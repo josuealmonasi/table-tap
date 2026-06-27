@@ -41,7 +41,8 @@ This is a complete Next.js project — just install and go.
 
 ```bash
 nvm use            # or ensure your node is ≥ 18.18
-npm install
+corepack enable    # makes the pinned pnpm available
+pnpm install
 ```
 
 ### 1. Environment variables
@@ -69,7 +70,7 @@ update restaurants set owner_id = '<your-user-uuid>' where name = 'Sakura Dining
 
 ### 4. Run locally
 ```bash
-npm run dev
+pnpm dev
 ```
 - Customer: `http://localhost:3000/r/<restaurantId>/t/<tableId>`
 - Dashboard: `http://localhost:3000/dashboard`

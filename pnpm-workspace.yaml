@@ -1,0 +1,7 @@
+# pnpm settings (pnpm 10+ reads build-script approvals from here, not package.json).
+# Allow these deps to run their install scripts:
+#   sharp         — Next.js production image optimization
+#   unrs-resolver — native resolver used by eslint-config-next
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
