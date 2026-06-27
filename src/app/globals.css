@@ -1,0 +1,208 @@
+/* ============================================================================
+   TableTap — global styles & design tokens
+   Palette: sumi ink, rice paper, persimmon accent, sage, gold
+   ========================================================================== */
+:root {
+  --tt-ink: #0f0f0f;
+  --tt-paper: #faf7f2;
+  --tt-accent: #e8522a;     /* persimmon */
+  --tt-sage: #7a8c7e;
+  --tt-gold: #c9a84c;
+  --tt-cream: #f0ebe1;
+  --tt-surface: #f5f1eb;
+  --tt-muted: #9b9490;
+  --tt-white: #ffffff;
+  --tt-success: #3a7d5c;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--tt-paper);
+  color: var(--tt-ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font-size: 0.9em; }
+
+.tt-serif { font-family: Georgia, "Times New Roman", serif; }
+.tt-muted { color: var(--tt-muted); }
+.tt-sage { color: var(--tt-sage); }
+.tt-accent { color: var(--tt-accent); }
+
+/* ── layout shells ── */
+.tt-root {
+  max-width: 460px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: var(--tt-paper);
+  position: relative;
+}
+.tt-row { display: flex; justify-content: space-between; align-items: center; }
+
+/* ── buttons ── */
+.tt-btn {
+  border: none; border-radius: 10px; font-weight: 600; cursor: pointer;
+  font-size: 15px; padding: 12px 24px; display: inline-flex; align-items: center;
+  justify-content: center; gap: 8px; transition: transform .12s, opacity .12s;
+  font-family: inherit;
+}
+.tt-btn:active { transform: scale(0.98); }
+.tt-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.tt-btn-primary { background: var(--tt-accent); color: #fff; }
+.tt-btn-success { background: var(--tt-success); color: #fff; }
+.tt-btn-ghost { background: transparent; color: var(--tt-muted); }
+.tt-btn-sm { font-size: 13px; padding: 8px 16px; }
+.tt-btn-lg { font-size: 16px; padding: 16px 28px; }
+
+/* ── cards ── */
+.tt-card {
+  background: var(--tt-white); border-radius: 16px; overflow: hidden;
+  margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+
+/* ── badges & chips ── */
+.tt-badge {
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 20px; background: rgba(122,140,126,.15); color: var(--tt-sage);
+}
+.tt-badge-gold { background: rgba(201,168,76,.18); color: var(--tt-gold); }
+.tt-pop {
+  font-size: 10px; background: rgba(232,82,42,.12); color: var(--tt-accent);
+  font-weight: 700; padding: 2px 6px; border-radius: 10px; text-transform: uppercase; letter-spacing: .05em;
+}
+
+/* ── menu header ── */
+.tt-menu-header { background: var(--tt-ink); padding: 20px 20px 0; color: #fff; position: sticky; top: 0; z-index: 10; }
+.tt-menu-header .tt-serif { color: #fff; }
+.tt-cats { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 16px; scrollbar-width: none; }
+.tt-cats::-webkit-scrollbar { display: none; }
+.tt-cat {
+  padding: 8px 16px; border-radius: 100px; border: none; flex-shrink: 0;
+  background: #1c1c1c; color: var(--tt-muted); font-weight: 400; font-size: 13px; cursor: pointer;
+}
+.tt-cat-on { background: var(--tt-accent); color: #fff; font-weight: 700; box-shadow: 0 2px 12px rgba(232,82,42,.5); }
+
+/* ── menu item rows ── */
+.tt-item { display: flex; align-items: center; gap: 12px; padding: 14px; cursor: pointer; }
+.tt-thumb {
+  font-size: 40px; width: 64px; height: 64px; background: var(--tt-surface);
+  border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.tt-desc {
+  font-size: 12px; line-height: 1.4; margin: 2px 0 6px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.tt-plus {
+  width: 32px; height: 32px; border-radius: 50%; background: var(--tt-accent); color: #fff;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 20px; font-weight: 300;
+}
+
+/* ── item detail ── */
+.tt-item-hero {
+  background: var(--tt-surface); height: 150px; display: flex; align-items: center;
+  justify-content: center; font-size: 80px; position: relative;
+}
+.tt-back {
+  position: absolute; top: 16px; left: 16px; background: #fff; border: none; border-radius: 50%;
+  width: 36px; height: 36px; font-size: 18px; cursor: pointer;
+}
+.tt-back-inline { background: none; border: none; font-size: 22px; cursor: pointer; }
+.tt-price-lg { font-weight: 700; color: var(--tt-accent); font-size: 22px; }
+.tt-mod-label { font-weight: 700; margin-bottom: 10px; font-size: 14px; }
+.tt-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.tt-chip {
+  padding: 8px 14px; border-radius: 10px; font-size: 13px; border: 1.5px solid var(--tt-cream);
+  background: transparent; color: var(--tt-ink); cursor: pointer; font-family: inherit;
+}
+.tt-chip-on { border-color: var(--tt-accent); background: rgba(232,82,42,.08); color: var(--tt-accent); font-weight: 700; }
+.tt-input {
+  width: 100%; border: 1.5px solid var(--tt-cream); border-radius: 10px; padding: 12px;
+  font-size: 13px; font-family: inherit; resize: none; background: #fff; color: var(--tt-ink);
+}
+.tt-stepper { display: flex; align-items: center; gap: 12px; background: var(--tt-surface); border-radius: 12px; padding: 8px 16px; }
+.tt-stepper button { background: none; border: none; cursor: pointer; font-size: 20px; color: var(--tt-ink); width: 20px; }
+.tt-stepper span { font-weight: 700; font-size: 18px; min-width: 20px; text-align: center; }
+
+/* ── header (cart) ── */
+.tt-header {
+  background: #fff; border-bottom: 1px solid var(--tt-cream); padding: 16px 20px;
+  display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 10;
+}
+.tt-x { background: none; border: none; cursor: pointer; color: var(--tt-muted); font-size: 20px; }
+.tt-add-more {
+  width: 100%; border: 1.5px dashed var(--tt-cream); border-radius: 12px; padding: 14px;
+  background: transparent; color: var(--tt-muted); font-size: 14px; cursor: pointer; margin-bottom: 20px;
+}
+.tt-total { padding-top: 12px; margin-top: 8px; border-top: 1px solid var(--tt-cream); font-weight: 700; }
+.tt-total span:last-child { font-size: 18px; }
+
+/* ── cart FAB ── */
+.tt-fab-wrap { position: sticky; bottom: 16px; padding: 0 16px; }
+.tt-fab {
+  width: 100%; background: var(--tt-ink); color: #fff; border: none; border-radius: 14px;
+  padding: 16px 20px; font-size: 16px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; box-shadow: 0 8px 24px rgba(0,0,0,.25);
+}
+.tt-fab-count { background: var(--tt-accent); border-radius: 8px; padding: 2px 10px; font-size: 13px; }
+
+/* ── order tracker ── */
+.tt-track-hero { background: var(--tt-ink); padding: 28px 20px; color: #fff; text-align: center; }
+.tt-track-hero .tt-serif { color: #fff; }
+.tt-tracker { display: flex; align-items: center; width: 100%; }
+.tt-step-wrap { display: flex; align-items: center; flex: 1; }
+.tt-step-wrap:last-child { flex: none; }
+.tt-step { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.tt-step-dot {
+  width: 44px; height: 44px; border-radius: 50%; background: var(--tt-cream);
+  display: flex; align-items: center; justify-content: center; font-size: 20px; transition: all .3s;
+}
+.tt-step-active { background: var(--tt-accent); box-shadow: 0 0 0 4px rgba(232,82,42,.19); }
+.tt-step-done { background: var(--tt-success); }
+.tt-step-label { font-size: 11px; color: var(--tt-muted); white-space: nowrap; }
+.tt-step-label-active { font-weight: 700; color: var(--tt-accent); }
+.tt-step-label-done { color: var(--tt-success); }
+.tt-step-line { flex: 1; height: 2px; background: var(--tt-cream); margin: 0 8px 20px; transition: all .3s; }
+.tt-step-line-done { background: var(--tt-success); }
+
+/* ── dashboard ── */
+.tt-dash { min-height: 100vh; background: #f0ede8; padding: 24px; }
+.tt-dash-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+.tt-dash-head h1 { font-size: 26px; }
+.tt-stat {
+  background: #fff; border-radius: 12px; padding: 10px 18px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  display: flex; flex-direction: column;
+}
+.tt-stat strong { font-size: 22px; }
+.tt-stat span { font-size: 12px; color: var(--tt-muted); }
+.tt-orders-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+.tt-order-card { background: #fff; border-radius: 16px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.tt-status-badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 4px 10px; border-radius: 20px; }
+.tt-order-items { border-top: 1px solid var(--tt-cream); padding-top: 10px; margin: 12px 0; }
+.tt-empty { background: #fff; border-radius: 16px; padding: 60px; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+
+/* ── login ── */
+.tt-login { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--tt-ink); padding: 20px; }
+.tt-login-card { background: #fff; border-radius: 20px; padding: 36px; max-width: 380px; width: 100%; text-align: center; }
+.tt-login-sent { background: rgba(58,125,92,.1); color: var(--tt-success); border-radius: 12px; padding: 16px; font-size: 14px; }
+
+/* ── landing ── */
+.tt-landing { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--tt-paper); }
+.tt-landing-inner { max-width: 480px; text-align: center; }
+.tt-landing-title { font-size: 48px; margin: 8px 0; }
+.tt-landing-sub { color: var(--tt-muted); font-size: 17px; line-height: 1.6; }
+.tt-landing-actions { margin-top: 24px; }
+
+/* ── responsive ── */
+@media (max-width: 640px) {
+  .tt-dash { padding: 16px; }
+  .tt-orders-grid { grid-template-columns: 1fr; }
+}
+
+/* ── accessibility ── */
+.tt-btn:focus-visible, .tt-chip:focus-visible, .tt-cat:focus-visible, .tt-input:focus-visible {
+  outline: 2px solid var(--tt-accent); outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
