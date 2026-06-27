@@ -50,11 +50,28 @@ Copy `.env.local.example` → `.env.local` and fill in your values.
 `.env.local` is gitignored by default — never commit it.
 
 ### 2. Create the database
-Supabase dashboard → **SQL Editor** → New query → paste all of
-`supabase/schema.sql` → **Run**. This creates the tables, security rules, realtime,
-and a demo "Sakura Dining" restaurant.
+Set `DATABASE_URL` in `.env.local` (Supabase → **Connect** → *Session pooler* URI,
+with your DB password), then:
 
-Then grab your demo IDs:
+```bash
+pnpm seed
+```
+
+This creates the tables, security rules, realtime, and the demo "Sakura Dining"
+restaurant — and prints a ready-to-open customer URL. It's safe to re-run.
+
+> Prefer the dashboard? You can still paste `supabase/schema.sql` into the
+> Supabase **SQL Editor** and **Run** instead.
+
+**Database scripts:**
+
+| Command | What it does |
+| --- | --- |
+| `pnpm seed` | Create schema + seed demo data (idempotent — safe to re-run). |
+| `pnpm database:purge` | Empty every table, keep the structure. Re-`seed` to refill. |
+| `pnpm database:drop` | Drop all tables (structure + data). Re-`seed` to rebuild. |
+
+If you need the demo IDs by hand, `pnpm seed` prints them, or query:
 ```sql
 select id, name from restaurants;
 select id, label from restaurant_tables order by label::int;
