@@ -79,7 +79,10 @@ create index if not exists orders_restaurant_idx on orders(restaurant_id, create
 create index if not exists orders_status_idx on orders(restaurant_id, status);
 
 -- ── Realtime: broadcast order changes to dashboard + customer ───────────────
-alter publication supabase_realtime add table orders;
+do $$ begin
+  alter publication supabase_realtime add table orders;
+exception when duplicate_object then null;  -- already added; safe to re-run
+end $$;
 
 -- ============================================================================
 -- Row Level Security
@@ -92,15 +95,20 @@ alter table orders             enable row level security;
 
 -- PUBLIC READ: anyone with the QR can read the restaurant's menu (no login).
 -- These tables hold no sensitive data — just the public menu.
+-- (drop-if-exists before each create keeps this script safe to re-run.)
+drop policy if exists "public read restaurants" on restaurants;
 create policy "public read restaurants"
   on restaurants for select using (true);
 
+drop policy if exists "public read tables" on restaurant_tables;
 create policy "public read tables"
   on restaurant_tables for select using (true);
 
+drop policy if exists "public read categories" on categories;
 create policy "public read categories"
   on categories for select using (true);
 
+drop policy if exists "public read available menu" on menu_items;
 create policy "public read available menu"
   on menu_items for select using (true);
 
@@ -108,6 +116,7 @@ create policy "public read available menu"
 -- A customer can read a single order by its id (they get the id back after
 -- checkout and poll/subscribe to it). We allow public SELECT because the id is
 -- an unguessable UUID — effectively a capability token.
+drop policy if exists "read order by id" on orders;
 create policy "read order by id"
   on orders for select using (true);
 
@@ -116,21 +125,25 @@ create policy "read order by id"
 -- the publishable (client) key cannot create or mutate orders directly.
 
 -- OWNER WRITE: the logged-in restaurant owner manages their own menu/tables.
+drop policy if exists "owner manages restaurant" on restaurants;
 create policy "owner manages restaurant"
   on restaurants for all
   using (auth.uid() = owner_id)
   with check (auth.uid() = owner_id);
 
+drop policy if exists "owner manages tables" on restaurant_tables;
 create policy "owner manages tables"
   on restaurant_tables for all
   using (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()))
   with check (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()));
 
+drop policy if exists "owner manages categories" on categories;
 create policy "owner manages categories"
   on categories for all
   using (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()))
   with check (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()));
 
+drop policy if exists "owner manages menu" on menu_items;
 create policy "owner manages menu"
   on menu_items for all
   using (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()))
@@ -144,6 +157,12 @@ declare
   rid uuid;
   cat_starters uuid; cat_mains uuid; cat_sushi uuid; cat_drinks uuid; cat_desserts uuid;
 begin
+  -- Idempotent: skip seeding if the demo restaurant already exists.
+  if exists (select 1 from restaurants where name = 'Sakura Dining') then
+    raise notice 'Seed skipped — Sakura Dining already exists.';
+    return;
+  end if;
+
   -- Restaurant
   insert into restaurants (name, tagline, logo, currency, service_pct)
   values ('Sakura Dining', 'Modern Japanese Kitchen', '🌸', 'USD', 10)
