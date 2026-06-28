@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import MenuManager from "@/components/dashboard/menu/MenuManager";
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import type { Restaurant } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -19,5 +20,9 @@ export default async function MenuPage() {
 
   if (!restaurant) redirect("/dashboard");
 
-  return <MenuManager restaurant={restaurant as Restaurant} />;
+  return (
+    <ConfirmProvider>
+      <MenuManager restaurant={restaurant as Restaurant} />
+    </ConfirmProvider>
+  );
 }

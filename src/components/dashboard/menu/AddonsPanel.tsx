@@ -4,7 +4,7 @@ import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import type { MenuItem } from "@/lib/types";
 import type { AddonInput } from "@/hooks/useMenuEditor";
-import IconPicker from "./IconPicker";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 /** Manages the restaurant's reusable add-on items (e.g. Catsup, Extra cheese). */
 export default function AddonsPanel({
@@ -24,6 +24,7 @@ export default function AddonsPanel({
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const confirm = useConfirm();
 
   return (
     <div className="tt-section">
@@ -72,8 +73,16 @@ export default function AddonsPanel({
                 <button
                   className="tt-iconbtn"
                   title="Delete"
-                  onClick={() => {
-                    if (confirm(`Delete extra "${addon.name}"?`)) onDelete(addon.id);
+                  onClick={async () => {
+                    if (
+                      await confirm({
+                        title: `Delete extra “${addon.name}”?`,
+                        confirmLabel: "Delete",
+                        danger: true,
+                      })
+                    ) {
+                      onDelete(addon.id);
+                    }
                   }}
                 >
                   🗑️
@@ -114,7 +123,6 @@ function AddonForm({
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [price, setPrice] = useState(String(initial?.price ?? ""));
-  const [emoji, setEmoji] = useState(initial?.emoji ?? "");
   const [saving, setSaving] = useState(false);
 
   return (
@@ -123,7 +131,7 @@ function AddonForm({
       onSubmit={async (e) => {
         e.preventDefault();
         setSaving(true);
-        await onSubmit({ name: name.trim(), price: Number(price) || 0, emoji });
+        await onSubmit({ name: name.trim(), price: Number(price) || 0 });
         setSaving(false);
       }}
     >
@@ -131,7 +139,6 @@ function AddonForm({
         <input className="tt-input" style={{ flex: 1 }} placeholder="Extra name (e.g. Catsup)" value={name} onChange={(e) => setName(e.target.value)} required />
         <input className="tt-input" style={{ width: 110 }} type="number" step="0.01" min="0" placeholder="Price" value={price} onChange={(e) => setPrice(e.target.value)} required />
       </div>
-      <IconPicker value={emoji} onChange={setEmoji} variant="addon" label="Icon (optional)" />
       <div className="tt-prodform-actions">
         <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={onCancel}>Cancel</button>
         <button type="submit" className="tt-btn tt-btn-primary tt-btn-sm" disabled={!name || saving}>{saving ? "…" : submitLabel}</button>

@@ -52,6 +52,7 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-btn-primary { background: var(--tt-accent); color: #fff; }
 .tt-btn-success { background: var(--tt-success); color: #fff; }
 .tt-btn-ghost { background: transparent; color: var(--tt-muted); }
+.tt-btn-danger { background: #c0392b; color: #fff; }
 .tt-btn-sm { font-size: 13px; padding: 8px 16px; }
 .tt-btn-lg { font-size: 16px; padding: 16px 28px; }
 
@@ -264,18 +265,17 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-check { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
 .tt-add-section { display: flex; gap: 8px; }
 
-/* icon picker accordion */
-.tt-accordion { border: 1px solid var(--tt-cream); border-radius: 12px; overflow: hidden; background: #fff; }
-.tt-acc-item + .tt-acc-item { border-top: 1px solid var(--tt-cream); }
-.tt-acc-head {
-  width: 100%; display: flex; justify-content: space-between; align-items: center;
-  background: #fff; border: none; padding: 12px 14px; cursor: pointer; font-family: inherit;
-  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--tt-muted);
+/* confirm dialog */
+.tt-dialog-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
 }
-.tt-acc-head:hover { background: var(--tt-surface); }
-.tt-acc-right { display: flex; align-items: center; gap: 8px; }
-.tt-acc-chevron { font-size: 11px; }
-.tt-acc-body { padding: 12px 14px; background: var(--tt-surface); }
+.tt-dialog {
+  background: #fff; border-radius: 16px; padding: 24px; max-width: 360px; width: 100%;
+  box-shadow: 0 12px 40px rgba(0,0,0,.25);
+}
+.tt-dialog h3 { font-size: 18px; }
+.tt-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 
 @media (max-width: 640px) {
   .tt-prodform-row { flex-wrap: wrap; }
