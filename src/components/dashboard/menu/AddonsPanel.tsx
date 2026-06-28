@@ -131,7 +131,7 @@ function AddonForm({
         <input className="tt-input" style={{ flex: 1 }} placeholder="Add-on name (e.g. Catsup)" value={name} onChange={(e) => setName(e.target.value)} required />
         <input className="tt-input" style={{ width: 110 }} type="number" step="0.01" min="0" placeholder="Price" value={price} onChange={(e) => setPrice(e.target.value)} required />
       </div>
-      <IconPicker value={emoji} onChange={setEmoji} />
+      <IconPicker value={emoji} onChange={setEmoji} variant="addon" label="Icon (optional)" />
       <div className="tt-prodform-actions">
         <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={onCancel}>Cancel</button>
         <button type="submit" className="tt-btn tt-btn-primary tt-btn-sm" disabled={!name || saving}>{saving ? "…" : submitLabel}</button>

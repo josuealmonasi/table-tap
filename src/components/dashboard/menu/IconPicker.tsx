@@ -139,16 +139,78 @@ const ICON_GROUPS: { group: string; items: { emoji: string; label: string }[] }[
   },
 ];
 
+// Add-ons are toppings / sauces / extras — never a full dish. Smaller, focused set.
+const ADDON_GROUPS: { group: string; items: { emoji: string; label: string }[] }[] = [
+  {
+    group: "Toppings",
+    items: [
+      { emoji: "🧀", label: "Cheese" },
+      { emoji: "🥓", label: "Bacon" },
+      { emoji: "🍳", label: "Egg" },
+      { emoji: "🍄", label: "Mushroom" },
+      { emoji: "🥑", label: "Avocado" },
+      { emoji: "🍅", label: "Tomato" },
+      { emoji: "🥬", label: "Lettuce" },
+      { emoji: "🧅", label: "Onion" },
+      { emoji: "🥒", label: "Pickle" },
+      { emoji: "🫑", label: "Pepper" },
+      { emoji: "🌽", label: "Corn" },
+      { emoji: "🫒", label: "Olive" },
+      { emoji: "🥜", label: "Peanuts" },
+      { emoji: "🍤", label: "Shrimp" },
+    ],
+  },
+  {
+    group: "Sauces & seasoning",
+    items: [
+      { emoji: "🥫", label: "Sauce" },
+      { emoji: "🧂", label: "Salt" },
+      { emoji: "🧈", label: "Butter" },
+      { emoji: "🌶️", label: "Chili" },
+      { emoji: "🧄", label: "Garlic" },
+      { emoji: "🍯", label: "Honey" },
+      { emoji: "🍋", label: "Lemon" },
+      { emoji: "🫚", label: "Ginger" },
+      { emoji: "🌿", label: "Herbs" },
+    ],
+  },
+  {
+    group: "Sweet toppings",
+    items: [
+      { emoji: "🍫", label: "Chocolate" },
+      { emoji: "🍓", label: "Strawberry" },
+      { emoji: "🍌", label: "Banana" },
+      { emoji: "🥥", label: "Coconut" },
+      { emoji: "🍒", label: "Cherry" },
+      { emoji: "🌰", label: "Nuts" },
+      { emoji: "🍪", label: "Cookie crumble" },
+    ],
+  },
+  {
+    group: "Drink extras",
+    items: [
+      { emoji: "🥛", label: "Milk" },
+      { emoji: "🧊", label: "Ice" },
+      { emoji: "☕", label: "Extra shot" },
+      { emoji: "🧋", label: "Pearls" },
+    ],
+  },
+];
+
 /** Optional icon/type picker. value is the chosen emoji ("" = no icon). */
 export default function IconPicker({
   value,
   onChange,
   label = "Type / icon (optional)",
+  variant = "product",
 }: {
   value: string;
   onChange: (emoji: string) => void;
   label?: string;
+  variant?: "product" | "addon";
 }) {
+  const groups = variant === "addon" ? ADDON_GROUPS : ICON_GROUPS;
+
   return (
     <div>
       <div className="tt-mod-label">{label}</div>
@@ -163,7 +225,7 @@ export default function IconPicker({
         </button>
       </div>
 
-      {ICON_GROUPS.map((g) => (
+      {groups.map((g) => (
         <div key={g.group} style={{ marginBottom: 12 }}>
           <div
             className="tt-muted"
