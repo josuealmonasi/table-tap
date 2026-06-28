@@ -167,7 +167,9 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-step-line-done { background: var(--tt-success); }
 
 /* ── dashboard ── */
+/* Breakpoints: mobile <640px, tablet 640–1024px, desktop >1024px. */
 .tt-dash { min-height: 100vh; background: #f0ede8; padding: 24px; }
+.tt-dash-inner { max-width: 1100px; margin: 0 auto; width: 100%; }
 .tt-dash-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
 .tt-dash-head h1 { font-size: 26px; }
 .tt-stat {
@@ -195,9 +197,15 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-landing-actions { margin-top: 24px; }
 
 /* ── responsive ── */
+/* Tablet */
+@media (max-width: 1024px) {
+  .tt-dash { padding: 20px; }
+}
+/* Mobile */
 @media (max-width: 640px) {
   .tt-dash { padding: 16px; }
   .tt-orders-grid { grid-template-columns: 1fr; }
+  .tt-tiles { grid-template-columns: 1fr; }
 }
 
 /* ── accessibility ── */
@@ -209,7 +217,7 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 }
 
 /* ── dashboard home tiles ── */
-.tt-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.tt-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
 .tt-tile {
   background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.06);
   display: flex; flex-direction: column; gap: 4px; text-decoration: none; color: var(--tt-ink);
@@ -239,7 +247,7 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-skel-tile { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
 
 /* ── menu manager ── */
-.tt-menu-grid { display: flex; flex-direction: column; gap: 16px; max-width: 760px; }
+.tt-menu-grid { display: flex; flex-direction: column; gap: 16px; max-width: 760px; margin: 0 auto; }
 .tt-section { background: #fff; border-radius: 16px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
 .tt-section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .tt-section-head h3 { font-size: 18px; }
@@ -282,6 +290,19 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-prodform-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .tt-check { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
 .tt-add-section { display: flex; gap: 8px; }
+
+/* icon picker accordion */
+.tt-accordion { border: 1px solid var(--tt-cream); border-radius: 12px; overflow: hidden; background: #fff; }
+.tt-acc-item + .tt-acc-item { border-top: 1px solid var(--tt-cream); }
+.tt-acc-head {
+  width: 100%; display: flex; justify-content: space-between; align-items: center;
+  background: #fff; border: none; padding: 12px 14px; cursor: pointer; font-family: inherit;
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--tt-muted);
+}
+.tt-acc-head:hover { background: var(--tt-surface); }
+.tt-acc-right { display: flex; align-items: center; gap: 8px; }
+.tt-acc-chevron { font-size: 11px; }
+.tt-acc-body { padding: 12px 14px; background: var(--tt-surface); }
 
 /* confirm dialog */
 .tt-dialog-overlay {

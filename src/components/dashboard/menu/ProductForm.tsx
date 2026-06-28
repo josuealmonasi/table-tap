@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import type { MenuItem } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
+import IconPicker from "./IconPicker";
 
 /** Add/edit form for a product, including which add-on items it offers. */
 export default function ProductForm({
@@ -27,6 +28,7 @@ export default function ProductForm({
   const [description, setDescription] = useState(initial?.description ?? "");
   const [price, setPrice] = useState(String(initial?.price ?? ""));
   const [imageUrl, setImageUrl] = useState(initial?.image_url ?? "");
+  const [emoji, setEmoji] = useState(initial?.emoji ?? "");
   const [popular, setPopular] = useState(initial?.popular ?? false);
   const [picked, setPicked] = useState<string[]>(selectedAddonIds);
   const [saving, setSaving] = useState(false);
@@ -44,6 +46,7 @@ export default function ProductForm({
         description: description.trim(),
         price: Number(price) || 0,
         image_url: imageUrl.trim() || null,
+        emoji,
         popular,
       },
       picked
@@ -94,6 +97,8 @@ export default function ProductForm({
         <input type="checkbox" checked={popular} onChange={(e) => setPopular(e.target.checked)} />
         Mark as popular
       </label>
+
+      <IconPicker value={emoji} onChange={setEmoji} />
 
       {addons.length > 0 && (
         <div>

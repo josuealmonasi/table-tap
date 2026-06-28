@@ -13,7 +13,7 @@ export default function MenuItemRow({
 }) {
   return (
     <div className="tt-card tt-item" onClick={() => onSelect(item)}>
-      <div className="tt-thumb">{item.emoji || item.name.charAt(0).toUpperCase()}</div>
+      <div className="tt-thumb">{item.emoji || "🍽️"}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <strong style={{ fontSize: 15 }}>{item.name}</strong>

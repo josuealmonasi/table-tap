@@ -59,7 +59,7 @@ export default function ItemDetailScreen({
   return (
     <div className="tt-root">
       <div className="tt-item-hero">
-        <span>{item.emoji || item.name.charAt(0).toUpperCase()}</span>
+        <span>{item.emoji || "🍽️"}</span>
         <button className="tt-back" onClick={onBack}>←</button>
       </div>
       <div style={{ padding: 20 }}>

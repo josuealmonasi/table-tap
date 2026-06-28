@@ -22,6 +22,7 @@ export default function MenuManager({ restaurant }: { restaurant: Restaurant }) 
 
   return (
     <div className="tt-dash">
+      <div className="tt-dash-inner">
       <header className="tt-dash-head">
         <div>
           <h1 className="tt-serif" style={{ margin: 0 }}>Menu</h1>
@@ -116,6 +117,7 @@ export default function MenuManager({ restaurant }: { restaurant: Restaurant }) 
           />
         </div>
       )}
+      </div>
     </div>
   );
 

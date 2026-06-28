@@ -18,7 +18,7 @@ export default function TrackedItemsCard({
         {items.map((item, i) => (
           <div key={i} style={{ marginBottom: 8 }}>
             <div className="tt-row" style={{ fontSize: 14 }}>
-              <span>{item.qty}× {item.emoji} {item.name}</span>
+              <span>{item.qty}× {item.emoji || "🍽️"} {item.name}</span>
               <span className="tt-muted">{formatMoney(lineUnitPrice(item) * item.qty, currency)}</span>
             </div>
             {item.extras && item.extras.length > 0 && (

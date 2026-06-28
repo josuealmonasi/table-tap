@@ -28,42 +28,44 @@ export default function OrdersBoard({
 
   return (
     <div className="tt-dash">
-      <header className="tt-dash-head">
-        <div>
-          <h1 className="tt-serif" style={{ margin: 0 }}>{restaurant.logo} {restaurant.name}</h1>
-          <span className="tt-muted" style={{ fontSize: 13 }}>Live Orders</span>
-        </div>
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <div className="tt-stat">
-            <strong className="tt-accent">{activeCount}</strong>
-            <span>Active</span>
+      <div className="tt-dash-inner">
+        <header className="tt-dash-head">
+          <div>
+            <h1 className="tt-serif" style={{ margin: 0 }}>{restaurant.logo} {restaurant.name}</h1>
+            <span className="tt-muted" style={{ fontSize: 13 }}>Live Orders</span>
           </div>
-          <div className="tt-stat">
-            <strong style={{ color: "var(--tt-success)" }}>{formatMoney(revenue, restaurant.currency)}</strong>
-            <span>Today</span>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <div className="tt-stat">
+              <strong className="tt-accent">{activeCount}</strong>
+              <span>Active</span>
+            </div>
+            <div className="tt-stat">
+              <strong style={{ color: "var(--tt-success)" }}>{formatMoney(revenue, restaurant.currency)}</strong>
+              <span>Today</span>
+            </div>
+            <button className="tt-btn tt-btn-ghost" onClick={signOut}>Sign out</button>
           </div>
-          <button className="tt-btn tt-btn-ghost" onClick={signOut}>Sign out</button>
-        </div>
-      </header>
+        </header>
 
-      {orders.length === 0 ? (
-        <div className="tt-empty">
-          <div style={{ fontSize: 48 }}>📭</div>
-          <strong>No orders yet</strong>
-          <p className="tt-muted">New orders appear here in real time.</p>
-        </div>
-      ) : (
-        <div className="tt-orders-grid">
-          {orders.map((order) => (
-            <OrderCard
-              key={order.id}
-              order={order}
-              currency={restaurant.currency}
-              onAdvance={updateStatus}
-            />
-          ))}
-        </div>
-      )}
+        {orders.length === 0 ? (
+          <div className="tt-empty">
+            <div style={{ fontSize: 48 }}>📭</div>
+            <strong>No orders yet</strong>
+            <p className="tt-muted">New orders appear here in real time.</p>
+          </div>
+        ) : (
+          <div className="tt-orders-grid">
+            {orders.map((order) => (
+              <OrderCard
+                key={order.id}
+                order={order}
+                currency={restaurant.currency}
+                onAdvance={updateStatus}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

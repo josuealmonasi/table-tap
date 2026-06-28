@@ -15,7 +15,7 @@ export default function CartLineRow({
   return (
     <div className="tt-card" style={{ padding: 14 }}>
       <div style={{ display: "flex", gap: 12 }}>
-        <span style={{ fontSize: 28 }}>{item.emoji || item.name.charAt(0).toUpperCase()}</span>
+        <span style={{ fontSize: 28 }}>{item.emoji || "🍽️"}</span>
         <div style={{ flex: 1 }}>
           <div className="tt-row">
             <strong>{item.qty}× {item.name}</strong>

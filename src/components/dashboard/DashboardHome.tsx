@@ -21,31 +21,33 @@ export default function DashboardHome({ restaurant }: { restaurant: Restaurant }
 
   return (
     <div className="tt-dash">
-      <header className="tt-dash-head">
-        <div>
-          <h1 className="tt-serif" style={{ margin: 0 }}>{restaurant.logo} {restaurant.name}</h1>
-          <span className="tt-muted" style={{ fontSize: 13 }}>Dashboard</span>
-        </div>
-        <button className="tt-btn tt-btn-ghost" onClick={signOut}>Sign out</button>
-      </header>
+      <div className="tt-dash-inner">
+        <header className="tt-dash-head">
+          <div>
+            <h1 className="tt-serif" style={{ margin: 0 }}>{restaurant.logo} {restaurant.name}</h1>
+            <span className="tt-muted" style={{ fontSize: 13 }}>Dashboard</span>
+          </div>
+          <button className="tt-btn tt-btn-ghost" onClick={signOut}>Sign out</button>
+        </header>
 
-      <div className="tt-tiles">
-        {TILES.map((tile) =>
-          tile.soon ? (
-            <div key={tile.title} className="tt-tile tt-tile-soon">
-              <div className="tt-tile-emoji">{tile.emoji}</div>
-              <strong>{tile.title}</strong>
-              <span className="tt-muted">{tile.desc}</span>
-              <span className="tt-badge" style={{ marginTop: 8 }}>Coming soon</span>
-            </div>
-          ) : (
-            <Link key={tile.title} href={tile.href} className="tt-tile">
-              <div className="tt-tile-emoji">{tile.emoji}</div>
-              <strong>{tile.title}</strong>
-              <span className="tt-muted">{tile.desc}</span>
-            </Link>
-          )
-        )}
+        <div className="tt-tiles">
+          {TILES.map((tile) =>
+            tile.soon ? (
+              <div key={tile.title} className="tt-tile tt-tile-soon">
+                <div className="tt-tile-emoji">{tile.emoji}</div>
+                <strong>{tile.title}</strong>
+                <span className="tt-muted">{tile.desc}</span>
+                <span className="tt-badge" style={{ marginTop: 8 }}>Coming soon</span>
+              </div>
+            ) : (
+              <Link key={tile.title} href={tile.href} className="tt-tile">
+                <div className="tt-tile-emoji">{tile.emoji}</div>
+                <strong>{tile.title}</strong>
+                <span className="tt-muted">{tile.desc}</span>
+              </Link>
+            )
+          )}
+        </div>
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ export type ProductInput = {
   description: string;
   price: number;
   image_url: string | null;
+  emoji: string;
   popular: boolean;
 };
 
@@ -93,7 +94,6 @@ export function useMenuEditor(restaurantId: string) {
         restaurant_id: restaurantId,
         category_id: categoryId,
         is_addon: false,
-        emoji: "", // icons removed; thumbnails fall back to the name's initial
         sort_order: products.length,
         ...input,
       })
