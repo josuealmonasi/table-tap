@@ -55,7 +55,7 @@ export default function ProductRow({
           // eslint-disable-next-line @next/next/no-img-element
           <img src={product.image_url} alt={product.name} />
         ) : (
-          <span>{product.emoji}</span>
+          <span>{product.emoji || product.name.charAt(0).toUpperCase()}</span>
         )}
       </div>
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import type { MenuItem } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
+import IconPicker from "./IconPicker";
 
 /** Add/edit form for a product, including which add-on items it offers. */
 export default function ProductForm({
@@ -26,7 +27,7 @@ export default function ProductForm({
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [price, setPrice] = useState(String(initial?.price ?? ""));
-  const [emoji, setEmoji] = useState(initial?.emoji ?? "🍽️");
+  const [emoji, setEmoji] = useState(initial?.emoji ?? "");
   const [imageUrl, setImageUrl] = useState(initial?.image_url ?? "");
   const [popular, setPopular] = useState(initial?.popular ?? false);
   const [picked, setPicked] = useState<string[]>(selectedAddonIds);
@@ -44,7 +45,7 @@ export default function ProductForm({
         name: name.trim(),
         description: description.trim(),
         price: Number(price) || 0,
-        emoji: emoji || "🍽️",
+        emoji,
         image_url: imageUrl.trim() || null,
         popular,
       },
@@ -56,13 +57,6 @@ export default function ProductForm({
   return (
     <form className="tt-prodform" onSubmit={handleSubmit}>
       <div className="tt-prodform-row">
-        <input
-          className="tt-input"
-          style={{ width: 64, textAlign: "center" }}
-          value={emoji}
-          onChange={(e) => setEmoji(e.target.value)}
-          aria-label="Emoji"
-        />
         <input
           className="tt-input"
           style={{ flex: 1 }}
@@ -83,6 +77,8 @@ export default function ProductForm({
           required
         />
       </div>
+
+      <IconPicker value={emoji} onChange={setEmoji} />
 
       <textarea
         className="tt-input"

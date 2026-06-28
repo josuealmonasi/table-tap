@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import type { MenuItem } from "@/lib/types";
 import type { AddonInput } from "@/hooks/useMenuEditor";
+import IconPicker from "./IconPicker";
 
 /** Manages the restaurant's reusable add-on items (e.g. Catsup, Extra cheese). */
 export default function AddonsPanel({
@@ -51,7 +52,7 @@ export default function AddonsPanel({
           />
         ) : (
           <div key={addon.id} className={`tt-prod ${addon.available ? "" : "tt-prod-off"}`}>
-            <div className="tt-prod-thumb"><span>{addon.emoji}</span></div>
+            <div className="tt-prod-thumb"><span>{addon.emoji || addon.name.charAt(0).toUpperCase()}</span></div>
             <div style={{ flex: 1 }}>
               <strong>{addon.name}</strong>
               {!addon.available && <span className="tt-badge" style={{ marginLeft: 6 }}>Unavailable</span>}
@@ -113,25 +114,28 @@ function AddonForm({
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [price, setPrice] = useState(String(initial?.price ?? ""));
-  const [emoji, setEmoji] = useState(initial?.emoji ?? "🧂");
+  const [emoji, setEmoji] = useState(initial?.emoji ?? "");
   const [saving, setSaving] = useState(false);
 
   return (
     <form
-      className="tt-prod tt-prod-editing"
-      style={{ gap: 8 }}
+      className="tt-prodform tt-prod-editing"
       onSubmit={async (e) => {
         e.preventDefault();
         setSaving(true);
-        await onSubmit({ name: name.trim(), price: Number(price) || 0, emoji: emoji || "🧂" });
+        await onSubmit({ name: name.trim(), price: Number(price) || 0, emoji });
         setSaving(false);
       }}
     >
-      <input className="tt-input" style={{ width: 56, textAlign: "center" }} value={emoji} onChange={(e) => setEmoji(e.target.value)} aria-label="Emoji" />
-      <input className="tt-input" style={{ flex: 1 }} placeholder="Add-on name (e.g. Catsup)" value={name} onChange={(e) => setName(e.target.value)} required />
-      <input className="tt-input" style={{ width: 100 }} type="number" step="0.01" min="0" placeholder="Price" value={price} onChange={(e) => setPrice(e.target.value)} required />
-      <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={onCancel}>Cancel</button>
-      <button type="submit" className="tt-btn tt-btn-primary tt-btn-sm" disabled={!name || saving}>{saving ? "…" : submitLabel}</button>
+      <div className="tt-prodform-row">
+        <input className="tt-input" style={{ flex: 1 }} placeholder="Add-on name (e.g. Catsup)" value={name} onChange={(e) => setName(e.target.value)} required />
+        <input className="tt-input" style={{ width: 110 }} type="number" step="0.01" min="0" placeholder="Price" value={price} onChange={(e) => setPrice(e.target.value)} required />
+      </div>
+      <IconPicker value={emoji} onChange={setEmoji} />
+      <div className="tt-prodform-actions">
+        <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={onCancel}>Cancel</button>
+        <button type="submit" className="tt-btn tt-btn-primary tt-btn-sm" disabled={!name || saving}>{saving ? "…" : submitLabel}</button>
+      </div>
     </form>
   );
 }
