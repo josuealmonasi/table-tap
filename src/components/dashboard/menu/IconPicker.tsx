@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 // Curated icon sets grouped by type, so users pick a fitting icon for any item
 // instead of typing an arbitrary emoji. "None" leaves the item without an icon.
 const ICON_GROUPS: { group: string; items: { emoji: string; label: string }[] }[] = [
@@ -197,7 +199,18 @@ const ADDON_GROUPS: { group: string; items: { emoji: string; label: string }[] }
   },
 ];
 
-/** Optional icon/type picker. value is the chosen emoji ("" = no icon). */
+type IconGroups = { group: string; items: { emoji: string; label: string }[] }[];
+
+/** Which group contains the currently chosen emoji (so we can open it by default). */
+function findGroupWith(groups: IconGroups, value: string) {
+  if (!value) return null;
+  return groups.find((g) => g.items.some((i) => i.emoji === value))?.group ?? null;
+}
+
+/**
+ * Optional icon/type picker. value is the chosen emoji ("" = no icon). Groups
+ * are a single-open accordion to keep the form compact.
+ */
 export default function IconPicker({
   value,
   onChange,
@@ -210,12 +223,14 @@ export default function IconPicker({
   variant?: "product" | "addon";
 }) {
   const groups = variant === "addon" ? ADDON_GROUPS : ICON_GROUPS;
+  // Open the group holding the current selection (if any); otherwise all closed.
+  const [openGroup, setOpenGroup] = useState<string | null>(() => findGroupWith(groups, value));
 
   return (
     <div>
       <div className="tt-mod-label">{label}</div>
 
-      <div className="tt-chips" style={{ marginBottom: 12 }}>
+      <div className="tt-chips" style={{ marginBottom: 10 }}>
         <button
           type="button"
           className={`tt-chip ${value ? "" : "tt-chip-on"}`}
@@ -225,28 +240,42 @@ export default function IconPicker({
         </button>
       </div>
 
-      {groups.map((g) => (
-        <div key={g.group} style={{ marginBottom: 12 }}>
-          <div
-            className="tt-muted"
-            style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}
-          >
-            {g.group}
-          </div>
-          <div className="tt-chips">
-            {g.items.map((o) => (
+      <div className="tt-accordion">
+        {groups.map((g) => {
+          const isOpen = openGroup === g.group;
+          const selected = g.items.find((i) => i.emoji === value);
+          return (
+            <div key={g.group} className="tt-acc-item">
               <button
                 type="button"
-                key={o.emoji}
-                className={`tt-chip ${value === o.emoji ? "tt-chip-on" : ""}`}
-                onClick={() => onChange(o.emoji)}
+                className="tt-acc-head"
+                aria-expanded={isOpen}
+                onClick={() => setOpenGroup(isOpen ? null : g.group)}
               >
-                {o.emoji} {o.label}
+                <span>{g.group}</span>
+                <span className="tt-acc-right">
+                  {selected && <span style={{ fontSize: 15 }}>{selected.emoji}</span>}
+                  <span className="tt-acc-chevron">{isOpen ? "▾" : "▸"}</span>
+                </span>
               </button>
-            ))}
-          </div>
-        </div>
-      ))}
+              {isOpen && (
+                <div className="tt-chips tt-acc-body">
+                  {g.items.map((o) => (
+                    <button
+                      type="button"
+                      key={o.emoji}
+                      className={`tt-chip ${value === o.emoji ? "tt-chip-on" : ""}`}
+                      onClick={() => onChange(o.emoji)}
+                    >
+                      {o.emoji} {o.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

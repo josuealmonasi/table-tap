@@ -264,6 +264,19 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-check { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
 .tt-add-section { display: flex; gap: 8px; }
 
+/* icon picker accordion */
+.tt-accordion { border: 1px solid var(--tt-cream); border-radius: 12px; overflow: hidden; background: #fff; }
+.tt-acc-item + .tt-acc-item { border-top: 1px solid var(--tt-cream); }
+.tt-acc-head {
+  width: 100%; display: flex; justify-content: space-between; align-items: center;
+  background: #fff; border: none; padding: 12px 14px; cursor: pointer; font-family: inherit;
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--tt-muted);
+}
+.tt-acc-head:hover { background: var(--tt-surface); }
+.tt-acc-right { display: flex; align-items: center; gap: 8px; }
+.tt-acc-chevron { font-size: 11px; }
+.tt-acc-body { padding: 12px 14px; background: var(--tt-surface); }
+
 @media (max-width: 640px) {
   .tt-prodform-row { flex-wrap: wrap; }
 }
