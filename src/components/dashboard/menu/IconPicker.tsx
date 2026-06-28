@@ -182,16 +182,6 @@ export default function IconPicker({
     <div>
       <div className="tt-mod-label">{label}</div>
 
-      <div className="tt-chips" style={{ marginBottom: 10 }}>
-        <button
-          type="button"
-          className={`tt-chip ${value ? "" : "tt-chip-on"}`}
-          onClick={() => onChange("")}
-        >
-          None
-        </button>
-      </div>
-
       <div className="tt-accordion">
         {groups.map((g) => {
           const isOpen = openGroup === g.group;
@@ -217,7 +207,8 @@ export default function IconPicker({
                       type="button"
                       key={o.emoji}
                       className={`tt-chip ${value === o.emoji ? "tt-chip-on" : ""}`}
-                      onClick={() => onChange(o.emoji)}
+                      // Toggle: click to select, click the selected one again to clear.
+                      onClick={() => onChange(value === o.emoji ? "" : o.emoji)}
                     >
                       {o.emoji} {o.label}
                     </button>
