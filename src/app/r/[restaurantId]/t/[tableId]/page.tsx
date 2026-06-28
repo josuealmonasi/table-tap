@@ -28,6 +28,7 @@ export default async function TablePage({
         .select("*")
         .eq("restaurant_id", restaurantId)
         .eq("available", true)
+        .eq("is_addon", false) // add-ons are attached to products, not shown standalone
         .order("sort_order"),
     ]);
 

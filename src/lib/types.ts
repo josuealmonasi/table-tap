@@ -17,7 +17,15 @@ export type MenuItem = {
   image_url: string | null;
   popular: boolean;
   available: boolean;
+  is_addon: boolean;
   modifiers: Modifier[];
+  sort_order: number;
+};
+
+// Links a product to an add-on item it offers (both rows live in menu_items).
+export type ItemAddon = {
+  product_id: string;
+  addon_id: string;
   sort_order: number;
 };
 

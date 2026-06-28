@@ -6,6 +6,7 @@
 -- ============================================================================
 truncate table
   orders,
+  item_addons,
   menu_items,
   categories,
   restaurant_tables,

@@ -46,10 +46,26 @@ create table if not exists menu_items (
   image_url     text,
   popular       boolean not null default false,
   available     boolean not null default true,
+  -- an add-on item (e.g. Catsup) is a menu_item that's attached to products
+  -- rather than shown standalone on the menu. See item_addons below.
+  is_addon      boolean not null default false,
   -- modifiers stored as JSON: [{ label, type: 'single'|'multi', options: [string] }]
   modifiers     jsonb not null default '[]'::jsonb,
   sort_order    int not null default 0,
   created_at    timestamptz not null default now()
+);
+
+-- Migration for databases created before is_addon existed.
+alter table menu_items add column if not exists is_addon boolean not null default false;
+
+-- ── Item add-ons ────────────────────────────────────────────────────────────
+-- Many-to-many: which add-on items can be added to which product.
+-- Both sides are menu_items; the add-on side has is_addon = true.
+create table if not exists item_addons (
+  product_id uuid not null references menu_items(id) on delete cascade,
+  addon_id   uuid not null references menu_items(id) on delete cascade,
+  sort_order int not null default 0,
+  primary key (product_id, addon_id)
 );
 
 -- ── Orders ──────────────────────────────────────────────────────────────────
@@ -91,6 +107,7 @@ alter table restaurants        enable row level security;
 alter table restaurant_tables  enable row level security;
 alter table categories         enable row level security;
 alter table menu_items         enable row level security;
+alter table item_addons        enable row level security;
 alter table orders             enable row level security;
 
 -- PUBLIC READ: anyone with the QR can read the restaurant's menu (no login).
@@ -111,6 +128,10 @@ create policy "public read categories"
 drop policy if exists "public read available menu" on menu_items;
 create policy "public read available menu"
   on menu_items for select using (true);
+
+drop policy if exists "public read item addons" on item_addons;
+create policy "public read item addons"
+  on item_addons for select using (true);
 
 -- ORDERS:
 -- A customer can read a single order by its id (they get the id back after
@@ -148,6 +169,17 @@ create policy "owner manages menu"
   on menu_items for all
   using (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()))
   with check (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()));
+
+-- Owner manages add-on links for products in their restaurant.
+drop policy if exists "owner manages item addons" on item_addons;
+create policy "owner manages item addons"
+  on item_addons for all
+  using (exists (
+    select 1 from menu_items m join restaurants r on r.id = m.restaurant_id
+    where m.id = product_id and r.owner_id = auth.uid()))
+  with check (exists (
+    select 1 from menu_items m join restaurants r on r.id = m.restaurant_id
+    where m.id = product_id and r.owner_id = auth.uid()));
 
 -- Demo seed data lives separately in supabase/seed.sql
 --   pnpm db:create  → this file (structure only)
