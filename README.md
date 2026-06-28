@@ -26,7 +26,8 @@ src/app/login/, src/app/signup/           ← restaurant email+password auth
 src/app/api/signup/                       ← creates user + restaurant
 src/app/r/[restaurantId]/t/[tableId]/     ← customer menu + ordering (QR target)
 src/app/order/[orderId]/                  ← live order tracking
-src/app/dashboard/                        ← restaurant dashboard (login required)
+src/app/dashboard/                        ← restaurant dashboard home (login required)
+src/app/dashboard/menu/                   ← menu manager (sections, products, add-ons)
 src/app/api/checkout/                     ← creates order + Stripe Checkout session
 src/app/api/webhooks/stripe/              ← marks order paid → 'received'
 src/app/api/orders/                       ← status updates (owner only)

@@ -206,3 +206,77 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* ── dashboard home tiles ── */
+.tt-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.tt-tile {
+  background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  display: flex; flex-direction: column; gap: 4px; text-decoration: none; color: var(--tt-ink);
+  border: 1px solid transparent; transition: border-color .12s, transform .12s;
+}
+.tt-tile:hover { border-color: var(--tt-accent); transform: translateY(-2px); }
+.tt-tile-emoji { font-size: 34px; margin-bottom: 8px; }
+.tt-tile-soon { opacity: 0.6; cursor: default; }
+.tt-tile-soon:hover { border-color: transparent; transform: none; }
+
+/* ── menu manager ── */
+.tt-menu-grid { display: flex; flex-direction: column; gap: 16px; max-width: 760px; }
+.tt-section { background: #fff; border-radius: 16px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.tt-section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.tt-section-head h3 { font-size: 18px; }
+
+.tt-prod {
+  display: flex; align-items: center; gap: 12px; padding: 12px;
+  border-top: 1px solid var(--tt-cream);
+}
+.tt-prod:first-of-type { border-top: none; }
+.tt-prod-off { opacity: 0.55; }
+.tt-prod-editing { display: block; background: var(--tt-surface); border-radius: 12px; margin: 8px 0; }
+.tt-prod-thumb {
+  width: 48px; height: 48px; border-radius: 10px; background: var(--tt-surface); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 26px; overflow: hidden;
+}
+.tt-prod-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.tt-prod-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.tt-prod-actions { display: flex; gap: 4px; }
+.tt-iconbtn { background: none; border: none; cursor: pointer; font-size: 16px; padding: 4px; border-radius: 6px; }
+.tt-iconbtn:hover { background: var(--tt-surface); }
+
+/* availability switch */
+.tt-switch { position: relative; display: inline-flex; cursor: pointer; }
+.tt-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.tt-switch-track {
+  width: 38px; height: 22px; border-radius: 22px; background: var(--tt-muted);
+  position: relative; transition: background .15s;
+}
+.tt-switch-track::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+  border-radius: 50%; background: #fff; transition: transform .15s;
+}
+.tt-switch input:checked + .tt-switch-track { background: var(--tt-success); }
+.tt-switch input:checked + .tt-switch-track::after { transform: translateX(16px); }
+.tt-switch input:focus-visible + .tt-switch-track { outline: 2px solid var(--tt-accent); outline-offset: 2px; }
+
+/* product form */
+.tt-prodform { display: flex; flex-direction: column; gap: 10px; padding: 14px; }
+.tt-prodform-row { display: flex; gap: 8px; }
+.tt-prodform-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.tt-check { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.tt-add-section { display: flex; gap: 8px; }
+
+/* icon picker accordion */
+.tt-accordion { border: 1px solid var(--tt-cream); border-radius: 12px; overflow: hidden; background: #fff; }
+.tt-acc-item + .tt-acc-item { border-top: 1px solid var(--tt-cream); }
+.tt-acc-head {
+  width: 100%; display: flex; justify-content: space-between; align-items: center;
+  background: #fff; border: none; padding: 12px 14px; cursor: pointer; font-family: inherit;
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--tt-muted);
+}
+.tt-acc-head:hover { background: var(--tt-surface); }
+.tt-acc-right { display: flex; align-items: center; gap: 8px; }
+.tt-acc-chevron { font-size: 11px; }
+.tt-acc-body { padding: 12px 14px; background: var(--tt-surface); }
+
+@media (max-width: 640px) {
+  .tt-prodform-row { flex-wrap: wrap; }
+}
