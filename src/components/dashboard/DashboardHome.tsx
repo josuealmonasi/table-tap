@@ -1,7 +1,4 @@
-"use client";
-
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import type { Restaurant } from "@/lib/types";
 
 type Tile = { href: string; emoji: string; title: string; desc: string; soon?: boolean };
@@ -12,22 +9,16 @@ const TILES: Tile[] = [
   { href: "#", emoji: "🪑", title: "Tables & QR", desc: "Manage tables and print QR codes", soon: true },
 ];
 
-/** Restaurant dashboard landing — shows the restaurant and links to each area. */
+/** Restaurant dashboard landing — links to each management area. */
 export default function DashboardHome({ restaurant }: { restaurant: Restaurant }) {
-  async function signOut() {
-    await createClient().auth.signOut();
-    window.location.assign("/login");
-  }
-
   return (
     <div className="tt-dash">
-      <div className="tt-dash-inner">
+      <div className="container">
         <header className="tt-dash-head">
           <div>
-            <h1 className="tt-serif" style={{ margin: 0 }}>{restaurant.logo} {restaurant.name}</h1>
-            <span className="tt-muted" style={{ fontSize: 13 }}>Dashboard</span>
+            <h1 className="tt-serif" style={{ margin: 0 }}>Dashboard</h1>
+            <span className="tt-muted" style={{ fontSize: 13 }}>{restaurant.name}</span>
           </div>
-          <button className="tt-btn tt-btn-ghost" onClick={signOut}>Sign out</button>
         </header>
 
         <div className="tt-tiles">

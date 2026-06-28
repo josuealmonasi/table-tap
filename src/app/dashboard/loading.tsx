@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 export default function DashboardLoading() {
   return (
     <div className="tt-dash">
-      <div className="tt-dash-inner">
+      <div className="container">
         <header className="tt-dash-head">
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <Skeleton width={220} height={26} />
