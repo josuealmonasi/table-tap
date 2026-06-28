@@ -7,7 +7,7 @@ import type { Restaurant } from "@/lib/types";
 type Tile = { href: string; emoji: string; title: string; desc: string; soon?: boolean };
 
 const TILES: Tile[] = [
-  { href: "/dashboard/menu", emoji: "📋", title: "Menu", desc: "Add sections, products, add-ons and prices" },
+  { href: "/dashboard/menu", emoji: "📋", title: "Menu", desc: "Add sections, products, extras and prices" },
   { href: "#", emoji: "🧾", title: "Orders", desc: "Live incoming orders", soon: true },
   { href: "#", emoji: "🪑", title: "Tables & QR", desc: "Manage tables and print QR codes", soon: true },
 ];

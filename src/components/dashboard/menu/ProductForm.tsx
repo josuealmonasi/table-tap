@@ -102,7 +102,7 @@ export default function ProductForm({
 
       {addons.length > 0 && (
         <div>
-          <div className="tt-mod-label" style={{ marginTop: 6 }}>Add-ons offered</div>
+          <div className="tt-mod-label" style={{ marginTop: 6 }}>Extras offered</div>
           <div className="tt-chips">
             {addons.map((a) => (
               <button

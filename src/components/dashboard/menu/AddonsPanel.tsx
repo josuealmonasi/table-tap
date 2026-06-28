@@ -28,13 +28,13 @@ export default function AddonsPanel({
   return (
     <div className="tt-section">
       <div className="tt-section-head">
-        <h3 className="tt-serif" style={{ margin: 0 }}>🧂 Add-on items</h3>
+        <h3 className="tt-serif" style={{ margin: 0 }}>🧂 Extras</h3>
         <span className="tt-muted" style={{ fontSize: 12 }}>Attach these to products</span>
       </div>
 
       {addons.length === 0 && (
         <p className="tt-muted" style={{ fontSize: 13 }}>
-          No add-ons yet. Create one (e.g. Catsup) to offer it on products.
+          No extras yet. Create one (e.g. Catsup) to offer it on products.
         </p>
       )}
 
@@ -73,7 +73,7 @@ export default function AddonsPanel({
                   className="tt-iconbtn"
                   title="Delete"
                   onClick={() => {
-                    if (confirm(`Delete add-on "${addon.name}"?`)) onDelete(addon.id);
+                    if (confirm(`Delete extra "${addon.name}"?`)) onDelete(addon.id);
                   }}
                 >
                   🗑️
@@ -86,7 +86,7 @@ export default function AddonsPanel({
 
       {adding ? (
         <AddonForm
-          submitLabel="Add add-on"
+          submitLabel="Add extra"
           onCancel={() => setAdding(false)}
           onSubmit={async (input) => {
             await onAdd(input);
@@ -94,7 +94,7 @@ export default function AddonsPanel({
           }}
         />
       ) : (
-        <button className="tt-add-more" onClick={() => setAdding(true)}>+ Add add-on item</button>
+        <button className="tt-add-more" onClick={() => setAdding(true)}>+ Add extra</button>
       )}
     </div>
   );
@@ -128,7 +128,7 @@ function AddonForm({
       }}
     >
       <div className="tt-prodform-row">
-        <input className="tt-input" style={{ flex: 1 }} placeholder="Add-on name (e.g. Catsup)" value={name} onChange={(e) => setName(e.target.value)} required />
+        <input className="tt-input" style={{ flex: 1 }} placeholder="Extra name (e.g. Catsup)" value={name} onChange={(e) => setName(e.target.value)} required />
         <input className="tt-input" style={{ width: 110 }} type="number" step="0.01" min="0" placeholder="Price" value={price} onChange={(e) => setPrice(e.target.value)} required />
       </div>
       <IconPicker value={emoji} onChange={setEmoji} variant="addon" label="Icon (optional)" />

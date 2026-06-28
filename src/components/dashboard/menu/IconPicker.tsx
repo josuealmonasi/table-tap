@@ -42,44 +42,9 @@ const ICON_GROUPS: { group: string; items: { emoji: string; label: string }[] }[
       { emoji: "🦞", label: "Lobster" },
       { emoji: "🦀", label: "Crab" },
       { emoji: "🦪", label: "Oyster" },
-    ],
-  },
-  {
-    group: "Sides & bread",
-    items: [
       { emoji: "🍟", label: "Fries" },
-      { emoji: "🥔", label: "Potato" },
-      { emoji: "🌽", label: "Corn" },
-      { emoji: "🥖", label: "Bread" },
       { emoji: "🥐", label: "Croissant" },
-      { emoji: "🥨", label: "Pretzel" },
-      { emoji: "🥯", label: "Bagel" },
-      { emoji: "🫓", label: "Flatbread" },
-      { emoji: "🧀", label: "Cheese" },
-      { emoji: "🥚", label: "Egg" },
-      { emoji: "🍄", label: "Mushroom" },
-      { emoji: "🥦", label: "Veg" },
-    ],
-  },
-  {
-    group: "Fruit",
-    items: [
-      { emoji: "🍎", label: "Apple" },
-      { emoji: "🍓", label: "Strawberry" },
-      { emoji: "🫐", label: "Blueberry" },
-      { emoji: "🍌", label: "Banana" },
-      { emoji: "🍋", label: "Lemon" },
-      { emoji: "🍊", label: "Orange" },
-      { emoji: "🍇", label: "Grapes" },
-      { emoji: "🍉", label: "Watermelon" },
-      { emoji: "🥭", label: "Mango" },
-      { emoji: "🍍", label: "Pineapple" },
-      { emoji: "🥥", label: "Coconut" },
-      { emoji: "🍑", label: "Peach" },
-      { emoji: "🍒", label: "Cherry" },
-      { emoji: "🥝", label: "Kiwi" },
-      { emoji: "🥑", label: "Avocado" },
-      { emoji: "🍅", label: "Tomato" },
+      { emoji: "🥖", label: "Bread" },
     ],
   },
   {
@@ -126,22 +91,9 @@ const ICON_GROUPS: { group: string; items: { emoji: string; label: string }[] }[
       { emoji: "🌰", label: "Chestnut" },
     ],
   },
-  {
-    group: "Extras & condiments",
-    items: [
-      { emoji: "🍽️", label: "Dish" },
-      { emoji: "🥢", label: "Chopsticks" },
-      { emoji: "🧂", label: "Salt" },
-      { emoji: "🧈", label: "Butter" },
-      { emoji: "🌶️", label: "Chili" },
-      { emoji: "🧄", label: "Garlic" },
-      { emoji: "🧅", label: "Onion" },
-      { emoji: "🥫", label: "Sauce" },
-    ],
-  },
 ];
 
-// Add-ons are toppings / sauces / extras — never a full dish. Smaller, focused set.
+// Extras are toppings / sauces / extras — never a full dish. Smaller, focused set.
 const ADDON_GROUPS: { group: string; items: { emoji: string; label: string }[] }[] = [
   {
     group: "Toppings",

@@ -39,7 +39,7 @@ export default function MenuManager({ restaurant }: { restaurant: Restaurant }) 
             </div>
             <p className="tt-muted" style={{ fontSize: 13, marginTop: 0 }}>
               Group your menu — e.g. “Coffee Drinks”. Add a section, then add products (Latte,
-              Espresso…) inside it below. Add-ons come last.
+              Espresso…) inside it below. Extras come last.
             </p>
             <form
               className="tt-add-section"
@@ -99,7 +99,7 @@ export default function MenuManager({ restaurant }: { restaurant: Restaurant }) 
 
           {/* Step 3 — optional add-ons, attached to products. */}
           <div className="tt-section-head" style={{ marginTop: 8 }}>
-            <h3 className="tt-serif" style={{ margin: 0 }}>Add-ons <span className="tt-muted" style={{ fontWeight: 400, fontSize: 14 }}>(optional)</span></h3>
+            <h3 className="tt-serif" style={{ margin: 0 }}>Extras <span className="tt-muted" style={{ fontWeight: 400, fontSize: 14 }}>(optional)</span></h3>
           </div>
           <AddonsPanel
             addons={editor.addons}
