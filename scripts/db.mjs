@@ -3,7 +3,7 @@
 //
 //   Dev (default → .env.development.local):
 //     pnpm db:create   create tables / RLS / realtime (structure only)
-//     pnpm db:seed     insert demo data
+//     pnpm db:seed     insert demo data + create test logins (test1..5@tabletap.dev)
 //     pnpm db:reset    drop + create + seed (fresh start)
 //     pnpm db:drop     drop all tables
 //     pnpm db:purge    empty all tables (keep structure)
@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import pg from "pg";
+import { seedTestUsers, TEST_PASSWORD } from "./test-users.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -88,19 +89,24 @@ try {
     await client.query(sql);
   }
 
-  // After create/seed/reset, surface a ready-to-open customer URL if data exists.
+  // After seed/reset: create dev-only test logins, then report what's ready.
   if (command === "seed" || command === "reset") {
+    const testEmails = isProd ? [] : await seedTestUsers(client);
+
     const { rows: restaurants } = await client.query(
       "select id, name from restaurants order by created_at"
     );
     const { rows: tables } = await client.query(
       "select id, label from restaurant_tables order by label::int limit 1"
     );
+
+    console.log(`\n✓ [${target}] Done. ${restaurants.length} restaurant(s).`);
     if (restaurants.length && tables.length) {
-      console.log(`\n✓ [${target}] Done. ${restaurants.length} restaurant(s).`);
-      console.log(`  Open a demo menu: http://localhost:3000/r/${restaurants[0].id}/t/${tables[0].id}`);
-    } else {
-      console.log(`\n✓ [${target}] Done.`);
+      console.log(`  Demo menu: http://localhost:3000/r/${restaurants[0].id}/t/${tables[0].id}`);
+    }
+    if (testEmails.length) {
+      console.log(`\n  Test logins at /login (password: ${TEST_PASSWORD}):`);
+      for (const email of testEmails) console.log(`    ${email}`);
     }
   } else {
     console.log(`✓ [${target}] Done.`);
