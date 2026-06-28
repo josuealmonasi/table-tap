@@ -79,7 +79,7 @@ prompts for confirmation on destructive ops):
 | Command | What it does |
 | --- | --- |
 | `pnpm db:create` | Create tables / RLS / realtime (structure only). |
-| `pnpm db:seed` | Insert the demo restaurant + menu (idempotent). |
+| `pnpm db:seed` | Insert the demo restaurant + menu, and (dev only) create the test logins below. Idempotent. |
 | `pnpm db:reset` | Drop + create + seed — a clean slate. Use this most. |
 | `pnpm db:purge` | Empty every table, keep the structure. |
 | `pnpm db:drop` | Drop all tables entirely. |
@@ -95,6 +95,9 @@ pnpm dev
 - Restaurant: open `http://localhost:3000/signup` to create an account (this also
   creates your restaurant), then you land on `/dashboard`. Sign in again any time
   at `http://localhost:3000/login`.
+- **Test logins (dev only):** `pnpm db:seed` / `pnpm db:reset` create five ready
+  accounts — `test1@tabletap.dev` … `test5@tabletap.dev`, password `test123`,
+  each with its own "Test Restaurant N". These are **never** created on prod.
 - Customer menu: `http://localhost:3000/r/<restaurantId>/t/<tableId>` — `pnpm db:reset`
   prints a ready-to-open demo URL.
 
