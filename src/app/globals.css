@@ -194,12 +194,12 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 
 /* ── login ── */
 .tt-login { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--tt-ink); padding: 20px; }
-.tt-login-card { background: #fff; border-radius: 20px; padding: 36px; max-width: 380px; width: 100%; text-align: center; }
+.tt-login-card { background: #fff; border-radius: 20px; padding: 36px; max-width: 380px; width: 100%; margin: 0 auto; text-align: center; }
 .tt-login-sent { background: rgba(58,125,92,.1); color: var(--tt-success); border-radius: 12px; padding: 16px; font-size: 14px; }
 
 /* ── landing ── */
 .tt-landing { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--tt-paper); }
-.tt-landing-inner { max-width: 480px; text-align: center; }
+.tt-landing-inner { max-width: 480px; margin: 0 auto; text-align: center; }
 .tt-landing-title { font-size: 48px; margin: 8px 0; }
 .tt-landing-sub { color: var(--tt-muted); font-size: 17px; line-height: 1.6; }
 .tt-landing-actions { margin-top: 24px; }

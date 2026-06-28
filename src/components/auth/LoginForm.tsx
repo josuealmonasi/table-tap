@@ -28,46 +28,48 @@ export default function LoginForm() {
 
   return (
     <div className="tt-login">
-      <form className="tt-login-card" onSubmit={handleSubmit}>
-        <div style={{ fontSize: 32 }}>🌸</div>
-        <h1 className="tt-serif" style={{ margin: "8px 0 4px" }}>Welcome back</h1>
-        <p className="tt-muted" style={{ marginTop: 0 }}>Sign in to your restaurant</p>
+      <div className="container">
+        <form className="tt-login-card" onSubmit={handleSubmit}>
+          <div style={{ fontSize: 32 }}>🌸</div>
+          <h1 className="tt-serif" style={{ margin: "8px 0 4px" }}>Welcome back</h1>
+          <p className="tt-muted" style={{ marginTop: 0 }}>Sign in to your restaurant</p>
 
-        <input
-          className="tt-input"
-          type="email"
-          placeholder="you@restaurant.com"
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={{ marginBottom: 12 }}
-          required
-        />
-        <input
-          className="tt-input"
-          type="password"
-          placeholder="Password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={{ marginBottom: 12 }}
-          required
-        />
-        <button
-          className="tt-btn tt-btn-primary"
-          style={{ width: "100%" }}
-          disabled={!email || !password || loading}
-          type="submit"
-        >
-          {loading ? "Signing in…" : "Sign in"}
-        </button>
+          <input
+            className="tt-input"
+            type="email"
+            placeholder="you@restaurant.com"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={{ marginBottom: 12 }}
+            required
+          />
+          <input
+            className="tt-input"
+            type="password"
+            placeholder="Password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{ marginBottom: 12 }}
+            required
+          />
+          <button
+            className="tt-btn tt-btn-primary"
+            style={{ width: "100%" }}
+            disabled={!email || !password || loading}
+            type="submit"
+          >
+            {loading ? "Signing in…" : "Sign in"}
+          </button>
 
-        {error && <p style={{ color: "#c0392b", fontSize: 13 }}>{error}</p>}
+          {error && <p style={{ color: "#c0392b", fontSize: 13 }}>{error}</p>}
 
-        <p className="tt-muted" style={{ fontSize: 13, marginTop: 20 }}>
-          New here? <Link href="/signup" className="tt-accent">Create an account</Link>
-        </p>
-      </form>
+          <p className="tt-muted" style={{ fontSize: 13, marginTop: 20 }}>
+            New here? <Link href="/signup" className="tt-accent">Create an account</Link>
+          </p>
+        </form>
+      </div>
     </div>
   );
 }

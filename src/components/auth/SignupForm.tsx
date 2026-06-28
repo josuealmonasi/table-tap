@@ -42,56 +42,58 @@ export default function SignupForm() {
 
   return (
     <div className="tt-login">
-      <form className="tt-login-card" onSubmit={handleSubmit}>
-        <div style={{ fontSize: 32 }}>🌸</div>
-        <h1 className="tt-serif" style={{ margin: "8px 0 4px" }}>Create your restaurant</h1>
-        <p className="tt-muted" style={{ marginTop: 0 }}>Get your TableTap dashboard in seconds</p>
+      <div className="container">
+        <form className="tt-login-card" onSubmit={handleSubmit}>
+          <div style={{ fontSize: 32 }}>🌸</div>
+          <h1 className="tt-serif" style={{ margin: "8px 0 4px" }}>Create your restaurant</h1>
+          <p className="tt-muted" style={{ marginTop: 0 }}>Get your TableTap dashboard in seconds</p>
 
-        <input
-          className="tt-input"
-          type="text"
-          placeholder="Restaurant name"
-          value={restaurantName}
-          onChange={(e) => setRestaurantName(e.target.value)}
-          style={{ marginBottom: 12 }}
-          required
-        />
-        <input
-          className="tt-input"
-          type="email"
-          placeholder="you@restaurant.com"
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={{ marginBottom: 12 }}
-          required
-        />
-        <input
-          className="tt-input"
-          type="password"
-          placeholder="Password (min 6 characters)"
-          autoComplete="new-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={{ marginBottom: 12 }}
-          minLength={6}
-          required
-        />
-        <button
-          className="tt-btn tt-btn-primary"
-          style={{ width: "100%" }}
-          disabled={!restaurantName || !email || password.length < 6 || loading}
-          type="submit"
-        >
-          {loading ? "Creating account…" : "Create account"}
-        </button>
+          <input
+            className="tt-input"
+            type="text"
+            placeholder="Restaurant name"
+            value={restaurantName}
+            onChange={(e) => setRestaurantName(e.target.value)}
+            style={{ marginBottom: 12 }}
+            required
+          />
+          <input
+            className="tt-input"
+            type="email"
+            placeholder="you@restaurant.com"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={{ marginBottom: 12 }}
+            required
+          />
+          <input
+            className="tt-input"
+            type="password"
+            placeholder="Password (min 6 characters)"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{ marginBottom: 12 }}
+            minLength={6}
+            required
+          />
+          <button
+            className="tt-btn tt-btn-primary"
+            style={{ width: "100%" }}
+            disabled={!restaurantName || !email || password.length < 6 || loading}
+            type="submit"
+          >
+            {loading ? "Creating account…" : "Create account"}
+          </button>
 
-        {error && <p style={{ color: "#c0392b", fontSize: 13 }}>{error}</p>}
+          {error && <p style={{ color: "#c0392b", fontSize: 13 }}>{error}</p>}
 
-        <p className="tt-muted" style={{ fontSize: 13, marginTop: 20 }}>
-          Already have an account? <Link href="/login" className="tt-accent">Sign in</Link>
-        </p>
-      </form>
+          <p className="tt-muted" style={{ fontSize: 13, marginTop: 20 }}>
+            Already have an account? <Link href="/login" className="tt-accent">Sign in</Link>
+          </p>
+        </form>
+      </div>
     </div>
   );
 }
