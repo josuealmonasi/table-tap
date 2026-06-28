@@ -1,79 +1,112 @@
 // ============================================================================
 // TableTap — database management runner
 //
-//   pnpm seed             → create schema + seed demo data (safe to re-run)
-//   pnpm database:drop    → drop all tables (structure + data)
-//   pnpm database:purge   → empty all tables (keep structure)
+//   Dev (default → .env.development.local):
+//     pnpm db:create   create tables / RLS / realtime (structure only)
+//     pnpm db:seed     insert demo data
+//     pnpm db:reset    drop + create + seed (fresh start)
+//     pnpm db:drop     drop all tables
+//     pnpm db:purge    empty all tables (keep structure)
 //
-// Connects to your Supabase Postgres via DATABASE_URL and executes the matching
-// SQL file in supabase/. The package.json scripts pass `--env-file=.env.local`,
-// so DATABASE_URL is read from there automatically.
+//   Prod (append :prod → .env.production.local):
+//     pnpm db:create:prod   pnpm db:seed:prod   pnpm db:reset:prod   ...
+//
+// Picks the database from DATABASE_URL in the matching env file. Destructive
+// commands against production require typing "production" to confirm.
 // ============================================================================
 
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { createInterface } from "node:readline/promises";
 import pg from "pg";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+// Each command maps to the ordered list of SQL files it runs.
 const COMMANDS = {
-  seed: { file: "supabase/schema.sql", label: "Creating schema + seeding demo data" },
-  drop: { file: "supabase/drop.sql", label: "Dropping all tables" },
-  purge: { file: "supabase/purge.sql", label: "Emptying all tables" },
+  create: { files: ["supabase/schema.sql"], label: "Creating schema", destructive: false },
+  seed: { files: ["supabase/seed.sql"], label: "Seeding demo data", destructive: false },
+  drop: { files: ["supabase/drop.sql"], label: "Dropping all tables", destructive: true },
+  purge: { files: ["supabase/purge.sql"], label: "Emptying all tables", destructive: true },
+  reset: {
+    files: ["supabase/drop.sql", "supabase/schema.sql", "supabase/seed.sql"],
+    label: "Resetting (drop + create + seed)",
+    destructive: true,
+  },
 };
 
 const command = process.argv[2];
-const config = COMMANDS[command];
+const isProd = process.argv.includes("--prod");
+const target = isProd ? "production" : "development";
+const envFile = isProd ? ".env.production.local" : ".env.development.local";
 
+const config = COMMANDS[command];
 if (!config) {
   console.error(`✗ Unknown command "${command ?? ""}".`);
-  console.error("  Use one of: pnpm seed | pnpm database:drop | pnpm database:purge");
+  console.error("  Use: create | seed | reset | drop | purge   (add --prod for production)");
+  process.exit(1);
+}
+
+// Load the target environment's variables (Node 20.12+/21.7+).
+try {
+  process.loadEnvFile(join(root, envFile));
+} catch {
+  console.error(`✗ Could not read ${envFile}.`);
+  console.error(`  Create it (copy ${envFile}.example) and fill in DATABASE_URL.`);
   process.exit(1);
 }
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
-  console.error("✗ DATABASE_URL is not set in .env.local.");
-  console.error("  Get it from Supabase → Connect (top bar) → 'Session pooler' URI,");
-  console.error("  paste your database password into it, then add it to .env.local as DATABASE_URL.");
+  console.error(`✗ DATABASE_URL is not set in ${envFile}.`);
+  console.error("  Supabase → Connect → 'Session pooler' URI, with your DB password.");
   process.exit(1);
 }
 
-const sql = await readFile(join(root, config.file), "utf8");
+// Safety gate: typing-confirmation before destructive production changes.
+if (isProd && config.destructive) {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await rl.question(
+    `⚠️  About to ${command.toUpperCase()} the PRODUCTION database. Type "production" to continue: `
+  );
+  rl.close();
+  if (answer.trim() !== "production") {
+    console.error("Aborted.");
+    process.exit(1);
+  }
+}
 
-// Supabase requires SSL; rejectUnauthorized:false avoids needing the CA locally.
 const client = new pg.Client({ connectionString, ssl: { rejectUnauthorized: false } });
 
-console.log(`▸ ${config.label}…`);
+console.log(`▸ [${target}] ${config.label}…`);
 
 try {
   await client.connect();
-  await client.query(sql);
+  for (const file of config.files) {
+    const sql = await readFile(join(root, file), "utf8");
+    await client.query(sql);
+  }
 
-  if (command === "seed") {
+  // After create/seed/reset, surface a ready-to-open customer URL if data exists.
+  if (command === "seed" || command === "reset") {
     const { rows: restaurants } = await client.query(
       "select id, name from restaurants order by created_at"
     );
     const { rows: tables } = await client.query(
-      "select id, label from restaurant_tables order by label::int"
+      "select id, label from restaurant_tables order by label::int limit 1"
     );
-
     if (restaurants.length && tables.length) {
-      const r = restaurants[0];
-      const t = tables[0];
-      console.log(`\n✓ Done. ${restaurants.length} restaurant(s), ${tables.length} table(s).`);
-      console.log(`  Demo restaurant "${r.name}" → ${r.id}`);
-      console.log(`\n  Open the customer menu at:`);
-      console.log(`  http://localhost:3000/r/${r.id}/t/${t.id}`);
+      console.log(`\n✓ [${target}] Done. ${restaurants.length} restaurant(s).`);
+      console.log(`  Open a demo menu: http://localhost:3000/r/${restaurants[0].id}/t/${tables[0].id}`);
     } else {
-      console.log("✓ Done.");
+      console.log(`\n✓ [${target}] Done.`);
     }
   } else {
-    console.log("✓ Done.");
+    console.log(`✓ [${target}] Done.`);
   }
 } catch (err) {
-  console.error(`\n✗ ${command} failed: ${err.message}`);
+  console.error(`\n✗ [${target}] ${command} failed: ${err.message}`);
   process.exitCode = 1;
 } finally {
   await client.end();
