@@ -32,15 +32,38 @@ export default function MenuManager({ restaurant }: { restaurant: Restaurant }) 
         <p className="tt-muted">Loading menu…</p>
       ) : (
         <div className="tt-menu-grid">
-          <AddonsPanel
-            addons={editor.addons}
-            currency={currency}
-            onAdd={editor.addAddon}
-            onUpdate={editor.updateAddon}
-            onDelete={editor.deleteAddon}
-            onToggleAvailable={editor.setAvailability}
-          />
+          {/* Step 1 — sections. The starting point: create a section, then add products to it. */}
+          <div className="tt-section">
+            <div className="tt-section-head">
+              <h3 className="tt-serif" style={{ margin: 0 }}>Sections</h3>
+            </div>
+            <p className="tt-muted" style={{ fontSize: 13, marginTop: 0 }}>
+              Group your menu — e.g. “Coffee Drinks”. Add a section, then add products (Latte,
+              Espresso…) inside it below. Add-ons come last.
+            </p>
+            <form
+              className="tt-add-section"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (newSection.trim()) {
+                  await editor.addSection(newSection.trim());
+                  setNewSection("");
+                }
+              }}
+            >
+              <input
+                className="tt-input"
+                placeholder="New section name (e.g. Coffee Drinks)"
+                value={newSection}
+                onChange={(e) => setNewSection(e.target.value)}
+              />
+              <button className="tt-btn tt-btn-primary" type="submit" disabled={!newSection.trim()}>
+                + Add section
+              </button>
+            </form>
+          </div>
 
+          {/* Step 2 — products within each section. */}
           {editor.sections.map((section) => (
             <SectionEditor
               key={section.id}
@@ -74,26 +97,18 @@ export default function MenuManager({ restaurant }: { restaurant: Restaurant }) 
             />
           )}
 
-          <form
-            className="tt-add-section"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (newSection.trim()) {
-                await editor.addSection(newSection.trim());
-                setNewSection("");
-              }
-            }}
-          >
-            <input
-              className="tt-input"
-              placeholder="New section name (e.g. Burgers)"
-              value={newSection}
-              onChange={(e) => setNewSection(e.target.value)}
-            />
-            <button className="tt-btn tt-btn-primary" type="submit" disabled={!newSection.trim()}>
-              + Add section
-            </button>
-          </form>
+          {/* Step 3 — optional add-ons, attached to products. */}
+          <div className="tt-section-head" style={{ marginTop: 8 }}>
+            <h3 className="tt-serif" style={{ margin: 0 }}>Add-ons <span className="tt-muted" style={{ fontWeight: 400, fontSize: 14 }}>(optional)</span></h3>
+          </div>
+          <AddonsPanel
+            addons={editor.addons}
+            currency={currency}
+            onAdd={editor.addAddon}
+            onUpdate={editor.updateAddon}
+            onDelete={editor.deleteAddon}
+            onToggleAvailable={editor.setAvailability}
+          />
         </div>
       )}
     </div>
