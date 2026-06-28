@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { OrderLineItem, Restaurant } from "@/lib/types";
+import { lineUnitPrice, type OrderLineItem, type Restaurant } from "@/lib/types";
 
 /** A cart line is an order line item plus a client-side id for list keys/removal. */
 export type CartItem = OrderLineItem & { cartId: number };
@@ -26,7 +26,7 @@ export function useCart(restaurant: Restaurant) {
   }
 
   const totals = useMemo(() => {
-    const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
+    const subtotal = items.reduce((sum, i) => sum + lineUnitPrice(i) * i.qty, 0);
     const serviceFee = +(subtotal * (restaurant.service_pct / 100)).toFixed(2);
     return { subtotal, serviceFee, total: subtotal + serviceFee };
   }, [items, restaurant.service_pct]);

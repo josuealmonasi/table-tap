@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { OrderLineItem } from "@/lib/types";
+import type { OrderLineItem, OrderExtra } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -36,12 +36,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
     }
 
-    // IMPORTANT: never trust client prices. Re-fetch each item's real price.
-    const itemIds = items.map((i) => i.itemId);
+    // IMPORTANT: never trust client prices. Re-fetch every referenced item
+    // (products AND extras) and use the DB's real price.
+    const referencedIds = [
+      ...new Set(items.flatMap((i) => [i.itemId, ...(i.extras?.map((e) => e.id) ?? [])])),
+    ];
     const { data: dbItems, error: iErr } = await supabase
       .from("menu_items")
       .select("id, name, price, emoji, available")
-      .in("id", itemIds)
+      .in("id", referencedIds)
       .eq("restaurant_id", restaurantId);
 
     if (iErr || !dbItems) {
@@ -50,7 +53,7 @@ export async function POST(req: NextRequest) {
 
     const priceMap = new Map(dbItems.map((d) => [d.id, d]));
 
-    // Build verified line items.
+    // Build verified line items with DB prices for the product and its extras.
     let subtotal = 0;
     const verified: OrderLineItem[] = [];
     for (const line of items) {
@@ -61,8 +64,27 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+
+      const verifiedExtras: OrderExtra[] = [];
+      for (const extra of line.extras ?? []) {
+        const dbExtra = priceMap.get(extra.id);
+        if (!dbExtra || !dbExtra.available) {
+          return NextResponse.json(
+            { error: `Extra unavailable: ${extra.name}` },
+            { status: 400 }
+          );
+        }
+        verifiedExtras.push({
+          id: dbExtra.id,
+          name: dbExtra.name,
+          emoji: dbExtra.emoji,
+          price: dbExtra.price,
+        });
+      }
+
       const qty = Math.max(1, Math.floor(line.qty));
-      subtotal += db.price * qty;
+      const unit = db.price + verifiedExtras.reduce((s, e) => s + e.price, 0);
+      subtotal += unit * qty;
       verified.push({
         itemId: db.id,
         name: db.name,
@@ -70,6 +92,7 @@ export async function POST(req: NextRequest) {
         price: db.price,
         qty,
         mods: line.mods ?? {},
+        extras: verifiedExtras.length ? verifiedExtras : undefined,
         notes: line.notes,
       });
     }
@@ -109,14 +132,19 @@ export async function POST(req: NextRequest) {
         const modText = Object.entries(v.mods)
           .map(([k, val]) => `${k}: ${Array.isArray(val) ? val.join(", ") : val}`)
           .join(" · ");
+        const extrasText = v.extras?.length
+          ? `Extras: ${v.extras.map((e) => e.name).join(", ")}`
+          : "";
+        const description = [modText, extrasText].filter(Boolean).join(" · ");
+        const unitAmount = v.price + (v.extras?.reduce((s, e) => s + e.price, 0) ?? 0);
         return {
           quantity: v.qty,
           price_data: {
             currency: cur,
-            unit_amount: Math.round(v.price * 100),
+            unit_amount: Math.round(unitAmount * 100),
             product_data: {
-              name: `${v.emoji} ${v.name}`,
-              ...(modText ? { description: modText } : {}),
+              name: `${v.emoji ? `${v.emoji} ` : ""}${v.name}`,
+              ...(description ? { description } : {}),
             },
           },
         };
