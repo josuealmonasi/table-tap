@@ -5,6 +5,7 @@ import { formatMoney } from "@/lib/format";
 import type { MenuItem } from "@/lib/types";
 import type { AddonInput } from "@/hooks/useMenuEditor";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import IconPicker from "./IconPicker";
 
 /** Manages the restaurant's reusable add-on items (e.g. Catsup, Extra cheese). */
 export default function AddonsPanel({
@@ -123,6 +124,7 @@ function AddonForm({
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [price, setPrice] = useState(String(initial?.price ?? ""));
+  const [emoji, setEmoji] = useState(initial?.emoji ?? "");
   const [saving, setSaving] = useState(false);
 
   return (
@@ -131,7 +133,7 @@ function AddonForm({
       onSubmit={async (e) => {
         e.preventDefault();
         setSaving(true);
-        await onSubmit({ name: name.trim(), price: Number(price) || 0 });
+        await onSubmit({ name: name.trim(), price: Number(price) || 0, emoji });
         setSaving(false);
       }}
     >
@@ -139,6 +141,7 @@ function AddonForm({
         <input className="tt-input" style={{ flex: 1 }} placeholder="Extra name (e.g. Catsup)" value={name} onChange={(e) => setName(e.target.value)} required />
         <input className="tt-input" style={{ width: 110 }} type="number" step="0.01" min="0" placeholder="Price" value={price} onChange={(e) => setPrice(e.target.value)} required />
       </div>
+      <IconPicker value={emoji} onChange={setEmoji} variant="addon" />
       <div className="tt-prodform-actions">
         <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={onCancel}>Cancel</button>
         <button type="submit" className="tt-btn tt-btn-primary tt-btn-sm" disabled={!name || saving}>{saving ? "…" : submitLabel}</button>

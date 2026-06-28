@@ -2,20 +2,27 @@
 
 import { useState } from "react";
 
-// A few common icons per category. Sections already group by type (e.g. "Coffee
-// Drinks"), so this just distinguishes meals / drinks / extras at a glance.
-const ICON_GROUPS: { group: string; items: { emoji: string; label: string }[] }[] = [
+type IconGroup = { group: string; items: { emoji: string; label: string }[] };
+
+// Sections already group by type (e.g. "Coffee Drinks"), so this just
+// distinguishes meals vs. drinks at a glance. 🍽️ is the generic default.
+const PRODUCT_ICON_GROUPS: IconGroup[] = [
   {
     group: "Meals",
     items: [
+      { emoji: "🍽️", label: "Dish" },
       { emoji: "🍔", label: "Burger" },
       { emoji: "🍕", label: "Pizza" },
       { emoji: "🌭", label: "Hot dog" },
       { emoji: "🌮", label: "Taco" },
+      { emoji: "🍝", label: "Pasta" },
       { emoji: "🍜", label: "Noodles" },
       { emoji: "🍣", label: "Sushi" },
       { emoji: "🍳", label: "Breakfast" },
       { emoji: "🥗", label: "Salad" },
+      { emoji: "🍗", label: "Chicken" },
+      { emoji: "🥩", label: "Meat" },
+      { emoji: "🥪", label: "Sandwich" },
     ],
   },
   {
@@ -29,46 +36,62 @@ const ICON_GROUPS: { group: string; items: { emoji: string; label: string }[] }[
       { emoji: "🍷", label: "Wine" },
     ],
   },
+];
+
+// Extras are condiments and a couple of complimentary beverage add-ons —
+// never a full dish.
+const ADDON_ICON_GROUPS: IconGroup[] = [
   {
-    group: "Extras",
+    group: "Condiments",
     items: [
-      { emoji: "🍟", label: "Fries" },
-      { emoji: "🍪", label: "Cookie" },
-      { emoji: "🍰", label: "Cake" },
-      { emoji: "🍩", label: "Donut" },
-      { emoji: "🧀", label: "Cheese" },
-      { emoji: "🥖", label: "Bread" },
+      { emoji: "🧂", label: "Salt" },
+      { emoji: "🌶️", label: "Chili" },
+      { emoji: "🧄", label: "Garlic" },
+      { emoji: "🍯", label: "Honey" },
+      { emoji: "🥫", label: "Sauce" },
+      { emoji: "🧈", label: "Butter" },
+    ],
+  },
+  {
+    group: "Beverage add-ons",
+    items: [
+      { emoji: "🥛", label: "Milk" },
+      { emoji: "☕", label: "Coffee" },
     ],
   },
 ];
 
 /** Which group contains the currently chosen emoji (so we can open it by default). */
-function findGroupWith(value: string) {
+function findGroupWith(groups: IconGroup[], value: string) {
   if (!value) return null;
-  return ICON_GROUPS.find((g) => g.items.some((i) => i.emoji === value))?.group ?? null;
+  return groups.find((g) => g.items.some((i) => i.emoji === value))?.group ?? null;
 }
 
 /**
- * Icon picker for a product: meals / drinks / extras, single-open accordion.
- * value is the chosen emoji ("" = none, falls back to 🍽️ wherever it's shown).
+ * Icon picker, single-open accordion. value is the chosen emoji ("" = none).
+ * variant picks the icon set: "product" (meals/drinks) or "addon" (condiments/
+ * beverage add-ons).
  */
 export default function IconPicker({
   value,
   onChange,
   label = "Icon (optional)",
+  variant = "product",
 }: {
   value: string;
   onChange: (emoji: string) => void;
   label?: string;
+  variant?: "product" | "addon";
 }) {
-  const [openGroup, setOpenGroup] = useState<string | null>(() => findGroupWith(value));
+  const groups = variant === "addon" ? ADDON_ICON_GROUPS : PRODUCT_ICON_GROUPS;
+  const [openGroup, setOpenGroup] = useState<string | null>(() => findGroupWith(groups, value));
 
   return (
     <div>
       <div className="tt-mod-label">{label}</div>
 
       <div className="tt-accordion">
-        {ICON_GROUPS.map((g) => {
+        {groups.map((g) => {
           const isOpen = openGroup === g.group;
           const selected = g.items.find((i) => i.emoji === value);
           return (
