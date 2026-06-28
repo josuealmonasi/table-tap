@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import type { Restaurant } from "@/lib/types";
 import { useMenuEditor } from "@/hooks/useMenuEditor";
+import { SectionSkeleton } from "@/components/ui/Skeleton";
 import AddonsPanel from "./AddonsPanel";
 import SectionEditor from "./SectionEditor";
 
@@ -21,6 +22,7 @@ export default function MenuManager({ restaurant }: { restaurant: Restaurant }) 
 
   return (
     <div className="tt-dash">
+      <div className="container">
       <header className="tt-dash-head">
         <div>
           <h1 className="tt-serif" style={{ margin: 0 }}>Menu</h1>
@@ -29,7 +31,11 @@ export default function MenuManager({ restaurant }: { restaurant: Restaurant }) 
       </header>
 
       {editor.loading ? (
-        <p className="tt-muted">Loading menu…</p>
+        <div className="tt-menu-grid">
+          <SectionSkeleton rows={1} />
+          <SectionSkeleton rows={3} />
+          <SectionSkeleton rows={2} />
+        </div>
       ) : (
         <div className="tt-menu-grid">
           {/* Step 1 — sections. The starting point: create a section, then add products to it. */}
@@ -111,6 +117,7 @@ export default function MenuManager({ restaurant }: { restaurant: Restaurant }) 
           />
         </div>
       )}
+      </div>
     </div>
   );
 

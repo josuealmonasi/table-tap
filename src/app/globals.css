@@ -22,6 +22,9 @@ body {
   color: var(--tt-ink);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font-size: 0.9em; }
 
@@ -29,6 +32,12 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-muted { color: var(--tt-muted); }
 .tt-sage { color: var(--tt-sage); }
 .tt-accent { color: var(--tt-accent); }
+
+/* ── container: standard centered content width, used everywhere except
+   the navbar/footer (which span the full page width) ── */
+.container { max-width: 1100px; margin: 0 auto; width: 100%; padding: 0 24px; }
+@media (max-width: 1024px) { .container { padding: 0 20px; } }
+@media (max-width: 640px) { .container { padding: 0 16px; } }
 
 /* ── layout shells ── */
 .tt-root {
@@ -52,6 +61,7 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-btn-primary { background: var(--tt-accent); color: #fff; }
 .tt-btn-success { background: var(--tt-success); color: #fff; }
 .tt-btn-ghost { background: transparent; color: var(--tt-muted); }
+.tt-btn-danger { background: #c0392b; color: #fff; }
 .tt-btn-sm { font-size: 13px; padding: 8px 16px; }
 .tt-btn-lg { font-size: 16px; padding: 16px 28px; }
 
@@ -166,7 +176,8 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-step-line-done { background: var(--tt-success); }
 
 /* ── dashboard ── */
-.tt-dash { min-height: 100vh; background: #f0ede8; padding: 24px; }
+/* Breakpoints: mobile <640px, tablet 640–1024px, desktop >1024px. */
+.tt-dash { min-height: 100vh; background: #f0ede8; padding: 24px 0; }
 .tt-dash-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
 .tt-dash-head h1 { font-size: 26px; }
 .tt-stat {
@@ -194,9 +205,54 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-landing-actions { margin-top: 24px; }
 
 /* ── responsive ── */
+/* Tablet */
+@media (max-width: 1024px) {
+  .tt-dash { padding: 20px 0; }
+}
+/* Mobile */
 @media (max-width: 640px) {
-  .tt-dash { padding: 16px; }
+  .tt-dash { padding: 16px 0; }
   .tt-orders-grid { grid-template-columns: 1fr; }
+  .tt-tiles { grid-template-columns: 1fr; }
+}
+
+/* ── navbar ── */
+.tt-navbar { background: #fff; border-bottom: 1px solid var(--tt-cream); position: sticky; top: 0; z-index: 50; }
+.tt-navbar-inner { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; }
+.tt-navbar-brand { display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--tt-ink); font-size: 16px; }
+.tt-navbar-logo { font-size: 22px; line-height: 1; }
+
+.tt-user-menu { position: relative; }
+.tt-user-btn {
+  width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--tt-cream); background: var(--tt-surface);
+  font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.tt-user-btn:hover { background: var(--tt-cream); }
+.tt-user-dropdown {
+  position: absolute; right: 0; top: calc(100% + 8px); background: #fff; border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.15); min-width: 190px; padding: 6px; z-index: 60;
+}
+.tt-user-item {
+  width: 100%; text-align: left; background: none; border: none; padding: 10px 12px; border-radius: 8px;
+  font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+  font-family: inherit; color: var(--tt-ink);
+}
+.tt-user-item:hover { background: var(--tt-surface); }
+.tt-user-item:disabled { color: var(--tt-muted); cursor: default; }
+.tt-user-item:disabled:hover { background: none; }
+.tt-user-divider { height: 1px; background: var(--tt-cream); margin: 6px 0; }
+
+/* ── footer ── */
+.tt-footer { background: var(--tt-ink); color: var(--tt-muted); margin-top: auto; }
+.tt-footer-inner {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px;
+  padding: 20px 0; font-size: 13px;
+}
+.tt-footer-brand { color: #fff; font-weight: 700; }
+
+@media (max-width: 640px) {
+  .tt-navbar-inner { padding: 12px 0; }
+  .tt-footer-inner { padding: 16px 0; flex-direction: column; text-align: center; }
 }
 
 /* ── accessibility ── */
@@ -208,7 +264,7 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 }
 
 /* ── dashboard home tiles ── */
-.tt-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.tt-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
 .tt-tile {
   background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.06);
   display: flex; flex-direction: column; gap: 4px; text-decoration: none; color: var(--tt-ink);
@@ -219,8 +275,26 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-tile-soon { opacity: 0.6; cursor: default; }
 .tt-tile-soon:hover { border-color: transparent; transform: none; }
 
+/* ── shimmer / skeleton loading ── */
+@keyframes tt-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.tt-skeleton {
+  background: linear-gradient(90deg, var(--tt-surface) 25%, var(--tt-cream) 50%, var(--tt-surface) 75%);
+  background-size: 200% 100%;
+  animation: tt-shimmer 1.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tt-skeleton { animation: none; }
+}
+.tt-skel-thumb { width: 48px; height: 48px; border-radius: 10px; flex-shrink: 0; }
+.tt-skel-line { height: 14px; border-radius: 4px; }
+.tt-skel-tile { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+
 /* ── menu manager ── */
-.tt-menu-grid { display: flex; flex-direction: column; gap: 16px; max-width: 760px; }
+.tt-menu-grid { display: flex; flex-direction: column; gap: 16px; max-width: 760px; margin: 0 auto; }
 .tt-section { background: #fff; border-radius: 16px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
 .tt-section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .tt-section-head h3 { font-size: 18px; }
@@ -276,6 +350,18 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-acc-right { display: flex; align-items: center; gap: 8px; }
 .tt-acc-chevron { font-size: 11px; }
 .tt-acc-body { padding: 12px 14px; background: var(--tt-surface); }
+
+/* confirm dialog */
+.tt-dialog-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.tt-dialog {
+  background: #fff; border-radius: 16px; padding: 24px; max-width: 360px; width: 100%;
+  box-shadow: 0 12px 40px rgba(0,0,0,.25);
+}
+.tt-dialog h3 { font-size: 18px; }
+.tt-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 
 @media (max-width: 640px) {
   .tt-prodform-row { flex-wrap: wrap; }

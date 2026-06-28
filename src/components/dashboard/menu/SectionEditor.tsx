@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Category, MenuItem } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import ProductRow from "./ProductRow";
 import ProductForm from "./ProductForm";
 
@@ -35,6 +36,7 @@ export default function SectionEditor({
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(section?.name ?? "");
+  const confirm = useConfirm();
 
   return (
     <div className="tt-section">
@@ -60,8 +62,15 @@ export default function SectionEditor({
                 <button
                   className="tt-iconbtn"
                   title="Delete section"
-                  onClick={() => {
-                    if (confirm(`Delete section "${section.name}"? Its products move to Uncategorized.`)) {
+                  onClick={async () => {
+                    if (
+                      await confirm({
+                        title: `Delete section “${section.name}”?`,
+                        message: "Its products move to Uncategorized.",
+                        confirmLabel: "Delete",
+                        danger: true,
+                      })
+                    ) {
                       onDelete(section.id);
                     }
                   }}

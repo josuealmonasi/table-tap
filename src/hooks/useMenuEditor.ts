@@ -9,8 +9,8 @@ export type ProductInput = {
   name: string;
   description: string;
   price: number;
-  emoji: string;
   image_url: string | null;
+  emoji: string;
   popular: boolean;
 };
 
@@ -18,7 +18,6 @@ export type ProductInput = {
 export type AddonInput = {
   name: string;
   price: number;
-  emoji: string;
 };
 
 /**
@@ -118,6 +117,7 @@ export function useMenuEditor(restaurantId: string) {
       restaurant_id: restaurantId,
       category_id: null,
       is_addon: true,
+      emoji: "",
       sort_order: addons.length,
       ...input,
     });

@@ -59,16 +59,30 @@ export type OrderStatus =
   | "completed"
   | "cancelled";
 
+// A chosen extra (add-on item) snapshot on a line item.
+export type OrderExtra = {
+  id: string;
+  name: string;
+  emoji: string;
+  price: number;
+};
+
 // A single line item snapshot stored on the order.
 export type OrderLineItem = {
   itemId: string;
   name: string;
   emoji: string;
-  price: number;
+  price: number; // base unit price (before extras)
   qty: number;
   mods: Record<string, string | string[]>;
+  extras?: OrderExtra[];
   notes?: string;
 };
+
+/** Unit price including selected extras (before quantity). */
+export function lineUnitPrice(item: { price: number; extras?: OrderExtra[] }): number {
+  return item.price + (item.extras?.reduce((sum, e) => sum + e.price, 0) ?? 0);
+}
 
 export type Order = {
   id: string;

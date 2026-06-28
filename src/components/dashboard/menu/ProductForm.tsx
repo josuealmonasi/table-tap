@@ -27,8 +27,8 @@ export default function ProductForm({
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [price, setPrice] = useState(String(initial?.price ?? ""));
-  const [emoji, setEmoji] = useState(initial?.emoji ?? "");
   const [imageUrl, setImageUrl] = useState(initial?.image_url ?? "");
+  const [emoji, setEmoji] = useState(initial?.emoji ?? "");
   const [popular, setPopular] = useState(initial?.popular ?? false);
   const [picked, setPicked] = useState<string[]>(selectedAddonIds);
   const [saving, setSaving] = useState(false);
@@ -45,8 +45,8 @@ export default function ProductForm({
         name: name.trim(),
         description: description.trim(),
         price: Number(price) || 0,
-        emoji,
         image_url: imageUrl.trim() || null,
+        emoji,
         popular,
       },
       picked
@@ -78,8 +78,6 @@ export default function ProductForm({
         />
       </div>
 
-      <IconPicker value={emoji} onChange={setEmoji} />
-
       <textarea
         className="tt-input"
         rows={2}
@@ -100,6 +98,8 @@ export default function ProductForm({
         Mark as popular
       </label>
 
+      <IconPicker value={emoji} onChange={setEmoji} />
+
       {addons.length > 0 && (
         <div>
           <div className="tt-mod-label" style={{ marginTop: 6 }}>Extras offered</div>
@@ -111,7 +111,7 @@ export default function ProductForm({
                 className={`tt-chip ${picked.includes(a.id) ? "tt-chip-on" : ""}`}
                 onClick={() => toggleAddon(a.id)}
               >
-                {a.emoji} {a.name} · {formatMoney(a.price, currency)}
+                {a.emoji ? `${a.emoji} ` : ""}{a.name} · {formatMoney(a.price, currency)}
               </button>
             ))}
           </div>

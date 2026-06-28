@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type {
   Category,
   MenuItem,
@@ -24,17 +24,31 @@ export default function OrderingApp({
   table,
   categories,
   items,
+  extras,
+  extrasByProduct,
 }: {
   restaurant: Restaurant;
   table: RestaurantTable | null;
   categories: Category[];
   items: MenuItem[];
+  extras: MenuItem[];
+  extrasByProduct: Record<string, string[]>;
 }) {
   const [screen, setScreen] = useState<Screen>("menu");
   const [selected, setSelected] = useState<MenuItem | null>(null);
   const [orderNote, setOrderNote] = useState("");
   const [loading, setLoading] = useState(false);
   const cart = useCart(restaurant);
+
+  const extrasById = useMemo(() => new Map(extras.map((e) => [e.id, e])), [extras]);
+
+  // The available extra items offered by the currently selected product.
+  const selectedExtras = useMemo(() => {
+    if (!selected) return [];
+    return (extrasByProduct[selected.id] ?? [])
+      .map((id) => extrasById.get(id))
+      .filter((e): e is MenuItem => Boolean(e));
+  }, [selected, extrasByProduct, extrasById]);
 
   function openItem(item: MenuItem) {
     setSelected(item);
@@ -63,6 +77,7 @@ export default function OrderingApp({
             price: c.price,
             qty: c.qty,
             mods: c.mods,
+            extras: c.extras,
             notes: c.notes,
           })),
           note: orderNote || undefined,
@@ -85,6 +100,7 @@ export default function OrderingApp({
     return (
       <ItemDetailScreen
         item={selected}
+        extras={selectedExtras}
         currency={restaurant.currency}
         onBack={() => setScreen("menu")}
         onAdd={addToCart}

@@ -5,19 +5,22 @@ import { formatMoney } from "@/lib/format";
 import type { MenuItem, Modifier, OrderLineItem } from "@/lib/types";
 import ModifierGroup from "./ModifierGroup";
 
-/** Item customisation screen: modifiers, special requests, quantity → add to cart. */
+/** Item customisation screen: modifiers, extras, special requests, qty → add to cart. */
 export default function ItemDetailScreen({
   item,
+  extras,
   currency,
   onBack,
   onAdd,
 }: {
   item: MenuItem;
+  extras: MenuItem[];
   currency: string;
   onBack: () => void;
   onAdd: (line: OrderLineItem) => void;
 }) {
   const [mods, setMods] = useState<Record<string, string | string[]>>({});
+  const [extraIds, setExtraIds] = useState<string[]>([]);
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState("");
 
@@ -32,6 +35,14 @@ export default function ItemDetailScreen({
     });
   }
 
+  function toggleExtra(id: string) {
+    setExtraIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  const chosenExtras = extras.filter((e) => extraIds.includes(e.id));
+  const extrasTotal = chosenExtras.reduce((sum, e) => sum + e.price, 0);
+  const unitPrice = item.price + extrasTotal;
+
   function handleAdd() {
     onAdd({
       itemId: item.id,
@@ -40,6 +51,7 @@ export default function ItemDetailScreen({
       price: item.price,
       qty,
       mods,
+      extras: chosenExtras.map((e) => ({ id: e.id, name: e.name, emoji: e.emoji, price: e.price })),
       notes: notes || undefined,
     });
   }
@@ -47,7 +59,7 @@ export default function ItemDetailScreen({
   return (
     <div className="tt-root">
       <div className="tt-item-hero">
-        <span>{item.emoji}</span>
+        <span>{item.emoji || "🍽️"}</span>
         <button className="tt-back" onClick={onBack}>←</button>
       </div>
       <div style={{ padding: 20 }}>
@@ -65,6 +77,29 @@ export default function ItemDetailScreen({
             onToggle={(option) => toggleMod(mod.label, option, mod.type)}
           />
         ))}
+
+        {extras.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div className="tt-mod-label">
+              Add extras <span className="tt-muted">(optional)</span>
+            </div>
+            <div className="tt-chips">
+              {extras.map((extra) => {
+                const on = extraIds.includes(extra.id);
+                return (
+                  <button
+                    key={extra.id}
+                    className={`tt-chip ${on ? "tt-chip-on" : ""}`}
+                    onClick={() => toggleExtra(extra.id)}
+                  >
+                    {extra.emoji ? `${extra.emoji} ` : ""}{extra.name}
+                    {extra.price > 0 ? ` +${formatMoney(extra.price, currency)}` : ""}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div style={{ marginBottom: 20 }}>
           <div className="tt-mod-label">Special requests</div>
@@ -84,7 +119,7 @@ export default function ItemDetailScreen({
             <button onClick={() => setQty((q) => q + 1)}>+</button>
           </div>
           <button className="tt-btn tt-btn-primary" style={{ flex: 1 }} onClick={handleAdd}>
-            Add to cart — {formatMoney(item.price * qty, currency)}
+            Add to cart — {formatMoney(unitPrice * qty, currency)}
           </button>
         </div>
       </div>
