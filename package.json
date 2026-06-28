@@ -8,9 +8,16 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed": "node --env-file=.env.local scripts/db.mjs seed",
-    "database:drop": "node --env-file=.env.local scripts/db.mjs drop",
-    "database:purge": "node --env-file=.env.local scripts/db.mjs purge"
+    "db:create": "node scripts/db.mjs create",
+    "db:seed": "node scripts/db.mjs seed",
+    "db:reset": "node scripts/db.mjs reset",
+    "db:drop": "node scripts/db.mjs drop",
+    "db:purge": "node scripts/db.mjs purge",
+    "db:create:prod": "node scripts/db.mjs create --prod",
+    "db:seed:prod": "node scripts/db.mjs seed --prod",
+    "db:reset:prod": "node scripts/db.mjs reset --prod",
+    "db:drop:prod": "node scripts/db.mjs drop --prod",
+    "db:purge:prod": "node scripts/db.mjs purge --prod"
   },
   "dependencies": {
     "@stripe/stripe-js": "^4.0.0",

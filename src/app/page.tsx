@@ -11,8 +11,8 @@ export default function Home() {
           all from your phone. No app, no waiting.
         </p>
         <div className="tt-landing-actions">
-          <Link className="tt-btn tt-btn-primary tt-btn-lg" href="/dashboard">
-            Restaurant Dashboard →
+          <Link className="tt-btn tt-btn-primary tt-btn-lg" href="/login">
+            Restaurant Login →
           </Link>
         </div>
         <p className="tt-muted" style={{ fontSize: 13, marginTop: 24 }}>

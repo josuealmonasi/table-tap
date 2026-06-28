@@ -15,15 +15,18 @@ data model, security, and the open decisions to make next.
 ## What's in here
 
 ```
-supabase/schema.sql                      ← run this in Supabase SQL Editor
+supabase/{schema,seed,drop,purge}.sql     ← DDL + seed + reset SQL (run via pnpm db:*)
+scripts/db.mjs                            ← db runner (create/seed/reset/drop/purge, dev|prod)
 src/lib/supabase/{client,server,admin}.ts ← 3 Supabase clients (publishable + secret)
 src/lib/stripe.ts                         ← server Stripe instance
 src/lib/types.ts                          ← shared types
 src/middleware.ts                         ← refreshes auth sessions
 src/app/page.tsx                          ← landing
+src/app/login/, src/app/signup/           ← restaurant email+password auth
+src/app/api/signup/                       ← creates user + restaurant
 src/app/r/[restaurantId]/t/[tableId]/     ← customer menu + ordering (QR target)
 src/app/order/[orderId]/                  ← live order tracking
-src/app/dashboard/                        ← restaurant staff board (login required)
+src/app/dashboard/                        ← restaurant dashboard (login required)
 src/app/api/checkout/                     ← creates order + Stripe Checkout session
 src/app/api/webhooks/stripe/              ← marks order paid → 'received'
 src/app/api/orders/                       ← status updates (owner only)
@@ -45,60 +48,64 @@ corepack enable    # makes the pinned pnpm available
 pnpm install
 ```
 
-### 1. Environment variables
-Copy `.env.local.example` → `.env.local` and fill in your values.
-`.env.local` is gitignored by default — never commit it.
+### 1. Environment variables — dev & prod are separate
+The app uses **two Supabase projects** so development never touches production
+data. Config lives in per-environment files (all gitignored):
 
-### 2. Create the database
-Set `DATABASE_URL` in `.env.local` (Supabase → **Connect** → *Session pooler* URI,
-with your DB password), then:
+| File | Used by | Points at |
+| --- | --- | --- |
+| `.env.development.local` | `pnpm dev`, `pnpm db:*` | your **dev** Supabase project |
+| `.env.production.local` | `pnpm build`/`start`, `pnpm db:*:prod` | your **prod** Supabase project |
 
 ```bash
-pnpm seed
+cp .env.development.local.example .env.development.local   # fill in dev keys
+cp .env.production.local.example  .env.production.local    # fill in prod keys (later)
 ```
 
-This creates the tables, security rules, realtime, and the demo "Sakura Dining"
-restaurant — and prints a ready-to-open customer URL. It's safe to re-run.
+Each needs the Supabase URL + keys, Stripe keys, and a `DATABASE_URL` (Supabase →
+**Connect** → *Session pooler* URI, with your DB password). Next.js loads the
+right file automatically based on `NODE_ENV`.
 
-> Prefer the dashboard? You can still paste `supabase/schema.sql` into the
-> Supabase **SQL Editor** and **Run** instead.
+### 2. Create the database
+With `DATABASE_URL` set in `.env.development.local`:
 
-**Database scripts:**
+```bash
+pnpm db:reset      # drop + create + seed the dev database, prints a demo URL
+```
+
+**Database scripts** (default = dev; append `:prod` to target production, which
+prompts for confirmation on destructive ops):
 
 | Command | What it does |
 | --- | --- |
-| `pnpm seed` | Create schema + seed demo data (idempotent — safe to re-run). |
-| `pnpm database:purge` | Empty every table, keep the structure. Re-`seed` to refill. |
-| `pnpm database:drop` | Drop all tables (structure + data). Re-`seed` to rebuild. |
+| `pnpm db:create` | Create tables / RLS / realtime (structure only). |
+| `pnpm db:seed` | Insert the demo restaurant + menu (idempotent). |
+| `pnpm db:reset` | Drop + create + seed — a clean slate. Use this most. |
+| `pnpm db:purge` | Empty every table, keep the structure. |
+| `pnpm db:drop` | Drop all tables entirely. |
+| `…:prod` | Same, against the prod DB (e.g. `pnpm db:create:prod`). |
 
-If you need the demo IDs by hand, `pnpm seed` prints them, or query:
-```sql
-select id, name from restaurants;
-select id, label from restaurant_tables order by label::int;
-```
-Your customer URL is `/r/<restaurantId>/t/<tableId>`.
+> Prefer the dashboard? You can still paste `supabase/schema.sql` (then
+> `supabase/seed.sql`) into the Supabase **SQL Editor** and **Run**.
 
-### 3. Link your dashboard login to the restaurant
-The dashboard uses a magic-link login. After you sign in once (step 6), copy your
-user id from Supabase → **Authentication → Users**, then:
-```sql
-update restaurants set owner_id = '<your-user-uuid>' where name = 'Sakura Dining';
-```
-
-### 4. Run locally
+### 3. Run locally & sign in
 ```bash
 pnpm dev
 ```
-- Customer: `http://localhost:3000/r/<restaurantId>/t/<tableId>`
-- Dashboard: `http://localhost:3000/dashboard`
+- Restaurant: open `http://localhost:3000/signup` to create an account (this also
+  creates your restaurant), then you land on `/dashboard`. Sign in again any time
+  at `http://localhost:3000/login`.
+- Customer menu: `http://localhost:3000/r/<restaurantId>/t/<tableId>` — `pnpm db:reset`
+  prints a ready-to-open demo URL.
 
-### 5. Stripe test payments locally
+### 4. Stripe test payments locally
 Install the Stripe CLI, then forward webhooks to your local server:
 ```bash
 stripe listen --forward-to localhost:3000/api/webhooks/stripe
 ```
-Copy the `whsec_...` it prints into `STRIPE_WEBHOOK_SECRET` in `.env.local`.
-Use test card `4242 4242 4242 4242`, any future expiry, any CVC.
+Copy the `whsec_...` it prints into `STRIPE_WEBHOOK_SECRET` in
+`.env.development.local`. Use test card `4242 4242 4242 4242`, any future expiry,
+any CVC.
 
 ---
 
@@ -106,8 +113,9 @@ Use test card `4242 4242 4242 4242`, any future expiry, any CVC.
 
 1. Push to GitHub (you've done this).
 2. vercel.com → **Add New → Project** → import your repo.
-3. Under **Environment Variables**, add all the keys from your `.env.local`
-   (paste the **secret** values here directly — they live only in Vercel, never in chat or git).
+3. Under **Environment Variables**, add all the keys from your
+   `.env.production.local` (paste the **secret** values here directly — they live
+   only in Vercel, never in chat or git).
 4. Deploy. You'll get a URL like `https://tabletap.vercel.app`.
 5. **Add the production webhook:** Stripe dashboard → Developers → Webhooks →
    **Add endpoint** → URL = `https://YOUR-APP.vercel.app/api/webhooks/stripe`,
