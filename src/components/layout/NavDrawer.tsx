@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/nav";
+import { createClient } from "@/lib/supabase/client";
 
 /**
  * Mobile-only navigation: a hamburger button that opens a backdrop drawer
  * (same dimmed overlay as our dialogs) with links to the dashboard and each
- * management area. The current page is highlighted.
+ * management area, plus sign out. The current page is highlighted.
  */
 export default function NavDrawer({
   restaurantName,
@@ -19,6 +20,11 @@ export default function NavDrawer({
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+
+  async function signOut() {
+    await createClient().auth.signOut();
+    window.location.assign("/login");
+  }
 
   // Close the drawer whenever the route changes.
   useEffect(() => {
@@ -102,6 +108,10 @@ export default function NavDrawer({
                 )
               )}
             </nav>
+
+            <button type="button" className="tt-drawer-link tt-drawer-signout" onClick={signOut}>
+              <span className="tt-drawer-emoji">🚪</span> Sign out
+            </button>
           </aside>
         </div>
       )}

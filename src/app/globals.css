@@ -264,6 +264,10 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-drawer-link-active:hover { background: rgba(232,82,42,.1); }
 .tt-drawer-link-soon { color: var(--tt-muted); cursor: default; }
 .tt-drawer-link-soon:hover { background: none; }
+.tt-drawer-signout {
+  margin-top: auto; border: none; background: none; width: 100%; font-family: inherit;
+  font-size: 15px; cursor: pointer; border-top: 1px solid var(--tt-cream); border-radius: 0; padding-top: 16px;
+}
 
 /* breadcrumbs — page location + heading (replaces the old per-page h1) */
 .tt-breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 15px; }

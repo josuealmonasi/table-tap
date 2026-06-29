@@ -104,7 +104,7 @@ export default function ProductRow({
           </label>
           <div className="tt-prod-actions">
             {canMove && (
-              <button className="tt-iconbtn" onClick={() => setMoving(true)} title="Move to a section">📁</button>
+              <button className="tt-iconbtn" onClick={() => setMoving(true)} title="Move to a section">🗂️</button>
             )}
             <button className="tt-iconbtn" onClick={() => setEditing(true)} title="Edit">✏️</button>
             <button
@@ -137,7 +137,7 @@ export default function ProductRow({
         <Modal open={moving} onClose={() => setMoving(false)} maxWidth={460}>
           <MoveToSection
             productName={product.name}
-            categories={categories ?? []}
+            categories={(categories ?? []).filter((c) => c.id !== product.category_id)}
             onMove={async (categoryId) => {
               await onMove!(product.id, categoryId);
               setMoving(false);
@@ -192,7 +192,7 @@ function MoveToSection({
         </div>
       ) : (
         <p className="tt-muted" style={{ fontSize: 13, marginTop: 0 }}>
-          You don’t have any sections yet. Create one below to move this product into it.
+          No other sections to move into. Create one below to move this product into it.
         </p>
       )}
 

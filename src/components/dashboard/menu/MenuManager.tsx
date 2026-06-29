@@ -92,6 +92,11 @@ export default function MenuManager({
                 onDeleteProduct={editor.deleteProduct}
                 onToggleAvailable={editor.setAvailability}
                 modalForms={modalForms}
+                categories={editor.sections}
+                onMoveProduct={(productId, categoryId) =>
+                  editor.updateProduct(productId, { category_id: categoryId })
+                }
+                onCreateCategory={editor.addSection}
               />
             ))}
 
