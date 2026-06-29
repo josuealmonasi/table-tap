@@ -1,14 +1,12 @@
-import { Skeleton, SectionSkeleton } from "@/components/ui/Skeleton";
+import { SectionSkeleton } from "@/components/ui/Skeleton";
+import Breadcrumb from "@/components/layout/Breadcrumb";
 
 export default function MenuLoading() {
   return (
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <Skeleton width={120} height={26} />
-            <Skeleton width={160} height={13} />
-          </div>
+          <Breadcrumb trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Menu" }]} />
         </header>
 
         <div className="tt-menu-grid">

@@ -1,15 +1,12 @@
 import { Skeleton } from "@/components/ui/Skeleton";
+import Breadcrumb from "@/components/layout/Breadcrumb";
 
 export default function DashboardLoading() {
   return (
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <Skeleton width={220} height={26} />
-            <Skeleton width={80} height={13} />
-          </div>
-          <Skeleton width={90} height={36} radius={8} />
+          <Breadcrumb trail={[{ label: "Dashboard" }]} />
         </header>
 
         <div className="tt-tiles">
