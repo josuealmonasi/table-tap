@@ -321,6 +321,13 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-prod-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .tt-prod-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .tt-prod-actions { display: flex; gap: 4px; }
+
+/* mobile: the price/switch/actions block won't fit beside the content without
+   squeezing it to nothing (badges overflow onto the price), so wrap it below. */
+@media (max-width: 640px) {
+  .tt-prod { flex-wrap: wrap; }
+  .tt-prod-right { flex-basis: 100%; justify-content: flex-end; }
+}
 .tt-iconbtn { background: none; border: none; cursor: pointer; font-size: 16px; padding: 4px; border-radius: 6px; }
 .tt-iconbtn:hover { background: var(--tt-surface); }
 
