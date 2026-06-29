@@ -97,7 +97,7 @@ export default function AddonsPanel({
                       }
                     }}
                   >
-                    🗑️
+                    ❌
                   </button>
                 </div>
               </div>
