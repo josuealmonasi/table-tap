@@ -265,16 +265,15 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-drawer-link-soon { color: var(--tt-muted); cursor: default; }
 .tt-drawer-link-soon:hover { background: none; }
 
-/* breadcrumbs — desktop/tablet only */
-.tt-breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 4px; }
+/* breadcrumbs — page location + heading (replaces the old per-page h1) */
+.tt-breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 15px; }
 .tt-breadcrumb a { color: var(--tt-muted); text-decoration: none; }
 .tt-breadcrumb a:hover { color: var(--tt-accent); text-decoration: underline; }
 .tt-breadcrumb-sep { color: var(--tt-muted); }
-.tt-breadcrumb-current { color: var(--tt-ink); font-weight: 600; }
+.tt-breadcrumb-current { color: var(--tt-ink); font-weight: 700; }
 
 @media (max-width: 640px) {
   .tt-hamburger { display: flex; }
-  .tt-breadcrumb { display: none; }
 }
 
 .tt-user-menu { position: relative; }
@@ -376,6 +375,15 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-prod-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .tt-prod-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .tt-prod-actions { display: flex; gap: 4px; }
+
+/* move-to-section picker (uncategorized products) */
+.tt-move-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.tt-move-option {
+  border: 1px solid var(--tt-cream); background: #fff; border-radius: 999px;
+  padding: 8px 14px; font-size: 14px; cursor: pointer; font-family: inherit; color: var(--tt-ink);
+}
+.tt-move-option:hover { border-color: var(--tt-accent); background: rgba(232,82,42,.06); color: var(--tt-accent); }
+.tt-move-option:disabled { opacity: .5; cursor: default; }
 
 /* mobile: the price/switch/actions block won't fit beside the content without
    squeezing it to nothing (badges overflow onto the price), so wrap it below. */

@@ -22,6 +22,9 @@ export default function SectionEditor({
   onDeleteProduct,
   onToggleAvailable,
   modalForms = true,
+  categories,
+  onMoveProduct,
+  onCreateCategory,
 }: {
   section: Category | null; // null = "Uncategorized" catch-all
   products: MenuItem[];
@@ -36,6 +39,10 @@ export default function SectionEditor({
   onToggleAvailable: (id: string, available: boolean) => void;
   /** Open add/edit forms in a focused modal instead of expanding inline. Defaults to on. */
   modalForms?: boolean;
+  /** Provided only for the Uncategorized catch-all: lets each product be moved into a real section. */
+  categories?: Category[];
+  onMoveProduct?: (productId: string, categoryId: string) => Promise<void>;
+  onCreateCategory?: (name: string) => Promise<string | undefined>;
 }) {
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -102,40 +109,46 @@ export default function SectionEditor({
             onDelete={onDeleteProduct}
             onToggleAvailable={onToggleAvailable}
             modalForms={modalForms}
+            categories={categories}
+            onMove={onMoveProduct}
+            onCreateCategory={onCreateCategory}
           />
         ))}
 
-        {(() => {
-          const addForm = (
-            <ProductForm
-              addons={addons}
-              currency={currency}
-              submitLabel="Add product"
-              onCancel={() => setAdding(false)}
-              onSubmit={async (input, addonIds) => {
-                await onAddProduct(section?.id ?? null, input, addonIds);
-                setAdding(false);
-              }}
-            />
-          );
-
-          if (modalForms) {
-            return (
-              <>
-                <button className="tt-add-more" onClick={() => setAdding(true)}>+ Add product</button>
-                <Modal open={adding} onClose={() => setAdding(false)} maxWidth={720}>
-                  {addForm}
-                </Modal>
-              </>
+        {/* The Uncategorized catch-all (section === null) isn't a real category,
+            so no products can be added to it — only orphans land here. */}
+        {section &&
+          (() => {
+            const addForm = (
+              <ProductForm
+                addons={addons}
+                currency={currency}
+                submitLabel="Add product"
+                onCancel={() => setAdding(false)}
+                onSubmit={async (input, addonIds) => {
+                  await onAddProduct(section.id, input, addonIds);
+                  setAdding(false);
+                }}
+              />
             );
-          }
 
-          return adding ? (
-            <div className="tt-prod tt-prod-editing">{addForm}</div>
-          ) : (
-            <button className="tt-add-more" onClick={() => setAdding(true)}>+ Add product</button>
-          );
-        })()}
+            if (modalForms) {
+              return (
+                <>
+                  <button className="tt-add-more" onClick={() => setAdding(true)}>+ Add product</button>
+                  <Modal open={adding} onClose={() => setAdding(false)} maxWidth={720}>
+                    {addForm}
+                  </Modal>
+                </>
+              );
+            }
+
+            return adding ? (
+              <div className="tt-prod tt-prod-editing">{addForm}</div>
+            ) : (
+              <button className="tt-add-more" onClick={() => setAdding(true)}>+ Add product</button>
+            );
+          })()}
       </div>
     </div>
   );

@@ -69,13 +69,18 @@ export function useMenuEditor(restaurantId: string) {
   }, [reload]);
 
   // ── Sections (categories) ──
-  async function addSection(name: string) {
-    await supabase.from("categories").insert({
-      restaurant_id: restaurantId,
-      name,
-      sort_order: sections.length,
-    });
+  async function addSection(name: string): Promise<string | undefined> {
+    const { data } = await supabase
+      .from("categories")
+      .insert({
+        restaurant_id: restaurantId,
+        name,
+        sort_order: sections.length,
+      })
+      .select("id")
+      .single();
     await reload();
+    return (data as { id: string } | null)?.id;
   }
   async function renameSection(id: string, name: string) {
     await supabase.from("categories").update({ name }).eq("id", id);

@@ -1,17 +1,14 @@
 import Link from "next/link";
-import type { Restaurant } from "@/lib/types";
 import { NAV_ITEMS } from "@/lib/nav";
+import Breadcrumb from "@/components/layout/Breadcrumb";
 
 /** Restaurant dashboard landing — links to each management area. */
-export default function DashboardHome({ restaurant }: { restaurant: Restaurant }) {
+export default function DashboardHome() {
   return (
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <div>
-            <h1 className="tt-serif" style={{ margin: 0 }}>Dashboard</h1>
-            <span className="tt-muted" style={{ fontSize: 13 }}>{restaurant.name}</span>
-          </div>
+          <Breadcrumb trail={[{ label: "Dashboard" }]} />
         </header>
 
         <div className="tt-tiles">

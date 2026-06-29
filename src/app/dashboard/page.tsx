@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DashboardHome from "@/components/dashboard/DashboardHome";
-import type { Restaurant } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -31,5 +30,5 @@ export default async function DashboardPage() {
     );
   }
 
-  return <DashboardHome restaurant={restaurant as Restaurant} />;
+  return <DashboardHome />;
 }

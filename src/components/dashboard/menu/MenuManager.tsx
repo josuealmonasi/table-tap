@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import type { Restaurant } from "@/lib/types";
 import { useMenuEditor } from "@/hooks/useMenuEditor";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
+import Breadcrumb from "@/components/layout/Breadcrumb";
 import AddonsPanel from "./AddonsPanel";
 import SectionEditor from "./SectionEditor";
 
@@ -34,14 +34,7 @@ export default function MenuManager({
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <div>
-            <nav className="tt-breadcrumb" aria-label="Breadcrumb">
-              <Link href="/dashboard">Dashboard</Link>
-              <span className="tt-breadcrumb-sep">/</span>
-              <span className="tt-breadcrumb-current" aria-current="page">Menu</span>
-            </nav>
-            <h1 className="tt-serif" style={{ margin: 0 }}>Menu</h1>
-          </div>
+          <Breadcrumb trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Menu" }]} />
         </header>
 
         {editor.loading ? (
@@ -116,6 +109,11 @@ export default function MenuManager({
                 onDeleteProduct={editor.deleteProduct}
                 onToggleAvailable={editor.setAvailability}
                 modalForms={modalForms}
+                categories={editor.sections}
+                onMoveProduct={(productId, categoryId) =>
+                  editor.updateProduct(productId, { category_id: categoryId })
+                }
+                onCreateCategory={editor.addSection}
               />
             )}
 

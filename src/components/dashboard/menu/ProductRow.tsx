@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
-import type { MenuItem } from "@/lib/types";
+import type { Category, MenuItem } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/Modal";
@@ -18,6 +18,9 @@ export default function ProductRow({
   onDelete,
   onToggleAvailable,
   modalForms = true,
+  categories,
+  onMove,
+  onCreateCategory,
 }: {
   product: MenuItem;
   addons: MenuItem[];
@@ -28,9 +31,15 @@ export default function ProductRow({
   onToggleAvailable: (id: string, available: boolean) => void;
   /** Open the edit form in a focused modal instead of expanding inline. Defaults to on. */
   modalForms?: boolean;
+  /** When provided (uncategorized products only), shows a "move to section" action. */
+  categories?: Category[];
+  onMove?: (productId: string, categoryId: string) => Promise<void>;
+  onCreateCategory?: (name: string) => Promise<string | undefined>;
 }) {
   const [editing, setEditing] = useState(false);
+  const [moving, setMoving] = useState(false);
   const confirm = useConfirm();
+  const canMove = !!onMove;
   const linkedNames = linkedAddonIds
     .map((id) => addons.find((a) => a.id === id))
     .filter(Boolean) as MenuItem[];
@@ -94,6 +103,9 @@ export default function ProductRow({
             <span className="tt-switch-track" />
           </label>
           <div className="tt-prod-actions">
+            {canMove && (
+              <button className="tt-iconbtn" onClick={() => setMoving(true)} title="Move to a section">📁</button>
+            )}
             <button className="tt-iconbtn" onClick={() => setEditing(true)} title="Edit">✏️</button>
             <button
               className="tt-iconbtn"
@@ -121,6 +133,99 @@ export default function ProductRow({
           {editForm}
         </Modal>
       )}
+      {canMove && (
+        <Modal open={moving} onClose={() => setMoving(false)} maxWidth={460}>
+          <MoveToSection
+            productName={product.name}
+            categories={categories ?? []}
+            onMove={async (categoryId) => {
+              await onMove!(product.id, categoryId);
+              setMoving(false);
+            }}
+            onCreateCategory={onCreateCategory}
+            onCancel={() => setMoving(false)}
+          />
+        </Modal>
+      )}
     </>
+  );
+}
+
+/** Picker shown for an uncategorized product: choose an existing section or create one. */
+function MoveToSection({
+  productName,
+  categories,
+  onMove,
+  onCreateCategory,
+  onCancel,
+}: {
+  productName: string;
+  categories: Category[];
+  onMove: (categoryId: string) => Promise<void>;
+  onCreateCategory?: (name: string) => Promise<string | undefined>;
+  onCancel: () => void;
+}) {
+  const [newName, setNewName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <div>
+      <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 12 }}>
+        Move “{productName}” to…
+      </h3>
+
+      {categories.length > 0 ? (
+        <div className="tt-move-list">
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              className="tt-move-option"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                await onMove(c.id);
+              }}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="tt-muted" style={{ fontSize: 13, marginTop: 0 }}>
+          You don’t have any sections yet. Create one below to move this product into it.
+        </p>
+      )}
+
+      {onCreateCategory && (
+        <form
+          className="tt-add-section"
+          style={{ marginTop: 14 }}
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!newName.trim()) return;
+            setBusy(true);
+            const id = await onCreateCategory(newName.trim());
+            if (id) await onMove(id);
+            else setBusy(false);
+          }}
+        >
+          <input
+            className="tt-input"
+            placeholder="New section name…"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+          />
+          <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit" disabled={!newName.trim() || busy}>
+            Create &amp; move
+          </button>
+        </form>
+      )}
+
+      <div className="tt-prodform-actions" style={{ marginTop: 16 }}>
+        <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={onCancel} disabled={busy}>
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
