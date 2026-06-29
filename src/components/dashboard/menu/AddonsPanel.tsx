@@ -5,6 +5,7 @@ import { formatMoney } from "@/lib/format";
 import type { MenuItem } from "@/lib/types";
 import type { AddonInput } from "@/hooks/useMenuEditor";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { Modal } from "@/components/ui/Modal";
 import IconPicker from "./IconPicker";
 
 /** Manages the restaurant's reusable add-on items (e.g. Catsup, Extra cheese). */
@@ -15,6 +16,7 @@ export default function AddonsPanel({
   onUpdate,
   onDelete,
   onToggleAvailable,
+  modalForms = true,
 }: {
   addons: MenuItem[];
   currency: string;
@@ -22,6 +24,8 @@ export default function AddonsPanel({
   onUpdate: (id: string, input: AddonInput) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onToggleAvailable: (id: string, available: boolean) => void;
+  /** Open add/edit forms in a focused modal instead of expanding inline. Defaults to on. */
+  modalForms?: boolean;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -40,10 +44,10 @@ export default function AddonsPanel({
         </p>
       )}
 
-      {addons.map((addon) =>
-        editingId === addon.id ? (
+      {addons.map((addon) => {
+        const isEditing = editingId === addon.id;
+        const editForm = (
           <AddonForm
-            key={addon.id}
             initial={addon}
             submitLabel="Save"
             onCancel={() => setEditingId(null)}
@@ -52,60 +56,90 @@ export default function AddonsPanel({
               setEditingId(null);
             }}
           />
-        ) : (
-          <div key={addon.id} className={`tt-prod ${addon.available ? "" : "tt-prod-off"}`}>
-            <div className="tt-prod-thumb"><span>{addon.emoji || addon.name.charAt(0).toUpperCase()}</span></div>
-            <div style={{ flex: 1 }}>
-              <strong>{addon.name}</strong>
-              {!addon.available && <span className="tt-badge" style={{ marginLeft: 6 }}>Unavailable</span>}
-            </div>
-            <div className="tt-prod-right">
-              <strong className="tt-accent">{formatMoney(addon.price, currency)}</strong>
-              <label className="tt-switch" title={addon.available ? "Available" : "Unavailable"}>
-                <input
-                  type="checkbox"
-                  checked={addon.available}
-                  onChange={(e) => onToggleAvailable(addon.id, e.target.checked)}
-                />
-                <span className="tt-switch-track" />
-              </label>
-              <div className="tt-prod-actions">
-                <button className="tt-iconbtn" title="Edit" onClick={() => setEditingId(addon.id)}>✏️</button>
-                <button
-                  className="tt-iconbtn"
-                  title="Delete"
-                  onClick={async () => {
-                    if (
-                      await confirm({
-                        title: `Delete extra “${addon.name}”?`,
-                        confirmLabel: "Delete",
-                        danger: true,
-                      })
-                    ) {
-                      onDelete(addon.id);
-                    }
-                  }}
-                >
-                  🗑️
-                </button>
+        );
+
+        if (!modalForms && isEditing) {
+          return <div key={addon.id} className="tt-prod-editing">{editForm}</div>;
+        }
+
+        return (
+          <div key={addon.id}>
+            <div className={`tt-prod ${addon.available ? "" : "tt-prod-off"}`}>
+              <div className="tt-prod-thumb"><span>{addon.emoji || addon.name.charAt(0).toUpperCase()}</span></div>
+              <div style={{ flex: 1 }}>
+                <strong>{addon.name}</strong>
+                {!addon.available && <span className="tt-badge" style={{ marginLeft: 6 }}>Unavailable</span>}
+              </div>
+              <div className="tt-prod-right">
+                <strong className="tt-accent">{formatMoney(addon.price, currency)}</strong>
+                <label className="tt-switch" title={addon.available ? "Available" : "Unavailable"}>
+                  <input
+                    type="checkbox"
+                    checked={addon.available}
+                    onChange={(e) => onToggleAvailable(addon.id, e.target.checked)}
+                  />
+                  <span className="tt-switch-track" />
+                </label>
+                <div className="tt-prod-actions">
+                  <button className="tt-iconbtn" title="Edit" onClick={() => setEditingId(addon.id)}>✏️</button>
+                  <button
+                    className="tt-iconbtn"
+                    title="Delete"
+                    onClick={async () => {
+                      if (
+                        await confirm({
+                          title: `Delete extra “${addon.name}”?`,
+                          confirmLabel: "Delete",
+                          danger: true,
+                        })
+                      ) {
+                        onDelete(addon.id);
+                      }
+                    }}
+                  >
+                    🗑️
+                  </button>
+                </div>
               </div>
             </div>
+            {modalForms && (
+              <Modal open={isEditing} onClose={() => setEditingId(null)} maxWidth={520}>
+                {editForm}
+              </Modal>
+            )}
           </div>
-        )
-      )}
+        );
+      })}
 
-      {adding ? (
-        <AddonForm
-          submitLabel="Add extra"
-          onCancel={() => setAdding(false)}
-          onSubmit={async (input) => {
-            await onAdd(input);
-            setAdding(false);
-          }}
-        />
-      ) : (
-        <button className="tt-add-more" onClick={() => setAdding(true)}>+ Add extra</button>
-      )}
+      {(() => {
+        const addForm = (
+          <AddonForm
+            submitLabel="Add extra"
+            onCancel={() => setAdding(false)}
+            onSubmit={async (input) => {
+              await onAdd(input);
+              setAdding(false);
+            }}
+          />
+        );
+
+        if (modalForms) {
+          return (
+            <>
+              <button className="tt-add-more" onClick={() => setAdding(true)}>+ Add extra</button>
+              <Modal open={adding} onClose={() => setAdding(false)} maxWidth={520}>
+                {addForm}
+              </Modal>
+            </>
+          );
+        }
+
+        return adding ? (
+          <div className="tt-prod-editing">{addForm}</div>
+        ) : (
+          <button className="tt-add-more" onClick={() => setAdding(true)}>+ Add extra</button>
+        );
+      })()}
     </div>
   );
 }
@@ -129,7 +163,7 @@ function AddonForm({
 
   return (
     <form
-      className="tt-prodform tt-prod-editing"
+      className="tt-prodform"
       onSubmit={async (e) => {
         e.preventDefault();
         setSaving(true);

@@ -8,8 +8,18 @@ import { SectionSkeleton } from "@/components/ui/Skeleton";
 import AddonsPanel from "./AddonsPanel";
 import SectionEditor from "./SectionEditor";
 
-/** Full menu management: add-on items, sections, and the products within them. */
-export default function MenuManager({ restaurant }: { restaurant: Restaurant }) {
+/**
+ * Full menu management: add-on items, sections, and the products within them.
+ * modalForms: when true (default), adding/editing a product or extra opens in
+ * a focused modal one at a time instead of expanding inline in place.
+ */
+export default function MenuManager({
+  restaurant,
+  modalForms = true,
+}: {
+  restaurant: Restaurant;
+  modalForms?: boolean;
+}) {
   const editor = useMenuEditor(restaurant.id);
   const [newSection, setNewSection] = useState("");
   const currency = restaurant.currency;
@@ -84,6 +94,7 @@ export default function MenuManager({ restaurant }: { restaurant: Restaurant }) 
                 onUpdateProduct={updateProductWithAddons}
                 onDeleteProduct={editor.deleteProduct}
                 onToggleAvailable={editor.setAvailability}
+                modalForms={modalForms}
               />
             ))}
 
@@ -100,6 +111,7 @@ export default function MenuManager({ restaurant }: { restaurant: Restaurant }) 
                 onUpdateProduct={updateProductWithAddons}
                 onDeleteProduct={editor.deleteProduct}
                 onToggleAvailable={editor.setAvailability}
+                modalForms={modalForms}
               />
             )}
 
@@ -114,6 +126,7 @@ export default function MenuManager({ restaurant }: { restaurant: Restaurant }) 
               onUpdate={editor.updateAddon}
               onDelete={editor.deleteAddon}
               onToggleAvailable={editor.setAvailability}
+              modalForms={modalForms}
             />
           </div>
         )}

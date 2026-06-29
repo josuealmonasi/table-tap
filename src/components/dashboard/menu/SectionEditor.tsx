@@ -4,10 +4,11 @@ import { useState } from "react";
 import type { Category, MenuItem } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { Modal } from "@/components/ui/Modal";
 import ProductRow from "./ProductRow";
 import ProductForm from "./ProductForm";
 
-/** One menu section (category) with its products and an inline add-product form. */
+/** One menu section (category) with its products and an add-product form. */
 export default function SectionEditor({
   section,
   products,
@@ -20,6 +21,7 @@ export default function SectionEditor({
   onUpdateProduct,
   onDeleteProduct,
   onToggleAvailable,
+  modalForms = true,
 }: {
   section: Category | null; // null = "Uncategorized" catch-all
   products: MenuItem[];
@@ -32,6 +34,8 @@ export default function SectionEditor({
   onUpdateProduct: (id: string, input: ProductInput, addonIds: string[]) => Promise<void>;
   onDeleteProduct: (id: string) => Promise<void>;
   onToggleAvailable: (id: string, available: boolean) => void;
+  /** Open add/edit forms in a focused modal instead of expanding inline. Defaults to on. */
+  modalForms?: boolean;
 }) {
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -39,80 +43,100 @@ export default function SectionEditor({
   const confirm = useConfirm();
 
   return (
-    <div className="tt-section">
-      <div className="tt-section-head">
-        {section && renaming ? (
-          <form
-            style={{ display: "flex", gap: 8, flex: 1 }}
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (name.trim()) await onRename(section.id, name.trim());
-              setRenaming(false);
-            }}
-          >
-            <input className="tt-input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-            <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">Save</button>
-          </form>
-        ) : (
-          <>
-            <h3 className="tt-serif" style={{ margin: 0 }}>{section ? section.name : "Uncategorized"}</h3>
-            {section && (
-              <div className="tt-prod-actions">
-                <button className="tt-iconbtn" title="Rename" onClick={() => { setName(section.name); setRenaming(true); }}>✏️</button>
-                <button
-                  className="tt-iconbtn"
-                  title="Delete section"
-                  onClick={async () => {
-                    if (
-                      await confirm({
-                        title: `Delete section “${section.name}”?`,
-                        message: "Its products move to Uncategorized.",
-                        confirmLabel: "Delete",
-                        danger: true,
-                      })
-                    ) {
-                      onDelete(section.id);
-                    }
-                  }}
-                >
-                  🗑️
-                </button>
-              </div>
-            )}
-          </>
-        )}
+    <div className="tt-section tt-section-split">
+      <div className="tt-section-left">
+        <div className="tt-section-head">
+          {section && renaming ? (
+            <form
+              style={{ display: "flex", gap: 8, flex: 1 }}
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (name.trim()) await onRename(section.id, name.trim());
+                setRenaming(false);
+              }}
+            >
+              <input className="tt-input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+              <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">Save</button>
+            </form>
+          ) : (
+            <>
+              <h3 className="tt-serif" style={{ margin: 0 }}>{section ? section.name : "Uncategorized"}</h3>
+              {section && (
+                <div className="tt-prod-actions">
+                  <button className="tt-iconbtn" title="Rename" onClick={() => { setName(section.name); setRenaming(true); }}>✏️</button>
+                  <button
+                    className="tt-iconbtn"
+                    title="Delete section"
+                    onClick={async () => {
+                      if (
+                        await confirm({
+                          title: `Delete section “${section.name}”?`,
+                          message: "Its products move to Uncategorized.",
+                          confirmLabel: "Delete",
+                          danger: true,
+                        })
+                      ) {
+                        onDelete(section.id);
+                      }
+                    }}
+                  >
+                    🗑️
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
-      {products.length === 0 && <p className="tt-muted" style={{ fontSize: 13 }}>No products yet.</p>}
-      {products.map((p) => (
-        <ProductRow
-          key={p.id}
-          product={p}
-          addons={addons}
-          linkedAddonIds={links[p.id] ?? []}
-          currency={currency}
-          onUpdate={onUpdateProduct}
-          onDelete={onDeleteProduct}
-          onToggleAvailable={onToggleAvailable}
-        />
-      ))}
-
-      {adding ? (
-        <div className="tt-prod tt-prod-editing">
-          <ProductForm
+      <div className="tt-section-right">
+        {products.length === 0 && <p className="tt-muted" style={{ fontSize: 13 }}>No products yet.</p>}
+        {products.map((p) => (
+          <ProductRow
+            key={p.id}
+            product={p}
             addons={addons}
+            linkedAddonIds={links[p.id] ?? []}
             currency={currency}
-            submitLabel="Add product"
-            onCancel={() => setAdding(false)}
-            onSubmit={async (input, addonIds) => {
-              await onAddProduct(section?.id ?? null, input, addonIds);
-              setAdding(false);
-            }}
+            onUpdate={onUpdateProduct}
+            onDelete={onDeleteProduct}
+            onToggleAvailable={onToggleAvailable}
+            modalForms={modalForms}
           />
-        </div>
-      ) : (
-        <button className="tt-add-more" onClick={() => setAdding(true)}>+ Add product</button>
-      )}
+        ))}
+
+        {(() => {
+          const addForm = (
+            <ProductForm
+              addons={addons}
+              currency={currency}
+              submitLabel="Add product"
+              onCancel={() => setAdding(false)}
+              onSubmit={async (input, addonIds) => {
+                await onAddProduct(section?.id ?? null, input, addonIds);
+                setAdding(false);
+              }}
+            />
+          );
+
+          if (modalForms) {
+            return (
+              <>
+                <button className="tt-add-more" onClick={() => setAdding(true)}>+ Add product</button>
+                <Modal open={adding} onClose={() => setAdding(false)} maxWidth={720}>
+                  {addForm}
+                </Modal>
+              </>
+            );
+          }
+
+          return adding ? (
+            <div className="tt-prod tt-prod-editing">{addForm}</div>
+          ) : (
+            <button className="tt-add-more" onClick={() => setAdding(true)}>+ Add product</button>
+          );
+        })()}
+      </div>
     </div>
   );
 }

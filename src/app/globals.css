@@ -218,7 +218,7 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 
 /* ── navbar ── */
 .tt-navbar { background: #fff; border-bottom: 1px solid var(--tt-cream); position: sticky; top: 0; z-index: 50; }
-.tt-navbar-inner { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; }
+.tt-navbar-inner { display: flex; align-items: center; justify-content: space-between; padding-top: 14px; padding-bottom: 14px; }
 .tt-navbar-brand { display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--tt-ink); font-size: 16px; }
 .tt-navbar-logo { font-size: 22px; line-height: 1; }
 
@@ -246,13 +246,13 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-footer { background: var(--tt-ink); color: var(--tt-muted); margin-top: auto; }
 .tt-footer-inner {
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px;
-  padding: 20px 0; font-size: 13px;
+  padding-top: 20px; padding-bottom: 20px; font-size: 13px;
 }
 .tt-footer-brand { color: #fff; font-weight: 700; }
 
 @media (max-width: 640px) {
-  .tt-navbar-inner { padding: 12px 0; }
-  .tt-footer-inner { padding: 16px 0; flex-direction: column; text-align: center; }
+  .tt-navbar-inner { padding-top: 12px; padding-bottom: 12px; }
+  .tt-footer-inner { padding-top: 16px; padding-bottom: 16px; flex-direction: column; text-align: center; }
 }
 
 /* ── accessibility ── */
@@ -294,10 +294,18 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-skel-tile { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
 
 /* ── menu manager ── */
-.tt-menu-grid { display: flex; flex-direction: column; gap: 16px; max-width: 760px; margin: 0 auto; }
+.tt-menu-grid { display: flex; flex-direction: column; gap: 16px; }
 .tt-section { background: #fff; border-radius: 16px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
 .tt-section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .tt-section-head h3 { font-size: 18px; }
+
+/* desktop: split a section into a section-info column and a wider products column */
+@media (min-width: 1025px) {
+  .tt-section-split { display: flex; align-items: flex-start; gap: 24px; }
+  .tt-section-split .tt-section-left { width: 220px; flex-shrink: 0; border-right: 1px solid var(--tt-cream); padding-right: 24px; }
+  .tt-section-split .tt-section-left .tt-section-head { margin-bottom: 0; }
+  .tt-section-split .tt-section-right { flex: 1; min-width: 0; }
+}
 
 .tt-prod {
   display: flex; align-items: center; gap: 12px; padding: 12px;
@@ -362,6 +370,10 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 }
 .tt-dialog h3 { font-size: 18px; }
 .tt-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+/* generic modal (form content instead of a fixed confirm message) */
+.tt-modal { text-align: left; max-height: 90vh; overflow-y: auto; }
+.tt-modal .tt-prodform { padding: 0; }
 
 @media (max-width: 640px) {
   .tt-prodform-row { flex-wrap: wrap; }
