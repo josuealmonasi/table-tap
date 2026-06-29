@@ -1,13 +1,6 @@
 import Link from "next/link";
 import type { Restaurant } from "@/lib/types";
-
-type Tile = { href: string; emoji: string; title: string; desc: string; soon?: boolean };
-
-const TILES: Tile[] = [
-  { href: "/dashboard/menu", emoji: "📋", title: "Menu", desc: "Add sections, products, extras and prices" },
-  { href: "#", emoji: "🧾", title: "Orders", desc: "Live incoming orders", soon: true },
-  { href: "#", emoji: "🪑", title: "Tables & QR", desc: "Manage tables and print QR codes", soon: true },
-];
+import { NAV_ITEMS } from "@/lib/nav";
 
 /** Restaurant dashboard landing — links to each management area. */
 export default function DashboardHome({ restaurant }: { restaurant: Restaurant }) {
@@ -22,7 +15,7 @@ export default function DashboardHome({ restaurant }: { restaurant: Restaurant }
         </header>
 
         <div className="tt-tiles">
-          {TILES.map((tile) =>
+          {NAV_ITEMS.map((tile) =>
             tile.soon ? (
               <div key={tile.title} className="tt-tile tt-tile-soon">
                 <div className="tt-tile-emoji">{tile.emoji}</div>

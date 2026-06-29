@@ -219,8 +219,63 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 /* ── navbar ── */
 .tt-navbar { background: #fff; border-bottom: 1px solid var(--tt-cream); position: sticky; top: 0; z-index: 50; }
 .tt-navbar-inner { display: flex; align-items: center; justify-content: space-between; padding-top: 14px; padding-bottom: 14px; }
+.tt-navbar-left { display: flex; align-items: center; gap: 12px; }
 .tt-navbar-brand { display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--tt-ink); font-size: 16px; }
 .tt-navbar-logo { font-size: 22px; line-height: 1; }
+
+/* hamburger — mobile only (desktop/tablet use breadcrumbs instead) */
+.tt-hamburger {
+  display: none; flex-direction: column; justify-content: center; gap: 4px;
+  width: 38px; height: 38px; padding: 9px; flex-shrink: 0;
+  border: 1px solid var(--tt-cream); border-radius: 10px; background: var(--tt-surface); cursor: pointer;
+}
+.tt-hamburger span { display: block; height: 2px; border-radius: 2px; background: var(--tt-ink); }
+.tt-hamburger:hover { background: var(--tt-cream); }
+
+/* nav drawer — backdrop + left slide-in panel */
+.tt-drawer-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100;
+  display: flex; justify-content: flex-start;
+}
+.tt-drawer {
+  background: #fff; width: 82%; max-width: 300px; height: 100%; padding: 16px;
+  box-shadow: 0 0 40px rgba(0,0,0,.3); display: flex; flex-direction: column;
+  animation: tt-drawer-in .18s ease-out;
+}
+@keyframes tt-drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+.tt-drawer-head {
+  display: flex; align-items: center; gap: 8px; padding: 4px 4px 14px;
+  border-bottom: 1px solid var(--tt-cream);
+}
+.tt-drawer-head strong { font-size: 15px; }
+.tt-drawer-close {
+  margin-left: auto; background: none; border: none; font-size: 15px; cursor: pointer;
+  color: var(--tt-muted); padding: 6px; border-radius: 8px; line-height: 1;
+}
+.tt-drawer-close:hover { background: var(--tt-surface); }
+.tt-drawer-nav { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
+.tt-drawer-link {
+  display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 10px;
+  text-decoration: none; color: var(--tt-ink); font-size: 15px;
+}
+.tt-drawer-link:hover { background: var(--tt-surface); }
+.tt-drawer-emoji { font-size: 18px; line-height: 1; }
+.tt-drawer-link-active { background: rgba(232,82,42,.1); color: var(--tt-accent); font-weight: 700; }
+.tt-drawer-link-active:hover { background: rgba(232,82,42,.1); }
+.tt-drawer-link-soon { color: var(--tt-muted); cursor: default; }
+.tt-drawer-link-soon:hover { background: none; }
+
+/* breadcrumbs — desktop/tablet only */
+.tt-breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 4px; }
+.tt-breadcrumb a { color: var(--tt-muted); text-decoration: none; }
+.tt-breadcrumb a:hover { color: var(--tt-accent); text-decoration: underline; }
+.tt-breadcrumb-sep { color: var(--tt-muted); }
+.tt-breadcrumb-current { color: var(--tt-ink); font-weight: 600; }
+
+@media (max-width: 640px) {
+  .tt-hamburger { display: flex; }
+  .tt-breadcrumb { display: none; }
+}
 
 .tt-user-menu { position: relative; }
 .tt-user-btn {

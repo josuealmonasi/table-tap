@@ -35,8 +35,12 @@ export default function MenuManager({
       <div className="container">
         <header className="tt-dash-head">
           <div>
+            <nav className="tt-breadcrumb" aria-label="Breadcrumb">
+              <Link href="/dashboard">Dashboard</Link>
+              <span className="tt-breadcrumb-sep">/</span>
+              <span className="tt-breadcrumb-current" aria-current="page">Menu</span>
+            </nav>
             <h1 className="tt-serif" style={{ margin: 0 }}>Menu</h1>
-            <Link href="/dashboard" className="tt-muted" style={{ fontSize: 13 }}>← {restaurant.name} dashboard</Link>
           </div>
         </header>
 

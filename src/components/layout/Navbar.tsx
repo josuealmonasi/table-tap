@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import NavDrawer from "./NavDrawer";
 
 /**
  * Site-wide nav for logged-in restaurant users: brand top-left, user menu
@@ -42,10 +43,13 @@ export default function Navbar({
   return (
     <nav className="tt-navbar">
       <div className="container tt-navbar-inner">
-        <Link href="/dashboard" className="tt-navbar-brand">
-          <span className="tt-navbar-logo">{restaurantLogo || "🍴"}</span>
-          <strong>{restaurantName}</strong>
-        </Link>
+        <div className="tt-navbar-left">
+          <NavDrawer restaurantName={restaurantName} restaurantLogo={restaurantLogo} />
+          <Link href="/dashboard" className="tt-navbar-brand">
+            <span className="tt-navbar-logo">{restaurantLogo || "🍴"}</span>
+            <strong>{restaurantName}</strong>
+          </Link>
+        </div>
 
         <div className="tt-user-menu" ref={menuRef}>
           <button
