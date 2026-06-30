@@ -1,15 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Restaurant } from "@/lib/types";
 import { useMenuEditor } from "@/hooks/useMenuEditor";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import AddonsPanel from "./AddonsPanel";
+import MenusPanel from "./MenusPanel";
 import SectionEditor from "./SectionEditor";
 
 /**
- * Full menu management: add-on items, sections, and the products within them.
+ * Full menu management. A restaurant can run several named menus; the top panel
+ * switches between them (and toggles each on/off for customers). Everything
+ * below — sections, products and extras — belongs to the selected menu only.
  * modalForms: when true (default), adding/editing a product or extra opens in
  * a focused modal one at a time instead of expanding inline in place.
  */
@@ -21,12 +24,29 @@ export default function MenuManager({
   modalForms?: boolean;
 }) {
   const editor = useMenuEditor(restaurant.id);
+  const [selectedMenuId, setSelectedMenuId] = useState<string | null>(null);
   const [newSection, setNewSection] = useState("");
   const currency = restaurant.currency;
 
-  // Products grouped by section, plus a catch-all for any without a section.
-  const sectionIds = new Set(editor.sections.map((s) => s.id));
-  const uncategorized = editor.products.filter(
+  // Keep a valid menu selected: default to the first, and recover if the
+  // selected menu is deleted.
+  useEffect(() => {
+    if (editor.menus.length === 0) {
+      if (selectedMenuId !== null) setSelectedMenuId(null);
+      return;
+    }
+    if (!editor.menus.some((m) => m.id === selectedMenuId)) {
+      setSelectedMenuId(editor.menus[0].id);
+    }
+  }, [editor.menus, selectedMenuId]);
+
+  // Everything below the menu picker is scoped to the selected menu.
+  const menuSections = editor.sections.filter((s) => s.menu_id === selectedMenuId);
+  const menuProducts = editor.products.filter((p) => p.menu_id === selectedMenuId);
+  const menuAddons = editor.addons.filter((a) => a.menu_id === selectedMenuId);
+
+  const sectionIds = new Set(menuSections.map((s) => s.id));
+  const uncategorized = menuProducts.filter(
     (p) => !p.category_id || !sectionIds.has(p.category_id)
   );
 
@@ -37,7 +57,7 @@ export default function MenuManager({
           <Breadcrumb trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Menu" }]} />
         </header>
 
-        {editor.loading ? (
+        {editor.loading || !selectedMenuId ? (
           <div className="tt-menu-grid">
             <SectionSkeleton rows={1} />
             <SectionSkeleton rows={3} />
@@ -45,13 +65,23 @@ export default function MenuManager({
           </div>
         ) : (
           <div className="tt-menu-grid">
-            {/* Step 1 — sections. The starting point: create a section, then add products to it. */}
+            <MenusPanel
+              menus={editor.menus}
+              selectedMenuId={selectedMenuId}
+              onSelect={setSelectedMenuId}
+              onAdd={editor.addMenu}
+              onRename={editor.renameMenu}
+              onDelete={editor.deleteMenu}
+              onToggleActive={editor.setMenuActive}
+            />
+
+            {/* Step 1 — sections within the selected menu. */}
             <div className="tt-section">
               <div className="tt-section-head">
                 <h3 className="tt-serif" style={{ margin: 0 }}>Sections</h3>
               </div>
               <p className="tt-muted" style={{ fontSize: 13, marginTop: 0 }}>
-                Group your menu — e.g. “Coffee Drinks”. Add a section, then add products (Latte,
+                Group this menu — e.g. “Coffee Drinks”. Add a section, then add products (Latte,
                 Espresso…) inside it below. Extras come last.
               </p>
               <form
@@ -59,7 +89,7 @@ export default function MenuManager({
                 onSubmit={async (e) => {
                   e.preventDefault();
                   if (newSection.trim()) {
-                    await editor.addSection(newSection.trim());
+                    await editor.addSection(selectedMenuId, newSection.trim());
                     setNewSection("");
                   }
                 }}
@@ -77,12 +107,12 @@ export default function MenuManager({
             </div>
 
             {/* Step 2 — products within each section. */}
-            {editor.sections.map((section) => (
+            {menuSections.map((section) => (
               <SectionEditor
                 key={section.id}
                 section={section}
-                products={editor.products.filter((p) => p.category_id === section.id)}
-                addons={editor.addons}
+                products={menuProducts.filter((p) => p.category_id === section.id)}
+                addons={menuAddons}
                 links={editor.links}
                 currency={currency}
                 onRename={editor.renameSection}
@@ -92,11 +122,11 @@ export default function MenuManager({
                 onDeleteProduct={editor.deleteProduct}
                 onToggleAvailable={editor.setAvailability}
                 modalForms={modalForms}
-                categories={editor.sections}
+                categories={menuSections}
                 onMoveProduct={(productId, categoryId) =>
                   editor.updateProduct(productId, { category_id: categoryId })
                 }
-                onCreateCategory={editor.addSection}
+                onCreateCategory={(name) => editor.addSection(selectedMenuId, name)}
               />
             ))}
 
@@ -104,7 +134,7 @@ export default function MenuManager({
               <SectionEditor
                 section={null}
                 products={uncategorized}
-                addons={editor.addons}
+                addons={menuAddons}
                 links={editor.links}
                 currency={currency}
                 onRename={async () => {}}
@@ -114,22 +144,22 @@ export default function MenuManager({
                 onDeleteProduct={editor.deleteProduct}
                 onToggleAvailable={editor.setAvailability}
                 modalForms={modalForms}
-                categories={editor.sections}
+                categories={menuSections}
                 onMoveProduct={(productId, categoryId) =>
                   editor.updateProduct(productId, { category_id: categoryId })
                 }
-                onCreateCategory={editor.addSection}
+                onCreateCategory={(name) => editor.addSection(selectedMenuId, name)}
               />
             )}
 
-            {/* Step 3 — optional add-ons, attached to products. */}
+            {/* Step 3 — optional add-ons, attached to products in this menu. */}
             <div className="tt-section-head" style={{ marginTop: 8 }}>
               <h3 className="tt-serif" style={{ margin: 0 }}>Extras <span className="tt-muted" style={{ fontWeight: 400, fontSize: 14 }}>(optional)</span></h3>
             </div>
             <AddonsPanel
-              addons={editor.addons}
+              addons={menuAddons}
               currency={currency}
-              onAdd={editor.addAddon}
+              onAdd={(input) => editor.addAddon(selectedMenuId, input)}
               onUpdate={editor.updateAddon}
               onDelete={editor.deleteAddon}
               onToggleAvailable={editor.setAvailability}
@@ -141,13 +171,13 @@ export default function MenuManager({
     </div>
   );
 
-  // Create a product, then attach its chosen add-ons.
+  // Create a product in the selected menu, then attach its chosen add-ons.
   async function addProductWithAddons(
     categoryId: string | null,
-    input: Parameters<typeof editor.addProduct>[1],
+    input: Parameters<typeof editor.addProduct>[2],
     addonIds: string[]
   ) {
-    const id = await editor.addProduct(categoryId, input);
+    const id = await editor.addProduct(selectedMenuId!, categoryId, input);
     if (id && addonIds.length) await editor.setProductAddons(id, addonIds);
   }
 

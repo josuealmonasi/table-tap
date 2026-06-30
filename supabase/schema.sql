@@ -26,10 +26,25 @@ create table if not exists restaurant_tables (
   created_at    timestamptz not null default now()
 );
 
+-- ── Menus ───────────────────────────────────────────────────────────────────
+-- A restaurant can run several named menus (e.g. "Breakfast", "Dinner") and
+-- turn them on/off through the day. Each menu owns its own categories, products
+-- and extras — nothing is shared between menus. Orders and tables/QRs are NOT
+-- tied to a menu; they stay shared across the whole restaurant.
+create table if not exists menus (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  name          text not null,
+  active        boolean not null default true,   -- shown to customers when true
+  sort_order    int not null default 0,
+  created_at    timestamptz not null default now()
+);
+
 -- ── Menu categories ─────────────────────────────────────────────────────────
 create table if not exists categories (
   id            uuid primary key default gen_random_uuid(),
   restaurant_id uuid not null references restaurants(id) on delete cascade,
+  menu_id       uuid references menus(id) on delete cascade,
   name          text not null,
   sort_order    int not null default 0
 );
@@ -38,6 +53,7 @@ create table if not exists categories (
 create table if not exists menu_items (
   id            uuid primary key default gen_random_uuid(),
   restaurant_id uuid not null references restaurants(id) on delete cascade,
+  menu_id       uuid references menus(id) on delete cascade,
   category_id   uuid references categories(id) on delete set null,
   name          text not null,
   description   text,
@@ -57,6 +73,10 @@ create table if not exists menu_items (
 
 -- Migration for databases created before is_addon existed.
 alter table menu_items add column if not exists is_addon boolean not null default false;
+
+-- Migration for databases created before menus existed.
+alter table categories add column if not exists menu_id uuid references menus(id) on delete cascade;
+alter table menu_items add column if not exists menu_id uuid references menus(id) on delete cascade;
 
 -- ── Item add-ons ────────────────────────────────────────────────────────────
 -- Many-to-many: which add-on items can be added to which product.
@@ -105,6 +125,7 @@ end $$;
 -- ============================================================================
 alter table restaurants        enable row level security;
 alter table restaurant_tables  enable row level security;
+alter table menus              enable row level security;
 alter table categories         enable row level security;
 alter table menu_items         enable row level security;
 alter table item_addons        enable row level security;
@@ -120,6 +141,10 @@ create policy "public read restaurants"
 drop policy if exists "public read tables" on restaurant_tables;
 create policy "public read tables"
   on restaurant_tables for select using (true);
+
+drop policy if exists "public read menus" on menus;
+create policy "public read menus"
+  on menus for select using (true);
 
 drop policy if exists "public read categories" on categories;
 create policy "public read categories"
@@ -158,6 +183,12 @@ create policy "owner manages tables"
   using (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()))
   with check (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()));
 
+drop policy if exists "owner manages menus" on menus;
+create policy "owner manages menus"
+  on menus for all
+  using (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()))
+  with check (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()));
+
 drop policy if exists "owner manages categories" on categories;
 create policy "owner manages categories"
   on categories for all
@@ -180,6 +211,28 @@ create policy "owner manages item addons"
   with check (exists (
     select 1 from menu_items m join restaurants r on r.id = m.restaurant_id
     where m.id = product_id and r.owner_id = auth.uid()));
+
+-- ============================================================================
+-- Backfill: every restaurant needs at least one menu. Restaurants (and their
+-- categories/items) created before menus existed get a default "Main Menu" and
+-- their content is assigned to it. Idempotent — only touches null menu_ids.
+-- ============================================================================
+do $$
+declare
+  r   record;
+  mid uuid;
+begin
+  for r in select id from restaurants loop
+    select id into mid from menus where restaurant_id = r.id order by sort_order, created_at limit 1;
+    if mid is null then
+      insert into menus (restaurant_id, name, active, sort_order)
+      values (r.id, 'Main Menu', true, 0)
+      returning id into mid;
+    end if;
+    update categories set menu_id = mid where restaurant_id = r.id and menu_id is null;
+    update menu_items set menu_id = mid where restaurant_id = r.id and menu_id is null;
+  end loop;
+end $$;
 
 -- Demo seed data lives separately in supabase/seed.sql
 --   pnpm db:create  → this file (structure only)

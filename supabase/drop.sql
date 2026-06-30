@@ -8,5 +8,6 @@ drop table if exists orders             cascade;
 drop table if exists item_addons        cascade;
 drop table if exists menu_items         cascade;
 drop table if exists categories         cascade;
+drop table if exists menus              cascade;
 drop table if exists restaurant_tables  cascade;
 drop table if exists restaurants        cascade;

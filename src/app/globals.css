@@ -353,6 +353,20 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 
 /* ── menu manager ── */
 .tt-menu-grid { display: flex; flex-direction: column; gap: 16px; }
+
+/* menus list (one row per menu: name + active switch + actions) */
+.tt-menu-list { display: flex; flex-direction: column; gap: 8px; }
+.tt-menu-row {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+  border: 1px solid var(--tt-cream); border-radius: 12px; background: var(--tt-surface);
+}
+.tt-menu-row-active { border-color: var(--tt-accent); background: rgba(232,82,42,.06); }
+.tt-menu-name {
+  flex: 1; min-width: 0; display: flex; align-items: center; text-align: left;
+  background: none; border: none; padding: 0; cursor: pointer; font-family: inherit;
+  font-size: 15px; font-weight: 700; color: var(--tt-ink);
+}
+.tt-menu-name:hover { color: var(--tt-accent); }
 .tt-section { background: #fff; border-radius: 16px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
 .tt-section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .tt-section-head h3 { font-size: 18px; }

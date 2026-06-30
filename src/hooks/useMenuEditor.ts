@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Category, MenuItem } from "@/lib/types";
+import type { Category, Menu, MenuItem } from "@/lib/types";
 
 /** Editable fields for a product (a non-add-on menu item). */
 export type ProductInput = {
@@ -22,13 +22,17 @@ export type AddonInput = {
 };
 
 /**
- * Loads and mutates a restaurant's menu (sections, products, add-on items, and
- * product↔add-on links) directly via the RLS-protected browser client — every
- * write is authorised as the logged-in owner. Reloads after structural changes.
+ * Loads and mutates a restaurant's menus and their contents (sections,
+ * products, add-on items, and product↔add-on links) directly via the
+ * RLS-protected browser client — every write is authorised as the logged-in
+ * owner. A restaurant can have several menus; each menu owns its own
+ * categories/products/extras (nothing is shared). Create operations take the
+ * target menu id so rows land in the right menu.
  */
 export function useMenuEditor(restaurantId: string) {
   const supabase = createClient();
   const [loading, setLoading] = useState(true);
+  const [menus, setMenus] = useState<Menu[]>([]);
   const [sections, setSections] = useState<Category[]>([]);
   const [products, setProducts] = useState<MenuItem[]>([]);
   const [addons, setAddons] = useState<MenuItem[]>([]);
@@ -36,13 +40,15 @@ export function useMenuEditor(restaurantId: string) {
   const [links, setLinks] = useState<Record<string, string[]>>({});
 
   const reload = useCallback(async () => {
-    const [{ data: cats }, { data: items }] = await Promise.all([
+    const [{ data: menuRows }, { data: cats }, { data: items }] = await Promise.all([
+      supabase.from("menus").select("*").eq("restaurant_id", restaurantId).order("sort_order"),
       supabase.from("categories").select("*").eq("restaurant_id", restaurantId).order("sort_order"),
       supabase.from("menu_items").select("*").eq("restaurant_id", restaurantId).order("sort_order"),
     ]);
 
     const allItems = (items as MenuItem[]) ?? [];
     const productList = allItems.filter((i) => !i.is_addon);
+    setMenus((menuRows as Menu[]) ?? []);
     setSections((cats as Category[]) ?? []);
     setProducts(productList);
     setAddons(allItems.filter((i) => i.is_addon));
@@ -68,14 +74,39 @@ export function useMenuEditor(restaurantId: string) {
     reload();
   }, [reload]);
 
+  // ── Menus ──
+  async function addMenu(name: string): Promise<string | undefined> {
+    const { data } = await supabase
+      .from("menus")
+      .insert({ restaurant_id: restaurantId, name, active: true, sort_order: menus.length })
+      .select("id")
+      .single();
+    await reload();
+    return (data as { id: string } | null)?.id;
+  }
+  async function renameMenu(id: string, name: string) {
+    await supabase.from("menus").update({ name }).eq("id", id);
+    await reload();
+  }
+  async function deleteMenu(id: string) {
+    // Cascade deletes the menu's categories, products, extras and their links.
+    await supabase.from("menus").delete().eq("id", id);
+    await reload();
+  }
+  async function setMenuActive(id: string, active: boolean) {
+    setMenus((prev) => prev.map((m) => (m.id === id ? { ...m, active } : m)));
+    await supabase.from("menus").update({ active }).eq("id", id);
+  }
+
   // ── Sections (categories) ──
-  async function addSection(name: string): Promise<string | undefined> {
+  async function addSection(menuId: string, name: string): Promise<string | undefined> {
     const { data } = await supabase
       .from("categories")
       .insert({
         restaurant_id: restaurantId,
+        menu_id: menuId,
         name,
-        sort_order: sections.length,
+        sort_order: sections.filter((s) => s.menu_id === menuId).length,
       })
       .select("id")
       .single();
@@ -93,14 +124,19 @@ export function useMenuEditor(restaurantId: string) {
   }
 
   // ── Products ──
-  async function addProduct(categoryId: string | null, input: ProductInput): Promise<string | undefined> {
+  async function addProduct(
+    menuId: string,
+    categoryId: string | null,
+    input: ProductInput
+  ): Promise<string | undefined> {
     const { data } = await supabase
       .from("menu_items")
       .insert({
         restaurant_id: restaurantId,
+        menu_id: menuId,
         category_id: categoryId,
         is_addon: false,
-        sort_order: products.length,
+        sort_order: products.filter((p) => p.menu_id === menuId).length,
         ...input,
       })
       .select("id")
@@ -118,12 +154,13 @@ export function useMenuEditor(restaurantId: string) {
   }
 
   // ── Add-on items ──
-  async function addAddon(input: AddonInput) {
+  async function addAddon(menuId: string, input: AddonInput) {
     await supabase.from("menu_items").insert({
       restaurant_id: restaurantId,
+      menu_id: menuId,
       category_id: null,
       is_addon: true,
-      sort_order: addons.length,
+      sort_order: addons.filter((a) => a.menu_id === menuId).length,
       ...input,
     });
     await reload();
@@ -157,11 +194,16 @@ export function useMenuEditor(restaurantId: string) {
 
   return {
     loading,
+    menus,
     sections,
     products,
     addons,
     links,
     reload,
+    addMenu,
+    renameMenu,
+    deleteMenu,
+    setMenuActive,
     addSection,
     renameSection,
     deleteSection,

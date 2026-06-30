@@ -9,6 +9,7 @@ export type Modifier = {
 export type MenuItem = {
   id: string;
   restaurant_id: string;
+  menu_id: string | null;
   category_id: string | null;
   name: string;
   description: string | null;
@@ -32,7 +33,18 @@ export type ItemAddon = {
 export type Category = {
   id: string;
   restaurant_id: string;
+  menu_id: string | null;
   name: string;
+  sort_order: number;
+};
+
+/** A named menu (e.g. "Breakfast", "Dinner"). Each owns its own categories,
+ *  products and extras. `active` controls whether customers see it. */
+export type Menu = {
+  id: string;
+  restaurant_id: string;
+  name: string;
+  active: boolean;
   sort_order: number;
 };
 

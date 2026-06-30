@@ -14,6 +14,15 @@ export default async function TablePage({
   const { restaurantId, tableId } = await params;
   const supabase = await createClient();
 
+  // Only active menus are shown to customers. A restaurant can have several
+  // active at once — the customer sees the union of their content.
+  const { data: activeMenus } = await supabase
+    .from("menus")
+    .select("id")
+    .eq("restaurant_id", restaurantId)
+    .eq("active", true);
+  const activeMenuIds = (activeMenus as { id: string }[] | null ?? []).map((m) => m.id);
+
   const [{ data: restaurant }, { data: table }, { data: categories }, { data: menuItems }] =
     await Promise.all([
       supabase.from("restaurants").select("*").eq("id", restaurantId).single(),
@@ -22,6 +31,7 @@ export default async function TablePage({
         .from("categories")
         .select("*")
         .eq("restaurant_id", restaurantId)
+        .in("menu_id", activeMenuIds.length ? activeMenuIds : ["00000000-0000-0000-0000-000000000000"])
         .order("sort_order"),
       // Products AND available add-on items; we split them client-side.
       supabase
@@ -29,6 +39,7 @@ export default async function TablePage({
         .select("*")
         .eq("restaurant_id", restaurantId)
         .eq("available", true)
+        .in("menu_id", activeMenuIds.length ? activeMenuIds : ["00000000-0000-0000-0000-000000000000"])
         .order("sort_order"),
     ]);
 

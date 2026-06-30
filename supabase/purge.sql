@@ -9,6 +9,7 @@ truncate table
   item_addons,
   menu_items,
   categories,
+  menus,
   restaurant_tables,
   restaurants
 restart identity cascade;
