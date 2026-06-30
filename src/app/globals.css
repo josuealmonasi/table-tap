@@ -380,11 +380,10 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-prod-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .tt-prod-actions { display: flex; align-items: center; gap: 4px; }
 .tt-move-btn {
-  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
-  border: 1px solid var(--tt-cream); background: #fff; border-radius: 8px;
-  padding: 5px 10px; font-size: 13px; font-family: inherit; color: var(--tt-ink); cursor: pointer;
+  background: none; border: none; padding: 0; cursor: pointer; white-space: nowrap;
+  font: inherit; font-weight: 700; color: var(--tt-accent);
 }
-.tt-move-btn:hover { border-color: var(--tt-accent); color: var(--tt-accent); background: rgba(232,82,42,.06); }
+.tt-move-btn:hover { text-decoration: underline; }
 
 /* move-to-section picker (uncategorized products) */
 .tt-move-list { display: flex; flex-wrap: wrap; gap: 8px; }
