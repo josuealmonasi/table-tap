@@ -206,6 +206,7 @@ export function useMenuEditor(restaurantId: string) {
     }
 
     await reload();
+    toast(`Duplicated as “${copyName}”`);
     return newMenuId;
   }
   async function moveMenu(id: string, direction: "up" | "down") {

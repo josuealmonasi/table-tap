@@ -94,6 +94,15 @@ export default function MenusPanel({
     if (ok) await onDelete(menu.id);
   }
 
+  async function duplicate(menu: Menu) {
+    const ok = await confirm({
+      title: `Duplicate “${menu.name}”?`,
+      message: "This makes a copy with all of its sections, products and extras. You can rename it afterward.",
+      confirmLabel: "Duplicate",
+    });
+    if (ok) await onDuplicate(menu.id);
+  }
+
   const addForm = (
     <>
       <form
@@ -201,7 +210,7 @@ export default function MenusPanel({
                       </label>
                       <div className="tt-prod-actions">
                         <button className="tt-iconbtn" title="Rename" onClick={() => { setRenameValue(m.name); setRenameError(null); setRenamingId(m.id); }}>✏️</button>
-                        <button className="tt-iconbtn" title="Duplicate menu" onClick={() => onDuplicate(m.id)}>📋</button>
+                        <button className="tt-iconbtn" title="Duplicate menu" onClick={() => duplicate(m)}>📋</button>
                         <button className="tt-iconbtn" title="Delete menu" onClick={() => remove(m)}>🗑️</button>
                       </div>
                     </div>
