@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Menu } from "@/lib/types";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { menuSlug } from "@/lib/slug";
 
 /**
  * Dashboard panel listing a restaurant's menus. Clicking a menu opens it (to
@@ -28,12 +29,20 @@ export default function MenusPanel({
 }) {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
+  const [addError, setAddError] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
   const confirm = useConfirm();
 
   const activeCount = menus.filter((m) => m.active).length;
   const empty = menus.length === 0;
+
+  // A name collides if it produces the same URL slug as an existing menu
+  // (catches case- and punctuation-only differences too). exceptId skips the
+  // menu being renamed.
+  const nameTaken = (name: string, exceptId?: string) =>
+    menus.some((m) => m.id !== exceptId && menuSlug(m.name) === menuSlug(name));
 
   async function toggle(menu: Menu, next: boolean) {
     if (!next && activeCount <= 1) {
@@ -81,31 +90,39 @@ export default function MenusPanel({
   }
 
   const addForm = (
-    <form
-      className="tt-add-section"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        const name = newName.trim();
-        if (!name) return;
-        const id = await onAdd(name);
-        setNewName("");
-        setAdding(false);
-        // Open the new menu right away so the user can start adding items.
-        if (id) onOpen({ id, name } as Menu);
-      }}
-    >
-      <input
-        className="tt-input"
-        placeholder="Menu name (e.g. Breakfast)"
-        value={newName}
-        onChange={(e) => setNewName(e.target.value)}
-        autoFocus
-      />
-      <button className="tt-btn tt-btn-primary" type="submit" disabled={!newName.trim()}>+ Add menu</button>
-      {!empty && (
-        <button type="button" className="tt-btn tt-btn-ghost" onClick={() => { setAdding(false); setNewName(""); }}>Cancel</button>
-      )}
-    </form>
+    <>
+      <form
+        className="tt-add-section"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const name = newName.trim();
+          if (!name) return;
+          if (nameTaken(name)) {
+            setAddError(`You already have a menu called “${name}”.`);
+            return;
+          }
+          const id = await onAdd(name);
+          setNewName("");
+          setAddError(null);
+          setAdding(false);
+          // Open the new menu right away so the user can start adding items.
+          if (id) onOpen({ id, name } as Menu);
+        }}
+      >
+        <input
+          className="tt-input"
+          placeholder="Menu name (e.g. Breakfast)"
+          value={newName}
+          onChange={(e) => { setNewName(e.target.value); setAddError(null); }}
+          autoFocus
+        />
+        <button className="tt-btn tt-btn-primary" type="submit" disabled={!newName.trim()}>+ Add menu</button>
+        {!empty && (
+          <button type="button" className="tt-btn tt-btn-ghost" onClick={() => { setAdding(false); setNewName(""); setAddError(null); }}>Cancel</button>
+        )}
+      </form>
+      {addError && <p className="tt-field-error">{addError}</p>}
+    </>
   );
 
   return (
@@ -130,26 +147,34 @@ export default function MenusPanel({
           <div className="tt-menu-list">
             {menus.map((m) =>
               renamingId === m.id ? (
-                <form
-                  key={m.id}
-                  className="tt-menu-row"
-                  style={{ gap: 8 }}
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    if (renameValue.trim()) await onRename(m.id, renameValue.trim());
-                    setRenamingId(null);
-                  }}
-                >
-                  <input
-                    className="tt-input"
-                    style={{ flex: 1 }}
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    autoFocus
-                  />
-                  <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">Save</button>
-                  <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => setRenamingId(null)}>Cancel</button>
-                </form>
+                <div key={m.id}>
+                  <form
+                    className="tt-menu-row"
+                    style={{ gap: 8 }}
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const name = renameValue.trim();
+                      if (!name) return;
+                      if (nameTaken(name, m.id)) {
+                        setRenameError(`You already have a menu called “${name}”.`);
+                        return;
+                      }
+                      await onRename(m.id, name);
+                      setRenamingId(null);
+                    }}
+                  >
+                    <input
+                      className="tt-input"
+                      style={{ flex: 1 }}
+                      value={renameValue}
+                      onChange={(e) => { setRenameValue(e.target.value); setRenameError(null); }}
+                      autoFocus
+                    />
+                    <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">Save</button>
+                    <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => setRenamingId(null)}>Cancel</button>
+                  </form>
+                  {renameError && <p className="tt-field-error">{renameError}</p>}
+                </div>
               ) : (
                 <div key={m.id} className="tt-menu-row">
                   <button className="tt-menu-name" onClick={() => onOpen(m)}>
@@ -162,7 +187,7 @@ export default function MenusPanel({
                     <span className="tt-switch-track" />
                   </label>
                   <div className="tt-prod-actions">
-                    <button className="tt-iconbtn" title="Rename" onClick={() => { setRenameValue(m.name); setRenamingId(m.id); }}>✏️</button>
+                    <button className="tt-iconbtn" title="Rename" onClick={() => { setRenameValue(m.name); setRenameError(null); setRenamingId(m.id); }}>✏️</button>
                     <button className="tt-iconbtn" title="Delete menu" onClick={() => remove(m)}>🗑️</button>
                   </div>
                 </div>

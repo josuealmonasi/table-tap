@@ -370,6 +370,8 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-menu-open { font-weight: 600; font-size: 13px; color: var(--tt-accent); opacity: 0; transition: opacity .12s; }
 .tt-menu-name:hover .tt-menu-open { opacity: 1; }
 
+.tt-field-error { color: #c0392b; font-size: 13px; margin: 8px 0 0; }
+
 /* empty state (e.g. a brand-new restaurant with no menus yet) */
 .tt-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 12px 0 4px; }
 .tt-empty-emoji { font-size: 40px; line-height: 1; margin-bottom: 8px; }

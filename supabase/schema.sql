@@ -40,6 +40,11 @@ create table if not exists menus (
   created_at    timestamptz not null default now()
 );
 
+-- Menu names are unique within a restaurant (case-insensitive, trimmed). Also
+-- keeps the /dashboard/{menu-name} URL unambiguous.
+create unique index if not exists menus_restaurant_name_unique
+  on menus (restaurant_id, lower(btrim(name)));
+
 -- ── Menu categories ─────────────────────────────────────────────────────────
 create table if not exists categories (
   id            uuid primary key default gen_random_uuid(),
