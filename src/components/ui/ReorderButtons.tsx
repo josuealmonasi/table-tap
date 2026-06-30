@@ -12,6 +12,9 @@ export default function ReorderButtons({
   onMoveUp: () => void;
   onMoveDown: () => void;
 }) {
+  // Nothing to reorder when this is the only item in its group.
+  if (!canMoveUp && !canMoveDown) return null;
+
   return (
     <div className="tt-reorder">
       <button type="button" className="tt-reorder-btn" title="Move up" disabled={!canMoveUp} onClick={onMoveUp}>
