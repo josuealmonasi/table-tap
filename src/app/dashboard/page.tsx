@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DashboardHome from "@/components/dashboard/DashboardHome";
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
+import type { Restaurant } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -30,5 +32,9 @@ export default async function DashboardPage() {
     );
   }
 
-  return <DashboardHome />;
+  return (
+    <ConfirmProvider>
+      <DashboardHome restaurant={restaurant as Restaurant} />
+    </ConfirmProvider>
+  );
 }

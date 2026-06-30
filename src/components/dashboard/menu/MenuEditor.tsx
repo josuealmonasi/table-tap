@@ -1,49 +1,38 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Restaurant } from "@/lib/types";
 import { useMenuEditor } from "@/hooks/useMenuEditor";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import AddonsPanel from "./AddonsPanel";
-import MenusPanel from "./MenusPanel";
 import SectionEditor from "./SectionEditor";
 
 /**
- * Full menu management. A restaurant can run several named menus; the top panel
- * switches between them (and toggles each on/off for customers). Everything
- * below — sections, products and extras — belongs to the selected menu only.
- * modalForms: when true (default), adding/editing a product or extra opens in
- * a focused modal one at a time instead of expanding inline in place.
+ * Editor for a single menu: its sections, products and extras. Reached from the
+ * dashboard at /dashboard/{menu-name}. Everything here belongs to this menu only.
+ * modalForms: when true (default), adding/editing a product or extra opens in a
+ * focused modal one at a time instead of expanding inline in place.
  */
-export default function MenuManager({
+export default function MenuEditor({
   restaurant,
+  menuId,
+  menuName,
   modalForms = true,
 }: {
   restaurant: Restaurant;
+  menuId: string;
+  menuName: string;
   modalForms?: boolean;
 }) {
   const editor = useMenuEditor(restaurant.id);
-  const [selectedMenuId, setSelectedMenuId] = useState<string | null>(null);
   const [newSection, setNewSection] = useState("");
   const currency = restaurant.currency;
 
-  // Keep a valid menu selected: default to the first, and recover if the
-  // selected menu is deleted.
-  useEffect(() => {
-    if (editor.menus.length === 0) {
-      if (selectedMenuId !== null) setSelectedMenuId(null);
-      return;
-    }
-    if (!editor.menus.some((m) => m.id === selectedMenuId)) {
-      setSelectedMenuId(editor.menus[0].id);
-    }
-  }, [editor.menus, selectedMenuId]);
-
-  // Everything below the menu picker is scoped to the selected menu.
-  const menuSections = editor.sections.filter((s) => s.menu_id === selectedMenuId);
-  const menuProducts = editor.products.filter((p) => p.menu_id === selectedMenuId);
-  const menuAddons = editor.addons.filter((a) => a.menu_id === selectedMenuId);
+  // Scope everything to this menu.
+  const menuSections = editor.sections.filter((s) => s.menu_id === menuId);
+  const menuProducts = editor.products.filter((p) => p.menu_id === menuId);
+  const menuAddons = editor.addons.filter((a) => a.menu_id === menuId);
 
   const sectionIds = new Set(menuSections.map((s) => s.id));
   const uncategorized = menuProducts.filter(
@@ -54,10 +43,10 @@ export default function MenuManager({
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <Breadcrumb trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Menu" }]} />
+          <Breadcrumb trail={[{ label: "Dashboard", href: "/dashboard" }, { label: menuName }]} />
         </header>
 
-        {editor.loading || !selectedMenuId ? (
+        {editor.loading ? (
           <div className="tt-menu-grid">
             <SectionSkeleton rows={1} />
             <SectionSkeleton rows={3} />
@@ -65,17 +54,7 @@ export default function MenuManager({
           </div>
         ) : (
           <div className="tt-menu-grid">
-            <MenusPanel
-              menus={editor.menus}
-              selectedMenuId={selectedMenuId}
-              onSelect={setSelectedMenuId}
-              onAdd={editor.addMenu}
-              onRename={editor.renameMenu}
-              onDelete={editor.deleteMenu}
-              onToggleActive={editor.setMenuActive}
-            />
-
-            {/* Step 1 — sections within the selected menu. */}
+            {/* Step 1 — sections within this menu. */}
             <div className="tt-section">
               <div className="tt-section-head">
                 <h3 className="tt-serif" style={{ margin: 0 }}>Sections</h3>
@@ -89,7 +68,7 @@ export default function MenuManager({
                 onSubmit={async (e) => {
                   e.preventDefault();
                   if (newSection.trim()) {
-                    await editor.addSection(selectedMenuId, newSection.trim());
+                    await editor.addSection(menuId, newSection.trim());
                     setNewSection("");
                   }
                 }}
@@ -126,7 +105,7 @@ export default function MenuManager({
                 onMoveProduct={(productId, categoryId) =>
                   editor.updateProduct(productId, { category_id: categoryId })
                 }
-                onCreateCategory={(name) => editor.addSection(selectedMenuId, name)}
+                onCreateCategory={(name) => editor.addSection(menuId, name)}
               />
             ))}
 
@@ -148,7 +127,7 @@ export default function MenuManager({
                 onMoveProduct={(productId, categoryId) =>
                   editor.updateProduct(productId, { category_id: categoryId })
                 }
-                onCreateCategory={(name) => editor.addSection(selectedMenuId, name)}
+                onCreateCategory={(name) => editor.addSection(menuId, name)}
               />
             )}
 
@@ -159,7 +138,7 @@ export default function MenuManager({
             <AddonsPanel
               addons={menuAddons}
               currency={currency}
-              onAdd={(input) => editor.addAddon(selectedMenuId, input)}
+              onAdd={(input) => editor.addAddon(menuId, input)}
               onUpdate={editor.updateAddon}
               onDelete={editor.deleteAddon}
               onToggleAvailable={editor.setAvailability}
@@ -171,13 +150,13 @@ export default function MenuManager({
     </div>
   );
 
-  // Create a product in the selected menu, then attach its chosen add-ons.
+  // Create a product in this menu, then attach its chosen add-ons.
   async function addProductWithAddons(
     categoryId: string | null,
     input: Parameters<typeof editor.addProduct>[2],
     addonIds: string[]
   ) {
-    const id = await editor.addProduct(selectedMenuId!, categoryId, input);
+    const id = await editor.addProduct(menuId, categoryId, input);
     if (id && addonIds.length) await editor.setProductAddons(id, addonIds);
   }
 

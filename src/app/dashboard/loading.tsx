@@ -9,8 +9,14 @@ export default function DashboardLoading() {
           <Breadcrumb trail={[{ label: "Dashboard" }]} />
         </header>
 
-        <div className="tt-tiles">
-          {Array.from({ length: 3 }).map((_, i) => (
+        <div className="tt-section" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Skeleton width={120} height={18} />
+          <Skeleton width="100%" height={44} radius={12} />
+          <Skeleton width="100%" height={44} radius={12} />
+        </div>
+
+        <div className="tt-tiles" style={{ marginTop: 16 }}>
+          {Array.from({ length: 2 }).map((_, i) => (
             <div key={i} className="tt-skel-tile" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <Skeleton width={34} height={34} radius={8} />
               <Skeleton width="50%" height={16} />

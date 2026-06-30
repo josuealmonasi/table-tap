@@ -1,12 +1,12 @@
 import { SectionSkeleton } from "@/components/ui/Skeleton";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 
-export default function MenuLoading() {
+export default function MenuEditorLoading() {
   return (
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <Breadcrumb trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Menu" }]} />
+          <Breadcrumb trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "…" }]} />
         </header>
 
         <div className="tt-menu-grid">

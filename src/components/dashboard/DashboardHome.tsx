@@ -1,9 +1,22 @@
-import Link from "next/link";
-import { NAV_ITEMS } from "@/lib/nav";
-import Breadcrumb from "@/components/layout/Breadcrumb";
+"use client";
 
-/** Restaurant dashboard landing — links to each management area. */
-export default function DashboardHome() {
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import type { Menu, Restaurant } from "@/lib/types";
+import { useMenuEditor } from "@/hooks/useMenuEditor";
+import { NAV_ITEMS } from "@/lib/nav";
+import { menuSlug } from "@/lib/slug";
+import Breadcrumb from "@/components/layout/Breadcrumb";
+import { Skeleton } from "@/components/ui/Skeleton";
+import MenusPanel from "@/components/dashboard/menu/MenusPanel";
+
+/** Restaurant dashboard landing — the restaurant's menus, plus other areas. */
+export default function DashboardHome({ restaurant }: { restaurant: Restaurant }) {
+  const editor = useMenuEditor(restaurant.id);
+  const router = useRouter();
+
+  const openMenu = (menu: Menu) => router.push(`/dashboard/${menuSlug(menu.name)}`);
+
   return (
     <div className="tt-dash">
       <div className="container">
@@ -11,7 +24,24 @@ export default function DashboardHome() {
           <Breadcrumb trail={[{ label: "Dashboard" }]} />
         </header>
 
-        <div className="tt-tiles">
+        {editor.loading ? (
+          <div className="tt-section" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <Skeleton width={120} height={18} />
+            <Skeleton width="100%" height={44} radius={12} />
+            <Skeleton width="100%" height={44} radius={12} />
+          </div>
+        ) : (
+          <MenusPanel
+            menus={editor.menus}
+            onOpen={openMenu}
+            onAdd={editor.addMenu}
+            onRename={editor.renameMenu}
+            onDelete={editor.deleteMenu}
+            onToggleActive={editor.setMenuActive}
+          />
+        )}
+
+        <div className="tt-tiles" style={{ marginTop: 16 }}>
           {NAV_ITEMS.map((tile) =>
             tile.soon ? (
               <div key={tile.title} className="tt-tile tt-tile-soon">

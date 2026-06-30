@@ -362,11 +362,18 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 }
 .tt-menu-row-active { border-color: var(--tt-accent); background: rgba(232,82,42,.06); }
 .tt-menu-name {
-  flex: 1; min-width: 0; display: flex; align-items: center; text-align: left;
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; text-align: left;
   background: none; border: none; padding: 0; cursor: pointer; font-family: inherit;
   font-size: 15px; font-weight: 700; color: var(--tt-ink);
 }
 .tt-menu-name:hover { color: var(--tt-accent); }
+.tt-menu-open { font-weight: 600; font-size: 13px; color: var(--tt-accent); opacity: 0; transition: opacity .12s; }
+.tt-menu-name:hover .tt-menu-open { opacity: 1; }
+
+/* empty state (e.g. a brand-new restaurant with no menus yet) */
+.tt-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 12px 0 4px; }
+.tt-empty-emoji { font-size: 40px; line-height: 1; margin-bottom: 8px; }
+.tt-empty .tt-add-section { width: 100%; max-width: 420px; }
 .tt-section { background: #fff; border-radius: 16px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
 .tt-section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .tt-section-head h3 { font-size: 18px; }
