@@ -276,6 +276,29 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-breadcrumb-sep { color: var(--tt-muted); }
 .tt-breadcrumb-current { color: var(--tt-ink); font-weight: 700; }
 
+/* menu switcher (editor header: jump between menus, rename current one) */
+.tt-menu-switcher { position: relative; display: inline-flex; align-items: center; gap: 2px; }
+.tt-menu-switcher-btn {
+  background: none; border: none; padding: 0; cursor: pointer; font: inherit;
+  font-weight: 700; color: var(--tt-ink); display: inline-flex; align-items: center; gap: 6px;
+}
+.tt-menu-switcher-btn:hover { color: var(--tt-accent); }
+.tt-menu-switcher-caret { font-size: 11px; color: var(--tt-muted); }
+.tt-menu-switcher-edit { font-size: 13px; opacity: .6; }
+.tt-menu-switcher-edit:hover { opacity: 1; }
+.tt-menu-switcher-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; min-width: 220px; max-height: 320px;
+  overflow-y: auto; background: #fff; border: 1px solid var(--tt-cream); border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 6px; z-index: 50;
+}
+.tt-menu-switcher-item {
+  display: block; width: 100%; text-align: left; background: none; border: none; cursor: pointer;
+  font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 8px; color: var(--tt-ink);
+}
+.tt-menu-switcher-item:hover { background: var(--tt-surface); }
+.tt-menu-switcher-item-active { color: var(--tt-accent); font-weight: 700; }
+.tt-menu-switcher-rename { display: flex; align-items: center; gap: 6px; }
+
 @media (max-width: 640px) {
   .tt-hamburger { display: flex; }
 }
@@ -369,8 +392,33 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-menu-name:hover { color: var(--tt-accent); }
 .tt-menu-open { font-weight: 600; font-size: 13px; color: var(--tt-accent); opacity: 0; transition: opacity .12s; }
 .tt-menu-name:hover .tt-menu-open { opacity: 1; }
+/* name + controls share the space beside the reorder column */
+.tt-menu-body { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+/* switch + actions group: never shrink (so the toggle can't overlap the icons) */
+.tt-menu-controls { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+
+/* narrow screens: stack the name over its controls so the row stays compact
+   and fills the reorder column's height instead of leaving it empty. */
+@media (max-width: 640px) {
+  .tt-menu-row { align-items: stretch; }
+  .tt-menu-body { flex-direction: column; align-items: stretch; justify-content: space-between; gap: 8px; }
+  .tt-menu-controls { justify-content: flex-end; }
+}
 
 .tt-field-error { color: #c0392b; font-size: 13px; margin: 8px 0 0; }
+
+/* toasts */
+.tt-toasts {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 200;
+  display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none;
+}
+.tt-toast {
+  background: var(--tt-ink); color: #fff; padding: 10px 18px; border-radius: 10px;
+  font-size: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.25); pointer-events: auto;
+  animation: tt-toast-in .15s ease-out;
+}
+.tt-toast-error { background: #c0392b; }
+@keyframes tt-toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
 /* empty state (e.g. a brand-new restaurant with no menus yet) */
 .tt-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 12px 0 4px; }
@@ -425,6 +473,23 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 }
 .tt-iconbtn { background: none; border: none; cursor: pointer; font-size: 16px; padding: 4px; border-radius: 6px; }
 .tt-iconbtn:hover { background: var(--tt-surface); }
+
+/* up/down reorder buttons */
+.tt-reorder { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+.tt-reorder-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 26px; font-size: 12px; line-height: 1;
+  background: none; border: 1px solid var(--tt-cream); cursor: pointer;
+  color: var(--tt-muted); border-radius: 7px;
+}
+.tt-reorder-btn:hover:not(:disabled) { background: var(--tt-surface); color: var(--tt-accent); border-color: var(--tt-accent); }
+.tt-reorder-btn:disabled { opacity: .3; cursor: default; }
+
+/* on touch screens, grow to a comfortable tap target */
+@media (max-width: 640px) {
+  .tt-reorder { gap: 4px; justify-content: space-between; }
+  .tt-reorder-btn { width: 44px; height: 34px; font-size: 14px; }
+}
 
 /* availability switch */
 .tt-switch { position: relative; display: inline-flex; cursor: pointer; }

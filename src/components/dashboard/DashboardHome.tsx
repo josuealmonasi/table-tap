@@ -38,6 +38,8 @@ export default function DashboardHome({ restaurant }: { restaurant: Restaurant }
             onRename={editor.renameMenu}
             onDelete={editor.deleteMenu}
             onToggleActive={editor.setMenuActive}
+            onDuplicate={editor.duplicateMenu}
+            onMove={editor.moveMenu}
           />
         )}
 
