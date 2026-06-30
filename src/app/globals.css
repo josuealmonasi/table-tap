@@ -441,6 +441,8 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
   border-top: 1px solid var(--tt-cream);
 }
 .tt-prod:first-of-type { border-top: none; }
+/* thumb + content + controls, beside the reorder column */
+.tt-prod-body { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
 .tt-prod-off { opacity: 0.55; }
 .tt-prod-editing { display: block; background: var(--tt-surface); border-radius: 12px; margin: 8px 0; }
 .tt-prod-thumb {
@@ -466,9 +468,12 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-move-option:disabled { opacity: .5; cursor: default; }
 
 /* mobile: the price/switch/actions block won't fit beside the content without
-   squeezing it to nothing (badges overflow onto the price), so wrap it below. */
+   squeezing it to nothing (badges overflow onto the price), so wrap it below
+   the thumb/content — within the body, so it fills the reorder column's height
+   instead of leaving it empty. */
 @media (max-width: 640px) {
-  .tt-prod { flex-wrap: wrap; }
+  .tt-prod { align-items: stretch; }
+  .tt-prod-body { flex-wrap: wrap; }
   .tt-prod-right { flex-basis: 100%; justify-content: flex-end; }
 }
 .tt-iconbtn { background: none; border: none; cursor: pointer; font-size: 16px; padding: 4px; border-radius: 6px; }

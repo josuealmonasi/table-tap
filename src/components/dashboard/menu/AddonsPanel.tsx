@@ -74,6 +74,7 @@ export default function AddonsPanel({
                 onMoveUp={() => onMove(addon.id, "up")}
                 onMoveDown={() => onMove(addon.id, "down")}
               />
+              <div className="tt-prod-body">
               <div className="tt-prod-thumb"><span>{addon.emoji || addon.name.charAt(0).toUpperCase()}</span></div>
               <div style={{ flex: 1 }}>
                 <strong>{addon.name}</strong>
@@ -109,6 +110,7 @@ export default function AddonsPanel({
                     🗑️
                   </button>
                 </div>
+              </div>
               </div>
             </div>
             {modalForms && (

@@ -83,6 +83,7 @@ export default function ProductRow({
             onMoveDown={() => onReorder(product.id, "down")}
           />
         )}
+        <div className="tt-prod-body">
         <div className="tt-prod-thumb">
           {product.image_url ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -144,6 +145,7 @@ export default function ProductRow({
               🗑️
             </button>
           </div>
+        </div>
         </div>
       </div>
       {modalForms && (
