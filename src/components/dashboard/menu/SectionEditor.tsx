@@ -5,6 +5,7 @@ import type { Category, MenuItem } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/Modal";
+import ReorderButtons from "@/components/ui/ReorderButtons";
 import ProductRow from "./ProductRow";
 import ProductForm from "./ProductForm";
 
@@ -25,6 +26,10 @@ export default function SectionEditor({
   categories,
   onMoveProduct,
   onCreateCategory,
+  onReorderProduct,
+  canMoveSectionUp,
+  canMoveSectionDown,
+  onMoveSection,
 }: {
   section: Category | null; // null = "Uncategorized" catch-all
   products: MenuItem[];
@@ -43,6 +48,12 @@ export default function SectionEditor({
   categories?: Category[];
   onMoveProduct?: (productId: string, categoryId: string) => Promise<void>;
   onCreateCategory?: (name: string) => Promise<string | undefined>;
+  /** Reorders a product up/down within this section. */
+  onReorderProduct?: (productId: string, direction: "up" | "down") => Promise<void>;
+  /** Reorders this section among its menu's other sections (real sections only). */
+  canMoveSectionUp?: boolean;
+  canMoveSectionDown?: boolean;
+  onMoveSection?: (sectionId: string, direction: "up" | "down") => Promise<void>;
 }) {
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -67,6 +78,14 @@ export default function SectionEditor({
             </form>
           ) : (
             <>
+              {section && onMoveSection && (
+                <ReorderButtons
+                  canMoveUp={!!canMoveSectionUp}
+                  canMoveDown={!!canMoveSectionDown}
+                  onMoveUp={() => onMoveSection(section.id, "up")}
+                  onMoveDown={() => onMoveSection(section.id, "down")}
+                />
+              )}
               <h3 className="tt-serif" style={{ margin: 0 }}>{section ? section.name : "Uncategorized"}</h3>
               {section && (
                 <div className="tt-prod-actions">
@@ -98,7 +117,7 @@ export default function SectionEditor({
 
       <div className="tt-section-right">
         {products.length === 0 && <p className="tt-muted" style={{ fontSize: 13 }}>No products yet.</p>}
-        {products.map((p) => (
+        {products.map((p, i) => (
           <ProductRow
             key={p.id}
             product={p}
@@ -112,6 +131,9 @@ export default function SectionEditor({
             categories={categories}
             onMove={onMoveProduct}
             onCreateCategory={onCreateCategory}
+            canReorderUp={i > 0}
+            canReorderDown={i < products.length - 1}
+            onReorder={onReorderProduct}
           />
         ))}
 

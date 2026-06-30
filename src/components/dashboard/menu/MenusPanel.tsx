@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Menu } from "@/lib/types";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { menuSlug } from "@/lib/slug";
+import ReorderButtons from "@/components/ui/ReorderButtons";
 
 /**
  * Dashboard panel listing a restaurant's menus. Clicking a menu opens it (to
@@ -19,6 +20,8 @@ export default function MenusPanel({
   onRename,
   onDelete,
   onToggleActive,
+  onDuplicate,
+  onMove,
 }: {
   menus: Menu[];
   onOpen: (menu: Menu) => void;
@@ -26,6 +29,8 @@ export default function MenusPanel({
   onRename: (id: string, name: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onToggleActive: (id: string, active: boolean) => Promise<void>;
+  onDuplicate: (id: string) => Promise<string | undefined>;
+  onMove: (id: string, direction: "up" | "down") => Promise<void>;
 }) {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -89,6 +94,15 @@ export default function MenusPanel({
     if (ok) await onDelete(menu.id);
   }
 
+  async function duplicate(menu: Menu) {
+    const ok = await confirm({
+      title: `Duplicate “${menu.name}”?`,
+      message: "This makes a copy with all of its sections, products and extras. You can rename it afterward.",
+      confirmLabel: "Duplicate",
+    });
+    if (ok) await onDuplicate(menu.id);
+  }
+
   const addForm = (
     <>
       <form
@@ -145,7 +159,7 @@ export default function MenusPanel({
       ) : (
         <>
           <div className="tt-menu-list">
-            {menus.map((m) =>
+            {menus.map((m, i) =>
               renamingId === m.id ? (
                 <div key={m.id}>
                   <form
@@ -177,18 +191,29 @@ export default function MenusPanel({
                 </div>
               ) : (
                 <div key={m.id} className="tt-menu-row">
-                  <button className="tt-menu-name" onClick={() => onOpen(m)}>
-                    <span>{m.name}</span>
-                    {!m.active && <span className="tt-badge" style={{ marginLeft: 8 }}>Hidden</span>}
-                    <span className="tt-menu-open">Open →</span>
-                  </button>
-                  <label className="tt-switch" title={m.active ? "Visible to customers" : "Hidden"}>
-                    <input type="checkbox" checked={m.active} onChange={(e) => toggle(m, e.target.checked)} />
-                    <span className="tt-switch-track" />
-                  </label>
-                  <div className="tt-prod-actions">
-                    <button className="tt-iconbtn" title="Rename" onClick={() => { setRenameValue(m.name); setRenameError(null); setRenamingId(m.id); }}>✏️</button>
-                    <button className="tt-iconbtn" title="Delete menu" onClick={() => remove(m)}>🗑️</button>
+                  <ReorderButtons
+                    canMoveUp={i > 0}
+                    canMoveDown={i < menus.length - 1}
+                    onMoveUp={() => onMove(m.id, "up")}
+                    onMoveDown={() => onMove(m.id, "down")}
+                  />
+                  <div className="tt-menu-body">
+                    <button className="tt-menu-name" onClick={() => onOpen(m)}>
+                      <span>{m.name}</span>
+                      {!m.active && <span className="tt-badge" style={{ marginLeft: 8 }}>Hidden</span>}
+                      <span className="tt-menu-open">Open →</span>
+                    </button>
+                    <div className="tt-menu-controls">
+                      <label className="tt-switch" title={m.active ? "Visible to customers" : "Hidden"}>
+                        <input type="checkbox" checked={m.active} onChange={(e) => toggle(m, e.target.checked)} />
+                        <span className="tt-switch-track" />
+                      </label>
+                      <div className="tt-prod-actions">
+                        <button className="tt-iconbtn" title="Rename" onClick={() => { setRenameValue(m.name); setRenameError(null); setRenamingId(m.id); }}>✏️</button>
+                        <button className="tt-iconbtn" title="Duplicate menu" onClick={() => duplicate(m)}>📋</button>
+                        <button className="tt-iconbtn" title="Delete menu" onClick={() => remove(m)}>🗑️</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )

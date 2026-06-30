@@ -3,6 +3,7 @@ import "./globals.css";
 import { createClient } from "@/lib/supabase/server";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import { ToastProvider } from "@/components/ui/Toast";
 
 export const metadata: Metadata = {
   title: "TableTap — Scan, Order, Enjoy",
@@ -29,9 +30,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en">
       <body>
-        {restaurant && <Navbar restaurantName={restaurant.name} restaurantLogo={restaurant.logo} />}
-        <main style={{ flex: 1 }}>{children}</main>
-        <Footer />
+        <ToastProvider>
+          {restaurant && <Navbar restaurantName={restaurant.name} restaurantLogo={restaurant.logo} />}
+          <main style={{ flex: 1 }}>{children}</main>
+          <Footer />
+        </ToastProvider>
       </body>
     </html>
   );

@@ -6,6 +6,7 @@ import type { MenuItem } from "@/lib/types";
 import type { AddonInput } from "@/hooks/useMenuEditor";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/Modal";
+import ReorderButtons from "@/components/ui/ReorderButtons";
 import IconPicker from "./IconPicker";
 
 /** Manages the restaurant's reusable add-on items (e.g. Catsup, Extra cheese). */
@@ -16,6 +17,7 @@ export default function AddonsPanel({
   onUpdate,
   onDelete,
   onToggleAvailable,
+  onMove,
   modalForms = true,
 }: {
   addons: MenuItem[];
@@ -24,6 +26,7 @@ export default function AddonsPanel({
   onUpdate: (id: string, input: AddonInput) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onToggleAvailable: (id: string, available: boolean) => void;
+  onMove: (id: string, direction: "up" | "down") => Promise<void>;
   /** Open add/edit forms in a focused modal instead of expanding inline. Defaults to on. */
   modalForms?: boolean;
 }) {
@@ -44,7 +47,7 @@ export default function AddonsPanel({
         </p>
       )}
 
-      {addons.map((addon) => {
+      {addons.map((addon, i) => {
         const isEditing = editingId === addon.id;
         const editForm = (
           <AddonForm
@@ -65,6 +68,13 @@ export default function AddonsPanel({
         return (
           <div key={addon.id}>
             <div className={`tt-prod ${addon.available ? "" : "tt-prod-off"}`}>
+              <ReorderButtons
+                canMoveUp={i > 0}
+                canMoveDown={i < addons.length - 1}
+                onMoveUp={() => onMove(addon.id, "up")}
+                onMoveDown={() => onMove(addon.id, "down")}
+              />
+              <div className="tt-prod-body">
               <div className="tt-prod-thumb"><span>{addon.emoji || addon.name.charAt(0).toUpperCase()}</span></div>
               <div style={{ flex: 1 }}>
                 <strong>{addon.name}</strong>
@@ -100,6 +110,7 @@ export default function AddonsPanel({
                     🗑️
                   </button>
                 </div>
+              </div>
               </div>
             </div>
             {modalForms && (

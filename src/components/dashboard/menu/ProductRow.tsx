@@ -6,6 +6,7 @@ import type { Category, MenuItem } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/Modal";
+import ReorderButtons from "@/components/ui/ReorderButtons";
 import ProductForm from "./ProductForm";
 
 /** One product in a section: image/emoji, price, availability switch, add-ons, edit/delete. */
@@ -21,6 +22,9 @@ export default function ProductRow({
   categories,
   onMove,
   onCreateCategory,
+  canReorderUp,
+  canReorderDown,
+  onReorder,
 }: {
   product: MenuItem;
   addons: MenuItem[];
@@ -35,6 +39,10 @@ export default function ProductRow({
   categories?: Category[];
   onMove?: (productId: string, categoryId: string) => Promise<void>;
   onCreateCategory?: (name: string) => Promise<string | undefined>;
+  /** Up/down position within this product's section, for reordering. */
+  canReorderUp?: boolean;
+  canReorderDown?: boolean;
+  onReorder?: (productId: string, direction: "up" | "down") => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [moving, setMoving] = useState(false);
@@ -67,6 +75,15 @@ export default function ProductRow({
   return (
     <>
       <div className={`tt-prod ${product.available ? "" : "tt-prod-off"}`}>
+        {onReorder && (
+          <ReorderButtons
+            canMoveUp={!!canReorderUp}
+            canMoveDown={!!canReorderDown}
+            onMoveUp={() => onReorder(product.id, "up")}
+            onMoveDown={() => onReorder(product.id, "down")}
+          />
+        )}
+        <div className="tt-prod-body">
         <div className="tt-prod-thumb">
           {product.image_url ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -128,6 +145,7 @@ export default function ProductRow({
               🗑️
             </button>
           </div>
+        </div>
         </div>
       </div>
       {modalForms && (

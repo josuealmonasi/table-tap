@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Restaurant } from "@/lib/types";
 import { useMenuEditor } from "@/hooks/useMenuEditor";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
-import Breadcrumb from "@/components/layout/Breadcrumb";
+import { menuSlug } from "@/lib/slug";
+import Link from "next/link";
 import AddonsPanel from "./AddonsPanel";
 import SectionEditor from "./SectionEditor";
+import MenuSwitcher from "./MenuSwitcher";
 
 /**
  * Editor for a single menu: its sections, products and extras. Reached from the
@@ -28,6 +31,21 @@ export default function MenuEditor({
   const editor = useMenuEditor(restaurant.id);
   const [newSection, setNewSection] = useState("");
   const currency = restaurant.currency;
+  const router = useRouter();
+
+  // If this menu was deleted from another tab, bounce back to the dashboard
+  // instead of showing a dead editor.
+  useEffect(() => {
+    if (!editor.loading && !editor.menus.some((m) => m.id === menuId)) {
+      router.replace("/dashboard");
+    }
+  }, [editor.loading, editor.menus, menuId, router]);
+
+  const currentMenu = editor.menus.find((m) => m.id === menuId);
+  const liveName = currentMenu?.name ?? menuName;
+
+  const nameTaken = (name: string, exceptId?: string) =>
+    editor.menus.some((m) => m.id !== exceptId && menuSlug(m.name) === menuSlug(name));
 
   // Scope everything to this menu.
   const menuSections = editor.sections.filter((s) => s.menu_id === menuId);
@@ -39,11 +57,23 @@ export default function MenuEditor({
     (p) => !p.category_id || !sectionIds.has(p.category_id)
   );
 
+  const menuEmpty = menuSections.length === 0 && menuProducts.length === 0;
+
   return (
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <Breadcrumb trail={[{ label: "Dashboard", href: "/dashboard" }, { label: menuName }]} />
+          <nav className="tt-breadcrumb" aria-label="Breadcrumb">
+            <Link href="/dashboard">Dashboard</Link>
+            <span className="tt-breadcrumb-sep">/</span>
+            <MenuSwitcher
+              menus={editor.menus}
+              currentId={menuId}
+              currentName={liveName}
+              onRename={editor.renameMenu}
+              nameTaken={nameTaken}
+            />
+          </nav>
         </header>
 
         {editor.loading ? (
@@ -51,6 +81,38 @@ export default function MenuEditor({
             <SectionSkeleton rows={1} />
             <SectionSkeleton rows={3} />
             <SectionSkeleton rows={2} />
+          </div>
+        ) : menuEmpty ? (
+          <div className="tt-section">
+            <div className="tt-empty">
+              <div className="tt-empty-emoji">🍽️</div>
+              <strong>Add your first section</strong>
+              <p className="tt-muted" style={{ fontSize: 13, margin: "4px 0 14px", maxWidth: 360 }}>
+                Group “{liveName}” into sections — e.g. “Coffee Drinks” — then add products
+                (Latte, Espresso…) inside each one.
+              </p>
+              <form
+                className="tt-add-section"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (newSection.trim()) {
+                    await editor.addSection(menuId, newSection.trim());
+                    setNewSection("");
+                  }
+                }}
+              >
+                <input
+                  className="tt-input"
+                  placeholder="New section name (e.g. Coffee Drinks)"
+                  value={newSection}
+                  onChange={(e) => setNewSection(e.target.value)}
+                  autoFocus
+                />
+                <button className="tt-btn tt-btn-primary" type="submit" disabled={!newSection.trim()}>
+                  + Add section
+                </button>
+              </form>
+            </div>
           </div>
         ) : (
           <div className="tt-menu-grid">
@@ -86,7 +148,7 @@ export default function MenuEditor({
             </div>
 
             {/* Step 2 — products within each section. */}
-            {menuSections.map((section) => (
+            {menuSections.map((section, i) => (
               <SectionEditor
                 key={section.id}
                 section={section}
@@ -106,6 +168,10 @@ export default function MenuEditor({
                   editor.updateProduct(productId, { category_id: categoryId })
                 }
                 onCreateCategory={(name) => editor.addSection(menuId, name)}
+                onReorderProduct={editor.moveProduct}
+                canMoveSectionUp={i > 0}
+                canMoveSectionDown={i < menuSections.length - 1}
+                onMoveSection={editor.moveSection}
               />
             ))}
 
@@ -128,6 +194,7 @@ export default function MenuEditor({
                   editor.updateProduct(productId, { category_id: categoryId })
                 }
                 onCreateCategory={(name) => editor.addSection(menuId, name)}
+                onReorderProduct={editor.moveProduct}
               />
             )}
 
@@ -142,6 +209,7 @@ export default function MenuEditor({
               onUpdate={editor.updateAddon}
               onDelete={editor.deleteAddon}
               onToggleAvailable={editor.setAvailability}
+              onMove={editor.moveAddon}
               modalForms={modalForms}
             />
           </div>
