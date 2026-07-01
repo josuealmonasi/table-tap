@@ -28,7 +28,7 @@ export default function ProductForm({
   const [description, setDescription] = useState(initial?.description ?? "");
   const [price, setPrice] = useState(String(initial?.price ?? ""));
   const [imageUrl, setImageUrl] = useState(initial?.image_url ?? "");
-  const [emoji, setEmoji] = useState(initial?.emoji ?? "🍽️");
+  const [emoji, setEmoji] = useState(initial?.emoji ?? "");
   const [popular, setPopular] = useState(initial?.popular ?? false);
   const [picked, setPicked] = useState<string[]>(selectedAddonIds);
   const [saving, setSaving] = useState(false);
