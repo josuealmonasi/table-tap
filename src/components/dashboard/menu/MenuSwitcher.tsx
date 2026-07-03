@@ -11,19 +11,15 @@ import { menuSlug } from "@/lib/slug";
  * rename the current menu in place (keeping the URL's slug in sync via
  * router.replace, since /dashboard/{menu-name} routes are name-derived).
  */
-export default function MenuSwitcher({
-  menus,
-  currentId,
-  currentName,
-  onRename,
-  nameTaken,
-}: {
+interface MenuSwitcherProps {
   menus: Menu[];
   currentId: string;
   currentName: string;
   onRename: (id: string, name: string) => Promise<void>;
   nameTaken: (name: string, exceptId?: string) => boolean;
-}) {
+}
+
+export default function MenuSwitcher({ menus, currentId, currentName, onRename, nameTaken }: MenuSwitcherProps) {
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [value, setValue] = useState(currentName);

@@ -9,28 +9,7 @@ import ReorderButtons from "@/components/ui/ReorderButtons";
 import ProductRow from "./ProductRow";
 import ProductForm from "./ProductForm";
 
-/** One menu section (category) with its products and an add-product form. */
-export default function SectionEditor({
-  section,
-  products,
-  addons,
-  links,
-  currency,
-  onRename,
-  onDelete,
-  onAddProduct,
-  onUpdateProduct,
-  onDeleteProduct,
-  onToggleAvailable,
-  modalForms = true,
-  categories,
-  onMoveProduct,
-  onCreateCategory,
-  onReorderProduct,
-  canMoveSectionUp,
-  canMoveSectionDown,
-  onMoveSection,
-}: {
+interface SectionEditorProps {
   section: Category | null; // null = "Uncategorized" catch-all
   products: MenuItem[];
   addons: MenuItem[];
@@ -54,7 +33,30 @@ export default function SectionEditor({
   canMoveSectionUp?: boolean;
   canMoveSectionDown?: boolean;
   onMoveSection?: (sectionId: string, direction: "up" | "down") => Promise<void>;
-}) {
+}
+
+/** One menu section (category) with its products and an add-product form. */
+export default function SectionEditor({
+  section,
+  products,
+  addons,
+  links,
+  currency,
+  onRename,
+  onDelete,
+  onAddProduct,
+  onUpdateProduct,
+  onDeleteProduct,
+  onToggleAvailable,
+  modalForms = true,
+  categories,
+  onMoveProduct,
+  onCreateCategory,
+  onReorderProduct,
+  canMoveSectionUp,
+  canMoveSectionDown,
+  onMoveSection,
+}: SectionEditorProps) {
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(section?.name ?? "");

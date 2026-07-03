@@ -1,17 +1,14 @@
 "use client";
 
-/** Stacked ▲▼ buttons for moving a row up/down within its sibling group. */
-export default function ReorderButtons({
-  canMoveUp,
-  canMoveDown,
-  onMoveUp,
-  onMoveDown,
-}: {
+interface ReorderButtonsProps {
   canMoveUp: boolean;
   canMoveDown: boolean;
   onMoveUp: () => void;
   onMoveDown: () => void;
-}) {
+}
+
+/** Stacked ▲▼ buttons for moving a row up/down within its sibling group. */
+export default function ReorderButtons({ canMoveUp, canMoveDown, onMoveUp, onMoveDown }: ReorderButtonsProps) {
   // Nothing to reorder when this is the only item in its group.
   if (!canMoveUp && !canMoveDown) return null;
 

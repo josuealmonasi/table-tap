@@ -1,35 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { Restaurant } from "@/lib/types";
 import { useMenuEditor } from "@/hooks/useMenuEditor";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
 import { menuSlug } from "@/lib/slug";
-import Link from "next/link";
 import AddonsPanel from "./AddonsPanel";
+import AddSectionForm from "./AddSectionForm";
 import SectionEditor from "./SectionEditor";
 import MenuSwitcher from "./MenuSwitcher";
+
+interface MenuEditorProps {
+  restaurant: Restaurant;
+  menuId: string;
+  menuName: string;
+  /** Open add/edit forms in a focused modal instead of expanding inline. Defaults to on. */
+  modalForms?: boolean;
+}
 
 /**
  * Editor for a single menu: its sections, products and extras. Reached from the
  * dashboard at /dashboard/{menu-name}. Everything here belongs to this menu only.
- * modalForms: when true (default), adding/editing a product or extra opens in a
- * focused modal one at a time instead of expanding inline in place.
  */
-export default function MenuEditor({
-  restaurant,
-  menuId,
-  menuName,
-  modalForms = true,
-}: {
-  restaurant: Restaurant;
-  menuId: string;
-  menuName: string;
-  modalForms?: boolean;
-}) {
+export default function MenuEditor({ restaurant, menuId, menuName, modalForms = true }: MenuEditorProps) {
   const editor = useMenuEditor(restaurant.id);
-  const [newSection, setNewSection] = useState("");
   const currency = restaurant.currency;
   const router = useRouter();
 
@@ -53,11 +49,10 @@ export default function MenuEditor({
   const menuAddons = editor.addons.filter((a) => a.menu_id === menuId);
 
   const sectionIds = new Set(menuSections.map((s) => s.id));
-  const uncategorized = menuProducts.filter(
-    (p) => !p.category_id || !sectionIds.has(p.category_id)
-  );
+  const uncategorized = menuProducts.filter((p) => !p.category_id || !sectionIds.has(p.category_id));
 
   const menuEmpty = menuSections.length === 0 && menuProducts.length === 0;
+  const addSection = (name: string) => editor.addSection(menuId, name);
 
   return (
     <div className="tt-dash">
@@ -83,6 +78,7 @@ export default function MenuEditor({
             <SectionSkeleton rows={2} />
           </div>
         ) : menuEmpty ? (
+          // A fresh menu: invite the first section instead of showing the bare form.
           <div className="tt-section">
             <div className="tt-empty">
               <div className="tt-empty-emoji">🍽️</div>
@@ -91,27 +87,7 @@ export default function MenuEditor({
                 Group “{liveName}” into sections — e.g. “Coffee Drinks” — then add products
                 (Latte, Espresso…) inside each one.
               </p>
-              <form
-                className="tt-add-section"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (newSection.trim()) {
-                    await editor.addSection(menuId, newSection.trim());
-                    setNewSection("");
-                  }
-                }}
-              >
-                <input
-                  className="tt-input"
-                  placeholder="New section name (e.g. Coffee Drinks)"
-                  value={newSection}
-                  onChange={(e) => setNewSection(e.target.value)}
-                  autoFocus
-                />
-                <button className="tt-btn tt-btn-primary" type="submit" disabled={!newSection.trim()}>
-                  + Add section
-                </button>
-              </form>
+              <AddSectionForm onAdd={addSection} autoFocus />
             </div>
           </div>
         ) : (
@@ -125,26 +101,7 @@ export default function MenuEditor({
                 Group this menu — e.g. “Coffee Drinks”. Add a section, then add products (Latte,
                 Espresso…) inside it below. Extras come last.
               </p>
-              <form
-                className="tt-add-section"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (newSection.trim()) {
-                    await editor.addSection(menuId, newSection.trim());
-                    setNewSection("");
-                  }
-                }}
-              >
-                <input
-                  className="tt-input"
-                  placeholder="New section name (e.g. Coffee Drinks)"
-                  value={newSection}
-                  onChange={(e) => setNewSection(e.target.value)}
-                />
-                <button className="tt-btn tt-btn-primary" type="submit" disabled={!newSection.trim()}>
-                  + Add section
-                </button>
-              </form>
+              <AddSectionForm onAdd={addSection} />
             </div>
 
             {/* Step 2 — products within each section. */}
@@ -167,7 +124,7 @@ export default function MenuEditor({
                 onMoveProduct={(productId, categoryId) =>
                   editor.updateProduct(productId, { category_id: categoryId })
                 }
-                onCreateCategory={(name) => editor.addSection(menuId, name)}
+                onCreateCategory={addSection}
                 onReorderProduct={editor.moveProduct}
                 canMoveSectionUp={i > 0}
                 canMoveSectionDown={i < menuSections.length - 1}
@@ -193,7 +150,7 @@ export default function MenuEditor({
                 onMoveProduct={(productId, categoryId) =>
                   editor.updateProduct(productId, { category_id: categoryId })
                 }
-                onCreateCategory={(name) => editor.addSection(menuId, name)}
+                onCreateCategory={addSection}
                 onReorderProduct={editor.moveProduct}
               />
             )}

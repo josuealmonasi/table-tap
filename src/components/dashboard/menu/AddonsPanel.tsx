@@ -9,6 +9,18 @@ import { Modal } from "@/components/ui/Modal";
 import ReorderButtons from "@/components/ui/ReorderButtons";
 import IconPicker from "./IconPicker";
 
+interface AddonsPanelProps {
+  addons: MenuItem[];
+  currency: string;
+  onAdd: (input: AddonInput) => Promise<void>;
+  onUpdate: (id: string, input: AddonInput) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+  onToggleAvailable: (id: string, available: boolean) => void;
+  onMove: (id: string, direction: "up" | "down") => Promise<void>;
+  /** Open add/edit forms in a focused modal instead of expanding inline. Defaults to on. */
+  modalForms?: boolean;
+}
+
 /** Manages the restaurant's reusable add-on items (e.g. Catsup, Extra cheese). */
 export default function AddonsPanel({
   addons,
@@ -19,17 +31,7 @@ export default function AddonsPanel({
   onToggleAvailable,
   onMove,
   modalForms = true,
-}: {
-  addons: MenuItem[];
-  currency: string;
-  onAdd: (input: AddonInput) => Promise<void>;
-  onUpdate: (id: string, input: AddonInput) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
-  onToggleAvailable: (id: string, available: boolean) => void;
-  onMove: (id: string, direction: "up" | "down") => Promise<void>;
-  /** Open add/edit forms in a focused modal instead of expanding inline. Defaults to on. */
-  modalForms?: boolean;
-}) {
+}: AddonsPanelProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const confirm = useConfirm();
@@ -155,18 +157,15 @@ export default function AddonsPanel({
   );
 }
 
-/** Small inline form for creating/editing an add-on item. */
-function AddonForm({
-  initial,
-  submitLabel,
-  onSubmit,
-  onCancel,
-}: {
+interface AddonFormProps {
   initial?: MenuItem;
   submitLabel: string;
   onSubmit: (input: AddonInput) => Promise<void>;
   onCancel: () => void;
-}) {
+}
+
+/** Small inline form for creating/editing an add-on item. */
+function AddonForm({ initial, submitLabel, onSubmit, onCancel }: AddonFormProps) {
   const [name, setName] = useState(initial?.name ?? "");
   const [price, setPrice] = useState(String(initial?.price ?? ""));
   const [emoji, setEmoji] = useState(initial?.emoji ?? "");

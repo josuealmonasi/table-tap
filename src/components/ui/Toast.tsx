@@ -1,10 +1,20 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 type Tone = "error" | "info";
-type ToastItem = { id: number; message: string; tone: Tone };
+
+interface ToastItem {
+  id: number;
+  message: string;
+  tone: Tone;
+}
+
 type ToastFn = (message: string, tone?: Tone) => void;
+
+interface ToastProviderProps {
+  children: React.ReactNode;
+}
 
 const ToastContext = createContext<ToastFn>(() => {});
 
@@ -14,13 +24,20 @@ export function useToast(): ToastFn {
 }
 
 /** Renders a stack of auto-dismissing toasts and provides useToast() to its subtree. */
-export function ToastProvider({ children }: { children: React.ReactNode }) {
+export function ToastProvider({ children }: ToastProviderProps) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const timeouts = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const show = useCallback<ToastFn>((message, tone = "info") => {
     const id = Date.now() + Math.random();
     setToasts((t) => [...t, { id, message, tone }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4000);
+    timeouts.current.push(setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4000));
+  }, []);
+
+  // Clear any pending dismiss timers if the provider unmounts.
+  useEffect(() => {
+    const pending = timeouts.current;
+    return () => pending.forEach(clearTimeout);
   }, []);
 
   return (

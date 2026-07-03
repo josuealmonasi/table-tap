@@ -10,8 +10,12 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 import { Skeleton } from "@/components/ui/Skeleton";
 import MenusPanel from "@/components/dashboard/menu/MenusPanel";
 
+interface DashboardHomeProps {
+  restaurant: Restaurant;
+}
+
 /** Restaurant dashboard landing — the restaurant's menus, plus other areas. */
-export default function DashboardHome({ restaurant }: { restaurant: Restaurant }) {
+export default function DashboardHome({ restaurant }: DashboardHomeProps) {
   const editor = useMenuEditor(restaurant.id);
   const router = useRouter();
 
