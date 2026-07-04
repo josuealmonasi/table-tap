@@ -143,6 +143,14 @@ drop policy if exists "public read restaurants" on restaurants;
 create policy "public read restaurants"
   on restaurants for select using (true);
 
+-- Column-level guard: the public (anon) role sees only a restaurant's display
+-- columns — never owner_id or created_at. RLS decides which ROWS are visible;
+-- this decides which COLUMNS. The dashboard (authenticated owner) and the
+-- secret key keep full access.
+revoke select on restaurants from anon;
+grant select (id, name, tagline, logo, currency, service_pct) on restaurants to anon;
+grant select on restaurants to authenticated;
+
 drop policy if exists "public read tables" on restaurant_tables;
 create policy "public read tables"
   on restaurant_tables for select using (true);
@@ -170,6 +178,24 @@ drop policy if exists "public read item addons" on item_addons;
 create policy "public read item addons"
   on item_addons for select using (true);
 
+-- Ownership check used by the policies below. SECURITY DEFINER so it can read
+-- `restaurants` on the caller's behalf — the anon role no longer has direct
+-- SELECT on that table (see the column-level guard above), so a plain
+-- `select 1 from restaurants …` inside a policy would fail with "permission
+-- denied for table restaurants" when a customer reads menus/items. auth.uid()
+-- is still the caller's (it reads the request JWT, not the function owner).
+create or replace function public.owns_restaurant(rid uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (select 1 from restaurants r where r.id = rid and r.owner_id = auth.uid());
+$$;
+revoke all on function public.owns_restaurant(uuid) from public;
+grant execute on function public.owns_restaurant(uuid) to anon, authenticated;
+
 -- ORDERS:
 -- Orders hold customer notes (PII) and payment references, so the public
 -- (client) key must NOT be able to read them. A blanket `using (true)` SELECT
@@ -183,7 +209,7 @@ drop policy if exists "read order by id" on orders;   -- removed: was over-permi
 drop policy if exists "owner reads orders" on orders;
 create policy "owner reads orders"
   on orders for select
-  using (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()));
+  using (owns_restaurant(restaurant_id));
 
 -- INSERT/UPDATE on orders is done ONLY server-side via the secret key, which
 -- bypasses RLS. So we intentionally add NO insert/update policies here:
@@ -199,37 +225,33 @@ create policy "owner manages restaurant"
 drop policy if exists "owner manages tables" on restaurant_tables;
 create policy "owner manages tables"
   on restaurant_tables for all
-  using (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()))
-  with check (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()));
+  using (owns_restaurant(restaurant_id))
+  with check (owns_restaurant(restaurant_id));
 
 drop policy if exists "owner manages menus" on menus;
 create policy "owner manages menus"
   on menus for all
-  using (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()))
-  with check (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()));
+  using (owns_restaurant(restaurant_id))
+  with check (owns_restaurant(restaurant_id));
 
 drop policy if exists "owner manages categories" on categories;
 create policy "owner manages categories"
   on categories for all
-  using (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()))
-  with check (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()));
+  using (owns_restaurant(restaurant_id))
+  with check (owns_restaurant(restaurant_id));
 
 drop policy if exists "owner manages menu" on menu_items;
 create policy "owner manages menu"
   on menu_items for all
-  using (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()))
-  with check (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()));
+  using (owns_restaurant(restaurant_id))
+  with check (owns_restaurant(restaurant_id));
 
 -- Owner manages add-on links for products in their restaurant.
 drop policy if exists "owner manages item addons" on item_addons;
 create policy "owner manages item addons"
   on item_addons for all
-  using (exists (
-    select 1 from menu_items m join restaurants r on r.id = m.restaurant_id
-    where m.id = product_id and r.owner_id = auth.uid()))
-  with check (exists (
-    select 1 from menu_items m join restaurants r on r.id = m.restaurant_id
-    where m.id = product_id and r.owner_id = auth.uid()));
+  using (owns_restaurant((select mi.restaurant_id from menu_items mi where mi.id = product_id)))
+  with check (owns_restaurant((select mi.restaurant_id from menu_items mi where mi.id = product_id)));
 
 -- ============================================================================
 -- Backfill: every restaurant needs at least one menu. Restaurants (and their
