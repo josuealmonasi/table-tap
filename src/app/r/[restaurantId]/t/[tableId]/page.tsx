@@ -25,7 +25,8 @@ export default async function TablePage({
 
   const [{ data: restaurant }, { data: table }, { data: categories }, { data: menuItems }] =
     await Promise.all([
-      supabase.from("restaurants").select("*").eq("id", restaurantId).single(),
+      // Only the customer-facing columns (never owner_id / created_at).
+      supabase.from("restaurants").select("id, name, tagline, logo, currency, service_pct").eq("id", restaurantId).single(),
       supabase.from("restaurant_tables").select("*").eq("id", tableId).single(),
       supabase
         .from("categories")
