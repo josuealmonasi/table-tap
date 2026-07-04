@@ -182,7 +182,7 @@ function AddonForm({ initial, submitLabel, onSubmit, onCancel }: AddonFormProps)
       }}
     >
       <div className="tt-prodform-row">
-        <input className="tt-input" style={{ flex: 1 }} placeholder="Extra name (e.g. Catsup)" value={name} onChange={(e) => setName(e.target.value)} required />
+        <input className="tt-input" style={{ flex: 1 }} placeholder="Extra name (e.g. Catsup)" value={name} onChange={(e) => setName(e.target.value)} autoFocus={!initial} required />
         <input className="tt-input" style={{ width: 110 }} type="number" step="0.01" min="0" placeholder="Price" value={price} onChange={(e) => setPrice(e.target.value)} required />
       </div>
       <IconPicker value={emoji} onChange={setEmoji} variant="addon" />

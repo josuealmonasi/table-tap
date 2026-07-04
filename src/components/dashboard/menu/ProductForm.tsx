@@ -6,6 +6,17 @@ import type { MenuItem } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
 import IconPicker from "./IconPicker";
 
+interface ProductFormProps {
+  /** The product being edited; omit to add a new one. */
+  initial?: Partial<MenuItem>;
+  addons: MenuItem[];
+  selectedAddonIds?: string[];
+  currency: string;
+  submitLabel: string;
+  onSubmit: (input: ProductInput, addonIds: string[]) => Promise<void> | void;
+  onCancel: () => void;
+}
+
 /** Add/edit form for a product, including which add-on items it offers. */
 export default function ProductForm({
   initial,
@@ -15,15 +26,7 @@ export default function ProductForm({
   submitLabel,
   onSubmit,
   onCancel,
-}: {
-  initial?: Partial<MenuItem>;
-  addons: MenuItem[];
-  selectedAddonIds?: string[];
-  currency: string;
-  submitLabel: string;
-  onSubmit: (input: ProductInput, addonIds: string[]) => Promise<void> | void;
-  onCancel: () => void;
-}) {
+}: ProductFormProps) {
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [price, setPrice] = useState(String(initial?.price ?? ""));
@@ -63,6 +66,7 @@ export default function ProductForm({
           placeholder="Product name (e.g. Hot Dog)"
           value={name}
           onChange={(e) => setName(e.target.value)}
+          autoFocus={!initial}
           required
         />
         <input
