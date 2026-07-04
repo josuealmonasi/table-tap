@@ -1,7 +1,8 @@
 "use client";
 
-import { orderCode, type Order, type OrderStatus } from "@/lib/types";
-import { useOrderRealtime } from "@/hooks/useOrderRealtime";
+import { orderCode, type OrderStatus } from "@/lib/types";
+import { useOrderPolling } from "@/hooks/useOrderPolling";
+import type { TrackedOrder } from "@/lib/order-tracking";
 import OrderStatusTimeline from "./OrderStatusTimeline";
 import TrackedItemsCard from "./TrackedItemsCard";
 
@@ -18,9 +19,13 @@ const HERO: Record<string, { headline: string; emoji: string }> = {
   received: { headline: "Order received!", emoji: "📋" },
 };
 
+interface OrderTrackerProps {
+  initialOrder: TrackedOrder;
+}
+
 /** Live order tracking screen the diner lands on after paying. */
-export default function OrderTracker({ initialOrder }: { initialOrder: Order }) {
-  const order = useOrderRealtime(initialOrder);
+export default function OrderTracker({ initialOrder }: OrderTrackerProps) {
+  const order = useOrderPolling(initialOrder);
   const status = toDisplayStatus(order.status);
   const hero = HERO[status] ?? HERO.received;
 
