@@ -147,29 +147,43 @@ drop policy if exists "public read tables" on restaurant_tables;
 create policy "public read tables"
   on restaurant_tables for select using (true);
 
+-- Only ACTIVE menus are public. Owners still see their inactive menus via the
+-- "owner manages menus" policy below (FOR ALL covers SELECT).
 drop policy if exists "public read menus" on menus;
 create policy "public read menus"
-  on menus for select using (true);
+  on menus for select using (active = true);
 
+-- A category is public only if its menu is active.
 drop policy if exists "public read categories" on categories;
 create policy "public read categories"
-  on categories for select using (true);
+  on categories for select
+  using (exists (select 1 from menus m where m.id = menu_id and m.active));
 
+-- An item (product or add-on) is public only if it's available AND its menu is
+-- active. Owners still see unavailable/hidden items via "owner manages menu".
 drop policy if exists "public read available menu" on menu_items;
 create policy "public read available menu"
-  on menu_items for select using (true);
+  on menu_items for select
+  using (available and exists (select 1 from menus m where m.id = menu_id and m.active));
 
 drop policy if exists "public read item addons" on item_addons;
 create policy "public read item addons"
   on item_addons for select using (true);
 
 -- ORDERS:
--- A customer can read a single order by its id (they get the id back after
--- checkout and poll/subscribe to it). We allow public SELECT because the id is
--- an unguessable UUID — effectively a capability token.
-drop policy if exists "read order by id" on orders;
-create policy "read order by id"
-  on orders for select using (true);
+-- Orders hold customer notes (PII) and payment references, so the public
+-- (client) key must NOT be able to read them. A blanket `using (true)` SELECT
+-- policy can't restrict to a single id — RLS can't force a WHERE clause, so it
+-- would let anyone dump the whole table. Instead:
+--   • The restaurant owner reads THEIR orders (policy below) for the dashboard.
+--   • The customer's order-tracker reads its single order server-side, by its
+--     unguessable id, via the secret key (see src/app/order/[orderId]/page.tsx
+--     and /api/order-status). The publishable key gets no order access at all.
+drop policy if exists "read order by id" on orders;   -- removed: was over-permissive
+drop policy if exists "owner reads orders" on orders;
+create policy "owner reads orders"
+  on orders for select
+  using (exists (select 1 from restaurants r where r.id = restaurant_id and r.owner_id = auth.uid()));
 
 -- INSERT/UPDATE on orders is done ONLY server-side via the secret key, which
 -- bypasses RLS. So we intentionally add NO insert/update policies here:
