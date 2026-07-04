@@ -452,11 +452,6 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-prod-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .tt-prod-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .tt-prod-actions { display: flex; align-items: center; gap: 4px; }
-.tt-move-btn {
-  background: none; border: none; padding: 0; cursor: pointer; white-space: nowrap;
-  font: inherit; font-weight: 700; color: var(--tt-accent);
-}
-.tt-move-btn:hover { text-decoration: underline; }
 
 /* move-to-section picker (uncategorized products) */
 .tt-move-list { display: flex; flex-wrap: wrap; gap: 8px; }

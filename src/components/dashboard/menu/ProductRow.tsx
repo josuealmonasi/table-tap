@@ -124,9 +124,7 @@ export default function ProductRow({
             </label>
             <div className="tt-prod-actions">
               {canMove && (
-                <button className="tt-move-btn" onClick={() => setMoving(true)} title="Move to a section">
-                  Move
-                </button>
+                <button className="tt-iconbtn" onClick={() => setMoving(true)} title="Move to a section">📤</button>
               )}
               <button className="tt-iconbtn" onClick={() => setEditing(true)} title="Edit">✏️</button>
               <button
