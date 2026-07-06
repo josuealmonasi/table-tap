@@ -167,7 +167,7 @@ export async function POST(req: NextRequest) {
       mode: "payment",
       line_items,
       success_url: `${origin}/order/${order.id}?paid=1`,
-      cancel_url: `${origin}/r/${restaurantId}/t/${tableId ?? ""}?cancelled=1`,
+      cancel_url: `${origin}/r/${restaurantId}${tableId ? `/t/${tableId}` : ""}?cancelled=1`,
       metadata: { order_id: order.id },
       payment_intent_data: { metadata: { order_id: order.id } },
     });
