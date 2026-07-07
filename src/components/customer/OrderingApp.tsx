@@ -9,6 +9,7 @@ import type {
   RestaurantTable,
 } from "@/lib/types";
 import { useCart } from "@/hooks/useCart";
+import { Modal } from "@/components/ui/Modal";
 import MenuScreen from "./MenuScreen";
 import ItemDetailScreen from "./ItemDetailScreen";
 import CartScreen from "./CartScreen";
@@ -38,6 +39,7 @@ export default function OrderingApp({
   const [selected, setSelected] = useState<MenuItem | null>(null);
   const [orderNote, setOrderNote] = useState("");
   const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const cart = useCart(restaurant);
 
   const extrasById = useMemo(() => new Map(extras.map((e) => [e.id, e])), [extras]);
@@ -86,12 +88,19 @@ export default function OrderingApp({
       const data = await res.json();
       if (data.url) {
         window.location.href = data.url; // Stripe Checkout
-      } else {
-        alert(data.error ?? "Something went wrong");
-        setLoading(false);
+        return;
       }
+      // An item sold out between loading the menu and checking out: drop it
+      // from the cart so the order can go through once they review.
+      if (data.unavailableItemId) {
+        cart.removeByItemId(data.unavailableItemId);
+        setNotice(`${data.error} We've removed it from your order — please review and try again.`);
+      } else {
+        setNotice(data.error ?? "Something went wrong. Please try again.");
+      }
+      setLoading(false);
     } catch {
-      alert("Network error — please try again");
+      setNotice("Network error — please check your connection and try again.");
       setLoading(false);
     }
   }
@@ -110,20 +119,29 @@ export default function OrderingApp({
 
   if (screen === "cart") {
     return (
-      <CartScreen
-        restaurant={restaurant}
-        table={table}
-        items={cart.items}
-        subtotal={cart.subtotal}
-        serviceFee={cart.serviceFee}
-        total={cart.total}
-        orderNote={orderNote}
-        loading={loading}
-        onChangeNote={setOrderNote}
-        onRemoveItem={cart.removeItem}
-        onAddMore={() => setScreen("menu")}
-        onCheckout={checkout}
-      />
+      <>
+        <CartScreen
+          restaurant={restaurant}
+          table={table}
+          items={cart.items}
+          subtotal={cart.subtotal}
+          serviceFee={cart.serviceFee}
+          total={cart.total}
+          orderNote={orderNote}
+          loading={loading}
+          onChangeNote={setOrderNote}
+          onRemoveItem={cart.removeItem}
+          onAddMore={() => setScreen("menu")}
+          onCheckout={checkout}
+        />
+        <Modal open={!!notice} onClose={() => setNotice(null)} maxWidth={400}>
+          <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 8 }}>Heads up</h3>
+          <p className="tt-muted" style={{ marginTop: 0 }}>{notice}</p>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+            <button className="tt-btn tt-btn-primary tt-btn-sm" onClick={() => setNotice(null)}>OK</button>
+          </div>
+        </Modal>
+      </>
     );
   }
 
