@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       const db = priceMap.get(line.itemId);
       if (!db || !db.available) {
         return NextResponse.json(
-          { error: `Item unavailable: ${line.name}` },
+          { error: `${line.name} is no longer available.`, unavailableItemId: line.itemId },
           { status: 400 }
         );
       }
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
         const dbExtra = priceMap.get(extra.id);
         if (!dbExtra || !dbExtra.available) {
           return NextResponse.json(
-            { error: `Extra unavailable: ${extra.name}` },
+            { error: `${extra.name} (an extra on ${line.name}) is no longer available.`, unavailableItemId: line.itemId },
             { status: 400 }
           );
         }
