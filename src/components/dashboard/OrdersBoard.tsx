@@ -3,16 +3,16 @@
 import { formatMoney } from "@/lib/format";
 import { useRestaurantOrders } from "@/hooks/useRestaurantOrders";
 import type { Order, Restaurant } from "@/lib/types";
+import Breadcrumb from "@/components/layout/Breadcrumb";
 import OrderCard from "./OrderCard";
 
-/** Kitchen dashboard: live order grid with a stats header. */
-export default function OrdersBoard({
-  restaurant,
-  initialOrders,
-}: {
+interface OrdersBoardProps {
   restaurant: Restaurant;
   initialOrders: Order[];
-}) {
+}
+
+/** Kitchen dashboard: live order grid with a stats header. */
+export default function OrdersBoard({ restaurant, initialOrders }: OrdersBoardProps) {
   const { orders, updateStatus } = useRestaurantOrders(restaurant.id, initialOrders);
 
   const activeCount = orders.filter(
@@ -24,7 +24,7 @@ export default function OrdersBoard({
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <h1 className="tt-serif" style={{ margin: 0 }}>Live Orders</h1>
+          <Breadcrumb trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Live Orders" }]} />
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <div className="tt-stat">
               <strong className="tt-accent">{activeCount}</strong>
