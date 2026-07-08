@@ -21,11 +21,6 @@ export function useCart(restaurant: Restaurant) {
     setItems((prev) => prev.filter((i) => i.cartId !== cartId));
   }
 
-  /** Removes every line for a product — used when it becomes unavailable at checkout. */
-  function removeByItemId(itemId: string) {
-    setItems((prev) => prev.filter((i) => i.itemId !== itemId));
-  }
-
   function clear() {
     setItems([]);
   }
@@ -38,5 +33,5 @@ export function useCart(restaurant: Restaurant) {
 
   const count = items.reduce((sum, i) => sum + i.qty, 0);
 
-  return { items, addItem, removeItem, removeByItemId, clear, count, ...totals };
+  return { items, addItem, removeItem, clear, count, ...totals };
 }
