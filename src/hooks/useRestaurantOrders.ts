@@ -31,32 +31,38 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
 
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
-      .channel(`orders-${restaurantId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "orders", filter: `restaurant_id=eq.${restaurantId}` },
-        (payload) => {
-          const row = payload.new as Order;
-          if (!row || row.status === "pending_payment") return;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
 
-          setOrders((prev) => {
-            const exists = prev.find((o) => o.id === row.id);
-            return exists
-              ? prev.map((o) => (o.id === row.id ? row : o))
-              : [row, ...prev];
-          });
+    function handleChange(row: Order | undefined, eventType: string) {
+      if (!row || row.status === "pending_payment") return;
+      setOrders((prev) => {
+        const exists = prev.find((o) => o.id === row.id);
+        return exists ? prev.map((o) => (o.id === row.id ? row : o)) : [row, ...prev];
+      });
+      if (eventType === "INSERT" || (eventType === "UPDATE" && row.status === "received")) playPing();
+    }
 
-          const isNewlyReceived =
-            payload.eventType === "INSERT" ||
-            (payload.eventType === "UPDATE" && row.status === "received");
-          if (isNewlyReceived) playPing();
-        }
-      )
-      .subscribe();
+    (async () => {
+      // Orders are owner-only under RLS, so the realtime socket must carry the
+      // owner's token — otherwise every change is filtered out.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (session) supabase.realtime.setAuth(session.access_token);
+
+      channel = supabase
+        .channel(`orders-${restaurantId}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "orders", filter: `restaurant_id=eq.${restaurantId}` },
+          (payload) => handleChange(payload.new as Order, payload.eventType)
+        )
+        .subscribe();
+    })();
 
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
     };
   }, [restaurantId]);
 

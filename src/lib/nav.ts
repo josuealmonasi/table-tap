@@ -11,6 +11,6 @@ export type NavItem = {
  * are listed dynamically on the dashboard, so they're not part of this list.
  */
 export const NAV_ITEMS: NavItem[] = [
-  { href: "#", emoji: "🧾", title: "Orders", desc: "Live incoming orders", soon: true },
+  { href: "/dashboard/orders", emoji: "🧾", title: "Orders", desc: "Live incoming orders" },
   { href: "/dashboard/tables", emoji: "🪑", title: "Tables & QR", desc: "Manage tables and print QR codes" },
 ];
