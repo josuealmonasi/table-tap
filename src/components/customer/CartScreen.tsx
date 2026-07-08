@@ -5,34 +5,42 @@ import type { CartItem } from "@/hooks/useCart";
 import CartLineRow from "./CartLineRow";
 import OrderTotals from "./OrderTotals";
 
-/** The review-and-pay screen: line items, kitchen note, totals, checkout button. */
-export default function CartScreen({
-  restaurant,
-  table,
-  items,
-  subtotal,
-  serviceFee,
-  total,
-  orderNote,
-  loading,
-  onChangeNote,
-  onRemoveItem,
-  onAddMore,
-  onCheckout,
-}: {
+interface CartScreenProps {
   restaurant: Restaurant;
   table: RestaurantTable | null;
   items: CartItem[];
+  /** Product ids that sold out — shown greyed and excluded from the total. */
+  soldOut: Set<string>;
   subtotal: number;
   serviceFee: number;
   total: number;
   orderNote: string;
   loading: boolean;
+  /** False when nothing orderable remains (empty or all sold out). */
+  canCheckout: boolean;
   onChangeNote: (note: string) => void;
   onRemoveItem: (cartId: number) => void;
   onAddMore: () => void;
   onCheckout: () => void;
-}) {
+}
+
+/** The review-and-pay screen: line items, kitchen note, totals, checkout button. */
+export default function CartScreen({
+  restaurant,
+  table,
+  items,
+  soldOut,
+  subtotal,
+  serviceFee,
+  total,
+  orderNote,
+  loading,
+  canCheckout,
+  onChangeNote,
+  onRemoveItem,
+  onAddMore,
+  onCheckout,
+}: CartScreenProps) {
   return (
     <div className="tt-root">
       <div className="tt-header">
@@ -47,6 +55,7 @@ export default function CartScreen({
             key={item.cartId}
             item={item}
             currency={restaurant.currency}
+            soldOut={soldOut.has(item.itemId)}
             onRemove={onRemoveItem}
           />
         ))}
@@ -75,7 +84,7 @@ export default function CartScreen({
         <button
           className="tt-btn tt-btn-primary tt-btn-lg"
           style={{ width: "100%", marginTop: 20 }}
-          disabled={items.length === 0 || loading}
+          disabled={!canCheckout || loading}
           onClick={onCheckout}
         >
           {loading ? "Redirecting to payment…" : "Proceed to Payment"}

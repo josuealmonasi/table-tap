@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type {
-  Category,
-  MenuItem,
-  OrderLineItem,
-  Restaurant,
-  RestaurantTable,
+import {
+  lineUnitPrice,
+  type Category,
+  type MenuItem,
+  type OrderLineItem,
+  type Restaurant,
+  type RestaurantTable,
 } from "@/lib/types";
 import { useCart } from "@/hooks/useCart";
 import { Modal } from "@/components/ui/Modal";
@@ -40,7 +41,16 @@ export default function OrderingApp({
   const [orderNote, setOrderNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Product ids that sold out at checkout — kept in the cart but greyed out
+  // and excluded from the total and the next payment attempt.
+  const [soldOut, setSoldOut] = useState<Set<string>>(new Set());
   const cart = useCart(restaurant);
+
+  // Totals count only the still-orderable lines (sold-out ones are excluded).
+  const orderableItems = cart.items.filter((i) => !soldOut.has(i.itemId));
+  const subtotal = orderableItems.reduce((sum, i) => sum + lineUnitPrice(i) * i.qty, 0);
+  const serviceFee = +(subtotal * (restaurant.service_pct / 100)).toFixed(2);
+  const total = +(subtotal + serviceFee).toFixed(2);
 
   const extrasById = useMemo(() => new Map(extras.map((e) => [e.id, e])), [extras]);
 
@@ -63,6 +73,12 @@ export default function OrderingApp({
   }
 
   async function checkout() {
+    // Only pay for the still-orderable lines (any already-sold-out ones stay
+    // greyed in the cart for the customer to see).
+    if (orderableItems.length === 0) {
+      setNotice("Everything in your cart just sold out. Add something else to order.");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/checkout", {
@@ -72,7 +88,7 @@ export default function OrderingApp({
           restaurantId: restaurant.id,
           tableId: table?.id ?? null,
           tableLabel: table?.label ?? null,
-          items: cart.items.map((c) => ({
+          items: orderableItems.map((c) => ({
             itemId: c.itemId,
             name: c.name,
             emoji: c.emoji,
@@ -90,11 +106,11 @@ export default function OrderingApp({
         window.location.href = data.url; // Stripe Checkout
         return;
       }
-      // An item sold out between loading the menu and checking out: drop it
-      // from the cart so the order can go through once they review.
+      // An item sold out between loading the menu and checking out: mark it
+      // sold out (it greys out and drops from the total) so the rest can pay.
       if (data.unavailableItemId) {
-        cart.removeByItemId(data.unavailableItemId);
-        setNotice(`${data.error} We've removed it from your order — please review and try again.`);
+        setSoldOut((prev) => new Set(prev).add(data.unavailableItemId));
+        setNotice(`${data.error} We've marked it sold out — remove it or pay for the rest of your order.`);
       } else {
         setNotice(data.error ?? "Something went wrong. Please try again.");
       }
@@ -124,11 +140,13 @@ export default function OrderingApp({
           restaurant={restaurant}
           table={table}
           items={cart.items}
-          subtotal={cart.subtotal}
-          serviceFee={cart.serviceFee}
-          total={cart.total}
+          soldOut={soldOut}
+          subtotal={subtotal}
+          serviceFee={serviceFee}
+          total={total}
           orderNote={orderNote}
           loading={loading}
+          canCheckout={orderableItems.length > 0}
           onChangeNote={setOrderNote}
           onRemoveItem={cart.removeItem}
           onAddMore={() => setScreen("menu")}

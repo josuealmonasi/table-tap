@@ -572,3 +572,6 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
   .tt-table-row { flex-direction: column; align-items: stretch; }
   .tt-table-actions { align-self: flex-end; }
 }
+
+/* a cart line whose product sold out at checkout */
+.tt-cart-soldout { opacity: 0.55; }
