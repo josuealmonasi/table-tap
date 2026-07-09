@@ -34,7 +34,7 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
 
   const [{ data: restaurant }, { data: categories }, { data: menuItems }] = await Promise.all([
     // Only the customer-facing columns (never owner_id / created_at).
-    supabase.from("restaurants").select("id, name, tagline, logo, currency, service_pct, accepting_orders").eq("id", restaurantId).single(),
+    supabase.from("restaurants").select("id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders").eq("id", restaurantId).single(),
     supabase.from("categories").select("*").eq("restaurant_id", restaurantId).in("menu_id", menuFilter).order("sort_order"),
     // Products AND available add-on items; split client-side.
     supabase.from("menu_items").select("*").eq("restaurant_id", restaurantId).eq("available", true).in("menu_id", menuFilter).order("sort_order"),
@@ -57,8 +57,13 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
     }
   }
 
+  // With the service charge switched off, customers see a plain 0% everywhere
+  // (cart math and checkout both key off service_pct).
+  const r = restaurant as Restaurant | null;
+  if (r && !r.service_enabled) r.service_pct = 0;
+
   return {
-    restaurant: (restaurant as Restaurant) ?? null,
+    restaurant: r,
     categories: (categories as Category[]) ?? [],
     items,
     extras,
