@@ -159,7 +159,7 @@ export default function OrderingApp({
           total={total}
           orderNote={orderNote}
           loading={loading}
-          canCheckout={orderableItems.length > 0}
+          canCheckout={orderableItems.length > 0 && restaurant.accepting_orders}
           onChangeNote={setOrderNote}
           onRemoveItem={cart.removeItem}
           onAddMore={() => setScreen("menu")}

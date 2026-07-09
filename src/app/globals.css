@@ -456,6 +456,19 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
   border-top: 1px solid var(--tt-cream);
 }
 .tt-prod:first-of-type { border-top: none; }
+/* Customer menu: shown when the restaurant paused orders */
+.tt-closed-banner {
+  margin-top: 12px; padding: 10px 14px; border-radius: 12px; font-size: 14px;
+  background: rgba(200, 90, 40, .1); color: var(--tt-accent);
+  border: 1px solid rgba(200, 90, 40, .25);
+}
+
+/* Settings: labelled switch row (e.g. "Accepting orders") */
+.tt-settings-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 12px; border: 1px solid var(--tt-cream); border-radius: 12px; cursor: pointer;
+}
+
 /* AddonsPanel wraps each row (row + its edit modal) in a .tt-addon div, so the
    first-of-type trick above can't draw dividers — do it between the wrappers. */
 .tt-addon + .tt-addon > .tt-prod { border-top: 1px solid var(--tt-cream); }

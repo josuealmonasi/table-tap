@@ -46,6 +46,11 @@ export default function MenuScreen({
           </div>
           {table && <span className="tt-badge tt-badge-gold">🪑 Table {table.label}</span>}
         </div>
+        {!restaurant.accepting_orders && (
+          <div className="tt-closed-banner" role="status">
+            ⏸️ We&apos;re not taking orders right now — please check back soon.
+          </div>
+        )}
         <CategoryTabs categories={categories} activeCat={activeCat} onSelect={setActiveCat} />
       </div>
 
