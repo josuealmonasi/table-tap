@@ -9,7 +9,7 @@ import type { Restaurant } from "@/lib/types";
 /** The restaurant fields the owner can edit from Settings. */
 export type SettingsInput = Pick<
   Restaurant,
-  "name" | "logo" | "tagline" | "currency" | "service_pct"
+  "name" | "logo" | "tagline" | "currency" | "service_pct" | "accepting_orders"
 >;
 
 /**

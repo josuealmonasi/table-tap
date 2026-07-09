@@ -55,6 +55,7 @@ export type Restaurant = {
   logo: string;
   currency: string;
   service_pct: number;
+  accepting_orders: boolean;
 };
 
 export type RestaurantTable = {

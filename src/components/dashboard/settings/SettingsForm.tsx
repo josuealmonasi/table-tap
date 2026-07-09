@@ -21,6 +21,7 @@ export default function SettingsForm({ restaurant }: SettingsFormProps) {
   const [tagline, setTagline] = useState(restaurant.tagline ?? "");
   const [currency, setCurrency] = useState(restaurant.currency);
   const [servicePct, setServicePct] = useState(String(restaurant.service_pct));
+  const [acceptingOrders, setAcceptingOrders] = useState(restaurant.accepting_orders);
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -31,6 +32,7 @@ export default function SettingsForm({ restaurant }: SettingsFormProps) {
       tagline: tagline.trim() || null,
       currency,
       service_pct: pct,
+      accepting_orders: acceptingOrders,
     });
   }
 
@@ -96,6 +98,23 @@ export default function SettingsForm({ restaurant }: SettingsFormProps) {
                 />
               </label>
             </div>
+
+            <label className="tt-settings-toggle">
+              <span>
+                <strong>Accepting orders</strong>
+                <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
+                  Turn off to pause new customer orders (e.g. kitchen closed or slammed)
+                </span>
+              </span>
+              <span className="tt-switch" title={acceptingOrders ? "Accepting orders" : "Orders paused"}>
+                <input
+                  type="checkbox"
+                  checked={acceptingOrders}
+                  onChange={(e) => setAcceptingOrders(e.target.checked)}
+                />
+                <span className="tt-switch-track" />
+              </span>
+            </label>
 
             <div className="tt-prodform-actions">
               <button type="submit" className="tt-btn tt-btn-primary tt-btn-sm" disabled={!name.trim() || saving}>

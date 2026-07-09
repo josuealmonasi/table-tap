@@ -28,6 +28,13 @@ export default function DashboardHome({ restaurant }: DashboardHomeProps) {
           <Breadcrumb trail={[{ label: "Dashboard" }]} />
         </header>
 
+        {!restaurant.accepting_orders && (
+          <div className="tt-closed-banner" style={{ marginTop: 0, marginBottom: 16 }} role="status">
+            ⏸️ Orders are paused — customers can browse but can&apos;t order.{" "}
+            <Link href="/dashboard/settings" style={{ fontWeight: 600 }}>Resume in Settings</Link>
+          </div>
+        )}
+
         {editor.loading ? (
           <div className="tt-section" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <Skeleton width={120} height={18} />

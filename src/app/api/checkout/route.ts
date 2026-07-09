@@ -28,12 +28,20 @@ export async function POST(req: NextRequest) {
     // Re-fetch the restaurant to get the authoritative service % and currency.
     const { data: restaurant, error: rErr } = await supabase
       .from("restaurants")
-      .select("id, currency, service_pct")
+      .select("id, currency, service_pct, accepting_orders")
       .eq("id", restaurantId)
       .single();
 
     if (rErr || !restaurant) {
       return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
+    }
+
+    // Kill switch: the owner paused orders (maybe after this page loaded).
+    if (!restaurant.accepting_orders) {
+      return NextResponse.json(
+        { error: "The restaurant isn't taking orders right now. Please try again later." },
+        { status: 409 }
+      );
     }
 
     // IMPORTANT: never trust client prices. Re-fetch every referenced item
