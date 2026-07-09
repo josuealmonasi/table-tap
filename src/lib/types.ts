@@ -118,6 +118,17 @@ export type Order = {
   created_at: string;
 };
 
+// A customer's tap of "call waiter" / "request bill" from a table QR.
+export type ServiceRequest = {
+  id: string;
+  restaurant_id: string;
+  table_id: string | null;
+  table_label: string;
+  kind: "waiter" | "bill";
+  status: "open" | "done";
+  created_at: string;
+};
+
 // Short display code derived from a UUID, e.g. "ORD-3F9A".
 export function orderCode(id: string): string {
   return "ORD-" + id.replace(/-/g, "").slice(0, 4).toUpperCase();

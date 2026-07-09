@@ -135,10 +135,29 @@ create table if not exists orders (
 create index if not exists orders_restaurant_idx on orders(restaurant_id, created_at desc);
 create index if not exists orders_status_idx on orders(restaurant_id, status);
 
+-- ── Service requests (customer taps "call waiter" / "request bill") ─────────
+create table if not exists service_requests (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  table_id      uuid references restaurant_tables(id) on delete cascade,
+  table_label   text not null,
+  kind          text not null check (kind in ('waiter', 'bill')),
+  status        text not null default 'open',  -- 'open' | 'done'
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists service_requests_open_idx
+  on service_requests(restaurant_id, status, created_at desc);
+
 -- ── Realtime: broadcast order changes to dashboard + customer ───────────────
 do $$ begin
   alter publication supabase_realtime add table orders;
 exception when duplicate_object then null;  -- already added; safe to re-run
+end $$;
+
+do $$ begin
+  alter publication supabase_realtime add table service_requests;
+exception when duplicate_object then null;
 end $$;
 
 -- ============================================================================
@@ -230,6 +249,20 @@ create policy "owner reads orders"
 -- INSERT/UPDATE on orders is done ONLY server-side via the secret key, which
 -- bypasses RLS. So we intentionally add NO insert/update policies here:
 -- the publishable (client) key cannot create or mutate orders directly.
+
+-- SERVICE REQUESTS: customers create them ONLY via /api/service-requests
+-- (secret key, validates the table), so no anon insert policy. The owner
+-- sees their own restaurant's requests and can mark them done.
+alter table service_requests enable row level security;
+drop policy if exists "owner reads service requests" on service_requests;
+create policy "owner reads service requests"
+  on service_requests for select
+  using (owns_restaurant(restaurant_id));
+drop policy if exists "owner updates service requests" on service_requests;
+create policy "owner updates service requests"
+  on service_requests for update
+  using (owns_restaurant(restaurant_id))
+  with check (owns_restaurant(restaurant_id));
 
 -- OWNER WRITE: the logged-in restaurant owner manages their own menu/tables.
 drop policy if exists "owner manages restaurant" on restaurants;

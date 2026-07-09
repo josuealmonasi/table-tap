@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import OrdersBoard from "@/components/dashboard/OrdersBoard";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
-import type { Order, Restaurant } from "@/lib/types";
+import type { Order, Restaurant, ServiceRequest } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +30,20 @@ export default async function OrdersPage() {
     .order("created_at", { ascending: false })
     .limit(100);
 
+  const { data: requests } = await supabase
+    .from("service_requests")
+    .select("*")
+    .eq("restaurant_id", r.id)
+    .eq("status", "open")
+    .order("created_at", { ascending: false });
+
   return (
     <ConfirmProvider>
-      <OrdersBoard restaurant={r} initialOrders={(orders as Order[]) ?? []} />
+      <OrdersBoard
+        restaurant={r}
+        initialOrders={(orders as Order[]) ?? []}
+        initialRequests={(requests as ServiceRequest[]) ?? []}
+      />
     </ConfirmProvider>
   );
 }

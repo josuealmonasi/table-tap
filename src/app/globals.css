@@ -464,6 +464,22 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 }
 .tt-board-tab-active { border-color: var(--tt-accent); color: var(--tt-accent); background: rgba(232,82,42,.06); font-weight: 600; }
 
+/* Orders board: open call-waiter / request-bill chips */
+.tt-requests-bar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.tt-request-chip {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: #fff; border-left: 4px solid var(--tt-gold); border-radius: 12px;
+  padding: 10px 14px; font-size: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+
+/* Customer menu: call-waiter / request-bill buttons (table QR only) */
+.tt-service-row { display: flex; gap: 8px; margin-top: 12px; }
+.tt-service-btn {
+  flex: 1; border: 1px solid var(--tt-cream); background: #fff; border-radius: 999px;
+  padding: 8px 0; font-size: 13px; cursor: pointer; font-family: inherit; color: var(--tt-ink);
+}
+.tt-service-btn:disabled { opacity: .6; cursor: default; color: var(--tt-sage); }
+
 /* Cart: tip percent chips */
 .tt-tip-row { display: flex; gap: 8px; }
 .tt-tip-chip {
