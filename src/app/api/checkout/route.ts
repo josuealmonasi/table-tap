@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     // Re-fetch the restaurant to get the authoritative service % and currency.
     const { data: restaurant, error: rErr } = await supabase
       .from("restaurants")
-      .select("id, currency, service_pct, accepting_orders")
+      .select("id, currency, service_pct, service_enabled, accepting_orders")
       .eq("id", restaurantId)
       .single();
 
@@ -115,7 +115,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const serviceFee = +(subtotal * (restaurant.service_pct / 100)).toFixed(2);
+    // The service charge only applies when the owner switched it on.
+    const servicePct = restaurant.service_enabled ? restaurant.service_pct : 0;
+    const serviceFee = +(subtotal * (servicePct / 100)).toFixed(2);
     const total = +(subtotal + serviceFee).toFixed(2);
 
     // Create the pending order first so the webhook can find it.
@@ -174,7 +176,7 @@ export async function POST(req: NextRequest) {
         price_data: {
           currency: cur,
           unit_amount: Math.round(serviceFee * 100),
-          product_data: { name: `Service charge (${restaurant.service_pct}%)` },
+          product_data: { name: `Service charge (${servicePct}%)` },
         },
       });
     }

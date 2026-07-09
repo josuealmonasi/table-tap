@@ -9,7 +9,7 @@ import type { Restaurant } from "@/lib/types";
 /** The restaurant fields the owner can edit from Settings. */
 export type SettingsInput = Pick<
   Restaurant,
-  "name" | "logo" | "tagline" | "currency" | "service_pct" | "accepting_orders"
+  "name" | "logo" | "tagline" | "currency" | "service_pct" | "service_enabled" | "accepting_orders"
 >;
 
 /**
@@ -23,7 +23,7 @@ export function useSettings(restaurantId: string) {
   const toast = useToast();
   const [saving, setSaving] = useState(false);
 
-  async function save(input: SettingsInput): Promise<void> {
+  async function save(input: Partial<SettingsInput>, message = "Settings saved"): Promise<boolean> {
     setSaving(true);
     const { error } = await supabase
       .from("restaurants")
@@ -32,10 +32,11 @@ export function useSettings(restaurantId: string) {
     setSaving(false);
     if (error) {
       toast(`Couldn't save settings: ${error.message}`, "error");
-      return;
+      return false;
     }
-    toast("Settings saved");
+    toast(message);
     router.refresh();
+    return true;
   }
 
   return { saving, save };

@@ -13,7 +13,7 @@ export default async function SettingsPage() {
 
   const { data: restaurant } = await supabase
     .from("restaurants")
-    .select("id, name, tagline, logo, currency, service_pct, accepting_orders")
+    .select("id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders")
     .eq("owner_id", user.id)
     .single();
   if (!restaurant) redirect("/dashboard");
