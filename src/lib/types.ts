@@ -111,6 +111,8 @@ export type Order = {
   note: string | null;
   pay_method: string | null;
   paid: boolean;
+  stripe_payment_intent: string | null;
+  stripe_refund_id: string | null;
   created_at: string;
 };
 

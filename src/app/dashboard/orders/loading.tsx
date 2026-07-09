@@ -6,7 +6,7 @@ export default function OrdersLoading() {
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <Breadcrumb trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Live Orders" }]} />
+          <Breadcrumb trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Orders" }]} />
         </header>
 
         <div className="tt-orders-grid">

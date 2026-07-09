@@ -6,6 +6,7 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
   preparing: { label: "Preparing", color: "var(--tt-accent)" },
   ready: { label: "Ready", color: "var(--tt-success)" },
   completed: { label: "Completed", color: "var(--tt-muted)" },
+  cancelled: { label: "Cancelled", color: "var(--tt-muted)" },
 };
 
 /** Map an order's current status to the button that advances it. */
@@ -16,18 +17,19 @@ function nextAction(status: OrderStatus): { label: string; to: OrderStatus; vari
   return null;
 }
 
-/** One order on the kitchen board: table, items, total, and its advance button. */
-export default function OrderCard({
-  order,
-  currency,
-  onAdvance,
-}: {
+interface OrderCardProps {
   order: Order;
   currency: string;
   onAdvance: (id: string, status: OrderStatus) => void;
-}) {
+  /** Cancel + refund; offered on new/preparing orders only. */
+  onCancel?: (order: Order) => void;
+}
+
+/** One order on the kitchen board: table, items, total, and its advance button. */
+export default function OrderCard({ order, currency, onAdvance, onCancel }: OrderCardProps) {
   const meta = STATUS_META[order.status] ?? STATUS_META.completed;
   const action = nextAction(order.status);
+  const cancellable = order.status === "received" || order.status === "preparing";
   const placedAt = new Date(order.created_at).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
@@ -72,16 +74,27 @@ export default function OrderCard({
 
       <div className="tt-row" style={{ alignItems: "center" }}>
         <strong className="tt-accent">{formatMoney(order.total, currency)}</strong>
-        {action ? (
-          <button
-            className={`tt-btn ${action.variant} tt-btn-sm`}
-            onClick={() => onAdvance(order.id, action.to)}
-          >
-            {action.label}
-          </button>
-        ) : (
-          <span style={{ color: "var(--tt-success)", fontSize: 13, fontWeight: 700 }}>✓ Done</span>
-        )}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {cancellable && onCancel && (
+            <button className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => onCancel(order)}>
+              Cancel
+            </button>
+          )}
+          {action ? (
+            <button
+              className={`tt-btn ${action.variant} tt-btn-sm`}
+              onClick={() => onAdvance(order.id, action.to)}
+            >
+              {action.label}
+            </button>
+          ) : order.status === "cancelled" ? (
+            <span className="tt-muted" style={{ fontSize: 13, fontWeight: 700 }}>
+              ✕ Cancelled{order.stripe_refund_id ? " · refunded" : ""}
+            </span>
+          ) : (
+            <span style={{ color: "var(--tt-success)", fontSize: 13, fontWeight: 700 }}>✓ Done</span>
+          )}
+        </div>
       </div>
     </div>
   );

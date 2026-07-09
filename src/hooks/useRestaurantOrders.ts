@@ -75,5 +75,25 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
     });
   }
 
-  return { orders, updateStatus };
+  /**
+   * Cancels (and refunds, if paid) an order. NOT optimistic — money moves, so
+   * we wait for the server. Returns an error message to show, or null on success.
+   */
+  async function cancelOrder(id: string): Promise<string | null> {
+    try {
+      const res = await fetch("/api/orders/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      if (!res.ok) return data.error ?? "Could not cancel the order.";
+      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "cancelled" } : o)));
+      return null;
+    } catch {
+      return "Network error — please try again.";
+    }
+  }
+
+  return { orders, updateStatus, cancelOrder };
 }
