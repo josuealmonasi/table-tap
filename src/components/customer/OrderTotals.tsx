@@ -4,12 +4,16 @@ import { formatMoney } from "@/lib/format";
 export default function OrderTotals({
   subtotal,
   serviceFee,
+  tip,
+  tipPct,
   total,
   servicePct,
   currency,
 }: {
   subtotal: number;
   serviceFee: number;
+  tip: number;
+  tipPct: number;
   total: number;
   servicePct: number;
   currency: string;
@@ -24,6 +28,12 @@ export default function OrderTotals({
         <div className="tt-row" style={{ marginTop: 8 }}>
           <span className="tt-muted">Service ({servicePct}%)</span>
           <span>{formatMoney(serviceFee, currency)}</span>
+        </div>
+      )}
+      {tipPct > 0 && (
+        <div className="tt-row" style={{ marginTop: 8 }}>
+          <span className="tt-muted">Tip ({tipPct}%)</span>
+          <span>{formatMoney(tip, currency)}</span>
         </div>
       )}
       <div className="tt-row tt-total">

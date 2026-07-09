@@ -13,12 +13,15 @@ interface CartScreenProps {
   soldOut: Set<string>;
   subtotal: number;
   serviceFee: number;
+  tip: number;
+  tipPct: number;
   total: number;
   orderNote: string;
   loading: boolean;
   /** False when nothing orderable remains (empty or all sold out). */
   canCheckout: boolean;
   onChangeNote: (note: string) => void;
+  onChangeTip: (pct: number) => void;
   onRemoveItem: (cartId: number) => void;
   onAddMore: () => void;
   onCheckout: () => void;
@@ -32,11 +35,14 @@ export default function CartScreen({
   soldOut,
   subtotal,
   serviceFee,
+  tip,
+  tipPct,
   total,
   orderNote,
   loading,
   canCheckout,
   onChangeNote,
+  onChangeTip,
   onRemoveItem,
   onAddMore,
   onCheckout,
@@ -73,9 +79,27 @@ export default function CartScreen({
           />
         </div>
 
+        <div style={{ marginBottom: 20 }}>
+          <div className="tt-mod-label">Add a tip? 💛</div>
+          <div className="tt-tip-row">
+            {[0, 10, 15, 20].map((pct) => (
+              <button
+                key={pct}
+                type="button"
+                className={`tt-tip-chip ${tipPct === pct ? "tt-tip-chip-active" : ""}`}
+                onClick={() => onChangeTip(pct)}
+              >
+                {pct === 0 ? "No tip" : `${pct}%`}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <OrderTotals
           subtotal={subtotal}
           serviceFee={serviceFee}
+          tip={tip}
+          tipPct={tipPct}
           total={total}
           servicePct={restaurant.service_pct}
           currency={restaurant.currency}

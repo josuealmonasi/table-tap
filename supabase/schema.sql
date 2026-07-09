@@ -91,6 +91,7 @@ alter table menu_items add column if not exists menu_id uuid references menus(id
 alter table restaurants add column if not exists accepting_orders boolean not null default true;
 alter table restaurants add column if not exists service_enabled boolean not null default false;
 alter table orders add column if not exists stripe_refund_id text;
+alter table orders add column if not exists tip numeric not null default 0;
 
 alter table restaurants drop constraint if exists restaurants_service_pct_range;
 alter table restaurants add constraint restaurants_service_pct_range
@@ -116,6 +117,7 @@ create table if not exists orders (
   status        text not null default 'pending_payment',
   subtotal      numeric not null default 0,
   service_fee   numeric not null default 0,
+  tip           numeric not null default 0,
   total         numeric not null default 0,
   currency      text not null default 'USD',
   -- line items snapshot: [{ name, emoji, price, qty, mods: {}, notes }]
