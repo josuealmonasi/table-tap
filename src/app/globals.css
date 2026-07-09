@@ -380,8 +380,8 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-menu-layout { display: flex; flex-direction: column; gap: 16px; }
 @media (min-width: 1025px) {
   .tt-menu-layout { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 24px; align-items: start; }
-  /* give the two columns room to breathe on large screens */
-  .tt-dash .container { max-width: 1360px; }
+  /* give the two columns room to breathe on large screens (navbar matches) */
+  .tt-dash .container, .tt-navbar .container { max-width: 1360px; }
   /* compact rows inside the side panel so name + price + controls fit */
   .tt-menu-side .tt-prod { gap: 8px; padding: 10px 4px; }
   .tt-menu-side .tt-prod-body { gap: 8px; flex-wrap: wrap; }
