@@ -407,6 +407,10 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 
 .tt-field-error { color: #c0392b; font-size: 13px; margin: 8px 0 0; }
 
+/* A labelled form field (label stacked above its input). */
+.tt-field { display: flex; flex-direction: column; gap: 6px; }
+.tt-field .tt-mod-label { margin-bottom: 0; }
+
 /* toasts */
 .tt-toasts {
   position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 200;

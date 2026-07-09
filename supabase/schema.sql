@@ -83,6 +83,13 @@ alter table menu_items add column if not exists is_addon boolean not null defaul
 alter table categories add column if not exists menu_id uuid references menus(id) on delete cascade;
 alter table menu_items add column if not exists menu_id uuid references menus(id) on delete cascade;
 
+-- Keep the owner-editable service charge in a sane range. The owner writes this
+-- via RLS, so a hand-crafted request can't be trusted — enforce 0–30% in the DB
+-- (checkout multiplies by service_pct/100). Re-add idempotently.
+alter table restaurants drop constraint if exists restaurants_service_pct_range;
+alter table restaurants add constraint restaurants_service_pct_range
+  check (service_pct >= 0 and service_pct <= 30);
+
 -- ── Item add-ons ────────────────────────────────────────────────────────────
 -- Many-to-many: which add-on items can be added to which product.
 -- Both sides are menu_items; the add-on side has is_addon = true.
