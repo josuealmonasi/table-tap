@@ -5,6 +5,7 @@ import type { Category, MenuItem, Restaurant, RestaurantTable } from "@/lib/type
 import CategoryTabs from "./CategoryTabs";
 import MenuItemRow from "./MenuItemRow";
 import CartBar from "./CartBar";
+import ServiceButtons from "./ServiceButtons";
 
 /** The menu browsing screen: restaurant header, category filter, item list, cart bar. */
 export default function MenuScreen({
@@ -46,6 +47,7 @@ export default function MenuScreen({
           </div>
           {table && <span className="tt-badge tt-badge-gold">🪑 Table {table.label}</span>}
         </div>
+        {table && <ServiceButtons restaurantId={restaurant.id} table={table} />}
         {!restaurant.accepting_orders && (
           <div className="tt-closed-banner" role="status">
             ⏸️ We&apos;re not taking orders right now — please check back soon.

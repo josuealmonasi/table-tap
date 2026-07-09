@@ -5,13 +5,15 @@ import { formatMoney } from "@/lib/format";
 import { useRestaurantOrders } from "@/hooks/useRestaurantOrders";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
-import { orderCode, type Order, type Restaurant } from "@/lib/types";
+import { orderCode, type Order, type Restaurant, type ServiceRequest } from "@/lib/types";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import OrderCard from "./OrderCard";
+import ServiceRequestsBar from "./ServiceRequestsBar";
 
 interface OrdersBoardProps {
   restaurant: Restaurant;
   initialOrders: Order[];
+  initialRequests: ServiceRequest[];
 }
 
 type Tab = "live" | "history";
@@ -24,7 +26,7 @@ function isToday(order: Order): boolean {
 }
 
 /** Kitchen dashboard: live order grid with stats, plus a history tab. */
-export default function OrdersBoard({ restaurant, initialOrders }: OrdersBoardProps) {
+export default function OrdersBoard({ restaurant, initialOrders, initialRequests }: OrdersBoardProps) {
   const { orders, updateStatus, cancelOrder } = useRestaurantOrders(restaurant.id, initialOrders);
   const [tab, setTab] = useState<Tab>("live");
   const confirm = useConfirm();
@@ -72,6 +74,8 @@ export default function OrdersBoard({ restaurant, initialOrders }: OrdersBoardPr
             </div>
           </div>
         </header>
+
+        <ServiceRequestsBar restaurantId={restaurant.id} initialRequests={initialRequests} />
 
         <div className="tt-board-tabs" role="tablist">
           <button
