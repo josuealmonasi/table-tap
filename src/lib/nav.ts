@@ -13,4 +13,5 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/orders", emoji: "🧾", title: "Orders", desc: "Live incoming orders" },
   { href: "/dashboard/tables", emoji: "🪑", title: "Tables & QR", desc: "Manage tables and print QR codes" },
+  { href: "/dashboard/settings", emoji: "⚙️", title: "Settings", desc: "Restaurant name, currency and service charge" },
 ];

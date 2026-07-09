@@ -68,9 +68,9 @@ export default function Navbar({
               <button type="button" className="tt-user-item" disabled>
                 Profile <span className="tt-badge">Soon</span>
               </button>
-              <button type="button" className="tt-user-item" disabled>
-                Settings <span className="tt-badge">Soon</span>
-              </button>
+              <Link href="/dashboard/settings" role="menuitem" className="tt-user-item" onClick={() => setOpen(false)}>
+                Settings
+              </Link>
               <div className="tt-user-divider" />
               <button type="button" className="tt-user-item" onClick={signOut}>
                 Sign out
