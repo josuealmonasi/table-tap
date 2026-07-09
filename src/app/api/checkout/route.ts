@@ -65,15 +65,12 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // An extra that went unavailable is simply dropped from the line (never
+      // charged) — the product itself is still fine to order without it.
       const verifiedExtras: OrderExtra[] = [];
       for (const extra of line.extras ?? []) {
         const dbExtra = priceMap.get(extra.id);
-        if (!dbExtra || !dbExtra.available) {
-          return NextResponse.json(
-            { error: `${extra.name} (an extra on ${line.name}) is no longer available.`, unavailableItemId: line.itemId },
-            { status: 400 }
-          );
-        }
+        if (!dbExtra || !dbExtra.available) continue;
         verifiedExtras.push({
           id: dbExtra.id,
           name: dbExtra.name,
