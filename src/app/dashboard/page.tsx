@@ -1,26 +1,22 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getMembership } from "@/lib/membership";
 import DashboardHome from "@/components/dashboard/DashboardHome";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
-import type { Restaurant } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-// /dashboard — restaurant staff view. Requires login.
+// /dashboard — the owner's home. Staff go straight to the orders board.
 export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
 
-  // Load the restaurant this user owns.
-  const { data: restaurant } = await supabase
-    .from("restaurants")
-    .select("*")
-    .eq("owner_id", user.id)
-    .single();
+  const membership = await getMembership(supabase);
+  if (membership?.role === "staff") redirect("/dashboard/orders");
 
-  if (!restaurant) {
+  if (!membership) {
     return (
       <div style={{ padding: 40, fontFamily: "system-ui" }}>
         <h2>No restaurant linked to this account</h2>
@@ -34,7 +30,7 @@ export default async function DashboardPage() {
 
   return (
     <ConfirmProvider>
-      <DashboardHome restaurant={restaurant as Restaurant} />
+      <DashboardHome restaurant={membership.restaurant} />
     </ConfirmProvider>
   );
 }

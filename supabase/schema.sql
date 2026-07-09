@@ -149,6 +149,17 @@ create table if not exists service_requests (
 create index if not exists service_requests_open_idx
   on service_requests(restaurant_id, status, created_at desc);
 
+-- ── Staff (kitchen logins the owner creates for the orders board) ───────────
+create table if not exists staff (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  user_id       uuid not null unique references auth.users(id) on delete cascade,
+  email         text not null,
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists staff_restaurant_idx on staff(restaurant_id);
+
 -- ── Realtime: broadcast order changes to dashboard + customer ───────────────
 do $$ begin
   alter publication supabase_realtime add table orders;
@@ -231,6 +242,39 @@ $$;
 revoke all on function public.owns_restaurant(uuid) from public;
 grant execute on function public.owns_restaurant(uuid) to anon, authenticated;
 
+-- Membership check: the owner OR one of their staff. Same SECURITY DEFINER
+-- reasoning as owns_restaurant — policies on other tables call this.
+create or replace function public.works_at(rid uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select owns_restaurant(rid)
+      or exists (select 1 from staff s where s.restaurant_id = rid and s.user_id = auth.uid());
+$$;
+revoke all on function public.works_at(uuid) from public;
+grant execute on function public.works_at(uuid) to anon, authenticated;
+
+-- STAFF table access: the owner manages their staff list (inserts happen only
+-- server-side — /api/staff creates the login with the secret key); a staff
+-- member can read their own membership row (the dashboard resolves their
+-- restaurant through it).
+alter table staff enable row level security;
+drop policy if exists "owner reads staff" on staff;
+create policy "owner reads staff"
+  on staff for select
+  using (owns_restaurant(restaurant_id));
+drop policy if exists "owner deletes staff" on staff;
+create policy "owner deletes staff"
+  on staff for delete
+  using (owns_restaurant(restaurant_id));
+drop policy if exists "staff reads own membership" on staff;
+create policy "staff reads own membership"
+  on staff for select
+  using (user_id = auth.uid());
+
 -- ORDERS:
 -- Orders hold customer notes (PII) and payment references, so the public
 -- (client) key must NOT be able to read them. A blanket `using (true)` SELECT
@@ -241,10 +285,11 @@ grant execute on function public.owns_restaurant(uuid) to anon, authenticated;
 --     unguessable id, via the secret key (see src/app/order/[orderId]/page.tsx
 --     and /api/order-status). The publishable key gets no order access at all.
 drop policy if exists "read order by id" on orders;   -- removed: was over-permissive
-drop policy if exists "owner reads orders" on orders;
-create policy "owner reads orders"
+drop policy if exists "owner reads orders" on orders; -- superseded by team read below
+drop policy if exists "team reads orders" on orders;
+create policy "team reads orders"
   on orders for select
-  using (owns_restaurant(restaurant_id));
+  using (works_at(restaurant_id));
 
 -- INSERT/UPDATE on orders is done ONLY server-side via the secret key, which
 -- bypasses RLS. So we intentionally add NO insert/update policies here:
@@ -255,14 +300,16 @@ create policy "owner reads orders"
 -- sees their own restaurant's requests and can mark them done.
 alter table service_requests enable row level security;
 drop policy if exists "owner reads service requests" on service_requests;
-create policy "owner reads service requests"
+drop policy if exists "team reads service requests" on service_requests;
+create policy "team reads service requests"
   on service_requests for select
-  using (owns_restaurant(restaurant_id));
+  using (works_at(restaurant_id));
 drop policy if exists "owner updates service requests" on service_requests;
-create policy "owner updates service requests"
+drop policy if exists "team updates service requests" on service_requests;
+create policy "team updates service requests"
   on service_requests for update
-  using (owns_restaurant(restaurant_id))
-  with check (owns_restaurant(restaurant_id));
+  using (works_at(restaurant_id))
+  with check (works_at(restaurant_id));
 
 -- OWNER WRITE: the logged-in restaurant owner manages their own menu/tables.
 drop policy if exists "owner manages restaurant" on restaurants;

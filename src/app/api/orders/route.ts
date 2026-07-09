@@ -20,18 +20,14 @@ export async function PATCH(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Confirm the order belongs to a restaurant this user owns.
+  // Authorisation is the RLS read itself: only the owner and their staff can
+  // SELECT an order (works_at policy), so seeing it means they may advance it.
   const { data: order } = await supabase
     .from("orders")
-    .select("id, restaurant_id, restaurants(owner_id)")
+    .select("id")
     .eq("id", id)
     .single();
-
-  const rel = (order as { restaurants?: { owner_id?: string } | { owner_id?: string }[] } | null)
-    ?.restaurants;
-  const ownerId = Array.isArray(rel) ? rel[0]?.owner_id : rel?.owner_id;
-
-  if (!order || ownerId !== user.id) {
+  if (!order) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
