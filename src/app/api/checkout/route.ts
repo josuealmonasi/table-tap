@@ -181,14 +181,29 @@ export async function POST(req: NextRequest) {
 
     // Stripe Checkout supports card, Apple Pay and Google Pay automatically
     // via the card payment method (wallets show on supported devices).
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      line_items,
-      success_url: `${origin}/order/${order.id}?paid=1`,
-      cancel_url: `${origin}/r/${restaurantId}${tableId ? `/t/${tableId}` : ""}?cancelled=1`,
-      metadata: { order_id: order.id },
-      payment_intent_data: { metadata: { order_id: order.id } },
-    });
+    let session;
+    try {
+      session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        line_items,
+        success_url: `${origin}/order/${order.id}?paid=1`,
+        cancel_url: `${origin}/r/${restaurantId}${tableId ? `/t/${tableId}` : ""}?cancelled=1`,
+        metadata: { order_id: order.id },
+        payment_intent_data: { metadata: { order_id: order.id } },
+      });
+    } catch (err) {
+      // Stripe refused the session — the pending order will never be paid,
+      // so remove it instead of leaving an orphan row.
+      await supabase.from("orders").delete().eq("id", order.id);
+      const code = err && typeof err === "object" && "code" in err ? err.code : undefined;
+      if (code === "amount_too_small") {
+        return NextResponse.json(
+          { error: "That total is below the card minimum — please add a little more to your order." },
+          { status: 400 }
+        );
+      }
+      throw err; // anything else falls through to the generic handler below
+    }
 
     await supabase
       .from("orders")
