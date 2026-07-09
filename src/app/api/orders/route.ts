@@ -9,7 +9,9 @@ export const runtime = "nodejs";
 export async function PATCH(req: NextRequest) {
   const { id, status } = await req.json();
 
-  const allowed = ["received", "preparing", "ready", "completed", "cancelled"];
+  // "cancelled" is deliberately NOT here: cancelling must go through
+  // /api/orders/cancel so a paid order is always refunded first.
+  const allowed = ["received", "preparing", "ready", "completed"];
   if (!id || !allowed.includes(status)) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }

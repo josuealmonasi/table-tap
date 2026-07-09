@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import OrdersBoard from "@/components/dashboard/OrdersBoard";
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import type { Order, Restaurant } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +28,11 @@ export default async function OrdersPage() {
     .eq("restaurant_id", r.id)
     .neq("status", "pending_payment")
     .order("created_at", { ascending: false })
-    .limit(50);
+    .limit(100);
 
-  return <OrdersBoard restaurant={r} initialOrders={(orders as Order[]) ?? []} />;
+  return (
+    <ConfirmProvider>
+      <OrdersBoard restaurant={r} initialOrders={(orders as Order[]) ?? []} />
+    </ConfirmProvider>
+  );
 }

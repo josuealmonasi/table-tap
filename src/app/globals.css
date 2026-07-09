@@ -456,6 +456,14 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
   border-top: 1px solid var(--tt-cream);
 }
 .tt-prod:first-of-type { border-top: none; }
+/* Orders board: Live / History tabs */
+.tt-board-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.tt-board-tab {
+  border: 1px solid var(--tt-cream); background: #fff; border-radius: 999px;
+  padding: 8px 18px; font-size: 14px; cursor: pointer; font-family: inherit; color: var(--tt-muted);
+}
+.tt-board-tab-active { border-color: var(--tt-accent); color: var(--tt-accent); background: rgba(232,82,42,.06); font-weight: 600; }
+
 /* Customer menu: shown when the restaurant paused orders */
 .tt-closed-banner {
   margin-top: 12px; padding: 10px 14px; border-radius: 12px; font-size: 14px;

@@ -88,6 +88,7 @@ alter table menu_items add column if not exists menu_id uuid references menus(id
 -- via RLS, so a hand-crafted request can't be trusted — enforce 0–30% in the DB
 -- (checkout multiplies by service_pct/100). Re-add idempotently.
 alter table restaurants add column if not exists accepting_orders boolean not null default true;
+alter table orders add column if not exists stripe_refund_id text;
 
 alter table restaurants drop constraint if exists restaurants_service_pct_range;
 alter table restaurants add constraint restaurants_service_pct_range
@@ -121,6 +122,7 @@ create table if not exists orders (
   pay_method    text,                            -- 'card' | 'apple' | 'google' | 'paypal'
   stripe_session_id text,
   stripe_payment_intent text,
+  stripe_refund_id text,                         -- set when a cancelled order was refunded
   paid          boolean not null default false,
   created_at    timestamptz not null default now()
 );
