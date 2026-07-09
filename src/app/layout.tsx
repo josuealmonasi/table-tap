@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { createClient } from "@/lib/supabase/server";
+import { getMembership } from "@/lib/membership";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { ToastProvider } from "@/components/ui/Toast";
@@ -15,23 +16,19 @@ export const dynamic = "force-dynamic";
 // Site-wide chrome: Navbar only for logged-in restaurant users, Footer always.
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  let restaurant: { name: string; logo: string } | null = null;
-  if (user) {
-    const { data } = await supabase
-      .from("restaurants")
-      .select("name, logo")
-      .eq("owner_id", user.id)
-      .single();
-    restaurant = data as { name: string; logo: string } | null;
-  }
+  const membership = await getMembership(supabase);
 
   return (
     <html lang="en">
       <body>
         <ToastProvider>
-          {restaurant && <Navbar restaurantName={restaurant.name} restaurantLogo={restaurant.logo} />}
+          {membership && (
+            <Navbar
+              restaurantName={membership.restaurant.name}
+              restaurantLogo={membership.restaurant.logo}
+              role={membership.role}
+            />
+          )}
           <main style={{ flex: 1 }}>{children}</main>
           <Footer />
         </ToastProvider>

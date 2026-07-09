@@ -12,9 +12,12 @@ import NavDrawer from "./NavDrawer";
 export default function Navbar({
   restaurantName,
   restaurantLogo,
+  role,
 }: {
   restaurantName: string;
   restaurantLogo: string;
+  /** Staff get a slimmed-down nav: orders board only, no settings. */
+  role: "owner" | "staff";
 }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -44,8 +47,8 @@ export default function Navbar({
     <nav className="tt-navbar">
       <div className="container tt-navbar-inner">
         <div className="tt-navbar-left">
-          <NavDrawer restaurantName={restaurantName} restaurantLogo={restaurantLogo} />
-          <Link href="/dashboard" className="tt-navbar-brand">
+          <NavDrawer restaurantName={restaurantName} restaurantLogo={restaurantLogo} role={role} />
+          <Link href={role === "owner" ? "/dashboard" : "/dashboard/orders"} className="tt-navbar-brand">
             <span className="tt-navbar-logo">{restaurantLogo || "🍴"}</span>
             <strong>{restaurantName}</strong>
           </Link>
@@ -65,13 +68,17 @@ export default function Navbar({
 
           {open && (
             <div className="tt-user-dropdown" role="menu">
-              <button type="button" className="tt-user-item" disabled>
-                Profile <span className="tt-badge">Soon</span>
-              </button>
-              <Link href="/dashboard/settings" role="menuitem" className="tt-user-item" onClick={() => setOpen(false)}>
-                Settings
-              </Link>
-              <div className="tt-user-divider" />
+              {role === "owner" && (
+                <>
+                  <button type="button" className="tt-user-item" disabled>
+                    Profile <span className="tt-badge">Soon</span>
+                  </button>
+                  <Link href="/dashboard/settings" role="menuitem" className="tt-user-item" onClick={() => setOpen(false)}>
+                    Settings
+                  </Link>
+                  <div className="tt-user-divider" />
+                </>
+              )}
               <button type="button" className="tt-user-item" onClick={signOut}>
                 Sign out
               </button>

@@ -14,6 +14,8 @@ interface OrdersBoardProps {
   restaurant: Restaurant;
   initialOrders: Order[];
   initialRequests: ServiceRequest[];
+  /** Cancelling triggers refunds, so only the owner gets the button. */
+  canCancel: boolean;
 }
 
 type Tab = "live" | "history";
@@ -26,7 +28,7 @@ function isToday(order: Order): boolean {
 }
 
 /** Kitchen dashboard: live order grid with stats, plus a history tab. */
-export default function OrdersBoard({ restaurant, initialOrders, initialRequests }: OrdersBoardProps) {
+export default function OrdersBoard({ restaurant, initialOrders, initialRequests, canCancel }: OrdersBoardProps) {
   const { orders, updateStatus, cancelOrder } = useRestaurantOrders(restaurant.id, initialOrders);
   const [tab, setTab] = useState<Tab>("live");
   const confirm = useConfirm();
@@ -116,7 +118,7 @@ export default function OrdersBoard({ restaurant, initialOrders, initialRequests
                 order={order}
                 currency={restaurant.currency}
                 onAdvance={updateStatus}
-                onCancel={handleCancel}
+                onCancel={canCancel ? handleCancel : undefined}
               />
             ))}
           </div>

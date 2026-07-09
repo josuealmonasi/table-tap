@@ -14,9 +14,12 @@ import { createClient } from "@/lib/supabase/client";
 export default function NavDrawer({
   restaurantName,
   restaurantLogo,
+  role,
 }: {
   restaurantName: string;
   restaurantLogo: string;
+  /** Staff only get the orders board — no dashboard, menus or management links. */
+  role: "owner" | "staff";
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -80,16 +83,18 @@ export default function NavDrawer({
             </div>
 
             <nav className="tt-drawer-nav">
-              <Link
-                href="/dashboard"
-                className={`tt-drawer-link ${isActive("/dashboard") ? "tt-drawer-link-active" : ""}`}
-                aria-current={isActive("/dashboard") ? "page" : undefined}
-                onClick={() => setOpen(false)}
-              >
-                <span className="tt-drawer-emoji">🏠</span> Dashboard
-              </Link>
+              {role === "owner" && (
+                <Link
+                  href="/dashboard"
+                  className={`tt-drawer-link ${isActive("/dashboard") ? "tt-drawer-link-active" : ""}`}
+                  aria-current={isActive("/dashboard") ? "page" : undefined}
+                  onClick={() => setOpen(false)}
+                >
+                  <span className="tt-drawer-emoji">🏠</span> Dashboard
+                </Link>
+              )}
 
-              {NAV_ITEMS.map((item) =>
+              {NAV_ITEMS.filter((item) => role === "owner" || item.href === "/dashboard/orders").map((item) =>
                 item.soon ? (
                   <span key={item.title} className="tt-drawer-link tt-drawer-link-soon">
                     <span className="tt-drawer-emoji">{item.emoji}</span> {item.title}
