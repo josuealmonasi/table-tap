@@ -91,8 +91,9 @@ export default function MenuEditor({ restaurant, menuId, menuName, modalForms = 
             </div>
           </div>
         ) : (
-          <div className="tt-menu-grid">
-            {/* Step 1 — sections within this menu. */}
+          <div className="tt-menu-layout">
+            <div className="tt-menu-grid">
+              {/* Step 1 — sections within this menu. */}
             <div className="tt-section">
               <div className="tt-section-head">
                 <h3 className="tt-serif" style={{ margin: 0 }}>Sections</h3>
@@ -155,20 +156,25 @@ export default function MenuEditor({ restaurant, menuId, menuName, modalForms = 
               />
             )}
 
-            {/* Step 3 — optional add-ons, attached to products in this menu. */}
-            <div className="tt-section-head" style={{ marginTop: 8 }}>
-              <h3 className="tt-serif" style={{ margin: 0 }}>Extras <span className="tt-muted" style={{ fontWeight: 400, fontSize: 14 }}>(optional)</span></h3>
             </div>
-            <AddonsPanel
-              addons={menuAddons}
-              currency={currency}
-              onAdd={(input) => editor.addAddon(menuId, input)}
-              onUpdate={editor.updateAddon}
-              onDelete={editor.deleteAddon}
-              onToggleAvailable={editor.setAvailability}
-              onMove={editor.moveAddon}
-              modalForms={modalForms}
-            />
+
+            {/* Step 3 — optional add-ons, attached to products in this menu.
+                Sits beside the sections on desktop, below them on mobile. */}
+            <aside className="tt-menu-side">
+              <div className="tt-section-head" style={{ marginTop: 8 }}>
+                <h3 className="tt-serif" style={{ margin: 0 }}>Extras <span className="tt-muted" style={{ fontWeight: 400, fontSize: 14 }}>(optional)</span></h3>
+              </div>
+              <AddonsPanel
+                addons={menuAddons}
+                currency={currency}
+                onAdd={(input) => editor.addAddon(menuId, input)}
+                onUpdate={editor.updateAddon}
+                onDelete={editor.deleteAddon}
+                onToggleAvailable={editor.setAvailability}
+                onMove={editor.moveAddon}
+                modalForms={modalForms}
+              />
+            </aside>
           </div>
         )}
       </div>

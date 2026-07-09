@@ -376,6 +376,11 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 
 /* ── menu manager ── */
 .tt-menu-grid { display: flex; flex-direction: column; gap: 16px; }
+/* sections column + Extras side panel: stacked on mobile, side-by-side on desktop */
+.tt-menu-layout { display: flex; flex-direction: column; gap: 16px; }
+@media (min-width: 1025px) {
+  .tt-menu-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
+}
 
 /* menus list (one row per menu: name + active switch + actions) */
 .tt-menu-list { display: flex; flex-direction: column; gap: 8px; }
