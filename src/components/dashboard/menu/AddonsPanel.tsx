@@ -64,11 +64,11 @@ export default function AddonsPanel({
         );
 
         if (!modalForms && isEditing) {
-          return <div key={addon.id} className="tt-prod-editing">{editForm}</div>;
+          return <div key={addon.id} className="tt-addon tt-prod-editing">{editForm}</div>;
         }
 
         return (
-          <div key={addon.id}>
+          <div key={addon.id} className="tt-addon">
             <div className={`tt-prod ${addon.available ? "" : "tt-prod-off"}`}>
               <ReorderButtons
                 canMoveUp={i > 0}
