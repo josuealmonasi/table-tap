@@ -106,6 +106,19 @@ export default function OrderingApp({
         window.location.href = data.url; // Stripe Checkout
         return;
       }
+      // One or more extras sold out: drop them from the cart, tell the customer,
+      // and let them pay again for the adjusted order.
+      if (data.removedExtraIds) {
+        cart.removeExtras(data.removedExtraIds);
+        const names: string[] = data.removedExtraNames ?? [];
+        const many = names.length > 1;
+        setNotice(
+          `${names.join(", ")} ${many ? "are" : "is"} no longer available, so we removed ` +
+            `${many ? "them" : "it"} from your order. Review and pay again.`
+        );
+        setLoading(false);
+        return;
+      }
       // An item sold out between loading the menu and checking out: mark it
       // sold out (it greys out and drops from the total) so the rest can pay.
       if (data.unavailableItemId) {
