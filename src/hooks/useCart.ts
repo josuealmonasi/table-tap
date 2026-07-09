@@ -21,6 +21,18 @@ export function useCart(restaurant: Restaurant) {
     setItems((prev) => prev.filter((i) => i.cartId !== cartId));
   }
 
+  /** Strips the given extras from every line — used when they sell out at checkout. */
+  function removeExtras(extraIds: string[]) {
+    const drop = new Set(extraIds);
+    setItems((prev) =>
+      prev.map((line) => {
+        if (!line.extras?.some((e) => drop.has(e.id))) return line;
+        const kept = line.extras.filter((e) => !drop.has(e.id));
+        return { ...line, extras: kept.length ? kept : undefined };
+      })
+    );
+  }
+
   function clear() {
     setItems([]);
   }
@@ -33,5 +45,5 @@ export function useCart(restaurant: Restaurant) {
 
   const count = items.reduce((sum, i) => sum + i.qty, 0);
 
-  return { items, addItem, removeItem, clear, count, ...totals };
+  return { items, addItem, removeItem, removeExtras, clear, count, ...totals };
 }

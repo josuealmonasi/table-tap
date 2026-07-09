@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
     // Build verified line items with DB prices for the product and its extras.
     let subtotal = 0;
     const verified: OrderLineItem[] = [];
+    const removedExtras = new Map<string, string>(); // extra id → name (deduped)
     for (const line of items) {
       const db = priceMap.get(line.itemId);
       if (!db || !db.available) {
@@ -65,14 +66,14 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // An extra that went unavailable is never charged. We collect them and,
+      // below, tell the client to drop them + review before paying.
       const verifiedExtras: OrderExtra[] = [];
       for (const extra of line.extras ?? []) {
         const dbExtra = priceMap.get(extra.id);
         if (!dbExtra || !dbExtra.available) {
-          return NextResponse.json(
-            { error: `${extra.name} (an extra on ${line.name}) is no longer available.`, unavailableItemId: line.itemId },
-            { status: 400 }
-          );
+          removedExtras.set(extra.id, extra.name);
+          continue;
         }
         verifiedExtras.push({
           id: dbExtra.id,
@@ -95,6 +96,15 @@ export async function POST(req: NextRequest) {
         extras: verifiedExtras.length ? verifiedExtras : undefined,
         notes: line.notes,
       });
+    }
+
+    // If any extras dropped out, don't charge yet — let the customer see what
+    // changed and confirm. The client removes them and re-submits.
+    if (removedExtras.size > 0) {
+      return NextResponse.json(
+        { removedExtraIds: [...removedExtras.keys()], removedExtraNames: [...removedExtras.values()] },
+        { status: 409 }
+      );
     }
 
     const serviceFee = +(subtotal * (restaurant.service_pct / 100)).toFixed(2);
