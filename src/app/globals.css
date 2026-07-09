@@ -432,12 +432,11 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .tt-section-head h3 { font-size: 18px; }
 
-/* desktop: split a section into a section-info column and a wider products column */
+/* desktop: section name as a header row above its products (no side column) */
 @media (min-width: 1025px) {
-  .tt-section-split { display: flex; align-items: flex-start; gap: 24px; }
-  .tt-section-split .tt-section-left { width: 220px; flex-shrink: 0; border-right: 1px solid var(--tt-cream); padding-right: 24px; }
-  .tt-section-split .tt-section-left .tt-section-head { margin-bottom: 0; }
-  .tt-section-split .tt-section-right { flex: 1; min-width: 0; }
+  .tt-section-split .tt-section-left .tt-section-head {
+    margin-bottom: 0; padding-bottom: 12px; border-bottom: 1px solid var(--tt-cream);
+  }
 }
 
 .tt-prod {
