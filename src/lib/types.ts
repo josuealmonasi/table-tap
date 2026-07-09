@@ -106,6 +106,7 @@ export type Order = {
   status: OrderStatus;
   subtotal: number;
   service_fee: number;
+  tip: number;
   total: number;
   currency: string;
   items: OrderLineItem[];

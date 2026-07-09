@@ -44,13 +44,15 @@ export default function OrderingApp({
   // Product ids that sold out at checkout — kept in the cart but greyed out
   // and excluded from the total and the next payment attempt.
   const [soldOut, setSoldOut] = useState<Set<string>>(new Set());
+  const [tipPct, setTipPct] = useState(0);
   const cart = useCart(restaurant);
 
   // Totals count only the still-orderable lines (sold-out ones are excluded).
   const orderableItems = cart.items.filter((i) => !soldOut.has(i.itemId));
   const subtotal = orderableItems.reduce((sum, i) => sum + lineUnitPrice(i) * i.qty, 0);
   const serviceFee = +(subtotal * (restaurant.service_pct / 100)).toFixed(2);
-  const total = +(subtotal + serviceFee).toFixed(2);
+  const tip = +(subtotal * (tipPct / 100)).toFixed(2);
+  const total = +(subtotal + serviceFee + tip).toFixed(2);
 
   const extrasById = useMemo(() => new Map(extras.map((e) => [e.id, e])), [extras]);
 
@@ -99,6 +101,7 @@ export default function OrderingApp({
             notes: c.notes,
           })),
           note: orderNote || undefined,
+          tipPct,
         }),
       });
       const data = await res.json();
@@ -156,11 +159,14 @@ export default function OrderingApp({
           soldOut={soldOut}
           subtotal={subtotal}
           serviceFee={serviceFee}
+          tip={tip}
+          tipPct={tipPct}
           total={total}
           orderNote={orderNote}
           loading={loading}
           canCheckout={orderableItems.length > 0 && restaurant.accepting_orders}
           onChangeNote={setOrderNote}
+          onChangeTip={setTipPct}
           onRemoveItem={cart.removeItem}
           onAddMore={() => setScreen("menu")}
           onCheckout={checkout}
