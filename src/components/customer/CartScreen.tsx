@@ -4,6 +4,7 @@ import type { Restaurant, RestaurantTable } from "@/lib/types";
 import type { CartItem } from "@/hooks/useCart";
 import CartLineRow from "./CartLineRow";
 import OrderTotals from "./OrderTotals";
+import TipPicker from "./TipPicker";
 
 interface CartScreenProps {
   restaurant: Restaurant;
@@ -15,6 +16,7 @@ interface CartScreenProps {
   serviceFee: number;
   tip: number;
   tipPct: number;
+  tipCustom: number | null;
   total: number;
   orderNote: string;
   loading: boolean;
@@ -22,6 +24,7 @@ interface CartScreenProps {
   canCheckout: boolean;
   onChangeNote: (note: string) => void;
   onChangeTip: (pct: number) => void;
+  onCustomTip: (amount: number | null) => void;
   onRemoveItem: (cartId: number) => void;
   onAddMore: () => void;
   onCheckout: () => void;
@@ -37,12 +40,14 @@ export default function CartScreen({
   serviceFee,
   tip,
   tipPct,
+  tipCustom,
   total,
   orderNote,
   loading,
   canCheckout,
   onChangeNote,
   onChangeTip,
+  onCustomTip,
   onRemoveItem,
   onAddMore,
   onCheckout,
@@ -79,27 +84,19 @@ export default function CartScreen({
           />
         </div>
 
-        <div style={{ marginBottom: 20 }}>
-          <div className="tt-mod-label">Add a tip? 💛</div>
-          <div className="tt-tip-row">
-            {[0, 10, 15, 20].map((pct) => (
-              <button
-                key={pct}
-                type="button"
-                className={`tt-tip-chip ${tipPct === pct ? "tt-tip-chip-active" : ""}`}
-                onClick={() => onChangeTip(pct)}
-              >
-                {pct === 0 ? "No tip" : `${pct}%`}
-              </button>
-            ))}
-          </div>
-        </div>
+        <TipPicker
+          currency={restaurant.currency}
+          tipPct={tipPct}
+          tipCustom={tipCustom}
+          onPresetTip={onChangeTip}
+          onCustomTip={onCustomTip}
+        />
 
         <OrderTotals
           subtotal={subtotal}
           serviceFee={serviceFee}
           tip={tip}
-          tipPct={tipPct}
+          tipPct={tipCustom !== null ? 0 : tipPct}
           total={total}
           servicePct={restaurant.service_pct}
           currency={restaurant.currency}

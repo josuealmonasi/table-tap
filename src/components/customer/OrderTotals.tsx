@@ -30,9 +30,9 @@ export default function OrderTotals({
           <span>{formatMoney(serviceFee, currency)}</span>
         </div>
       )}
-      {tipPct > 0 && (
+      {tip > 0 && (
         <div className="tt-row" style={{ marginTop: 8 }}>
-          <span className="tt-muted">Tip ({tipPct}%)</span>
+          <span className="tt-muted">Tip{tipPct > 0 ? ` (${tipPct}%)` : ""}</span>
           <span>{formatMoney(tip, currency)}</span>
         </div>
       )}
