@@ -12,7 +12,7 @@ create table if not exists restaurants (
   name        text not null,
   tagline     text,
   logo        text default '🍱',
-  currency    text not null default 'USD',
+  currency    text not null default 'MXN',
   service_pct numeric not null default 0,        -- service charge %, e.g. 10
   service_enabled boolean not null default false, -- charge the service % only when on
   accepting_orders boolean not null default true, -- kill switch: pause customer orders
@@ -90,7 +90,7 @@ create table if not exists orders (
   service_fee   numeric not null default 0,
   tip           numeric not null default 0,
   total         numeric not null default 0,
-  currency      text not null default 'USD',
+  currency      text not null default 'MXN',
   -- line items snapshot: [{ name, emoji, price, qty, mods: {}, notes }]
   items         jsonb not null default '[]'::jsonb,
   note          text,                            -- whole-order note
