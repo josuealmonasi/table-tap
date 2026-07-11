@@ -47,36 +47,47 @@ export default function StaffPanel({ restaurantId }: StaffPanelProps) {
               No staff yet. Create a login for the kitchen below.
             </p>
           )}
-          {members.map((m) => (
-            <div key={m.id} className="tt-staff-row">
-              <span>
-                {m.role === "manager" ? "🧑‍💼" : "👨‍🍳"} <strong>{m.full_name ?? m.email}</strong>
-                {m.full_name && (
-                  <span className="tt-muted" style={{ fontSize: 12 }}> · {m.email}</span>
-                )}{" "}
-                <span className="tt-badge">{m.role === "manager" ? "Manager" : "Kitchen"}</span>
-              </span>
-              <button
-                className="tt-iconbtn"
-                title="Remove login"
-                disabled={busy}
-                onClick={async () => {
-                  if (
-                    await confirm({
-                      title: `Remove ${m.email}?`,
-                      message: "Their login stops working immediately.",
-                      confirmLabel: "Remove",
-                      danger: true,
-                    })
-                  ) {
-                    removeMember(m.id);
-                  }
-                }}
-              >
-                🗑️
-              </button>
+          {members.length > 0 && (
+            <div className="tt-staff-table">
+              <div className="tt-staff-tr tt-staff-thead" aria-hidden="true">
+                <span>Name</span>
+                <span>Email</span>
+                <span>Role</span>
+                <span />
+              </div>
+              {members.map((m) => (
+                <div key={m.id} className="tt-staff-tr">
+                  <span className="tt-staff-cell" title={m.full_name ?? ""}>
+                    {m.role === "manager" ? "🧑‍💼" : "👨‍🍳"}{" "}
+                    {m.full_name ? <strong>{m.full_name}</strong> : <span className="tt-muted">—</span>}
+                  </span>
+                  <span className="tt-staff-cell tt-muted" title={m.email}>{m.email}</span>
+                  <span>
+                    <span className="tt-badge">{m.role === "manager" ? "Manager" : "Kitchen"}</span>
+                  </span>
+                  <button
+                    className="tt-iconbtn"
+                    title="Remove login"
+                    disabled={busy}
+                    onClick={async () => {
+                      if (
+                        await confirm({
+                          title: `Remove ${m.full_name || m.email}?`,
+                          message: "Their login stops working immediately.",
+                          confirmLabel: "Remove",
+                          danger: true,
+                        })
+                      ) {
+                        removeMember(m.id);
+                      }
+                    }}
+                  >
+                    🗑️
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
 
           <form className="tt-prodform" style={{ marginTop: 16 }} onSubmit={handleAdd}>
             <div className="tt-prodform-row">
