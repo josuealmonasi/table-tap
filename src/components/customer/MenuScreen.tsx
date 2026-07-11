@@ -28,11 +28,18 @@ export default function MenuScreen({
   onOpenCart: () => void;
 }) {
   const [activeCat, setActiveCat] = useState<string>("all");
+  const [search, setSearch] = useState("");
 
-  const filtered = useMemo(
-    () => (activeCat === "all" ? items : items.filter((i) => i.category_id === activeCat)),
-    [activeCat, items]
-  );
+  // A search looks across the WHOLE menu (category tabs step aside while typing).
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (q) {
+      return items.filter(
+        (i) => i.name.toLowerCase().includes(q) || (i.description ?? "").toLowerCase().includes(q)
+      );
+    }
+    return activeCat === "all" ? items : items.filter((i) => i.category_id === activeCat);
+  }, [activeCat, items, search]);
 
   return (
     <div className="tt-root">
@@ -53,10 +60,25 @@ export default function MenuScreen({
             ⏸️ We&apos;re not taking orders right now — please check back soon.
           </div>
         )}
-        <CategoryTabs categories={categories} activeCat={activeCat} onSelect={setActiveCat} />
+        <input
+          className="tt-input tt-customer-search"
+          type="search"
+          placeholder="🔍 Search the menu…"
+          aria-label="Search the menu"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {!search.trim() && (
+          <CategoryTabs categories={categories} activeCat={activeCat} onSelect={setActiveCat} />
+        )}
       </div>
 
       <div style={{ padding: 16 }}>
+        {filtered.length === 0 && search.trim() && (
+          <p className="tt-muted" style={{ textAlign: "center", fontSize: 14 }}>
+            Nothing matches “{search.trim()}” — try another craving.
+          </p>
+        )}
         {filtered.map((item) => (
           <MenuItemRow
             key={item.id}
