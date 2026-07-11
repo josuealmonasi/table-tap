@@ -68,17 +68,15 @@ export default function Navbar({
 
           {open && (
             <div className="tt-user-dropdown" role="menu">
+              <Link href="/dashboard/profile" role="menuitem" className="tt-user-item" onClick={() => setOpen(false)}>
+                Profile
+              </Link>
               {role === "owner" && (
-                <>
-                  <button type="button" className="tt-user-item" disabled>
-                    Profile <span className="tt-badge">Soon</span>
-                  </button>
-                  <Link href="/dashboard/settings" role="menuitem" className="tt-user-item" onClick={() => setOpen(false)}>
-                    Settings
-                  </Link>
-                  <div className="tt-user-divider" />
-                </>
+                <Link href="/dashboard/settings" role="menuitem" className="tt-user-item" onClick={() => setOpen(false)}>
+                  Settings
+                </Link>
               )}
+              <div className="tt-user-divider" />
               <button type="button" className="tt-user-item" onClick={signOut}>
                 Sign out
               </button>

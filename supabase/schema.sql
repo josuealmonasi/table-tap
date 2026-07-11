@@ -165,6 +165,13 @@ alter table staff add constraint staff_role_check check (role in ('manager', 'ki
 
 create index if not exists staff_restaurant_idx on staff(restaurant_id);
 
+-- ── Profiles (a user's own basic info — name; email/password live in auth) ──
+create table if not exists profiles (
+  user_id    uuid primary key references auth.users(id) on delete cascade,
+  full_name  text not null default '',
+  updated_at timestamptz not null default now()
+);
+
 -- ── Realtime: broadcast order changes to dashboard + customer ───────────────
 do $$ begin
   alter publication supabase_realtime add table orders;
@@ -295,6 +302,20 @@ drop policy if exists "staff reads own membership" on staff;
 create policy "staff reads own membership"
   on staff for select
   using (user_id = auth.uid());
+
+-- PROFILES: each user manages only their own row; the owner can additionally
+-- read their staff's profiles so the Staff page can show real names.
+alter table profiles enable row level security;
+drop policy if exists "own profile" on profiles;
+create policy "own profile"
+  on profiles for all
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+drop policy if exists "owner reads staff profiles" on profiles;
+create policy "owner reads staff profiles"
+  on profiles for select
+  using (exists (select 1 from staff s
+                 where s.user_id = profiles.user_id and owns_restaurant(s.restaurant_id)));
 
 -- ORDERS:
 -- Orders hold customer notes (PII) and payment references, so the public

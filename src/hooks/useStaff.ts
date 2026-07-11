@@ -12,6 +12,33 @@ export interface StaffMember {
   email: string;
   role: StaffRole;
   created_at: string;
+  /** From the member's own profile page, when they've filled it in. */
+  full_name?: string;
+}
+
+/** Staff rows plus each member's profile name (when they've filled it in). */
+async function fetchMembers(restaurantId: string): Promise<StaffMember[]> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("staff")
+    .select("id, email, role, created_at, user_id")
+    .eq("restaurant_id", restaurantId)
+    .order("created_at");
+  const rows = (data as (StaffMember & { user_id: string })[]) ?? [];
+  if (rows.length === 0) return [];
+
+  // Names live in profiles (the owner may read their staff's rows under RLS).
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("user_id, full_name")
+    .in("user_id", rows.map((r) => r.user_id));
+  const names = new Map(
+    ((profiles as { user_id: string; full_name: string }[]) ?? []).map((p) => [p.user_id, p.full_name])
+  );
+  return rows.map(({ user_id, ...rest }) => ({
+    ...rest,
+    full_name: names.get(user_id) || undefined,
+  }));
 }
 
 /**
@@ -27,13 +54,9 @@ export function useStaff(restaurantId: string) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data } = await createClient()
-        .from("staff")
-        .select("id, email, role, created_at")
-        .eq("restaurant_id", restaurantId)
-        .order("created_at");
+      const members = await fetchMembers(restaurantId);
       if (!cancelled) {
-        setMembers((data as StaffMember[]) ?? []);
+        setMembers(members);
         setLoading(false);
       }
     })();
@@ -43,12 +66,7 @@ export function useStaff(restaurantId: string) {
   }, [restaurantId]);
 
   async function refresh(): Promise<void> {
-    const { data } = await createClient()
-      .from("staff")
-      .select("id, email, role, created_at")
-      .eq("restaurant_id", restaurantId)
-      .order("created_at");
-    setMembers((data as StaffMember[]) ?? []);
+    setMembers(await fetchMembers(restaurantId));
   }
 
   async function addMember(email: string, password: string, role: StaffRole): Promise<boolean> {
