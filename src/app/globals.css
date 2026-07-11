@@ -379,7 +379,9 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 /* sections column + Extras side panel: stacked on mobile, side-by-side on desktop */
 .tt-menu-layout { display: flex; flex-direction: column; gap: 16px; }
 @media (min-width: 1025px) {
-  .tt-menu-layout { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 24px; align-items: start; }
+  /* the Extras column scales with the screen (~1/3) but never below 400px,
+     so wide screens don't dump all the extra width on the sections column */
+  .tt-menu-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(400px, 34%); gap: 24px; align-items: start; }
   /* give the two columns room to breathe on large screens (navbar matches) */
   .tt-dash .container, .tt-navbar .container { max-width: 1360px; }
   /* compact rows inside the side panel so name + price + controls fit */
