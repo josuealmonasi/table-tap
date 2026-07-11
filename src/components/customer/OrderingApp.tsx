@@ -9,13 +9,13 @@ import {
   type Restaurant,
   type RestaurantTable,
 } from "@/lib/types";
-import { useCart } from "@/hooks/useCart";
+import { useCart, type CartItem } from "@/hooks/useCart";
 import { Modal } from "@/components/ui/Modal";
 import MenuScreen from "./MenuScreen";
 import ItemDetailScreen from "./ItemDetailScreen";
 import CartScreen from "./CartScreen";
 
-type Screen = "menu" | "item" | "cart";
+type Screen = "menu" | "item" | "edit" | "cart";
 
 /**
  * The QR-target customer app. Owns which screen is showing and the cart, and
@@ -38,6 +38,7 @@ export default function OrderingApp({
 }) {
   const [screen, setScreen] = useState<Screen>("menu");
   const [selected, setSelected] = useState<MenuItem | null>(null);
+  const [editingLine, setEditingLine] = useState<CartItem | null>(null);
   const [orderNote, setOrderNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -74,6 +75,15 @@ export default function OrderingApp({
   function addToCart(line: OrderLineItem) {
     cart.addItem(line);
     setScreen("menu");
+  }
+
+  /** Re-opens the item screen prefilled with a cart line's choices. */
+  function editLine(item: CartItem) {
+    const product = items.find((i) => i.id === item.itemId);
+    if (!product) return; // product left the menu — the line can only be removed
+    setSelected(product);
+    setEditingLine(item);
+    setScreen("edit");
   }
 
   async function checkout() {
@@ -152,6 +162,23 @@ export default function OrderingApp({
     );
   }
 
+  if (screen === "edit" && selected && editingLine) {
+    return (
+      <ItemDetailScreen
+        item={selected}
+        extras={selectedExtras}
+        currency={restaurant.currency}
+        initialLine={editingLine}
+        onBack={() => setScreen("cart")}
+        onAdd={(line) => {
+          cart.updateItem(editingLine.cartId, line);
+          setEditingLine(null);
+          setScreen("cart");
+        }}
+      />
+    );
+  }
+
   if (screen === "cart") {
     return (
       <>
@@ -176,6 +203,7 @@ export default function OrderingApp({
           }}
           onCustomTip={setTipCustom}
           onRemoveItem={cart.removeItem}
+          onEditItem={editLine}
           onAddMore={() => setScreen("menu")}
           onCheckout={checkout}
         />

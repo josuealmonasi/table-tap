@@ -12,17 +12,20 @@ export default function ItemDetailScreen({
   currency,
   onBack,
   onAdd,
+  initialLine,
 }: {
   item: MenuItem;
   extras: MenuItem[];
   currency: string;
   onBack: () => void;
   onAdd: (line: OrderLineItem) => void;
+  /** Editing an existing cart line: prefills choices and relabels the button. */
+  initialLine?: OrderLineItem;
 }) {
-  const [mods, setMods] = useState<Record<string, string | string[]>>({});
-  const [extraIds, setExtraIds] = useState<string[]>([]);
-  const [qty, setQty] = useState(1);
-  const [notes, setNotes] = useState("");
+  const [mods, setMods] = useState<Record<string, string | string[]>>(initialLine?.mods ?? {});
+  const [extraIds, setExtraIds] = useState<string[]>(initialLine?.extras?.map((e) => e.id) ?? []);
+  const [qty, setQty] = useState(initialLine?.qty ?? 1);
+  const [notes, setNotes] = useState(initialLine?.notes ?? "");
 
   function toggleMod(label: string, option: string, type: Modifier["type"]) {
     setMods((prev) => {
@@ -119,7 +122,7 @@ export default function ItemDetailScreen({
             <button onClick={() => setQty((q) => q + 1)}>+</button>
           </div>
           <button className="tt-btn tt-btn-primary" style={{ flex: 1 }} onClick={handleAdd}>
-            Add to cart — {formatMoney(unitPrice * qty, currency)}
+            {initialLine ? "Update item" : "Add to cart"} — {formatMoney(unitPrice * qty, currency)}
           </button>
         </div>
       </div>

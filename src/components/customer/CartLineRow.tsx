@@ -8,10 +8,12 @@ interface CartLineRowProps {
   /** Sold out at checkout: greyed, price struck through, not counted. */
   soldOut?: boolean;
   onRemove: (cartId: number) => void;
+  /** Re-opens the item screen prefilled to change extras/notes/quantity. */
+  onEdit?: (item: CartItem) => void;
 }
 
-/** A single line in the cart, with its modifiers, notes, and a remove button. */
-export default function CartLineRow({ item, currency, soldOut = false, onRemove }: CartLineRowProps) {
+/** A single line in the cart, with its modifiers, notes, edit and remove. */
+export default function CartLineRow({ item, currency, soldOut = false, onRemove, onEdit }: CartLineRowProps) {
   return (
     <div className={`tt-card ${soldOut ? "tt-cart-soldout" : ""}`} style={{ padding: 14 }}>
       <div style={{ display: "flex", gap: 12 }}>
@@ -42,7 +44,20 @@ export default function CartLineRow({ item, currency, soldOut = false, onRemove 
             </div>
           )}
         </div>
-        <button className="tt-x" onClick={() => onRemove(item.cartId)}>×</button>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
+          <button className="tt-x" onClick={() => onRemove(item.cartId)}>×</button>
+          {onEdit && !soldOut && (
+            <button
+              className="tt-iconbtn"
+              style={{ fontSize: 14 }}
+              title="Edit item"
+              aria-label={`Edit ${item.name}`}
+              onClick={() => onEdit(item)}
+            >
+              ✏️
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
