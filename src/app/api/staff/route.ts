@@ -4,22 +4,68 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
-/** The caller's own restaurant id — or null if they don't own one. */
-async function ownedRestaurantId(): Promise<string | null> {
+const ROLES: readonly string[] = ["owner", "manager", "kitchen"];
+
+/** Owners a restaurant may have, counting the founding owner. */
+const MAX_OWNERS = 3;
+
+interface Actor {
+  restaurantId: string;
+  email: string;
+}
+
+/** The caller as an owner (founding or co-owner) — null when they're neither. */
+async function actingOwner(): Promise<Actor | null> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  const { data } = await supabase
+
+  const { data: owned } = await supabase
     .from("restaurants")
     .select("id")
     .eq("owner_id", user.id)
     .single();
-  return data?.id ?? null;
+  if (owned) return { restaurantId: owned.id, email: user.email ?? "owner" };
+
+  const { data: co } = await supabase
+    .from("staff")
+    .select("restaurant_id, role")
+    .eq("user_id", user.id)
+    .single();
+  if (co?.role === "owner") return { restaurantId: co.restaurant_id, email: user.email ?? "owner" };
+  return null;
 }
 
-// POST /api/staff — the owner creates a staff login (orders board only).
-// The auth user is created with the secret key; a matching staff row links it
-// to the owner's restaurant.
+/** Every user-management action lands in the restaurant's activity log. */
+async function log(
+  restaurantId: string,
+  actorEmail: string,
+  action: "created" | "updated" | "deleted",
+  targetRole: string,
+  targetEmail: string
+): Promise<void> {
+  await createAdminClient().from("user_logs").insert({
+    restaurant_id: restaurantId,
+    actor_email: actorEmail,
+    action,
+    target_role: targetRole,
+    target_email: targetEmail,
+  });
+}
+
+/** True when adding one more owner login would pass the cap. */
+async function ownerSlotFree(restaurantId: string): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data: r } = await admin.from("restaurants").select("owner_id").eq("id", restaurantId).single();
+  const { count } = await admin
+    .from("staff")
+    .select("id", { count: "exact", head: true })
+    .eq("restaurant_id", restaurantId)
+    .eq("role", "owner");
+  return (r?.owner_id ? 1 : 0) + (count ?? 0) < MAX_OWNERS;
+}
+
+// POST /api/staff — an owner creates a team login (owner / manager / kitchen).
 export async function POST(req: NextRequest) {
   const { email, password, role } = await req.json();
 
@@ -29,12 +75,19 @@ export async function POST(req: NextRequest) {
   if (typeof password !== "string" || password.length < 8) {
     return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
   }
-  if (role !== "manager" && role !== "kitchen") {
+  if (!ROLES.includes(role)) {
     return NextResponse.json({ error: "Pick a role." }, { status: 400 });
   }
 
-  const restaurantId = await ownedRestaurantId();
-  if (!restaurantId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const actor = await actingOwner();
+  if (!actor) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  if (role === "owner" && !(await ownerSlotFree(actor.restaurantId))) {
+    return NextResponse.json(
+      { error: `A restaurant can have at most ${MAX_OWNERS} owners.` },
+      { status: 409 }
+    );
+  }
 
   const admin = createAdminClient();
   const { data: created, error: userErr } = await admin.auth.admin.createUser({
@@ -50,40 +103,77 @@ export async function POST(req: NextRequest) {
   }
 
   const { error: staffErr } = await admin.from("staff").insert({
-    restaurant_id: restaurantId,
+    restaurant_id: actor.restaurantId,
     user_id: created.user.id,
     email,
     role,
   });
   if (staffErr) {
     await admin.auth.admin.deleteUser(created.user.id); // roll back the login
-    return NextResponse.json({ error: "Could not add the staff member." }, { status: 500 });
+    return NextResponse.json({ error: "Could not add the team member." }, { status: 500 });
   }
 
+  await log(actor.restaurantId, actor.email, "created", role, email);
   return NextResponse.json({ ok: true });
 }
 
-// DELETE /api/staff — the owner removes a staff login entirely (the staff row
+// PATCH /api/staff — an owner changes a member's role.
+export async function PATCH(req: NextRequest) {
+  const { id, role } = await req.json();
+  if (!id || !ROLES.includes(role)) {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+
+  const actor = await actingOwner();
+  if (!actor) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const admin = createAdminClient();
+  const { data: member } = await admin
+    .from("staff")
+    .select("id, email, role, restaurant_id")
+    .eq("id", id)
+    .single();
+  if (!member || member.restaurant_id !== actor.restaurantId) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  if (member.role === role) return NextResponse.json({ ok: true });
+
+  if (role === "owner" && !(await ownerSlotFree(actor.restaurantId))) {
+    return NextResponse.json(
+      { error: `A restaurant can have at most ${MAX_OWNERS} owners.` },
+      { status: 409 }
+    );
+  }
+
+  const { error } = await admin.from("staff").update({ role }).eq("id", id);
+  if (error) return NextResponse.json({ error: "Could not update the role." }, { status: 500 });
+
+  await log(actor.restaurantId, actor.email, "updated", role, member.email);
+  return NextResponse.json({ ok: true });
+}
+
+// DELETE /api/staff — an owner removes a login entirely (the staff row
 // cascades away with the auth user).
 export async function DELETE(req: NextRequest) {
   const { id } = await req.json();
   if (!id) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
-  const restaurantId = await ownedRestaurantId();
-  if (!restaurantId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const actor = await actingOwner();
+  if (!actor) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const admin = createAdminClient();
   const { data: member } = await admin
     .from("staff")
-    .select("id, user_id, restaurant_id")
+    .select("id, user_id, email, role, restaurant_id")
     .eq("id", id)
     .single();
-  if (!member || member.restaurant_id !== restaurantId) {
+  if (!member || member.restaurant_id !== actor.restaurantId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   const { error } = await admin.auth.admin.deleteUser(member.user_id);
   if (error) return NextResponse.json({ error: "Could not remove the login." }, { status: 500 });
 
+  await log(actor.restaurantId, actor.email, "deleted", member.role, member.email);
   return NextResponse.json({ ok: true });
 }

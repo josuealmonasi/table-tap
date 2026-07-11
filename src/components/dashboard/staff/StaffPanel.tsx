@@ -7,11 +7,15 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 
 interface StaffPanelProps {
   restaurantId: string;
+  /** Extra sections rendered below the team card (e.g. the activity log). */
+  children?: React.ReactNode;
 }
 
-/** Owner-only staff management: create and remove orders-board logins. */
-export default function StaffPanel({ restaurantId }: StaffPanelProps) {
-  const { members, loading, busy, addMember, removeMember } = useStaff(restaurantId);
+const ROLE_EMOJI: Record<StaffRole, string> = { owner: "👑", manager: "🧑‍💼", kitchen: "👨‍🍳" };
+
+/** Owner-only team management: create, re-role and remove logins. */
+export default function StaffPanel({ restaurantId, children }: StaffPanelProps) {
+  const { members, loading, busy, addMember, updateRole, removeMember } = useStaff(restaurantId);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<StaffRole>("kitchen");
@@ -35,9 +39,9 @@ export default function StaffPanel({ restaurantId }: StaffPanelProps) {
 
         <div className="tt-section" style={{ maxWidth: 560 }}>
           <div className="tt-section-head">
-            <h3 className="tt-serif" style={{ margin: 0 }}>Staff logins</h3>
+            <h3 className="tt-serif" style={{ margin: 0 }}>Team logins</h3>
             <span className="tt-muted" style={{ fontSize: 12 }}>
-              Kitchen sees the orders board only; managers also run menus, tables and refunds
+              Kitchen: orders board only · Manager: + menus, tables, refunds · Owner: everything (max 3)
             </span>
           </div>
 
@@ -58,13 +62,21 @@ export default function StaffPanel({ restaurantId }: StaffPanelProps) {
               {members.map((m) => (
                 <div key={m.id} className="tt-staff-tr">
                   <span className="tt-staff-cell" title={m.full_name ?? ""}>
-                    {m.role === "manager" ? "🧑‍💼" : "👨‍🍳"}{" "}
+                    {ROLE_EMOJI[m.role]}{" "}
                     {m.full_name ? <strong>{m.full_name}</strong> : <span className="tt-muted">—</span>}
                   </span>
                   <span className="tt-staff-cell tt-muted" title={m.email}>{m.email}</span>
-                  <span>
-                    <span className="tt-badge">{m.role === "manager" ? "Manager" : "Kitchen"}</span>
-                  </span>
+                  <select
+                    className="tt-input tt-role-select"
+                    value={m.role}
+                    disabled={busy}
+                    aria-label={`Role for ${m.email}`}
+                    onChange={(e) => updateRole(m.id, e.target.value as StaffRole)}
+                  >
+                    <option value="kitchen">Kitchen</option>
+                    <option value="manager">Manager</option>
+                    <option value="owner">Owner</option>
+                  </select>
                   <button
                     className="tt-iconbtn"
                     title="Remove login"
@@ -116,6 +128,7 @@ export default function StaffPanel({ restaurantId }: StaffPanelProps) {
               <select className="tt-input" value={role} onChange={(e) => setRole(e.target.value as StaffRole)}>
                 <option value="kitchen">Kitchen — orders board only</option>
                 <option value="manager">Manager — menus, tables, refunds</option>
+                <option value="owner">Owner — everything (max 3 owners)</option>
               </select>
             </label>
             <div className="tt-prodform-actions">
@@ -125,6 +138,8 @@ export default function StaffPanel({ restaurantId }: StaffPanelProps) {
             </div>
           </form>
         </div>
+
+        {children}
       </div>
     </div>
   );

@@ -477,6 +477,15 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-staff-thead { color: var(--tt-muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding-bottom: 6px; }
 /* long names/emails truncate instead of wrecking the columns */
 .tt-staff-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-role-select { padding: 6px 8px; font-size: 13px; }
+
+/* user activity log rows + pager */
+.tt-log-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 4px; border-top: 1px solid var(--tt-cream); font-size: 13px;
+}
+.tt-log-row:first-of-type { border-top: none; }
+.tt-log-pager { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
 
 /* Orders board: open call-waiter / request-bill chips */
 .tt-requests-bar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }

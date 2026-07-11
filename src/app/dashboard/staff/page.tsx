@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/membership";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import StaffPanel from "@/components/dashboard/staff/StaffPanel";
+import UserLogs from "@/components/dashboard/staff/UserLogs";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,9 @@ export default async function StaffPage() {
 
   return (
     <ConfirmProvider>
-      <StaffPanel restaurantId={membership.restaurant.id} />
+      <StaffPanel restaurantId={membership.restaurant.id}>
+        <UserLogs restaurantId={membership.restaurant.id} />
+      </StaffPanel>
     </ConfirmProvider>
   );
 }
