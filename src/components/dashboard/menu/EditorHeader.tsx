@@ -45,7 +45,7 @@ export default function EditorHeader({
         />
       </nav>
       {showTools && (
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div className="tt-editor-tools">
           <input
             className="tt-input tt-menu-search"
             type="search"
