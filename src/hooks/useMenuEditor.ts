@@ -201,6 +201,10 @@ export function useMenuEditor(restaurantId: string) {
     run("update the extra", supabase.from("menu_items").update(input).eq("id", id));
   const deleteAddon = (id: string) => run("delete the extra", supabase.from("menu_items").delete().eq("id", id));
 
+  /** Bulk delete: removes any mix of products and extras in one call. */
+  const deleteItems = (ids: string[]) =>
+    run("delete the selected items", supabase.from("menu_items").delete().in("id", ids));
+
   async function moveAddon(id: string, direction: "up" | "down"): Promise<void> {
     const addon = addons.find((a) => a.id === id);
     if (!addon) return;
@@ -260,6 +264,7 @@ export function useMenuEditor(restaurantId: string) {
     addAddon,
     updateAddon,
     deleteAddon,
+    deleteItems,
     moveAddon,
     setAvailability,
     setProductAddons,

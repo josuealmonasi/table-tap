@@ -28,6 +28,9 @@ interface ProductRowProps {
   canReorderUp?: boolean;
   canReorderDown?: boolean;
   onReorder?: (productId: string, direction: "up" | "down") => Promise<void>;
+  /** Bulk-select mode: shows a checkbox instead of the reorder arrows. */
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
 /** One product in a section: image/emoji, price, availability switch, add-ons, edit/delete. */
@@ -46,6 +49,8 @@ export default function ProductRow({
   canReorderUp,
   canReorderDown,
   onReorder,
+  selected = false,
+  onToggleSelect,
 }: ProductRowProps) {
   const [editing, setEditing] = useState(false);
   const [moving, setMoving] = useState(false);
@@ -77,14 +82,24 @@ export default function ProductRow({
 
   return (
     <>
-      <div className={`tt-prod ${product.available ? "" : "tt-prod-off"}`}>
-        {onReorder && (
-          <ReorderButtons
-            canMoveUp={!!canReorderUp}
-            canMoveDown={!!canReorderDown}
-            onMoveUp={() => onReorder(product.id, "up")}
-            onMoveDown={() => onReorder(product.id, "down")}
+      <div className={`tt-prod ${product.available ? "" : "tt-prod-off"} ${selected ? "tt-prod-selected" : ""}`}>
+        {onToggleSelect ? (
+          <input
+            type="checkbox"
+            className="tt-bulk-check"
+            checked={selected}
+            aria-label={`Select ${product.name}`}
+            onChange={() => onToggleSelect(product.id)}
           />
+        ) : (
+          onReorder && (
+            <ReorderButtons
+              canMoveUp={!!canReorderUp}
+              canMoveDown={!!canReorderDown}
+              onMoveUp={() => onReorder(product.id, "up")}
+              onMoveDown={() => onReorder(product.id, "down")}
+            />
+          )
         )}
         <div className="tt-prod-body">
           <div className="tt-prod-thumb">
