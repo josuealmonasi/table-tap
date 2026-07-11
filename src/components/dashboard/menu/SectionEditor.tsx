@@ -33,6 +33,9 @@ interface SectionEditorProps {
   canMoveSectionUp?: boolean;
   canMoveSectionDown?: boolean;
   onMoveSection?: (sectionId: string, direction: "up" | "down") => Promise<void>;
+  /** Bulk-select mode: product rows show checkboxes. */
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }
 
 /** One menu section (category) with its products and an add-product form. */
@@ -56,6 +59,8 @@ export default function SectionEditor({
   canMoveSectionUp,
   canMoveSectionDown,
   onMoveSection,
+  selectedIds,
+  onToggleSelect,
 }: SectionEditorProps) {
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -136,6 +141,8 @@ export default function SectionEditor({
             canReorderUp={i > 0}
             canReorderDown={i < products.length - 1}
             onReorder={onReorderProduct}
+            selected={selectedIds?.has(p.id) ?? false}
+            onToggleSelect={onToggleSelect}
           />
         ))}
 

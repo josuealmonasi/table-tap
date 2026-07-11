@@ -2,15 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import type { Restaurant } from "@/lib/types";
 import { useMenuEditor } from "@/hooks/useMenuEditor";
+import { useBulkSelect } from "@/hooks/useBulkSelect";
+import BulkBar from "./BulkBar";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
 import { menuSlug } from "@/lib/slug";
 import AddonsPanel from "./AddonsPanel";
 import AddSectionForm from "./AddSectionForm";
 import SectionEditor from "./SectionEditor";
-import MenuSwitcher from "./MenuSwitcher";
+import EditorHeader from "./EditorHeader";
 
 interface MenuEditorProps {
   restaurant: Restaurant;
@@ -29,6 +30,7 @@ export default function MenuEditor({ restaurant, menuId, menuName, modalForms = 
   const currency = restaurant.currency;
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const bulk = useBulkSelect();
 
   // If this menu was deleted from another tab, bounce back to the dashboard
   // instead of showing a dead editor.
@@ -71,29 +73,18 @@ export default function MenuEditor({ restaurant, menuId, menuName, modalForms = 
   return (
     <div className="tt-dash">
       <div className="container">
-        <header className="tt-dash-head">
-          <nav className="tt-breadcrumb" aria-label="Breadcrumb">
-            <Link href="/dashboard">Dashboard</Link>
-            <span className="tt-breadcrumb-sep">/</span>
-            <MenuSwitcher
-              menus={editor.menus}
-              currentId={menuId}
-              currentName={liveName}
-              onRename={editor.renameMenu}
-              nameTaken={nameTaken}
-            />
-          </nav>
-          {!editor.loading && !menuEmpty && (
-            <input
-              className="tt-input tt-menu-search"
-              type="search"
-              placeholder="🔍 Search products & extras…"
-              aria-label="Search products and extras"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          )}
-        </header>
+        <EditorHeader
+          menus={editor.menus}
+          menuId={menuId}
+          menuName={liveName}
+          onRenameMenu={editor.renameMenu}
+          nameTaken={nameTaken}
+          showTools={!editor.loading && !menuEmpty}
+          search={search}
+          onSearch={setSearch}
+          selecting={bulk.selecting}
+          onToggleSelecting={() => (bulk.selecting ? bulk.exit() : bulk.setSelecting(true))}
+        />
 
         {editor.loading ? (
           <div className="tt-menu-grid">
@@ -163,6 +154,8 @@ export default function MenuEditor({ restaurant, menuId, menuName, modalForms = 
                 canMoveSectionUp={!q && i > 0}
                 canMoveSectionDown={!q && i < menuSections.length - 1}
                 onMoveSection={editor.moveSection}
+                selectedIds={bulk.selecting ? bulk.selected : undefined}
+                onToggleSelect={bulk.selecting ? bulk.toggle : undefined}
               />
             ))}
 
@@ -186,6 +179,8 @@ export default function MenuEditor({ restaurant, menuId, menuName, modalForms = 
                 }
                 onCreateCategory={addSection}
                 onReorderProduct={editor.moveProduct}
+                selectedIds={bulk.selecting ? bulk.selected : undefined}
+                onToggleSelect={bulk.selecting ? bulk.toggle : undefined}
               />
             )}
 
@@ -200,6 +195,8 @@ export default function MenuEditor({ restaurant, menuId, menuName, modalForms = 
               <AddonsPanel
                 addons={menuAddons}
                 searchQuery={q}
+                selectedIds={bulk.selecting ? bulk.selected : undefined}
+                onToggleSelect={bulk.selecting ? bulk.toggle : undefined}
                 currency={currency}
                 onAdd={(input) => editor.addAddon(menuId, input)}
                 onUpdate={editor.updateAddon}
@@ -210,6 +207,17 @@ export default function MenuEditor({ restaurant, menuId, menuName, modalForms = 
               />
             </aside>
           </div>
+        )}
+
+        {bulk.selecting && (
+          <BulkBar
+            count={bulk.selected.size}
+            onCancel={bulk.exit}
+            onDelete={async () => {
+              await editor.deleteItems([...bulk.selected]);
+              bulk.exit();
+            }}
+          />
         )}
       </div>
     </div>

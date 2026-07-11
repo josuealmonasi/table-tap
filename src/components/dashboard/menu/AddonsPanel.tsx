@@ -21,6 +21,9 @@ interface AddonsPanelProps {
   modalForms?: boolean;
   /** Lower-cased filter from the editor's search box — narrows the list shown here. */
   searchQuery?: string;
+  /** Bulk-select mode: rows show checkboxes. */
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }
 
 /** Manages the restaurant's reusable add-on items (e.g. Catsup, Extra cheese). */
@@ -34,6 +37,8 @@ export default function AddonsPanel({
   onMove,
   modalForms = true,
   searchQuery = "",
+  selectedIds,
+  onToggleSelect,
 }: AddonsPanelProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -80,13 +85,23 @@ export default function AddonsPanel({
 
         return (
           <div key={addon.id} className="tt-addon">
-            <div className={`tt-prod ${addon.available ? "" : "tt-prod-off"}`}>
-              <ReorderButtons
-                canMoveUp={!searchQuery && i > 0}
-                canMoveDown={!searchQuery && i < addons.length - 1}
-                onMoveUp={() => onMove(addon.id, "up")}
-                onMoveDown={() => onMove(addon.id, "down")}
-              />
+            <div className={`tt-prod ${addon.available ? "" : "tt-prod-off"} ${selectedIds?.has(addon.id) ? "tt-prod-selected" : ""}`}>
+              {onToggleSelect ? (
+                <input
+                  type="checkbox"
+                  className="tt-bulk-check"
+                  checked={selectedIds?.has(addon.id) ?? false}
+                  aria-label={`Select ${addon.name}`}
+                  onChange={() => onToggleSelect(addon.id)}
+                />
+              ) : (
+                <ReorderButtons
+                  canMoveUp={!searchQuery && i > 0}
+                  canMoveDown={!searchQuery && i < addons.length - 1}
+                  onMoveUp={() => onMove(addon.id, "up")}
+                  onMoveDown={() => onMove(addon.id, "down")}
+                />
+              )}
               <div className="tt-prod-body">
               <div className="tt-prod-thumb"><span>{addon.emoji || addon.name.charAt(0).toUpperCase()}</span></div>
               <div style={{ flex: 1 }}>
