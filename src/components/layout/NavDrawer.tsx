@@ -19,7 +19,7 @@ export default function NavDrawer({
   restaurantName: string;
   restaurantLogo: string;
   /** Managers lose Staff/Settings; kitchen only gets the orders board. */
-  role: "owner" | "manager" | "kitchen";
+  role: "owner" | "manager" | "kitchen" | "admin";
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -83,7 +83,7 @@ export default function NavDrawer({
             </div>
 
             <nav className="tt-drawer-nav">
-              {role !== "kitchen" && (
+              {(role === "owner" || role === "manager") && (
                 <Link
                   href="/dashboard"
                   className={`tt-drawer-link ${isActive("/dashboard") ? "tt-drawer-link-active" : ""}`}

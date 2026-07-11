@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/membership";
+import { getPlatformAdmin } from "@/lib/admin";
 import DashboardHome from "@/components/dashboard/DashboardHome";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 
@@ -12,6 +13,8 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
+
+  if (await getPlatformAdmin()) redirect("/dashboard/admin");
 
   const membership = await getMembership(supabase);
   if (membership?.role === "kitchen") redirect("/dashboard/orders");

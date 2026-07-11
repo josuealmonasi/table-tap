@@ -479,6 +479,15 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-staff-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-role-select { padding: 6px 8px; font-size: 13px; }
 
+/* platform admin tables */
+.tt-admin-table { display: flex; flex-direction: column; }
+.tt-admin-tr {
+  display: grid; grid-template-columns: minmax(0,1.6fr) minmax(0,1fr) 110px minmax(0,1fr) 32px;
+  align-items: center; gap: 12px; padding: 9px 4px;
+  border-top: 1px solid var(--tt-cream); font-size: 14px;
+}
+.tt-admin-tr:first-of-type { border-top: none; }
+
 /* user activity log rows + pager */
 .tt-log-row {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;

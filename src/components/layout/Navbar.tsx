@@ -17,7 +17,7 @@ export default function Navbar({
   restaurantName: string;
   restaurantLogo: string;
   /** Managers lose Settings/Staff; kitchen only gets the orders board. */
-  role: "owner" | "manager" | "kitchen";
+  role: "owner" | "manager" | "kitchen" | "admin";
 }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -48,7 +48,10 @@ export default function Navbar({
       <div className="container tt-navbar-inner">
         <div className="tt-navbar-left">
           <NavDrawer restaurantName={restaurantName} restaurantLogo={restaurantLogo} role={role} />
-          <Link href={role === "kitchen" ? "/dashboard/orders" : "/dashboard"} className="tt-navbar-brand">
+          <Link
+            href={role === "admin" ? "/dashboard/admin" : role === "kitchen" ? "/dashboard/orders" : "/dashboard"}
+            className="tt-navbar-brand"
+          >
             <span className="tt-navbar-logo">{restaurantLogo || "🍴"}</span>
             <strong>{restaurantName}</strong>
           </Link>

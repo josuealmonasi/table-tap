@@ -17,13 +17,16 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/settings", emoji: "⚙️", title: "Settings", desc: "Restaurant name, currency and service charge" },
 ];
 
-export type DashboardRole = "owner" | "manager" | "kitchen";
+export type DashboardRole = "owner" | "manager" | "kitchen" | "admin";
 
 // Staff management and settings stay with the owner.
 const OWNER_ONLY = ["/dashboard/staff", "/dashboard/settings"];
 
 /** The dashboard areas a role may see (drawer links and home tiles). */
 export function navItemsFor(role: DashboardRole): NavItem[] {
+  if (role === "admin") {
+    return [{ href: "/dashboard/admin", emoji: "🛡️", title: "Admin", desc: "All restaurants and users" }];
+  }
   if (role === "kitchen") return NAV_ITEMS.filter((i) => i.href === "/dashboard/orders");
   if (role === "manager") return NAV_ITEMS.filter((i) => !OWNER_ONLY.includes(i.href));
   return NAV_ITEMS;
