@@ -4,10 +4,13 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 
+export type StaffRole = "manager" | "kitchen";
+
 /** A staff login row as the owner sees it. */
 export interface StaffMember {
   id: string;
   email: string;
+  role: StaffRole;
   created_at: string;
 }
 
@@ -26,7 +29,7 @@ export function useStaff(restaurantId: string) {
     (async () => {
       const { data } = await createClient()
         .from("staff")
-        .select("id, email, created_at")
+        .select("id, email, role, created_at")
         .eq("restaurant_id", restaurantId)
         .order("created_at");
       if (!cancelled) {
@@ -42,19 +45,19 @@ export function useStaff(restaurantId: string) {
   async function refresh(): Promise<void> {
     const { data } = await createClient()
       .from("staff")
-      .select("id, email, created_at")
+      .select("id, email, role, created_at")
       .eq("restaurant_id", restaurantId)
       .order("created_at");
     setMembers((data as StaffMember[]) ?? []);
   }
 
-  async function addMember(email: string, password: string): Promise<boolean> {
+  async function addMember(email: string, password: string, role: StaffRole): Promise<boolean> {
     setBusy(true);
     try {
       const res = await fetch("/api/staff", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, role }),
       });
       const data = await res.json();
       if (!res.ok) {

@@ -21,13 +21,16 @@ async function ownedRestaurantId(): Promise<string | null> {
 // The auth user is created with the secret key; a matching staff row links it
 // to the owner's restaurant.
 export async function POST(req: NextRequest) {
-  const { email, password } = await req.json();
+  const { email, password, role } = await req.json();
 
   if (typeof email !== "string" || !/^\S+@\S+\.\S+$/.test(email)) {
     return NextResponse.json({ error: "Enter a valid email." }, { status: 400 });
   }
   if (typeof password !== "string" || password.length < 8) {
     return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
+  }
+  if (role !== "manager" && role !== "kitchen") {
+    return NextResponse.json({ error: "Pick a role." }, { status: 400 });
   }
 
   const restaurantId = await ownedRestaurantId();
@@ -50,6 +53,7 @@ export async function POST(req: NextRequest) {
     restaurant_id: restaurantId,
     user_id: created.user.id,
     email,
+    role,
   });
   if (staffErr) {
     await admin.auth.admin.deleteUser(created.user.id); // roll back the login

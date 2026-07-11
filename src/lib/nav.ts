@@ -13,6 +13,18 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/orders", emoji: "🧾", title: "Orders", desc: "Live incoming orders" },
   { href: "/dashboard/tables", emoji: "🪑", title: "Tables & QR", desc: "Manage tables and print QR codes" },
-  { href: "/dashboard/staff", emoji: "👥", title: "Staff", desc: "Logins for the orders board" },
+  { href: "/dashboard/staff", emoji: "👥", title: "Staff", desc: "Team logins and roles" },
   { href: "/dashboard/settings", emoji: "⚙️", title: "Settings", desc: "Restaurant name, currency and service charge" },
 ];
+
+export type DashboardRole = "owner" | "manager" | "kitchen";
+
+// Staff management and settings stay with the owner.
+const OWNER_ONLY = ["/dashboard/staff", "/dashboard/settings"];
+
+/** The dashboard areas a role may see (drawer links and home tiles). */
+export function navItemsFor(role: DashboardRole): NavItem[] {
+  if (role === "kitchen") return NAV_ITEMS.filter((i) => i.href === "/dashboard/orders");
+  if (role === "manager") return NAV_ITEMS.filter((i) => !OWNER_ONLY.includes(i.href));
+  return NAV_ITEMS;
+}

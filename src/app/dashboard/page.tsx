@@ -14,7 +14,7 @@ export default async function DashboardPage() {
   if (!user) redirect("/login");
 
   const membership = await getMembership(supabase);
-  if (membership?.role === "staff") redirect("/dashboard/orders");
+  if (membership?.role === "kitchen") redirect("/dashboard/orders");
 
   if (!membership) {
     return (
@@ -30,7 +30,7 @@ export default async function DashboardPage() {
 
   return (
     <ConfirmProvider>
-      <DashboardHome restaurant={membership.restaurant} />
+      <DashboardHome restaurant={membership.restaurant} role={membership.role} />
     </ConfirmProvider>
   );
 }

@@ -16,18 +16,26 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Confirm the order belongs to a restaurant this user owns (user-scoped
-  // client, so RLS does the heavy lifting).
-  const { data: owned } = await supabase
+  // Refunds move money, so only the owner or a manager may cancel. The RLS
+  // read proves membership; the role check separates them from kitchen.
+  const { data: visible } = await supabase
     .from("orders")
     .select("id, restaurants(owner_id)")
     .eq("id", id)
     .single();
-  const rel = (owned as { restaurants?: { owner_id?: string } | { owner_id?: string }[] } | null)
+  const rel = (visible as { restaurants?: { owner_id?: string } | { owner_id?: string }[] } | null)
     ?.restaurants;
   const ownerId = Array.isArray(rel) ? rel[0]?.owner_id : rel?.owner_id;
-  if (!owned || ownerId !== user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!visible) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (ownerId !== user.id) {
+    const { data: me } = await supabase
+      .from("staff")
+      .select("role")
+      .eq("user_id", user.id)
+      .single();
+    if (me?.role !== "manager") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
 
   // Re-read the authoritative row: guards double-clicks and two tabs racing.

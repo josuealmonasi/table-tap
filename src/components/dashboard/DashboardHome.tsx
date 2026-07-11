@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Menu, Restaurant } from "@/lib/types";
 import { useMenuEditor } from "@/hooks/useMenuEditor";
-import { NAV_ITEMS } from "@/lib/nav";
+import { navItemsFor, type DashboardRole } from "@/lib/nav";
 import { menuSlug } from "@/lib/slug";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -12,10 +12,12 @@ import MenusPanel from "@/components/dashboard/menu/MenusPanel";
 
 interface DashboardHomeProps {
   restaurant: Restaurant;
+  /** Filters the area tiles — managers don't see Staff or Settings. */
+  role: DashboardRole;
 }
 
 /** Restaurant dashboard landing — the restaurant's menus, plus other areas. */
-export default function DashboardHome({ restaurant }: DashboardHomeProps) {
+export default function DashboardHome({ restaurant, role }: DashboardHomeProps) {
   const editor = useMenuEditor(restaurant.id);
   const router = useRouter();
 
@@ -55,7 +57,7 @@ export default function DashboardHome({ restaurant }: DashboardHomeProps) {
         )}
 
         <div className="tt-tiles" style={{ marginTop: 16 }}>
-          {NAV_ITEMS.map((tile) =>
+          {navItemsFor(role).map((tile) =>
             tile.soon ? (
               <div key={tile.title} className="tt-tile tt-tile-soon">
                 <div className="tt-tile-emoji">{tile.emoji}</div>
