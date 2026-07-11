@@ -50,7 +50,10 @@ export default function StaffPanel({ restaurantId }: StaffPanelProps) {
           {members.map((m) => (
             <div key={m.id} className="tt-staff-row">
               <span>
-                {m.role === "manager" ? "🧑‍💼" : "👨‍🍳"} {m.email}{" "}
+                {m.role === "manager" ? "🧑‍💼" : "👨‍🍳"} <strong>{m.full_name ?? m.email}</strong>
+                {m.full_name && (
+                  <span className="tt-muted" style={{ fontSize: 12 }}> · {m.email}</span>
+                )}{" "}
                 <span className="tt-badge">{m.role === "manager" ? "Manager" : "Kitchen"}</span>
               </span>
               <button
