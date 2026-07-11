@@ -11,18 +11,23 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { restaurantId, tableId, tableLabel, items, note, tipPct: rawTipPct } = body as {
+    const { restaurantId, tableId, tableLabel, items, note, tipPct: rawTipPct, tipAmount: rawTipAmount } = body as {
       restaurantId: string;
       tableId: string | null;
       tableLabel: string | null;
       items: OrderLineItem[];
       note?: string;
       tipPct?: number;
+      tipAmount?: number;
     };
 
-    // Only the preset tip percentages are accepted — the amount itself is
-    // always recomputed from the verified subtotal, never taken from the client.
+    // Tips: either a preset percentage (recomputed from the verified subtotal)
+    // or an exact "Other" amount — sanitised and capped below once the
+    // subtotal is known.
     const tipPct = [0, 10, 15, 20].includes(rawTipPct ?? 0) ? (rawTipPct ?? 0) : 0;
+    const tipAmount = Number.isFinite(rawTipAmount) && (rawTipAmount as number) > 0
+      ? +(rawTipAmount as number).toFixed(2)
+      : null;
 
     if (!restaurantId || !items?.length) {
       return NextResponse.json({ error: "Missing order data" }, { status: 400 });
@@ -123,7 +128,10 @@ export async function POST(req: NextRequest) {
     // The service charge only applies when the owner switched it on.
     const servicePct = restaurant.service_enabled ? restaurant.service_pct : 0;
     const serviceFee = +(subtotal * (servicePct / 100)).toFixed(2);
-    const tip = +(subtotal * (tipPct / 100)).toFixed(2);
+    // An exact tip can't exceed the order itself (guards fat fingers and abuse).
+    const tip = tipAmount !== null
+      ? Math.min(tipAmount, +subtotal.toFixed(2))
+      : +(subtotal * (tipPct / 100)).toFixed(2);
     const total = +(subtotal + serviceFee + tip).toFixed(2);
 
     // Create the pending order first so the webhook can find it.
@@ -194,7 +202,7 @@ export async function POST(req: NextRequest) {
         price_data: {
           currency: cur,
           unit_amount: Math.round(tip * 100),
-          product_data: { name: `Tip (${tipPct}%)` },
+          product_data: { name: tipAmount !== null ? "Tip" : `Tip (${tipPct}%)` },
         },
       });
     }
