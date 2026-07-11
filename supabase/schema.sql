@@ -155,15 +155,37 @@ create table if not exists staff (
   restaurant_id uuid not null references restaurants(id) on delete cascade,
   user_id       uuid not null unique references auth.users(id) on delete cascade,
   email         text not null,
-  role          text not null default 'kitchen',  -- 'manager' | 'kitchen' ('waiter' planned)
+  role          text not null default 'kitchen',  -- 'owner' (co-owner) | 'manager' | 'kitchen' ('waiter' planned)
   created_at    timestamptz not null default now()
 );
 
 alter table staff add column if not exists role text not null default 'kitchen';
 alter table staff drop constraint if exists staff_role_check;
-alter table staff add constraint staff_role_check check (role in ('manager', 'kitchen'));
+alter table staff add constraint staff_role_check check (role in ('owner', 'manager', 'kitchen'));
 
 create index if not exists staff_restaurant_idx on staff(restaurant_id);
+
+-- A reset that drops/recreates `restaurants` silently removes this FK from a
+-- surviving staff table — restore it idempotently so rows can't orphan again.
+do $$ begin
+  alter table staff add constraint staff_restaurant_id_fkey
+    foreign key (restaurant_id) references restaurants(id) on delete cascade;
+exception when duplicate_object then null; end $$;
+
+-- ── User activity log (who created/updated/deleted which login) ─────────────
+-- Written ONLY server-side by the user-management API routes; the restaurant's
+-- owners are the only readers.
+create table if not exists user_logs (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  actor_email   text not null,                     -- who did it
+  action        text not null check (action in ('created', 'updated', 'deleted')),
+  target_role   text not null,                     -- role of the affected login
+  target_email  text not null,                     -- the affected login
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists user_logs_restaurant_idx on user_logs(restaurant_id, created_at desc);
 
 -- ── Profiles (a user's own basic info — name; email/password live in auth) ──
 create table if not exists profiles (
@@ -249,7 +271,11 @@ security definer
 stable
 set search_path = public
 as $$
-  select exists (select 1 from restaurants r where r.id = rid and r.owner_id = auth.uid());
+  -- The founding owner (restaurants.owner_id) or a co-owner (staff role
+  -- 'owner') — both hold full owner powers everywhere this is used.
+  select exists (select 1 from restaurants r where r.id = rid and r.owner_id = auth.uid())
+      or exists (select 1 from staff s
+                 where s.restaurant_id = rid and s.user_id = auth.uid() and s.role = 'owner');
 $$;
 revoke all on function public.owns_restaurant(uuid) from public;
 grant execute on function public.owns_restaurant(uuid) to anon, authenticated;
@@ -354,11 +380,20 @@ create policy "team updates service requests"
   with check (works_at(restaurant_id));
 
 -- OWNER WRITE: the logged-in restaurant owner manages their own menu/tables.
+-- owns_restaurant() covers co-owners (staff role 'owner') too.
 drop policy if exists "owner manages restaurant" on restaurants;
 create policy "owner manages restaurant"
   on restaurants for all
-  using (auth.uid() = owner_id)
-  with check (auth.uid() = owner_id);
+  using (owns_restaurant(id))
+  with check (owns_restaurant(id));
+
+-- USER LOGS: owners read their restaurant's log; writes happen only
+-- server-side from the user-management API routes (secret key).
+alter table user_logs enable row level security;
+drop policy if exists "owner reads user logs" on user_logs;
+create policy "owner reads user logs"
+  on user_logs for select
+  using (owns_restaurant(restaurant_id));
 
 drop policy if exists "owner manages tables" on restaurant_tables;
 drop policy if exists "team manages tables" on restaurant_tables;

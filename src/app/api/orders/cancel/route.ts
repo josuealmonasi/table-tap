@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       .select("role")
       .eq("user_id", user.id)
       .single();
-    if (me?.role !== "manager") {
+    if (me?.role !== "manager" && me?.role !== "owner") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
   }

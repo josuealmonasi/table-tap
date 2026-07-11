@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 
-export type StaffRole = "manager" | "kitchen";
+export type StaffRole = "owner" | "manager" | "kitchen";
 
 /** A staff login row as the owner sees it. */
 export interface StaffMember {
@@ -93,6 +93,28 @@ export function useStaff(restaurantId: string) {
     }
   }
 
+  async function updateRole(id: string, role: StaffRole): Promise<void> {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/staff", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, role }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast(data.error ?? "Could not update the role.", "error");
+        return;
+      }
+      toast("Role updated");
+      setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, role } : m)));
+    } catch {
+      toast("Network error — please try again.", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function removeMember(id: string): Promise<void> {
     setBusy(true);
     try {
@@ -115,5 +137,5 @@ export function useStaff(restaurantId: string) {
     }
   }
 
-  return { members, loading, busy, addMember, removeMember };
+  return { members, loading, busy, addMember, updateRole, removeMember };
 }

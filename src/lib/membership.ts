@@ -37,8 +37,8 @@ export async function getMembership(supabase: SupabaseClient): Promise<Membershi
     .eq("id", membership.restaurant_id)
     .single();
   if (!restaurant) return null;
-  return {
-    restaurant: restaurant as Restaurant,
-    role: membership.role === "manager" ? "manager" : "kitchen",
-  };
+  // Co-owners (staff role 'owner') get the full owner experience.
+  const role: Role =
+    membership.role === "owner" ? "owner" : membership.role === "manager" ? "manager" : "kitchen";
+  return { restaurant: restaurant as Restaurant, role };
 }
