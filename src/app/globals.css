@@ -479,6 +479,9 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-staff-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-role-select { padding: 6px 8px; font-size: 13px; }
 
+/* menu editor search box (header, next to the breadcrumb) */
+.tt-menu-search { max-width: 280px; padding: 9px 12px; font-size: 14px; }
+
 /* platform admin tables */
 .tt-admin-table { display: flex; flex-direction: column; }
 .tt-admin-tr {

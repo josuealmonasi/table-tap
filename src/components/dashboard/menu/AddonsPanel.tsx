@@ -19,6 +19,8 @@ interface AddonsPanelProps {
   onMove: (id: string, direction: "up" | "down") => Promise<void>;
   /** Open add/edit forms in a focused modal instead of expanding inline. Defaults to on. */
   modalForms?: boolean;
+  /** Lower-cased filter from the editor's search box — narrows the list shown here. */
+  searchQuery?: string;
 }
 
 /** Manages the restaurant's reusable add-on items (e.g. Catsup, Extra cheese). */
@@ -31,10 +33,16 @@ export default function AddonsPanel({
   onToggleAvailable,
   onMove,
   modalForms = true,
+  searchQuery = "",
 }: AddonsPanelProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const confirm = useConfirm();
+
+  // A search narrows only what's shown; reorder arrows pause meanwhile.
+  const shown = searchQuery
+    ? addons.filter((a) => a.name.toLowerCase().includes(searchQuery))
+    : addons;
 
   return (
     <div className="tt-section">
@@ -48,8 +56,11 @@ export default function AddonsPanel({
           No extras yet. Create one (e.g. Catsup) to offer it on products.
         </p>
       )}
+      {addons.length > 0 && shown.length === 0 && (
+        <p className="tt-muted" style={{ fontSize: 13 }}>No extras match your search.</p>
+      )}
 
-      {addons.map((addon, i) => {
+      {shown.map((addon, i) => {
         const isEditing = editingId === addon.id;
         const editForm = (
           <AddonForm
@@ -71,8 +82,8 @@ export default function AddonsPanel({
           <div key={addon.id} className="tt-addon">
             <div className={`tt-prod ${addon.available ? "" : "tt-prod-off"}`}>
               <ReorderButtons
-                canMoveUp={i > 0}
-                canMoveDown={i < addons.length - 1}
+                canMoveUp={!searchQuery && i > 0}
+                canMoveDown={!searchQuery && i < addons.length - 1}
                 onMoveUp={() => onMove(addon.id, "up")}
                 onMoveDown={() => onMove(addon.id, "down")}
               />

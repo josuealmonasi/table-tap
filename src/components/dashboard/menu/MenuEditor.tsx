@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Restaurant } from "@/lib/types";
@@ -28,6 +28,7 @@ export default function MenuEditor({ restaurant, menuId, menuName, modalForms = 
   const editor = useMenuEditor(restaurant.id);
   const currency = restaurant.currency;
   const router = useRouter();
+  const [search, setSearch] = useState("");
 
   // If this menu was deleted from another tab, bounce back to the dashboard
   // instead of showing a dead editor.
@@ -48,8 +49,21 @@ export default function MenuEditor({ restaurant, menuId, menuName, modalForms = 
   const menuProducts = editor.products.filter((p) => p.menu_id === menuId);
   const menuAddons = editor.addons.filter((a) => a.menu_id === menuId);
 
+  // Client-side search: filters what's SHOWN (products per section + extras);
+  // the full addon list still backs the attach-extras forms.
+  const q = search.trim().toLowerCase();
+  const matches = (name: string, description?: string | null) =>
+    !q || name.toLowerCase().includes(q) || (description ?? "").toLowerCase().includes(q);
+  const shownProducts = menuProducts.filter((p) => matches(p.name, p.description));
+
   const sectionIds = new Set(menuSections.map((s) => s.id));
-  const uncategorized = menuProducts.filter((p) => !p.category_id || !sectionIds.has(p.category_id));
+  const uncategorized = shownProducts.filter((p) => !p.category_id || !sectionIds.has(p.category_id));
+  // While searching, sections with no hits disappear instead of sitting empty.
+  const shownSections = q
+    ? menuSections.filter((s) => shownProducts.some((p) => p.category_id === s.id))
+    : menuSections;
+  const nothingMatches =
+    q && shownProducts.length === 0 && !menuAddons.some((a) => matches(a.name));
 
   const menuEmpty = menuSections.length === 0 && menuProducts.length === 0;
   const addSection = (name: string) => editor.addSection(menuId, name);
@@ -69,6 +83,16 @@ export default function MenuEditor({ restaurant, menuId, menuName, modalForms = 
               nameTaken={nameTaken}
             />
           </nav>
+          {!editor.loading && !menuEmpty && (
+            <input
+              className="tt-input tt-menu-search"
+              type="search"
+              placeholder="🔍 Search products & extras…"
+              aria-label="Search products and extras"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          )}
         </header>
 
         {editor.loading ? (
@@ -105,12 +129,21 @@ export default function MenuEditor({ restaurant, menuId, menuName, modalForms = 
               <AddSectionForm onAdd={addSection} />
             </div>
 
-            {/* Step 2 — products within each section. */}
-            {menuSections.map((section, i) => (
+            {nothingMatches && (
+              <div className="tt-section">
+                <p className="tt-muted" style={{ fontSize: 13, margin: 0 }}>
+                  Nothing matches “{search.trim()}”.
+                </p>
+              </div>
+            )}
+
+            {/* Step 2 — products within each section. Reorder arrows pause
+                while a search filters the view (indices wouldn't be real). */}
+            {shownSections.map((section, i) => (
               <SectionEditor
                 key={section.id}
                 section={section}
-                products={menuProducts.filter((p) => p.category_id === section.id)}
+                products={shownProducts.filter((p) => p.category_id === section.id)}
                 addons={menuAddons}
                 links={editor.links}
                 currency={currency}
@@ -127,8 +160,8 @@ export default function MenuEditor({ restaurant, menuId, menuName, modalForms = 
                 }
                 onCreateCategory={addSection}
                 onReorderProduct={editor.moveProduct}
-                canMoveSectionUp={i > 0}
-                canMoveSectionDown={i < menuSections.length - 1}
+                canMoveSectionUp={!q && i > 0}
+                canMoveSectionDown={!q && i < menuSections.length - 1}
                 onMoveSection={editor.moveSection}
               />
             ))}
@@ -166,6 +199,7 @@ export default function MenuEditor({ restaurant, menuId, menuName, modalForms = 
               </div>
               <AddonsPanel
                 addons={menuAddons}
+                searchQuery={q}
                 currency={currency}
                 onAdd={(input) => editor.addAddon(menuId, input)}
                 onUpdate={editor.updateAddon}
