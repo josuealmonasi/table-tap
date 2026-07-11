@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { getMembership } from "@/lib/membership";
 import { qrSvg } from "@/lib/qr";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import TablesPanel, { type TableWithQr } from "@/components/dashboard/tables/TablesPanel";
-import type { Restaurant, RestaurantTable } from "@/lib/types";
+import type { RestaurantTable } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -14,13 +15,11 @@ export default async function TablesPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: restaurant } = await supabase
-    .from("restaurants")
-    .select("id, name")
-    .eq("owner_id", user.id)
-    .single();
-  if (!restaurant) redirect("/dashboard");
-  const r = restaurant as Pick<Restaurant, "id" | "name">;
+  // Owners and managers may manage tables; kitchen goes back to its board.
+  const membership = await getMembership(supabase);
+  if (!membership) redirect("/dashboard");
+  if (membership.role === "kitchen") redirect("/dashboard/orders");
+  const r = membership.restaurant;
 
   const { data: tables } = await supabase
     .from("restaurant_tables")

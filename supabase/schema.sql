@@ -155,8 +155,13 @@ create table if not exists staff (
   restaurant_id uuid not null references restaurants(id) on delete cascade,
   user_id       uuid not null unique references auth.users(id) on delete cascade,
   email         text not null,
+  role          text not null default 'kitchen',  -- 'manager' | 'kitchen' ('waiter' planned)
   created_at    timestamptz not null default now()
 );
+
+alter table staff add column if not exists role text not null default 'kitchen';
+alter table staff drop constraint if exists staff_role_check;
+alter table staff add constraint staff_role_check check (role in ('manager', 'kitchen'));
 
 create index if not exists staff_restaurant_idx on staff(restaurant_id);
 
@@ -257,6 +262,22 @@ $$;
 revoke all on function public.works_at(uuid) from public;
 grant execute on function public.works_at(uuid) to anon, authenticated;
 
+-- Role check: the owner always qualifies; staff qualify when their role is in
+-- the list. Used to give managers owner-grade powers over menus/tables.
+create or replace function public.has_role(rid uuid, roles text[])
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select owns_restaurant(rid)
+      or exists (select 1 from staff s
+                 where s.restaurant_id = rid and s.user_id = auth.uid() and s.role = any(roles));
+$$;
+revoke all on function public.has_role(uuid, text[]) from public;
+grant execute on function public.has_role(uuid, text[]) to anon, authenticated;
+
 -- STAFF table access: the owner manages their staff list (inserts happen only
 -- server-side — /api/staff creates the login with the secret key); a staff
 -- member can read their own membership row (the dashboard resolves their
@@ -319,35 +340,40 @@ create policy "owner manages restaurant"
   with check (auth.uid() = owner_id);
 
 drop policy if exists "owner manages tables" on restaurant_tables;
-create policy "owner manages tables"
+drop policy if exists "team manages tables" on restaurant_tables;
+create policy "team manages tables"
   on restaurant_tables for all
-  using (owns_restaurant(restaurant_id))
-  with check (owns_restaurant(restaurant_id));
+  using (has_role(restaurant_id, array['manager']))
+  with check (has_role(restaurant_id, array['manager']));
 
 drop policy if exists "owner manages menus" on menus;
-create policy "owner manages menus"
+drop policy if exists "team manages menus" on menus;
+create policy "team manages menus"
   on menus for all
-  using (owns_restaurant(restaurant_id))
-  with check (owns_restaurant(restaurant_id));
+  using (has_role(restaurant_id, array['manager']))
+  with check (has_role(restaurant_id, array['manager']));
 
 drop policy if exists "owner manages categories" on categories;
-create policy "owner manages categories"
+drop policy if exists "team manages categories" on categories;
+create policy "team manages categories"
   on categories for all
-  using (owns_restaurant(restaurant_id))
-  with check (owns_restaurant(restaurant_id));
+  using (has_role(restaurant_id, array['manager']))
+  with check (has_role(restaurant_id, array['manager']));
 
 drop policy if exists "owner manages menu" on menu_items;
-create policy "owner manages menu"
+drop policy if exists "team manages menu" on menu_items;
+create policy "team manages menu"
   on menu_items for all
-  using (owns_restaurant(restaurant_id))
-  with check (owns_restaurant(restaurant_id));
+  using (has_role(restaurant_id, array['manager']))
+  with check (has_role(restaurant_id, array['manager']));
 
 -- Owner manages add-on links for products in their restaurant.
 drop policy if exists "owner manages item addons" on item_addons;
-create policy "owner manages item addons"
+drop policy if exists "team manages item addons" on item_addons;
+create policy "team manages item addons"
   on item_addons for all
-  using (owns_restaurant((select mi.restaurant_id from menu_items mi where mi.id = product_id)))
-  with check (owns_restaurant((select mi.restaurant_id from menu_items mi where mi.id = product_id)));
+  using (has_role((select mi.restaurant_id from menu_items mi where mi.id = product_id), array['manager']))
+  with check (has_role((select mi.restaurant_id from menu_items mi where mi.id = product_id), array['manager']));
 
 -- ============================================================================
 -- Backfill: every restaurant needs at least one menu. Restaurants (and their

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Restaurant } from "@/lib/types";
 
-export type Role = "owner" | "staff";
+export type Role = "owner" | "manager" | "kitchen";
 
 export interface Membership {
   restaurant: Restaurant;
@@ -9,9 +9,9 @@ export interface Membership {
 }
 
 /**
- * Resolves which restaurant the logged-in user belongs to: as its owner, or as
- * staff (via their membership row). Null when logged out or unaffiliated.
- * Used by the dashboard pages and layout — staff get the orders board only.
+ * Resolves which restaurant the logged-in user belongs to and as what: the
+ * owner, a manager (menus/tables/orders), or kitchen (orders board only).
+ * Null when logged out or unaffiliated.
  */
 export async function getMembership(supabase: SupabaseClient): Promise<Membership | null> {
   const { data: { user } } = await supabase.auth.getUser();
@@ -26,7 +26,7 @@ export async function getMembership(supabase: SupabaseClient): Promise<Membershi
 
   const { data: membership } = await supabase
     .from("staff")
-    .select("restaurant_id")
+    .select("restaurant_id, role")
     .eq("user_id", user.id)
     .single();
   if (!membership) return null;
@@ -36,5 +36,9 @@ export async function getMembership(supabase: SupabaseClient): Promise<Membershi
     .select("*")
     .eq("id", membership.restaurant_id)
     .single();
-  return restaurant ? { restaurant: restaurant as Restaurant, role: "staff" } : null;
+  if (!restaurant) return null;
+  return {
+    restaurant: restaurant as Restaurant,
+    role: membership.role === "manager" ? "manager" : "kitchen",
+  };
 }

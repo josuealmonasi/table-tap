@@ -41,7 +41,7 @@ export default async function OrdersPage() {
         restaurant={r}
         initialOrders={(orders as Order[]) ?? []}
         initialRequests={(requests as ServiceRequest[]) ?? []}
-        canCancel={membership.role === "owner"}
+        canCancel={membership.role !== "kitchen"}
       />
     </ConfirmProvider>
   );

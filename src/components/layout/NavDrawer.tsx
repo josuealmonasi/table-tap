@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV_ITEMS } from "@/lib/nav";
+import { navItemsFor } from "@/lib/nav";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -18,8 +18,8 @@ export default function NavDrawer({
 }: {
   restaurantName: string;
   restaurantLogo: string;
-  /** Staff only get the orders board — no dashboard, menus or management links. */
-  role: "owner" | "staff";
+  /** Managers lose Staff/Settings; kitchen only gets the orders board. */
+  role: "owner" | "manager" | "kitchen";
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -83,7 +83,7 @@ export default function NavDrawer({
             </div>
 
             <nav className="tt-drawer-nav">
-              {role === "owner" && (
+              {role !== "kitchen" && (
                 <Link
                   href="/dashboard"
                   className={`tt-drawer-link ${isActive("/dashboard") ? "tt-drawer-link-active" : ""}`}
@@ -94,7 +94,7 @@ export default function NavDrawer({
                 </Link>
               )}
 
-              {NAV_ITEMS.filter((item) => role === "owner" || item.href === "/dashboard/orders").map((item) =>
+              {navItemsFor(role).map((item) =>
                 item.soon ? (
                   <span key={item.title} className="tt-drawer-link tt-drawer-link-soon">
                     <span className="tt-drawer-emoji">{item.emoji}</span> {item.title}

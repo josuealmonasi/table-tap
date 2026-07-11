@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getMembership } from "@/lib/membership";
 import MenuEditor from "@/components/dashboard/menu/MenuEditor";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { menuSlug } from "@/lib/slug";
-import type { Menu, Restaurant } from "@/lib/types";
+import type { Menu } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -18,12 +19,11 @@ export default async function MenuEditorPage({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: restaurant } = await supabase
-    .from("restaurants")
-    .select("*")
-    .eq("owner_id", user.id)
-    .single();
-  if (!restaurant) redirect("/dashboard");
+  // Owners and managers may edit menus; kitchen goes back to its board.
+  const membership = await getMembership(supabase);
+  if (!membership) redirect("/dashboard");
+  if (membership.role === "kitchen") redirect("/dashboard/orders");
+  const restaurant = membership.restaurant;
 
   const { data: menus } = await supabase
     .from("menus")
@@ -36,7 +36,7 @@ export default async function MenuEditorPage({
 
   return (
     <ConfirmProvider>
-      <MenuEditor restaurant={restaurant as Restaurant} menuId={menu.id} menuName={menu.name} />
+      <MenuEditor restaurant={restaurant} menuId={menu.id} menuName={menu.name} />
     </ConfirmProvider>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useStaff } from "@/hooks/useStaff";
+import { useStaff, type StaffRole } from "@/hooks/useStaff";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 
@@ -14,13 +14,15 @@ export default function StaffPanel({ restaurantId }: StaffPanelProps) {
   const { members, loading, busy, addMember, removeMember } = useStaff(restaurantId);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState<StaffRole>("kitchen");
   const confirm = useConfirm();
 
   async function handleAdd(e: React.FormEvent): Promise<void> {
     e.preventDefault();
-    if (await addMember(email.trim(), password)) {
+    if (await addMember(email.trim(), password, role)) {
       setEmail("");
       setPassword("");
+      setRole("kitchen");
     }
   }
 
@@ -35,7 +37,7 @@ export default function StaffPanel({ restaurantId }: StaffPanelProps) {
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>Staff logins</h3>
             <span className="tt-muted" style={{ fontSize: 12 }}>
-              Staff see the live orders board only — no menus, settings or refunds
+              Kitchen sees the orders board only; managers also run menus, tables and refunds
             </span>
           </div>
 
@@ -47,7 +49,10 @@ export default function StaffPanel({ restaurantId }: StaffPanelProps) {
           )}
           {members.map((m) => (
             <div key={m.id} className="tt-staff-row">
-              <span>👤 {m.email}</span>
+              <span>
+                {m.role === "manager" ? "🧑‍💼" : "👨‍🍳"} {m.email}{" "}
+                <span className="tt-badge">{m.role === "manager" ? "Manager" : "Kitchen"}</span>
+              </span>
               <button
                 className="tt-iconbtn"
                 title="Remove login"
@@ -92,6 +97,13 @@ export default function StaffPanel({ restaurantId }: StaffPanelProps) {
                 required
               />
             </div>
+            <label className="tt-field" style={{ maxWidth: 220 }}>
+              <span className="tt-mod-label">Role</span>
+              <select className="tt-input" value={role} onChange={(e) => setRole(e.target.value as StaffRole)}>
+                <option value="kitchen">Kitchen — orders board only</option>
+                <option value="manager">Manager — menus, tables, refunds</option>
+              </select>
+            </label>
             <div className="tt-prodform-actions">
               <button type="submit" className="tt-btn tt-btn-primary tt-btn-sm" disabled={busy}>
                 {busy ? "Working…" : "+ Add staff login"}
