@@ -543,6 +543,9 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 }
 .tt-tip-chip-active { border-color: var(--tt-accent); color: var(--tt-accent); background: rgba(232,82,42,.06); font-weight: 600; }
 
+/* Customer menu: search box above the category tabs */
+.tt-customer-search { margin-top: 12px; padding: 10px 14px; font-size: 15px; border-radius: 999px; }
+
 /* Customer menu: shown when the restaurant paused orders */
 .tt-closed-banner {
   margin-top: 12px; padding: 10px 14px; border-radius: 12px; font-size: 14px;
