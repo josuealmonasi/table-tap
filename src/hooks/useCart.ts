@@ -21,6 +21,11 @@ export function useCart(restaurant: Restaurant) {
     setItems((prev) => prev.filter((i) => i.cartId !== cartId));
   }
 
+  /** Replaces a line's choices (extras, mods, notes, qty) keeping its place. */
+  function updateItem(cartId: number, line: OrderLineItem) {
+    setItems((prev) => prev.map((i) => (i.cartId === cartId ? { ...line, cartId } : i)));
+  }
+
   /** Strips the given extras from every line — used when they sell out at checkout. */
   function removeExtras(extraIds: string[]) {
     const drop = new Set(extraIds);
@@ -45,5 +50,5 @@ export function useCart(restaurant: Restaurant) {
 
   const count = items.reduce((sum, i) => sum + i.qty, 0);
 
-  return { items, addItem, removeItem, removeExtras, clear, count, ...totals };
+  return { items, addItem, removeItem, updateItem, removeExtras, clear, count, ...totals };
 }
