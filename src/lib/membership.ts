@@ -13,8 +13,12 @@ export interface Membership {
  * owner, a manager (menus/tables/orders), or kitchen (orders board only).
  * Null when logged out or unaffiliated.
  */
-export async function getMembership(supabase: SupabaseClient): Promise<Membership | null> {
-  const { data: { user } } = await supabase.auth.getUser();
+export async function getMembership(
+  supabase: SupabaseClient,
+): Promise<Membership | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return null;
 
   const { data: owned } = await supabase
@@ -39,6 +43,10 @@ export async function getMembership(supabase: SupabaseClient): Promise<Membershi
   if (!restaurant) return null;
   // Co-owners (staff role 'owner') get the full owner experience.
   const role: Role =
-    membership.role === "owner" ? "owner" : membership.role === "manager" ? "manager" : "kitchen";
+    membership.role === "owner"
+      ? "owner"
+      : membership.role === "manager"
+        ? "manager"
+        : "kitchen";
   return { restaurant: restaurant as Restaurant, role };
 }

@@ -8,7 +8,7 @@ import type { ServiceRequest } from "@/lib/types";
 function playChime() {
   try {
     const ctx = new AudioContext();
-    [0, 0.2].forEach((delay) => {
+    [0, 0.2].forEach(delay => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
@@ -28,7 +28,10 @@ function playChime() {
  * Seeds from server data, follows realtime inserts (chiming), and marks
  * requests done via the owner's RLS-scoped client.
  */
-export function useServiceRequests(restaurantId: string, initialRequests: ServiceRequest[]) {
+export function useServiceRequests(
+  restaurantId: string,
+  initialRequests: ServiceRequest[],
+) {
   const [requests, setRequests] = useState<ServiceRequest[]>(initialRequests);
 
   useEffect(() => {
@@ -38,7 +41,9 @@ export function useServiceRequests(restaurantId: string, initialRequests: Servic
 
     (async () => {
       // Reads are owner-only under RLS, so the socket needs the owner's token.
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (cancelled) return;
       if (session) supabase.realtime.setAuth(session.access_token);
 
@@ -46,12 +51,19 @@ export function useServiceRequests(restaurantId: string, initialRequests: Servic
         .channel(`service-requests-${restaurantId}`)
         .on(
           "postgres_changes",
-          { event: "INSERT", schema: "public", table: "service_requests", filter: `restaurant_id=eq.${restaurantId}` },
-          (payload) => {
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "service_requests",
+            filter: `restaurant_id=eq.${restaurantId}`,
+          },
+          payload => {
             const row = payload.new as ServiceRequest;
-            setRequests((prev) => (prev.some((r) => r.id === row.id) ? prev : [row, ...prev]));
+            setRequests(prev =>
+              prev.some(r => r.id === row.id) ? prev : [row, ...prev],
+            );
             playChime();
-          }
+          },
         )
         .subscribe();
     })();
@@ -63,7 +75,7 @@ export function useServiceRequests(restaurantId: string, initialRequests: Servic
   }, [restaurantId]);
 
   async function markDone(id: string): Promise<void> {
-    setRequests((prev) => prev.filter((r) => r.id !== id)); // optimistic
+    setRequests(prev => prev.filter(r => r.id !== id)); // optimistic
     await createClient().from("service_requests").update({ status: "done" }).eq("id", id);
   }
 

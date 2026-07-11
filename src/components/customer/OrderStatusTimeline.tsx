@@ -14,7 +14,7 @@ export default function OrderStatusTimeline({
   status: OrderStatus;
   tableLabel: string | null;
 }) {
-  const activeIndex = STEPS.findIndex((s) => s.key === status);
+  const activeIndex = STEPS.findIndex(s => s.key === status);
   const isReady = status === "ready";
 
   return (
@@ -59,7 +59,10 @@ export default function OrderStatusTimeline({
           🎉 Our team will bring it to Table {tableLabel}!
         </div>
       ) : (
-        <div className="tt-muted" style={{ textAlign: "center", marginTop: 16, fontSize: 13 }}>
+        <div
+          className="tt-muted"
+          style={{ textAlign: "center", marginTop: 16, fontSize: 13 }}
+        >
           ⏱ Estimated wait: 15–20 min
         </div>
       )}

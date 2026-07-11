@@ -36,7 +36,7 @@ export function Modal({
         style={{ maxWidth }}
         role="dialog"
         aria-modal="true"
-        onClick={(e) => e.stopPropagation()}
+        onClick={e => e.stopPropagation()}
       >
         {children}
       </div>

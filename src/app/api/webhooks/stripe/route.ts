@@ -39,9 +39,7 @@ export async function POST(req: NextRequest) {
           status: "received",
           pay_method: "card",
           stripe_payment_intent:
-            typeof session.payment_intent === "string"
-              ? session.payment_intent
-              : null,
+            typeof session.payment_intent === "string" ? session.payment_intent : null,
         })
         .eq("id", orderId);
     }

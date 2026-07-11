@@ -11,10 +11,30 @@ export type NavItem = {
  * are listed dynamically on the dashboard, so they're not part of this list.
  */
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard/orders", emoji: "🧾", title: "Orders", desc: "Live incoming orders" },
-  { href: "/dashboard/tables", emoji: "🪑", title: "Tables & QR", desc: "Manage tables and print QR codes" },
-  { href: "/dashboard/staff", emoji: "👥", title: "Staff", desc: "Team logins and roles" },
-  { href: "/dashboard/settings", emoji: "⚙️", title: "Settings", desc: "Restaurant name, currency and service charge" },
+  {
+    href: "/dashboard/orders",
+    emoji: "🧾",
+    title: "Orders",
+    desc: "Live incoming orders",
+  },
+  {
+    href: "/dashboard/tables",
+    emoji: "🪑",
+    title: "Tables & QR",
+    desc: "Manage tables and print QR codes",
+  },
+  {
+    href: "/dashboard/staff",
+    emoji: "👥",
+    title: "Staff",
+    desc: "Team logins and roles",
+  },
+  {
+    href: "/dashboard/settings",
+    emoji: "⚙️",
+    title: "Settings",
+    desc: "Restaurant name, currency and service charge",
+  },
 ];
 
 export type DashboardRole = "owner" | "manager" | "kitchen" | "admin";
@@ -25,9 +45,16 @@ const OWNER_ONLY = ["/dashboard/staff", "/dashboard/settings"];
 /** The dashboard areas a role may see (drawer links and home tiles). */
 export function navItemsFor(role: DashboardRole): NavItem[] {
   if (role === "admin") {
-    return [{ href: "/dashboard/admin", emoji: "🛡️", title: "Admin", desc: "All restaurants and users" }];
+    return [
+      {
+        href: "/dashboard/admin",
+        emoji: "🛡️",
+        title: "Admin",
+        desc: "All restaurants and users",
+      },
+    ];
   }
-  if (role === "kitchen") return NAV_ITEMS.filter((i) => i.href === "/dashboard/orders");
-  if (role === "manager") return NAV_ITEMS.filter((i) => !OWNER_ONLY.includes(i.href));
+  if (role === "kitchen") return NAV_ITEMS.filter(i => i.href === "/dashboard/orders");
+  if (role === "manager") return NAV_ITEMS.filter(i => !OWNER_ONLY.includes(i.href));
   return NAV_ITEMS;
 }

@@ -40,7 +40,8 @@ export async function POST(req: NextRequest) {
     table_label: table.label,
     kind,
   });
-  if (error) return NextResponse.json({ error: "Could not send request" }, { status: 500 });
+  if (error)
+    return NextResponse.json({ error: "Could not send request" }, { status: 500 });
 
   return NextResponse.json({ ok: true });
 }

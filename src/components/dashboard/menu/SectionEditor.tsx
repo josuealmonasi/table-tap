@@ -17,7 +17,11 @@ interface SectionEditorProps {
   currency: string;
   onRename: (id: string, name: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
-  onAddProduct: (categoryId: string | null, input: ProductInput, addonIds: string[]) => Promise<void>;
+  onAddProduct: (
+    categoryId: string | null,
+    input: ProductInput,
+    addonIds: string[],
+  ) => Promise<void>;
   onUpdateProduct: (id: string, input: ProductInput, addonIds: string[]) => Promise<void>;
   onDeleteProduct: (id: string) => Promise<void>;
   onToggleAvailable: (id: string, available: boolean) => void;
@@ -74,14 +78,21 @@ export default function SectionEditor({
           {section && renaming ? (
             <form
               style={{ display: "flex", gap: 8, flex: 1 }}
-              onSubmit={async (e) => {
+              onSubmit={async e => {
                 e.preventDefault();
                 if (name.trim()) await onRename(section.id, name.trim());
                 setRenaming(false);
               }}
             >
-              <input className="tt-input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-              <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">Save</button>
+              <input
+                className="tt-input"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                autoFocus
+              />
+              <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">
+                Save
+              </button>
             </form>
           ) : (
             <>
@@ -93,10 +104,21 @@ export default function SectionEditor({
                   onMoveDown={() => onMoveSection(section.id, "down")}
                 />
               )}
-              <h3 className="tt-serif" style={{ margin: 0 }}>{section ? section.name : "Uncategorized"}</h3>
+              <h3 className="tt-serif" style={{ margin: 0 }}>
+                {section ? section.name : "Uncategorized"}
+              </h3>
               {section && (
                 <div className="tt-prod-actions">
-                  <button className="tt-iconbtn" title="Rename" onClick={() => { setName(section.name); setRenaming(true); }}>✏️</button>
+                  <button
+                    className="tt-iconbtn"
+                    title="Rename"
+                    onClick={() => {
+                      setName(section.name);
+                      setRenaming(true);
+                    }}
+                  >
+                    ✏️
+                  </button>
                   <button
                     className="tt-iconbtn"
                     title="Delete section"
@@ -123,7 +145,11 @@ export default function SectionEditor({
       </div>
 
       <div className="tt-section-right">
-        {products.length === 0 && <p className="tt-muted" style={{ fontSize: 13 }}>No products yet.</p>}
+        {products.length === 0 && (
+          <p className="tt-muted" style={{ fontSize: 13 }}>
+            No products yet.
+          </p>
+        )}
         {products.map((p, i) => (
           <ProductRow
             key={p.id}
@@ -166,7 +192,9 @@ export default function SectionEditor({
             if (modalForms) {
               return (
                 <>
-                  <button className="tt-add-more" onClick={() => setAdding(true)}>+ Add product</button>
+                  <button className="tt-add-more" onClick={() => setAdding(true)}>
+                    + Add product
+                  </button>
                   <Modal open={adding} onClose={() => setAdding(false)} maxWidth={720}>
                     {addForm}
                   </Modal>
@@ -177,7 +205,9 @@ export default function SectionEditor({
             return adding ? (
               <div className="tt-prod tt-prod-editing">{addForm}</div>
             ) : (
-              <button className="tt-add-more" onClick={() => setAdding(true)}>+ Add product</button>
+              <button className="tt-add-more" onClick={() => setAdding(true)}>
+                + Add product
+              </button>
             );
           })()}
       </div>

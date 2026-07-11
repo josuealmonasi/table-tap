@@ -64,7 +64,7 @@ const ADDON_ICON_GROUPS: IconGroup[] = [
 /** Which group contains the currently chosen emoji (so we can open it by default). */
 function findGroupWith(groups: IconGroup[], value: string) {
   if (!value) return null;
-  return groups.find((g) => g.items.some((i) => i.emoji === value))?.group ?? null;
+  return groups.find(g => g.items.some(i => i.emoji === value))?.group ?? null;
 }
 
 /**
@@ -84,16 +84,18 @@ export default function IconPicker({
   variant?: "product" | "addon";
 }) {
   const groups = variant === "addon" ? ADDON_ICON_GROUPS : PRODUCT_ICON_GROUPS;
-  const [openGroup, setOpenGroup] = useState<string | null>(() => findGroupWith(groups, value));
+  const [openGroup, setOpenGroup] = useState<string | null>(() =>
+    findGroupWith(groups, value),
+  );
 
   return (
     <div>
       <div className="tt-mod-label">{label}</div>
 
       <div className="tt-accordion">
-        {groups.map((g) => {
+        {groups.map(g => {
           const isOpen = openGroup === g.group;
-          const selected = g.items.find((i) => i.emoji === value);
+          const selected = g.items.find(i => i.emoji === value);
           return (
             <div key={g.group} className="tt-acc-item">
               <button
@@ -110,7 +112,7 @@ export default function IconPicker({
               </button>
               {isOpen && (
                 <div className="tt-chips tt-acc-body">
-                  {g.items.map((o) => (
+                  {g.items.map(o => (
                     <button
                       type="button"
                       key={o.emoji}

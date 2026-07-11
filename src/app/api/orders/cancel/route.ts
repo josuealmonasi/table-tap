@@ -13,7 +13,9 @@ export async function POST(req: NextRequest) {
   if (!id) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // Refunds move money, so only the owner or a manager may cancel. The RLS
@@ -23,8 +25,9 @@ export async function POST(req: NextRequest) {
     .select("id, restaurants(owner_id)")
     .eq("id", id)
     .single();
-  const rel = (visible as { restaurants?: { owner_id?: string } | { owner_id?: string }[] } | null)
-    ?.restaurants;
+  const rel = (
+    visible as { restaurants?: { owner_id?: string } | { owner_id?: string }[] } | null
+  )?.restaurants;
   const ownerId = Array.isArray(rel) ? rel[0]?.owner_id : rel?.owner_id;
   if (!visible) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (ownerId !== user.id) {
@@ -50,7 +53,7 @@ export async function POST(req: NextRequest) {
   if (order.status !== "received" && order.status !== "preparing") {
     return NextResponse.json(
       { error: "Only new or preparing orders can be cancelled." },
-      { status: 409 }
+      { status: 409 },
     );
   }
 
@@ -62,7 +65,7 @@ export async function POST(req: NextRequest) {
       // silently without a refund.
       return NextResponse.json(
         { error: "Payment is still settling — try again in a moment." },
-        { status: 409 }
+        { status: 409 },
       );
     }
     try {
@@ -70,14 +73,14 @@ export async function POST(req: NextRequest) {
       // instead of failing on an already-refunded payment.
       const refund = await stripe.refunds.create(
         { payment_intent: order.stripe_payment_intent },
-        { idempotencyKey: `cancel-${order.id}` }
+        { idempotencyKey: `cancel-${order.id}` },
       );
       refundId = refund.id;
     } catch (err) {
       console.error("refund error", err);
       return NextResponse.json(
         { error: "Refund failed — the order was NOT cancelled. Try again." },
-        { status: 500 }
+        { status: 500 },
       );
     }
   }

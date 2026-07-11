@@ -30,7 +30,7 @@ export default function MoveToSection({
 
       {categories.length > 0 ? (
         <div className="tt-move-list">
-          {categories.map((c) => (
+          {categories.map(c => (
             <button
               key={c.id}
               className="tt-move-option"
@@ -54,7 +54,7 @@ export default function MoveToSection({
         <form
           className="tt-add-section"
           style={{ marginTop: 14 }}
-          onSubmit={async (e) => {
+          onSubmit={async e => {
             e.preventDefault();
             if (!newName.trim()) return;
             setBusy(true);
@@ -67,16 +67,25 @@ export default function MoveToSection({
             className="tt-input"
             placeholder="New section name…"
             value={newName}
-            onChange={(e) => setNewName(e.target.value)}
+            onChange={e => setNewName(e.target.value)}
           />
-          <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit" disabled={!newName.trim() || busy}>
+          <button
+            className="tt-btn tt-btn-primary tt-btn-sm"
+            type="submit"
+            disabled={!newName.trim() || busy}
+          >
             Create &amp; move
           </button>
         </form>
       )}
 
       <div className="tt-prodform-actions" style={{ marginTop: 16 }}>
-        <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={onCancel} disabled={busy}>
+        <button
+          type="button"
+          className="tt-btn tt-btn-ghost tt-btn-sm"
+          onClick={onCancel}
+          disabled={busy}
+        >
           Cancel
         </button>
       </div>

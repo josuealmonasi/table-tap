@@ -47,9 +47,19 @@ export default function Navbar({
     <nav className="tt-navbar">
       <div className="container tt-navbar-inner">
         <div className="tt-navbar-left">
-          <NavDrawer restaurantName={restaurantName} restaurantLogo={restaurantLogo} role={role} />
+          <NavDrawer
+            restaurantName={restaurantName}
+            restaurantLogo={restaurantLogo}
+            role={role}
+          />
           <Link
-            href={role === "admin" ? "/dashboard/admin" : role === "kitchen" ? "/dashboard/orders" : "/dashboard"}
+            href={
+              role === "admin"
+                ? "/dashboard/admin"
+                : role === "kitchen"
+                  ? "/dashboard/orders"
+                  : "/dashboard"
+            }
             className="tt-navbar-brand"
           >
             <span className="tt-navbar-logo">{restaurantLogo || "🍴"}</span>
@@ -64,18 +74,28 @@ export default function Navbar({
             aria-haspopup="true"
             aria-expanded={open}
             aria-label="Account menu"
-            onClick={() => setOpen((o) => !o)}
+            onClick={() => setOpen(o => !o)}
           >
             👤
           </button>
 
           {open && (
             <div className="tt-user-dropdown" role="menu">
-              <Link href="/dashboard/profile" role="menuitem" className="tt-user-item" onClick={() => setOpen(false)}>
+              <Link
+                href="/dashboard/profile"
+                role="menuitem"
+                className="tt-user-item"
+                onClick={() => setOpen(false)}
+              >
                 Profile
               </Link>
               {role === "owner" && (
-                <Link href="/dashboard/settings" role="menuitem" className="tt-user-item" onClick={() => setOpen(false)}>
+                <Link
+                  href="/dashboard/settings"
+                  role="menuitem"
+                  className="tt-user-item"
+                  onClick={() => setOpen(false)}
+                >
                   Settings
                 </Link>
               )}

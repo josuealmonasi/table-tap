@@ -52,7 +52,7 @@ export default function EditorHeader({
             placeholder="🔍 Search products & extras…"
             aria-label="Search products and extras"
             value={search}
-            onChange={(e) => onSearch(e.target.value)}
+            onChange={e => onSearch(e.target.value)}
           />
           <button
             type="button"

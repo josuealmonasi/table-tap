@@ -8,12 +8,16 @@ export const dynamic = "force-dynamic";
 // /dashboard/settings — edit the restaurant's identity and service charge.
 export default async function SettingsPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const { data: restaurant } = await supabase
     .from("restaurants")
-    .select("id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders")
+    .select(
+      "id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders",
+    )
     .eq("owner_id", user.id)
     .single();
   if (!restaurant) redirect("/dashboard");

@@ -16,10 +16,10 @@ Reference competitor: https://klikit.io/
 
 ## Actors
 
-| Actor | Needs |
-| --- | --- |
-| **Diner** | Scan → browse menu → customise items → pay → track status. No login. |
-| **Kitchen / staff** | See incoming orders live, advance status, know the table. Login required. |
+| Actor                | Needs                                                                            |
+| -------------------- | -------------------------------------------------------------------------------- |
+| **Diner**            | Scan → browse menu → customise items → pay → track status. No login.             |
+| **Kitchen / staff**  | See incoming orders live, advance status, know the table. Login required.        |
 | **Restaurant owner** | Manage menu, tables, pricing; print QR codes; see revenue. (Mostly future work.) |
 
 ## End-to-end flow
@@ -81,6 +81,7 @@ pending_payment ──(stripe webhook: paid)──▶ received ──▶ prepari
 ## Open decisions / next steps
 
 **Decide soon (they shape the build):**
+
 - **Payments by region** — Stripe covers card + Apple/Google Pay. PayPal is a
   separate integration; confirm it's actually needed for the launch market.
 - **Tipping** — common expectation in some markets, not in Japan. Add as a
@@ -91,6 +92,7 @@ pending_payment ──(stripe webhook: paid)──▶ received ──▶ prepari
   restaurants onboard onto? Affects billing, onboarding, subdomains.
 
 **Build next (schema/RLS already support most):**
+
 - Menu management UI (CRUD) for owners — currently menu is edited via SQL.
 - QR code generation + printable per-table PDFs.
 - Order history + basic analytics (covers, revenue, popular items).

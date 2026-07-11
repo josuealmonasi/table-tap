@@ -13,18 +13,34 @@ interface CartLineRowProps {
 }
 
 /** A single line in the cart, with its modifiers, notes, edit and remove. */
-export default function CartLineRow({ item, currency, soldOut = false, onRemove, onEdit }: CartLineRowProps) {
+export default function CartLineRow({
+  item,
+  currency,
+  soldOut = false,
+  onRemove,
+  onEdit,
+}: CartLineRowProps) {
   return (
-    <div className={`tt-card ${soldOut ? "tt-cart-soldout" : ""}`} style={{ padding: 14 }}>
+    <div
+      className={`tt-card ${soldOut ? "tt-cart-soldout" : ""}`}
+      style={{ padding: 14 }}
+    >
       <div style={{ display: "flex", gap: 12 }}>
         <span style={{ fontSize: 28 }}>{item.emoji || "🍽️"}</span>
         <div style={{ flex: 1 }}>
           <div className="tt-row">
             <strong>
               {item.qty}× {item.name}
-              {soldOut && <span className="tt-badge" style={{ marginLeft: 8 }}>Sold out</span>}
+              {soldOut && (
+                <span className="tt-badge" style={{ marginLeft: 8 }}>
+                  Sold out
+                </span>
+              )}
             </strong>
-            <strong className={soldOut ? "tt-muted" : "tt-accent"} style={soldOut ? { textDecoration: "line-through" } : undefined}>
+            <strong
+              className={soldOut ? "tt-muted" : "tt-accent"}
+              style={soldOut ? { textDecoration: "line-through" } : undefined}
+            >
               {formatMoney(lineUnitPrice(item) * item.qty, currency)}
             </strong>
           </div>
@@ -35,7 +51,7 @@ export default function CartLineRow({ item, currency, soldOut = false, onRemove,
           ))}
           {item.extras && item.extras.length > 0 && (
             <div className="tt-muted" style={{ fontSize: 12 }}>
-              + {item.extras.map((e) => e.name).join(", ")}
+              + {item.extras.map(e => e.name).join(", ")}
             </div>
           )}
           {item.notes && (
@@ -44,8 +60,17 @@ export default function CartLineRow({ item, currency, soldOut = false, onRemove,
             </div>
           )}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
-          <button className="tt-x" onClick={() => onRemove(item.cartId)}>×</button>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+            alignItems: "center",
+          }}
+        >
+          <button className="tt-x" onClick={() => onRemove(item.cartId)}>
+            ×
+          </button>
           {onEdit && !soldOut && (
             <button
               className="tt-iconbtn"

@@ -6,43 +6,205 @@
 /** Dish pool (grouped by section). populateMenu() samples from this. */
 const DISHES = [
   // Starters
-  { c: "Starters", name: "Edamame", price: 5.0, emoji: "🫛", desc: "Steamed young soybeans, sea salt" },
-  { c: "Starters", name: "Spring Rolls", price: 6.5, emoji: "🥢", desc: "Crispy veg rolls, sweet chili dip" },
-  { c: "Starters", name: "Gyoza", price: 7.0, emoji: "🥟", desc: "Pan-fried pork dumplings" },
-  { c: "Starters", name: "Bruschetta", price: 6.0, emoji: "🍅", desc: "Toasted sourdough, tomato, basil" },
-  { c: "Starters", name: "Garlic Bread", price: 4.5, emoji: "🧄", desc: "Warm, buttery, herby" },
-  { c: "Starters", name: "Chicken Wings", price: 8.5, emoji: "🍗", desc: "Six wings, house hot sauce" },
-  { c: "Starters", name: "Loaded Nachos", price: 8.0, emoji: "🧀", desc: "Cheese, jalapeños, salsa" },
-  { c: "Starters", name: "Calamari", price: 9.0, emoji: "🦑", desc: "Crispy squid, lemon aioli" },
-  { c: "Starters", name: "Soup of the Day", price: 5.5, emoji: "🍲", desc: "Ask your server" },
+  {
+    c: "Starters",
+    name: "Edamame",
+    price: 5.0,
+    emoji: "🫛",
+    desc: "Steamed young soybeans, sea salt",
+  },
+  {
+    c: "Starters",
+    name: "Spring Rolls",
+    price: 6.5,
+    emoji: "🥢",
+    desc: "Crispy veg rolls, sweet chili dip",
+  },
+  {
+    c: "Starters",
+    name: "Gyoza",
+    price: 7.0,
+    emoji: "🥟",
+    desc: "Pan-fried pork dumplings",
+  },
+  {
+    c: "Starters",
+    name: "Bruschetta",
+    price: 6.0,
+    emoji: "🍅",
+    desc: "Toasted sourdough, tomato, basil",
+  },
+  {
+    c: "Starters",
+    name: "Garlic Bread",
+    price: 4.5,
+    emoji: "🧄",
+    desc: "Warm, buttery, herby",
+  },
+  {
+    c: "Starters",
+    name: "Chicken Wings",
+    price: 8.5,
+    emoji: "🍗",
+    desc: "Six wings, house hot sauce",
+  },
+  {
+    c: "Starters",
+    name: "Loaded Nachos",
+    price: 8.0,
+    emoji: "🧀",
+    desc: "Cheese, jalapeños, salsa",
+  },
+  {
+    c: "Starters",
+    name: "Calamari",
+    price: 9.0,
+    emoji: "🦑",
+    desc: "Crispy squid, lemon aioli",
+  },
+  {
+    c: "Starters",
+    name: "Soup of the Day",
+    price: 5.5,
+    emoji: "🍲",
+    desc: "Ask your server",
+  },
   // Mains
-  { c: "Mains", name: "Margherita Pizza", price: 11.0, emoji: "🍕", desc: "Tomato, mozzarella, basil" },
-  { c: "Mains", name: "Classic Cheeseburger", price: 12.5, emoji: "🍔", desc: "Beef, cheddar, pickles, fries" },
-  { c: "Mains", name: "Tonkotsu Ramen", price: 13.0, emoji: "🍜", desc: "Rich pork broth, egg, chashu" },
-  { c: "Mains", name: "Pad Thai", price: 11.5, emoji: "🍤", desc: "Rice noodles, peanuts, lime" },
-  { c: "Mains", name: "Grilled Salmon", price: 16.0, emoji: "🐟", desc: "Seasonal greens, lemon butter" },
-  { c: "Mains", name: "Ribeye Steak", price: 22.0, emoji: "🥩", desc: "300g, chimichurri, fries" },
-  { c: "Mains", name: "Chicken Curry", price: 12.0, emoji: "🍛", desc: "Coconut, jasmine rice" },
-  { c: "Mains", name: "Fish & Chips", price: 13.5, emoji: "🍟", desc: "Beer-battered cod, mushy peas" },
-  { c: "Mains", name: "Spaghetti Carbonara", price: 12.0, emoji: "🍝", desc: "Pancetta, egg, pecorino" },
-  { c: "Mains", name: "Beef Tacos", price: 10.5, emoji: "🌮", desc: "Three, salsa verde, lime" },
-  { c: "Mains", name: "Veggie Buddha Bowl", price: 11.0, emoji: "🥗", desc: "Grains, roasted veg, tahini" },
-  { c: "Mains", name: "Katsu Curry", price: 12.5, emoji: "🍱", desc: "Panko chicken, curry sauce" },
+  {
+    c: "Mains",
+    name: "Margherita Pizza",
+    price: 11.0,
+    emoji: "🍕",
+    desc: "Tomato, mozzarella, basil",
+  },
+  {
+    c: "Mains",
+    name: "Classic Cheeseburger",
+    price: 12.5,
+    emoji: "🍔",
+    desc: "Beef, cheddar, pickles, fries",
+  },
+  {
+    c: "Mains",
+    name: "Tonkotsu Ramen",
+    price: 13.0,
+    emoji: "🍜",
+    desc: "Rich pork broth, egg, chashu",
+  },
+  {
+    c: "Mains",
+    name: "Pad Thai",
+    price: 11.5,
+    emoji: "🍤",
+    desc: "Rice noodles, peanuts, lime",
+  },
+  {
+    c: "Mains",
+    name: "Grilled Salmon",
+    price: 16.0,
+    emoji: "🐟",
+    desc: "Seasonal greens, lemon butter",
+  },
+  {
+    c: "Mains",
+    name: "Ribeye Steak",
+    price: 22.0,
+    emoji: "🥩",
+    desc: "300g, chimichurri, fries",
+  },
+  {
+    c: "Mains",
+    name: "Chicken Curry",
+    price: 12.0,
+    emoji: "🍛",
+    desc: "Coconut, jasmine rice",
+  },
+  {
+    c: "Mains",
+    name: "Fish & Chips",
+    price: 13.5,
+    emoji: "🍟",
+    desc: "Beer-battered cod, mushy peas",
+  },
+  {
+    c: "Mains",
+    name: "Spaghetti Carbonara",
+    price: 12.0,
+    emoji: "🍝",
+    desc: "Pancetta, egg, pecorino",
+  },
+  {
+    c: "Mains",
+    name: "Beef Tacos",
+    price: 10.5,
+    emoji: "🌮",
+    desc: "Three, salsa verde, lime",
+  },
+  {
+    c: "Mains",
+    name: "Veggie Buddha Bowl",
+    price: 11.0,
+    emoji: "🥗",
+    desc: "Grains, roasted veg, tahini",
+  },
+  {
+    c: "Mains",
+    name: "Katsu Curry",
+    price: 12.5,
+    emoji: "🍱",
+    desc: "Panko chicken, curry sauce",
+  },
   // Sides
   { c: "Sides", name: "French Fries", price: 4.0, emoji: "🍟", desc: "Crispy, sea salt" },
   { c: "Sides", name: "Onion Rings", price: 4.5, emoji: "🧅", desc: "Beer-battered" },
-  { c: "Sides", name: "Side Salad", price: 4.0, emoji: "🥗", desc: "Mixed leaves, vinaigrette" },
-  { c: "Sides", name: "Mashed Potatoes", price: 4.5, emoji: "🥔", desc: "Buttery, creamy" },
+  {
+    c: "Sides",
+    name: "Side Salad",
+    price: 4.0,
+    emoji: "🥗",
+    desc: "Mixed leaves, vinaigrette",
+  },
+  {
+    c: "Sides",
+    name: "Mashed Potatoes",
+    price: 4.5,
+    emoji: "🥔",
+    desc: "Buttery, creamy",
+  },
   { c: "Sides", name: "Steamed Rice", price: 3.0, emoji: "🍚", desc: "Jasmine" },
   { c: "Sides", name: "Coleslaw", price: 3.5, emoji: "🥬", desc: "House-made" },
   // Desserts
   { c: "Desserts", name: "Cheesecake", price: 6.5, emoji: "🍰", desc: "New York style" },
-  { c: "Desserts", name: "Chocolate Lava Cake", price: 7.0, emoji: "🍫", desc: "Molten center, vanilla ice cream" },
-  { c: "Desserts", name: "Matcha Tiramisu", price: 7.5, emoji: "🍵", desc: "Green tea twist" },
-  { c: "Desserts", name: "Mochi Ice Cream", price: 5.5, emoji: "🍡", desc: "Three pieces" },
+  {
+    c: "Desserts",
+    name: "Chocolate Lava Cake",
+    price: 7.0,
+    emoji: "🍫",
+    desc: "Molten center, vanilla ice cream",
+  },
+  {
+    c: "Desserts",
+    name: "Matcha Tiramisu",
+    price: 7.5,
+    emoji: "🍵",
+    desc: "Green tea twist",
+  },
+  {
+    c: "Desserts",
+    name: "Mochi Ice Cream",
+    price: 5.5,
+    emoji: "🍡",
+    desc: "Three pieces",
+  },
   { c: "Desserts", name: "Apple Pie", price: 6.0, emoji: "🥧", desc: "Warm, cinnamon" },
   // Drinks
-  { c: "Drinks", name: "Iced Latte", price: 4.5, emoji: "🧋", desc: "Double shot, oat option" },
+  {
+    c: "Drinks",
+    name: "Iced Latte",
+    price: 4.5,
+    emoji: "🧋",
+    desc: "Double shot, oat option",
+  },
   { c: "Drinks", name: "Green Tea", price: 3.0, emoji: "🍵", desc: "Sencha" },
   { c: "Drinks", name: "Fresh Lemonade", price: 4.0, emoji: "🍋", desc: "House-made" },
   { c: "Drinks", name: "Craft Beer", price: 6.0, emoji: "🍺", desc: "Local IPA" },
@@ -89,7 +251,15 @@ const sample = (arr, n) => shuffle(arr).slice(0, n);
 async function bulkInsert(pg, table, columns, rows, returning = "") {
   if (!rows.length) return [];
   const params = [];
-  const tuples = rows.map((row) => `(${row.map((v) => { params.push(v); return `$${params.length}`; }).join(",")})`);
+  const tuples = rows.map(
+    row =>
+      `(${row
+        .map(v => {
+          params.push(v);
+          return `$${params.length}`;
+        })
+        .join(",")})`,
+  );
   const sql = `insert into ${table} (${columns.join(",")}) values ${tuples.join(",")}${returning ? ` returning ${returning}` : ""}`;
   const { rows: out } = await pg.query(sql, params);
   return out;
@@ -106,9 +276,11 @@ async function bulkInsert(pg, table, columns, rows, returning = "") {
  * @param {string} menuId
  */
 export async function populateMenu(pg, restaurantId, menuId) {
-  const { rows: [{ count }] } = await pg.query(
+  const {
+    rows: [{ count }],
+  } = await pg.query(
     "select count(*)::int as count from menu_items where menu_id = $1 and not is_addon",
-    [menuId]
+    [menuId],
   );
   if (count >= 20) return { skipped: true };
 
@@ -120,29 +292,50 @@ export async function populateMenu(pg, restaurantId, menuId) {
   const extras = sample(EXTRAS, EXTRAS_PER_MENU);
 
   // Sections actually used, in a sensible order.
-  const usedSections = SECTION_ORDER.filter((s) => dishes.some((d) => d.c === s));
+  const usedSections = SECTION_ORDER.filter(s => dishes.some(d => d.c === s));
   const catRows = await bulkInsert(
     pg,
     "categories",
     ["restaurant_id", "menu_id", "name", "sort_order"],
     usedSections.map((name, i) => [restaurantId, menuId, name, i]),
-    "id, name"
+    "id, name",
   );
-  const catId = Object.fromEntries(catRows.map((r) => [r.name, r.id]));
+  const catId = Object.fromEntries(catRows.map(r => [r.name, r.id]));
 
   // Extras (add-on items).
   const itemCols = [
-    "restaurant_id", "menu_id", "category_id", "name", "description",
-    "price", "emoji", "popular", "available", "is_addon", "sort_order",
+    "restaurant_id",
+    "menu_id",
+    "category_id",
+    "name",
+    "description",
+    "price",
+    "emoji",
+    "popular",
+    "available",
+    "is_addon",
+    "sort_order",
   ];
   const addonRows = await bulkInsert(
     pg,
     "menu_items",
     itemCols,
-    extras.map((e, i) => [restaurantId, menuId, null, e.name, null, e.price, e.emoji, false, true, true, i]),
-    "id"
+    extras.map((e, i) => [
+      restaurantId,
+      menuId,
+      null,
+      e.name,
+      null,
+      e.price,
+      e.emoji,
+      false,
+      true,
+      true,
+      i,
+    ]),
+    "id",
   );
-  const addonIds = addonRows.map((r) => r.id);
+  const addonIds = addonRows.map(r => r.id);
 
   // Products (RETURNING order matches VALUES order in a single INSERT).
   const sortByCat = {};
@@ -150,19 +343,33 @@ export async function populateMenu(pg, restaurantId, menuId) {
     pg,
     "menu_items",
     itemCols,
-    dishes.map((d) => {
+    dishes.map(d => {
       const sort = (sortByCat[d.c] = (sortByCat[d.c] ?? 0) + 1);
       const popular = Math.random() < 0.3;
       const available = Math.random() > 0.12;
-      return [restaurantId, menuId, catId[d.c], d.name, d.desc, d.price, d.emoji, popular, available, false, sort];
+      return [
+        restaurantId,
+        menuId,
+        catId[d.c],
+        d.name,
+        d.desc,
+        d.price,
+        d.emoji,
+        popular,
+        available,
+        false,
+        sort,
+      ];
     }),
-    "id"
+    "id",
   );
 
   // Link each product to a random 0–4 of the menu's extras.
   const links = [];
   for (const p of productRows) {
-    sample(addonIds, randInt(0, 4)).forEach((addonId, i) => links.push([p.id, addonId, i]));
+    sample(addonIds, randInt(0, 4)).forEach((addonId, i) =>
+      links.push([p.id, addonId, i]),
+    );
   }
   await bulkInsert(pg, "item_addons", ["product_id", "addon_id", "sort_order"], links);
 

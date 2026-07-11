@@ -17,7 +17,9 @@ export async function PATCH(req: NextRequest) {
   }
 
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // Authorisation is the RLS read itself: only the owner and their staff can
@@ -33,7 +35,10 @@ export async function PATCH(req: NextRequest) {
 
   // Ownership is verified above. Orders have no client UPDATE policy (writes are
   // server-only), so perform the update with the secret key.
-  const { error } = await createAdminClient().from("orders").update({ status }).eq("id", id);
+  const { error } = await createAdminClient()
+    .from("orders")
+    .update({ status })
+    .eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true });

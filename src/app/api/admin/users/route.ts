@@ -13,7 +13,7 @@ async function log(
   actorEmail: string,
   action: "created" | "deleted",
   targetRole: string,
-  targetEmail: string
+  targetEmail: string,
 ): Promise<void> {
   await createAdminClient().from("user_logs").insert({
     restaurant_id: restaurantId,
@@ -36,27 +36,44 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Enter a valid email." }, { status: 400 });
   }
   if (typeof password !== "string" || password.length < 8) {
-    return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Password must be at least 8 characters." },
+      { status: 400 },
+    );
   }
   if (!ROLES.includes(role)) {
     return NextResponse.json({ error: "Pick a role." }, { status: 400 });
   }
-  if (role !== "admin" && !restaurantId && !(role === "owner" && restaurantName?.trim())) {
-    return NextResponse.json({ error: "Pick a restaurant (or name a new one for an owner)." }, { status: 400 });
+  if (
+    role !== "admin" &&
+    !restaurantId &&
+    !(role === "owner" && restaurantName?.trim())
+  ) {
+    return NextResponse.json(
+      { error: "Pick a restaurant (or name a new one for an owner)." },
+      { status: 400 },
+    );
   }
 
   const db = createAdminClient();
 
   // Owner cap applies when attaching a co-owner to an existing restaurant.
   if (role === "owner" && restaurantId) {
-    const { data: r } = await db.from("restaurants").select("owner_id").eq("id", restaurantId).single();
+    const { data: r } = await db
+      .from("restaurants")
+      .select("owner_id")
+      .eq("id", restaurantId)
+      .single();
     const { count } = await db
       .from("staff")
       .select("id", { count: "exact", head: true })
       .eq("restaurant_id", restaurantId)
       .eq("role", "owner");
     if ((r?.owner_id ? 1 : 0) + (count ?? 0) >= MAX_OWNERS) {
-      return NextResponse.json({ error: `That restaurant already has ${MAX_OWNERS} owners.` }, { status: 409 });
+      return NextResponse.json(
+        { error: `That restaurant already has ${MAX_OWNERS} owners.` },
+        { status: 409 },
+      );
     }
   }
 
@@ -66,12 +83,17 @@ export async function POST(req: NextRequest) {
     email_confirm: true,
   });
   if (userErr || !created.user) {
-    return NextResponse.json({ error: userErr?.message ?? "Could not create the login." }, { status: 400 });
+    return NextResponse.json(
+      { error: userErr?.message ?? "Could not create the login." },
+      { status: 400 },
+    );
   }
 
   try {
     if (role === "admin") {
-      const { error } = await db.from("platform_admins").insert({ user_id: created.user.id, email });
+      const { error } = await db
+        .from("platform_admins")
+        .insert({ user_id: created.user.id, email });
       if (error) throw error;
     } else if (role === "owner" && !restaurantId) {
       const { error } = await db
@@ -90,7 +112,10 @@ export async function POST(req: NextRequest) {
     }
   } catch {
     await db.auth.admin.deleteUser(created.user.id); // roll back the login
-    return NextResponse.json({ error: "Could not attach the new login." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Could not attach the new login." },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({ ok: true });
@@ -105,16 +130,23 @@ export async function DELETE(req: NextRequest) {
   const { userId } = await req.json();
   if (!userId) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   if (userId === admin.userId) {
-    return NextResponse.json({ error: "You can't delete your own admin login." }, { status: 409 });
+    return NextResponse.json(
+      { error: "You can't delete your own admin login." },
+      { status: 409 },
+    );
   }
 
   const db = createAdminClient();
 
-  const { data: owned } = await db.from("restaurants").select("id, name").eq("owner_id", userId).single();
+  const { data: owned } = await db
+    .from("restaurants")
+    .select("id, name")
+    .eq("owner_id", userId)
+    .single();
   if (owned) {
     return NextResponse.json(
       { error: `This user founded "${owned.name}" — delete that restaurant first.` },
-      { status: 409 }
+      { status: 409 },
     );
   }
 
@@ -126,8 +158,10 @@ export async function DELETE(req: NextRequest) {
     .single();
 
   const { error } = await db.auth.admin.deleteUser(userId);
-  if (error) return NextResponse.json({ error: "Could not delete the login." }, { status: 500 });
+  if (error)
+    return NextResponse.json({ error: "Could not delete the login." }, { status: 500 });
 
-  if (member) await log(member.restaurant_id, admin.email, "deleted", member.role, member.email);
+  if (member)
+    await log(member.restaurant_id, admin.email, "deleted", member.role, member.email);
   return NextResponse.json({ ok: true });
 }

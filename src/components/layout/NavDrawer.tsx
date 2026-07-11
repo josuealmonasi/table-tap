@@ -67,7 +67,7 @@ export default function NavDrawer({
             role="dialog"
             aria-modal="true"
             aria-label="Navigation"
-            onClick={(e) => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
           >
             <div className="tt-drawer-head">
               <span className="tt-navbar-logo">{restaurantLogo || "🍴"}</span>
@@ -94,11 +94,13 @@ export default function NavDrawer({
                 </Link>
               )}
 
-              {navItemsFor(role).map((item) =>
+              {navItemsFor(role).map(item =>
                 item.soon ? (
                   <span key={item.title} className="tt-drawer-link tt-drawer-link-soon">
                     <span className="tt-drawer-emoji">{item.emoji}</span> {item.title}
-                    <span className="tt-badge" style={{ marginLeft: "auto" }}>Soon</span>
+                    <span className="tt-badge" style={{ marginLeft: "auto" }}>
+                      Soon
+                    </span>
                   </span>
                 ) : (
                   <Link
@@ -110,11 +112,15 @@ export default function NavDrawer({
                   >
                     <span className="tt-drawer-emoji">{item.emoji}</span> {item.title}
                   </Link>
-                )
+                ),
               )}
             </nav>
 
-            <button type="button" className="tt-drawer-link tt-drawer-signout" onClick={signOut}>
+            <button
+              type="button"
+              className="tt-drawer-link tt-drawer-signout"
+              onClick={signOut}
+            >
               <span className="tt-drawer-emoji">🚪</span> Sign out
             </button>
           </aside>

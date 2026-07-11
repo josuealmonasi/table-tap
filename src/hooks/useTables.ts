@@ -22,7 +22,10 @@ export function useTables(restaurantId: string) {
     return !error;
   }
 
-  async function run(action: string, write: PromiseLike<{ error: { message: string } | null }>): Promise<void> {
+  async function run(
+    action: string,
+    write: PromiseLike<{ error: { message: string } | null }>,
+  ): Promise<void> {
     setBusy(true);
     const { error } = await write;
     if (reportError(action, error)) router.refresh();
@@ -30,10 +33,16 @@ export function useTables(restaurantId: string) {
   }
 
   const addTable = (label: string): Promise<void> =>
-    run("add the table", supabase.from("restaurant_tables").insert({ restaurant_id: restaurantId, label }));
+    run(
+      "add the table",
+      supabase.from("restaurant_tables").insert({ restaurant_id: restaurantId, label }),
+    );
 
   const renameTable = (id: string, label: string): Promise<void> =>
-    run("rename the table", supabase.from("restaurant_tables").update({ label }).eq("id", id));
+    run(
+      "rename the table",
+      supabase.from("restaurant_tables").update({ label }).eq("id", id),
+    );
 
   const deleteTable = (id: string): Promise<void> =>
     run("delete the table", supabase.from("restaurant_tables").delete().eq("id", id));

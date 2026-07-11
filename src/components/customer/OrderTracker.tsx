@@ -33,13 +33,21 @@ export default function OrderTracker({ initialOrder }: OrderTrackerProps) {
     <div className="tt-root">
       <div className="tt-track-hero">
         <div style={{ fontSize: 48 }}>{hero.emoji}</div>
-        <h2 className="tt-serif" style={{ margin: 0, fontSize: 22 }}>{hero.headline}</h2>
-        <div className="tt-sage" style={{ fontSize: 13, marginTop: 4 }}>{orderCode(order.id)}</div>
+        <h2 className="tt-serif" style={{ margin: 0, fontSize: 22 }}>
+          {hero.headline}
+        </h2>
+        <div className="tt-sage" style={{ fontSize: 13, marginTop: 4 }}>
+          {orderCode(order.id)}
+        </div>
       </div>
 
       <div style={{ padding: 20 }}>
         <OrderStatusTimeline status={status} tableLabel={order.table_label} />
-        <TrackedItemsCard items={order.items} total={order.total} currency={order.currency} />
+        <TrackedItemsCard
+          items={order.items}
+          total={order.total}
+          currency={order.currency}
+        />
       </div>
     </div>
   );

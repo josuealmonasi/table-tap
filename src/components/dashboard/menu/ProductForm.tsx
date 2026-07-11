@@ -37,7 +37,7 @@ export default function ProductForm({
   const [saving, setSaving] = useState(false);
 
   function toggleAddon(id: string) {
-    setPicked((prev) => (prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]));
+    setPicked(prev => (prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -52,7 +52,7 @@ export default function ProductForm({
         emoji,
         popular,
       },
-      picked
+      picked,
     );
     setSaving(false);
   }
@@ -65,7 +65,7 @@ export default function ProductForm({
           style={{ flex: 1 }}
           placeholder="Product name (e.g. Hot Dog)"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={e => setName(e.target.value)}
           autoFocus={!initial}
           required
         />
@@ -77,7 +77,7 @@ export default function ProductForm({
           min="0"
           placeholder="Price"
           value={price}
-          onChange={(e) => setPrice(e.target.value)}
+          onChange={e => setPrice(e.target.value)}
           required
         />
       </div>
@@ -87,18 +87,22 @@ export default function ProductForm({
         rows={2}
         placeholder="Description (optional)"
         value={description}
-        onChange={(e) => setDescription(e.target.value)}
+        onChange={e => setDescription(e.target.value)}
       />
 
       <input
         className="tt-input"
         placeholder="Image URL (optional — upload coming soon)"
         value={imageUrl}
-        onChange={(e) => setImageUrl(e.target.value)}
+        onChange={e => setImageUrl(e.target.value)}
       />
 
       <label className="tt-check">
-        <input type="checkbox" checked={popular} onChange={(e) => setPopular(e.target.checked)} />
+        <input
+          type="checkbox"
+          checked={popular}
+          onChange={e => setPopular(e.target.checked)}
+        />
         Mark as popular
       </label>
 
@@ -106,16 +110,19 @@ export default function ProductForm({
 
       {addons.length > 0 && (
         <div>
-          <div className="tt-mod-label" style={{ marginTop: 6 }}>Extras offered</div>
+          <div className="tt-mod-label" style={{ marginTop: 6 }}>
+            Extras offered
+          </div>
           <div className="tt-chips">
-            {addons.map((a) => (
+            {addons.map(a => (
               <button
                 type="button"
                 key={a.id}
                 className={`tt-chip ${picked.includes(a.id) ? "tt-chip-on" : ""}`}
                 onClick={() => toggleAddon(a.id)}
               >
-                {a.emoji ? `${a.emoji} ` : ""}{a.name} · {formatMoney(a.price, currency)}
+                {a.emoji ? `${a.emoji} ` : ""}
+                {a.name} · {formatMoney(a.price, currency)}
               </button>
             ))}
           </div>
@@ -123,8 +130,18 @@ export default function ProductForm({
       )}
 
       <div className="tt-prodform-actions">
-        <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={onCancel}>Cancel</button>
-        <button type="submit" className="tt-btn tt-btn-primary tt-btn-sm" disabled={!name || saving}>
+        <button
+          type="button"
+          className="tt-btn tt-btn-ghost tt-btn-sm"
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          className="tt-btn tt-btn-primary tt-btn-sm"
+          disabled={!name || saving}
+        >
           {saving ? "Saving…" : submitLabel}
         </button>
       </div>

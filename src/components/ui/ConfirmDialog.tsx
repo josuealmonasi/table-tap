@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 /** Basic options for a confirm/cancel dialog. */
 export type ConfirmOptions = {
@@ -32,9 +39,9 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [options, setOptions] = useState<ConfirmOptions | null>(null);
   const resolverRef = useRef<((result: boolean) => void) | null>(null);
 
-  const confirm = useCallback<ConfirmFn>((opts) => {
+  const confirm = useCallback<ConfirmFn>(opts => {
     setOptions(opts);
-    return new Promise<boolean>((resolve) => {
+    return new Promise<boolean>(resolve => {
       resolverRef.current = resolve;
     });
   }, []);
@@ -75,10 +82,16 @@ function Dialog({
         className="tt-dialog"
         role="dialog"
         aria-modal="true"
-        onClick={(e) => e.stopPropagation()}
+        onClick={e => e.stopPropagation()}
       >
-        <h3 className="tt-serif" style={{ margin: 0 }}>{options.title}</h3>
-        {options.message && <p className="tt-muted" style={{ marginTop: 8 }}>{options.message}</p>}
+        <h3 className="tt-serif" style={{ margin: 0 }}>
+          {options.title}
+        </h3>
+        {options.message && (
+          <p className="tt-muted" style={{ marginTop: 8 }}>
+            {options.message}
+          </p>
+        )}
         <div className="tt-dialog-actions">
           <button className="tt-btn tt-btn-ghost" onClick={() => onResolve(false)}>
             {options.cancelLabel ?? "Cancel"}

@@ -10,7 +10,9 @@ export const dynamic = "force-dynamic";
 // /dashboard — the owner's home. Staff go straight to the orders board.
 export default async function DashboardPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
 

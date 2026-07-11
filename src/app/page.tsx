@@ -8,8 +8,8 @@ export default function Home() {
           <div style={{ fontSize: 48 }}>🌸</div>
           <h1 className="tt-serif tt-landing-title">TableTap</h1>
           <p className="tt-landing-sub">
-            Scan a QR at your table, browse the menu, customise your order, and pay —
-            all from your phone. No app, no waiting.
+            Scan a QR at your table, browse the menu, customise your order, and pay — all
+            from your phone. No app, no waiting.
           </p>
           <div className="tt-landing-actions">
             <Link className="tt-btn tt-btn-primary tt-btn-lg" href="/login">

@@ -57,7 +57,7 @@ export default function ProductRow({
   const confirm = useConfirm();
   const canMove = !!onMove;
   const linkedNames = linkedAddonIds
-    .map((id) => addons.find((a) => a.id === id))
+    .map(id => addons.find(a => a.id === id))
     .filter(Boolean) as MenuItem[];
 
   const editForm = (
@@ -82,7 +82,9 @@ export default function ProductRow({
 
   return (
     <>
-      <div className={`tt-prod ${product.available ? "" : "tt-prod-off"} ${selected ? "tt-prod-selected" : ""}`}>
+      <div
+        className={`tt-prod ${product.available ? "" : "tt-prod-off"} ${selected ? "tt-prod-selected" : ""}`}
+      >
         {onToggleSelect ? (
           <input
             type="checkbox"
@@ -112,36 +114,55 @@ export default function ProductRow({
           </div>
 
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <div
+              style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}
+            >
               <strong>{product.name}</strong>
               {product.popular && <span className="tt-pop">Popular</span>}
               {!product.available && <span className="tt-badge">Unavailable</span>}
             </div>
             {product.description && (
-              <div className="tt-desc tt-muted" style={{ margin: "2px 0" }}>{product.description}</div>
+              <div className="tt-desc tt-muted" style={{ margin: "2px 0" }}>
+                {product.description}
+              </div>
             )}
             {linkedNames.length > 0 && (
               <div className="tt-muted" style={{ fontSize: 12 }}>
-                + {linkedNames.map((a) => a.name).join(", ")}
+                + {linkedNames.map(a => a.name).join(", ")}
               </div>
             )}
           </div>
 
           <div className="tt-prod-right">
             <strong className="tt-accent">{formatMoney(product.price, currency)}</strong>
-            <label className="tt-switch" title={product.available ? "Available" : "Unavailable"}>
+            <label
+              className="tt-switch"
+              title={product.available ? "Available" : "Unavailable"}
+            >
               <input
                 type="checkbox"
                 checked={product.available}
-                onChange={(e) => onToggleAvailable(product.id, e.target.checked)}
+                onChange={e => onToggleAvailable(product.id, e.target.checked)}
               />
               <span className="tt-switch-track" />
             </label>
             <div className="tt-prod-actions">
               {canMove && (
-                <button className="tt-iconbtn" onClick={() => setMoving(true)} title="Move to a section">📤</button>
+                <button
+                  className="tt-iconbtn"
+                  onClick={() => setMoving(true)}
+                  title="Move to a section"
+                >
+                  📤
+                </button>
               )}
-              <button className="tt-iconbtn" onClick={() => setEditing(true)} title="Edit">✏️</button>
+              <button
+                className="tt-iconbtn"
+                onClick={() => setEditing(true)}
+                title="Edit"
+              >
+                ✏️
+              </button>
               <button
                 className="tt-iconbtn"
                 onClick={async () => {
@@ -173,8 +194,8 @@ export default function ProductRow({
         <Modal open={moving} onClose={() => setMoving(false)} maxWidth={460}>
           <MoveToSection
             productName={product.name}
-            categories={(categories ?? []).filter((c) => c.id !== product.category_id)}
-            onMove={async (categoryId) => {
+            categories={(categories ?? []).filter(c => c.id !== product.category_id)}
+            onMove={async categoryId => {
               await onMove!(product.id, categoryId);
               setMoving(false);
             }}

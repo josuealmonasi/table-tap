@@ -24,7 +24,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en">
       <body>
         <ToastProvider>
-          {admin && <Navbar restaurantName="TableTap Admin" restaurantLogo="🛡️" role="admin" />}
+          {admin && (
+            <Navbar restaurantName="TableTap Admin" restaurantLogo="🛡️" role="admin" />
+          )}
           {membership && (
             <Navbar
               restaurantName={membership.restaurant.name}

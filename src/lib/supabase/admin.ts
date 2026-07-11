@@ -16,6 +16,6 @@ export function createAdminClient() {
     process.env.SUPABASE_SECRET_KEY!,
     {
       auth: { persistSession: false, autoRefreshToken: false },
-    }
+    },
   );
 }

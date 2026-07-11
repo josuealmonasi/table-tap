@@ -21,7 +21,12 @@ interface TablesPanelProps {
 }
 
 /** Dashboard Tables & QR: one restaurant-wide QR plus a per-table QR manager. */
-export default function TablesPanel({ restaurantId, restaurantName, fastFood, tables }: TablesPanelProps) {
+export default function TablesPanel({
+  restaurantId,
+  restaurantName,
+  fastFood,
+  tables,
+}: TablesPanelProps) {
   const { busy, addTable, renameTable, deleteTable } = useTables(restaurantId);
   const [newLabel, setNewLabel] = useState("");
 
@@ -39,9 +44,15 @@ export default function TablesPanel({ restaurantId, restaurantName, fastFood, ta
         className="tt-input"
         placeholder="Table number or name (e.g. 7, Patio 3)"
         value={newLabel}
-        onChange={(e) => setNewLabel(e.target.value)}
+        onChange={e => setNewLabel(e.target.value)}
       />
-      <button className="tt-btn tt-btn-primary" type="submit" disabled={!newLabel.trim() || busy}>+ Add table</button>
+      <button
+        className="tt-btn tt-btn-primary"
+        type="submit"
+        disabled={!newLabel.trim() || busy}
+      >
+        + Add table
+      </button>
     </form>
   );
 
@@ -49,36 +60,54 @@ export default function TablesPanel({ restaurantId, restaurantName, fastFood, ta
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <Breadcrumb trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Tables & QR" }]} />
+          <Breadcrumb
+            trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Tables & QR" }]}
+          />
         </header>
 
         {/* Fast-food: one QR for the whole restaurant. */}
         <div className="tt-section">
           <div className="tt-section-head">
-            <h3 className="tt-serif" style={{ margin: 0 }}>Fast-food QR</h3>
-            <span className="tt-muted" style={{ fontSize: 12 }}>One code for the whole place — no table</span>
+            <h3 className="tt-serif" style={{ margin: 0 }}>
+              Fast-food QR
+            </h3>
+            <span className="tt-muted" style={{ fontSize: 12 }}>
+              One code for the whole place — no table
+            </span>
           </div>
           <p className="tt-muted" style={{ fontSize: 13, marginTop: 0 }}>
-            Print this once (counter, flyer, sticker). Customers scan it, order, and get a pickup code.
-            Only your active menus are shown.
+            Print this once (counter, flyer, sticker). Customers scan it, order, and get a
+            pickup code. Only your active menus are shown.
           </p>
-          <QrCard title={restaurantName} subtitle="Whole restaurant" qr={fastFood} downloadName="restaurant-qr" />
+          <QrCard
+            title={restaurantName}
+            subtitle="Whole restaurant"
+            qr={fastFood}
+            downloadName="restaurant-qr"
+          />
         </div>
 
         {/* Table service: one QR per table. */}
         <div className="tt-section" style={{ marginTop: 16 }}>
           <div className="tt-section-head">
-            <h3 className="tt-serif" style={{ margin: 0 }}>Table QRs</h3>
-            <span className="tt-muted" style={{ fontSize: 12 }}>One code per table — orders tagged with the table</span>
+            <h3 className="tt-serif" style={{ margin: 0 }}>
+              Table QRs
+            </h3>
+            <span className="tt-muted" style={{ fontSize: 12 }}>
+              One code per table — orders tagged with the table
+            </span>
           </div>
 
           {tables.length === 0 ? (
             <div className="tt-empty">
               <div className="tt-empty-emoji">🪑</div>
               <strong>Add your first table</strong>
-              <p className="tt-muted" style={{ fontSize: 13, margin: "4px 0 14px", maxWidth: 360 }}>
-                Each table gets its own QR. When a customer scans it and orders, the order arrives tagged
-                with the table so you know where to send the food.
+              <p
+                className="tt-muted"
+                style={{ fontSize: 13, margin: "4px 0 14px", maxWidth: 360 }}
+              >
+                Each table gets its own QR. When a customer scans it and orders, the order
+                arrives tagged with the table so you know where to send the food.
               </p>
               {addForm}
             </div>
@@ -86,7 +115,13 @@ export default function TablesPanel({ restaurantId, restaurantName, fastFood, ta
             <>
               <div className="tt-table-list">
                 {tables.map(({ table, qr }) => (
-                  <TableRow key={table.id} table={table} qr={qr} onRename={renameTable} onDelete={deleteTable} />
+                  <TableRow
+                    key={table.id}
+                    table={table}
+                    qr={qr}
+                    onRename={renameTable}
+                    onDelete={deleteTable}
+                  />
                 ))}
               </div>
               <div style={{ marginTop: 12 }}>{addForm}</div>

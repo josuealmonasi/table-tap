@@ -7,7 +7,9 @@ export const dynamic = "force-dynamic";
 // /signup — create a restaurant account.
 export default async function SignupPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (user) redirect("/dashboard");
 
   return <SignupForm />;

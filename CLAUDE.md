@@ -9,7 +9,7 @@ the simpler one.
 - **Simple beats clever.** Write the most straightforward code that solves the problem.
 - **Small files.** Keep each file focused on one thing — aim for under ~200 lines. If it grows past that, split it.
 - **Clear names.** Name things so the next person gets it without needing a comment.
-- **Feature first, speed later.** Get it working, then optimize *only if it actually needs it*.
+- **Feature first, speed later.** Get it working, then optimize _only if it actually needs it_.
 - **Check as you go.** Test after every meaningful change — don't pile up untested edits.
 - **Let the types help.** Lean on TypeScript and the linter to catch mistakes before they run.
 - **Think in components.** Build small, reusable pieces and compose them.

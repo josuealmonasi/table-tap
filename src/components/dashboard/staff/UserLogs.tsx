@@ -20,20 +20,26 @@ export default function UserLogs({ restaurantId }: UserLogsProps) {
   return (
     <div className="tt-section" style={{ maxWidth: 720, marginTop: 16 }}>
       <div className="tt-section-head">
-        <h3 className="tt-serif" style={{ margin: 0 }}>Recent activity</h3>
+        <h3 className="tt-serif" style={{ margin: 0 }}>
+          Recent activity
+        </h3>
         <span className="tt-muted" style={{ fontSize: 12 }}>
           Every change to logins and roles, newest first
         </span>
       </div>
 
-      {loading && <p className="tt-muted" style={{ fontSize: 13 }}>Loading…</p>}
+      {loading && (
+        <p className="tt-muted" style={{ fontSize: 13 }}>
+          Loading…
+        </p>
+      )}
       {!loading && total === 0 && (
         <p className="tt-muted" style={{ fontSize: 13 }}>
           Nothing yet — team changes will show up here.
         </p>
       )}
 
-      {logs.map((l) => (
+      {logs.map(l => (
         <div key={l.id} className="tt-log-row">
           <span className="tt-staff-cell">
             <strong>{l.actor_email}</strong> {describe(l.action, l.target_role)}{" "}
@@ -41,7 +47,10 @@ export default function UserLogs({ restaurantId }: UserLogsProps) {
           </span>
           <span className="tt-muted" style={{ whiteSpace: "nowrap", fontSize: 12 }}>
             {new Date(l.created_at).toLocaleString([], {
-              day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+              day: "2-digit",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
             })}
           </span>
         </div>

@@ -22,27 +22,31 @@ export default function ItemDetailScreen({
   /** Editing an existing cart line: prefills choices and relabels the button. */
   initialLine?: OrderLineItem;
 }) {
-  const [mods, setMods] = useState<Record<string, string | string[]>>(initialLine?.mods ?? {});
-  const [extraIds, setExtraIds] = useState<string[]>(initialLine?.extras?.map((e) => e.id) ?? []);
+  const [mods, setMods] = useState<Record<string, string | string[]>>(
+    initialLine?.mods ?? {},
+  );
+  const [extraIds, setExtraIds] = useState<string[]>(
+    initialLine?.extras?.map(e => e.id) ?? [],
+  );
   const [qty, setQty] = useState(initialLine?.qty ?? 1);
   const [notes, setNotes] = useState(initialLine?.notes ?? "");
 
   function toggleMod(label: string, option: string, type: Modifier["type"]) {
-    setMods((prev) => {
+    setMods(prev => {
       if (type === "single") return { ...prev, [label]: option };
       const cur = (prev[label] as string[]) ?? [];
       return {
         ...prev,
-        [label]: cur.includes(option) ? cur.filter((o) => o !== option) : [...cur, option],
+        [label]: cur.includes(option) ? cur.filter(o => o !== option) : [...cur, option],
       };
     });
   }
 
   function toggleExtra(id: string) {
-    setExtraIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    setExtraIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
   }
 
-  const chosenExtras = extras.filter((e) => extraIds.includes(e.id));
+  const chosenExtras = extras.filter(e => extraIds.includes(e.id));
   const extrasTotal = chosenExtras.reduce((sum, e) => sum + e.price, 0);
   const unitPrice = item.price + extrasTotal;
 
@@ -54,7 +58,12 @@ export default function ItemDetailScreen({
       price: item.price,
       qty,
       mods,
-      extras: chosenExtras.map((e) => ({ id: e.id, name: e.name, emoji: e.emoji, price: e.price })),
+      extras: chosenExtras.map(e => ({
+        id: e.id,
+        name: e.name,
+        emoji: e.emoji,
+        price: e.price,
+      })),
       notes: notes || undefined,
     });
   }
@@ -63,21 +72,27 @@ export default function ItemDetailScreen({
     <div className="tt-root">
       <div className="tt-item-hero">
         <span>{item.emoji || "🍽️"}</span>
-        <button className="tt-back" onClick={onBack}>←</button>
+        <button className="tt-back" onClick={onBack}>
+          ←
+        </button>
       </div>
       <div style={{ padding: 20 }}>
         <div className="tt-row">
-          <h2 className="tt-serif" style={{ margin: 0, fontSize: 24 }}>{item.name}</h2>
+          <h2 className="tt-serif" style={{ margin: 0, fontSize: 24 }}>
+            {item.name}
+          </h2>
           <span className="tt-price-lg">{formatMoney(item.price, currency)}</span>
         </div>
-        <p className="tt-muted" style={{ lineHeight: 1.6 }}>{item.description}</p>
+        <p className="tt-muted" style={{ lineHeight: 1.6 }}>
+          {item.description}
+        </p>
 
-        {item.modifiers.map((mod) => (
+        {item.modifiers.map(mod => (
           <ModifierGroup
             key={mod.label}
             modifier={mod}
             value={mods[mod.label]}
-            onToggle={(option) => toggleMod(mod.label, option, mod.type)}
+            onToggle={option => toggleMod(mod.label, option, mod.type)}
           />
         ))}
 
@@ -87,7 +102,7 @@ export default function ItemDetailScreen({
               Add extras <span className="tt-muted">(optional)</span>
             </div>
             <div className="tt-chips">
-              {extras.map((extra) => {
+              {extras.map(extra => {
                 const on = extraIds.includes(extra.id);
                 return (
                   <button
@@ -95,7 +110,8 @@ export default function ItemDetailScreen({
                     className={`tt-chip ${on ? "tt-chip-on" : ""}`}
                     onClick={() => toggleExtra(extra.id)}
                   >
-                    {extra.emoji ? `${extra.emoji} ` : ""}{extra.name}
+                    {extra.emoji ? `${extra.emoji} ` : ""}
+                    {extra.name}
                     {extra.price > 0 ? ` +${formatMoney(extra.price, currency)}` : ""}
                   </button>
                 );
@@ -111,18 +127,23 @@ export default function ItemDetailScreen({
             rows={2}
             placeholder="Allergies, preferences…"
             value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            onChange={e => setNotes(e.target.value)}
           />
         </div>
 
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
           <div className="tt-stepper">
-            <button onClick={() => setQty((q) => Math.max(1, q - 1))}>−</button>
+            <button onClick={() => setQty(q => Math.max(1, q - 1))}>−</button>
             <span>{qty}</span>
-            <button onClick={() => setQty((q) => q + 1)}>+</button>
+            <button onClick={() => setQty(q => q + 1)}>+</button>
           </div>
-          <button className="tt-btn tt-btn-primary" style={{ flex: 1 }} onClick={handleAdd}>
-            {initialLine ? "Update item" : "Add to cart"} — {formatMoney(unitPrice * qty, currency)}
+          <button
+            className="tt-btn tt-btn-primary"
+            style={{ flex: 1 }}
+            onClick={handleAdd}
+          >
+            {initialLine ? "Update item" : "Add to cart"} —{" "}
+            {formatMoney(unitPrice * qty, currency)}
           </button>
         </div>
       </div>

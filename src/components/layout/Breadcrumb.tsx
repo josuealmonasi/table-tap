@@ -19,7 +19,10 @@ export default function Breadcrumb({ trail }: { trail: Crumb[] }) {
             {c.href && !last ? (
               <Link href={c.href}>{c.label}</Link>
             ) : (
-              <span className="tt-breadcrumb-current" aria-current={last ? "page" : undefined}>
+              <span
+                className="tt-breadcrumb-current"
+                aria-current={last ? "page" : undefined}
+              >
                 {c.label}
               </span>
             )}

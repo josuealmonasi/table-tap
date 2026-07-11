@@ -14,27 +14,27 @@ export function useCart(restaurant: Restaurant) {
   const [items, setItems] = useState<CartItem[]>([]);
 
   function addItem(line: OrderLineItem) {
-    setItems((prev) => [...prev, { ...line, cartId: Date.now() }]);
+    setItems(prev => [...prev, { ...line, cartId: Date.now() }]);
   }
 
   function removeItem(cartId: number) {
-    setItems((prev) => prev.filter((i) => i.cartId !== cartId));
+    setItems(prev => prev.filter(i => i.cartId !== cartId));
   }
 
   /** Replaces a line's choices (extras, mods, notes, qty) keeping its place. */
   function updateItem(cartId: number, line: OrderLineItem) {
-    setItems((prev) => prev.map((i) => (i.cartId === cartId ? { ...line, cartId } : i)));
+    setItems(prev => prev.map(i => (i.cartId === cartId ? { ...line, cartId } : i)));
   }
 
   /** Strips the given extras from every line — used when they sell out at checkout. */
   function removeExtras(extraIds: string[]) {
     const drop = new Set(extraIds);
-    setItems((prev) =>
-      prev.map((line) => {
-        if (!line.extras?.some((e) => drop.has(e.id))) return line;
-        const kept = line.extras.filter((e) => !drop.has(e.id));
+    setItems(prev =>
+      prev.map(line => {
+        if (!line.extras?.some(e => drop.has(e.id))) return line;
+        const kept = line.extras.filter(e => !drop.has(e.id));
         return { ...line, extras: kept.length ? kept : undefined };
-      })
+      }),
     );
   }
 
@@ -50,5 +50,14 @@ export function useCart(restaurant: Restaurant) {
 
   const count = items.reduce((sum, i) => sum + i.qty, 0);
 
-  return { items, addItem, removeItem, updateItem, removeExtras, clear, count, ...totals };
+  return {
+    items,
+    addItem,
+    removeItem,
+    updateItem,
+    removeExtras,
+    clear,
+    count,
+    ...totals,
+  };
 }

@@ -8,7 +8,7 @@ export function useBulkSelect() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   function toggle(id: string): void {
-    setSelected((prev) => {
+    setSelected(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
