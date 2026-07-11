@@ -16,7 +16,9 @@ export default async function MenuEditorPage({
 }) {
   const { menu: slug } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   // Owners and managers may edit menus; kitchen goes back to its board.
@@ -31,7 +33,7 @@ export default async function MenuEditorPage({
     .eq("restaurant_id", restaurant.id)
     .order("sort_order");
 
-  const menu = ((menus as Menu[]) ?? []).find((m) => menuSlug(m.name) === slug);
+  const menu = ((menus as Menu[]) ?? []).find(m => menuSlug(m.name) === slug);
   if (!menu) redirect("/dashboard");
 
   return (

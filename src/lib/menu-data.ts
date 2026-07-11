@@ -14,18 +14,33 @@ export interface MenuData {
 }
 
 /** Loads a restaurant's menus, sections, items and product↔add-on links. */
-export async function fetchMenuData(supabase: Supabase, restaurantId: string): Promise<MenuData> {
+export async function fetchMenuData(
+  supabase: Supabase,
+  restaurantId: string,
+): Promise<MenuData> {
   const [{ data: menuRows }, { data: cats }, { data: items }] = await Promise.all([
-    supabase.from("menus").select("*").eq("restaurant_id", restaurantId).order("sort_order"),
-    supabase.from("categories").select("*").eq("restaurant_id", restaurantId).order("sort_order"),
-    supabase.from("menu_items").select("*").eq("restaurant_id", restaurantId).order("sort_order"),
+    supabase
+      .from("menus")
+      .select("*")
+      .eq("restaurant_id", restaurantId)
+      .order("sort_order"),
+    supabase
+      .from("categories")
+      .select("*")
+      .eq("restaurant_id", restaurantId)
+      .order("sort_order"),
+    supabase
+      .from("menu_items")
+      .select("*")
+      .eq("restaurant_id", restaurantId)
+      .order("sort_order"),
   ]);
 
   const allItems = (items as MenuItem[]) ?? [];
-  const products = allItems.filter((i) => !i.is_addon);
+  const products = allItems.filter(i => !i.is_addon);
 
   const links: Record<string, string[]> = {};
-  const productIds = products.map((p) => p.id);
+  const productIds = products.map(p => p.id);
   if (productIds.length) {
     const { data: linkRows } = await supabase
       .from("item_addons")
@@ -40,7 +55,7 @@ export async function fetchMenuData(supabase: Supabase, restaurantId: string): P
     menus: (menuRows as Menu[]) ?? [],
     sections: (cats as Category[]) ?? [],
     products,
-    addons: allItems.filter((i) => i.is_addon),
+    addons: allItems.filter(i => i.is_addon),
     links,
   };
 }
@@ -63,10 +78,10 @@ export async function reorderRows(
   table: ReorderTable,
   siblings: Reorderable[],
   id: string,
-  direction: "up" | "down"
+  direction: "up" | "down",
 ): Promise<{ message: string } | null> {
   const ordered = [...siblings].sort((a, b) => a.sort_order - b.sort_order);
-  const index = ordered.findIndex((x) => x.id === id);
+  const index = ordered.findIndex(x => x.id === id);
   const swapIndex = direction === "up" ? index - 1 : index + 1;
   if (index === -1 || swapIndex < 0 || swapIndex >= ordered.length) return null;
   const a = ordered[index];

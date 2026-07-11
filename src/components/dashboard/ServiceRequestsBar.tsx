@@ -15,21 +15,27 @@ function age(createdAt: string): string {
 }
 
 /** Open call-waiter / request-bill taps, pinned above the orders grid. */
-export default function ServiceRequestsBar({ restaurantId, initialRequests }: ServiceRequestsBarProps) {
+export default function ServiceRequestsBar({
+  restaurantId,
+  initialRequests,
+}: ServiceRequestsBarProps) {
   const { requests, markDone } = useServiceRequests(restaurantId, initialRequests);
 
   if (requests.length === 0) return null;
 
   return (
     <div className="tt-requests-bar" role="status">
-      {requests.map((r) => (
+      {requests.map(r => (
         <div key={r.id} className="tt-request-chip">
           <span>
             {r.kind === "waiter" ? "🛎️" : "🧾"} <strong>Table {r.table_label}</strong>{" "}
             {r.kind === "waiter" ? "wants a waiter" : "wants the bill"}
             <span className="tt-muted"> · {age(r.created_at)}</span>
           </span>
-          <button className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => markDone(r.id)}>
+          <button
+            className="tt-btn tt-btn-ghost tt-btn-sm"
+            onClick={() => markDone(r.id)}
+          >
             Done
           </button>
         </div>

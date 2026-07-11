@@ -4,7 +4,7 @@ import { populateMenu } from "./menu-catalog.mjs";
 // Convenience logins for local development. Created only against the DEV database
 // by `pnpm db:seed` / `pnpm db:reset` — never seeded into production.
 export const TEST_PASSWORD = "test123";
-export const TEST_USERS = [1, 2, 3, 4, 5].map((n) => ({
+export const TEST_USERS = [1, 2, 3, 4, 5].map(n => ({
   email: `test${n}@tabletap.dev`,
   restaurantName: `Test Restaurant ${n}`,
 }));
@@ -21,7 +21,9 @@ export async function seedTestUsers(pgClient) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const secret = process.env.SUPABASE_SECRET_KEY;
   if (!url || !secret) {
-    console.warn("  (skipped test users — NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SECRET_KEY missing)");
+    console.warn(
+      "  (skipped test users — NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SECRET_KEY missing)",
+    );
     return [];
   }
 
@@ -31,7 +33,9 @@ export async function seedTestUsers(pgClient) {
 
   const ready = [];
   for (const user of TEST_USERS) {
-    const { rows } = await pgClient.query("select id from auth.users where email = $1", [user.email]);
+    const { rows } = await pgClient.query("select id from auth.users where email = $1", [
+      user.email,
+    ]);
     let userId = rows[0]?.id;
 
     if (!userId) {
@@ -49,13 +53,13 @@ export async function seedTestUsers(pgClient) {
 
     const { rows: existing } = await pgClient.query(
       "select id from restaurants where owner_id = $1",
-      [userId]
+      [userId],
     );
     let rid = existing[0]?.id;
     if (!rid) {
       const { rows } = await pgClient.query(
         "insert into restaurants (name, owner_id) values ($1, $2) returning id",
-        [user.restaurantName, userId]
+        [user.restaurantName, userId],
       );
       rid = rows[0].id;
     }
@@ -84,14 +88,14 @@ async function ensureMenus(pg, rid) {
 
   const { rows: existing } = await pg.query(
     "select name from menus where restaurant_id = $1",
-    [rid]
+    [rid],
   );
-  const names = new Set(existing.map((m) => m.name));
+  const names = new Set(existing.map(m => m.name));
   for (const { name, sort } of wanted) {
     if (!names.has(name)) {
       await pg.query(
         "insert into menus (restaurant_id, name, active, sort_order) values ($1, $2, true, $3)",
-        [rid, name, sort]
+        [rid, name, sort],
       );
     }
   }
@@ -99,7 +103,7 @@ async function ensureMenus(pg, rid) {
   // Populate every menu this restaurant has.
   const { rows: menus } = await pg.query(
     "select id from menus where restaurant_id = $1 order by sort_order",
-    [rid]
+    [rid],
   );
   for (const { id } of menus) await populateMenu(pg, rid, id);
 }

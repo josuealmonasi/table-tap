@@ -6,7 +6,10 @@ import type { Order } from "@/lib/types";
  * payment references (stripe_*), the internal note, and anything else the
  * customer-facing screen doesn't render.
  */
-export type TrackedOrder = Pick<Order, "id" | "table_label" | "status" | "items" | "total" | "currency">;
+export type TrackedOrder = Pick<
+  Order,
+  "id" | "table_label" | "status" | "items" | "total" | "currency"
+>;
 
 const TRACKER_COLUMNS = "id, table_label, status, items, total, currency";
 
@@ -22,6 +25,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export async function fetchTrackedOrder(orderId: string): Promise<TrackedOrder | null> {
   if (!UUID_RE.test(orderId)) return null;
   const admin = createAdminClient();
-  const { data } = await admin.from("orders").select(TRACKER_COLUMNS).eq("id", orderId).single();
+  const { data } = await admin
+    .from("orders")
+    .select(TRACKER_COLUMNS)
+    .eq("id", orderId)
+    .single();
   return (data as TrackedOrder | null) ?? null;
 }

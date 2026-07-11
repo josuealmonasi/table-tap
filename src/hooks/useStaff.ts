@@ -31,9 +31,15 @@ async function fetchMembers(restaurantId: string): Promise<StaffMember[]> {
   const { data: profiles } = await supabase
     .from("profiles")
     .select("user_id, full_name")
-    .in("user_id", rows.map((r) => r.user_id));
+    .in(
+      "user_id",
+      rows.map(r => r.user_id),
+    );
   const names = new Map(
-    ((profiles as { user_id: string; full_name: string }[]) ?? []).map((p) => [p.user_id, p.full_name])
+    ((profiles as { user_id: string; full_name: string }[]) ?? []).map(p => [
+      p.user_id,
+      p.full_name,
+    ]),
   );
   return rows.map(({ user_id, ...rest }) => ({
     ...rest,
@@ -69,7 +75,11 @@ export function useStaff(restaurantId: string) {
     setMembers(await fetchMembers(restaurantId));
   }
 
-  async function addMember(email: string, password: string, role: StaffRole): Promise<boolean> {
+  async function addMember(
+    email: string,
+    password: string,
+    role: StaffRole,
+  ): Promise<boolean> {
     setBusy(true);
     try {
       const res = await fetch("/api/staff", {
@@ -107,7 +117,7 @@ export function useStaff(restaurantId: string) {
         return;
       }
       toast("Role updated");
-      setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, role } : m)));
+      setMembers(prev => prev.map(m => (m.id === id ? { ...m, role } : m)));
     } catch {
       toast("Network error — please try again.", "error");
     } finally {
@@ -129,7 +139,7 @@ export function useStaff(restaurantId: string) {
         return;
       }
       toast("Staff login removed");
-      setMembers((prev) => prev.filter((m) => m.id !== id));
+      setMembers(prev => prev.filter(m => m.id !== id));
     } catch {
       toast("Network error — please try again.", "error");
     } finally {

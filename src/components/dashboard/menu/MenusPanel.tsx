@@ -40,14 +40,14 @@ export default function MenusPanel({
   const [addError, setAddError] = useState<string | null>(null);
   const confirm = useConfirm();
 
-  const activeCount = menus.filter((m) => m.active).length;
+  const activeCount = menus.filter(m => m.active).length;
   const empty = menus.length === 0;
 
   // A name collides if it produces the same URL slug as an existing menu
   // (catches case- and punctuation-only differences too). exceptId skips the
   // menu being renamed.
   const nameTaken = (name: string, exceptId?: string) =>
-    menus.some((m) => m.id !== exceptId && menuSlug(m.name) === menuSlug(name));
+    menus.some(m => m.id !== exceptId && menuSlug(m.name) === menuSlug(name));
 
   async function toggle(menu: Menu, next: boolean) {
     if (!next && activeCount <= 1) {
@@ -68,9 +68,10 @@ export default function MenusPanel({
           }
         : {
             title: `Hide “${menu.name}” from customers?`,
-            message: "Customers won't see this menu until you turn it back on. Nothing is deleted.",
+            message:
+              "Customers won't see this menu until you turn it back on. Nothing is deleted.",
             confirmLabel: "Deactivate",
-          }
+          },
     );
     if (ok) await onToggleActive(menu.id, next);
   }
@@ -87,7 +88,8 @@ export default function MenusPanel({
     }
     const ok = await confirm({
       title: `Delete “${menu.name}”?`,
-      message: "All of its sections, products and extras will be permanently deleted. This can't be undone.",
+      message:
+        "All of its sections, products and extras will be permanently deleted. This can't be undone.",
       confirmLabel: "Delete",
       danger: true,
     });
@@ -97,7 +99,8 @@ export default function MenusPanel({
   async function duplicate(menu: Menu) {
     const ok = await confirm({
       title: `Duplicate “${menu.name}”?`,
-      message: "This makes a copy with all of its sections, products and extras. You can rename it afterward.",
+      message:
+        "This makes a copy with all of its sections, products and extras. You can rename it afterward.",
       confirmLabel: "Duplicate",
     });
     if (ok) await onDuplicate(menu.id);
@@ -107,7 +110,7 @@ export default function MenusPanel({
     <>
       <form
         className="tt-add-section"
-        onSubmit={async (e) => {
+        onSubmit={async e => {
           e.preventDefault();
           const name = newName.trim();
           if (!name) return;
@@ -127,12 +130,31 @@ export default function MenusPanel({
           className="tt-input"
           placeholder="Menu name (e.g. Breakfast)"
           value={newName}
-          onChange={(e) => { setNewName(e.target.value); setAddError(null); }}
+          onChange={e => {
+            setNewName(e.target.value);
+            setAddError(null);
+          }}
           autoFocus
         />
-        <button className="tt-btn tt-btn-primary" type="submit" disabled={!newName.trim()}>+ Add menu</button>
+        <button
+          className="tt-btn tt-btn-primary"
+          type="submit"
+          disabled={!newName.trim()}
+        >
+          + Add menu
+        </button>
         {!empty && (
-          <button type="button" className="tt-btn tt-btn-ghost" onClick={() => { setAdding(false); setNewName(""); setAddError(null); }}>Cancel</button>
+          <button
+            type="button"
+            className="tt-btn tt-btn-ghost"
+            onClick={() => {
+              setAdding(false);
+              setNewName("");
+              setAddError(null);
+            }}
+          >
+            Cancel
+          </button>
         )}
       </form>
       {addError && <p className="tt-field-error">{addError}</p>}
@@ -142,17 +164,26 @@ export default function MenusPanel({
   return (
     <div className="tt-section">
       <div className="tt-section-head">
-        <h3 className="tt-serif" style={{ margin: 0 }}>Menus</h3>
-        {!empty && <span className="tt-muted" style={{ fontSize: 12 }}>Open a menu to edit it · switch it on to show it to customers</span>}
+        <h3 className="tt-serif" style={{ margin: 0 }}>
+          Menus
+        </h3>
+        {!empty && (
+          <span className="tt-muted" style={{ fontSize: 12 }}>
+            Open a menu to edit it · switch it on to show it to customers
+          </span>
+        )}
       </div>
 
       {empty ? (
         <div className="tt-empty">
           <div className="tt-empty-emoji">📋</div>
           <strong>Create your first menu</strong>
-          <p className="tt-muted" style={{ fontSize: 13, margin: "4px 0 14px", maxWidth: 360 }}>
-            Name it anything — e.g. “All Day”, “Breakfast” or “Dinner”. You can add as many as you like
-            and turn each on or off through the day.
+          <p
+            className="tt-muted"
+            style={{ fontSize: 13, margin: "4px 0 14px", maxWidth: 360 }}
+          >
+            Name it anything — e.g. “All Day”, “Breakfast” or “Dinner”. You can add as
+            many as you like and turn each on or off through the day.
           </p>
           {addForm}
         </div>
@@ -179,7 +210,13 @@ export default function MenusPanel({
           {adding ? (
             <div style={{ marginTop: 12 }}>{addForm}</div>
           ) : (
-            <button className="tt-add-more" style={{ marginTop: 12 }} onClick={() => setAdding(true)}>+ Add menu</button>
+            <button
+              className="tt-add-more"
+              style={{ marginTop: 12 }}
+              onClick={() => setAdding(true)}
+            >
+              + Add menu
+            </button>
           )}
         </>
       )}

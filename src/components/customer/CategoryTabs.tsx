@@ -18,7 +18,7 @@ export default function CategoryTabs({
       >
         All
       </button>
-      {categories.map((c) => (
+      {categories.map(c => (
         <button
           key={c.id}
           className={`tt-cat ${activeCat === c.id ? "tt-cat-on" : ""}`}

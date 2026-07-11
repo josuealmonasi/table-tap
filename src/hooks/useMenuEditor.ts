@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
-import { fetchMenuData, reorderRows, type Reorderable, type ReorderTable } from "@/lib/menu-data";
+import {
+  fetchMenuData,
+  reorderRows,
+  type Reorderable,
+  type ReorderTable,
+} from "@/lib/menu-data";
 import { duplicateMenuDeep } from "@/lib/menu-duplicate";
 import type { Category, Menu, MenuItem } from "@/lib/types";
 
@@ -65,7 +70,10 @@ export function useMenuEditor(restaurantId: string) {
   }
 
   /** Runs a write, reports any failure, then refreshes local state. */
-  async function run(action: string, write: PromiseLike<{ error: { message: string } | null }>): Promise<void> {
+  async function run(
+    action: string,
+    write: PromiseLike<{ error: { message: string } | null }>,
+  ): Promise<void> {
     const { error } = await write;
     reportError(action, error);
     await reload();
@@ -75,7 +83,7 @@ export function useMenuEditor(restaurantId: string) {
   async function insertReturningId(
     action: string,
     table: ReorderTable,
-    row: Record<string, unknown>
+    row: Record<string, unknown>,
   ): Promise<string | undefined> {
     const { data, error } = await supabase.from(table).insert(row).select("id").single();
     if (!reportError(action, error)) return undefined;
@@ -89,7 +97,7 @@ export function useMenuEditor(restaurantId: string) {
     table: ReorderTable,
     siblings: Reorderable[],
     id: string,
-    direction: "up" | "down"
+    direction: "up" | "down",
   ): Promise<void> {
     reportError(action, await reorderRows(supabase, table, siblings, id, direction));
     await reload();
@@ -106,12 +114,14 @@ export function useMenuEditor(restaurantId: string) {
   const renameMenu = (id: string, name: string) =>
     run("rename the menu", supabase.from("menus").update({ name }).eq("id", id));
   // Cascade deletes the menu's categories, products, extras and their links.
-  const deleteMenu = (id: string) => run("delete the menu", supabase.from("menus").delete().eq("id", id));
-  const moveMenu = (id: string, direction: "up" | "down") => move("reorder menus", "menus", menus, id, direction);
+  const deleteMenu = (id: string) =>
+    run("delete the menu", supabase.from("menus").delete().eq("id", id));
+  const moveMenu = (id: string, direction: "up" | "down") =>
+    move("reorder menus", "menus", menus, id, direction);
 
   async function setMenuActive(id: string, active: boolean): Promise<void> {
     const prev = menus;
-    setMenus((m) => m.map((x) => (x.id === id ? { ...x, active } : x)));
+    setMenus(m => m.map(x => (x.id === id ? { ...x, active } : x)));
     const { error } = await supabase.from("menus").update({ active }).eq("id", id);
     if (error) {
       setMenus(prev); // roll back the optimistic flip
@@ -143,17 +153,18 @@ export function useMenuEditor(restaurantId: string) {
       restaurant_id: restaurantId,
       menu_id: menuId,
       name,
-      sort_order: sections.filter((s) => s.menu_id === menuId).length,
+      sort_order: sections.filter(s => s.menu_id === menuId).length,
     });
   const renameSection = (id: string, name: string) =>
     run("rename the section", supabase.from("categories").update({ name }).eq("id", id));
   // Products in a deleted section keep existing (category_id → null via FK).
-  const deleteSection = (id: string) => run("delete the section", supabase.from("categories").delete().eq("id", id));
+  const deleteSection = (id: string) =>
+    run("delete the section", supabase.from("categories").delete().eq("id", id));
 
   async function moveSection(id: string, direction: "up" | "down"): Promise<void> {
-    const section = sections.find((s) => s.id === id);
+    const section = sections.find(s => s.id === id);
     if (!section) return;
-    const siblings = sections.filter((s) => s.menu_id === section.menu_id);
+    const siblings = sections.filter(s => s.menu_id === section.menu_id);
     await move("reorder sections", "categories", siblings, id, direction);
   }
 
@@ -164,24 +175,33 @@ export function useMenuEditor(restaurantId: string) {
       menu_id: menuId,
       category_id: categoryId,
       is_addon: false,
-      sort_order: products.filter((p) => p.menu_id === menuId).length,
+      sort_order: products.filter(p => p.menu_id === menuId).length,
       ...input,
     });
-  const updateProduct = (id: string, input: Partial<ProductInput & { category_id: string | null }>) =>
-    run("update the product", supabase.from("menu_items").update(input).eq("id", id));
-  const deleteProduct = (id: string) => run("delete the product", supabase.from("menu_items").delete().eq("id", id));
+  const updateProduct = (
+    id: string,
+    input: Partial<ProductInput & { category_id: string | null }>,
+  ) => run("update the product", supabase.from("menu_items").update(input).eq("id", id));
+  const deleteProduct = (id: string) =>
+    run("delete the product", supabase.from("menu_items").delete().eq("id", id));
 
   /** Moves a product up/down among its siblings (same menu + same section, including "uncategorized"). */
   async function moveProduct(id: string, direction: "up" | "down"): Promise<void> {
-    const product = products.find((p) => p.id === id);
+    const product = products.find(p => p.id === id);
     if (!product) return;
-    const sectionIds = new Set(sections.map((s) => s.id));
+    const sectionIds = new Set(sections.map(s => s.id));
     const inSameGroup = (p: MenuItem) =>
       p.menu_id === product.menu_id &&
       (product.category_id && sectionIds.has(product.category_id)
         ? p.category_id === product.category_id
         : !p.category_id || !sectionIds.has(p.category_id));
-    await move("reorder products", "menu_items", products.filter(inSameGroup), id, direction);
+    await move(
+      "reorder products",
+      "menu_items",
+      products.filter(inSameGroup),
+      id,
+      direction,
+    );
   }
 
   // ── Add-on items ──
@@ -193,22 +213,23 @@ export function useMenuEditor(restaurantId: string) {
         menu_id: menuId,
         category_id: null,
         is_addon: true,
-        sort_order: addons.filter((a) => a.menu_id === menuId).length,
+        sort_order: addons.filter(a => a.menu_id === menuId).length,
         ...input,
-      })
+      }),
     );
   const updateAddon = (id: string, input: Partial<AddonInput>) =>
     run("update the extra", supabase.from("menu_items").update(input).eq("id", id));
-  const deleteAddon = (id: string) => run("delete the extra", supabase.from("menu_items").delete().eq("id", id));
+  const deleteAddon = (id: string) =>
+    run("delete the extra", supabase.from("menu_items").delete().eq("id", id));
 
   /** Bulk delete: removes any mix of products and extras in one call. */
   const deleteItems = (ids: string[]) =>
     run("delete the selected items", supabase.from("menu_items").delete().in("id", ids));
 
   async function moveAddon(id: string, direction: "up" | "down"): Promise<void> {
-    const addon = addons.find((a) => a.id === id);
+    const addon = addons.find(a => a.id === id);
     if (!addon) return;
-    const siblings = addons.filter((a) => a.menu_id === addon.menu_id);
+    const siblings = addons.filter(a => a.menu_id === addon.menu_id);
     await move("reorder extras", "menu_items", siblings, id, direction);
   }
 
@@ -216,9 +237,12 @@ export function useMenuEditor(restaurantId: string) {
   async function setAvailability(id: string, available: boolean): Promise<void> {
     const prevProducts = products;
     const prevAddons = addons;
-    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, available } : p)));
-    setAddons((prev) => prev.map((a) => (a.id === id ? { ...a, available } : a)));
-    const { error } = await supabase.from("menu_items").update({ available }).eq("id", id);
+    setProducts(prev => prev.map(p => (p.id === id ? { ...p, available } : p)));
+    setAddons(prev => prev.map(a => (a.id === id ? { ...a, available } : a)));
+    const { error } = await supabase
+      .from("menu_items")
+      .update({ available })
+      .eq("id", id);
     if (error) {
       setProducts(prevProducts);
       setAddons(prevAddons);
@@ -228,12 +252,19 @@ export function useMenuEditor(restaurantId: string) {
 
   // ── Which add-ons a product offers (replace the full set) ──
   async function setProductAddons(productId: string, addonIds: string[]): Promise<void> {
-    const { error: delErr } = await supabase.from("item_addons").delete().eq("product_id", productId);
+    const { error: delErr } = await supabase
+      .from("item_addons")
+      .delete()
+      .eq("product_id", productId);
     if (!reportError("update the product's extras", delErr)) return;
     if (addonIds.length) {
-      const { error } = await supabase
-        .from("item_addons")
-        .insert(addonIds.map((addon_id, i) => ({ product_id: productId, addon_id, sort_order: i })));
+      const { error } = await supabase.from("item_addons").insert(
+        addonIds.map((addon_id, i) => ({
+          product_id: productId,
+          addon_id,
+          sort_order: i,
+        })),
+      );
       reportError("update the product's extras", error);
     }
     await reload();

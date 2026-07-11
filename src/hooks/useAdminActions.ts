@@ -18,7 +18,12 @@ export function useAdminActions() {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
 
-  async function call(path: string, method: string, body: unknown, okMsg: string): Promise<boolean> {
+  async function call(
+    path: string,
+    method: string,
+    body: unknown,
+    okMsg: string,
+  ): Promise<boolean> {
     setBusy(true);
     try {
       const res = await fetch(path, {
@@ -44,8 +49,10 @@ export function useAdminActions() {
 
   return {
     busy,
-    createUser: (input: NewUserInput) => call("/api/admin/users", "POST", input, "Login created"),
-    deleteUser: (userId: string) => call("/api/admin/users", "DELETE", { userId }, "Login deleted"),
+    createUser: (input: NewUserInput) =>
+      call("/api/admin/users", "POST", input, "Login created"),
+    deleteUser: (userId: string) =>
+      call("/api/admin/users", "DELETE", { userId }, "Login deleted"),
     deleteRestaurant: (id: string) =>
       call("/api/admin/restaurants", "DELETE", { id }, "Restaurant deleted"),
   };

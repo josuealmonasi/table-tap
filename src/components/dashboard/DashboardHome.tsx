@@ -31,14 +31,23 @@ export default function DashboardHome({ restaurant, role }: DashboardHomeProps) 
         </header>
 
         {!restaurant.accepting_orders && (
-          <div className="tt-closed-banner" style={{ marginTop: 0, marginBottom: 16 }} role="status">
+          <div
+            className="tt-closed-banner"
+            style={{ marginTop: 0, marginBottom: 16 }}
+            role="status"
+          >
             ⏸️ Orders are paused — customers can browse but can&apos;t order.{" "}
-            <Link href="/dashboard/settings" style={{ fontWeight: 600 }}>Resume in Settings</Link>
+            <Link href="/dashboard/settings" style={{ fontWeight: 600 }}>
+              Resume in Settings
+            </Link>
           </div>
         )}
 
         {editor.loading ? (
-          <div className="tt-section" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div
+            className="tt-section"
+            style={{ display: "flex", flexDirection: "column", gap: 12 }}
+          >
             <Skeleton width={120} height={18} />
             <Skeleton width="100%" height={44} radius={12} />
             <Skeleton width="100%" height={44} radius={12} />
@@ -57,13 +66,15 @@ export default function DashboardHome({ restaurant, role }: DashboardHomeProps) 
         )}
 
         <div className="tt-tiles" style={{ marginTop: 16 }}>
-          {navItemsFor(role).map((tile) =>
+          {navItemsFor(role).map(tile =>
             tile.soon ? (
               <div key={tile.title} className="tt-tile tt-tile-soon">
                 <div className="tt-tile-emoji">{tile.emoji}</div>
                 <strong>{tile.title}</strong>
                 <span className="tt-muted">{tile.desc}</span>
-                <span className="tt-badge" style={{ marginTop: 8 }}>Coming soon</span>
+                <span className="tt-badge" style={{ marginTop: 8 }}>
+                  Coming soon
+                </span>
               </div>
             ) : (
               <Link key={tile.title} href={tile.href} className="tt-tile">
@@ -71,7 +82,7 @@ export default function DashboardHome({ restaurant, role }: DashboardHomeProps) 
                 <strong>{tile.title}</strong>
                 <span className="tt-muted">{tile.desc}</span>
               </Link>
-            )
+            ),
           )}
         </div>
       </div>

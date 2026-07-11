@@ -32,7 +32,9 @@ export function useUserLogs(restaurantId: string) {
       const from = (page - 1) * LOGS_PER_PAGE;
       const { data, count } = await createClient()
         .from("user_logs")
-        .select("id, actor_email, action, target_role, target_email, created_at", { count: "exact" })
+        .select("id, actor_email, action, target_role, target_email, created_at", {
+          count: "exact",
+        })
         .eq("restaurant_id", restaurantId)
         .order("created_at", { ascending: false })
         .range(from, from + LOGS_PER_PAGE - 1);

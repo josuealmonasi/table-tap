@@ -35,10 +35,12 @@ export default function MenuScreen({
     const q = search.trim().toLowerCase();
     if (q) {
       return items.filter(
-        (i) => i.name.toLowerCase().includes(q) || (i.description ?? "").toLowerCase().includes(q)
+        i =>
+          i.name.toLowerCase().includes(q) ||
+          (i.description ?? "").toLowerCase().includes(q),
       );
     }
-    return activeCat === "all" ? items : items.filter((i) => i.category_id === activeCat);
+    return activeCat === "all" ? items : items.filter(i => i.category_id === activeCat);
   }, [activeCat, items, search]);
 
   return (
@@ -50,9 +52,13 @@ export default function MenuScreen({
             <div className="tt-serif" style={{ fontSize: 22, fontWeight: 700 }}>
               {restaurant.name}
             </div>
-            <div className="tt-sage" style={{ fontSize: 13 }}>{restaurant.tagline}</div>
+            <div className="tt-sage" style={{ fontSize: 13 }}>
+              {restaurant.tagline}
+            </div>
           </div>
-          {table && <span className="tt-badge tt-badge-gold">🪑 Table {table.label}</span>}
+          {table && (
+            <span className="tt-badge tt-badge-gold">🪑 Table {table.label}</span>
+          )}
         </div>
         {table && <ServiceButtons restaurantId={restaurant.id} table={table} />}
         {!restaurant.accepting_orders && (
@@ -66,10 +72,14 @@ export default function MenuScreen({
           placeholder="🔍 Search the menu…"
           aria-label="Search the menu"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={e => setSearch(e.target.value)}
         />
         {!search.trim() && (
-          <CategoryTabs categories={categories} activeCat={activeCat} onSelect={setActiveCat} />
+          <CategoryTabs
+            categories={categories}
+            activeCat={activeCat}
+            onSelect={setActiveCat}
+          />
         )}
       </div>
 
@@ -79,7 +89,7 @@ export default function MenuScreen({
             Nothing matches “{search.trim()}” — try another craving.
           </p>
         )}
-        {filtered.map((item) => (
+        {filtered.map(item => (
           <MenuItemRow
             key={item.id}
             item={item}

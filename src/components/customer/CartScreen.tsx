@@ -57,13 +57,17 @@ export default function CartScreen({
   return (
     <div className="tt-root">
       <div className="tt-header">
-        <button className="tt-back-inline" onClick={onAddMore}>←</button>
-        <h2 className="tt-serif" style={{ margin: 0, fontSize: 20 }}>Your Order</h2>
+        <button className="tt-back-inline" onClick={onAddMore}>
+          ←
+        </button>
+        <h2 className="tt-serif" style={{ margin: 0, fontSize: 20 }}>
+          Your Order
+        </h2>
         {table && <span className="tt-badge">Table {table.label}</span>}
       </div>
       <div style={{ padding: 16 }}>
         {items.length === 0 && <p className="tt-muted">Your cart is empty.</p>}
-        {items.map((item) => (
+        {items.map(item => (
           <CartLineRow
             key={item.cartId}
             item={item}
@@ -74,7 +78,9 @@ export default function CartScreen({
           />
         ))}
 
-        <button className="tt-add-more" onClick={onAddMore}>+ Add more items</button>
+        <button className="tt-add-more" onClick={onAddMore}>
+          + Add more items
+        </button>
 
         <div style={{ marginBottom: 20 }}>
           <div className="tt-mod-label">Note for the kitchen</div>
@@ -83,7 +89,7 @@ export default function CartScreen({
             rows={2}
             placeholder="Any notes for the whole order?"
             value={orderNote}
-            onChange={(e) => onChangeNote(e.target.value)}
+            onChange={e => onChangeNote(e.target.value)}
           />
         </div>
 
@@ -113,7 +119,10 @@ export default function CartScreen({
         >
           {loading ? "Redirecting to payment…" : "Proceed to Payment"}
         </button>
-        <p className="tt-muted" style={{ textAlign: "center", fontSize: 12, marginTop: 12 }}>
+        <p
+          className="tt-muted"
+          style={{ textAlign: "center", fontSize: 12, marginTop: 12 }}
+        >
           🔒 Secured by Stripe · card, Apple Pay &amp; Google Pay
         </p>
       </div>

@@ -18,13 +18,20 @@ export async function DELETE(req: NextRequest) {
 
   // Staff logins would be orphaned auth users once their rows cascade — remove
   // the logins themselves first.
-  const { data: members } = await db.from("staff").select("user_id").eq("restaurant_id", id);
+  const { data: members } = await db
+    .from("staff")
+    .select("user_id")
+    .eq("restaurant_id", id);
   for (const m of members ?? []) {
     await db.auth.admin.deleteUser(m.user_id);
   }
 
   const { error } = await db.from("restaurants").delete().eq("id", id);
-  if (error) return NextResponse.json({ error: "Could not delete the restaurant." }, { status: 500 });
+  if (error)
+    return NextResponse.json(
+      { error: "Could not delete the restaurant." },
+      { status: 500 },
+    );
 
   return NextResponse.json({ ok: true });
 }

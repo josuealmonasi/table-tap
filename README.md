@@ -41,6 +41,7 @@ src/app/globals.css                       ← design system
 > Requires **Node ≥ 18.18** (Next.js 15). An `.nvmrc` pins Node 22 — run `nvm use`.
 
 ### 0. Install dependencies
+
 This is a complete Next.js project — just install and go.
 
 ```bash
@@ -50,13 +51,14 @@ pnpm install
 ```
 
 ### 1. Environment variables — dev & prod are separate
+
 The app uses **two Supabase projects** so development never touches production
 data. Config lives in per-environment files (all gitignored):
 
-| File | Used by | Points at |
-| --- | --- | --- |
-| `.env.development.local` | `pnpm dev`, `pnpm db:*` | your **dev** Supabase project |
-| `.env.production.local` | `pnpm build`/`start`, `pnpm db:*:prod` | your **prod** Supabase project |
+| File                     | Used by                                | Points at                      |
+| ------------------------ | -------------------------------------- | ------------------------------ |
+| `.env.development.local` | `pnpm dev`, `pnpm db:*`                | your **dev** Supabase project  |
+| `.env.production.local`  | `pnpm build`/`start`, `pnpm db:*:prod` | your **prod** Supabase project |
 
 ```bash
 cp .env.development.local.example .env.development.local   # fill in dev keys
@@ -64,10 +66,11 @@ cp .env.production.local.example  .env.production.local    # fill in prod keys (
 ```
 
 Each needs the Supabase URL + keys, Stripe keys, and a `DATABASE_URL` (Supabase →
-**Connect** → *Session pooler* URI, with your DB password). Next.js loads the
+**Connect** → _Session pooler_ URI, with your DB password). Next.js loads the
 right file automatically based on `NODE_ENV`.
 
 ### 2. Create the database
+
 With `DATABASE_URL` set in `.env.development.local`:
 
 ```bash
@@ -77,22 +80,24 @@ pnpm db:reset      # drop + create + seed the dev database, prints a demo URL
 **Database scripts** (default = dev; append `:prod` to target production, which
 prompts for confirmation on destructive ops):
 
-| Command | What it does |
-| --- | --- |
-| `pnpm db:create` | Create tables / RLS / realtime (structure only). |
-| `pnpm db:seed` | Insert the demo restaurant + menu, and (dev only) create the test logins below. Idempotent. |
-| `pnpm db:reset` | Drop + create + seed — a clean slate. Use this most. |
-| `pnpm db:purge` | Empty every table, keep the structure. |
-| `pnpm db:drop` | Drop all tables entirely. |
-| `…:prod` | Same, against the prod DB (e.g. `pnpm db:create:prod`). |
+| Command          | What it does                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------- |
+| `pnpm db:create` | Create tables / RLS / realtime (structure only).                                            |
+| `pnpm db:seed`   | Insert the demo restaurant + menu, and (dev only) create the test logins below. Idempotent. |
+| `pnpm db:reset`  | Drop + create + seed — a clean slate. Use this most.                                        |
+| `pnpm db:purge`  | Empty every table, keep the structure.                                                      |
+| `pnpm db:drop`   | Drop all tables entirely.                                                                   |
+| `…:prod`         | Same, against the prod DB (e.g. `pnpm db:create:prod`).                                     |
 
 > Prefer the dashboard? You can still paste `supabase/schema.sql` (then
 > `supabase/seed.sql`) into the Supabase **SQL Editor** and **Run**.
 
 ### 3. Run locally & sign in
+
 ```bash
 pnpm dev
 ```
+
 - Restaurant: open `http://localhost:3000/signup` to create an account (this also
   creates your restaurant), then you land on `/dashboard`. Sign in again any time
   at `http://localhost:3000/login`.
@@ -103,10 +108,13 @@ pnpm dev
   prints a ready-to-open demo URL.
 
 ### 4. Stripe test payments locally
+
 Install the Stripe CLI, then forward webhooks to your local server:
+
 ```bash
 stripe listen --forward-to localhost:3000/api/webhooks/stripe
 ```
+
 Copy the `whsec_...` it prints into `STRIPE_WEBHOOK_SECRET` in
 `.env.development.local`. Use test card `4242 4242 4242 4242`, any future expiry,
 any CVC.

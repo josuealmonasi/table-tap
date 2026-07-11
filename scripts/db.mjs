@@ -26,10 +26,18 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 // Each command maps to the ordered list of SQL files it runs.
 const COMMANDS = {
-  create: { files: ["supabase/schema.sql"], label: "Creating schema", destructive: false },
+  create: {
+    files: ["supabase/schema.sql"],
+    label: "Creating schema",
+    destructive: false,
+  },
   seed: { files: ["supabase/seed.sql"], label: "Seeding demo data", destructive: false },
   drop: { files: ["supabase/drop.sql"], label: "Dropping all tables", destructive: true },
-  purge: { files: ["supabase/purge.sql"], label: "Emptying all tables", destructive: true },
+  purge: {
+    files: ["supabase/purge.sql"],
+    label: "Emptying all tables",
+    destructive: true,
+  },
   reset: {
     files: ["supabase/drop.sql", "supabase/schema.sql", "supabase/seed.sql"],
     label: "Resetting (drop + create + seed)",
@@ -45,7 +53,9 @@ const envFile = isProd ? ".env.production.local" : ".env.development.local";
 const config = COMMANDS[command];
 if (!config) {
   console.error(`✗ Unknown command "${command ?? ""}".`);
-  console.error("  Use: create | seed | reset | drop | purge   (add --prod for production)");
+  console.error(
+    "  Use: create | seed | reset | drop | purge   (add --prod for production)",
+  );
   process.exit(1);
 }
 
@@ -69,7 +79,7 @@ if (!connectionString) {
 if (isProd && config.destructive) {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const answer = await rl.question(
-    `⚠️  About to ${command.toUpperCase()} the PRODUCTION database. Type "production" to continue: `
+    `⚠️  About to ${command.toUpperCase()} the PRODUCTION database. Type "production" to continue: `,
   );
   rl.close();
   if (answer.trim() !== "production") {
@@ -94,15 +104,17 @@ try {
     const testEmails = isProd ? [] : await seedTestUsers(client);
 
     const { rows: restaurants } = await client.query(
-      "select id, name from restaurants order by created_at"
+      "select id, name from restaurants order by created_at",
     );
     const { rows: tables } = await client.query(
-      "select id, label from restaurant_tables order by label::int limit 1"
+      "select id, label from restaurant_tables order by label::int limit 1",
     );
 
     console.log(`\n✓ [${target}] Done. ${restaurants.length} restaurant(s).`);
     if (restaurants.length && tables.length) {
-      console.log(`  Demo menu: http://localhost:3000/r/${restaurants[0].id}/t/${tables[0].id}`);
+      console.log(
+        `  Demo menu: http://localhost:3000/r/${restaurants[0].id}/t/${tables[0].id}`,
+      );
     }
     if (testEmails.length) {
       console.log(`\n  Test logins at /login (password: ${TEST_PASSWORD}):`);

@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   if (!restaurantName?.trim() || !email || !password || password.length < 6) {
     return NextResponse.json(
       { error: "Restaurant name, email and a 6+ character password are required." },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   if (userErr || !created?.user) {
     return NextResponse.json(
       { error: userErr?.message ?? "Could not create the account." },
-      { status: 400 }
+      { status: 400 },
     );
   }
 

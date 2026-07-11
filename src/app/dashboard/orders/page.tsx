@@ -12,7 +12,9 @@ export const dynamic = "force-dynamic";
 // board keeps them live via realtime. Cancelling (refunds) stays owner-only.
 export default async function OrdersPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const membership = await getMembership(supabase);

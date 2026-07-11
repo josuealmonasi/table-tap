@@ -35,8 +35,10 @@ export default function QrCard({ title, subtitle, qr, downloadName }: QrCardProp
         `height:100vh;font-family:system-ui,sans-serif;text-align:center">` +
         `<div style="width:260px">${qr.svg}</div>` +
         `<div style="font-size:20px;font-weight:700;margin-top:12px">${title}</div>` +
-        (subtitle ? `<div style="font-size:13px;color:#666;margin-top:2px">${subtitle}</div>` : "") +
-        `</body>`
+        (subtitle
+          ? `<div style="font-size:13px;color:#666;margin-top:2px">${subtitle}</div>`
+          : "") +
+        `</body>`,
     );
     w.document.close();
     w.focus();
@@ -48,11 +50,21 @@ export default function QrCard({ title, subtitle, qr, downloadName }: QrCardProp
       <div className="tt-qr-code" dangerouslySetInnerHTML={{ __html: qr.svg }} />
       <div className="tt-qr-meta">
         <strong>{title}</strong>
-        {subtitle && <span className="tt-muted" style={{ fontSize: 13 }}>{subtitle}</span>}
-        <a className="tt-qr-url tt-muted" href={qr.url} target="_blank" rel="noreferrer">{qr.url}</a>
+        {subtitle && (
+          <span className="tt-muted" style={{ fontSize: 13 }}>
+            {subtitle}
+          </span>
+        )}
+        <a className="tt-qr-url tt-muted" href={qr.url} target="_blank" rel="noreferrer">
+          {qr.url}
+        </a>
         <div className="tt-qr-actions">
-          <button className="tt-btn tt-btn-ghost tt-btn-sm" onClick={downloadSvg}>⬇ Download</button>
-          <button className="tt-btn tt-btn-ghost tt-btn-sm" onClick={printQr}>🖨 Print</button>
+          <button className="tt-btn tt-btn-ghost tt-btn-sm" onClick={downloadSvg}>
+            ⬇ Download
+          </button>
+          <button className="tt-btn tt-btn-ghost tt-btn-sm" onClick={printQr}>
+            🖨 Print
+          </button>
         </div>
       </div>
     </div>

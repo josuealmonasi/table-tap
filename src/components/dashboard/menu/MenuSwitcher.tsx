@@ -19,7 +19,13 @@ interface MenuSwitcherProps {
   nameTaken: (name: string, exceptId?: string) => boolean;
 }
 
-export default function MenuSwitcher({ menus, currentId, currentName, onRename, nameTaken }: MenuSwitcherProps) {
+export default function MenuSwitcher({
+  menus,
+  currentId,
+  currentName,
+  onRename,
+  nameTaken,
+}: MenuSwitcherProps) {
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [value, setValue] = useState(currentName);
@@ -64,12 +70,24 @@ export default function MenuSwitcher({ menus, currentId, currentName, onRename, 
             className="tt-input"
             style={{ width: 220 }}
             value={value}
-            onChange={(e) => { setValue(e.target.value); setError(null); }}
+            onChange={e => {
+              setValue(e.target.value);
+              setError(null);
+            }}
             autoFocus
-            onFocus={(e) => e.target.select()}
+            onFocus={e => e.target.select()}
           />
-          <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">Save</button>
-          <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => { setRenaming(false); setOpen(false); }}>
+          <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">
+            Save
+          </button>
+          <button
+            type="button"
+            className="tt-btn tt-btn-ghost tt-btn-sm"
+            onClick={() => {
+              setRenaming(false);
+              setOpen(false);
+            }}
+          >
             Cancel
           </button>
         </form>
@@ -85,7 +103,7 @@ export default function MenuSwitcher({ menus, currentId, currentName, onRename, 
         className="tt-breadcrumb-current tt-menu-switcher-btn"
         aria-current="page"
         aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpen(o => !o)}
       >
         {currentName}
         {menus.length > 1 && <span className="tt-menu-switcher-caret">▾</span>}
@@ -94,14 +112,19 @@ export default function MenuSwitcher({ menus, currentId, currentName, onRename, 
         type="button"
         className="tt-iconbtn tt-menu-switcher-edit"
         title="Rename this menu"
-        onClick={() => { setValue(currentName); setError(null); setRenaming(true); setOpen(false); }}
+        onClick={() => {
+          setValue(currentName);
+          setError(null);
+          setRenaming(true);
+          setOpen(false);
+        }}
       >
         ✏️
       </button>
 
       {open && menus.length > 1 && (
         <div className="tt-menu-switcher-menu" role="menu">
-          {menus.map((m) => (
+          {menus.map(m => (
             <button
               key={m.id}
               type="button"
@@ -113,7 +136,11 @@ export default function MenuSwitcher({ menus, currentId, currentName, onRename, 
               }}
             >
               {m.name}
-              {!m.active && <span className="tt-badge" style={{ marginLeft: 8 }}>Hidden</span>}
+              {!m.active && (
+                <span className="tt-badge" style={{ marginLeft: 8 }}>
+                  Hidden
+                </span>
+              )}
             </button>
           ))}
         </div>

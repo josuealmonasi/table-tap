@@ -66,12 +66,7 @@ export type RestaurantTable = {
 };
 
 export type OrderStatus =
-  | "pending_payment"
-  | "received"
-  | "preparing"
-  | "ready"
-  | "completed"
-  | "cancelled";
+  "pending_payment" | "received" | "preparing" | "ready" | "completed" | "cancelled";
 
 // A chosen extra (add-on item) snapshot on a line item.
 export type OrderExtra = {

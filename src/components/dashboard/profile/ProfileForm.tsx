@@ -11,7 +11,11 @@ interface ProfileFormProps {
 }
 
 /** The user's own profile: name, login email, and a password change. */
-export default function ProfileForm({ userId, initialName, initialEmail }: ProfileFormProps) {
+export default function ProfileForm({
+  userId,
+  initialName,
+  initialEmail,
+}: ProfileFormProps) {
   const { saving, saveName, saveEmail, savePassword } = useProfile(userId);
   const [name, setName] = useState(initialName);
   const [email, setEmail] = useState(initialEmail);
@@ -42,13 +46,19 @@ export default function ProfileForm({ userId, initialName, initialEmail }: Profi
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <Breadcrumb trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Profile" }]} />
+          <Breadcrumb
+            trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Profile" }]}
+          />
         </header>
 
         <div className="tt-section" style={{ maxWidth: 520 }}>
           <div className="tt-section-head">
-            <h3 className="tt-serif" style={{ margin: 0 }}>Your details</h3>
-            <span className="tt-muted" style={{ fontSize: 12 }}>Your name shows on the team list</span>
+            <h3 className="tt-serif" style={{ margin: 0 }}>
+              Your details
+            </h3>
+            <span className="tt-muted" style={{ fontSize: 12 }}>
+              Your name shows on the team list
+            </span>
           </div>
 
           <form className="tt-prodform" onSubmit={handleDetails}>
@@ -58,7 +68,7 @@ export default function ProfileForm({ userId, initialName, initialEmail }: Profi
                 className="tt-input"
                 placeholder="Your name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={e => setName(e.target.value)}
               />
             </label>
             <label className="tt-field">
@@ -67,7 +77,7 @@ export default function ProfileForm({ userId, initialName, initialEmail }: Profi
                 className="tt-input"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={e => setEmail(e.target.value)}
                 required
               />
             </label>
@@ -76,7 +86,11 @@ export default function ProfileForm({ userId, initialName, initialEmail }: Profi
               change only applies after you confirm it there.
             </p>
             <div className="tt-prodform-actions">
-              <button type="submit" className="tt-btn tt-btn-primary tt-btn-sm" disabled={saving || !email.trim()}>
+              <button
+                type="submit"
+                className="tt-btn tt-btn-primary tt-btn-sm"
+                disabled={saving || !email.trim()}
+              >
                 {saving ? "Saving…" : "Save details"}
               </button>
             </div>
@@ -85,7 +99,9 @@ export default function ProfileForm({ userId, initialName, initialEmail }: Profi
 
         <div className="tt-section" style={{ maxWidth: 520, marginTop: 16 }}>
           <div className="tt-section-head">
-            <h3 className="tt-serif" style={{ margin: 0 }}>Change password</h3>
+            <h3 className="tt-serif" style={{ margin: 0 }}>
+              Change password
+            </h3>
           </div>
 
           <form className="tt-prodform" onSubmit={handlePassword}>
@@ -97,7 +113,7 @@ export default function ProfileForm({ userId, initialName, initialEmail }: Profi
                 placeholder="New password (8+ characters)"
                 minLength={8}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={e => setPassword(e.target.value)}
                 required
               />
               <input
@@ -107,7 +123,7 @@ export default function ProfileForm({ userId, initialName, initialEmail }: Profi
                 placeholder="Repeat new password"
                 minLength={8}
                 value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
+                onChange={e => setConfirm(e.target.value)}
                 required
               />
             </div>
@@ -117,7 +133,11 @@ export default function ProfileForm({ userId, initialName, initialEmail }: Profi
               </p>
             )}
             <div className="tt-prodform-actions">
-              <button type="submit" className="tt-btn tt-btn-primary tt-btn-sm" disabled={saving}>
+              <button
+                type="submit"
+                className="tt-btn tt-btn-primary tt-btn-sm"
+                disabled={saving}
+              >
                 {saving ? "Saving…" : "Update password"}
               </button>
             </div>

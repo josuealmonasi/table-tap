@@ -11,7 +11,15 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { restaurantId, tableId, tableLabel, items, note, tipPct: rawTipPct, tipAmount: rawTipAmount } = body as {
+    const {
+      restaurantId,
+      tableId,
+      tableLabel,
+      items,
+      note,
+      tipPct: rawTipPct,
+      tipAmount: rawTipAmount,
+    } = body as {
       restaurantId: string;
       tableId: string | null;
       tableLabel: string | null;
@@ -25,9 +33,10 @@ export async function POST(req: NextRequest) {
     // or an exact "Other" amount — sanitised and capped below once the
     // subtotal is known.
     const tipPct = [0, 10, 15, 20].includes(rawTipPct ?? 0) ? (rawTipPct ?? 0) : 0;
-    const tipAmount = Number.isFinite(rawTipAmount) && (rawTipAmount as number) > 0
-      ? +(rawTipAmount as number).toFixed(2)
-      : null;
+    const tipAmount =
+      Number.isFinite(rawTipAmount) && (rawTipAmount as number) > 0
+        ? +(rawTipAmount as number).toFixed(2)
+        : null;
 
     if (!restaurantId || !items?.length) {
       return NextResponse.json({ error: "Missing order data" }, { status: 400 });
@@ -49,15 +58,17 @@ export async function POST(req: NextRequest) {
     // Kill switch: the owner paused orders (maybe after this page loaded).
     if (!restaurant.accepting_orders) {
       return NextResponse.json(
-        { error: "The restaurant isn't taking orders right now. Please try again later." },
-        { status: 409 }
+        {
+          error: "The restaurant isn't taking orders right now. Please try again later.",
+        },
+        { status: 409 },
       );
     }
 
     // IMPORTANT: never trust client prices. Re-fetch every referenced item
     // (products AND extras) and use the DB's real price.
     const referencedIds = [
-      ...new Set(items.flatMap((i) => [i.itemId, ...(i.extras?.map((e) => e.id) ?? [])])),
+      ...new Set(items.flatMap(i => [i.itemId, ...(i.extras?.map(e => e.id) ?? [])])),
     ];
     const { data: dbItems, error: iErr } = await supabase
       .from("menu_items")
@@ -69,7 +80,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Could not verify items" }, { status: 400 });
     }
 
-    const priceMap = new Map(dbItems.map((d) => [d.id, d]));
+    const priceMap = new Map(dbItems.map(d => [d.id, d]));
 
     // Build verified line items with DB prices for the product and its extras.
     let subtotal = 0;
@@ -79,8 +90,11 @@ export async function POST(req: NextRequest) {
       const db = priceMap.get(line.itemId);
       if (!db || !db.available) {
         return NextResponse.json(
-          { error: `${line.name} is no longer available.`, unavailableItemId: line.itemId },
-          { status: 400 }
+          {
+            error: `${line.name} is no longer available.`,
+            unavailableItemId: line.itemId,
+          },
+          { status: 400 },
         );
       }
 
@@ -120,8 +134,11 @@ export async function POST(req: NextRequest) {
     // changed and confirm. The client removes them and re-submits.
     if (removedExtras.size > 0) {
       return NextResponse.json(
-        { removedExtraIds: [...removedExtras.keys()], removedExtraNames: [...removedExtras.values()] },
-        { status: 409 }
+        {
+          removedExtraIds: [...removedExtras.keys()],
+          removedExtraNames: [...removedExtras.values()],
+        },
+        { status: 409 },
       );
     }
 
@@ -129,9 +146,10 @@ export async function POST(req: NextRequest) {
     const servicePct = restaurant.service_enabled ? restaurant.service_pct : 0;
     const serviceFee = +(subtotal * (servicePct / 100)).toFixed(2);
     // An exact tip can't exceed the order itself (guards fat fingers and abuse).
-    const tip = tipAmount !== null
-      ? Math.min(tipAmount, +subtotal.toFixed(2))
-      : +(subtotal * (tipPct / 100)).toFixed(2);
+    const tip =
+      tipAmount !== null
+        ? Math.min(tipAmount, +subtotal.toFixed(2))
+        : +(subtotal * (tipPct / 100)).toFixed(2);
     const total = +(subtotal + serviceFee + tip).toFixed(2);
 
     // Create the pending order first so the webhook can find it.
@@ -163,12 +181,12 @@ export async function POST(req: NextRequest) {
 
     // Line items for Stripe (amounts in the smallest currency unit).
     const line_items: import("stripe").Stripe.Checkout.SessionCreateParams.LineItem[] =
-      verified.map((v) => {
+      verified.map(v => {
         const modText = Object.entries(v.mods)
           .map(([k, val]) => `${k}: ${Array.isArray(val) ? val.join(", ") : val}`)
           .join(" · ");
         const extrasText = v.extras?.length
-          ? `Extras: ${v.extras.map((e) => e.name).join(", ")}`
+          ? `Extras: ${v.extras.map(e => e.name).join(", ")}`
           : "";
         const description = [modText, extrasText].filter(Boolean).join(" · ");
         const unitAmount = v.price + (v.extras?.reduce((s, e) => s + e.price, 0) ?? 0);
@@ -226,8 +244,11 @@ export async function POST(req: NextRequest) {
       const code = err && typeof err === "object" && "code" in err ? err.code : undefined;
       if (code === "amount_too_small") {
         return NextResponse.json(
-          { error: "That total is below the card minimum — please add a little more to your order." },
-          { status: 400 }
+          {
+            error:
+              "That total is below the card minimum — please add a little more to your order.",
+          },
+          { status: 400 },
         );
       }
       throw err; // anything else falls through to the generic handler below

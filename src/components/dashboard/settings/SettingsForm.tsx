@@ -43,7 +43,7 @@ export default function SettingsForm({ restaurant }: SettingsFormProps) {
     setAcceptingOrders(next);
     const ok = await save(
       { accepting_orders: next },
-      next ? "Accepting orders again" : "Orders paused"
+      next ? "Accepting orders again" : "Orders paused",
     );
     if (!ok) setAcceptingOrders(!next); // roll back on failure
   }
@@ -52,13 +52,19 @@ export default function SettingsForm({ restaurant }: SettingsFormProps) {
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <Breadcrumb trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Settings" }]} />
+          <Breadcrumb
+            trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Settings" }]}
+          />
         </header>
 
         <div className="tt-section" style={{ maxWidth: 520 }}>
           <div className="tt-section-head">
-            <h3 className="tt-serif" style={{ margin: 0 }}>Restaurant</h3>
-            <span className="tt-muted" style={{ fontSize: 12 }}>Shown to customers on your menu</span>
+            <h3 className="tt-serif" style={{ margin: 0 }}>
+              Restaurant
+            </h3>
+            <span className="tt-muted" style={{ fontSize: 12 }}>
+              Shown to customers on your menu
+            </span>
           </div>
 
           <form className="tt-prodform" onSubmit={handleSubmit}>
@@ -68,7 +74,7 @@ export default function SettingsForm({ restaurant }: SettingsFormProps) {
                 style={{ flex: 1 }}
                 placeholder="Restaurant name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={e => setName(e.target.value)}
                 required
               />
               <input
@@ -77,7 +83,7 @@ export default function SettingsForm({ restaurant }: SettingsFormProps) {
                 placeholder="🍱"
                 aria-label="Logo emoji"
                 value={logo}
-                onChange={(e) => setLogo(e.target.value)}
+                onChange={e => setLogo(e.target.value)}
               />
             </div>
 
@@ -85,14 +91,20 @@ export default function SettingsForm({ restaurant }: SettingsFormProps) {
               className="tt-input"
               placeholder="Tagline (optional)"
               value={tagline}
-              onChange={(e) => setTagline(e.target.value)}
+              onChange={e => setTagline(e.target.value)}
             />
 
             <label className="tt-field" style={{ maxWidth: 200 }}>
               <span className="tt-mod-label">Currency</span>
-              <select className="tt-input" value={currency} onChange={(e) => setCurrency(e.target.value)}>
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
+              <select
+                className="tt-input"
+                value={currency}
+                onChange={e => setCurrency(e.target.value)}
+              >
+                {CURRENCIES.map(c => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
                 ))}
               </select>
             </label>
@@ -104,11 +116,14 @@ export default function SettingsForm({ restaurant }: SettingsFormProps) {
                   Added to every order as a % of the subtotal — off by default
                 </span>
               </span>
-              <span className="tt-switch" title={serviceEnabled ? "Service fee on" : "Service fee off"}>
+              <span
+                className="tt-switch"
+                title={serviceEnabled ? "Service fee on" : "Service fee off"}
+              >
                 <input
                   type="checkbox"
                   checked={serviceEnabled}
-                  onChange={(e) => setServiceEnabled(e.target.checked)}
+                  onChange={e => setServiceEnabled(e.target.checked)}
                 />
                 <span className="tt-switch-track" />
               </span>
@@ -124,13 +139,17 @@ export default function SettingsForm({ restaurant }: SettingsFormProps) {
                   min="0"
                   max="30"
                   value={servicePct}
-                  onChange={(e) => setServicePct(e.target.value)}
+                  onChange={e => setServicePct(e.target.value)}
                 />
               </label>
             )}
 
             <div className="tt-prodform-actions">
-              <button type="submit" className="tt-btn tt-btn-primary tt-btn-sm" disabled={!name.trim() || saving}>
+              <button
+                type="submit"
+                className="tt-btn tt-btn-primary tt-btn-sm"
+                disabled={!name.trim() || saving}
+              >
                 {saving ? "Saving…" : "Save changes"}
               </button>
             </div>
@@ -139,8 +158,12 @@ export default function SettingsForm({ restaurant }: SettingsFormProps) {
 
         <div className="tt-section" style={{ maxWidth: 520, marginTop: 16 }}>
           <div className="tt-section-head">
-            <h3 className="tt-serif" style={{ margin: 0 }}>Ordering</h3>
-            <span className="tt-muted" style={{ fontSize: 12 }}>Applies immediately — no save needed</span>
+            <h3 className="tt-serif" style={{ margin: 0 }}>
+              Ordering
+            </h3>
+            <span className="tt-muted" style={{ fontSize: 12 }}>
+              Applies immediately — no save needed
+            </span>
           </div>
 
           <label className="tt-settings-toggle">
@@ -150,12 +173,15 @@ export default function SettingsForm({ restaurant }: SettingsFormProps) {
                 Turn off to pause new customer orders (e.g. kitchen closed or slammed)
               </span>
             </span>
-            <span className="tt-switch" title={acceptingOrders ? "Accepting orders" : "Orders paused"}>
+            <span
+              className="tt-switch"
+              title={acceptingOrders ? "Accepting orders" : "Orders paused"}
+            >
               <input
                 type="checkbox"
                 checked={acceptingOrders}
                 disabled={saving}
-                onChange={(e) => toggleAcceptingOrders(e.target.checked)}
+                onChange={e => toggleAcceptingOrders(e.target.checked)}
               />
               <span className="tt-switch-track" />
             </span>

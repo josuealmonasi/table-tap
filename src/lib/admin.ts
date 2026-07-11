@@ -13,7 +13,9 @@ export interface PlatformAdmin {
  */
 export async function getPlatformAdmin(): Promise<PlatformAdmin | null> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return null;
 
   const { data } = await createAdminClient()

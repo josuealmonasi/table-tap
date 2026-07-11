@@ -22,7 +22,7 @@ export default function ModifierGroup({
         {modifier.type === "multi" && <span className="tt-muted"> (choose any)</span>}
       </div>
       <div className="tt-chips">
-        {modifier.options.map((opt) => (
+        {modifier.options.map(opt => (
           <button
             key={opt}
             className={`tt-chip ${isSelected(opt) ? "tt-chip-on" : ""}`}

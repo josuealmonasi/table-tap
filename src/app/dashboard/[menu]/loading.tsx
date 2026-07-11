@@ -6,7 +6,9 @@ export default function MenuEditorLoading() {
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <Breadcrumb trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "…" }]} />
+          <Breadcrumb
+            trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "…" }]}
+          />
         </header>
 
         <div className="tt-menu-grid">

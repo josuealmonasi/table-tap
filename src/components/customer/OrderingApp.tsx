@@ -50,20 +50,20 @@ export default function OrderingApp({
   const cart = useCart(restaurant);
 
   // Totals count only the still-orderable lines (sold-out ones are excluded).
-  const orderableItems = cart.items.filter((i) => !soldOut.has(i.itemId));
+  const orderableItems = cart.items.filter(i => !soldOut.has(i.itemId));
   const subtotal = orderableItems.reduce((sum, i) => sum + lineUnitPrice(i) * i.qty, 0);
   const serviceFee = +(subtotal * (restaurant.service_pct / 100)).toFixed(2);
   // An exact "Other" amount wins over the percentage chips.
   const tip = tipCustom ?? +(subtotal * (tipPct / 100)).toFixed(2);
   const total = +(subtotal + serviceFee + tip).toFixed(2);
 
-  const extrasById = useMemo(() => new Map(extras.map((e) => [e.id, e])), [extras]);
+  const extrasById = useMemo(() => new Map(extras.map(e => [e.id, e])), [extras]);
 
   // The available extra items offered by the currently selected product.
   const selectedExtras = useMemo(() => {
     if (!selected) return [];
     return (extrasByProduct[selected.id] ?? [])
-      .map((id) => extrasById.get(id))
+      .map(id => extrasById.get(id))
       .filter((e): e is MenuItem => Boolean(e));
   }, [selected, extrasByProduct, extrasById]);
 
@@ -79,7 +79,7 @@ export default function OrderingApp({
 
   /** Re-opens the item screen prefilled with a cart line's choices. */
   function editLine(item: CartItem) {
-    const product = items.find((i) => i.id === item.itemId);
+    const product = items.find(i => i.id === item.itemId);
     if (!product) return; // product left the menu — the line can only be removed
     setSelected(product);
     setEditingLine(item);
@@ -102,7 +102,7 @@ export default function OrderingApp({
           restaurantId: restaurant.id,
           tableId: table?.id ?? null,
           tableLabel: table?.label ?? null,
-          items: orderableItems.map((c) => ({
+          items: orderableItems.map(c => ({
             itemId: c.itemId,
             name: c.name,
             emoji: c.emoji,
@@ -130,7 +130,7 @@ export default function OrderingApp({
         const many = names.length > 1;
         setNotice(
           `${names.join(", ")} ${many ? "are" : "is"} no longer available, so we removed ` +
-            `${many ? "them" : "it"} from your order. Review and pay again.`
+            `${many ? "them" : "it"} from your order. Review and pay again.`,
         );
         setLoading(false);
         return;
@@ -138,8 +138,10 @@ export default function OrderingApp({
       // An item sold out between loading the menu and checking out: mark it
       // sold out (it greys out and drops from the total) so the rest can pay.
       if (data.unavailableItemId) {
-        setSoldOut((prev) => new Set(prev).add(data.unavailableItemId));
-        setNotice(`${data.error} We've marked it sold out — remove it or pay for the rest of your order.`);
+        setSoldOut(prev => new Set(prev).add(data.unavailableItemId));
+        setNotice(
+          `${data.error} We've marked it sold out — remove it or pay for the rest of your order.`,
+        );
       } else {
         setNotice(data.error ?? "Something went wrong. Please try again.");
       }
@@ -170,7 +172,7 @@ export default function OrderingApp({
         currency={restaurant.currency}
         initialLine={editingLine}
         onBack={() => setScreen("cart")}
-        onAdd={(line) => {
+        onAdd={line => {
           cart.updateItem(editingLine.cartId, line);
           setEditingLine(null);
           setScreen("cart");
@@ -197,7 +199,7 @@ export default function OrderingApp({
           loading={loading}
           canCheckout={orderableItems.length > 0 && restaurant.accepting_orders}
           onChangeNote={setOrderNote}
-          onChangeTip={(pct) => {
+          onChangeTip={pct => {
             setTipPct(pct);
             setTipCustom(null); // picking a preset clears the exact amount
           }}
@@ -208,10 +210,19 @@ export default function OrderingApp({
           onCheckout={checkout}
         />
         <Modal open={!!notice} onClose={() => setNotice(null)} maxWidth={400}>
-          <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 8 }}>Heads up</h3>
-          <p className="tt-muted" style={{ marginTop: 0 }}>{notice}</p>
+          <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 8 }}>
+            Heads up
+          </h3>
+          <p className="tt-muted" style={{ marginTop: 0 }}>
+            {notice}
+          </p>
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-            <button className="tt-btn tt-btn-primary tt-btn-sm" onClick={() => setNotice(null)}>OK</button>
+            <button
+              className="tt-btn tt-btn-primary tt-btn-sm"
+              onClick={() => setNotice(null)}
+            >
+              OK
+            </button>
           </div>
         </Modal>
       </>

@@ -30,26 +30,55 @@ export default function TableRow({ table, qr, onRename, onDelete }: TableRowProp
 
   return (
     <div className="tt-table-row">
-      <QrCard title={`Table ${table.label}`} subtitle="Order tagged to this table" qr={qr} downloadName={`table-${table.label}`} />
+      <QrCard
+        title={`Table ${table.label}`}
+        subtitle="Order tagged to this table"
+        qr={qr}
+        downloadName={`table-${table.label}`}
+      />
       <div className="tt-table-actions">
         {renaming ? (
           <form
             className="tt-add-section"
-            onSubmit={async (e) => {
+            onSubmit={async e => {
               e.preventDefault();
               const label = value.trim();
               if (label && label !== table.label) await onRename(table.id, label);
               setRenaming(false);
             }}
           >
-            <input className="tt-input" value={value} onChange={(e) => setValue(e.target.value)} autoFocus />
-            <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">Save</button>
-            <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => { setValue(table.label); setRenaming(false); }}>Cancel</button>
+            <input
+              className="tt-input"
+              value={value}
+              onChange={e => setValue(e.target.value)}
+              autoFocus
+            />
+            <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">
+              Save
+            </button>
+            <button
+              type="button"
+              className="tt-btn tt-btn-ghost tt-btn-sm"
+              onClick={() => {
+                setValue(table.label);
+                setRenaming(false);
+              }}
+            >
+              Cancel
+            </button>
           </form>
         ) : (
           <div className="tt-prod-actions">
-            <button className="tt-iconbtn" title="Rename" onClick={() => setRenaming(true)}>✏️</button>
-            <button className="tt-iconbtn" title="Delete table" onClick={remove}>🗑️</button>
+            <button
+              className="tt-iconbtn"
+              title="Rename"
+              onClick={() => setRenaming(true)}
+            >
+              ✏️
+            </button>
+            <button className="tt-iconbtn" title="Delete table" onClick={remove}>
+              🗑️
+            </button>
           </div>
         )}
       </div>

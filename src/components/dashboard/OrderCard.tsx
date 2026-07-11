@@ -10,10 +10,15 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
 };
 
 /** Map an order's current status to the button that advances it. */
-function nextAction(status: OrderStatus): { label: string; to: OrderStatus; variant: string } | null {
-  if (status === "received") return { label: "Start Preparing", to: "preparing", variant: "tt-btn-primary" };
-  if (status === "preparing") return { label: "Mark Ready", to: "ready", variant: "tt-btn-success" };
-  if (status === "ready") return { label: "Complete", to: "completed", variant: "tt-btn-ghost" };
+function nextAction(
+  status: OrderStatus,
+): { label: string; to: OrderStatus; variant: string } | null {
+  if (status === "received")
+    return { label: "Start Preparing", to: "preparing", variant: "tt-btn-primary" };
+  if (status === "preparing")
+    return { label: "Mark Ready", to: "ready", variant: "tt-btn-success" };
+  if (status === "ready")
+    return { label: "Complete", to: "completed", variant: "tt-btn-ghost" };
   return null;
 }
 
@@ -26,7 +31,12 @@ interface OrderCardProps {
 }
 
 /** One order on the kitchen board: table, items, total, and its advance button. */
-export default function OrderCard({ order, currency, onAdvance, onCancel }: OrderCardProps) {
+export default function OrderCard({
+  order,
+  currency,
+  onAdvance,
+  onCancel,
+}: OrderCardProps) {
   const meta = STATUS_META[order.status] ?? STATUS_META.completed;
   const action = nextAction(order.status);
   const cancellable = order.status === "received" || order.status === "preparing";
@@ -44,7 +54,10 @@ export default function OrderCard({ order, currency, onAdvance, onCancel }: Orde
             {orderCode(order.id)} · {placedAt}
           </div>
         </div>
-        <span className="tt-status-badge" style={{ color: meta.color, background: `${meta.color}1a` }}>
+        <span
+          className="tt-status-badge"
+          style={{ color: meta.color, background: `${meta.color}1a` }}
+        >
           {meta.label}
         </span>
       </div>
@@ -57,16 +70,25 @@ export default function OrderCard({ order, currency, onAdvance, onCancel }: Orde
             {Object.keys(item.mods).length > 0 && (
               <span className="tt-muted" style={{ fontSize: 11 }}>
                 {" "}
-                ({Object.values(item.mods).map((v) => (Array.isArray(v) ? v.join(", ") : v)).join(" · ")})
+                (
+                {Object.values(item.mods)
+                  .map(v => (Array.isArray(v) ? v.join(", ") : v))
+                  .join(" · ")}
+                )
               </span>
             )}
             {item.notes && (
-              <div className="tt-accent" style={{ fontSize: 11, fontStyle: "italic" }}>↳ {item.notes}</div>
+              <div className="tt-accent" style={{ fontSize: 11, fontStyle: "italic" }}>
+                ↳ {item.notes}
+              </div>
             )}
           </div>
         ))}
         {order.note && (
-          <div className="tt-accent" style={{ fontSize: 12, fontStyle: "italic", marginTop: 6 }}>
+          <div
+            className="tt-accent"
+            style={{ fontSize: 12, fontStyle: "italic", marginTop: 6 }}
+          >
             📝 {order.note}
           </div>
         )}
@@ -76,7 +98,10 @@ export default function OrderCard({ order, currency, onAdvance, onCancel }: Orde
         <strong className="tt-accent">{formatMoney(order.total, currency)}</strong>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {cancellable && onCancel && (
-            <button className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => onCancel(order)}>
+            <button
+              className="tt-btn tt-btn-ghost tt-btn-sm"
+              onClick={() => onCancel(order)}
+            >
               Cancel
             </button>
           )}
@@ -92,7 +117,9 @@ export default function OrderCard({ order, currency, onAdvance, onCancel }: Orde
               ✕ Cancelled{order.stripe_refund_id ? " · refunded" : ""}
             </span>
           ) : (
-            <span style={{ color: "var(--tt-success)", fontSize: 13, fontWeight: 700 }}>✓ Done</span>
+            <span style={{ color: "var(--tt-success)", fontSize: 13, fontWeight: 700 }}>
+              ✓ Done
+            </span>
           )}
         </div>
       </div>

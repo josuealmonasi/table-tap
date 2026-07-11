@@ -28,21 +28,31 @@ function isToday(order: Order): boolean {
 }
 
 /** Kitchen dashboard: live order grid with stats, plus a history tab. */
-export default function OrdersBoard({ restaurant, initialOrders, initialRequests, canCancel }: OrdersBoardProps) {
-  const { orders, updateStatus, cancelOrder } = useRestaurantOrders(restaurant.id, initialOrders);
+export default function OrdersBoard({
+  restaurant,
+  initialOrders,
+  initialRequests,
+  canCancel,
+}: OrdersBoardProps) {
+  const { orders, updateStatus, cancelOrder } = useRestaurantOrders(
+    restaurant.id,
+    initialOrders,
+  );
   const [tab, setTab] = useState<Tab>("live");
   const confirm = useConfirm();
   const toast = useToast();
 
-  const live = orders.filter((o) => LIVE_STATUSES.has(o.status));
-  const history = orders.filter((o) => !LIVE_STATUSES.has(o.status));
+  const live = orders.filter(o => LIVE_STATUSES.has(o.status));
+  const history = orders.filter(o => !LIVE_STATUSES.has(o.status));
   const shown = tab === "live" ? live : history;
 
-  const activeCount = live.filter((o) => o.status === "received" || o.status === "preparing").length;
+  const activeCount = live.filter(
+    o => o.status === "received" || o.status === "preparing",
+  ).length;
   // Today's takings: paid orders placed today, minus anything refunded.
   const revenue = orders.reduce(
     (sum, o) => sum + (o.paid && o.status !== "cancelled" && isToday(o) ? o.total : 0),
-    0
+    0,
   );
 
   async function handleCancel(order: Order): Promise<void> {
@@ -64,20 +74,27 @@ export default function OrdersBoard({ restaurant, initialOrders, initialRequests
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <Breadcrumb trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Orders" }]} />
+          <Breadcrumb
+            trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Orders" }]}
+          />
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <div className="tt-stat">
               <strong className="tt-accent">{activeCount}</strong>
               <span>Active</span>
             </div>
             <div className="tt-stat">
-              <strong style={{ color: "var(--tt-success)" }}>{formatMoney(revenue, restaurant.currency)}</strong>
+              <strong style={{ color: "var(--tt-success)" }}>
+                {formatMoney(revenue, restaurant.currency)}
+              </strong>
               <span>Today</span>
             </div>
           </div>
         </header>
 
-        <ServiceRequestsBar restaurantId={restaurant.id} initialRequests={initialRequests} />
+        <ServiceRequestsBar
+          restaurantId={restaurant.id}
+          initialRequests={initialRequests}
+        />
 
         <div className="tt-board-tabs" role="tablist">
           <button
@@ -112,7 +129,7 @@ export default function OrdersBoard({ restaurant, initialOrders, initialRequests
           </div>
         ) : (
           <div className="tt-orders-grid">
-            {shown.map((order) => (
+            {shown.map(order => (
               <OrderCard
                 key={order.id}
                 order={order}

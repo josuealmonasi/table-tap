@@ -17,7 +17,9 @@ interface Actor {
 /** The caller as an owner (founding or co-owner) — null when they're neither. */
 async function actingOwner(): Promise<Actor | null> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return null;
 
   const { data: owned } = await supabase
@@ -32,7 +34,8 @@ async function actingOwner(): Promise<Actor | null> {
     .select("restaurant_id, role")
     .eq("user_id", user.id)
     .single();
-  if (co?.role === "owner") return { restaurantId: co.restaurant_id, email: user.email ?? "owner" };
+  if (co?.role === "owner")
+    return { restaurantId: co.restaurant_id, email: user.email ?? "owner" };
   return null;
 }
 
@@ -42,7 +45,7 @@ async function log(
   actorEmail: string,
   action: "created" | "updated" | "deleted",
   targetRole: string,
-  targetEmail: string
+  targetEmail: string,
 ): Promise<void> {
   await createAdminClient().from("user_logs").insert({
     restaurant_id: restaurantId,
@@ -56,7 +59,11 @@ async function log(
 /** True when adding one more owner login would pass the cap. */
 async function ownerSlotFree(restaurantId: string): Promise<boolean> {
   const admin = createAdminClient();
-  const { data: r } = await admin.from("restaurants").select("owner_id").eq("id", restaurantId).single();
+  const { data: r } = await admin
+    .from("restaurants")
+    .select("owner_id")
+    .eq("id", restaurantId)
+    .single();
   const { count } = await admin
     .from("staff")
     .select("id", { count: "exact", head: true })
@@ -73,7 +80,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Enter a valid email." }, { status: 400 });
   }
   if (typeof password !== "string" || password.length < 8) {
-    return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Password must be at least 8 characters." },
+      { status: 400 },
+    );
   }
   if (!ROLES.includes(role)) {
     return NextResponse.json({ error: "Pick a role." }, { status: 400 });
@@ -85,7 +95,7 @@ export async function POST(req: NextRequest) {
   if (role === "owner" && !(await ownerSlotFree(actor.restaurantId))) {
     return NextResponse.json(
       { error: `A restaurant can have at most ${MAX_OWNERS} owners.` },
-      { status: 409 }
+      { status: 409 },
     );
   }
 
@@ -98,7 +108,7 @@ export async function POST(req: NextRequest) {
   if (userErr || !created.user) {
     return NextResponse.json(
       { error: userErr?.message ?? "Could not create the login." },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -110,7 +120,10 @@ export async function POST(req: NextRequest) {
   });
   if (staffErr) {
     await admin.auth.admin.deleteUser(created.user.id); // roll back the login
-    return NextResponse.json({ error: "Could not add the team member." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Could not add the team member." },
+      { status: 500 },
+    );
   }
 
   await log(actor.restaurantId, actor.email, "created", role, email);
@@ -141,12 +154,13 @@ export async function PATCH(req: NextRequest) {
   if (role === "owner" && !(await ownerSlotFree(actor.restaurantId))) {
     return NextResponse.json(
       { error: `A restaurant can have at most ${MAX_OWNERS} owners.` },
-      { status: 409 }
+      { status: 409 },
     );
   }
 
   const { error } = await admin.from("staff").update({ role }).eq("id", id);
-  if (error) return NextResponse.json({ error: "Could not update the role." }, { status: 500 });
+  if (error)
+    return NextResponse.json({ error: "Could not update the role." }, { status: 500 });
 
   await log(actor.restaurantId, actor.email, "updated", role, member.email);
   return NextResponse.json({ ok: true });
@@ -172,7 +186,8 @@ export async function DELETE(req: NextRequest) {
   }
 
   const { error } = await admin.auth.admin.deleteUser(member.user_id);
-  if (error) return NextResponse.json({ error: "Could not remove the login." }, { status: 500 });
+  if (error)
+    return NextResponse.json({ error: "Could not remove the login." }, { status: 500 });
 
   await log(actor.restaurantId, actor.email, "deleted", member.role, member.email);
   return NextResponse.json({ ok: true });

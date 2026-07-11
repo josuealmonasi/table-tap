@@ -41,7 +41,7 @@ export default function MenuRow({
         <form
           className="tt-menu-row"
           style={{ gap: 8 }}
-          onSubmit={async (e) => {
+          onSubmit={async e => {
             e.preventDefault();
             const name = value.trim();
             if (!name) return;
@@ -57,11 +57,22 @@ export default function MenuRow({
             className="tt-input"
             style={{ flex: 1 }}
             value={value}
-            onChange={(e) => { setValue(e.target.value); setError(null); }}
+            onChange={e => {
+              setValue(e.target.value);
+              setError(null);
+            }}
             autoFocus
           />
-          <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">Save</button>
-          <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => setRenaming(false)}>Cancel</button>
+          <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">
+            Save
+          </button>
+          <button
+            type="button"
+            className="tt-btn tt-btn-ghost tt-btn-sm"
+            onClick={() => setRenaming(false)}
+          >
+            Cancel
+          </button>
         </form>
         {error && <p className="tt-field-error">{error}</p>}
       </div>
@@ -79,18 +90,51 @@ export default function MenuRow({
       <div className="tt-menu-body">
         <button className="tt-menu-name" onClick={() => onOpen(menu)}>
           <span>{menu.name}</span>
-          {!menu.active && <span className="tt-badge" style={{ marginLeft: 8 }}>Hidden</span>}
+          {!menu.active && (
+            <span className="tt-badge" style={{ marginLeft: 8 }}>
+              Hidden
+            </span>
+          )}
           <span className="tt-menu-open">Open →</span>
         </button>
         <div className="tt-menu-controls">
-          <label className="tt-switch" title={menu.active ? "Visible to customers" : "Hidden"}>
-            <input type="checkbox" checked={menu.active} onChange={(e) => onToggle(menu, e.target.checked)} />
+          <label
+            className="tt-switch"
+            title={menu.active ? "Visible to customers" : "Hidden"}
+          >
+            <input
+              type="checkbox"
+              checked={menu.active}
+              onChange={e => onToggle(menu, e.target.checked)}
+            />
             <span className="tt-switch-track" />
           </label>
           <div className="tt-prod-actions">
-            <button className="tt-iconbtn" title="Rename" onClick={() => { setValue(menu.name); setError(null); setRenaming(true); }}>✏️</button>
-            <button className="tt-iconbtn" title="Duplicate menu" onClick={() => onDuplicate(menu)}>📋</button>
-            <button className="tt-iconbtn" title="Delete menu" onClick={() => onDelete(menu)}>🗑️</button>
+            <button
+              className="tt-iconbtn"
+              title="Rename"
+              onClick={() => {
+                setValue(menu.name);
+                setError(null);
+                setRenaming(true);
+              }}
+            >
+              ✏️
+            </button>
+            <button
+              className="tt-iconbtn"
+              title="Duplicate menu"
+              onClick={() => onDuplicate(menu)}
+            >
+              📋
+            </button>
+            <button
+              className="tt-iconbtn"
+              title="Delete menu"
+              onClick={() => onDelete(menu)}
+            >
+              🗑️
+            </button>
           </div>
         </div>
       </div>

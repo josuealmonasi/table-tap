@@ -31,21 +31,35 @@ export interface DuplicateMenuResult {
  */
 export async function duplicateMenuDeep(
   supabase: Supabase,
-  args: DuplicateMenuArgs
+  args: DuplicateMenuArgs,
 ): Promise<DuplicateMenuResult | undefined> {
-  const { restaurantId, sourceId, menus, sections, products, addons, links, reportError } = args;
-  const source = menus.find((m) => m.id === sourceId);
+  const {
+    restaurantId,
+    sourceId,
+    menus,
+    sections,
+    products,
+    addons,
+    links,
+    reportError,
+  } = args;
+  const source = menus.find(m => m.id === sourceId);
   if (!source) return undefined;
 
   // Find a free "{name} copy" / "{name} copy 2" ... name.
-  const existing = new Set(menus.map((m) => m.name.trim().toLowerCase()));
+  const existing = new Set(menus.map(m => m.name.trim().toLowerCase()));
   let copyName = `${source.name} copy`;
   let n = 2;
   while (existing.has(copyName.toLowerCase())) copyName = `${source.name} copy ${n++}`;
 
   const { data: newMenuRow, error: menuErr } = await supabase
     .from("menus")
-    .insert({ restaurant_id: restaurantId, name: copyName, active: source.active, sort_order: menus.length })
+    .insert({
+      restaurant_id: restaurantId,
+      name: copyName,
+      active: source.active,
+      sort_order: menus.length,
+    })
     .select("id")
     .single();
   if (!reportError("duplicate the menu", menuErr)) return undefined;
@@ -53,10 +67,15 @@ export async function duplicateMenuDeep(
 
   // Sections.
   const sectionIdMap = new Map<string, string>();
-  for (const s of sections.filter((x) => x.menu_id === sourceId)) {
+  for (const s of sections.filter(x => x.menu_id === sourceId)) {
     const { data, error } = await supabase
       .from("categories")
-      .insert({ restaurant_id: restaurantId, menu_id: newMenuId, name: s.name, sort_order: s.sort_order })
+      .insert({
+        restaurant_id: restaurantId,
+        menu_id: newMenuId,
+        name: s.name,
+        sort_order: s.sort_order,
+      })
       .select("id")
       .single();
     if (!reportError("duplicate a section", error)) return undefined;
@@ -65,7 +84,7 @@ export async function duplicateMenuDeep(
 
   // Extras (add-ons) first, so products can reference them.
   const addonIdMap = new Map<string, string>();
-  for (const a of addons.filter((x) => x.menu_id === sourceId)) {
+  for (const a of addons.filter(x => x.menu_id === sourceId)) {
     const { data, error } = await supabase
       .from("menu_items")
       .insert({
@@ -86,13 +105,13 @@ export async function duplicateMenuDeep(
   }
 
   // Products, plus their add-on links.
-  for (const p of products.filter((x) => x.menu_id === sourceId)) {
+  for (const p of products.filter(x => x.menu_id === sourceId)) {
     const { data, error } = await supabase
       .from("menu_items")
       .insert({
         restaurant_id: restaurantId,
         menu_id: newMenuId,
-        category_id: p.category_id ? sectionIdMap.get(p.category_id) ?? null : null,
+        category_id: p.category_id ? (sectionIdMap.get(p.category_id) ?? null) : null,
         is_addon: false,
         name: p.name,
         description: p.description,
@@ -109,11 +128,17 @@ export async function duplicateMenuDeep(
     if (!reportError("duplicate a product", error)) return undefined;
     const newProductId = (data as { id: string }).id;
 
-    const linkedAddonIds = (links[p.id] ?? []).map((aid) => addonIdMap.get(aid)).filter(Boolean) as string[];
+    const linkedAddonIds = (links[p.id] ?? [])
+      .map(aid => addonIdMap.get(aid))
+      .filter(Boolean) as string[];
     if (linkedAddonIds.length) {
-      const { error: linkErr } = await supabase
-        .from("item_addons")
-        .insert(linkedAddonIds.map((addon_id, i) => ({ product_id: newProductId, addon_id, sort_order: i })));
+      const { error: linkErr } = await supabase.from("item_addons").insert(
+        linkedAddonIds.map((addon_id, i) => ({
+          product_id: newProductId,
+          addon_id,
+          sort_order: i,
+        })),
+      );
       reportError("link an extra to a duplicated product", linkErr);
     }
   }

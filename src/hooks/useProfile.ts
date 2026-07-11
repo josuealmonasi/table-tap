@@ -16,9 +16,11 @@ export function useProfile(userId: string) {
 
   async function saveName(fullName: string): Promise<boolean> {
     setSaving(true);
-    const { error } = await supabase
-      .from("profiles")
-      .upsert({ user_id: userId, full_name: fullName.trim(), updated_at: new Date().toISOString() });
+    const { error } = await supabase.from("profiles").upsert({
+      user_id: userId,
+      full_name: fullName.trim(),
+      updated_at: new Date().toISOString(),
+    });
     setSaving(false);
     if (error) {
       toast(`Couldn't save your name: ${error.message}`, "error");

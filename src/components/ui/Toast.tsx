@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 type Tone = "error" | "info";
 
@@ -30,8 +37,10 @@ export function ToastProvider({ children }: ToastProviderProps) {
 
   const show = useCallback<ToastFn>((message, tone = "info") => {
     const id = Date.now() + Math.random();
-    setToasts((t) => [...t, { id, message, tone }]);
-    timeouts.current.push(setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4000));
+    setToasts(t => [...t, { id, message, tone }]);
+    timeouts.current.push(
+      setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4000),
+    );
   }, []);
 
   // Clear any pending dismiss timers if the provider unmounts.
@@ -45,8 +54,11 @@ export function ToastProvider({ children }: ToastProviderProps) {
       {children}
       {toasts.length > 0 && (
         <div className="tt-toasts" role="status" aria-live="polite">
-          {toasts.map((t) => (
-            <div key={t.id} className={`tt-toast ${t.tone === "error" ? "tt-toast-error" : ""}`}>
+          {toasts.map(t => (
+            <div
+              key={t.id}
+              className={`tt-toast ${t.tone === "error" ? "tt-toast-error" : ""}`}
+            >
               {t.message}
             </div>
           ))}

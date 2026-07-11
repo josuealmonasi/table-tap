@@ -12,7 +12,9 @@ export const dynamic = "force-dynamic";
 // /dashboard/tables — manage tables and their QR codes. Requires login.
 export default async function TablesPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   // Owners and managers may manage tables; kitchen goes back to its board.
@@ -31,22 +33,28 @@ export default async function TablesPage() {
   // Absolute base URL so scanned QRs reach the deployed site (dev: localhost).
   const h = await headers();
   const host = h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  const proto =
+    h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const origin = `${proto}://${host}`;
 
   const fastFoodUrl = `${origin}/r/${r.id}`;
   const fastFood = { url: fastFoodUrl, svg: await qrSvg(fastFoodUrl) };
 
   const tableQrs: TableWithQr[] = await Promise.all(
-    tableList.map(async (table) => {
+    tableList.map(async table => {
       const url = `${origin}/r/${r.id}/t/${table.id}`;
       return { table, qr: { url, svg: await qrSvg(url) } };
-    })
+    }),
   );
 
   return (
     <ConfirmProvider>
-      <TablesPanel restaurantId={r.id} restaurantName={r.name} fastFood={fastFood} tables={tableQrs} />
+      <TablesPanel
+        restaurantId={r.id}
+        restaurantName={r.name}
+        fastFood={fastFood}
+        tables={tableQrs}
+      />
     </ConfirmProvider>
   );
 }

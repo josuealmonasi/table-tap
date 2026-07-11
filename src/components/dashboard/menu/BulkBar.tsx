@@ -19,7 +19,9 @@ export default function BulkBar({ count, onCancel, onDelete }: BulkBarProps) {
         <strong>{count}</strong> selected
       </span>
       <div style={{ display: "flex", gap: 8 }}>
-        <button className="tt-btn tt-btn-ghost tt-btn-sm" onClick={onCancel}>Cancel</button>
+        <button className="tt-btn tt-btn-ghost tt-btn-sm" onClick={onCancel}>
+          Cancel
+        </button>
         <button
           className="tt-btn tt-btn-primary tt-btn-sm"
           disabled={count === 0}
@@ -27,7 +29,8 @@ export default function BulkBar({ count, onCancel, onDelete }: BulkBarProps) {
             if (
               await confirm({
                 title: `Delete ${count} selected item${count === 1 ? "" : "s"}?`,
-                message: "Products and extras are removed permanently. This can't be undone.",
+                message:
+                  "Products and extras are removed permanently. This can't be undone.",
                 confirmLabel: "Delete selected",
                 danger: true,
               })

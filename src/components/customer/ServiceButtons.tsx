@@ -30,15 +30,15 @@ export default function ServiceButtons({ restaurantId, table }: ServiceButtonsPr
   }, []);
 
   async function send(kind: Kind): Promise<void> {
-    setSent((prev) => new Set(prev).add(kind));
+    setSent(prev => new Set(prev).add(kind));
     timers.current.push(
       setTimeout(() => {
-        setSent((prev) => {
+        setSent(prev => {
           const next = new Set(prev);
           next.delete(kind);
           return next;
         });
-      }, 60_000)
+      }, 60_000),
     );
     try {
       await fetch("/api/service-requests", {
@@ -53,7 +53,7 @@ export default function ServiceButtons({ restaurantId, table }: ServiceButtonsPr
 
   return (
     <div className="tt-service-row">
-      {(Object.keys(LABELS) as Kind[]).map((kind) => (
+      {(Object.keys(LABELS) as Kind[]).map(kind => (
         <button
           key={kind}
           type="button"
