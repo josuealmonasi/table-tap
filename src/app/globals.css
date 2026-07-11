@@ -466,12 +466,17 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 }
 .tt-board-tab-active { border-color: var(--tt-accent); color: var(--tt-accent); background: rgba(232,82,42,.06); font-weight: 600; }
 
-/* Staff page: one login row */
-.tt-staff-row {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 10px 4px; border-top: 1px solid var(--tt-cream); font-size: 14px;
+/* Staff page: aligned table of logins (name | email | role | remove) */
+.tt-staff-table { display: flex; flex-direction: column; }
+.tt-staff-tr {
+  display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.6fr) 84px 32px;
+  align-items: center; gap: 12px; padding: 10px 4px;
+  border-top: 1px solid var(--tt-cream); font-size: 14px;
 }
-.tt-staff-row:first-of-type { border-top: none; }
+.tt-staff-tr:first-of-type { border-top: none; }
+.tt-staff-thead { color: var(--tt-muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding-bottom: 6px; }
+/* long names/emails truncate instead of wrecking the columns */
+.tt-staff-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Orders board: open call-waiter / request-bill chips */
 .tt-requests-bar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
