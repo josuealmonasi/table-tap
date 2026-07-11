@@ -479,8 +479,18 @@ code { background: var(--tt-surface); padding: 1px 6px; border-radius: 6px; font
 .tt-staff-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-role-select { padding: 6px 8px; font-size: 13px; }
 
-/* menu editor search box (header, next to the breadcrumb) */
-.tt-menu-search { max-width: 280px; padding: 9px 12px; font-size: 14px; }
+/* menu editor tools (search + select), sized to mirror the Extras column:
+   full-width row on mobile, shrinking on tablets, exactly the side column's
+   34%/min-400px on desktop so the search lines up over Extras. */
+.tt-editor-tools { display: flex; gap: 8px; align-items: center; width: 100%; }
+.tt-menu-search { flex: 1; min-width: 0; padding: 9px 12px; font-size: 14px; }
+@media (min-width: 641px) and (max-width: 1024px) {
+  .tt-editor-tools { width: auto; }
+  .tt-menu-search { flex: none; width: clamp(220px, 32vw, 400px); }
+}
+@media (min-width: 1025px) {
+  .tt-editor-tools { width: 34%; min-width: 400px; }
+}
 
 /* bulk select: row checkboxes + the floating action bar */
 .tt-bulk-check { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--tt-accent); cursor: pointer; }
