@@ -172,6 +172,16 @@ do $$ begin
     foreign key (restaurant_id) references restaurants(id) on delete cascade;
 exception when duplicate_object then null; end $$;
 
+-- ── Platform admins (highest permission level — power over the whole app) ───
+-- Checked ONLY server-side with the secret key: RLS is enabled with no
+-- policies, so no client key (anon or authenticated) can read or write it.
+create table if not exists platform_admins (
+  user_id    uuid primary key references auth.users(id) on delete cascade,
+  email      text not null,
+  created_at timestamptz not null default now()
+);
+alter table platform_admins enable row level security;
+
 -- ── User activity log (who created/updated/deleted which login) ─────────────
 -- Written ONLY server-side by the user-management API routes; the restaurant's
 -- owners are the only readers.
