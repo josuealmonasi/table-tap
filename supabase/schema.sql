@@ -78,6 +78,30 @@ create table if not exists menu_items (
   created_at    timestamptz not null default now()
 );
 
+-- ── Orders ──────────────────────────────────────────────────────────────────
+-- status: 'pending_payment' | 'received' | 'preparing' | 'ready' | 'completed' | 'cancelled'
+create table if not exists orders (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  table_id      uuid references restaurant_tables(id) on delete set null,
+  table_label   text,                            -- denormalised for display
+  status        text not null default 'pending_payment',
+  subtotal      numeric not null default 0,
+  service_fee   numeric not null default 0,
+  tip           numeric not null default 0,
+  total         numeric not null default 0,
+  currency      text not null default 'USD',
+  -- line items snapshot: [{ name, emoji, price, qty, mods: {}, notes }]
+  items         jsonb not null default '[]'::jsonb,
+  note          text,                            -- whole-order note
+  pay_method    text,                            -- 'card' | 'apple' | 'google' | 'paypal'
+  stripe_session_id text,
+  stripe_payment_intent text,
+  stripe_refund_id text,                         -- set when a cancelled order was refunded
+  paid          boolean not null default false,
+  created_at    timestamptz not null default now()
+);
+
 -- Migration for databases created before is_addon existed.
 alter table menu_items add column if not exists is_addon boolean not null default false;
 
@@ -105,30 +129,6 @@ create table if not exists item_addons (
   addon_id   uuid not null references menu_items(id) on delete cascade,
   sort_order int not null default 0,
   primary key (product_id, addon_id)
-);
-
--- ── Orders ──────────────────────────────────────────────────────────────────
--- status: 'pending_payment' | 'received' | 'preparing' | 'ready' | 'completed' | 'cancelled'
-create table if not exists orders (
-  id            uuid primary key default gen_random_uuid(),
-  restaurant_id uuid not null references restaurants(id) on delete cascade,
-  table_id      uuid references restaurant_tables(id) on delete set null,
-  table_label   text,                            -- denormalised for display
-  status        text not null default 'pending_payment',
-  subtotal      numeric not null default 0,
-  service_fee   numeric not null default 0,
-  tip           numeric not null default 0,
-  total         numeric not null default 0,
-  currency      text not null default 'USD',
-  -- line items snapshot: [{ name, emoji, price, qty, mods: {}, notes }]
-  items         jsonb not null default '[]'::jsonb,
-  note          text,                            -- whole-order note
-  pay_method    text,                            -- 'card' | 'apple' | 'google' | 'paypal'
-  stripe_session_id text,
-  stripe_payment_intent text,
-  stripe_refund_id text,                         -- set when a cancelled order was refunded
-  paid          boolean not null default false,
-  created_at    timestamptz not null default now()
 );
 
 -- short human-friendly code for display (ORD-XXXX) derived from id
