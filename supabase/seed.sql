@@ -19,7 +19,7 @@ begin
 
   -- Restaurant
   insert into restaurants (name, tagline, logo, currency, service_pct)
-  values ('Sakura Dining', 'Modern Japanese Kitchen', '🌸', 'USD', 10)
+  values ('Sakura Dining', 'Modern Japanese Kitchen', '🌸', 'USD', 0)
   returning id into rid;
 
   -- Tables 1..12
