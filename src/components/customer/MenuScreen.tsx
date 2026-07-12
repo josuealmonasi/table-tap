@@ -66,6 +66,11 @@ export default function MenuScreen({
             ⏸️ We&apos;re not taking orders right now — please check back soon.
           </div>
         )}
+      </div>
+
+      {/* Only this strip stays pinned while scrolling — the restaurant
+          identity above scrolls away with the page. */}
+      <div className="tt-menu-sticky">
         <input
           className="tt-input tt-customer-search"
           type="search"
