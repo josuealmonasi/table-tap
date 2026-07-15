@@ -57,6 +57,7 @@ export default async function AdminPage() {
         email: u.email ?? "—",
         full_name: nameByUser.get(u.id) || undefined,
         role,
+        founding: !!founded,
         restaurant_name: restaurant?.name,
       };
     })
