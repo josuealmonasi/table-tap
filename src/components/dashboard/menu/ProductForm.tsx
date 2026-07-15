@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
-import type { MenuItem } from "@/lib/types";
+import type { MenuItem, Modifier } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
 import IconPicker from "./IconPicker";
+import ModifiersEditor from "./ModifiersEditor";
 
 interface ProductFormProps {
   /** The product being edited; omit to add a new one. */
@@ -33,6 +34,7 @@ export default function ProductForm({
   const [imageUrl, setImageUrl] = useState(initial?.image_url ?? "");
   const [emoji, setEmoji] = useState(initial?.emoji ?? "");
   const [popular, setPopular] = useState(initial?.popular ?? false);
+  const [modifiers, setModifiers] = useState<Modifier[]>(initial?.modifiers ?? []);
   const [picked, setPicked] = useState<string[]>(selectedAddonIds);
   const [saving, setSaving] = useState(false);
 
@@ -51,6 +53,14 @@ export default function ProductForm({
         image_url: imageUrl.trim() || null,
         emoji,
         popular,
+        // Only keep groups that actually have a name and choices.
+        modifiers: modifiers
+          .map(g => ({
+            label: g.label.trim(),
+            type: g.type,
+            options: g.options.map(o => o.trim()).filter(Boolean),
+          }))
+          .filter(g => g.label && g.options.length > 0),
       },
       picked,
     );
@@ -107,6 +117,8 @@ export default function ProductForm({
       </label>
 
       <IconPicker value={emoji} onChange={setEmoji} />
+
+      <ModifiersEditor value={modifiers} onChange={setModifiers} />
 
       {addons.length > 0 && (
         <div>
