@@ -10,7 +10,7 @@ import {
   type ReorderTable,
 } from "@/lib/menu-data";
 import { duplicateMenuDeep } from "@/lib/menu-duplicate";
-import type { Category, Menu, MenuItem } from "@/lib/types";
+import type { Category, Menu, MenuItem, Modifier } from "@/lib/types";
 
 /** Editable fields for a product (a non-add-on menu item). */
 export interface ProductInput {
@@ -20,6 +20,8 @@ export interface ProductInput {
   image_url: string | null;
   emoji: string;
   popular: boolean;
+  /** Option groups the customer picks from (e.g. "Spice level"). */
+  modifiers: Modifier[];
 }
 
 /** Editable fields for an add-on item. */

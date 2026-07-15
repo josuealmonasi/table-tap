@@ -1409,6 +1409,14 @@ code {
   }
 }
 
+/* product form: one option group (modifier) card */
+.tt-modgroup {
+  border: 1px solid var(--tt-cream);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+
 /* bulk select: row checkboxes + the floating action bar */
 .tt-bulk-check {
   width: 18px;
