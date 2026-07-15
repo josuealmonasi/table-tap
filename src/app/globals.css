@@ -1443,7 +1443,7 @@ code {
 }
 .tt-admin-tr {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) 110px minmax(0, 1fr) 32px;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) 110px minmax(0, 1fr) 60px;
   align-items: center;
   gap: 12px;
   padding: 9px 4px;

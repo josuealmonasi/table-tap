@@ -51,6 +51,13 @@ export function useAdminActions() {
     busy,
     createUser: (input: NewUserInput) =>
       call("/api/admin/users", "POST", input, "Login created"),
+    updateUser: (input: {
+      userId: string;
+      fullName?: string;
+      email?: string;
+      password?: string;
+      role?: string;
+    }) => call("/api/admin/users", "PATCH", input, "Login updated"),
     deleteUser: (userId: string) =>
       call("/api/admin/users", "DELETE", { userId }, "Login deleted"),
     deleteRestaurant: (id: string) =>

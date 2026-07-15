@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useAdminActions } from "@/hooks/useAdminActions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import AdminCreateUser from "./AdminCreateUser";
+import AdminEditUser from "./AdminEditUser";
 
 export interface AdminRestaurantRow {
   id: string;
@@ -18,6 +20,8 @@ export interface AdminUserRow {
   email: string;
   full_name?: string;
   role: "admin" | "owner" | "manager" | "kitchen" | "none";
+  /** Founding owners' role is fixed (it comes from restaurants.owner_id). */
+  founding?: boolean;
   restaurant_name?: string;
 }
 
@@ -45,6 +49,7 @@ export default function AdminPanel({
 }: AdminPanelProps) {
   const { busy, deleteUser, deleteRestaurant } = useAdminActions();
   const confirm = useConfirm();
+  const [editing, setEditing] = useState<AdminUserRow | null>(null);
 
   return (
     <div className="tt-dash">
@@ -158,25 +163,35 @@ export default function AdminPanel({
                     you
                   </span>
                 ) : (
-                  <button
-                    className="tt-iconbtn"
-                    title="Delete login"
-                    disabled={busy}
-                    onClick={async () => {
-                      if (
-                        await confirm({
-                          title: `Delete ${u.email}?`,
-                          message: "Their login stops working immediately.",
-                          confirmLabel: "Delete login",
-                          danger: true,
-                        })
-                      ) {
-                        deleteUser(u.user_id);
-                      }
-                    }}
-                  >
-                    🗑️
-                  </button>
+                  <span style={{ display: "flex", gap: 2 }}>
+                    <button
+                      className="tt-iconbtn"
+                      title="Edit login"
+                      disabled={busy}
+                      onClick={() => setEditing(u)}
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      className="tt-iconbtn"
+                      title="Delete login"
+                      disabled={busy}
+                      onClick={async () => {
+                        if (
+                          await confirm({
+                            title: `Delete ${u.email}?`,
+                            message: "Their login stops working immediately.",
+                            confirmLabel: "Delete login",
+                            danger: true,
+                          })
+                        ) {
+                          deleteUser(u.user_id);
+                        }
+                      }}
+                    >
+                      🗑️
+                    </button>
+                  </span>
                 )}
               </div>
             ))}
@@ -184,6 +199,14 @@ export default function AdminPanel({
         </div>
 
         <AdminCreateUser restaurantOptions={restaurantOptions} />
+
+        {editing && (
+          <AdminEditUser
+            key={editing.user_id}
+            user={editing}
+            onClose={() => setEditing(null)}
+          />
+        )}
       </div>
     </div>
   );

@@ -11,7 +11,7 @@ const MAX_OWNERS = 3;
 async function log(
   restaurantId: string,
   actorEmail: string,
-  action: "created" | "deleted",
+  action: "created" | "updated" | "deleted",
   targetRole: string,
   targetEmail: string,
 ): Promise<void> {
@@ -116,6 +116,108 @@ export async function POST(req: NextRequest) {
       { error: "Could not attach the new login." },
       { status: 500 },
     );
+  }
+
+  return NextResponse.json({ ok: true });
+}
+
+// PATCH /api/admin/users — a platform admin edits a login: name, email, a
+// password reset (sets a NEW one; the old is never readable), and — for team
+// members — the role. Founding-owner and admin roles can't be changed here.
+export async function PATCH(req: NextRequest) {
+  const admin = await getPlatformAdmin();
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const { userId, fullName, email, password, role } = await req.json();
+  if (!userId) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  if (email !== undefined && !/^\S+@\S+\.\S+$/.test(email)) {
+    return NextResponse.json({ error: "Enter a valid email." }, { status: 400 });
+  }
+  if (password !== undefined && (typeof password !== "string" || password.length < 8)) {
+    return NextResponse.json(
+      { error: "New password must be at least 8 characters." },
+      { status: 400 },
+    );
+  }
+  if (role !== undefined && !["owner", "manager", "kitchen"].includes(role)) {
+    return NextResponse.json({ error: "Pick a valid role." }, { status: 400 });
+  }
+
+  const db = createAdminClient();
+  const { data: member } = await db
+    .from("staff")
+    .select("id, restaurant_id, email, role")
+    .eq("user_id", userId)
+    .single();
+
+  // Role changes only make sense for team members (a founding owner's or
+  // admin's role isn't a staff row).
+  if (role !== undefined && !member) {
+    return NextResponse.json(
+      { error: "Only team members' roles can be changed." },
+      { status: 400 },
+    );
+  }
+  if (role === "owner" && member && member.role !== "owner") {
+    const { data: r } = await db
+      .from("restaurants")
+      .select("owner_id")
+      .eq("id", member.restaurant_id)
+      .single();
+    const { count } = await db
+      .from("staff")
+      .select("id", { count: "exact", head: true })
+      .eq("restaurant_id", member.restaurant_id)
+      .eq("role", "owner");
+    if ((r?.owner_id ? 1 : 0) + (count ?? 0) >= MAX_OWNERS) {
+      return NextResponse.json(
+        { error: `That restaurant already has ${MAX_OWNERS} owners.` },
+        { status: 409 },
+      );
+    }
+  }
+
+  // Auth-side updates (email / new password) — Supabase handles the secrets.
+  if (email !== undefined || password !== undefined) {
+    const { error } = await db.auth.admin.updateUserById(userId, {
+      ...(email !== undefined ? { email, email_confirm: true } : {}),
+      ...(password !== undefined ? { password } : {}),
+    });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+  }
+
+  if (fullName !== undefined) {
+    const { error } = await db.from("profiles").upsert({
+      user_id: userId,
+      full_name: String(fullName).trim(),
+      updated_at: new Date().toISOString(),
+    });
+    if (error)
+      return NextResponse.json({ error: "Could not save the name." }, { status: 500 });
+  }
+
+  // Keep the denormalised emails + role in sync.
+  if (member) {
+    const changes: Record<string, string> = {};
+    if (email !== undefined) changes.email = email;
+    if (role !== undefined && role !== member.role) changes.role = role;
+    if (Object.keys(changes).length > 0) {
+      const { error } = await db.from("staff").update(changes).eq("id", member.id);
+      if (error)
+        return NextResponse.json({ error: "Could not update the team row." }, { status: 500 });
+    }
+    await log(
+      member.restaurant_id,
+      admin.email,
+      "updated",
+      role ?? member.role,
+      email ?? member.email,
+    );
+  }
+  if (email !== undefined) {
+    await db.from("platform_admins").update({ email }).eq("user_id", userId);
   }
 
   return NextResponse.json({ ok: true });
