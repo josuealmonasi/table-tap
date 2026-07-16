@@ -236,8 +236,8 @@ const SECTION_ORDER = ["Starters", "Mains", "Sides", "Desserts", "Drinks"];
 const PRODUCTS_PER_MENU = 22;
 const EXTRAS_PER_MENU = 12;
 
-const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-function shuffle(arr) {
+export const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+export function shuffle(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -245,10 +245,10 @@ function shuffle(arr) {
   }
   return a;
 }
-const sample = (arr, n) => shuffle(arr).slice(0, n);
+export const sample = (arr, n) => shuffle(arr).slice(0, n);
 
 /** insert ... values (…),(…) with positional params; optional RETURNING. */
-async function bulkInsert(pg, table, columns, rows, returning = "") {
+export async function bulkInsert(pg, table, columns, rows, returning = "") {
   if (!rows.length) return [];
   const params = [];
   const tuples = rows.map(

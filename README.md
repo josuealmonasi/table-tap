@@ -87,7 +87,9 @@ prompts for confirmation on destructive ops):
 | `pnpm db:reset`  | Drop + create + seed — a clean slate. Use this most.                                        |
 | `pnpm db:purge`  | Empty every table, keep the structure.                                                      |
 | `pnpm db:drop`   | Drop all tables entirely.                                                                   |
-| `…:prod`         | Same, against the prod DB (e.g. `pnpm db:create:prod`).                                     |
+| `pnpm db:mock`   | Add a self-contained demo restaurant ("Demo Bistro") with a full menu, ~250 orders across 30 days, a named team, live orders and service requests — everything to present the app. Repeatable. |
+| `pnpm db:dropmock` | Remove **only** the demo data (Demo Bistro + its logins); leaves the base seed untouched.  |
+| `…:prod`         | Same, against the prod DB (e.g. `pnpm db:create:prod`, `pnpm db:mock:prod`).                |
 
 > Prefer the dashboard? You can still paste `supabase/schema.sql` (then
 > `supabase/seed.sql`) into the Supabase **SQL Editor** and **Run**.
@@ -106,6 +108,10 @@ pnpm dev
   each with its own "Test Restaurant N". These are **never** created on prod.
 - Customer menu: `http://localhost:3000/r/<restaurantId>/t/<tableId>` — `pnpm db:reset`
   prints a ready-to-open demo URL.
+- **Presentation data:** `pnpm db:mock` builds "Demo Bistro" — a fully populated
+  restaurant to demo every feature (orders board, analytics, service requests,
+  staff). Logins: `demo@tabletap.dev` (owner), `demo-manager@`, `demo-kitchen@`,
+  password `demo123`. Run `pnpm db:dropmock` to remove it again.
 
 ### 4. Stripe test payments locally
 

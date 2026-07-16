@@ -13,11 +13,15 @@
     "db:reset": "node scripts/db.mjs reset",
     "db:drop": "node scripts/db.mjs drop",
     "db:purge": "node scripts/db.mjs purge",
+    "db:mock": "node scripts/db.mjs mock",
+    "db:dropmock": "node scripts/db.mjs dropmock",
     "db:create:prod": "node scripts/db.mjs create --prod",
     "db:seed:prod": "node scripts/db.mjs seed --prod",
     "db:reset:prod": "node scripts/db.mjs reset --prod",
     "db:drop:prod": "node scripts/db.mjs drop --prod",
-    "db:purge:prod": "node scripts/db.mjs purge --prod"
+    "db:purge:prod": "node scripts/db.mjs purge --prod",
+    "db:mock:prod": "node scripts/db.mjs mock --prod",
+    "db:dropmock:prod": "node scripts/db.mjs dropmock --prod"
   },
   "dependencies": {
     "@stripe/stripe-js": "^4.0.0",
