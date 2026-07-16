@@ -1444,6 +1444,61 @@ code {
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
 }
 
+/* analytics: stat tiles */
+.tt-analytics-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+@media (max-width: 640px) {
+  .tt-analytics-tiles { grid-template-columns: repeat(2, 1fr); }
+}
+.tt-analytics-tile {
+  background: #fff;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tt-analytics-tile strong { font-size: 24px; line-height: 1.1; }
+.tt-analytics-tile span { color: var(--tt-muted); font-size: 13px; }
+
+/* analytics: CSS bar charts */
+.tt-bars { display: flex; align-items: flex-end; gap: 6px; height: 160px; }
+.tt-bars-hours { gap: 2px; }
+.tt-bar-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+}
+.tt-bar-track { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+.tt-bar-fill {
+  width: 100%;
+  min-height: 2px;
+  background: var(--tt-accent);
+  border-radius: 6px 6px 0 0;
+}
+.tt-bar-label { font-size: 11px; color: var(--tt-muted); white-space: nowrap; }
+
+/* analytics: top-products table */
+.tt-analytics-table { display: flex; flex-direction: column; }
+.tt-analytics-tr {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 70px 110px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 4px;
+  border-top: 1px solid var(--tt-cream);
+  font-size: 14px;
+}
+.tt-analytics-tr:first-of-type { border-top: none; }
+
 /* platform admin tables */
 .tt-admin-table {
   display: flex;

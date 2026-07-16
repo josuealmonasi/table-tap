@@ -18,6 +18,12 @@ export const NAV_ITEMS: NavItem[] = [
     desc: "Live incoming orders",
   },
   {
+    href: "/dashboard/analytics",
+    emoji: "📊",
+    title: "Analytics",
+    desc: "Sales, top items and busy hours",
+  },
+  {
     href: "/dashboard/tables",
     emoji: "🪑",
     title: "Tables & QR",
