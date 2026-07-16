@@ -43,28 +43,32 @@ export default function AnalyticsView({ data, period, currency }: AnalyticsViewP
           <Tile label="Tips" value={money(data.tips)} />
         </div>
 
-        <div className="tt-section" style={{ marginTop: 16 }}>
-          <div className="tt-section-head">
-            <h3 className="tt-serif" style={{ margin: 0 }}>Revenue by day</h3>
-          </div>
-          {data.revenue === 0 ? (
-            <p className="tt-muted" style={{ fontSize: 13 }}>No sales in this period yet.</p>
-          ) : (
-            <div className="tt-bars">
-              {data.byDay.map((d, i) => (
-                <div key={i} className="tt-bar-col" title={`${d.label}: ${money(d.revenue)}`}>
-                  <div className="tt-bar-track">
-                    <div
-                      className="tt-bar-fill"
-                      style={{ height: `${Math.round((d.revenue / maxDay) * 100)}%` }}
-                    />
-                  </div>
-                  <span className="tt-bar-label">{d.label}</span>
-                </div>
-              ))}
+        {/* A one-day "by day" chart is just a single full-width bar — skip it
+            for Today; the busiest-hours chart below covers today's shape. */}
+        {period !== "today" && (
+          <div className="tt-section" style={{ marginTop: 16 }}>
+            <div className="tt-section-head">
+              <h3 className="tt-serif" style={{ margin: 0 }}>Revenue by day</h3>
             </div>
-          )}
-        </div>
+            {data.revenue === 0 ? (
+              <p className="tt-muted" style={{ fontSize: 13 }}>No sales in this period yet.</p>
+            ) : (
+              <div className="tt-bars">
+                {data.byDay.map((d, i) => (
+                  <div key={i} className="tt-bar-col" title={`${d.label}: ${money(d.revenue)}`}>
+                    <div className="tt-bar-track">
+                      <div
+                        className="tt-bar-fill"
+                        style={{ height: `${Math.round((d.revenue / maxDay) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="tt-bar-label">{d.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="tt-section" style={{ marginTop: 16 }}>
           <div className="tt-section-head">
