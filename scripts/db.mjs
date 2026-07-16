@@ -20,7 +20,12 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import pg from "pg";
-import { seedTestUsers, TEST_PASSWORD } from "./test-users.mjs";
+import {
+  ensurePlatformAdmin,
+  seedTeamLogins,
+  seedTestUsers,
+  TEST_PASSWORD,
+} from "./test-users.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -99,9 +104,18 @@ try {
     await client.query(sql);
   }
 
-  // After seed/reset: create dev-only test logins, then report what's ready.
+  // After seed/reset: re-link the test logins, then report what's ready.
+  // This runs on dev AND prod (a test prod): a reset wipes restaurants/staff
+  // but not auth.users, so seeding must heal those links or every surviving
+  // login lands on "No restaurant linked to this account".
   if (command === "seed" || command === "reset") {
-    const testEmails = isProd ? [] : await seedTestUsers(client);
+    const testEmails = await seedTestUsers(client);
+    const teamReady = await seedTeamLogins(client);
+
+    // The platform admin is infrastructure — ensure it on dev AND prod.
+    const adminEmail = await ensurePlatformAdmin(client);
+    if (adminEmail) console.log(`  Platform admin ready: ${adminEmail}`);
+    if (teamReady.length) console.log(`  Team logins: ${teamReady.join(", ")}`);
 
     const { rows: restaurants } = await client.query(
       "select id, name from restaurants order by created_at",
