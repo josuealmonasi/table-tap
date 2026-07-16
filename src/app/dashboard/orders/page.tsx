@@ -37,6 +37,36 @@ export default async function OrdersPage() {
     .eq("status", "open")
     .order("created_at", { ascending: false });
 
+  // Today's takings, computed server-side over ALL of today's orders (the
+  // board only loads the latest 100, so summing those undercounts a busy day).
+  // We pass a "base" — today's total minus what's in the loaded set — so the
+  // board can add its live, realtime-updating slice on top without double
+  // counting. Both sides use the same day boundary (todayStartMs).
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const showRevenue = membership.role !== "kitchen";
+
+  let revenueBase = 0;
+  if (showRevenue) {
+    const { data: todayRows } = await supabase
+      .from("orders")
+      .select("total")
+      .eq("restaurant_id", r.id)
+      .eq("paid", true)
+      .neq("status", "cancelled")
+      .gte("created_at", todayStart.toISOString());
+    const todayTotal = (todayRows ?? []).reduce((s, o) => s + Number(o.total), 0);
+    const loadedToday = ((orders as Order[]) ?? [])
+      .filter(
+        o =>
+          o.paid &&
+          o.status !== "cancelled" &&
+          new Date(o.created_at).getTime() >= todayStart.getTime(),
+      )
+      .reduce((s, o) => s + Number(o.total), 0);
+    revenueBase = +(todayTotal - loadedToday).toFixed(2);
+  }
+
   return (
     <ConfirmProvider>
       <OrdersBoard
@@ -44,6 +74,9 @@ export default async function OrdersPage() {
         initialOrders={(orders as Order[]) ?? []}
         initialRequests={(requests as ServiceRequest[]) ?? []}
         canCancel={membership.role !== "kitchen"}
+        showRevenue={showRevenue}
+        revenueBase={revenueBase}
+        todayStartMs={todayStart.getTime()}
       />
     </ConfirmProvider>
   );

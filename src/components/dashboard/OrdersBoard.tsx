@@ -16,16 +16,17 @@ interface OrdersBoardProps {
   initialRequests: ServiceRequest[];
   /** Cancelling triggers refunds, so only the owner gets the button. */
   canCancel: boolean;
+  /** Kitchen doesn't get the daily takings stat. */
+  showRevenue: boolean;
+  /** Today's takings from orders NOT in the loaded set (server-computed). */
+  revenueBase: number;
+  /** Start of today (ms) — the shared day boundary for the revenue stat. */
+  todayStartMs: number;
 }
 
 type Tab = "live" | "history";
 
 const LIVE_STATUSES = new Set(["received", "preparing", "ready"]);
-
-/** True when the order was placed today (local time). */
-function isToday(order: Order): boolean {
-  return new Date(order.created_at).toDateString() === new Date().toDateString();
-}
 
 /** Kitchen dashboard: live order grid with stats, plus a history tab. */
 export default function OrdersBoard({
@@ -33,6 +34,9 @@ export default function OrdersBoard({
   initialOrders,
   initialRequests,
   canCancel,
+  showRevenue,
+  revenueBase,
+  todayStartMs,
 }: OrdersBoardProps) {
   const { orders, updateStatus, cancelOrder } = useRestaurantOrders(
     restaurant.id,
@@ -49,11 +53,19 @@ export default function OrdersBoard({
   const activeCount = live.filter(
     o => o.status === "received" || o.status === "preparing",
   ).length;
-  // Today's takings: paid orders placed today, minus anything refunded.
-  const revenue = orders.reduce(
-    (sum, o) => sum + (o.paid && o.status !== "cancelled" && isToday(o) ? o.total : 0),
+  // Today's takings = the server base (orders beyond the loaded set) plus the
+  // live slice we can see, so it stays accurate AND updates in realtime.
+  const liveToday = orders.reduce(
+    (sum, o) =>
+      sum +
+      (o.paid &&
+      o.status !== "cancelled" &&
+      new Date(o.created_at).getTime() >= todayStartMs
+        ? o.total
+        : 0),
     0,
   );
+  const revenue = +(revenueBase + liveToday).toFixed(2);
 
   async function handleCancel(order: Order): Promise<void> {
     const ok = await confirm({
@@ -82,12 +94,14 @@ export default function OrdersBoard({
               <strong className="tt-accent">{activeCount}</strong>
               <span>Active</span>
             </div>
-            <div className="tt-stat">
-              <strong style={{ color: "var(--tt-success)" }}>
-                {formatMoney(revenue, restaurant.currency)}
-              </strong>
-              <span>Today</span>
-            </div>
+            {showRevenue && (
+              <div className="tt-stat">
+                <strong style={{ color: "var(--tt-success)" }}>
+                  {formatMoney(revenue, restaurant.currency)}
+                </strong>
+                <span>Today</span>
+              </div>
+            )}
           </div>
         </header>
 
