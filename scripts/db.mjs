@@ -26,6 +26,7 @@ import {
   seedTestUsers,
   TEST_PASSWORD,
 } from "./test-users.mjs";
+import { seedMock, dropMock, DEMO_OWNER, DEMO_TEAM, DEMO_PASSWORD } from "./mock-data.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -48,6 +49,14 @@ const COMMANDS = {
     label: "Resetting (drop + create + seed)",
     destructive: true,
   },
+  // Demo/presentation data lives under one "Demo Bistro" restaurant, built in
+  // JS (not SQL files), so these run custom code instead of the file loop.
+  mock: { custom: "mock", label: "Seeding demo/presentation data", destructive: false },
+  dropmock: {
+    custom: "dropmock",
+    label: "Dropping demo/presentation data",
+    destructive: true,
+  },
 };
 
 const command = process.argv[2];
@@ -59,7 +68,7 @@ const config = COMMANDS[command];
 if (!config) {
   console.error(`✗ Unknown command "${command ?? ""}".`);
   console.error(
-    "  Use: create | seed | reset | drop | purge   (add --prod for production)",
+    "  Use: create | seed | reset | drop | purge | mock | dropmock   (add --prod)",
   );
   process.exit(1);
 }
@@ -99,6 +108,29 @@ console.log(`▸ [${target}] ${config.label}…`);
 
 try {
   await client.connect();
+
+  // Demo data commands run custom JS rather than the SQL-file loop.
+  if (config.custom === "mock") {
+    const summary = await seedMock(client);
+    console.log(`\n✓ [${target}] Demo Bistro ready — ${summary.orders} orders.`);
+    console.log(`  Menu: http://localhost:3000/r/${summary.restaurantId}/t/${summary.tableId}`);
+    console.log(`\n  Demo logins at /login (password: ${DEMO_PASSWORD}):`);
+    console.log(`    ${DEMO_OWNER.email}   (owner)`);
+    for (const t of DEMO_TEAM) console.log(`    ${t.email}   (${t.role})`);
+  } else if (config.custom === "dropmock") {
+    const n = await dropMock(client);
+    console.log(`✓ [${target}] Removed demo data (${n} restaurant + demo logins).`);
+  } else {
+    await runSqlCommand();
+  }
+} catch (err) {
+  console.error(`\n✗ [${target}] ${command} failed: ${err.message}`);
+  process.exitCode = 1;
+} finally {
+  await client.end();
+}
+
+async function runSqlCommand() {
   for (const file of config.files) {
     const sql = await readFile(join(root, file), "utf8");
     await client.query(sql);
@@ -137,9 +169,4 @@ try {
   } else {
     console.log(`✓ [${target}] Done.`);
   }
-} catch (err) {
-  console.error(`\n✗ [${target}] ${command} failed: ${err.message}`);
-  process.exitCode = 1;
-} finally {
-  await client.end();
 }
