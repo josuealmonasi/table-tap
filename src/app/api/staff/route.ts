@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
-const ROLES: readonly string[] = ["owner", "manager", "kitchen"];
+const ROLES: readonly string[] = ["owner", "manager", "waiter", "kitchen"];
 
 /** Owners a restaurant may have, counting the founding owner. */
 const MAX_OWNERS = 3;

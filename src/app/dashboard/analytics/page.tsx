@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getMembership } from "@/lib/membership";
+import { getMembership, MANAGES } from "@/lib/membership";
 import {
   computeAnalytics,
   normalisePeriod,
@@ -21,7 +21,7 @@ export default async function AnalyticsPage({
   const supabase = await createClient();
   const membership = await getMembership(supabase);
   if (!membership) redirect("/login");
-  if (membership.role === "kitchen") redirect("/dashboard/orders");
+  if (!MANAGES(membership.role)) redirect("/dashboard/orders");
 
   const period = normalisePeriod((await searchParams).period);
   const { start, end } = periodRange(period);

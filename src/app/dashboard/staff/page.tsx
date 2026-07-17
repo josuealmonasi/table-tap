@@ -12,7 +12,8 @@ export default async function StaffPage() {
   const supabase = await createClient();
   const membership = await getMembership(supabase);
   if (!membership) redirect("/login");
-  if (membership.role === "kitchen") redirect("/dashboard/orders");
+  if (membership.role === "kitchen" || membership.role === "waiter")
+    redirect("/dashboard/orders");
   if (membership.role === "manager") redirect("/dashboard");
 
   return (

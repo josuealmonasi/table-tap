@@ -155,13 +155,14 @@ create table if not exists staff (
   restaurant_id uuid not null references restaurants(id) on delete cascade,
   user_id       uuid not null unique references auth.users(id) on delete cascade,
   email         text not null,
-  role          text not null default 'kitchen',  -- 'owner' (co-owner) | 'manager' | 'kitchen' ('waiter' planned)
+  role          text not null default 'kitchen',  -- 'owner' (co-owner) | 'manager' | 'waiter' | 'kitchen'
   created_at    timestamptz not null default now()
 );
 
 alter table staff add column if not exists role text not null default 'kitchen';
 alter table staff drop constraint if exists staff_role_check;
-alter table staff add constraint staff_role_check check (role in ('owner', 'manager', 'kitchen'));
+alter table staff add constraint staff_role_check
+  check (role in ('owner', 'manager', 'waiter', 'kitchen'));
 
 create index if not exists staff_restaurant_idx on staff(restaurant_id);
 

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getMembership } from "@/lib/membership";
+import { getMembership, MANAGES } from "@/lib/membership";
 import MenuEditor from "@/components/dashboard/menu/MenuEditor";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { menuSlug } from "@/lib/slug";
@@ -24,7 +24,7 @@ export default async function MenuEditorPage({
   // Owners and managers may edit menus; kitchen goes back to its board.
   const membership = await getMembership(supabase);
   if (!membership) redirect("/dashboard");
-  if (membership.role === "kitchen") redirect("/dashboard/orders");
+  if (!MANAGES(membership.role)) redirect("/dashboard/orders");
   const restaurant = membership.restaurant;
 
   const { data: menus } = await supabase

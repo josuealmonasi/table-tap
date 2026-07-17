@@ -1,7 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Restaurant } from "@/lib/types";
 
-export type Role = "owner" | "manager" | "kitchen";
+export type Role = "owner" | "manager" | "waiter" | "kitchen";
+
+/** Owner + manager run the business (money, settings). Waiter + kitchen are floor/back staff. */
+export const MANAGES = (role: Role): boolean => role === "owner" || role === "manager";
 
 export interface Membership {
   restaurant: Restaurant;
@@ -41,12 +44,11 @@ export async function getMembership(
     .eq("id", membership.restaurant_id)
     .single();
   if (!restaurant) return null;
-  // Co-owners (staff role 'owner') get the full owner experience.
-  const role: Role =
-    membership.role === "owner"
-      ? "owner"
-      : membership.role === "manager"
-        ? "manager"
-        : "kitchen";
+  // Co-owners (staff role 'owner') get the full owner experience; other roles
+  // map through directly.
+  const known: Role[] = ["owner", "manager", "waiter", "kitchen"];
+  const role: Role = known.includes(membership.role as Role)
+    ? (membership.role as Role)
+    : "kitchen";
   return { restaurant: restaurant as Restaurant, role };
 }

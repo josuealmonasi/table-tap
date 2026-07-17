@@ -19,7 +19,7 @@ export interface AdminUserRow {
   user_id: string;
   email: string;
   full_name?: string;
-  role: "admin" | "owner" | "manager" | "kitchen" | "none";
+  role: "admin" | "owner" | "manager" | "waiter" | "kitchen" | "none";
   /** Founding owners' role is fixed (it comes from restaurants.owner_id). */
   founding?: boolean;
   restaurant_name?: string;
@@ -36,6 +36,7 @@ const ROLE_LABEL: Record<AdminUserRow["role"], string> = {
   admin: "🛡️ Admin",
   owner: "👑 Owner",
   manager: "🧑‍💼 Manager",
+  waiter: "🧑‍🍽️ Waiter",
   kitchen: "👨‍🍳 Kitchen",
   none: "—",
 };
