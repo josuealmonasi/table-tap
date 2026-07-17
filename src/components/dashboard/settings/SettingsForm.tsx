@@ -5,6 +5,7 @@ import type { Restaurant } from "@/lib/types";
 import type { Role } from "@/lib/membership";
 import { useSettings } from "@/hooks/useSettings";
 import Breadcrumb from "@/components/layout/Breadcrumb";
+import PaymentsCard from "./PaymentsCard";
 
 interface SettingsFormProps {
   restaurant: Restaurant;
@@ -175,6 +176,8 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
             </form>
           </div>
         )}
+
+        {isOwner && <PaymentsCard />}
 
         <div className="tt-section" style={{ maxWidth: 520, marginTop: isOwner ? 16 : 0 }}>
           <div className="tt-section-head">

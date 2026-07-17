@@ -163,6 +163,12 @@ code {
   background: rgba(201, 168, 76, 0.18);
   color: var(--tt-gold);
 }
+.tt-badge-green {
+  background: rgba(60, 150, 90, 0.15);
+  color: #2e7d4f;
+  text-transform: none;
+  letter-spacing: 0;
+}
 .tt-pop {
   font-size: 10px;
   background: rgba(232, 82, 42, 0.12);

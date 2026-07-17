@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { platformFeeCents } from "@/lib/stripe-connect";
 import type { OrderLineItem, OrderExtra } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -47,7 +48,9 @@ export async function POST(req: NextRequest) {
     // Re-fetch the restaurant to get the authoritative service % and currency.
     const { data: restaurant, error: rErr } = await supabase
       .from("restaurants")
-      .select("id, currency, service_pct, service_enabled, accepting_orders, tax_pct")
+      .select(
+        "id, currency, service_pct, service_enabled, accepting_orders, tax_pct, stripe_account_id, stripe_charges_enabled",
+      )
       .eq("id", restaurantId)
       .single();
 
@@ -60,6 +63,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error: "The restaurant isn't taking orders right now. Please try again later.",
+        },
+        { status: 409 },
+      );
+    }
+
+    // No payouts without a connected Stripe account: refuse to charge a card
+    // when we'd have nowhere to send the money. The owner completes onboarding
+    // in Settings → Payments before customers can check out.
+    if (!restaurant.stripe_account_id || !restaurant.stripe_charges_enabled) {
+      return NextResponse.json(
+        {
+          error:
+            "This restaurant isn't set up to take card payments yet. Please let the staff know.",
         },
         { status: 409 },
       );
@@ -228,6 +244,11 @@ export async function POST(req: NextRequest) {
 
     // Stripe Checkout supports card, Apple Pay and Google Pay automatically
     // via the card payment method (wallets show on supported devices).
+    // Destination charge: the platform creates the charge, then routes the funds
+    // to the restaurant's connected account. An optional platform fee (0 by
+    // default) is skimmed as an application fee.
+    const appFee = platformFeeCents(Math.round(total * 100));
+
     let session;
     try {
       session = await stripe.checkout.sessions.create({
@@ -236,7 +257,11 @@ export async function POST(req: NextRequest) {
         success_url: `${origin}/order/${order.id}?paid=1`,
         cancel_url: `${origin}/r/${restaurantId}${tableId ? `/t/${tableId}` : ""}?cancelled=1`,
         metadata: { order_id: order.id },
-        payment_intent_data: { metadata: { order_id: order.id } },
+        payment_intent_data: {
+          metadata: { order_id: order.id },
+          transfer_data: { destination: restaurant.stripe_account_id },
+          ...(appFee > 0 ? { application_fee_amount: appFee } : {}),
+        },
       });
     } catch (err) {
       // Stripe refused the session — the pending order will never be paid,

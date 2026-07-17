@@ -18,6 +18,11 @@ create table if not exists restaurants (
   accepting_orders boolean not null default true, -- kill switch: pause customer orders
   tax_pct numeric not null default 0,             -- IVA %, already INCLUDED in prices
   tax_show_breakdown boolean not null default false, -- show net + IVA split to customers
+  -- Stripe Connect: the restaurant's own connected account, so customer
+  -- payments land in THEIR balance (not the platform's). Server-only — never
+  -- granted to anon.
+  stripe_account_id text,                          -- Stripe Express account (acct_…)
+  stripe_charges_enabled boolean not null default false, -- onboarding complete, can accept charges
   owner_id    uuid references auth.users(id),    -- the dashboard account
   created_at  timestamptz not null default now()
 );
@@ -123,6 +128,8 @@ alter table restaurants add column if not exists accepting_orders boolean not nu
 alter table restaurants add column if not exists service_enabled boolean not null default false;
 alter table restaurants add column if not exists tax_pct numeric not null default 0;
 alter table restaurants add column if not exists tax_show_breakdown boolean not null default false;
+alter table restaurants add column if not exists stripe_account_id text;
+alter table restaurants add column if not exists stripe_charges_enabled boolean not null default false;
 alter table orders add column if not exists stripe_refund_id text;
 alter table orders add column if not exists tip numeric not null default 0;
 alter table orders add column if not exists tax_pct numeric not null default 0;
