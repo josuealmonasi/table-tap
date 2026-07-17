@@ -1652,6 +1652,24 @@ code {
   border: 1px solid rgba(200, 90, 40, 0.25);
 }
 
+/* "You have an order in progress" link on the menu — tappable, accent-filled. */
+.tt-track-banner {
+  display: block;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  background: var(--tt-accent);
+  color: #fff;
+  border: none;
+  text-decoration: none;
+}
+.tt-track-banner:hover {
+  filter: brightness(1.05);
+}
+
 /* Settings: labelled switch row (e.g. "Accepting orders") */
 .tt-settings-toggle {
   display: flex;
