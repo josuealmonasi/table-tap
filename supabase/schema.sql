@@ -248,13 +248,27 @@ drop policy if exists "public read restaurants" on restaurants;
 create policy "public read restaurants"
   on restaurants for select using (true);
 
--- Column-level guard: the public (anon) role sees only a restaurant's display
--- columns — never owner_id or created_at. RLS decides which ROWS are visible;
--- this decides which COLUMNS. The dashboard (authenticated owner) and the
--- secret key keep full access.
-revoke select on restaurants from anon;
+-- Defense in depth — lock the anon (publishable-key) role down to READ-ONLY on
+-- just the public menu. Supabase grants every new table ALL privileges to anon
+-- by default, leaving RLS as the *only* thing between a browser key and the
+-- data. But this app never writes as anon: every insert/update goes through the
+-- secret key (service_role), which bypasses RLS. So we strip anon to nothing,
+-- then re-grant only the public reads the customer menu needs. Re-run on every
+-- `db:create`, so tables added later get stripped too.
+revoke all on all tables in schema public from anon;
+grant select on restaurant_tables, menus, categories, menu_items, item_addons to anon;
+
+-- Column-level guard on restaurants: the public (anon) role sees only a
+-- restaurant's display columns — never owner_id or created_at. RLS decides
+-- which ROWS are visible; this decides which COLUMNS. The dashboard
+-- (authenticated owner) and the secret key keep full access.
 grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown) on restaurants to anon;
 grant select on restaurants to authenticated;
+
+-- authenticated (logged-in staff) keeps the DML its dashboard needs — those
+-- writes are gated by the RLS policies below. But it never needs the
+-- table-shaping privileges, and RLS does not guard those, so drop them.
+revoke truncate, references, trigger on all tables in schema public from authenticated;
 
 drop policy if exists "public read tables" on restaurant_tables;
 create policy "public read tables"
