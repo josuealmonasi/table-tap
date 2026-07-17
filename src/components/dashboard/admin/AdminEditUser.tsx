@@ -12,7 +12,7 @@ interface AdminEditUserProps {
 
 /** True when the role lives in a staff row and can be switched here. */
 function roleEditable(role: AdminUserRow["role"]): boolean {
-  return role === "owner" || role === "manager" || role === "kitchen";
+  return role === "owner" || role === "manager" || role === "waiter" || role === "kitchen";
 }
 
 /** Edit a login: name, email, an optional password reset, and (staff) role. */
@@ -92,6 +92,7 @@ export default function AdminEditUser({ user, onClose }: AdminEditUserProps) {
                 onChange={e => setRole(e.target.value as AdminUserRow["role"])}
               >
                 <option value="kitchen">Kitchen</option>
+                <option value="waiter">Waiter</option>
                 <option value="manager">Manager</option>
                 <option value="owner">Owner</option>
               </select>

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getMembership } from "@/lib/membership";
+import { getMembership, MANAGES } from "@/lib/membership";
 import { getPlatformAdmin } from "@/lib/admin";
 import DashboardHome from "@/components/dashboard/DashboardHome";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
@@ -19,7 +19,7 @@ export default async function DashboardPage() {
   if (await getPlatformAdmin()) redirect("/dashboard/admin");
 
   const membership = await getMembership(supabase);
-  if (membership?.role === "kitchen") redirect("/dashboard/orders");
+  if (membership && !MANAGES(membership.role)) redirect("/dashboard/orders");
 
   if (!membership) {
     return (

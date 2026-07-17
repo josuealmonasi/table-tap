@@ -80,6 +80,7 @@ export default function AdminCreateUser({ restaurantOptions }: AdminCreateUserPr
               onChange={e => setRole(e.target.value as NewUserInput["role"])}
             >
               <option value="kitchen">Kitchen</option>
+              <option value="waiter">Waiter</option>
               <option value="manager">Manager</option>
               <option value="owner">Owner</option>
               <option value="admin">Platform admin</option>

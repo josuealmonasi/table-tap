@@ -43,7 +43,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-export type DashboardRole = "owner" | "manager" | "kitchen" | "admin";
+export type DashboardRole = "owner" | "manager" | "waiter" | "kitchen" | "admin";
 
 // Staff management and settings stay with the owner.
 const OWNER_ONLY = ["/dashboard/staff", "/dashboard/settings"];
@@ -60,7 +60,10 @@ export function navItemsFor(role: DashboardRole): NavItem[] {
       },
     ];
   }
-  if (role === "kitchen") return NAV_ITEMS.filter(i => i.href === "/dashboard/orders");
+  // Floor/back staff only get the live orders board.
+  if (role === "kitchen" || role === "waiter") {
+    return NAV_ITEMS.filter(i => i.href === "/dashboard/orders");
+  }
   if (role === "manager") return NAV_ITEMS.filter(i => !OWNER_ONLY.includes(i.href));
   return NAV_ITEMS;
 }

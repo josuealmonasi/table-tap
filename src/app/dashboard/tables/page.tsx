@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { getMembership } from "@/lib/membership";
+import { getMembership, MANAGES } from "@/lib/membership";
 import { qrSvg } from "@/lib/qr";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import TablesPanel, { type TableWithQr } from "@/components/dashboard/tables/TablesPanel";
@@ -20,7 +20,7 @@ export default async function TablesPage() {
   // Owners and managers may manage tables; kitchen goes back to its board.
   const membership = await getMembership(supabase);
   if (!membership) redirect("/dashboard");
-  if (membership.role === "kitchen") redirect("/dashboard/orders");
+  if (!MANAGES(membership.role)) redirect("/dashboard/orders");
   const r = membership.restaurant;
 
   const { data: tables } = await supabase

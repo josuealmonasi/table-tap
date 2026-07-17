@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getMembership } from "@/lib/membership";
+import { getMembership, MANAGES } from "@/lib/membership";
 import OrdersBoard from "@/components/dashboard/OrdersBoard";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import type { Order, ServiceRequest } from "@/lib/types";
@@ -44,7 +44,7 @@ export default async function OrdersPage() {
   // counting. Both sides use the same day boundary (todayStartMs).
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
-  const showRevenue = membership.role !== "kitchen";
+  const showRevenue = MANAGES(membership.role);
 
   let revenueBase = 0;
   if (showRevenue) {
@@ -73,7 +73,7 @@ export default async function OrdersPage() {
         restaurant={r}
         initialOrders={(orders as Order[]) ?? []}
         initialRequests={(requests as ServiceRequest[]) ?? []}
-        canCancel={membership.role !== "kitchen"}
+        canCancel={MANAGES(membership.role)}
         showRevenue={showRevenue}
         revenueBase={revenueBase}
         todayStartMs={todayStart.getTime()}

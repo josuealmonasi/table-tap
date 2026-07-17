@@ -16,8 +16,8 @@ export default function Navbar({
 }: {
   restaurantName: string;
   restaurantLogo: string;
-  /** Managers lose Settings/Staff; kitchen only gets the orders board. */
-  role: "owner" | "manager" | "kitchen" | "admin";
+  /** Managers lose Settings/Staff; waiter/kitchen only get the orders board. */
+  role: "owner" | "manager" | "waiter" | "kitchen" | "admin";
 }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -56,7 +56,7 @@ export default function Navbar({
             href={
               role === "admin"
                 ? "/dashboard/admin"
-                : role === "kitchen"
+                : role === "kitchen" || role === "waiter"
                   ? "/dashboard/orders"
                   : "/dashboard"
             }

@@ -19,7 +19,7 @@ export default function NavDrawer({
   restaurantName: string;
   restaurantLogo: string;
   /** Managers lose Staff/Settings; kitchen only gets the orders board. */
-  role: "owner" | "manager" | "kitchen" | "admin";
+  role: "owner" | "manager" | "waiter" | "kitchen" | "admin";
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();

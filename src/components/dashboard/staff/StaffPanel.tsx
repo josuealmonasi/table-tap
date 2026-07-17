@@ -14,6 +14,7 @@ interface StaffPanelProps {
 const ROLE_EMOJI: Record<StaffRole, string> = {
   owner: "👑",
   manager: "🧑‍💼",
+  waiter: "🧑‍🍽️",
   kitchen: "👨‍🍳",
 };
 
@@ -50,8 +51,8 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
               Team logins
             </h3>
             <span className="tt-muted" style={{ fontSize: 12 }}>
-              Kitchen: orders board only · Manager: + menus, tables, refunds · Owner:
-              everything (max 3)
+              Kitchen &amp; waiter: orders board only · Manager: + menus, tables,
+              settings, refunds · Owner: everything (max 3)
             </span>
           </div>
 
@@ -94,6 +95,7 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
                     onChange={e => updateRole(m.id, e.target.value as StaffRole)}
                   >
                     <option value="kitchen">Kitchen</option>
+                    <option value="waiter">Waiter</option>
                     <option value="manager">Manager</option>
                     <option value="owner">Owner</option>
                   </select>
@@ -151,7 +153,8 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
                 onChange={e => setRole(e.target.value as StaffRole)}
               >
                 <option value="kitchen">Kitchen — orders board only</option>
-                <option value="manager">Manager — menus, tables, refunds</option>
+                <option value="waiter">Waiter — orders board &amp; floor service</option>
+                <option value="manager">Manager — menus, tables, settings, refunds</option>
                 <option value="owner">Owner — everything (max 3 owners)</option>
               </select>
             </label>

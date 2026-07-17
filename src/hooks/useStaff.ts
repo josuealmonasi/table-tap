@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 
-export type StaffRole = "owner" | "manager" | "kitchen";
+export type StaffRole = "owner" | "manager" | "waiter" | "kitchen";
 
 /** A staff login row as the owner sees it. */
 export interface StaffMember {
