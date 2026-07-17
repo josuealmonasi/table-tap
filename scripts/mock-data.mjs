@@ -19,6 +19,7 @@ export const DEMO_PASSWORD = "demo123";
 export const DEMO_OWNER = { email: "demo@tabletap.dev", name: "Diego Owner" };
 export const DEMO_TEAM = [
   { email: "demo-manager@tabletap.dev", role: "manager", name: "María Manager" },
+  { email: "demo-waiter@tabletap.dev", role: "waiter", name: "Walter Waiter" },
   { email: "demo-kitchen@tabletap.dev", role: "kitchen", name: "Carlos Kitchen" },
 ];
 const DEMO_EMAILS = [DEMO_OWNER.email, ...DEMO_TEAM.map(t => t.email)];
