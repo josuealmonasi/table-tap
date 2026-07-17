@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     // Re-fetch the restaurant to get the authoritative service % and currency.
     const { data: restaurant, error: rErr } = await supabase
       .from("restaurants")
-      .select("id, currency, service_pct, service_enabled, accepting_orders")
+      .select("id, currency, service_pct, service_enabled, accepting_orders, tax_pct")
       .eq("id", restaurantId)
       .single();
 
@@ -163,6 +163,7 @@ export async function POST(req: NextRequest) {
         subtotal,
         service_fee: serviceFee,
         tip,
+        tax_pct: Number(restaurant.tax_pct) || 0,
         total,
         currency: restaurant.currency,
         items: verified,

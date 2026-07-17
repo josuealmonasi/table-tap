@@ -57,6 +57,10 @@ export type Restaurant = {
   service_pct: number;
   service_enabled: boolean;
   accepting_orders: boolean;
+  /** IVA %, already included in menu prices (0 = no tax shown). */
+  tax_pct: number;
+  /** Show the net + IVA split to customers, or just the total. */
+  tax_show_breakdown: boolean;
 };
 
 export type RestaurantTable = {
@@ -102,6 +106,7 @@ export type Order = {
   subtotal: number;
   service_fee: number;
   tip: number;
+  tax_pct: number;
   total: number;
   currency: string;
   items: OrderLineItem[];

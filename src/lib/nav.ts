@@ -45,8 +45,9 @@ export const NAV_ITEMS: NavItem[] = [
 
 export type DashboardRole = "owner" | "manager" | "waiter" | "kitchen" | "admin";
 
-// Staff management and settings stay with the owner.
-const OWNER_ONLY = ["/dashboard/staff", "/dashboard/settings"];
+// Staff management stays with the owner; Settings is owner + manager
+// (managers get the operational controls only — see SettingsForm).
+const OWNER_ONLY = ["/dashboard/staff"];
 
 /** The dashboard areas a role may see (drawer links and home tiles). */
 export function navItemsFor(role: DashboardRole): NavItem[] {

@@ -108,6 +108,8 @@ export default function CartScreen({
           tipPct={tipCustom !== null ? 0 : tipPct}
           total={total}
           servicePct={restaurant.service_pct}
+          taxPct={restaurant.tax_pct}
+          taxBreakdown={restaurant.tax_show_breakdown}
           currency={restaurant.currency}
         />
 

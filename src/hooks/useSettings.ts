@@ -2,11 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import type { Restaurant } from "@/lib/types";
 
-/** The restaurant fields the owner can edit from Settings. */
+/** The restaurant fields editable from Settings (server enforces per role). */
 export type SettingsInput = Pick<
   Restaurant,
   | "name"
@@ -15,16 +14,17 @@ export type SettingsInput = Pick<
   | "currency"
   | "service_pct"
   | "service_enabled"
+  | "tax_pct"
+  | "tax_show_breakdown"
   | "accepting_orders"
 >;
 
 /**
- * Saves restaurant settings via the RLS-protected browser client (authorised as
- * the logged-in owner). On success it calls router.refresh() so the server
- * re-renders — the navbar picks up a new name/logo. Toasts on success/failure.
+ * Saves restaurant settings through the role-checked /api/settings route
+ * (owners edit everything; managers only the operational fields). On success
+ * it router.refresh()es so the server re-renders. Toasts on success/failure.
  */
-export function useSettings(restaurantId: string) {
-  const supabase = createClient();
+export function useSettings() {
   const router = useRouter();
   const toast = useToast();
   const [saving, setSaving] = useState(false);
@@ -34,18 +34,26 @@ export function useSettings(restaurantId: string) {
     message = "Settings saved",
   ): Promise<boolean> {
     setSaving(true);
-    const { error } = await supabase
-      .from("restaurants")
-      .update(input)
-      .eq("id", restaurantId);
-    setSaving(false);
-    if (error) {
-      toast(`Couldn't save settings: ${error.message}`, "error");
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast(data.error ?? "Couldn't save settings.", "error");
+        return false;
+      }
+      toast(message);
+      router.refresh();
+      return true;
+    } catch {
+      toast("Network error — please try again.", "error");
       return false;
+    } finally {
+      setSaving(false);
     }
-    toast(message);
-    router.refresh();
-    return true;
   }
 
   return { saving, save };
