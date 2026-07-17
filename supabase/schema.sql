@@ -16,6 +16,8 @@ create table if not exists restaurants (
   service_pct numeric not null default 0,        -- service charge %, e.g. 10
   service_enabled boolean not null default false, -- charge the service % only when on
   accepting_orders boolean not null default true, -- kill switch: pause customer orders
+  tax_pct numeric not null default 0,             -- IVA %, already INCLUDED in prices
+  tax_show_breakdown boolean not null default false, -- show net + IVA split to customers
   owner_id    uuid references auth.users(id),    -- the dashboard account
   created_at  timestamptz not null default now()
 );
@@ -114,12 +116,19 @@ alter table menu_items add column if not exists menu_id uuid references menus(id
 -- (checkout multiplies by service_pct/100). Re-add idempotently.
 alter table restaurants add column if not exists accepting_orders boolean not null default true;
 alter table restaurants add column if not exists service_enabled boolean not null default false;
+alter table restaurants add column if not exists tax_pct numeric not null default 0;
+alter table restaurants add column if not exists tax_show_breakdown boolean not null default false;
 alter table orders add column if not exists stripe_refund_id text;
 alter table orders add column if not exists tip numeric not null default 0;
+alter table orders add column if not exists tax_pct numeric not null default 0;
 
 alter table restaurants drop constraint if exists restaurants_service_pct_range;
 alter table restaurants add constraint restaurants_service_pct_range
   check (service_pct >= 0 and service_pct <= 30);
+
+alter table restaurants drop constraint if exists restaurants_tax_pct_range;
+alter table restaurants add constraint restaurants_tax_pct_range
+  check (tax_pct >= 0 and tax_pct <= 100);
 
 -- ── Item add-ons ────────────────────────────────────────────────────────────
 -- Many-to-many: which add-on items can be added to which product.
@@ -239,7 +248,7 @@ create policy "public read restaurants"
 -- this decides which COLUMNS. The dashboard (authenticated owner) and the
 -- secret key keep full access.
 revoke select on restaurants from anon;
-grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders) on restaurants to anon;
+grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown) on restaurants to anon;
 grant select on restaurants to authenticated;
 
 drop policy if exists "public read tables" on restaurant_tables;
