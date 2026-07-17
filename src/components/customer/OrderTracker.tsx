@@ -1,10 +1,15 @@
 "use client";
 
+import { useEffect } from "react";
+import Link from "next/link";
 import { orderCode, type OrderStatus } from "@/lib/types";
 import { useOrderPolling } from "@/hooks/useOrderPolling";
 import type { TrackedOrder } from "@/lib/order-tracking";
+import { forgetOrder, rememberOrder } from "@/lib/recent-order";
 import OrderStatusTimeline from "./OrderStatusTimeline";
 import TrackedItemsCard from "./TrackedItemsCard";
+
+const TERMINAL: OrderStatus[] = ["completed", "cancelled"];
 
 /** Collapse the full order status into the three stages the diner sees. */
 function toDisplayStatus(status: OrderStatus): OrderStatus {
@@ -29,6 +34,18 @@ export default function OrderTracker({ initialOrder }: OrderTrackerProps) {
   const status = toDisplayStatus(order.status);
   const hero = HERO[status] ?? HERO.received;
 
+  // Back to the same menu the order came from (table route if it had a table).
+  const menuHref = `/r/${order.restaurant_id}${
+    order.table_id ? `/t/${order.table_id}` : ""
+  }`;
+
+  // Remember this order so the menu can offer a way back to its status — and
+  // forget it once it's done, so a stale "track your order" link disappears.
+  useEffect(() => {
+    if (TERMINAL.includes(order.status)) forgetOrder(order.restaurant_id);
+    else rememberOrder(order.restaurant_id, order.id);
+  }, [order.restaurant_id, order.id, order.status]);
+
   return (
     <div className="tt-root">
       <div className="tt-track-hero">
@@ -48,6 +65,9 @@ export default function OrderTracker({ initialOrder }: OrderTrackerProps) {
           total={order.total}
           currency={order.currency}
         />
+        <Link href={menuHref} className="tt-btn tt-btn-ghost" style={{ width: "100%" }}>
+          ← Back to menu
+        </Link>
       </div>
     </div>
   );

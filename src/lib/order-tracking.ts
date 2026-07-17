@@ -8,10 +8,18 @@ import type { Order } from "@/lib/types";
  */
 export type TrackedOrder = Pick<
   Order,
-  "id" | "table_label" | "status" | "items" | "total" | "currency"
+  | "id"
+  | "restaurant_id"
+  | "table_id"
+  | "table_label"
+  | "status"
+  | "items"
+  | "total"
+  | "currency"
 >;
 
-const TRACKER_COLUMNS = "id, table_label, status, items, total, currency";
+const TRACKER_COLUMNS =
+  "id, restaurant_id, table_id, table_label, status, items, total, currency";
 
 // UUIDs only — avoids sending malformed ids to Postgres' uuid column.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

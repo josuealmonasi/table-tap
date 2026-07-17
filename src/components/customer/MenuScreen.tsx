@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import type { Category, MenuItem, Restaurant, RestaurantTable } from "@/lib/types";
 import { DIETARY_TAGS } from "@/lib/dietary";
+import { recallOrder } from "@/lib/recent-order";
 import CategoryTabs from "./CategoryTabs";
 import MenuItemRow from "./MenuItemRow";
 import CartBar from "./CartBar";
@@ -31,6 +33,13 @@ export default function MenuScreen({
   const [activeCat, setActiveCat] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [diet, setDiet] = useState<string[]>([]);
+  // An in-progress order for this restaurant on this device — lets the diner
+  // hop back to its live status after returning to the menu to order more.
+  const [trackId, setTrackId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTrackId(recallOrder(restaurant.id));
+  }, [restaurant.id]);
 
   // Which dietary tags actually appear on this menu (so we only offer useful filters).
   const menuTags = useMemo(() => {
@@ -77,6 +86,11 @@ export default function MenuScreen({
           )}
         </div>
         {table && <ServiceButtons restaurantId={restaurant.id} table={table} />}
+        {trackId && (
+          <Link href={`/order/${trackId}`} className="tt-track-banner" role="status">
+            🧾 You have an order in progress — track it →
+          </Link>
+        )}
         {!restaurant.accepting_orders && (
           <div className="tt-closed-banner" role="status">
             ⏸️ We&apos;re not taking orders right now — please check back soon.
