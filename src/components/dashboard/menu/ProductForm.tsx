@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import type { MenuItem, Modifier } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
+import { DIETARY_TAGS } from "@/lib/dietary";
 import IconPicker from "./IconPicker";
 import ModifiersEditor from "./ModifiersEditor";
 
@@ -35,11 +36,16 @@ export default function ProductForm({
   const [emoji, setEmoji] = useState(initial?.emoji ?? "");
   const [popular, setPopular] = useState(initial?.popular ?? false);
   const [modifiers, setModifiers] = useState<Modifier[]>(initial?.modifiers ?? []);
+  const [dietary, setDietary] = useState<string[]>(initial?.dietary ?? []);
   const [picked, setPicked] = useState<string[]>(selectedAddonIds);
   const [saving, setSaving] = useState(false);
 
   function toggleAddon(id: string) {
     setPicked(prev => (prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]));
+  }
+
+  function toggleDietary(key: string) {
+    setDietary(prev => (prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -61,6 +67,7 @@ export default function ProductForm({
             options: g.options.map(o => o.trim()).filter(Boolean),
           }))
           .filter(g => g.label && g.options.length > 0),
+        dietary,
       },
       picked,
     );
@@ -119,6 +126,27 @@ export default function ProductForm({
       <IconPicker value={emoji} onChange={setEmoji} />
 
       <ModifiersEditor value={modifiers} onChange={setModifiers} />
+
+      <div>
+        <div className="tt-mod-label" style={{ marginTop: 6 }}>
+          Dietary &amp; allergens{" "}
+          <span className="tt-muted" style={{ fontWeight: 400 }}>
+            (shown to customers)
+          </span>
+        </div>
+        <div className="tt-chips">
+          {DIETARY_TAGS.map(tag => (
+            <button
+              type="button"
+              key={tag.key}
+              className={`tt-chip ${dietary.includes(tag.key) ? "tt-chip-on" : ""}`}
+              onClick={() => toggleDietary(tag.key)}
+            >
+              {tag.emoji} {tag.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {addons.length > 0 && (
         <div>

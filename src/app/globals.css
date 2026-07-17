@@ -1603,6 +1603,35 @@ code {
   font-weight: 600;
 }
 
+/* Dietary / allergen badges on menu items */
+.tt-diet-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+.tt-diet-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(70, 130, 80, 0.12);
+  color: #3c7a4a;
+  white-space: nowrap;
+}
+
+/* Customer menu: dietary filter chips (under the category tabs) */
+.tt-diet-filter { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 12px; }
+.tt-diet-chip {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: #1c1c1c;
+  color: var(--tt-muted);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.tt-diet-chip-on {
+  background: #2a4d33;
+  color: #fff;
+  border-color: #3c7a4a;
+}
+
 /* Customer menu: search box above the category tabs — the same breathing
    room above and below so the pinned strip doesn't look cramped */
 .tt-customer-search {

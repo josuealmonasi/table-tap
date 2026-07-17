@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Category, MenuItem, Restaurant, RestaurantTable } from "@/lib/types";
+import { DIETARY_TAGS } from "@/lib/dietary";
 import CategoryTabs from "./CategoryTabs";
 import MenuItemRow from "./MenuItemRow";
 import CartBar from "./CartBar";
@@ -29,19 +30,34 @@ export default function MenuScreen({
 }) {
   const [activeCat, setActiveCat] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [diet, setDiet] = useState<string[]>([]);
 
-  // A search looks across the WHOLE menu (category tabs step aside while typing).
+  // Which dietary tags actually appear on this menu (so we only offer useful filters).
+  const menuTags = useMemo(() => {
+    const present = new Set(items.flatMap(i => i.dietary ?? []));
+    return DIETARY_TAGS.filter(t => present.has(t.key));
+  }, [items]);
+
+  function toggleDiet(key: string): void {
+    setDiet(prev => (prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]));
+  }
+
+  // Search spans the whole menu; the category tabs + dietary filter narrow it.
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (q) {
-      return items.filter(
-        i =>
-          i.name.toLowerCase().includes(q) ||
-          (i.description ?? "").toLowerCase().includes(q),
-      );
-    }
-    return activeCat === "all" ? items : items.filter(i => i.category_id === activeCat);
-  }, [activeCat, items, search]);
+    let list = q
+      ? items.filter(
+          i =>
+            i.name.toLowerCase().includes(q) ||
+            (i.description ?? "").toLowerCase().includes(q),
+        )
+      : activeCat === "all"
+        ? items
+        : items.filter(i => i.category_id === activeCat);
+    // An item must carry EVERY selected dietary tag (e.g. vegan AND gluten-free).
+    if (diet.length) list = list.filter(i => diet.every(k => (i.dietary ?? []).includes(k)));
+    return list;
+  }, [activeCat, items, search, diet]);
 
   return (
     <div className="tt-root">
@@ -86,12 +102,28 @@ export default function MenuScreen({
             onSelect={setActiveCat}
           />
         )}
+        {menuTags.length > 0 && (
+          <div className="tt-diet-filter">
+            {menuTags.map(t => (
+              <button
+                key={t.key}
+                type="button"
+                className={`tt-diet-chip ${diet.includes(t.key) ? "tt-diet-chip-on" : ""}`}
+                onClick={() => toggleDiet(t.key)}
+              >
+                {t.emoji} {t.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ padding: 16 }}>
-        {filtered.length === 0 && search.trim() && (
+        {filtered.length === 0 && (search.trim() || diet.length > 0) && (
           <p className="tt-muted" style={{ textAlign: "center", fontSize: 14 }}>
-            Nothing matches “{search.trim()}” — try another craving.
+            {search.trim()
+              ? `Nothing matches “${search.trim()}” — try another craving.`
+              : "No items match those dietary filters."}
           </p>
         )}
         {filtered.map(item => (

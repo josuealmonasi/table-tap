@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import type { MenuItem, Modifier, OrderLineItem } from "@/lib/types";
+import { dietaryTags } from "@/lib/dietary";
 import ModifierGroup from "./ModifierGroup";
 
 /** Item customisation screen: modifiers, extras, special requests, qty → add to cart. */
@@ -86,6 +87,16 @@ export default function ItemDetailScreen({
         <p className="tt-muted" style={{ lineHeight: 1.6 }}>
           {item.description}
         </p>
+
+        {dietaryTags(item.dietary).length > 0 && (
+          <div className="tt-diet-row" style={{ marginBottom: 16 }}>
+            {dietaryTags(item.dietary).map(t => (
+              <span key={t.key} className="tt-diet-badge" title={t.label}>
+                {t.emoji} {t.label}
+              </span>
+            ))}
+          </div>
+        )}
 
         {item.modifiers.map(mod => (
           <ModifierGroup

@@ -1,5 +1,6 @@
 import { formatMoney } from "@/lib/format";
 import type { MenuItem } from "@/lib/types";
+import { dietaryTags } from "@/lib/dietary";
 
 /** A single tappable row in the menu list. */
 export default function MenuItemRow({
@@ -20,6 +21,15 @@ export default function MenuItemRow({
           {item.popular && <span className="tt-pop">Popular</span>}
         </div>
         <div className="tt-desc tt-muted">{item.description}</div>
+        {dietaryTags(item.dietary).length > 0 && (
+          <div className="tt-diet-row">
+            {dietaryTags(item.dietary).map(t => (
+              <span key={t.key} className="tt-diet-badge" title={t.label}>
+                {t.emoji} {t.label}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="tt-accent" style={{ fontWeight: 700, fontSize: 16 }}>
           {formatMoney(item.price, currency)}
         </div>

@@ -195,6 +195,24 @@ export async function seedMock(pg) {
     ]);
   }
 
+  // Dietary / allergen tags on products whose names imply them, so the demo
+  // shows the badges and the customer filter.
+  const dietaryFor = name => {
+    const tags = [];
+    if (/salad|edamame|veg|tofu|buddha|rice/i.test(name)) tags.push("vegetarian");
+    if (/salad|edamame|buddha|veg|lemonade|tea|water/i.test(name)) tags.push("vegan");
+    if (/salad|rice|edamame|steak|salmon|fries/i.test(name)) tags.push("gluten_free");
+    if (/wing|curry|taco|nacho|ramen/i.test(name)) tags.push("spicy");
+    if (/salmon|calamari|prawn|fish|sushi|shrimp/i.test(name)) tags.push("seafood");
+    return [...new Set(tags)];
+  };
+  for (const p of allProducts) {
+    const tags = dietaryFor(p.name);
+    if (tags.length) {
+      await pg.query("update menu_items set dietary = $2 where id = $1", [p.id, tags]);
+    }
+  }
+
   // ── Team (manager + kitchen) with names, plus an activity log ──
   const logs = [];
   for (const member of DEMO_TEAM) {
