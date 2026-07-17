@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/membership";
-import { stripe } from "@/lib/stripe";
-import { ensureConnectAccount } from "@/lib/stripe-connect";
+import { createOnboardingLink, ensureConnectAccount } from "@/lib/stripe-connect";
 
 export const runtime = "nodejs";
 
@@ -16,20 +15,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const origin = req.headers.get("origin") ?? new URL(req.url).origin;
 
   try {
-    const accountId = await ensureConnectAccount(membership.restaurant.id);
-    const link = await stripe.accountLinks.create({
-      account: accountId,
-      refresh_url: `${origin}/dashboard/settings?connect=refresh`,
-      return_url: `${origin}/dashboard/settings?connect=return`,
-      type: "account_onboarding",
+    const accountId = await ensureConnectAccount(membership.restaurant.id, {
+      email: user?.email,
+      currency: membership.restaurant.currency,
     });
-    return NextResponse.json({ url: link.url });
+    const url = await createOnboardingLink(accountId, origin);
+    return NextResponse.json({ url });
   } catch (err) {
-    // Most likely the platform hasn't enabled Connect yet
-    // (dashboard.stripe.com/connect). Surface a clean message, not a 500.
+    // Surface a clean message, not a 500, if Stripe rejects the request.
     console.error("connect onboard error", err);
     return NextResponse.json(
       { error: "Couldn't start Stripe onboarding. Please try again shortly." },
