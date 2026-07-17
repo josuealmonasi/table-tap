@@ -20,6 +20,8 @@ export type MenuItem = {
   available: boolean;
   is_addon: boolean;
   modifiers: Modifier[];
+  /** Dietary / allergen tag keys (see src/lib/dietary.ts). */
+  dietary: string[];
   sort_order: number;
 };
 

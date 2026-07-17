@@ -76,6 +76,8 @@ create table if not exists menu_items (
   is_addon      boolean not null default false,
   -- modifiers stored as JSON: [{ label, type: 'single'|'multi', options: [string] }]
   modifiers     jsonb not null default '[]'::jsonb,
+  -- dietary / allergen tag keys (see src/lib/dietary.ts)
+  dietary       text[] not null default '{}',
   sort_order    int not null default 0,
   created_at    timestamptz not null default now()
 );
@@ -106,6 +108,9 @@ create table if not exists orders (
 
 -- Migration for databases created before is_addon existed.
 alter table menu_items add column if not exists is_addon boolean not null default false;
+
+-- Dietary / allergen tags (keys from src/lib/dietary.ts), shown to customers.
+alter table menu_items add column if not exists dietary text[] not null default '{}';
 
 -- Migration for databases created before menus existed.
 alter table categories add column if not exists menu_id uuid references menus(id) on delete cascade;

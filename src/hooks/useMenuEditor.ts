@@ -22,6 +22,8 @@ export interface ProductInput {
   popular: boolean;
   /** Option groups the customer picks from (e.g. "Spice level"). */
   modifiers: Modifier[];
+  /** Dietary / allergen tag keys (see src/lib/dietary.ts). */
+  dietary: string[];
 }
 
 /** Editable fields for an add-on item. */
