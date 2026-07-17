@@ -89,7 +89,7 @@ export default function Navbar({
               >
                 Profile
               </Link>
-              {role === "owner" && (
+              {(role === "owner" || role === "manager") && (
                 <Link
                   href="/dashboard/settings"
                   role="menuitem"

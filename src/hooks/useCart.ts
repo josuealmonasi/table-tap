@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { lineUnitPrice, type OrderLineItem, type Restaurant } from "@/lib/types";
 
 /** A cart line is an order line item plus a client-side id for list keys/removal. */
@@ -12,9 +12,12 @@ export type CartItem = OrderLineItem & { cartId: number };
  */
 export function useCart(restaurant: Restaurant) {
   const [items, setItems] = useState<CartItem[]>([]);
+  // Monotonic id for cart lines — a plain counter can't collide the way
+  // Date.now() can when two items are added in the same millisecond.
+  const nextId = useRef(1);
 
   function addItem(line: OrderLineItem) {
-    setItems(prev => [...prev, { ...line, cartId: Date.now() }]);
+    setItems(prev => [...prev, { ...line, cartId: nextId.current++ }]);
   }
 
   function removeItem(cartId: number) {
