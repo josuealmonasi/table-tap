@@ -13,9 +13,9 @@ const V2 = { apiVersion: "2026-06-24.preview" } as const;
 interface V2Account {
   id: string;
   configuration?: {
-    merchant?: {
-      status?: string;
-      capabilities?: { card_payments?: { status?: string } };
+    merchant?: { capabilities?: { card_payments?: { status?: string } } };
+    recipient?: {
+      capabilities?: { stripe_balance?: { stripe_transfers?: { status?: string } } };
     };
   };
 }
@@ -64,12 +64,25 @@ export async function ensureConnectAccount(
       ...(opts.email ? { contact_email: opts.email } : {}),
       dashboard: "express",
       identity: { country: countryFor(opts.currency), entity_type: "individual" },
-      configuration: { merchant: { capabilities: { card_payments: { requested: true } } } },
+      configuration: {
+        // merchant → the restaurant can be shown its payments / do refunds;
+        // recipient.stripe_transfers → it can RECEIVE our destination-charge
+        // transfers (required, or checkout fails); payouts → withdraw to its bank.
+        merchant: { capabilities: { card_payments: { requested: true } } },
+        recipient: {
+          capabilities: {
+            stripe_balance: {
+              stripe_transfers: { requested: true },
+              payouts: { requested: true },
+            },
+          },
+        },
+      },
       defaults: {
         currency: opts.currency.toLowerCase(),
         responsibilities: { fees_collector: "stripe", losses_collector: "stripe" },
       },
-      include: ["configuration.merchant"],
+      include: ["configuration.merchant", "configuration.recipient"],
     },
     V2,
   )) as unknown as V2Account;
@@ -112,13 +125,16 @@ export async function syncConnectStatus(restaurantId: string): Promise<ConnectSt
 
   const account = (await stripe.rawRequest(
     "GET",
-    `/v2/core/accounts/${accountId}?include=configuration.merchant`,
+    `/v2/core/accounts/${accountId}?include=configuration.merchant&include=configuration.recipient`,
     {},
     V2,
   )) as unknown as V2Account;
 
-  const merchant = account.configuration?.merchant;
-  const chargesEnabled = merchant?.capabilities?.card_payments?.status === "active";
+  // Our checkout uses a destination charge, so "can accept payments" hinges on
+  // the recipient being able to receive transfers — not on card_payments.
+  const cfg = account.configuration;
+  const chargesEnabled =
+    cfg?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status === "active";
   await createAdminClient()
     .from("restaurants")
     .update({ stripe_charges_enabled: chargesEnabled })
@@ -126,7 +142,7 @@ export async function syncConnectStatus(restaurantId: string): Promise<ConnectSt
   return {
     accountId,
     chargesEnabled,
-    detailsSubmitted: merchant?.status === "active",
+    detailsSubmitted: cfg?.merchant?.capabilities?.card_payments?.status === "active",
   };
 }
 
