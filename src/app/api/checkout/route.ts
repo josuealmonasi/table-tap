@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { platformFeeCents } from "@/lib/stripe-connect";
+import { platformFeeCents } from "@/lib/money";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import type { OrderLineItem, OrderExtra } from "@/lib/types";
 

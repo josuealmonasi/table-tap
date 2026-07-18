@@ -1,4 +1,5 @@
 import { formatMoney } from "@/lib/format";
+import { ivaSplit } from "@/lib/money";
 
 /** Subtotal / service charge / total summary card. */
 export default function OrderTotals({
@@ -26,8 +27,7 @@ export default function OrderTotals({
 }) {
   // Prices include IVA, so the split is informational: net = subtotal / (1+r).
   const showTax = taxBreakdown && taxPct > 0;
-  const net = showTax ? subtotal / (1 + taxPct / 100) : subtotal;
-  const iva = subtotal - net;
+  const { net, iva } = ivaSplit(subtotal, showTax ? taxPct : 0);
 
   return (
     <div className="tt-card" style={{ padding: 16 }}>
