@@ -67,6 +67,12 @@ export default function LoginForm() {
             {loading ? "Signing in…" : "Sign in"}
           </button>
 
+          <p style={{ fontSize: 13, marginTop: 12, marginBottom: 0 }}>
+            <Link href="/forgot-password" className="tt-accent">
+              Forgot your password?
+            </Link>
+          </p>
+
           {error && <p style={{ color: "#c0392b", fontSize: 13 }}>{error}</p>}
 
           <p className="tt-muted" style={{ fontSize: 13, marginTop: 20 }}>
