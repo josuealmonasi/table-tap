@@ -72,18 +72,14 @@ async function ownerSlotFree(restaurantId: string): Promise<boolean> {
   return (r?.owner_id ? 1 : 0) + (count ?? 0) < MAX_OWNERS;
 }
 
-// POST /api/staff — an owner creates a team login (owner / manager / kitchen).
+// POST /api/staff — an owner invites a team member (owner / manager / waiter /
+// kitchen). We email them an invite link to set their own password, so the
+// owner never handles someone else's credentials.
 export async function POST(req: NextRequest) {
-  const { email, password, role } = await req.json();
+  const { email, role } = await req.json();
 
   if (typeof email !== "string" || !/^\S+@\S+\.\S+$/.test(email)) {
     return NextResponse.json({ error: "Enter a valid email." }, { status: 400 });
-  }
-  if (typeof password !== "string" || password.length < 8) {
-    return NextResponse.json(
-      { error: "Password must be at least 8 characters." },
-      { status: 400 },
-    );
   }
   if (!ROLES.includes(role)) {
     return NextResponse.json({ error: "Pick a role." }, { status: 400 });
@@ -100,26 +96,34 @@ export async function POST(req: NextRequest) {
   }
 
   const admin = createAdminClient();
-  const { data: created, error: userErr } = await admin.auth.admin.createUser({
+  const origin = req.headers.get("origin") ?? new URL(req.url).origin;
+
+  // Creates the (password-less) user and emails them an invite. They set their
+  // own password via the link → /auth/callback → /reset-password.
+  const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(
     email,
-    password,
-    email_confirm: true,
-  });
-  if (userErr || !created.user) {
+    { redirectTo: `${origin}/auth/callback?next=/reset-password` },
+  );
+  if (inviteErr || !invited.user) {
+    const already = inviteErr?.message?.toLowerCase().includes("already");
     return NextResponse.json(
-      { error: userErr?.message ?? "Could not create the login." },
+      {
+        error: already
+          ? "That email already has an account."
+          : (inviteErr?.message ?? "Could not send the invite."),
+      },
       { status: 400 },
     );
   }
 
   const { error: staffErr } = await admin.from("staff").insert({
     restaurant_id: actor.restaurantId,
-    user_id: created.user.id,
+    user_id: invited.user.id,
     email,
     role,
   });
   if (staffErr) {
-    await admin.auth.admin.deleteUser(created.user.id); // roll back the login
+    await admin.auth.admin.deleteUser(invited.user.id); // roll back the invite
     return NextResponse.json(
       { error: "Could not add the team member." },
       { status: 500 },

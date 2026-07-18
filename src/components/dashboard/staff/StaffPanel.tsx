@@ -23,15 +23,13 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
   const { members, loading, busy, addMember, updateRole, removeMember } =
     useStaff(restaurantId);
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [role, setRole] = useState<StaffRole>("kitchen");
   const confirm = useConfirm();
 
   async function handleAdd(e: React.FormEvent): Promise<void> {
     e.preventDefault();
-    if (await addMember(email.trim(), password, role)) {
+    if (await addMember(email.trim(), role)) {
       setEmail("");
-      setPassword("");
       setRole("kitchen");
     }
   }
@@ -63,7 +61,8 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
           )}
           {!loading && members.length === 0 && (
             <p className="tt-muted" style={{ fontSize: 13 }}>
-              No staff yet. Create a login for the kitchen below.
+              No staff yet. Invite your kitchen team below — they&apos;ll get an email
+              to set their own password.
             </p>
           )}
           {members.length > 0 && (
@@ -124,27 +123,14 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
           )}
 
           <form className="tt-prodform" style={{ marginTop: 16 }} onSubmit={handleAdd}>
-            <div className="tt-prodform-row">
-              <input
-                className="tt-input"
-                style={{ flex: 1 }}
-                type="email"
-                placeholder="staff@email.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-              />
-              <input
-                className="tt-input"
-                style={{ flex: 1 }}
-                type="password"
-                placeholder="Password (8+ characters)"
-                minLength={8}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-              />
-            </div>
+            <input
+              className="tt-input"
+              type="email"
+              placeholder="staff@email.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+            />
             <label className="tt-field" style={{ maxWidth: 220 }}>
               <span className="tt-mod-label">Role</span>
               <select
@@ -164,7 +150,7 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
                 className="tt-btn tt-btn-primary tt-btn-sm"
                 disabled={busy}
               >
-                {busy ? "Working…" : "+ Add staff login"}
+                {busy ? "Sending…" : "✉️ Send invite"}
               </button>
             </div>
           </form>

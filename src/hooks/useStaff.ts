@@ -75,24 +75,20 @@ export function useStaff(restaurantId: string) {
     setMembers(await fetchMembers(restaurantId));
   }
 
-  async function addMember(
-    email: string,
-    password: string,
-    role: StaffRole,
-  ): Promise<boolean> {
+  async function addMember(email: string, role: StaffRole): Promise<boolean> {
     setBusy(true);
     try {
       const res = await fetch("/api/staff", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, role }),
+        body: JSON.stringify({ email, role }),
       });
       const data = await res.json();
       if (!res.ok) {
         toast(data.error ?? "Could not add the staff member.", "error");
         return false;
       }
-      toast("Staff login created");
+      toast(`Invite sent to ${email}`);
       await refresh();
       return true;
     } catch {
