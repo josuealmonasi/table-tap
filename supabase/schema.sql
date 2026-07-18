@@ -357,6 +357,53 @@ $$;
 revoke all on function public.has_role(uuid, text[]) from public;
 grant execute on function public.has_role(uuid, text[]) to anon, authenticated;
 
+-- ── Rate limiting ───────────────────────────────────────────────────────────
+-- A tiny shared counter so the public API routes (checkout, service requests,
+-- signup) can throttle abusive callers. One row per bucket (e.g. "checkout:1.2.3.4"),
+-- reset whenever its fixed window elapses. Written only by the secret key via
+-- rate_limit_hit(); RLS-on with no policies keeps every client role out.
+create table if not exists rate_limits (
+  bucket       text primary key,
+  count        int not null default 0,
+  window_start timestamptz not null default now()
+);
+alter table rate_limits enable row level security;
+-- Only the secret key (via rate_limit_hit) ever touches this table. The anon
+-- lockdown above ran before this table existed, so strip the default grants
+-- here too — RLS is then a second line of defence, not the only one.
+revoke all on rate_limits from anon, authenticated;
+
+-- Atomically bump a bucket's counter and return its new count for the current
+-- window. Callers compare the result against their own limit. SECURITY DEFINER
+-- so it works regardless of the caller's row-level access to rate_limits.
+create or replace function public.rate_limit_hit(p_bucket text, p_window_seconds int)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_count int;
+begin
+  insert into rate_limits (bucket, count, window_start)
+  values (p_bucket, 1, now())
+  on conflict (bucket) do update set
+    count = case
+      when rate_limits.window_start < now() - make_interval(secs => p_window_seconds)
+      then 1 else rate_limits.count + 1 end,
+    window_start = case
+      when rate_limits.window_start < now() - make_interval(secs => p_window_seconds)
+      then now() else rate_limits.window_start end
+  returning count into v_count;
+  return v_count;
+end;
+$$;
+-- Only the secret key may bump counters. Supabase's default privileges grant
+-- execute to anon/authenticated too, so revoke from them explicitly — otherwise
+-- anyone could inflate another caller's bucket and grief them into a 429.
+revoke all on function public.rate_limit_hit(text, int) from public, anon, authenticated;
+grant execute on function public.rate_limit_hit(text, int) to service_role;
+
 -- STAFF table access: the owner manages their staff list (inserts happen only
 -- server-side — /api/staff creates the login with the secret key); a staff
 -- member can read their own membership row (the dashboard resolves their
