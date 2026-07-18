@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/lib/i18n/context";
 
 interface ConnectStatus {
   connected: boolean;
@@ -14,6 +15,7 @@ interface ConnectStatus {
  * from /api/connect/status and kicks off Stripe onboarding via /api/connect/onboard.
  */
 export default function PaymentsCard() {
+  const t = useT();
   const [status, setStatus] = useState<ConnectStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [redirecting, setRedirecting] = useState(false);
@@ -47,9 +49,9 @@ export default function PaymentsCard() {
         window.location.href = data.url; // Stripe-hosted onboarding
         return;
       }
-      setError(data.error ?? "Couldn't start Stripe onboarding.");
+      setError(data.error ?? t("dash.connectError"));
     } catch {
-      setError("Network error — please try again.");
+      setError(t("notice.network"));
     }
     setRedirecting(false);
   }
@@ -58,28 +60,26 @@ export default function PaymentsCard() {
     <div className="tt-section" style={{ maxWidth: 520, marginTop: 16 }}>
       <div className="tt-section-head">
         <h3 className="tt-serif" style={{ margin: 0 }}>
-          Payments
+          {t("dash.payments")}
         </h3>
         <span className="tt-muted" style={{ fontSize: 12 }}>
-          Where your customers&apos; money goes
+          {t("dash.paymentsHint")}
         </span>
       </div>
 
       {loading ? (
         <p className="tt-muted" style={{ fontSize: 14, margin: 0 }}>
-          Checking your payment setup…
+          {t("dash.paymentsChecking")}
         </p>
       ) : status?.chargesEnabled ? (
         <p style={{ fontSize: 14, margin: 0 }}>
-          <span className="tt-badge tt-badge-green">✓ Connected</span>{" "}
-          Payments for your orders go straight to your Stripe account.
+          <span className="tt-badge tt-badge-green">{t("dash.connected")}</span>{" "}
+          {t("dash.connectedMsg")}
         </p>
       ) : (
         <>
           <p className="tt-muted" style={{ fontSize: 14, marginTop: 0 }}>
-            {status?.connected
-              ? "Your Stripe setup is almost done — finish it so you can start taking orders."
-              : "Connect a Stripe account so customer payments land in your bank. Until then, customers can’t check out."}
+            {status?.connected ? t("dash.connectAlmost") : t("dash.connectPrompt")}
           </p>
           <button
             className="tt-btn tt-btn-primary tt-btn-sm"
@@ -87,10 +87,10 @@ export default function PaymentsCard() {
             disabled={redirecting}
           >
             {redirecting
-              ? "Redirecting…"
+              ? t("dash.redirecting")
               : status?.connected
-                ? "Finish Stripe setup"
-                : "Connect Stripe"}
+                ? t("dash.finishBtn")
+                : t("dash.connectBtn")}
           </button>
           {error && (
             <p style={{ color: "#c0392b", fontSize: 13, marginBottom: 0 }}>{error}</p>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { RestaurantTable } from "@/lib/types";
 import { useTables } from "@/hooks/useTables";
+import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import QrCard, { type QrTarget } from "./QrCard";
 import TableRow from "./TableRow";
@@ -27,6 +28,7 @@ export default function TablesPanel({
   fastFood,
   tables,
 }: TablesPanelProps) {
+  const t = useT();
   const { busy, addTable, renameTable, deleteTable } = useTables(restaurantId);
   const [newLabel, setNewLabel] = useState("");
 
@@ -42,7 +44,7 @@ export default function TablesPanel({
     <form className="tt-add-section" onSubmit={submitAdd}>
       <input
         className="tt-input"
-        placeholder="Table number or name (e.g. 7, Patio 3)"
+        placeholder={t("dash.tableLabelPlaceholder")}
         value={newLabel}
         onChange={e => setNewLabel(e.target.value)}
       />
@@ -51,7 +53,7 @@ export default function TablesPanel({
         type="submit"
         disabled={!newLabel.trim() || busy}
       >
-        + Add table
+        {t("dash.addTable")}
       </button>
     </form>
   );
@@ -61,7 +63,10 @@ export default function TablesPanel({
       <div className="container">
         <header className="tt-dash-head">
           <Breadcrumb
-            trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Tables & QR" }]}
+            trail={[
+              { labelKey: "nav.dashboard", href: "/dashboard" },
+              { labelKey: "nav.tables" },
+            ]}
           />
         </header>
 
@@ -69,19 +74,18 @@ export default function TablesPanel({
         <div className="tt-section">
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>
-              Fast-food QR
+              {t("dash.fastFoodQr")}
             </h3>
             <span className="tt-muted" style={{ fontSize: 12 }}>
-              One code for the whole place — no table
+              {t("dash.fastFoodHint")}
             </span>
           </div>
           <p className="tt-muted" style={{ fontSize: 13, marginTop: 0 }}>
-            Print this once (counter, flyer, sticker). Customers scan it, order, and get a
-            pickup code. Only your active menus are shown.
+            {t("dash.fastFoodDesc")}
           </p>
           <QrCard
             title={restaurantName}
-            subtitle="Whole restaurant"
+            subtitle={t("dash.wholeRestaurant")}
             qr={fastFood}
             downloadName="restaurant-qr"
           />
@@ -91,23 +95,22 @@ export default function TablesPanel({
         <div className="tt-section" style={{ marginTop: 16 }}>
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>
-              Table QRs
+              {t("dash.tableQrs")}
             </h3>
             <span className="tt-muted" style={{ fontSize: 12 }}>
-              One code per table — orders tagged with the table
+              {t("dash.tableQrsHint")}
             </span>
           </div>
 
           {tables.length === 0 ? (
             <div className="tt-empty">
               <div className="tt-empty-emoji">🪑</div>
-              <strong>Add your first table</strong>
+              <strong>{t("dash.addFirstTable")}</strong>
               <p
                 className="tt-muted"
                 style={{ fontSize: 13, margin: "4px 0 14px", maxWidth: 360 }}
               >
-                Each table gets its own QR. When a customer scans it and orders, the order
-                arrives tagged with the table so you know where to send the food.
+                {t("dash.addFirstTableDesc")}
               </p>
               {addForm}
             </div>

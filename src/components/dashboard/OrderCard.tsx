@@ -1,24 +1,27 @@
+"use client";
+
 import { formatMoney } from "@/lib/format";
 import { orderCode, type Order, type OrderStatus } from "@/lib/types";
+import { useT } from "@/lib/i18n/context";
 
-const STATUS_META: Record<string, { label: string; color: string }> = {
-  received: { label: "New Order", color: "var(--tt-gold)" },
-  preparing: { label: "Preparing", color: "var(--tt-accent)" },
-  ready: { label: "Ready", color: "var(--tt-success)" },
-  completed: { label: "Completed", color: "var(--tt-muted)" },
-  cancelled: { label: "Cancelled", color: "var(--tt-muted)" },
+const STATUS_META: Record<string, { labelKey: string; color: string }> = {
+  received: { labelKey: "orders.statusNew", color: "var(--tt-gold)" },
+  preparing: { labelKey: "orders.statusPreparing", color: "var(--tt-accent)" },
+  ready: { labelKey: "orders.statusReady", color: "var(--tt-success)" },
+  completed: { labelKey: "orders.statusCompleted", color: "var(--tt-muted)" },
+  cancelled: { labelKey: "orders.statusCancelled", color: "var(--tt-muted)" },
 };
 
 /** Map an order's current status to the button that advances it. */
 function nextAction(
   status: OrderStatus,
-): { label: string; to: OrderStatus; variant: string } | null {
+): { labelKey: string; to: OrderStatus; variant: string } | null {
   if (status === "received")
-    return { label: "Start Preparing", to: "preparing", variant: "tt-btn-primary" };
+    return { labelKey: "orders.startPreparing", to: "preparing", variant: "tt-btn-primary" };
   if (status === "preparing")
-    return { label: "Mark Ready", to: "ready", variant: "tt-btn-success" };
+    return { labelKey: "orders.markReady", to: "ready", variant: "tt-btn-success" };
   if (status === "ready")
-    return { label: "Complete", to: "completed", variant: "tt-btn-ghost" };
+    return { labelKey: "orders.complete", to: "completed", variant: "tt-btn-ghost" };
   return null;
 }
 
@@ -37,6 +40,7 @@ export default function OrderCard({
   onAdvance,
   onCancel,
 }: OrderCardProps) {
+  const t = useT();
   const meta = STATUS_META[order.status] ?? STATUS_META.completed;
   const action = nextAction(order.status);
   const cancellable = order.status === "received" || order.status === "preparing";
@@ -49,7 +53,9 @@ export default function OrderCard({
     <div className="tt-order-card" style={{ borderLeft: `4px solid ${meta.color}` }}>
       <div className="tt-row">
         <div>
-          <strong style={{ fontSize: 16 }}>Table {order.table_label}</strong>
+          <strong style={{ fontSize: 16 }}>
+            {t("dash.tableN", { label: order.table_label ?? "" })}
+          </strong>
           <div className="tt-muted" style={{ fontSize: 12 }}>
             {orderCode(order.id)} · {placedAt}
           </div>
@@ -58,7 +64,7 @@ export default function OrderCard({
           className="tt-status-badge"
           style={{ color: meta.color, background: `${meta.color}1a` }}
         >
-          {meta.label}
+          {t(meta.labelKey)}
         </span>
       </div>
 
@@ -102,7 +108,7 @@ export default function OrderCard({
               className="tt-btn tt-btn-ghost tt-btn-sm"
               onClick={() => onCancel(order)}
             >
-              Cancel
+              {t("common.cancel")}
             </button>
           )}
           {action ? (
@@ -110,15 +116,16 @@ export default function OrderCard({
               className={`tt-btn ${action.variant} tt-btn-sm`}
               onClick={() => onAdvance(order.id, action.to)}
             >
-              {action.label}
+              {t(action.labelKey)}
             </button>
           ) : order.status === "cancelled" ? (
             <span className="tt-muted" style={{ fontSize: 13, fontWeight: 700 }}>
-              ✕ Cancelled{order.stripe_refund_id ? " · refunded" : ""}
+              {t("orders.cancelledLabel")}
+              {order.stripe_refund_id ? t("orders.refunded") : ""}
             </span>
           ) : (
             <span style={{ color: "var(--tt-success)", fontSize: 13, fontWeight: 700 }}>
-              ✓ Done
+              {t("orders.done")}
             </span>
           )}
         </div>

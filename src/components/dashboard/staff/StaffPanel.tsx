@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useStaff, type StaffRole } from "@/hooks/useStaff";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 
 interface StaffPanelProps {
@@ -20,6 +21,7 @@ const ROLE_EMOJI: Record<StaffRole, string> = {
 
 /** Owner-only team management: create, re-role and remove logins. */
 export default function StaffPanel({ restaurantId, children }: StaffPanelProps) {
+  const t = useT();
   const { members, loading, busy, addMember, updateRole, removeMember } =
     useStaff(restaurantId);
   const [email, setEmail] = useState("");
@@ -39,38 +41,39 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
       <div className="container">
         <header className="tt-dash-head">
           <Breadcrumb
-            trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Staff" }]}
+            trail={[
+              { labelKey: "nav.dashboard", href: "/dashboard" },
+              { labelKey: "nav.staff" },
+            ]}
           />
         </header>
 
         <div className="tt-section" style={{ maxWidth: 560 }}>
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>
-              Team logins
+              {t("dash.teamLogins")}
             </h3>
             <span className="tt-muted" style={{ fontSize: 12 }}>
-              Kitchen &amp; waiter: orders board only · Manager: + menus, tables,
-              settings, refunds · Owner: everything (max 3)
+              {t("dash.teamHint")}
             </span>
           </div>
 
           {loading && (
             <p className="tt-muted" style={{ fontSize: 13 }}>
-              Loading…
+              {t("common.loading")}
             </p>
           )}
           {!loading && members.length === 0 && (
             <p className="tt-muted" style={{ fontSize: 13 }}>
-              No staff yet. Invite your kitchen team below — they&apos;ll get an email
-              to set their own password.
+              {t("dash.noStaff")}
             </p>
           )}
           {members.length > 0 && (
             <div className="tt-staff-table">
               <div className="tt-staff-tr tt-staff-thead" aria-hidden="true">
-                <span>Name</span>
-                <span>Email</span>
-                <span>Role</span>
+                <span>{t("dash.name")}</span>
+                <span>{t("dash.email")}</span>
+                <span>{t("dash.role")}</span>
                 <span />
               </div>
               {members.map(m => (
@@ -90,24 +93,24 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
                     className="tt-input tt-role-select"
                     value={m.role}
                     disabled={busy}
-                    aria-label={`Role for ${m.email}`}
+                    aria-label={t("dash.roleFor", { email: m.email })}
                     onChange={e => updateRole(m.id, e.target.value as StaffRole)}
                   >
-                    <option value="kitchen">Kitchen</option>
-                    <option value="waiter">Waiter</option>
-                    <option value="manager">Manager</option>
-                    <option value="owner">Owner</option>
+                    <option value="kitchen">{t("dash.kitchen")}</option>
+                    <option value="waiter">{t("dash.waiter")}</option>
+                    <option value="manager">{t("dash.manager")}</option>
+                    <option value="owner">{t("dash.owner")}</option>
                   </select>
                   <button
                     className="tt-iconbtn"
-                    title="Remove login"
+                    title={t("dash.removeLogin")}
                     disabled={busy}
                     onClick={async () => {
                       if (
                         await confirm({
-                          title: `Remove ${m.full_name || m.email}?`,
-                          message: "Their login stops working immediately.",
-                          confirmLabel: "Remove",
+                          title: t("dash.removeConfirm", { name: m.full_name || m.email }),
+                          message: t("dash.removeConfirmMsg"),
+                          confirmLabel: t("common.remove"),
                           danger: true,
                         })
                       ) {
@@ -126,22 +129,22 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
             <input
               className="tt-input"
               type="email"
-              placeholder="staff@email.com"
+              placeholder={t("dash.staffEmailPlaceholder")}
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
             />
             <label className="tt-field" style={{ maxWidth: 220 }}>
-              <span className="tt-mod-label">Role</span>
+              <span className="tt-mod-label">{t("dash.role")}</span>
               <select
                 className="tt-input"
                 value={role}
                 onChange={e => setRole(e.target.value as StaffRole)}
               >
-                <option value="kitchen">Kitchen — orders board only</option>
-                <option value="waiter">Waiter — orders board &amp; floor service</option>
-                <option value="manager">Manager — menus, tables, settings, refunds</option>
-                <option value="owner">Owner — everything (max 3 owners)</option>
+                <option value="kitchen">{t("dash.roleKitchen")}</option>
+                <option value="waiter">{t("dash.roleWaiter")}</option>
+                <option value="manager">{t("dash.roleManager")}</option>
+                <option value="owner">{t("dash.roleOwner")}</option>
               </select>
             </label>
             <div className="tt-prodform-actions">
@@ -150,7 +153,7 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
                 className="tt-btn tt-btn-primary tt-btn-sm"
                 disabled={busy}
               >
-                {busy ? "Sending…" : "✉️ Send invite"}
+                {busy ? t("dash.sending") : t("dash.sendInvite")}
               </button>
             </div>
           </form>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navItemsFor } from "@/lib/nav";
 import { createClient } from "@/lib/supabase/client";
+import { useT } from "@/lib/i18n/context";
 
 /**
  * Mobile-only navigation: a hamburger button that opens a backdrop drawer
@@ -21,6 +22,7 @@ export default function NavDrawer({
   /** Managers lose Staff/Settings; kitchen only gets the orders board. */
   role: "owner" | "manager" | "waiter" | "kitchen" | "admin";
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
@@ -51,7 +53,7 @@ export default function NavDrawer({
       <button
         type="button"
         className="tt-hamburger"
-        aria-label="Open navigation menu"
+        aria-label={t("nav.openMenu")}
         aria-expanded={open}
         onClick={() => setOpen(true)}
       >
@@ -66,7 +68,7 @@ export default function NavDrawer({
             className="tt-drawer"
             role="dialog"
             aria-modal="true"
-            aria-label="Navigation"
+            aria-label={t("nav.navigation")}
             onClick={e => e.stopPropagation()}
           >
             <div className="tt-drawer-head">
@@ -75,7 +77,7 @@ export default function NavDrawer({
               <button
                 type="button"
                 className="tt-drawer-close"
-                aria-label="Close menu"
+                aria-label={t("nav.closeMenu")}
                 onClick={() => setOpen(false)}
               >
                 ✕
@@ -90,27 +92,27 @@ export default function NavDrawer({
                   aria-current={isActive("/dashboard") ? "page" : undefined}
                   onClick={() => setOpen(false)}
                 >
-                  <span className="tt-drawer-emoji">🏠</span> Dashboard
+                  <span className="tt-drawer-emoji">🏠</span> {t("nav.dashboard")}
                 </Link>
               )}
 
               {navItemsFor(role).map(item =>
                 item.soon ? (
-                  <span key={item.title} className="tt-drawer-link tt-drawer-link-soon">
-                    <span className="tt-drawer-emoji">{item.emoji}</span> {item.title}
+                  <span key={item.href} className="tt-drawer-link tt-drawer-link-soon">
+                    <span className="tt-drawer-emoji">{item.emoji}</span> {t(item.titleKey)}
                     <span className="tt-badge" style={{ marginLeft: "auto" }}>
-                      Soon
+                      {t("nav.soon")}
                     </span>
                   </span>
                 ) : (
                   <Link
-                    key={item.title}
+                    key={item.href}
                     href={item.href}
                     className={`tt-drawer-link ${isActive(item.href) ? "tt-drawer-link-active" : ""}`}
                     aria-current={isActive(item.href) ? "page" : undefined}
                     onClick={() => setOpen(false)}
                   >
-                    <span className="tt-drawer-emoji">{item.emoji}</span> {item.title}
+                    <span className="tt-drawer-emoji">{item.emoji}</span> {t(item.titleKey)}
                   </Link>
                 ),
               )}
@@ -121,7 +123,7 @@ export default function NavDrawer({
               className="tt-drawer-link tt-drawer-signout"
               onClick={signOut}
             >
-              <span className="tt-drawer-emoji">🚪</span> Sign out
+              <span className="tt-drawer-emoji">🚪</span> {t("nav.signOut")}
             </button>
           </aside>
         </div>

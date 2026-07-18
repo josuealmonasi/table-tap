@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Modifier } from "@/lib/types";
+import { useT } from "@/lib/i18n/context";
 
 interface ModifiersEditorProps {
   value: Modifier[];
@@ -14,6 +15,7 @@ interface ModifiersEditorProps {
  * multi-select. Stored as the modifiers JSON on the product.
  */
 export default function ModifiersEditor({ value, onChange }: ModifiersEditorProps) {
+  const t = useT();
   // One draft option text per group, keyed by index.
   const [drafts, setDrafts] = useState<Record<number, string>>({});
 
@@ -31,9 +33,9 @@ export default function ModifiersEditor({ value, onChange }: ModifiersEditorProp
   return (
     <div>
       <div className="tt-mod-label" style={{ marginTop: 6 }}>
-        Option groups{" "}
+        {t("menu.optionGroups")}{" "}
         <span className="tt-muted" style={{ fontWeight: 400 }}>
-          (e.g. “Spice level” — customers pick when ordering)
+          {t("menu.optionGroupsHint")}
         </span>
       </div>
 
@@ -43,7 +45,7 @@ export default function ModifiersEditor({ value, onChange }: ModifiersEditorProp
             <input
               className="tt-input"
               style={{ flex: 1 }}
-              placeholder="Group name (e.g. Spice level)"
+              placeholder={t("menu.groupNamePlaceholder")}
               value={group.label}
               onChange={e => patchGroup(i, { label: e.target.value })}
             />
@@ -51,18 +53,18 @@ export default function ModifiersEditor({ value, onChange }: ModifiersEditorProp
               className="tt-input"
               style={{ width: 130 }}
               value={group.type}
-              aria-label="Choice type"
+              aria-label={t("menu.choiceType")}
               onChange={e =>
                 patchGroup(i, { type: e.target.value as Modifier["type"] })
               }
             >
-              <option value="single">One choice</option>
-              <option value="multi">Any</option>
+              <option value="single">{t("menu.oneChoice")}</option>
+              <option value="multi">{t("menu.anyChoice")}</option>
             </select>
             <button
               type="button"
               className="tt-iconbtn"
-              title="Remove group"
+              title={t("menu.removeGroup")}
               onClick={() => onChange(value.filter((_, idx) => idx !== i))}
             >
               🗑️
@@ -75,7 +77,7 @@ export default function ModifiersEditor({ value, onChange }: ModifiersEditorProp
                 type="button"
                 key={option}
                 className="tt-chip tt-chip-on"
-                title="Remove option"
+                title={t("menu.removeOption")}
                 onClick={() =>
                   patchGroup(i, { options: group.options.filter(o => o !== option) })
                 }
@@ -89,7 +91,7 @@ export default function ModifiersEditor({ value, onChange }: ModifiersEditorProp
             <input
               className="tt-input"
               style={{ flex: 1 }}
-              placeholder="Add an option (e.g. Mild) and press Enter"
+              placeholder={t("menu.addOptionPlaceholder")}
               value={drafts[i] ?? ""}
               onChange={e => setDrafts(prev => ({ ...prev, [i]: e.target.value }))}
               onKeyDown={e => {
@@ -104,7 +106,7 @@ export default function ModifiersEditor({ value, onChange }: ModifiersEditorProp
               className="tt-btn tt-btn-ghost tt-btn-sm"
               onClick={() => addOption(i)}
             >
-              + Add
+              {t("menu.addBtn")}
             </button>
           </div>
         </div>
@@ -116,7 +118,7 @@ export default function ModifiersEditor({ value, onChange }: ModifiersEditorProp
         style={{ marginBottom: 0 }}
         onClick={() => onChange([...value, { label: "", type: "single", options: [] }])}
       >
-        + Add option group
+        {t("menu.addOptionGroup")}
       </button>
     </div>
   );

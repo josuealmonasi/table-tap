@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAdminActions } from "@/hooks/useAdminActions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import AdminCreateUser from "./AdminCreateUser";
 import AdminEditUser from "./AdminEditUser";
@@ -32,13 +33,13 @@ interface AdminPanelProps {
   restaurantOptions: { id: string; name: string }[];
 }
 
-const ROLE_LABEL: Record<AdminUserRow["role"], string> = {
-  admin: "🛡️ Admin",
-  owner: "👑 Owner",
-  manager: "🧑‍💼 Manager",
-  waiter: "🧑‍🍽️ Waiter",
-  kitchen: "👨‍🍳 Kitchen",
-  none: "—",
+const ROLE_META: Record<AdminUserRow["role"], { emoji: string; key: string }> = {
+  admin: { emoji: "🛡️", key: "admin.platformAdmin" },
+  owner: { emoji: "👑", key: "dash.owner" },
+  manager: { emoji: "🧑‍💼", key: "dash.manager" },
+  waiter: { emoji: "🧑‍🍽️", key: "dash.waiter" },
+  kitchen: { emoji: "👨‍🍳", key: "dash.kitchen" },
+  none: { emoji: "", key: "" },
 };
 
 /** The platform admin's home: every restaurant and login, with full control. */
@@ -48,24 +49,29 @@ export default function AdminPanel({
   users,
   restaurantOptions,
 }: AdminPanelProps) {
+  const t = useT();
   const { busy, deleteUser, deleteRestaurant } = useAdminActions();
   const confirm = useConfirm();
   const [editing, setEditing] = useState<AdminUserRow | null>(null);
+  const roleLabel = (role: AdminUserRow["role"]): string => {
+    const m = ROLE_META[role];
+    return m.key ? `${m.emoji} ${t(m.key)}` : "—";
+  };
 
   return (
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <Breadcrumb trail={[{ label: "Platform Admin" }]} />
+          <Breadcrumb trail={[{ labelKey: "admin.title" }]} />
         </header>
 
         <div className="tt-section">
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>
-              Restaurants
+              {t("admin.restaurants")}
             </h3>
             <span className="tt-muted" style={{ fontSize: 12 }}>
-              {restaurants.length} total
+              {t("admin.total", { n: restaurants.length })}
             </span>
           </div>
           <div className="tt-admin-table">
@@ -76,10 +82,10 @@ export default function AdminPanel({
               }}
               aria-hidden="true"
             >
-              <span>Restaurant</span>
-              <span>Founding owner</span>
-              <span>Team</span>
-              <span>Created</span>
+              <span>{t("admin.restaurant")}</span>
+              <span>{t("admin.foundingOwner")}</span>
+              <span>{t("admin.team")}</span>
+              <span>{t("admin.created")}</span>
               <span />
             </div>
             {restaurants.map(r => (
@@ -105,15 +111,14 @@ export default function AdminPanel({
                 </span>
                 <button
                   className="tt-iconbtn"
-                  title="Delete restaurant"
+                  title={t("admin.deleteRestaurant")}
                   disabled={busy}
                   onClick={async () => {
                     if (
                       await confirm({
-                        title: `Delete ${r.name}?`,
-                        message:
-                          "Menus, orders, tables and team logins are erased permanently.",
-                        confirmLabel: "Delete restaurant",
+                        title: t("admin.deleteRestaurantConfirm", { name: r.name }),
+                        message: t("admin.deleteRestaurantMsg"),
+                        confirmLabel: t("admin.deleteRestaurant"),
                         danger: true,
                       })
                     ) {
@@ -131,18 +136,18 @@ export default function AdminPanel({
         <div className="tt-section" style={{ marginTop: 16 }}>
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>
-              Users
+              {t("admin.users")}
             </h3>
             <span className="tt-muted" style={{ fontSize: 12 }}>
-              {users.length} total
+              {t("admin.total", { n: users.length })}
             </span>
           </div>
           <div className="tt-admin-table">
             <div className="tt-admin-tr tt-staff-thead" aria-hidden="true">
-              <span>Email</span>
-              <span>Name</span>
-              <span>Role</span>
-              <span>Restaurant</span>
+              <span>{t("dash.email")}</span>
+              <span>{t("dash.name")}</span>
+              <span>{t("dash.role")}</span>
+              <span>{t("admin.restaurant")}</span>
               <span />
             </div>
             {users.map(u => (
@@ -154,20 +159,20 @@ export default function AdminPanel({
                   {u.full_name ?? "—"}
                 </span>
                 <span style={{ whiteSpace: "nowrap", fontSize: 13 }}>
-                  {ROLE_LABEL[u.role]}
+                  {roleLabel(u.role)}
                 </span>
                 <span className="tt-staff-cell tt-muted" title={u.restaurant_name ?? ""}>
                   {u.restaurant_name ?? "—"}
                 </span>
                 {u.user_id === adminUserId ? (
                   <span className="tt-muted" style={{ fontSize: 11 }}>
-                    you
+                    {t("admin.you")}
                   </span>
                 ) : (
                   <span style={{ display: "flex", gap: 2 }}>
                     <button
                       className="tt-iconbtn"
-                      title="Edit login"
+                      title={t("admin.editLogin")}
                       disabled={busy}
                       onClick={() => setEditing(u)}
                     >
@@ -175,14 +180,14 @@ export default function AdminPanel({
                     </button>
                     <button
                       className="tt-iconbtn"
-                      title="Delete login"
+                      title={t("admin.deleteLogin")}
                       disabled={busy}
                       onClick={async () => {
                         if (
                           await confirm({
-                            title: `Delete ${u.email}?`,
-                            message: "Their login stops working immediately.",
-                            confirmLabel: "Delete login",
+                            title: t("admin.deleteLoginConfirm", { email: u.email }),
+                            message: t("admin.deleteLoginMsg"),
+                            confirmLabel: t("admin.deleteLogin"),
                             danger: true,
                           })
                         ) {

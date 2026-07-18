@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useAdminActions } from "@/hooks/useAdminActions";
+import { useT } from "@/lib/i18n/context";
 import type { AdminUserRow } from "./AdminPanel";
 
 interface AdminEditUserProps {
@@ -17,6 +18,7 @@ function roleEditable(role: AdminUserRow["role"]): boolean {
 
 /** Edit a login: name, email, an optional password reset, and (staff) role. */
 export default function AdminEditUser({ user, onClose }: AdminEditUserProps) {
+  const t = useT();
   const { busy, updateUser } = useAdminActions();
   const [name, setName] = useState(user?.full_name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
@@ -42,25 +44,25 @@ export default function AdminEditUser({ user, onClose }: AdminEditUserProps) {
   return (
     <Modal open onClose={onClose} maxWidth={460}>
       <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 4 }}>
-        Edit {user.email}
+        {t("admin.editUserTitle", { email: user.email })}
       </h3>
       <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
-        Leave the password empty to keep the current one.
+        {t("admin.keepPassword")}
       </p>
 
       <form className="tt-prodform" onSubmit={handleSubmit}>
         <label className="tt-field">
-          <span className="tt-mod-label">Full name</span>
+          <span className="tt-mod-label">{t("dash.fullName")}</span>
           <input
             className="tt-input"
-            placeholder="Name"
+            placeholder={t("admin.namePlaceholder")}
             value={name}
             onChange={e => setName(e.target.value)}
           />
         </label>
 
         <label className="tt-field">
-          <span className="tt-mod-label">Email</span>
+          <span className="tt-mod-label">{t("dash.email")}</span>
           <input
             className="tt-input"
             type="email"
@@ -72,11 +74,11 @@ export default function AdminEditUser({ user, onClose }: AdminEditUserProps) {
 
         <div className="tt-prodform-row">
           <label className="tt-field" style={{ flex: 1 }}>
-            <span className="tt-mod-label">Reset password</span>
+            <span className="tt-mod-label">{t("admin.resetPassword")}</span>
             <input
               className="tt-input"
               type="password"
-              placeholder="New password (8+ characters)"
+              placeholder={t("dash.newPassword")}
               minLength={8}
               value={password}
               onChange={e => setPassword(e.target.value)}
@@ -84,24 +86,24 @@ export default function AdminEditUser({ user, onClose }: AdminEditUserProps) {
           </label>
 
           <label className="tt-field" style={{ width: 150 }}>
-            <span className="tt-mod-label">Role</span>
+            <span className="tt-mod-label">{t("dash.role")}</span>
             {canEditRole ? (
               <select
                 className="tt-input"
                 value={role}
                 onChange={e => setRole(e.target.value as AdminUserRow["role"])}
               >
-                <option value="kitchen">Kitchen</option>
-                <option value="waiter">Waiter</option>
-                <option value="manager">Manager</option>
-                <option value="owner">Owner</option>
+                <option value="kitchen">{t("dash.kitchen")}</option>
+                <option value="waiter">{t("dash.waiter")}</option>
+                <option value="manager">{t("dash.manager")}</option>
+                <option value="owner">{t("dash.owner")}</option>
               </select>
             ) : (
               <input
                 className="tt-input"
-                value={user.founding ? "Founding owner" : user.role}
+                value={user.founding ? t("admin.foundingOwner") : user.role}
                 disabled
-                title="This role can't be changed here"
+                title={t("admin.cantChangeRole")}
               />
             )}
           </label>
@@ -113,10 +115,10 @@ export default function AdminEditUser({ user, onClose }: AdminEditUserProps) {
             className="tt-btn tt-btn-ghost tt-btn-sm"
             onClick={onClose}
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button type="submit" className="tt-btn tt-btn-primary tt-btn-sm" disabled={busy}>
-            {busy ? "Saving…" : "Save changes"}
+            {busy ? t("common.saving") : t("common.save")}
           </button>
         </div>
       </form>

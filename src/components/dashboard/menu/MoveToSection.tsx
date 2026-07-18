@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Category } from "@/lib/types";
+import { useT } from "@/lib/i18n/context";
 
 interface MoveToSectionProps {
   productName: string;
@@ -19,13 +20,14 @@ export default function MoveToSection({
   onCreateCategory,
   onCancel,
 }: MoveToSectionProps) {
+  const t = useT();
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);
 
   return (
     <div>
       <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 12 }}>
-        Move “{productName}” to…
+        {t("menu.moveTo", { name: productName })}
       </h3>
 
       {categories.length > 0 ? (
@@ -46,7 +48,7 @@ export default function MoveToSection({
         </div>
       ) : (
         <p className="tt-muted" style={{ fontSize: 13, marginTop: 0 }}>
-          No other sections to move into. Create one below to move this product into it.
+          {t("menu.noSections")}
         </p>
       )}
 
@@ -65,7 +67,7 @@ export default function MoveToSection({
         >
           <input
             className="tt-input"
-            placeholder="New section name…"
+            placeholder={t("menu.newSectionPlaceholder2")}
             value={newName}
             onChange={e => setNewName(e.target.value)}
           />
@@ -74,7 +76,7 @@ export default function MoveToSection({
             type="submit"
             disabled={!newName.trim() || busy}
           >
-            Create &amp; move
+            {t("menu.createAndMove")}
           </button>
         </form>
       )}
@@ -86,7 +88,7 @@ export default function MoveToSection({
           onClick={onCancel}
           disabled={busy}
         >
-          Cancel
+          {t("menu.cancel")}
         </button>
       </div>
     </div>

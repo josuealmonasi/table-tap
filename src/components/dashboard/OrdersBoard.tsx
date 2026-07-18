@@ -6,6 +6,7 @@ import { useRestaurantOrders } from "@/hooks/useRestaurantOrders";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { orderCode, type Order, type Restaurant, type ServiceRequest } from "@/lib/types";
+import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import OrderCard from "./OrderCard";
 import ServiceRequestsBar from "./ServiceRequestsBar";
@@ -38,6 +39,7 @@ export default function OrdersBoard({
   revenueBase,
   todayStartMs,
 }: OrdersBoardProps) {
+  const t = useT();
   const { orders, updateStatus, cancelOrder } = useRestaurantOrders(
     restaurant.id,
     initialOrders,
@@ -69,17 +71,19 @@ export default function OrdersBoard({
 
   async function handleCancel(order: Order): Promise<void> {
     const ok = await confirm({
-      title: `Cancel order ${orderCode(order.id)}?`,
+      title: t("orders.cancelConfirm", { code: orderCode(order.id) }),
       message: order.paid
-        ? `The customer will be refunded ${formatMoney(order.total, restaurant.currency)}.`
-        : "This order hasn't been paid — it will just be cancelled.",
-      confirmLabel: order.paid ? "Cancel & refund" : "Cancel order",
+        ? t("orders.refundMsg", {
+            amount: formatMoney(order.total, restaurant.currency),
+          })
+        : t("orders.unpaidCancelMsg"),
+      confirmLabel: t(order.paid ? "orders.cancelRefund" : "orders.cancelOrder"),
       danger: true,
     });
     if (!ok) return;
     const error = await cancelOrder(order.id);
     if (error) toast(error, "error");
-    else toast(order.paid ? "Order cancelled and refunded" : "Order cancelled");
+    else toast(t(order.paid ? "orders.cancelledRefunded" : "orders.cancelledToast"));
   }
 
   return (
@@ -87,19 +91,22 @@ export default function OrdersBoard({
       <div className="container">
         <header className="tt-dash-head">
           <Breadcrumb
-            trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Orders" }]}
+            trail={[
+              { labelKey: "nav.dashboard", href: "/dashboard" },
+              { labelKey: "nav.orders" },
+            ]}
           />
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <div className="tt-stat">
               <strong className="tt-accent">{activeCount}</strong>
-              <span>Active</span>
+              <span>{t("orders.active")}</span>
             </div>
             {showRevenue && (
               <div className="tt-stat">
                 <strong style={{ color: "var(--tt-success)" }}>
                   {formatMoney(revenue, restaurant.currency)}
                 </strong>
-                <span>Today</span>
+                <span>{t("orders.today")}</span>
               </div>
             )}
           </div>
@@ -118,7 +125,8 @@ export default function OrdersBoard({
             className={`tt-board-tab ${tab === "live" ? "tt-board-tab-active" : ""}`}
             onClick={() => setTab("live")}
           >
-            Live{live.length > 0 ? ` (${live.length})` : ""}
+            {t("orders.live")}
+            {live.length > 0 ? ` (${live.length})` : ""}
           </button>
           <button
             type="button"
@@ -127,18 +135,16 @@ export default function OrdersBoard({
             className={`tt-board-tab ${tab === "history" ? "tt-board-tab-active" : ""}`}
             onClick={() => setTab("history")}
           >
-            History
+            {t("orders.history")}
           </button>
         </div>
 
         {shown.length === 0 ? (
           <div className="tt-empty">
             <div style={{ fontSize: 48 }}>📭</div>
-            <strong>{tab === "live" ? "No live orders" : "No past orders yet"}</strong>
+            <strong>{tab === "live" ? t("orders.noLive") : t("orders.noPast")}</strong>
             <p className="tt-muted">
-              {tab === "live"
-                ? "New orders appear here in real time."
-                : "Completed and cancelled orders land here."}
+              {tab === "live" ? t("orders.liveHint") : t("orders.historyHint")}
             </p>
           </div>
         ) : (

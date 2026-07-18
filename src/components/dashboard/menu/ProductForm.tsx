@@ -5,6 +5,7 @@ import { formatMoney } from "@/lib/format";
 import type { MenuItem, Modifier } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
 import { DIETARY_TAGS } from "@/lib/dietary";
+import { useT } from "@/lib/i18n/context";
 import IconPicker from "./IconPicker";
 import ModifiersEditor from "./ModifiersEditor";
 
@@ -29,6 +30,7 @@ export default function ProductForm({
   onSubmit,
   onCancel,
 }: ProductFormProps) {
+  const t = useT();
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [price, setPrice] = useState(String(initial?.price ?? ""));
@@ -80,7 +82,7 @@ export default function ProductForm({
         <input
           className="tt-input"
           style={{ flex: 1 }}
-          placeholder="Product name (e.g. Hot Dog)"
+          placeholder={t("menu.productNamePlaceholder")}
           value={name}
           onChange={e => setName(e.target.value)}
           autoFocus={!initial}
@@ -92,7 +94,7 @@ export default function ProductForm({
           type="number"
           step="0.01"
           min="0"
-          placeholder="Price"
+          placeholder={t("menu.pricePlaceholder")}
           value={price}
           onChange={e => setPrice(e.target.value)}
           required
@@ -102,14 +104,14 @@ export default function ProductForm({
       <textarea
         className="tt-input"
         rows={2}
-        placeholder="Description (optional)"
+        placeholder={t("menu.descriptionPlaceholder")}
         value={description}
         onChange={e => setDescription(e.target.value)}
       />
 
       <input
         className="tt-input"
-        placeholder="Image URL (optional — upload coming soon)"
+        placeholder={t("menu.imageUrlPlaceholder")}
         value={imageUrl}
         onChange={e => setImageUrl(e.target.value)}
       />
@@ -120,7 +122,7 @@ export default function ProductForm({
           checked={popular}
           onChange={e => setPopular(e.target.checked)}
         />
-        Mark as popular
+        {t("menu.markPopular")}
       </label>
 
       <IconPicker value={emoji} onChange={setEmoji} />
@@ -129,9 +131,9 @@ export default function ProductForm({
 
       <div>
         <div className="tt-mod-label" style={{ marginTop: 6 }}>
-          Dietary &amp; allergens{" "}
+          {t("menu.dietaryAllergens")}{" "}
           <span className="tt-muted" style={{ fontWeight: 400 }}>
-            (shown to customers)
+            {t("menu.shownToCustomers")}
           </span>
         </div>
         <div className="tt-chips">
@@ -142,7 +144,7 @@ export default function ProductForm({
               className={`tt-chip ${dietary.includes(tag.key) ? "tt-chip-on" : ""}`}
               onClick={() => toggleDietary(tag.key)}
             >
-              {tag.emoji} {tag.label}
+              {tag.emoji} {t(`dietary.${tag.key}`)}
             </button>
           ))}
         </div>
@@ -151,7 +153,7 @@ export default function ProductForm({
       {addons.length > 0 && (
         <div>
           <div className="tt-mod-label" style={{ marginTop: 6 }}>
-            Extras offered
+            {t("menu.extrasOffered")}
           </div>
           <div className="tt-chips">
             {addons.map(a => (
@@ -175,14 +177,14 @@ export default function ProductForm({
           className="tt-btn tt-btn-ghost tt-btn-sm"
           onClick={onCancel}
         >
-          Cancel
+          {t("menu.cancel")}
         </button>
         <button
           type="submit"
           className="tt-btn tt-btn-primary tt-btn-sm"
           disabled={!name || saving}
         >
-          {saving ? "Saving…" : submitLabel}
+          {saving ? t("common.saving") : submitLabel}
         </button>
       </div>
     </form>

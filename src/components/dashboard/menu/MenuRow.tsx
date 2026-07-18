@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Menu } from "@/lib/types";
+import { useT } from "@/lib/i18n/context";
 import ReorderButtons from "@/components/ui/ReorderButtons";
 
 interface MenuRowProps {
@@ -31,6 +32,7 @@ export default function MenuRow({
   onMove,
   nameTaken,
 }: MenuRowProps) {
+  const t = useT();
   const [renaming, setRenaming] = useState(false);
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +48,7 @@ export default function MenuRow({
             const name = value.trim();
             if (!name) return;
             if (nameTaken(name, menu.id)) {
-              setError(`You already have a menu called “${name}”.`);
+              setError(t("menu.nameTaken", { name }));
               return;
             }
             await onRename(menu.id, name);
@@ -64,14 +66,14 @@ export default function MenuRow({
             autoFocus
           />
           <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">
-            Save
+            {t("menu.save")}
           </button>
           <button
             type="button"
             className="tt-btn tt-btn-ghost tt-btn-sm"
             onClick={() => setRenaming(false)}
           >
-            Cancel
+            {t("menu.cancel")}
           </button>
         </form>
         {error && <p className="tt-field-error">{error}</p>}
@@ -92,15 +94,15 @@ export default function MenuRow({
           <span>{menu.name}</span>
           {!menu.active && (
             <span className="tt-badge" style={{ marginLeft: 8 }}>
-              Hidden
+              {t("menu.hidden")}
             </span>
           )}
-          <span className="tt-menu-open">Open →</span>
+          <span className="tt-menu-open">{t("menu.open")}</span>
         </button>
         <div className="tt-menu-controls">
           <label
             className="tt-switch"
-            title={menu.active ? "Visible to customers" : "Hidden"}
+            title={t(menu.active ? "menu.visibleToCustomers" : "menu.hiddenTitle")}
           >
             <input
               type="checkbox"
@@ -112,7 +114,7 @@ export default function MenuRow({
           <div className="tt-prod-actions">
             <button
               className="tt-iconbtn"
-              title="Rename"
+              title={t("menu.rename")}
               onClick={() => {
                 setValue(menu.name);
                 setError(null);
@@ -123,14 +125,14 @@ export default function MenuRow({
             </button>
             <button
               className="tt-iconbtn"
-              title="Duplicate menu"
+              title={t("menu.duplicateMenu")}
               onClick={() => onDuplicate(menu)}
             >
               📋
             </button>
             <button
               className="tt-iconbtn"
-              title="Delete menu"
+              title={t("menu.deleteMenu")}
               onClick={() => onDelete(menu)}
             >
               🗑️

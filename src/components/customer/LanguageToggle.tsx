@@ -1,16 +1,19 @@
 "use client";
 
-import { useLocale } from "@/lib/i18n/context";
-import { useT } from "@/lib/i18n/context";
+import { useLocale, useT } from "@/lib/i18n/context";
 
-/** A small EN/ES switch for the customer screens. */
-export default function LanguageToggle() {
+/** A small EN/ES switch. `className` lets it restyle for light (nav) backgrounds. */
+export default function LanguageToggle({
+  className = "tt-lang-toggle",
+}: {
+  className?: string;
+}) {
   const { locale, setLocale } = useLocale();
   const t = useT();
   return (
     <button
       type="button"
-      className="tt-lang-toggle"
+      className={className}
       aria-label={t("lang.label")}
       onClick={() => setLocale(locale === "es" ? "en" : "es")}
     >

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Restaurant } from "@/lib/types";
 import type { Role } from "@/lib/membership";
 import { useSettings } from "@/hooks/useSettings";
+import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import PaymentsCard from "./PaymentsCard";
 
@@ -18,6 +19,7 @@ const CURRENCIES = ["USD", "MXN"] as const;
 
 /** Dashboard Settings: identity + service charge (owner), tax + pausing (owner + manager). */
 export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
+  const t = useT();
   const { saving, save } = useSettings();
   const isOwner = role === "owner";
 
@@ -62,7 +64,7 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
     setAcceptingOrders(next);
     const ok = await save(
       { accepting_orders: next },
-      next ? "Accepting orders again" : "Orders paused",
+      t(next ? "dash.acceptingAgain" : "dash.ordersPaused"),
     );
     if (!ok) setAcceptingOrders(!next); // roll back on failure
   }
@@ -72,7 +74,10 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
       <div className="container">
         <header className="tt-dash-head">
           <Breadcrumb
-            trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Settings" }]}
+            trail={[
+              { labelKey: "nav.dashboard", href: "/dashboard" },
+              { labelKey: "nav.settings" },
+            ]}
           />
         </header>
 
@@ -80,10 +85,10 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
           <div className="tt-section" style={{ maxWidth: 520 }}>
             <div className="tt-section-head">
               <h3 className="tt-serif" style={{ margin: 0 }}>
-                Restaurant
+                {t("dash.restaurant")}
               </h3>
               <span className="tt-muted" style={{ fontSize: 12 }}>
-                Shown to customers on your menu
+                {t("dash.shownToCustomers")}
               </span>
             </div>
 
@@ -92,7 +97,7 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
                 <input
                   className="tt-input"
                   style={{ flex: 1 }}
-                  placeholder="Restaurant name"
+                  placeholder={t("dash.restaurantName")}
                   value={name}
                   onChange={e => setName(e.target.value)}
                   required
@@ -101,7 +106,7 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
                   className="tt-input"
                   style={{ width: 80, textAlign: "center" }}
                   placeholder="🍱"
-                  aria-label="Logo emoji"
+                  aria-label={t("dash.logoEmoji")}
                   value={logo}
                   onChange={e => setLogo(e.target.value)}
                 />
@@ -109,13 +114,13 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
 
               <input
                 className="tt-input"
-                placeholder="Tagline (optional)"
+                placeholder={t("dash.tagline")}
                 value={tagline}
                 onChange={e => setTagline(e.target.value)}
               />
 
               <label className="tt-field" style={{ maxWidth: 200 }}>
-                <span className="tt-mod-label">Currency</span>
+                <span className="tt-mod-label">{t("dash.currency")}</span>
                 <select
                   className="tt-input"
                   value={currency}
@@ -131,14 +136,14 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
 
               <label className="tt-settings-toggle">
                 <span>
-                  <strong>Charge a service fee</strong>
+                  <strong>{t("dash.serviceFee")}</strong>
                   <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
-                    Added to every order as a % of the subtotal — off by default
+                    {t("dash.serviceFeeHint")}
                   </span>
                 </span>
                 <span
                   className="tt-switch"
-                  title={serviceEnabled ? "Service fee on" : "Service fee off"}
+                  title={t(serviceEnabled ? "dash.serviceOn" : "dash.serviceOff")}
                 >
                   <input
                     type="checkbox"
@@ -151,7 +156,7 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
 
               {serviceEnabled && (
                 <label className="tt-field" style={{ width: 150 }}>
-                  <span className="tt-mod-label">Service fee %</span>
+                  <span className="tt-mod-label">{t("dash.serviceFeePct")}</span>
                   <input
                     className="tt-input"
                     type="number"
@@ -170,7 +175,7 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
                   className="tt-btn tt-btn-primary tt-btn-sm"
                   disabled={!name.trim() || saving}
                 >
-                  {saving ? "Saving…" : "Save changes"}
+                  {saving ? t("common.saving") : t("common.save")}
                 </button>
               </div>
             </form>
@@ -182,16 +187,16 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
         <div className="tt-section" style={{ maxWidth: 520, marginTop: isOwner ? 16 : 0 }}>
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>
-              Tax (IVA)
+              {t("dash.taxTitle")}
             </h3>
             <span className="tt-muted" style={{ fontSize: 12 }}>
-              Already included in your menu prices
+              {t("dash.taxHint")}
             </span>
           </div>
 
           <form className="tt-prodform" onSubmit={saveTax}>
             <label className="tt-field" style={{ width: 150 }}>
-              <span className="tt-mod-label">IVA %</span>
+              <span className="tt-mod-label">{t("dash.ivaPct")}</span>
               <input
                 className="tt-input"
                 type="number"
@@ -205,14 +210,14 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
 
             <label className="tt-settings-toggle">
               <span>
-                <strong>Show the tax breakdown</strong>
+                <strong>{t("dash.showBreakdown")}</strong>
                 <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
-                  Customers see “Subtotal + IVA = total”. Off shows only the total.
+                  {t("dash.showBreakdownHint")}
                 </span>
               </span>
               <span
                 className="tt-switch"
-                title={taxBreakdown ? "Breakdown shown" : "Breakdown hidden"}
+                title={t(taxBreakdown ? "dash.breakdownShown" : "dash.breakdownHidden")}
               >
                 <input
                   type="checkbox"
@@ -229,7 +234,7 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
                 className="tt-btn tt-btn-primary tt-btn-sm"
                 disabled={saving}
               >
-                {saving ? "Saving…" : "Save tax settings"}
+                {saving ? t("common.saving") : t("dash.saveTax")}
               </button>
             </div>
           </form>
@@ -238,23 +243,23 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
         <div className="tt-section" style={{ maxWidth: 520, marginTop: 16 }}>
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>
-              Ordering
+              {t("dash.orderingTitle")}
             </h3>
             <span className="tt-muted" style={{ fontSize: 12 }}>
-              Applies immediately — no save needed
+              {t("dash.orderingHint")}
             </span>
           </div>
 
           <label className="tt-settings-toggle">
             <span>
-              <strong>Accepting orders</strong>
+              <strong>{t("dash.acceptingOrders")}</strong>
               <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
-                Turn off to pause new customer orders (e.g. kitchen closed or slammed)
+                {t("dash.acceptingOrdersHint")}
               </span>
             </span>
             <span
               className="tt-switch"
-              title={acceptingOrders ? "Accepting orders" : "Orders paused"}
+              title={t(acceptingOrders ? "dash.accepting" : "dash.paused")}
             >
               <input
                 type="checkbox"

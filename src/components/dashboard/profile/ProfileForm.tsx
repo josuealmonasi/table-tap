@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useProfile } from "@/hooks/useProfile";
+import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 
 interface ProfileFormProps {
@@ -16,6 +17,7 @@ export default function ProfileForm({
   initialName,
   initialEmail,
 }: ProfileFormProps) {
+  const t = useT();
   const { saving, saveName, saveEmail, savePassword } = useProfile(userId);
   const [name, setName] = useState(initialName);
   const [email, setEmail] = useState(initialEmail);
@@ -47,32 +49,35 @@ export default function ProfileForm({
       <div className="container">
         <header className="tt-dash-head">
           <Breadcrumb
-            trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Profile" }]}
+            trail={[
+              { labelKey: "nav.dashboard", href: "/dashboard" },
+              { labelKey: "nav.profile" },
+            ]}
           />
         </header>
 
         <div className="tt-section" style={{ maxWidth: 520 }}>
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>
-              Your details
+              {t("dash.profileDetails")}
             </h3>
             <span className="tt-muted" style={{ fontSize: 12 }}>
-              Your name shows on the team list
+              {t("dash.profileNameHint")}
             </span>
           </div>
 
           <form className="tt-prodform" onSubmit={handleDetails}>
             <label className="tt-field">
-              <span className="tt-mod-label">Full name</span>
+              <span className="tt-mod-label">{t("dash.fullName")}</span>
               <input
                 className="tt-input"
-                placeholder="Your name"
+                placeholder={t("dash.yourName")}
                 value={name}
                 onChange={e => setName(e.target.value)}
               />
             </label>
             <label className="tt-field">
-              <span className="tt-mod-label">Email</span>
+              <span className="tt-mod-label">{t("dash.email")}</span>
               <input
                 className="tt-input"
                 type="email"
@@ -82,8 +87,7 @@ export default function ProfileForm({
               />
             </label>
             <p className="tt-muted" style={{ fontSize: 12, margin: 0 }}>
-              Changing your email sends a confirmation link to the new address — the
-              change only applies after you confirm it there.
+              {t("dash.emailChangeHint")}
             </p>
             <div className="tt-prodform-actions">
               <button
@@ -91,7 +95,7 @@ export default function ProfileForm({
                 className="tt-btn tt-btn-primary tt-btn-sm"
                 disabled={saving || !email.trim()}
               >
-                {saving ? "Saving…" : "Save details"}
+                {saving ? t("common.saving") : t("dash.saveDetails")}
               </button>
             </div>
           </form>
@@ -100,7 +104,7 @@ export default function ProfileForm({
         <div className="tt-section" style={{ maxWidth: 520, marginTop: 16 }}>
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>
-              Change password
+              {t("dash.changePassword")}
             </h3>
           </div>
 
@@ -110,7 +114,7 @@ export default function ProfileForm({
                 className="tt-input"
                 style={{ flex: 1 }}
                 type="password"
-                placeholder="New password (8+ characters)"
+                placeholder={t("dash.newPassword")}
                 minLength={8}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
@@ -120,7 +124,7 @@ export default function ProfileForm({
                 className="tt-input"
                 style={{ flex: 1 }}
                 type="password"
-                placeholder="Repeat new password"
+                placeholder={t("dash.repeatPassword")}
                 minLength={8}
                 value={confirm}
                 onChange={e => setConfirm(e.target.value)}
@@ -129,7 +133,7 @@ export default function ProfileForm({
             </div>
             {mismatch && (
               <p className="tt-accent" style={{ fontSize: 13, margin: 0 }}>
-                The passwords don&apos;t match — try again.
+                {t("dash.passwordMismatch")}
               </p>
             )}
             <div className="tt-prodform-actions">
@@ -138,7 +142,7 @@ export default function ProfileForm({
                 className="tt-btn tt-btn-primary tt-btn-sm"
                 disabled={saving}
               >
-                {saving ? "Saving…" : "Update password"}
+                {saving ? t("common.saving") : t("dash.updatePassword")}
               </button>
             </div>
           </form>

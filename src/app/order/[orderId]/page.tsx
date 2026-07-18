@@ -1,7 +1,5 @@
 import OrderTracker from "@/components/customer/OrderTracker";
 import { fetchTrackedOrder } from "@/lib/order-tracking";
-import { getLocale } from "@/lib/i18n/server";
-import { LocaleProvider } from "@/lib/i18n/context";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -14,12 +12,8 @@ export default async function OrderPage({
   params: Promise<{ orderId: string }>;
 }) {
   const { orderId } = await params;
-  const [order, locale] = await Promise.all([fetchTrackedOrder(orderId), getLocale()]);
+  const order = await fetchTrackedOrder(orderId);
   if (!order) notFound();
 
-  return (
-    <LocaleProvider locale={locale}>
-      <OrderTracker initialOrder={order} />
-    </LocaleProvider>
-  );
+  return <OrderTracker initialOrder={order} />;
 }

@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { formatMoney } from "@/lib/format";
 import { PERIODS, type Analytics, type Period } from "@/lib/analytics";
+import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 
 interface AnalyticsViewProps {
@@ -10,7 +13,15 @@ interface AnalyticsViewProps {
 }
 
 /** Read-only analytics dashboard: stat tiles, revenue-by-day, top items, hours. */
+const PERIOD_KEY: Record<string, string> = {
+  today: "analytics.periodToday",
+  "7d": "analytics.period7d",
+  "30d": "analytics.period30d",
+  month: "analytics.periodMonth",
+};
+
 export default function AnalyticsView({ data, period, currency }: AnalyticsViewProps) {
+  const t = useT();
   const maxDay = Math.max(1, ...data.byDay.map(d => d.revenue));
   const maxHour = Math.max(1, ...data.byHour.map(h => h.count));
   const money = (n: number) => formatMoney(n, currency);
@@ -20,7 +31,10 @@ export default function AnalyticsView({ data, period, currency }: AnalyticsViewP
       <div className="container">
         <header className="tt-dash-head">
           <Breadcrumb
-            trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Analytics" }]}
+            trail={[
+              { labelKey: "nav.dashboard", href: "/dashboard" },
+              { labelKey: "nav.analytics" },
+            ]}
           />
         </header>
 
@@ -31,16 +45,16 @@ export default function AnalyticsView({ data, period, currency }: AnalyticsViewP
               href={`/dashboard/analytics?period=${p.key}`}
               className={`tt-board-tab ${p.key === period ? "tt-board-tab-active" : ""}`}
             >
-              {p.label}
+              {t(PERIOD_KEY[p.key] ?? p.label)}
             </Link>
           ))}
         </div>
 
         <div className="tt-analytics-tiles">
-          <Tile label="Revenue" value={money(data.revenue)} accent />
-          <Tile label="Orders" value={String(data.orderCount)} />
-          <Tile label="Avg ticket" value={money(data.avgTicket)} />
-          <Tile label="Tips" value={money(data.tips)} />
+          <Tile label={t("analytics.revenue")} value={money(data.revenue)} accent />
+          <Tile label={t("analytics.orders")} value={String(data.orderCount)} />
+          <Tile label={t("analytics.avgTicket")} value={money(data.avgTicket)} />
+          <Tile label={t("analytics.tips")} value={money(data.tips)} />
         </div>
 
         {/* A one-day "by day" chart is just a single full-width bar — skip it
@@ -48,10 +62,10 @@ export default function AnalyticsView({ data, period, currency }: AnalyticsViewP
         {period !== "today" && (
           <div className="tt-section" style={{ marginTop: 16 }}>
             <div className="tt-section-head">
-              <h3 className="tt-serif" style={{ margin: 0 }}>Revenue by day</h3>
+              <h3 className="tt-serif" style={{ margin: 0 }}>{t("analytics.revenueByDay")}</h3>
             </div>
             {data.revenue === 0 ? (
-              <p className="tt-muted" style={{ fontSize: 13 }}>No sales in this period yet.</p>
+              <p className="tt-muted" style={{ fontSize: 13 }}>{t("analytics.noSales")}</p>
             ) : (
               <div className="tt-bars">
                 {data.byDay.map((d, i) => (
@@ -72,16 +86,16 @@ export default function AnalyticsView({ data, period, currency }: AnalyticsViewP
 
         <div className="tt-section" style={{ marginTop: 16 }}>
           <div className="tt-section-head">
-            <h3 className="tt-serif" style={{ margin: 0 }}>Most sold products</h3>
+            <h3 className="tt-serif" style={{ margin: 0 }}>{t("analytics.mostSold")}</h3>
           </div>
           {data.topProducts.length === 0 ? (
-            <p className="tt-muted" style={{ fontSize: 13 }}>Nothing sold yet.</p>
+            <p className="tt-muted" style={{ fontSize: 13 }}>{t("analytics.nothingSold")}</p>
           ) : (
             <div className="tt-analytics-table">
               <div className="tt-analytics-tr tt-staff-thead" aria-hidden="true">
-                <span>Product</span>
-                <span style={{ textAlign: "right" }}>Sold</span>
-                <span style={{ textAlign: "right" }}>Revenue</span>
+                <span>{t("analytics.product")}</span>
+                <span style={{ textAlign: "right" }}>{t("analytics.sold")}</span>
+                <span style={{ textAlign: "right" }}>{t("analytics.revenue")}</span>
               </div>
               {data.topProducts.map((p, i) => (
                 <div key={i} className="tt-analytics-tr">
@@ -101,15 +115,15 @@ export default function AnalyticsView({ data, period, currency }: AnalyticsViewP
 
         <div className="tt-section" style={{ marginTop: 16 }}>
           <div className="tt-section-head">
-            <h3 className="tt-serif" style={{ margin: 0 }}>Busiest hours</h3>
-            <span className="tt-muted" style={{ fontSize: 12 }}>Orders by time of day</span>
+            <h3 className="tt-serif" style={{ margin: 0 }}>{t("analytics.busiestHours")}</h3>
+            <span className="tt-muted" style={{ fontSize: 12 }}>{t("analytics.ordersByTime")}</span>
           </div>
           {data.orderCount === 0 ? (
-            <p className="tt-muted" style={{ fontSize: 13 }}>No orders in this period yet.</p>
+            <p className="tt-muted" style={{ fontSize: 13 }}>{t("analytics.noOrdersPeriod")}</p>
           ) : (
             <div className="tt-bars tt-bars-hours">
               {data.byHour.map(h => (
-                <div key={h.hour} className="tt-bar-col" title={`${h.hour}:00 — ${h.count} orders`}>
+                <div key={h.hour} className="tt-bar-col" title={`${h.hour}:00 — ${t("analytics.ordersTip", { count: h.count })}`}>
                   <div className="tt-bar-track">
                     <div
                       className="tt-bar-fill"

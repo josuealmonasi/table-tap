@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Category, MenuItem } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
 import ReorderButtons from "@/components/ui/ReorderButtons";
 import ProductRow from "./ProductRow";
@@ -66,6 +67,7 @@ export default function SectionEditor({
   selectedIds,
   onToggleSelect,
 }: SectionEditorProps) {
+  const t = useT();
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(section?.name ?? "");
@@ -91,7 +93,7 @@ export default function SectionEditor({
                 autoFocus
               />
               <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">
-                Save
+                {t("menu.save")}
               </button>
             </form>
           ) : (
@@ -105,13 +107,13 @@ export default function SectionEditor({
                 />
               )}
               <h3 className="tt-serif" style={{ margin: 0 }}>
-                {section ? section.name : "Uncategorized"}
+                {section ? section.name : t("menu.uncategorized")}
               </h3>
               {section && (
                 <div className="tt-prod-actions">
                   <button
                     className="tt-iconbtn"
-                    title="Rename"
+                    title={t("menu.rename")}
                     onClick={() => {
                       setName(section.name);
                       setRenaming(true);
@@ -121,13 +123,13 @@ export default function SectionEditor({
                   </button>
                   <button
                     className="tt-iconbtn"
-                    title="Delete section"
+                    title={t("menu.deleteSection")}
                     onClick={async () => {
                       if (
                         await confirm({
-                          title: `Delete section “${section.name}”?`,
-                          message: "Its products move to Uncategorized.",
-                          confirmLabel: "Delete",
+                          title: t("menu.deleteSectionConfirm", { name: section.name }),
+                          message: t("menu.productsMoveUncategorized"),
+                          confirmLabel: t("menu.delete"),
                           danger: true,
                         })
                       ) {
@@ -147,7 +149,7 @@ export default function SectionEditor({
       <div className="tt-section-right">
         {products.length === 0 && (
           <p className="tt-muted" style={{ fontSize: 13 }}>
-            No products yet.
+            {t("menu.noProducts")}
           </p>
         )}
         {products.map((p, i) => (
@@ -180,7 +182,7 @@ export default function SectionEditor({
               <ProductForm
                 addons={addons}
                 currency={currency}
-                submitLabel="Add product"
+                submitLabel={t("menu.addProduct")}
                 onCancel={() => setAdding(false)}
                 onSubmit={async (input, addonIds) => {
                   await onAddProduct(section.id, input, addonIds);
@@ -193,7 +195,7 @@ export default function SectionEditor({
               return (
                 <>
                   <button className="tt-add-more" onClick={() => setAdding(true)}>
-                    + Add product
+                    {t("menu.addProduct")}
                   </button>
                   <Modal open={adding} onClose={() => setAdding(false)} maxWidth={720}>
                     {addForm}
@@ -206,7 +208,7 @@ export default function SectionEditor({
               <div className="tt-prod tt-prod-editing">{addForm}</div>
             ) : (
               <button className="tt-add-more" onClick={() => setAdding(true)}>
-                + Add product
+                {t("menu.addProduct")}
               </button>
             );
           })()}
