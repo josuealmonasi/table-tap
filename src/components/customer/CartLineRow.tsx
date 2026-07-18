@@ -1,6 +1,9 @@
+"use client";
+
 import { formatMoney } from "@/lib/format";
 import { lineUnitPrice } from "@/lib/types";
 import type { CartItem } from "@/hooks/useCart";
+import { useT } from "@/lib/i18n/context";
 
 interface CartLineRowProps {
   item: CartItem;
@@ -20,6 +23,7 @@ export default function CartLineRow({
   onRemove,
   onEdit,
 }: CartLineRowProps) {
+  const t = useT();
   return (
     <div
       className={`tt-card ${soldOut ? "tt-cart-soldout" : ""}`}
@@ -33,7 +37,7 @@ export default function CartLineRow({
               {item.qty}× {item.name}
               {soldOut && (
                 <span className="tt-badge" style={{ marginLeft: 8 }}>
-                  Sold out
+                  {t("cart.soldOut")}
                 </span>
               )}
             </strong>
@@ -75,8 +79,8 @@ export default function CartLineRow({
             <button
               className="tt-iconbtn"
               style={{ fontSize: 14 }}
-              title="Edit item"
-              aria-label={`Edit ${item.name}`}
+              title={t("cart.editItem")}
+              aria-label={`${t("cart.editItem")} — ${item.name}`}
               onClick={() => onEdit(item)}
             >
               ✏️

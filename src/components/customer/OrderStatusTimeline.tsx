@@ -1,9 +1,12 @@
-import type { OrderStatus } from "@/lib/types";
+"use client";
 
-const STEPS: { key: OrderStatus; label: string; emoji: string }[] = [
-  { key: "received", label: "Order Received", emoji: "📋" },
-  { key: "preparing", label: "Preparing", emoji: "👨‍🍳" },
-  { key: "ready", label: "Ready!", emoji: "🍱" },
+import type { OrderStatus } from "@/lib/types";
+import { useT } from "@/lib/i18n/context";
+
+const STEPS: { key: OrderStatus; labelKey: string; emoji: string }[] = [
+  { key: "received", labelKey: "tracker.stepReceived", emoji: "📋" },
+  { key: "preparing", labelKey: "tracker.stepPreparing", emoji: "👨‍🍳" },
+  { key: "ready", labelKey: "tracker.stepReady", emoji: "🍱" },
 ];
 
 /** The three-step progress tracker (Received → Preparing → Ready) plus its footer note. */
@@ -14,6 +17,7 @@ export default function OrderStatusTimeline({
   status: OrderStatus;
   tableLabel: string | null;
 }) {
+  const t = useT();
   const activeIndex = STEPS.findIndex(s => s.key === status);
   const isReady = status === "ready";
 
@@ -36,7 +40,7 @@ export default function OrderStatusTimeline({
                     active ? "tt-step-label-active" : done ? "tt-step-label-done" : ""
                   }`}
                 >
-                  {step.label}
+                  {t(step.labelKey)}
                 </span>
               </div>
               {i < STEPS.length - 1 && (
@@ -56,14 +60,14 @@ export default function OrderStatusTimeline({
             color: "var(--tt-success)",
           }}
         >
-          🎉 Our team will bring it to Table {tableLabel}!
+          {t("tracker.readyTable", { label: tableLabel ?? "" })}
         </div>
       ) : (
         <div
           className="tt-muted"
           style={{ textAlign: "center", marginTop: 16, fontSize: 13 }}
         >
-          ⏱ Estimated wait: 15–20 min
+          {t("tracker.wait")}
         </div>
       )}
     </div>

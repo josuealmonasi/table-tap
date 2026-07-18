@@ -1,5 +1,8 @@
+"use client";
+
 import { formatMoney } from "@/lib/format";
 import { ivaSplit } from "@/lib/money";
+import { useT } from "@/lib/i18n/context";
 
 /** Subtotal / service charge / total summary card. */
 export default function OrderTotals({
@@ -25,6 +28,7 @@ export default function OrderTotals({
   taxBreakdown: boolean;
   currency: string;
 }) {
+  const t = useT();
   // Prices include IVA, so the split is informational: net = subtotal / (1+r).
   const showTax = taxBreakdown && taxPct > 0;
   const { net, iva } = ivaSplit(subtotal, showTax ? taxPct : 0);
@@ -32,29 +36,33 @@ export default function OrderTotals({
   return (
     <div className="tt-card" style={{ padding: 16 }}>
       <div className="tt-row">
-        <span className="tt-muted">{showTax ? "Subtotal (excl. IVA)" : "Subtotal"}</span>
+        <span className="tt-muted">
+          {t(showTax ? "totals.subtotalExclIva" : "totals.subtotal")}
+        </span>
         <span>{formatMoney(showTax ? net : subtotal, currency)}</span>
       </div>
       {showTax && (
         <div className="tt-row" style={{ marginTop: 8 }}>
-          <span className="tt-muted">IVA ({taxPct}%)</span>
+          <span className="tt-muted">{t("totals.iva", { pct: taxPct })}</span>
           <span>{formatMoney(iva, currency)}</span>
         </div>
       )}
       {servicePct > 0 && (
         <div className="tt-row" style={{ marginTop: 8 }}>
-          <span className="tt-muted">Service ({servicePct}%)</span>
+          <span className="tt-muted">{t("totals.service", { pct: servicePct })}</span>
           <span>{formatMoney(serviceFee, currency)}</span>
         </div>
       )}
       {tip > 0 && (
         <div className="tt-row" style={{ marginTop: 8 }}>
-          <span className="tt-muted">Tip{tipPct > 0 ? ` (${tipPct}%)` : ""}</span>
+          <span className="tt-muted">
+            {tipPct > 0 ? t("totals.tipPct", { pct: tipPct }) : t("totals.tip")}
+          </span>
           <span>{formatMoney(tip, currency)}</span>
         </div>
       )}
       <div className="tt-row tt-total">
-        <span>Total</span>
+        <span>{t("totals.total")}</span>
         <span className="tt-accent">{formatMoney(total, currency)}</span>
       </div>
     </div>

@@ -10,6 +10,7 @@ import {
   type RestaurantTable,
 } from "@/lib/types";
 import { useCart, type CartItem } from "@/hooks/useCart";
+import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
 import MenuScreen from "./MenuScreen";
 import ItemDetailScreen from "./ItemDetailScreen";
@@ -48,6 +49,7 @@ export default function OrderingApp({
   const [tipPct, setTipPct] = useState(0);
   const [tipCustom, setTipCustom] = useState<number | null>(null);
   const cart = useCart(restaurant);
+  const t = useT();
 
   // Totals count only the still-orderable lines (sold-out ones are excluded).
   const orderableItems = cart.items.filter(i => !soldOut.has(i.itemId));
@@ -90,7 +92,7 @@ export default function OrderingApp({
     // Only pay for the still-orderable lines (any already-sold-out ones stay
     // greyed in the cart for the customer to see).
     if (orderableItems.length === 0) {
-      setNotice("Everything in your cart just sold out. Add something else to order.");
+      setNotice(t("notice.allSoldOut"));
       return;
     }
     setLoading(true);
@@ -143,11 +145,11 @@ export default function OrderingApp({
           `${data.error} We've marked it sold out — remove it or pay for the rest of your order.`,
         );
       } else {
-        setNotice(data.error ?? "Something went wrong. Please try again.");
+        setNotice(data.error ?? t("notice.generic"));
       }
       setLoading(false);
     } catch {
-      setNotice("Network error — please check your connection and try again.");
+      setNotice(t("notice.network"));
       setLoading(false);
     }
   }
@@ -211,7 +213,7 @@ export default function OrderingApp({
         />
         <Modal open={!!notice} onClose={() => setNotice(null)} maxWidth={400}>
           <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 8 }}>
-            Heads up
+            {t("notice.heads")}
           </h3>
           <p className="tt-muted" style={{ marginTop: 0 }}>
             {notice}
@@ -221,7 +223,7 @@ export default function OrderingApp({
               className="tt-btn tt-btn-primary tt-btn-sm"
               onClick={() => setNotice(null)}
             >
-              OK
+              {t("notice.ok")}
             </button>
           </div>
         </Modal>

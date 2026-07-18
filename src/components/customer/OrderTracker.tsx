@@ -6,8 +6,10 @@ import { orderCode, type OrderStatus } from "@/lib/types";
 import { useOrderPolling } from "@/hooks/useOrderPolling";
 import type { TrackedOrder } from "@/lib/order-tracking";
 import { forgetOrder, rememberOrder } from "@/lib/recent-order";
+import { useT } from "@/lib/i18n/context";
 import OrderStatusTimeline from "./OrderStatusTimeline";
 import TrackedItemsCard from "./TrackedItemsCard";
+import LanguageToggle from "./LanguageToggle";
 
 const TERMINAL: OrderStatus[] = ["completed", "cancelled"];
 
@@ -18,10 +20,10 @@ function toDisplayStatus(status: OrderStatus): OrderStatus {
   return status;
 }
 
-const HERO: Record<string, { headline: string; emoji: string }> = {
-  ready: { headline: "Your order is ready!", emoji: "🍱" },
-  preparing: { headline: "Chef is preparing it", emoji: "👨‍🍳" },
-  received: { headline: "Order received!", emoji: "📋" },
+const HERO: Record<string, { headlineKey: string; emoji: string }> = {
+  ready: { headlineKey: "tracker.ready", emoji: "🍱" },
+  preparing: { headlineKey: "tracker.preparing", emoji: "👨‍🍳" },
+  received: { headlineKey: "tracker.received", emoji: "📋" },
 };
 
 interface OrderTrackerProps {
@@ -30,6 +32,7 @@ interface OrderTrackerProps {
 
 /** Live order tracking screen the diner lands on after paying. */
 export default function OrderTracker({ initialOrder }: OrderTrackerProps) {
+  const t = useT();
   const order = useOrderPolling(initialOrder);
   const status = toDisplayStatus(order.status);
   const hero = HERO[status] ?? HERO.received;
@@ -48,10 +51,13 @@ export default function OrderTracker({ initialOrder }: OrderTrackerProps) {
 
   return (
     <div className="tt-root">
-      <div className="tt-track-hero">
+      <div className="tt-track-hero" style={{ position: "relative" }}>
+        <div style={{ position: "absolute", top: 16, right: 16 }}>
+          <LanguageToggle />
+        </div>
         <div style={{ fontSize: 48 }}>{hero.emoji}</div>
         <h2 className="tt-serif" style={{ margin: 0, fontSize: 22 }}>
-          {hero.headline}
+          {t(hero.headlineKey)}
         </h2>
         <div className="tt-sage" style={{ fontSize: 13, marginTop: 4 }}>
           {orderCode(order.id)}
@@ -66,7 +72,7 @@ export default function OrderTracker({ initialOrder }: OrderTrackerProps) {
           currency={order.currency}
         />
         <Link href={menuHref} className="tt-btn tt-btn-ghost" style={{ width: "100%" }}>
-          ← Back to menu
+          {t("tracker.backToMenu")}
         </Link>
       </div>
     </div>

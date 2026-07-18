@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import type { MenuItem, Modifier, OrderLineItem } from "@/lib/types";
 import { dietaryTags } from "@/lib/dietary";
+import { useT } from "@/lib/i18n/context";
 import ModifierGroup from "./ModifierGroup";
 
 /** Item customisation screen: modifiers, extras, special requests, qty → add to cart. */
@@ -23,6 +24,7 @@ export default function ItemDetailScreen({
   /** Editing an existing cart line: prefills choices and relabels the button. */
   initialLine?: OrderLineItem;
 }) {
+  const t = useT();
   const [mods, setMods] = useState<Record<string, string | string[]>>(
     initialLine?.mods ?? {},
   );
@@ -90,9 +92,9 @@ export default function ItemDetailScreen({
 
         {dietaryTags(item.dietary).length > 0 && (
           <div className="tt-diet-row" style={{ marginBottom: 16 }}>
-            {dietaryTags(item.dietary).map(t => (
-              <span key={t.key} className="tt-diet-badge" title={t.label}>
-                {t.emoji} {t.label}
+            {dietaryTags(item.dietary).map(tag => (
+              <span key={tag.key} className="tt-diet-badge" title={t(`dietary.${tag.key}`)}>
+                {tag.emoji} {t(`dietary.${tag.key}`)}
               </span>
             ))}
           </div>
@@ -110,7 +112,8 @@ export default function ItemDetailScreen({
         {extras.length > 0 && (
           <div style={{ marginBottom: 20 }}>
             <div className="tt-mod-label">
-              Add extras <span className="tt-muted">(optional)</span>
+              {t("item.addExtras")}{" "}
+              <span className="tt-muted">{t("item.optional")}</span>
             </div>
             <div className="tt-chips">
               {extras.map(extra => {
@@ -132,11 +135,11 @@ export default function ItemDetailScreen({
         )}
 
         <div style={{ marginBottom: 20 }}>
-          <div className="tt-mod-label">Special requests</div>
+          <div className="tt-mod-label">{t("item.specialRequests")}</div>
           <textarea
             className="tt-input"
             rows={2}
-            placeholder="Allergies, preferences…"
+            placeholder={t("item.requestsPlaceholder")}
             value={notes}
             onChange={e => setNotes(e.target.value)}
           />
@@ -153,7 +156,7 @@ export default function ItemDetailScreen({
             style={{ flex: 1 }}
             onClick={handleAdd}
           >
-            {initialLine ? "Update item" : "Add to cart"} —{" "}
+            {t(initialLine ? "item.updateItem" : "item.addToCart")} —{" "}
             {formatMoney(unitPrice * qty, currency)}
           </button>
         </div>

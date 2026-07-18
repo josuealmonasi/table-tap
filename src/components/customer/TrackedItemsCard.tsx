@@ -1,5 +1,8 @@
+"use client";
+
 import { formatMoney } from "@/lib/format";
 import { lineUnitPrice, type OrderLineItem } from "@/lib/types";
+import { useT } from "@/lib/i18n/context";
 
 /** Read-only summary of what was ordered, shown on the tracking screen. */
 export default function TrackedItemsCard({
@@ -11,9 +14,10 @@ export default function TrackedItemsCard({
   total: number;
   currency: string;
 }) {
+  const t = useT();
   return (
     <div className="tt-card" style={{ padding: 16, marginTop: 16 }}>
-      <strong>Your items</strong>
+      <strong>{t("tracker.yourItems")}</strong>
       <div style={{ marginTop: 12 }}>
         {items.map((item, i) => (
           <div key={i} style={{ marginBottom: 8 }}>
@@ -34,7 +38,7 @@ export default function TrackedItemsCard({
         ))}
       </div>
       <div className="tt-row tt-total">
-        <span>Total paid</span>
+        <span>{t("tracker.totalPaid")}</span>
         <span className="tt-accent">{formatMoney(total, currency)}</span>
       </div>
     </div>
