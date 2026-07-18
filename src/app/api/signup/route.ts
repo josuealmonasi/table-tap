@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { clientIp, isRateLimited } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -8,6 +9,14 @@ export const runtime = "nodejs";
 // Creates a pre-confirmed auth user and their restaurant, atomically-ish:
 // if the restaurant insert fails we remove the just-created user so a retry works.
 export async function POST(req: NextRequest) {
+  // Cap account-creation attempts per IP to blunt signup spam.
+  if (await isRateLimited(`signup:${clientIp(req)}`, 5, 60)) {
+    return NextResponse.json(
+      { error: "Too many attempts — please wait a moment and try again." },
+      { status: 429 },
+    );
+  }
+
   const { restaurantName, email, password } = await req.json();
 
   if (!restaurantName?.trim() || !email || !password || password.length < 6) {

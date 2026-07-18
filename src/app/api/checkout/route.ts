@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { platformFeeCents } from "@/lib/stripe-connect";
+import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import type { OrderLineItem, OrderExtra } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -11,6 +12,14 @@ export const runtime = "nodejs";
 // Creates a pending order, then a Stripe Checkout Session, and returns its URL.
 export async function POST(req: NextRequest) {
   try {
+    // Throttle abusive callers before we create any orders or Stripe sessions.
+    if (await isRateLimited(`checkout:${clientIp(req)}`, 10, 60)) {
+      return NextResponse.json(
+        { error: "Too many attempts — please wait a moment and try again." },
+        { status: 429 },
+      );
+    }
+
     const body = await req.json();
     const {
       restaurantId,

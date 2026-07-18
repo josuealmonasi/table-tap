@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { clientIp, isRateLimited } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -7,6 +8,14 @@ export const runtime = "nodejs";
 // bill. No login (they scanned a QR); we validate the table server-side and
 // insert with the secret key, so the client key can't write this table at all.
 export async function POST(req: NextRequest) {
+  // A table needs only a handful of calls a minute; block spam past that.
+  if (await isRateLimited(`service:${clientIp(req)}`, 8, 60)) {
+    return NextResponse.json(
+      { error: "Too many requests — please wait a moment." },
+      { status: 429 },
+    );
+  }
+
   const { restaurantId, tableId, kind } = await req.json();
 
   if (!restaurantId || !tableId || (kind !== "waiter" && kind !== "bill")) {
