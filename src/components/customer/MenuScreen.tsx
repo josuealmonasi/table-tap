@@ -5,10 +5,12 @@ import Link from "next/link";
 import type { Category, MenuItem, Restaurant, RestaurantTable } from "@/lib/types";
 import { DIETARY_TAGS } from "@/lib/dietary";
 import { recallOrder } from "@/lib/recent-order";
+import { useT } from "@/lib/i18n/context";
 import CategoryTabs from "./CategoryTabs";
 import MenuItemRow from "./MenuItemRow";
 import CartBar from "./CartBar";
 import ServiceButtons from "./ServiceButtons";
+import LanguageToggle from "./LanguageToggle";
 
 /** The menu browsing screen: restaurant header, category filter, item list, cart bar. */
 export default function MenuScreen({
@@ -30,6 +32,7 @@ export default function MenuScreen({
   onSelectItem: (item: MenuItem) => void;
   onOpenCart: () => void;
 }) {
+  const t = useT();
   const [activeCat, setActiveCat] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [diet, setDiet] = useState<string[]>([]);
@@ -44,7 +47,7 @@ export default function MenuScreen({
   // Which dietary tags actually appear on this menu (so we only offer useful filters).
   const menuTags = useMemo(() => {
     const present = new Set(items.flatMap(i => i.dietary ?? []));
-    return DIETARY_TAGS.filter(t => present.has(t.key));
+    return DIETARY_TAGS.filter(tag => present.has(tag.key));
   }, [items]);
 
   function toggleDiet(key: string): void {
@@ -81,19 +84,26 @@ export default function MenuScreen({
               {restaurant.tagline}
             </div>
           </div>
-          {table && (
-            <span className="tt-badge tt-badge-gold">🪑 Table {table.label}</span>
-          )}
+          <div
+            style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}
+          >
+            <LanguageToggle />
+            {table && (
+              <span className="tt-badge tt-badge-gold">
+                {t("menu.table", { label: table.label })}
+              </span>
+            )}
+          </div>
         </div>
         {table && <ServiceButtons restaurantId={restaurant.id} table={table} />}
         {trackId && (
           <Link href={`/order/${trackId}`} className="tt-track-banner" role="status">
-            🧾 You have an order in progress — track it →
+            {t("menu.trackOrder")}
           </Link>
         )}
         {!restaurant.accepting_orders && (
           <div className="tt-closed-banner" role="status">
-            ⏸️ We&apos;re not taking orders right now — please check back soon.
+            {t("menu.closed")}
           </div>
         )}
       </div>
@@ -104,8 +114,8 @@ export default function MenuScreen({
         <input
           className="tt-input tt-customer-search"
           type="search"
-          placeholder="🔍 Search the menu…"
-          aria-label="Search the menu"
+          placeholder={t("menu.search")}
+          aria-label={t("menu.search")}
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
@@ -118,14 +128,14 @@ export default function MenuScreen({
         )}
         {menuTags.length > 0 && (
           <div className="tt-diet-filter">
-            {menuTags.map(t => (
+            {menuTags.map(tag => (
               <button
-                key={t.key}
+                key={tag.key}
                 type="button"
-                className={`tt-diet-chip ${diet.includes(t.key) ? "tt-diet-chip-on" : ""}`}
-                onClick={() => toggleDiet(t.key)}
+                className={`tt-diet-chip ${diet.includes(tag.key) ? "tt-diet-chip-on" : ""}`}
+                onClick={() => toggleDiet(tag.key)}
               >
-                {t.emoji} {t.label}
+                {tag.emoji} {t(`dietary.${tag.key}`)}
               </button>
             ))}
           </div>
@@ -136,8 +146,8 @@ export default function MenuScreen({
         {filtered.length === 0 && (search.trim() || diet.length > 0) && (
           <p className="tt-muted" style={{ textAlign: "center", fontSize: 14 }}>
             {search.trim()
-              ? `Nothing matches “${search.trim()}” — try another craving.`
-              : "No items match those dietary filters."}
+              ? t("menu.noSearchMatch", { q: search.trim() })
+              : t("menu.noDietMatch")}
           </p>
         )}
         {filtered.map(item => (

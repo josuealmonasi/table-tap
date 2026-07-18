@@ -1,6 +1,9 @@
+"use client";
+
 import { formatMoney } from "@/lib/format";
 import type { MenuItem } from "@/lib/types";
 import { dietaryTags } from "@/lib/dietary";
+import { useT } from "@/lib/i18n/context";
 
 /** A single tappable row in the menu list. */
 export default function MenuItemRow({
@@ -12,20 +15,25 @@ export default function MenuItemRow({
   currency: string;
   onSelect: (item: MenuItem) => void;
 }) {
+  const t = useT();
   return (
     <div className="tt-card tt-item" onClick={() => onSelect(item)}>
       <div className="tt-thumb">{item.emoji || "🍽️"}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <strong style={{ fontSize: 15 }}>{item.name}</strong>
-          {item.popular && <span className="tt-pop">Popular</span>}
+          {item.popular && <span className="tt-pop">{t("menu.popular")}</span>}
         </div>
         <div className="tt-desc tt-muted">{item.description}</div>
         {dietaryTags(item.dietary).length > 0 && (
           <div className="tt-diet-row">
-            {dietaryTags(item.dietary).map(t => (
-              <span key={t.key} className="tt-diet-badge" title={t.label}>
-                {t.emoji} {t.label}
+            {dietaryTags(item.dietary).map(tag => (
+              <span
+                key={tag.key}
+                className="tt-diet-badge"
+                title={t(`dietary.${tag.key}`)}
+              >
+                {tag.emoji} {t(`dietary.${tag.key}`)}
               </span>
             ))}
           </div>

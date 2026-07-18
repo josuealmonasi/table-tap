@@ -169,6 +169,22 @@ code {
   text-transform: none;
   letter-spacing: 0;
 }
+
+/* Customer EN/ES language switch (menu + tracker headers). */
+.tt-lang-toggle {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tt-lang-toggle:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
 .tt-pop {
   font-size: 10px;
   background: rgba(232, 82, 42, 0.12);

@@ -1,4 +1,7 @@
+"use client";
+
 import type { Category } from "@/lib/types";
+import { useT } from "@/lib/i18n/context";
 
 /** The horizontal scrollable category filter at the top of the menu. */
 export default function CategoryTabs({
@@ -10,13 +13,14 @@ export default function CategoryTabs({
   activeCat: string;
   onSelect: (categoryId: string) => void;
 }) {
+  const t = useT();
   return (
     <div className="tt-cats">
       <button
         className={`tt-cat ${activeCat === "all" ? "tt-cat-on" : ""}`}
         onClick={() => onSelect("all")}
       >
-        All
+        {t("menu.all")}
       </button>
       {categories.map(c => (
         <button

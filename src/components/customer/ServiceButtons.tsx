@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { RestaurantTable } from "@/lib/types";
+import { useT } from "@/lib/i18n/context";
 
 interface ServiceButtonsProps {
   restaurantId: string;
@@ -10,9 +11,10 @@ interface ServiceButtonsProps {
 
 type Kind = "waiter" | "bill";
 
-const LABELS: Record<Kind, { idle: string; sent: string }> = {
-  waiter: { idle: "🛎️ Call waiter", sent: "🛎️ On the way!" },
-  bill: { idle: "🧾 Get the bill", sent: "🧾 Bill requested" },
+// Message keys per button state (resolved through t() at render).
+const KEYS: Record<Kind, { idle: string; sent: string }> = {
+  waiter: { idle: "service.callWaiter", sent: "service.waiterSent" },
+  bill: { idle: "service.getBill", sent: "service.billSent" },
 };
 
 /**
@@ -21,6 +23,7 @@ const LABELS: Record<Kind, { idle: string; sent: string }> = {
  * the kitchen.
  */
 export default function ServiceButtons({ restaurantId, table }: ServiceButtonsProps) {
+  const t = useT();
   const [sent, setSent] = useState<Set<Kind>>(new Set());
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -53,7 +56,7 @@ export default function ServiceButtons({ restaurantId, table }: ServiceButtonsPr
 
   return (
     <div className="tt-service-row">
-      {(Object.keys(LABELS) as Kind[]).map(kind => (
+      {(Object.keys(KEYS) as Kind[]).map(kind => (
         <button
           key={kind}
           type="button"
@@ -61,7 +64,7 @@ export default function ServiceButtons({ restaurantId, table }: ServiceButtonsPr
           disabled={sent.has(kind)}
           onClick={() => send(kind)}
         >
-          {sent.has(kind) ? LABELS[kind].sent : LABELS[kind].idle}
+          {t(sent.has(kind) ? KEYS[kind].sent : KEYS[kind].idle)}
         </button>
       ))}
     </div>

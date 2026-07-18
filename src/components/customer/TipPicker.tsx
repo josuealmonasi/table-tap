@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
+import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
 
 interface TipPickerProps {
@@ -21,6 +22,7 @@ export default function TipPicker({
   onPresetTip,
   onCustomTip,
 }: TipPickerProps) {
+  const t = useT();
   const [asking, setAsking] = useState(false);
   const [draft, setDraft] = useState("");
 
@@ -33,7 +35,7 @@ export default function TipPicker({
 
   return (
     <div style={{ marginBottom: 20 }}>
-      <div className="tt-mod-label">Add a tip? 💛</div>
+      <div className="tt-mod-label">{t("tip.prompt")}</div>
       <div className="tt-tip-row">
         {[0, 10, 15, 20].map(pct => (
           <button
@@ -42,7 +44,7 @@ export default function TipPicker({
             className={`tt-tip-chip ${tipCustom === null && tipPct === pct ? "tt-tip-chip-active" : ""}`}
             onClick={() => onPresetTip(pct)}
           >
-            {pct === 0 ? "No tip" : `${pct}%`}
+            {pct === 0 ? t("tip.none") : `${pct}%`}
           </button>
         ))}
         <button
@@ -53,16 +55,16 @@ export default function TipPicker({
             setAsking(true);
           }}
         >
-          {tipCustom !== null ? formatMoney(tipCustom, currency) : "Other"}
+          {tipCustom !== null ? formatMoney(tipCustom, currency) : t("tip.other")}
         </button>
       </div>
 
       <Modal open={asking} onClose={() => setAsking(false)} maxWidth={360}>
         <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 8 }}>
-          Tip amount
+          {t("tip.amountTitle")}
         </h3>
         <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
-          How much would you like to tip?
+          {t("tip.amountPrompt")}
         </p>
         <form onSubmit={confirmCustom}>
           <input
@@ -85,10 +87,10 @@ export default function TipPicker({
               className="tt-btn tt-btn-ghost tt-btn-sm"
               onClick={() => setAsking(false)}
             >
-              Cancel
+              {t("tip.cancel")}
             </button>
             <button type="submit" className="tt-btn tt-btn-primary tt-btn-sm">
-              Confirm tip
+              {t("tip.confirm")}
             </button>
           </div>
         </form>

@@ -2,6 +2,7 @@
 
 import type { Restaurant, RestaurantTable } from "@/lib/types";
 import type { CartItem } from "@/hooks/useCart";
+import { useT } from "@/lib/i18n/context";
 import CartLineRow from "./CartLineRow";
 import OrderTotals from "./OrderTotals";
 import TipPicker from "./TipPicker";
@@ -54,6 +55,7 @@ export default function CartScreen({
   onAddMore,
   onCheckout,
 }: CartScreenProps) {
+  const t = useT();
   return (
     <div className="tt-root">
       <div className="tt-header">
@@ -61,12 +63,14 @@ export default function CartScreen({
           ←
         </button>
         <h2 className="tt-serif" style={{ margin: 0, fontSize: 20 }}>
-          Your Order
+          {t("cart.title")}
         </h2>
-        {table && <span className="tt-badge">Table {table.label}</span>}
+        {table && (
+          <span className="tt-badge">{t("menu.table", { label: table.label })}</span>
+        )}
       </div>
       <div style={{ padding: 16 }}>
-        {items.length === 0 && <p className="tt-muted">Your cart is empty.</p>}
+        {items.length === 0 && <p className="tt-muted">{t("cart.empty")}</p>}
         {items.map(item => (
           <CartLineRow
             key={item.cartId}
@@ -79,15 +83,15 @@ export default function CartScreen({
         ))}
 
         <button className="tt-add-more" onClick={onAddMore}>
-          + Add more items
+          {t("cart.addMore")}
         </button>
 
         <div style={{ marginBottom: 20 }}>
-          <div className="tt-mod-label">Note for the kitchen</div>
+          <div className="tt-mod-label">{t("cart.kitchenNote")}</div>
           <textarea
             className="tt-input"
             rows={2}
-            placeholder="Any notes for the whole order?"
+            placeholder={t("cart.kitchenNotePlaceholder")}
             value={orderNote}
             onChange={e => onChangeNote(e.target.value)}
           />
@@ -119,13 +123,13 @@ export default function CartScreen({
           disabled={!canCheckout || loading}
           onClick={onCheckout}
         >
-          {loading ? "Redirecting to payment…" : "Proceed to Payment"}
+          {t(loading ? "cart.redirecting" : "cart.proceed")}
         </button>
         <p
           className="tt-muted"
           style={{ textAlign: "center", fontSize: 12, marginTop: 12 }}
         >
-          🔒 Secured by Stripe · card, Apple Pay &amp; Google Pay
+          {t("cart.securedBy")}
         </p>
       </div>
     </div>
