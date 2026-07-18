@@ -6,6 +6,7 @@ import type { Menu, Restaurant } from "@/lib/types";
 import { useMenuEditor } from "@/hooks/useMenuEditor";
 import { navItemsFor, type DashboardRole } from "@/lib/nav";
 import { menuSlug } from "@/lib/slug";
+import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import { Skeleton } from "@/components/ui/Skeleton";
 import MenusPanel from "@/components/dashboard/menu/MenusPanel";
@@ -18,6 +19,7 @@ interface DashboardHomeProps {
 
 /** Restaurant dashboard landing — the restaurant's menus, plus other areas. */
 export default function DashboardHome({ restaurant, role }: DashboardHomeProps) {
+  const t = useT();
   const editor = useMenuEditor(restaurant.id);
   const router = useRouter();
 
@@ -27,7 +29,7 @@ export default function DashboardHome({ restaurant, role }: DashboardHomeProps) 
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <Breadcrumb trail={[{ label: "Dashboard" }]} />
+          <Breadcrumb trail={[{ labelKey: "nav.dashboard" }]} />
         </header>
 
         {!restaurant.accepting_orders && (
@@ -36,9 +38,9 @@ export default function DashboardHome({ restaurant, role }: DashboardHomeProps) 
             style={{ marginTop: 0, marginBottom: 16 }}
             role="status"
           >
-            ⏸️ Orders are paused — customers can browse but can&apos;t order.{" "}
+            {t("dash.ordersPausedBanner")}{" "}
             <Link href="/dashboard/settings" style={{ fontWeight: 600 }}>
-              Resume in Settings
+              {t("dash.resumeInSettings")}
             </Link>
           </div>
         )}
@@ -68,19 +70,19 @@ export default function DashboardHome({ restaurant, role }: DashboardHomeProps) 
         <div className="tt-tiles" style={{ marginTop: 16 }}>
           {navItemsFor(role).map(tile =>
             tile.soon ? (
-              <div key={tile.title} className="tt-tile tt-tile-soon">
+              <div key={tile.href} className="tt-tile tt-tile-soon">
                 <div className="tt-tile-emoji">{tile.emoji}</div>
-                <strong>{tile.title}</strong>
-                <span className="tt-muted">{tile.desc}</span>
+                <strong>{t(tile.titleKey)}</strong>
+                <span className="tt-muted">{t(tile.descKey)}</span>
                 <span className="tt-badge" style={{ marginTop: 8 }}>
-                  Coming soon
+                  {t("dash.comingSoon")}
                 </span>
               </div>
             ) : (
-              <Link key={tile.title} href={tile.href} className="tt-tile">
+              <Link key={tile.href} href={tile.href} className="tt-tile">
                 <div className="tt-tile-emoji">{tile.emoji}</div>
-                <strong>{tile.title}</strong>
-                <span className="tt-muted">{tile.desc}</span>
+                <strong>{t(tile.titleKey)}</strong>
+                <span className="tt-muted">{t(tile.descKey)}</span>
               </Link>
             ),
           )}

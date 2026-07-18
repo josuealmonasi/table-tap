@@ -6,6 +6,8 @@ import { getPlatformAdmin } from "@/lib/admin";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { ToastProvider } from "@/components/ui/Toast";
+import { LocaleProvider } from "@/lib/i18n/context";
+import { getLocale } from "@/lib/i18n/server";
 
 export const metadata: Metadata = {
   title: "TableTap — Scan, Order, Enjoy",
@@ -19,24 +21,27 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const supabase = await createClient();
   const admin = await getPlatformAdmin();
   const membership = admin ? null : await getMembership(supabase);
+  const locale = await getLocale();
 
   return (
-    <html lang="en">
+    <html lang={locale}>
       <body>
-        <ToastProvider>
-          {admin && (
-            <Navbar restaurantName="TableTap Admin" restaurantLogo="🛡️" role="admin" />
-          )}
-          {membership && (
-            <Navbar
-              restaurantName={membership.restaurant.name}
-              restaurantLogo={membership.restaurant.logo}
-              role={membership.role}
-            />
-          )}
-          <main style={{ flex: 1 }}>{children}</main>
-          <Footer />
-        </ToastProvider>
+        <LocaleProvider locale={locale}>
+          <ToastProvider>
+            {admin && (
+              <Navbar restaurantName="TableTap Admin" restaurantLogo="🛡️" role="admin" />
+            )}
+            {membership && (
+              <Navbar
+                restaurantName={membership.restaurant.name}
+                restaurantLogo={membership.restaurant.logo}
+                role={membership.role}
+              />
+            )}
+            <main style={{ flex: 1 }}>{children}</main>
+            <Footer />
+          </ToastProvider>
+        </LocaleProvider>
       </body>
     </html>
   );

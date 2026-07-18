@@ -5,6 +5,7 @@ import { formatMoney } from "@/lib/format";
 import type { MenuItem } from "@/lib/types";
 import type { AddonInput } from "@/hooks/useMenuEditor";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
 import ReorderButtons from "@/components/ui/ReorderButtons";
 import IconPicker from "./IconPicker";
@@ -40,6 +41,7 @@ export default function AddonsPanel({
   selectedIds,
   onToggleSelect,
 }: AddonsPanelProps) {
+  const t = useT();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const confirm = useConfirm();
@@ -53,21 +55,21 @@ export default function AddonsPanel({
     <div className="tt-section">
       <div className="tt-section-head">
         <h3 className="tt-serif" style={{ margin: 0 }}>
-          🧂 Extras
+          {t("menu.extrasTitle")}
         </h3>
         <span className="tt-muted" style={{ fontSize: 12 }}>
-          Attach these to products
+          {t("menu.attachToProducts")}
         </span>
       </div>
 
       {addons.length === 0 && (
         <p className="tt-muted" style={{ fontSize: 13 }}>
-          No extras yet. Create one (e.g. Catsup) to offer it on products.
+          {t("menu.noExtras")}
         </p>
       )}
       {addons.length > 0 && shown.length === 0 && (
         <p className="tt-muted" style={{ fontSize: 13 }}>
-          No extras match your search.
+          {t("menu.noExtrasSearch")}
         </p>
       )}
 
@@ -76,7 +78,7 @@ export default function AddonsPanel({
         const editForm = (
           <AddonForm
             initial={addon}
-            submitLabel="Save"
+            submitLabel={t("menu.saveShort")}
             onCancel={() => setEditingId(null)}
             onSubmit={async input => {
               await onUpdate(addon.id, input);
@@ -103,7 +105,7 @@ export default function AddonsPanel({
                   type="checkbox"
                   className="tt-bulk-check"
                   checked={selectedIds?.has(addon.id) ?? false}
-                  aria-label={`Select ${addon.name}`}
+                  aria-label={t("menu.selectItem", { name: addon.name })}
                   onChange={() => onToggleSelect(addon.id)}
                 />
               ) : (
@@ -122,7 +124,7 @@ export default function AddonsPanel({
                   <strong>{addon.name}</strong>
                   {!addon.available && (
                     <span className="tt-badge" style={{ marginLeft: 6 }}>
-                      Unavailable
+                      {t("menu.unavailable")}
                     </span>
                   )}
                 </div>
@@ -132,7 +134,7 @@ export default function AddonsPanel({
                   </strong>
                   <label
                     className="tt-switch"
-                    title={addon.available ? "Available" : "Unavailable"}
+                    title={t(addon.available ? "menu.available" : "menu.unavailable")}
                   >
                     <input
                       type="checkbox"
@@ -144,19 +146,19 @@ export default function AddonsPanel({
                   <div className="tt-prod-actions">
                     <button
                       className="tt-iconbtn"
-                      title="Edit"
+                      title={t("menu.edit")}
                       onClick={() => setEditingId(addon.id)}
                     >
                       ✏️
                     </button>
                     <button
                       className="tt-iconbtn"
-                      title="Delete"
+                      title={t("menu.delete")}
                       onClick={async () => {
                         if (
                           await confirm({
-                            title: `Delete extra “${addon.name}”?`,
-                            confirmLabel: "Delete",
+                            title: t("menu.deleteExtraConfirm", { name: addon.name }),
+                            confirmLabel: t("menu.delete"),
                             danger: true,
                           })
                         ) {
@@ -182,7 +184,7 @@ export default function AddonsPanel({
       {(() => {
         const addForm = (
           <AddonForm
-            submitLabel="Add extra"
+            submitLabel={t("menu.addExtra")}
             onCancel={() => setAdding(false)}
             onSubmit={async input => {
               await onAdd(input);
@@ -195,7 +197,7 @@ export default function AddonsPanel({
           return (
             <>
               <button className="tt-add-more" onClick={() => setAdding(true)}>
-                + Add extra
+                {t("menu.addExtra")}
               </button>
               <Modal open={adding} onClose={() => setAdding(false)} maxWidth={520}>
                 {addForm}
@@ -208,7 +210,7 @@ export default function AddonsPanel({
           <div className="tt-prod-editing">{addForm}</div>
         ) : (
           <button className="tt-add-more" onClick={() => setAdding(true)}>
-            + Add extra
+            {t("menu.addExtra")}
           </button>
         );
       })()}
@@ -225,6 +227,7 @@ interface AddonFormProps {
 
 /** Small inline form for creating/editing an add-on item. */
 function AddonForm({ initial, submitLabel, onSubmit, onCancel }: AddonFormProps) {
+  const t = useT();
   const [name, setName] = useState(initial?.name ?? "");
   const [price, setPrice] = useState(String(initial?.price ?? ""));
   const [emoji, setEmoji] = useState(initial?.emoji ?? "");
@@ -244,7 +247,7 @@ function AddonForm({ initial, submitLabel, onSubmit, onCancel }: AddonFormProps)
         <input
           className="tt-input"
           style={{ flex: 1 }}
-          placeholder="Extra name (e.g. Catsup)"
+          placeholder={t("menu.extraNamePlaceholder")}
           value={name}
           onChange={e => setName(e.target.value)}
           autoFocus={!initial}
@@ -256,7 +259,7 @@ function AddonForm({ initial, submitLabel, onSubmit, onCancel }: AddonFormProps)
           type="number"
           step="0.01"
           min="0"
-          placeholder="Price"
+          placeholder={t("menu.pricePlaceholder")}
           value={price}
           onChange={e => setPrice(e.target.value)}
           required
@@ -269,7 +272,7 @@ function AddonForm({ initial, submitLabel, onSubmit, onCancel }: AddonFormProps)
           className="tt-btn tt-btn-ghost tt-btn-sm"
           onClick={onCancel}
         >
-          Cancel
+          {t("menu.cancel")}
         </button>
         <button
           type="submit"

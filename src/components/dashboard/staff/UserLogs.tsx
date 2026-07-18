@@ -1,41 +1,44 @@
 "use client";
 
 import { useUserLogs } from "@/hooks/useUserLogs";
+import { useT } from "@/lib/i18n/context";
 
 interface UserLogsProps {
   restaurantId: string;
 }
 
-/** "manager1@… created a new kitchen user at 12 Jul, 10:31" */
-function describe(action: string, role: string): string {
-  if (action === "created") return `created a new ${role} user`;
-  if (action === "deleted") return `deleted a ${role} user`;
-  return `updated a user to ${role}`;
-}
-
 /** Owner-only activity log: who created/updated/deleted which login. */
 export default function UserLogs({ restaurantId }: UserLogsProps) {
+  const t = useT();
   const { logs, loading, page, pages, total, setPage } = useUserLogs(restaurantId);
+
+  // "manager1@… created a new kitchen user" — role name is localised too.
+  const describe = (action: string, role: string): string => {
+    const roleName = t(`dash.${role}`);
+    if (action === "created") return t("dash.logCreated", { role: roleName });
+    if (action === "deleted") return t("dash.logDeleted", { role: roleName });
+    return t("dash.logUpdated", { role: roleName });
+  };
 
   return (
     <div className="tt-section" style={{ maxWidth: 720, marginTop: 16 }}>
       <div className="tt-section-head">
         <h3 className="tt-serif" style={{ margin: 0 }}>
-          Recent activity
+          {t("dash.recentActivity")}
         </h3>
         <span className="tt-muted" style={{ fontSize: 12 }}>
-          Every change to logins and roles, newest first
+          {t("dash.activityHint")}
         </span>
       </div>
 
       {loading && (
         <p className="tt-muted" style={{ fontSize: 13 }}>
-          Loading…
+          {t("common.loading")}
         </p>
       )}
       {!loading && total === 0 && (
         <p className="tt-muted" style={{ fontSize: 13 }}>
-          Nothing yet — team changes will show up here.
+          {t("dash.logsEmpty")}
         </p>
       )}
 
@@ -63,17 +66,17 @@ export default function UserLogs({ restaurantId }: UserLogsProps) {
             disabled={page <= 1}
             onClick={() => setPage(page - 1)}
           >
-            ← Newer
+            {t("dash.newer")}
           </button>
           <span className="tt-muted" style={{ fontSize: 13 }}>
-            Page {page} of {pages}
+            {t("dash.pageOf", { page, pages })}
           </span>
           <button
             className="tt-btn tt-btn-ghost tt-btn-sm"
             disabled={page >= pages}
             onClick={() => setPage(page + 1)}
           >
-            Older →
+            {t("dash.older")}
           </button>
         </div>
       )}

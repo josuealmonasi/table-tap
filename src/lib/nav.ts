@@ -1,8 +1,9 @@
 export type NavItem = {
   href: string;
   emoji: string;
-  title: string;
-  desc: string;
+  /** i18n keys resolved with t() where the item is rendered. */
+  titleKey: string;
+  descKey: string;
   soon?: boolean;
 };
 
@@ -11,35 +12,20 @@ export type NavItem = {
  * are listed dynamically on the dashboard, so they're not part of this list.
  */
 export const NAV_ITEMS: NavItem[] = [
-  {
-    href: "/dashboard/orders",
-    emoji: "🧾",
-    title: "Orders",
-    desc: "Live incoming orders",
-  },
+  { href: "/dashboard/orders", emoji: "🧾", titleKey: "nav.orders", descKey: "nav.ordersDesc" },
   {
     href: "/dashboard/analytics",
     emoji: "📊",
-    title: "Analytics",
-    desc: "Sales, top items and busy hours",
+    titleKey: "nav.analytics",
+    descKey: "nav.analyticsDesc",
   },
-  {
-    href: "/dashboard/tables",
-    emoji: "🪑",
-    title: "Tables & QR",
-    desc: "Manage tables and print QR codes",
-  },
-  {
-    href: "/dashboard/staff",
-    emoji: "👥",
-    title: "Staff",
-    desc: "Team logins and roles",
-  },
+  { href: "/dashboard/tables", emoji: "🪑", titleKey: "nav.tables", descKey: "nav.tablesDesc" },
+  { href: "/dashboard/staff", emoji: "👥", titleKey: "nav.staff", descKey: "nav.staffDesc" },
   {
     href: "/dashboard/settings",
     emoji: "⚙️",
-    title: "Settings",
-    desc: "Restaurant name, currency and service charge",
+    titleKey: "nav.settings",
+    descKey: "nav.settingsDesc",
   },
 ];
 
@@ -56,8 +42,8 @@ export function navItemsFor(role: DashboardRole): NavItem[] {
       {
         href: "/dashboard/admin",
         emoji: "🛡️",
-        title: "Admin",
-        desc: "All restaurants and users",
+        titleKey: "nav.admin",
+        descKey: "nav.adminDesc",
       },
     ];
   }

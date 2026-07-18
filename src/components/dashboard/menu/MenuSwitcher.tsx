@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Menu } from "@/lib/types";
 import { menuSlug } from "@/lib/slug";
+import { useT } from "@/lib/i18n/context";
 
 /**
  * Breadcrumb-style control for the menu editor header: shows the current menu
@@ -26,6 +27,7 @@ export default function MenuSwitcher({
   onRename,
   nameTaken,
 }: MenuSwitcherProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [value, setValue] = useState(currentName);
@@ -53,7 +55,7 @@ export default function MenuSwitcher({
       return;
     }
     if (nameTaken(name, currentId)) {
-      setError(`You already have a menu called “${name}”.`);
+      setError(t("menu.nameTaken", { name }));
       return;
     }
     await onRename(currentId, name);
@@ -78,7 +80,7 @@ export default function MenuSwitcher({
             onFocus={e => e.target.select()}
           />
           <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">
-            Save
+            {t("menu.save")}
           </button>
           <button
             type="button"
@@ -88,7 +90,7 @@ export default function MenuSwitcher({
               setOpen(false);
             }}
           >
-            Cancel
+            {t("menu.cancel")}
           </button>
         </form>
         {error && <p className="tt-field-error">{error}</p>}
@@ -111,7 +113,7 @@ export default function MenuSwitcher({
       <button
         type="button"
         className="tt-iconbtn tt-menu-switcher-edit"
-        title="Rename this menu"
+        title={t("menu.rename")}
         onClick={() => {
           setValue(currentName);
           setError(null);
@@ -138,7 +140,7 @@ export default function MenuSwitcher({
               {m.name}
               {!m.active && (
                 <span className="tt-badge" style={{ marginLeft: 8 }}>
-                  Hidden
+                  {t("menu.hidden")}
                 </span>
               )}
             </button>

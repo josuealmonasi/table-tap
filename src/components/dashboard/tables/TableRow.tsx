@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { RestaurantTable } from "@/lib/types";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useT } from "@/lib/i18n/context";
 import QrCard, { type QrTarget } from "./QrCard";
 
 interface TableRowProps {
@@ -14,15 +15,16 @@ interface TableRowProps {
 
 /** One table: its QR plus rename (inline) and delete (confirmed) actions. */
 export default function TableRow({ table, qr, onRename, onDelete }: TableRowProps) {
+  const t = useT();
   const [renaming, setRenaming] = useState(false);
   const [value, setValue] = useState(table.label);
   const confirm = useConfirm();
 
   async function remove(): Promise<void> {
     const ok = await confirm({
-      title: `Delete table “${table.label}”?`,
-      message: "Its QR code will stop working. Existing orders keep their table label.",
-      confirmLabel: "Delete",
+      title: t("dash.deleteTableConfirm", { label: table.label }),
+      message: t("dash.deleteTableMsg"),
+      confirmLabel: t("common.delete"),
       danger: true,
     });
     if (ok) await onDelete(table.id);
@@ -31,8 +33,8 @@ export default function TableRow({ table, qr, onRename, onDelete }: TableRowProp
   return (
     <div className="tt-table-row">
       <QrCard
-        title={`Table ${table.label}`}
-        subtitle="Order tagged to this table"
+        title={t("dash.tableN", { label: table.label })}
+        subtitle={t("dash.orderTagged")}
         qr={qr}
         downloadName={`table-${table.label}`}
       />
@@ -54,7 +56,7 @@ export default function TableRow({ table, qr, onRename, onDelete }: TableRowProp
               autoFocus
             />
             <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">
-              Save
+              {t("dash.saveShort")}
             </button>
             <button
               type="button"
@@ -64,19 +66,19 @@ export default function TableRow({ table, qr, onRename, onDelete }: TableRowProp
                 setRenaming(false);
               }}
             >
-              Cancel
+              {t("common.cancel")}
             </button>
           </form>
         ) : (
           <div className="tt-prod-actions">
             <button
               className="tt-iconbtn"
-              title="Rename"
+              title={t("dash.rename")}
               onClick={() => setRenaming(true)}
             >
               ✏️
             </button>
-            <button className="tt-iconbtn" title="Delete table" onClick={remove}>
+            <button className="tt-iconbtn" title={t("dash.deleteTable")} onClick={remove}>
               🗑️
             </button>
           </div>

@@ -5,6 +5,7 @@ import { formatMoney } from "@/lib/format";
 import type { Category, MenuItem } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
 import ReorderButtons from "@/components/ui/ReorderButtons";
 import MoveToSection from "./MoveToSection";
@@ -52,6 +53,7 @@ export default function ProductRow({
   selected = false,
   onToggleSelect,
 }: ProductRowProps) {
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [moving, setMoving] = useState(false);
   const confirm = useConfirm();
@@ -66,7 +68,7 @@ export default function ProductRow({
       addons={addons}
       selectedAddonIds={linkedAddonIds}
       currency={currency}
-      submitLabel="Save changes"
+      submitLabel={t("menu.saveChanges")}
       onCancel={() => setEditing(false)}
       onSubmit={async (input, addonIds) => {
         await onUpdate(product.id, input, addonIds);
@@ -90,7 +92,7 @@ export default function ProductRow({
             type="checkbox"
             className="tt-bulk-check"
             checked={selected}
-            aria-label={`Select ${product.name}`}
+            aria-label={t("menu.selectItem", { name: product.name })}
             onChange={() => onToggleSelect(product.id)}
           />
         ) : (
@@ -118,8 +120,10 @@ export default function ProductRow({
               style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}
             >
               <strong>{product.name}</strong>
-              {product.popular && <span className="tt-pop">Popular</span>}
-              {!product.available && <span className="tt-badge">Unavailable</span>}
+              {product.popular && <span className="tt-pop">{t("menu.popular")}</span>}
+              {!product.available && (
+                <span className="tt-badge">{t("menu.unavailable")}</span>
+              )}
             </div>
             {product.description && (
               <div className="tt-desc tt-muted" style={{ margin: "2px 0" }}>
@@ -137,7 +141,7 @@ export default function ProductRow({
             <strong className="tt-accent">{formatMoney(product.price, currency)}</strong>
             <label
               className="tt-switch"
-              title={product.available ? "Available" : "Unavailable"}
+              title={t(product.available ? "menu.available" : "menu.unavailable")}
             >
               <input
                 type="checkbox"
@@ -151,7 +155,7 @@ export default function ProductRow({
                 <button
                   className="tt-iconbtn"
                   onClick={() => setMoving(true)}
-                  title="Move to a section"
+                  title={t("menu.moveToSection")}
                 >
                   📤
                 </button>
@@ -159,7 +163,7 @@ export default function ProductRow({
               <button
                 className="tt-iconbtn"
                 onClick={() => setEditing(true)}
-                title="Edit"
+                title={t("menu.edit")}
               >
                 ✏️
               </button>
@@ -168,16 +172,16 @@ export default function ProductRow({
                 onClick={async () => {
                   if (
                     await confirm({
-                      title: `Delete “${product.name}”?`,
-                      message: "This can't be undone.",
-                      confirmLabel: "Delete",
+                      title: t("menu.deleteProductConfirm", { name: product.name }),
+                      message: t("menu.cantUndo"),
+                      confirmLabel: t("menu.delete"),
                       danger: true,
                     })
                   ) {
                     onDelete(product.id);
                   }
                 }}
-                title="Delete"
+                title={t("menu.delete")}
               >
                 🗑️
               </button>

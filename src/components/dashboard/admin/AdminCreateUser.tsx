@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAdminActions, type NewUserInput } from "@/hooks/useAdminActions";
+import { useT } from "@/lib/i18n/context";
 
 interface AdminCreateUserProps {
   restaurantOptions: { id: string; name: string }[];
@@ -11,6 +12,7 @@ const NEW_RESTAURANT = "__new__";
 
 /** Create any kind of login: admin, founding owner, co-owner, manager, kitchen. */
 export default function AdminCreateUser({ restaurantOptions }: AdminCreateUserProps) {
+  const t = useT();
   const { busy, createUser } = useAdminActions();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -41,10 +43,10 @@ export default function AdminCreateUser({ restaurantOptions }: AdminCreateUserPr
     <div className="tt-section" style={{ maxWidth: 560, marginTop: 16 }}>
       <div className="tt-section-head">
         <h3 className="tt-serif" style={{ margin: 0 }}>
-          Create a login
+          {t("admin.createUser")}
         </h3>
         <span className="tt-muted" style={{ fontSize: 12 }}>
-          Admins rule the platform; owners can also be founded with a fresh restaurant
+          {t("admin.createHint")}
         </span>
       </div>
 
@@ -54,7 +56,7 @@ export default function AdminCreateUser({ restaurantOptions }: AdminCreateUserPr
             className="tt-input"
             style={{ flex: 1 }}
             type="email"
-            placeholder="user@email.com"
+            placeholder={t("admin.emailPlaceholder")}
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
@@ -63,7 +65,7 @@ export default function AdminCreateUser({ restaurantOptions }: AdminCreateUserPr
             className="tt-input"
             style={{ flex: 1 }}
             type="password"
-            placeholder="Password (8+ characters)"
+            placeholder={t("admin.passwordPlaceholder")}
             minLength={8}
             value={password}
             onChange={e => setPassword(e.target.value)}
@@ -73,23 +75,23 @@ export default function AdminCreateUser({ restaurantOptions }: AdminCreateUserPr
 
         <div className="tt-prodform-row">
           <label className="tt-field" style={{ flex: 1 }}>
-            <span className="tt-mod-label">Role</span>
+            <span className="tt-mod-label">{t("dash.role")}</span>
             <select
               className="tt-input"
               value={role}
               onChange={e => setRole(e.target.value as NewUserInput["role"])}
             >
-              <option value="kitchen">Kitchen</option>
-              <option value="waiter">Waiter</option>
-              <option value="manager">Manager</option>
-              <option value="owner">Owner</option>
-              <option value="admin">Platform admin</option>
+              <option value="kitchen">{t("dash.kitchen")}</option>
+              <option value="waiter">{t("dash.waiter")}</option>
+              <option value="manager">{t("dash.manager")}</option>
+              <option value="owner">{t("dash.owner")}</option>
+              <option value="admin">{t("admin.platformAdmin")}</option>
             </select>
           </label>
 
           {needsRestaurant && (
             <label className="tt-field" style={{ flex: 1.4 }}>
-              <span className="tt-mod-label">Restaurant</span>
+              <span className="tt-mod-label">{t("admin.restaurant")}</span>
               <select
                 className="tt-input"
                 value={restaurantId}
@@ -101,7 +103,7 @@ export default function AdminCreateUser({ restaurantOptions }: AdminCreateUserPr
                   </option>
                 ))}
                 {role === "owner" && (
-                  <option value={NEW_RESTAURANT}>➕ New restaurant…</option>
+                  <option value={NEW_RESTAURANT}>{t("admin.newRestaurantOption")}</option>
                 )}
               </select>
             </label>
@@ -111,7 +113,7 @@ export default function AdminCreateUser({ restaurantOptions }: AdminCreateUserPr
         {creatingNew && (
           <input
             className="tt-input"
-            placeholder="New restaurant name"
+            placeholder={t("admin.newRestaurantName")}
             value={restaurantName}
             onChange={e => setRestaurantName(e.target.value)}
             required
@@ -124,7 +126,7 @@ export default function AdminCreateUser({ restaurantOptions }: AdminCreateUserPr
             className="tt-btn tt-btn-primary tt-btn-sm"
             disabled={busy}
           >
-            {busy ? "Working…" : "+ Create login"}
+            {busy ? t("common.working") : t("admin.createLogin")}
           </button>
         </div>
       </form>

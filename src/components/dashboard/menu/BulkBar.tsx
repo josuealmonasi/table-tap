@@ -1,6 +1,7 @@
 "use client";
 
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useT } from "@/lib/i18n/context";
 
 interface BulkBarProps {
   count: number;
@@ -11,16 +12,17 @@ interface BulkBarProps {
 
 /** Floating toolbar shown in bulk-select mode: count, cancel, delete. */
 export default function BulkBar({ count, onCancel, onDelete }: BulkBarProps) {
+  const t = useT();
   const confirm = useConfirm();
 
   return (
-    <div className="tt-bulk-bar" role="toolbar" aria-label="Bulk actions">
+    <div className="tt-bulk-bar" role="toolbar" aria-label={t("menu.bulkActions")}>
       <span style={{ fontSize: 14 }}>
-        <strong>{count}</strong> selected
+        <strong>{count}</strong> {t("menu.selected")}
       </span>
       <div style={{ display: "flex", gap: 8 }}>
         <button className="tt-btn tt-btn-ghost tt-btn-sm" onClick={onCancel}>
-          Cancel
+          {t("menu.cancel")}
         </button>
         <button
           className="tt-btn tt-btn-primary tt-btn-sm"
@@ -28,10 +30,9 @@ export default function BulkBar({ count, onCancel, onDelete }: BulkBarProps) {
           onClick={async () => {
             if (
               await confirm({
-                title: `Delete ${count} selected item${count === 1 ? "" : "s"}?`,
-                message:
-                  "Products and extras are removed permanently. This can't be undone.",
-                confirmLabel: "Delete selected",
+                title: t("menu.deleteSelectedConfirm"),
+                message: t("menu.deleteSelectedMsg"),
+                confirmLabel: t("menu.deleteSelected"),
                 danger: true,
               })
             ) {
@@ -39,7 +40,7 @@ export default function BulkBar({ count, onCancel, onDelete }: BulkBarProps) {
             }
           }}
         >
-          🗑️ Delete selected
+          {t("menu.deleteSelected")}
         </button>
       </div>
     </div>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Menu } from "@/lib/types";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { menuSlug } from "@/lib/slug";
+import { useT } from "@/lib/i18n/context";
 import MenuRow from "./MenuRow";
 
 interface MenusPanelProps {
@@ -35,6 +36,7 @@ export default function MenusPanel({
   onDuplicate,
   onMove,
 }: MenusPanelProps) {
+  const t = useT();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
@@ -52,25 +54,24 @@ export default function MenusPanel({
   async function toggle(menu: Menu, next: boolean) {
     if (!next && activeCount <= 1) {
       await confirm({
-        title: "At least one menu must stay active",
-        message: "Turn another menu on before hiding this one.",
-        confirmLabel: "Got it",
-        cancelLabel: "Close",
+        title: t("menu.keepOneActive"),
+        message: t("menu.keepOneActiveMsg"),
+        confirmLabel: t("menu.gotIt"),
+        cancelLabel: t("menu.close"),
       });
       return;
     }
     const ok = await confirm(
       next
         ? {
-            title: `Show “${menu.name}” to customers?`,
-            message: "Its sections, products and extras become orderable right away.",
-            confirmLabel: "Activate",
+            title: t("menu.showConfirm", { name: menu.name }),
+            message: t("menu.showConfirmMsg"),
+            confirmLabel: t("menu.activate"),
           }
         : {
-            title: `Hide “${menu.name}” from customers?`,
-            message:
-              "Customers won't see this menu until you turn it back on. Nothing is deleted.",
-            confirmLabel: "Deactivate",
+            title: t("menu.hideConfirm", { name: menu.name }),
+            message: t("menu.hideConfirmMsg"),
+            confirmLabel: t("menu.deactivate"),
           },
     );
     if (ok) await onToggleActive(menu.id, next);
@@ -79,18 +80,17 @@ export default function MenusPanel({
   async function remove(menu: Menu) {
     if (menus.length <= 1) {
       await confirm({
-        title: "Can't delete the only menu",
-        message: "A restaurant needs at least one menu. Add another first.",
-        confirmLabel: "Got it",
-        cancelLabel: "Close",
+        title: t("menu.cantDeleteOnly"),
+        message: t("menu.cantDeleteOnlyMsg"),
+        confirmLabel: t("menu.gotIt"),
+        cancelLabel: t("menu.close"),
       });
       return;
     }
     const ok = await confirm({
-      title: `Delete “${menu.name}”?`,
-      message:
-        "All of its sections, products and extras will be permanently deleted. This can't be undone.",
-      confirmLabel: "Delete",
+      title: t("menu.deleteConfirm", { name: menu.name }),
+      message: t("menu.deleteMenuMsg"),
+      confirmLabel: t("menu.delete"),
       danger: true,
     });
     if (ok) await onDelete(menu.id);
@@ -98,10 +98,9 @@ export default function MenusPanel({
 
   async function duplicate(menu: Menu) {
     const ok = await confirm({
-      title: `Duplicate “${menu.name}”?`,
-      message:
-        "This makes a copy with all of its sections, products and extras. You can rename it afterward.",
-      confirmLabel: "Duplicate",
+      title: t("menu.duplicateConfirm", { name: menu.name }),
+      message: t("menu.duplicateMsg"),
+      confirmLabel: t("menu.duplicate"),
     });
     if (ok) await onDuplicate(menu.id);
   }
@@ -115,7 +114,7 @@ export default function MenusPanel({
           const name = newName.trim();
           if (!name) return;
           if (nameTaken(name)) {
-            setAddError(`You already have a menu called “${name}”.`);
+            setAddError(t("menu.nameTaken", { name }));
             return;
           }
           const id = await onAdd(name);
@@ -128,7 +127,7 @@ export default function MenusPanel({
       >
         <input
           className="tt-input"
-          placeholder="Menu name (e.g. Breakfast)"
+          placeholder={t("menu.menuNamePlaceholder")}
           value={newName}
           onChange={e => {
             setNewName(e.target.value);
@@ -141,7 +140,7 @@ export default function MenusPanel({
           type="submit"
           disabled={!newName.trim()}
         >
-          + Add menu
+          {t("menu.addMenu")}
         </button>
         {!empty && (
           <button
@@ -153,7 +152,7 @@ export default function MenusPanel({
               setAddError(null);
             }}
           >
-            Cancel
+            {t("menu.cancel")}
           </button>
         )}
       </form>
@@ -165,11 +164,11 @@ export default function MenusPanel({
     <div className="tt-section">
       <div className="tt-section-head">
         <h3 className="tt-serif" style={{ margin: 0 }}>
-          Menus
+          {t("menu.title")}
         </h3>
         {!empty && (
           <span className="tt-muted" style={{ fontSize: 12 }}>
-            Open a menu to edit it · switch it on to show it to customers
+            {t("menu.hint")}
           </span>
         )}
       </div>
@@ -177,13 +176,12 @@ export default function MenusPanel({
       {empty ? (
         <div className="tt-empty">
           <div className="tt-empty-emoji">📋</div>
-          <strong>Create your first menu</strong>
+          <strong>{t("menu.createFirst")}</strong>
           <p
             className="tt-muted"
             style={{ fontSize: 13, margin: "4px 0 14px", maxWidth: 360 }}
           >
-            Name it anything — e.g. “All Day”, “Breakfast” or “Dinner”. You can add as
-            many as you like and turn each on or off through the day.
+            {t("menu.createFirstDesc")}
           </p>
           {addForm}
         </div>
@@ -215,7 +213,7 @@ export default function MenusPanel({
               style={{ marginTop: 12 }}
               onClick={() => setAdding(true)}
             >
-              + Add menu
+              {t("menu.addMenu")}
             </button>
           )}
         </>

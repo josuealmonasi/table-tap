@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useT } from "@/lib/i18n/context";
+import LanguageToggle from "@/components/customer/LanguageToggle";
 import NavDrawer from "./NavDrawer";
 
 /**
@@ -19,6 +21,7 @@ export default function Navbar({
   /** Managers lose Settings/Staff; waiter/kitchen only get the orders board. */
   role: "owner" | "manager" | "waiter" | "kitchen" | "admin";
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -67,44 +70,47 @@ export default function Navbar({
           </Link>
         </div>
 
-        <div className="tt-user-menu" ref={menuRef}>
-          <button
-            type="button"
-            className="tt-user-btn"
-            aria-haspopup="true"
-            aria-expanded={open}
-            aria-label="Account menu"
-            onClick={() => setOpen(o => !o)}
-          >
-            👤
-          </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <LanguageToggle className="tt-lang-toggle-nav" />
+          <div className="tt-user-menu" ref={menuRef}>
+            <button
+              type="button"
+              className="tt-user-btn"
+              aria-haspopup="true"
+              aria-expanded={open}
+              aria-label={t("nav.account")}
+              onClick={() => setOpen(o => !o)}
+            >
+              👤
+            </button>
 
-          {open && (
-            <div className="tt-user-dropdown" role="menu">
-              <Link
-                href="/dashboard/profile"
-                role="menuitem"
-                className="tt-user-item"
-                onClick={() => setOpen(false)}
-              >
-                Profile
-              </Link>
-              {(role === "owner" || role === "manager") && (
+            {open && (
+              <div className="tt-user-dropdown" role="menu">
                 <Link
-                  href="/dashboard/settings"
+                  href="/dashboard/profile"
                   role="menuitem"
                   className="tt-user-item"
                   onClick={() => setOpen(false)}
                 >
-                  Settings
+                  {t("nav.profile")}
                 </Link>
-              )}
-              <div className="tt-user-divider" />
-              <button type="button" className="tt-user-item" onClick={signOut}>
-                Sign out
-              </button>
-            </div>
-          )}
+                {(role === "owner" || role === "manager") && (
+                  <Link
+                    href="/dashboard/settings"
+                    role="menuitem"
+                    className="tt-user-item"
+                    onClick={() => setOpen(false)}
+                  >
+                    {t("nav.settings")}
+                  </Link>
+                )}
+                <div className="tt-user-divider" />
+                <button type="button" className="tt-user-item" onClick={signOut}>
+                  {t("nav.signOut")}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </nav>

@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/lib/i18n/context";
+
 /** A QR target: the URL it points to and its pre-rendered inline SVG. */
 export interface QrTarget {
   url: string;
@@ -16,6 +18,7 @@ interface QrCardProps {
 
 /** Shows a QR code with its target URL and Download / Print actions. */
 export default function QrCard({ title, subtitle, qr, downloadName }: QrCardProps) {
+  const t = useT();
   function downloadSvg(): void {
     const blob = new Blob([qr.svg], { type: "image/svg+xml" });
     const href = URL.createObjectURL(blob);
@@ -60,10 +63,10 @@ export default function QrCard({ title, subtitle, qr, downloadName }: QrCardProp
         </a>
         <div className="tt-qr-actions">
           <button className="tt-btn tt-btn-ghost tt-btn-sm" onClick={downloadSvg}>
-            ⬇ Download
+            {t("dash.download")}
           </button>
           <button className="tt-btn tt-btn-ghost tt-btn-sm" onClick={printQr}>
-            🖨 Print
+            {t("dash.print")}
           </button>
         </div>
       </div>

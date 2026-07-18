@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Restaurant } from "@/lib/types";
 import { useMenuEditor } from "@/hooks/useMenuEditor";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
+import { useT } from "@/lib/i18n/context";
 import BulkBar from "./BulkBar";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
 import { menuSlug } from "@/lib/slug";
@@ -31,6 +32,7 @@ export default function MenuEditor({
   menuName,
   modalForms = true,
 }: MenuEditorProps) {
+  const t = useT();
   const editor = useMenuEditor(restaurant.id);
   const currency = restaurant.currency;
   const router = useRouter();
@@ -106,13 +108,12 @@ export default function MenuEditor({
           <div className="tt-section">
             <div className="tt-empty">
               <div className="tt-empty-emoji">🍽️</div>
-              <strong>Add your first section</strong>
+              <strong>{t("menu.addFirstSection")}</strong>
               <p
                 className="tt-muted"
                 style={{ fontSize: 13, margin: "4px 0 14px", maxWidth: 360 }}
               >
-                Group “{liveName}” into sections — e.g. “Coffee Drinks” — then add
-                products (Latte, Espresso…) inside each one.
+                {t("menu.addFirstSectionHint", { name: liveName })}
               </p>
               <AddSectionForm onAdd={addSection} autoFocus />
             </div>
@@ -124,12 +125,11 @@ export default function MenuEditor({
               <div className="tt-section">
                 <div className="tt-section-head">
                   <h3 className="tt-serif" style={{ margin: 0 }}>
-                    Sections
+                    {t("menu.sections")}
                   </h3>
                 </div>
                 <p className="tt-muted" style={{ fontSize: 13, marginTop: 0 }}>
-                  Group this menu — e.g. “Coffee Drinks”. Add a section, then add products
-                  (Latte, Espresso…) inside it below. Extras come last.
+                  {t("menu.sectionsHint")}
                 </p>
                 <AddSectionForm onAdd={addSection} />
               </div>
@@ -137,7 +137,7 @@ export default function MenuEditor({
               {nothingMatches && (
                 <div className="tt-section">
                   <p className="tt-muted" style={{ fontSize: 13, margin: 0 }}>
-                    Nothing matches “{search.trim()}”.
+                    {t("menu.nothingMatches", { q: search.trim() })}
                   </p>
                 </div>
               )}
@@ -204,9 +204,9 @@ export default function MenuEditor({
             <aside className="tt-menu-side">
               <div className="tt-section-head" style={{ marginTop: 8 }}>
                 <h3 className="tt-serif" style={{ margin: 0 }}>
-                  Extras{" "}
+                  {t("menu.extras")}{" "}
                   <span className="tt-muted" style={{ fontWeight: 400, fontSize: 14 }}>
-                    (optional)
+                    {t("menu.extrasOptional")}
                   </span>
                 </h3>
               </div>

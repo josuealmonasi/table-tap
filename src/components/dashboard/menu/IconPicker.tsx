@@ -1,8 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/lib/i18n/context";
 
 type IconGroup = { group: string; items: { emoji: string; label: string }[] };
+
+// Group header → translation key.
+const GROUP_KEY: Record<string, string> = {
+  Meals: "menu.groupMeals",
+  Drinks: "menu.groupDrinks",
+  Condiments: "menu.groupCondiments",
+  "Beverage add-ons": "menu.groupBeverageAddons",
+};
 
 // Sections already group by type (e.g. "Coffee Drinks"), so this just
 // distinguishes meals vs. drinks at a glance. 🍽️ is the generic default.
@@ -75,7 +84,7 @@ function findGroupWith(groups: IconGroup[], value: string) {
 export default function IconPicker({
   value,
   onChange,
-  label = "Icon (optional)",
+  label,
   variant = "product",
 }: {
   value: string;
@@ -83,6 +92,7 @@ export default function IconPicker({
   label?: string;
   variant?: "product" | "addon";
 }) {
+  const t = useT();
   const groups = variant === "addon" ? ADDON_ICON_GROUPS : PRODUCT_ICON_GROUPS;
   const [openGroup, setOpenGroup] = useState<string | null>(() =>
     findGroupWith(groups, value),
@@ -90,7 +100,7 @@ export default function IconPicker({
 
   return (
     <div>
-      <div className="tt-mod-label">{label}</div>
+      <div className="tt-mod-label">{label ?? t("menu.iconOptional")}</div>
 
       <div className="tt-accordion">
         {groups.map(g => {
@@ -104,7 +114,7 @@ export default function IconPicker({
                 aria-expanded={isOpen}
                 onClick={() => setOpenGroup(isOpen ? null : g.group)}
               >
-                <span>{g.group}</span>
+                <span>{t(GROUP_KEY[g.group] ?? g.group)}</span>
                 <span className="tt-acc-right">
                   {selected && <span style={{ fontSize: 15 }}>{selected.emoji}</span>}
                   <span className="tt-acc-chevron">{isOpen ? "▾" : "▸"}</span>

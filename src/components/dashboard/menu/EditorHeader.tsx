@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { Menu } from "@/lib/types";
+import { useT } from "@/lib/i18n/context";
 import MenuSwitcher from "./MenuSwitcher";
 
 interface EditorHeaderProps {
@@ -31,10 +32,11 @@ export default function EditorHeader({
   selecting,
   onToggleSelecting,
 }: EditorHeaderProps) {
+  const t = useT();
   return (
     <header className="tt-dash-head">
       <nav className="tt-breadcrumb" aria-label="Breadcrumb">
-        <Link href="/dashboard">Dashboard</Link>
+        <Link href="/dashboard">{t("nav.dashboard")}</Link>
         <span className="tt-breadcrumb-sep">/</span>
         <MenuSwitcher
           menus={menus}
@@ -49,8 +51,8 @@ export default function EditorHeader({
           <input
             className="tt-input tt-menu-search"
             type="search"
-            placeholder="🔍 Search products & extras…"
-            aria-label="Search products and extras"
+            placeholder={t("menu.searchProducts")}
+            aria-label={t("menu.searchProducts")}
             value={search}
             onChange={e => onSearch(e.target.value)}
           />
@@ -59,7 +61,7 @@ export default function EditorHeader({
             className={`tt-btn tt-btn-sm ${selecting ? "tt-btn-primary" : "tt-btn-ghost"}`}
             onClick={onToggleSelecting}
           >
-            {selecting ? "Done" : "☑️ Select"}
+            {selecting ? t("menu.doneBtn") : t("menu.select")}
           </button>
         </div>
       )}
