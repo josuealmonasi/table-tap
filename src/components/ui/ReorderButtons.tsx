@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/lib/i18n/context";
+
 interface ReorderButtonsProps {
   canMoveUp: boolean;
   canMoveDown: boolean;
@@ -14,6 +16,7 @@ export default function ReorderButtons({
   onMoveUp,
   onMoveDown,
 }: ReorderButtonsProps) {
+  const t = useT();
   // Nothing to reorder when this is the only item in its group.
   if (!canMoveUp && !canMoveDown) return null;
 
@@ -22,7 +25,7 @@ export default function ReorderButtons({
       <button
         type="button"
         className="tt-reorder-btn"
-        title="Move up"
+        title={t("menu.moveUp")}
         disabled={!canMoveUp}
         onClick={onMoveUp}
       >
@@ -31,7 +34,7 @@ export default function ReorderButtons({
       <button
         type="button"
         className="tt-reorder-btn"
-        title="Move down"
+        title={t("menu.moveDown")}
         disabled={!canMoveDown}
         onClick={onMoveDown}
       >
