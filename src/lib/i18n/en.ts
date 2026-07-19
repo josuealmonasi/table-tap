@@ -129,6 +129,8 @@ export const en = {
     extrasOptional: "(optional)",
     nothingMatches: "Nothing matches “{q}”.",
     extras: "Extras",
+    moveUp: "Move up",
+    moveDown: "Move down",
   },
   item: {
     addExtras: "Add extras",

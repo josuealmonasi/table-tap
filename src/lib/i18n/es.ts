@@ -123,6 +123,8 @@ export const es: Messages = {
     extrasOptional: "(opcional)",
     nothingMatches: "Nada coincide con “{q}”.",
     extras: "Extras",
+    moveUp: "Subir",
+    moveDown: "Bajar",
   },
   item: {
     addExtras: "Agregar extras",
