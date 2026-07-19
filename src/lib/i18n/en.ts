@@ -1,7 +1,7 @@
 // English UI strings for the customer-facing screens. This is the source of
 // truth for the message keys; es.ts must mirror its shape (enforced by types).
 export const en = {
-  lang: { toggle: "🇲🇽 ES", label: "Language" },
+  lang: { label: "Language" },
   menu: {
     search: "🔍 Search the menu…",
     all: "All",

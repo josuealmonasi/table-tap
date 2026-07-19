@@ -3,7 +3,7 @@ import type { Messages } from "./en";
 // Spanish (Mexico) UI strings. Typed as Messages so a missing or extra key is a
 // compile error.
 export const es: Messages = {
-  lang: { toggle: "🇺🇸 EN", label: "Idioma" },
+  lang: { label: "Idioma" },
   menu: {
     search: "🔍 Busca en el menú…",
     all: "Todo",

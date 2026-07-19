@@ -6,6 +6,12 @@ export const LOCALES: Locale[] = ["en", "es"];
 export const LOCALE_COOKIE = "tt-locale";
 export type { Messages };
 
+/** Display metadata for the language switcher. Add a row here to offer a new language. */
+export const LOCALE_LABELS: Record<Locale, { flag: string; name: string; short: string }> = {
+  en: { flag: "🇺🇸", name: "English", short: "EN" },
+  es: { flag: "🇲🇽", name: "Español", short: "ES" },
+};
+
 const DICTS: Record<Locale, Messages> = { en, es };
 
 /** The message catalog for a locale (English if somehow unknown). */
