@@ -2,6 +2,16 @@
 
 import { useT } from "@/lib/i18n/context";
 
+/** Escape text for safe interpolation into an HTML string (the print window). */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /** A QR target: the URL it points to and its pre-rendered inline SVG. */
 export interface QrTarget {
   url: string;
@@ -32,14 +42,19 @@ export default function QrCard({ title, subtitle, qr, downloadName }: QrCardProp
   function printQr(): void {
     const w = window.open("", "_blank", "width=420,height=560");
     if (!w) return;
+    // title/subtitle are user-set (restaurant name, table label), so escape
+    // them before writing into the print window's HTML. The QR svg is
+    // library-generated markup and is embedded as-is.
+    const safeTitle = escapeHtml(title);
+    const safeSubtitle = subtitle ? escapeHtml(subtitle) : "";
     w.document.write(
-      `<!doctype html><title>${title}</title>` +
+      `<!doctype html><title>${safeTitle}</title>` +
         `<body style="margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;` +
         `height:100vh;font-family:system-ui,sans-serif;text-align:center">` +
         `<div style="width:260px">${qr.svg}</div>` +
-        `<div style="font-size:20px;font-weight:700;margin-top:12px">${title}</div>` +
-        (subtitle
-          ? `<div style="font-size:13px;color:#666;margin-top:2px">${subtitle}</div>`
+        `<div style="font-size:20px;font-weight:700;margin-top:12px">${safeTitle}</div>` +
+        (safeSubtitle
+          ? `<div style="font-size:13px;color:#666;margin-top:2px">${safeSubtitle}</div>`
           : "") +
         `</body>`,
     );
