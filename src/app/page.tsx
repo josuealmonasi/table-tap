@@ -1,23 +1,24 @@
 import Link from "next/link";
+import { getLocale } from "@/lib/i18n/server";
+import { messagesFor, translate } from "@/lib/i18n";
 
-export default function Home() {
+export default async function Home() {
+  const m = messagesFor(await getLocale());
+  const t = (key: string) => translate(m, key);
   return (
     <main className="tt-landing">
       <div className="container">
         <div className="tt-landing-inner">
           <div style={{ fontSize: 48 }}>🌸</div>
           <h1 className="tt-serif tt-landing-title">TableTap</h1>
-          <p className="tt-landing-sub">
-            Scan a QR at your table, browse the menu, customise your order, and pay — all
-            from your phone. No app, no waiting.
-          </p>
+          <p className="tt-landing-sub">{t("landing.tagline")}</p>
           <div className="tt-landing-actions">
             <Link className="tt-btn tt-btn-primary tt-btn-lg" href="/login">
-              Restaurant Login →
+              {t("landing.login")}
             </Link>
           </div>
           <p className="tt-muted" style={{ fontSize: 13, marginTop: 24 }}>
-            Customers reach their menu via a table QR link like{" "}
+            {t("landing.qrHint")}{" "}
             <code>/r/&lt;restaurantId&gt;/t/&lt;tableId&gt;</code>
           </p>
         </div>

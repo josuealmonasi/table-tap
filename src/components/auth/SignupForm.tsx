@@ -3,9 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useT } from "@/lib/i18n/context";
 
 /** Create a restaurant account: provisions the user + their restaurant, then signs in. */
 export default function SignupForm() {
+  const t = useT();
   const [restaurantName, setRestaurantName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,7 +27,7 @@ export default function SignupForm() {
     });
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error ?? "Could not create account");
+      setError(data.error ?? t("auth.couldNotCreate"));
       setLoading(false);
       return;
     }
@@ -33,7 +35,7 @@ export default function SignupForm() {
     // Sign in with the credentials we just created.
     const { error } = await createClient().auth.signInWithPassword({ email, password });
     if (error) {
-      setError("Account created — please sign in.");
+      setError(t("auth.accountCreatedSignIn"));
       setLoading(false);
       return;
     }
@@ -46,16 +48,16 @@ export default function SignupForm() {
         <form className="tt-login-card" onSubmit={handleSubmit}>
           <div style={{ fontSize: 32 }}>🌸</div>
           <h1 className="tt-serif" style={{ margin: "8px 0 4px" }}>
-            Create your restaurant
+            {t("auth.createTitle")}
           </h1>
           <p className="tt-muted" style={{ marginTop: 0 }}>
-            Get your TableTap dashboard in seconds
+            {t("auth.createSub")}
           </p>
 
           <input
             className="tt-input"
             type="text"
-            placeholder="Restaurant name"
+            placeholder={t("auth.restaurantNamePlaceholder")}
             value={restaurantName}
             onChange={e => setRestaurantName(e.target.value)}
             style={{ marginBottom: 12 }}
@@ -64,7 +66,7 @@ export default function SignupForm() {
           <input
             className="tt-input"
             type="email"
-            placeholder="you@restaurant.com"
+            placeholder={t("auth.emailPlaceholder")}
             autoComplete="email"
             value={email}
             onChange={e => setEmail(e.target.value)}
@@ -74,7 +76,7 @@ export default function SignupForm() {
           <input
             className="tt-input"
             type="password"
-            placeholder="Password (min 6 characters)"
+            placeholder={t("auth.passwordMinPlaceholder")}
             autoComplete="new-password"
             value={password}
             onChange={e => setPassword(e.target.value)}
@@ -88,15 +90,15 @@ export default function SignupForm() {
             disabled={!restaurantName || !email || password.length < 6 || loading}
             type="submit"
           >
-            {loading ? "Creating account…" : "Create account"}
+            {loading ? t("auth.creatingAccount") : t("auth.createAccount")}
           </button>
 
           {error && <p style={{ color: "#c0392b", fontSize: 13 }}>{error}</p>}
 
           <p className="tt-muted" style={{ fontSize: 13, marginTop: 20 }}>
-            Already have an account?{" "}
+            {t("auth.haveAccount")}{" "}
             <Link href="/login" className="tt-accent">
-              Sign in
+              {t("auth.signIn")}
             </Link>
           </p>
         </form>

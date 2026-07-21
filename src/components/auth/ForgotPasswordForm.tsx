@@ -3,9 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useT } from "@/lib/i18n/context";
 
 /** Requests a password-reset email. Never reveals whether the email exists. */
 export default function ForgotPasswordForm() {
+  const t = useT();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -30,15 +32,16 @@ export default function ForgotPasswordForm() {
           <div className="tt-login-card">
             <div style={{ fontSize: 32 }}>📬</div>
             <h1 className="tt-serif" style={{ margin: "8px 0 4px" }}>
-              Check your email
+              {t("auth.checkEmail")}
             </h1>
             <p className="tt-muted" style={{ marginTop: 0 }}>
-              If an account exists for <strong>{email.trim()}</strong>, we&apos;ve sent a
-              link to reset your password.
+              {t("auth.resetSentBefore")}
+              <strong>{email.trim()}</strong>
+              {t("auth.resetSentAfter")}
             </p>
             <p className="tt-muted" style={{ fontSize: 13, marginTop: 20 }}>
               <Link href="/login" className="tt-accent">
-                Back to sign in
+                {t("auth.backToSignIn")}
               </Link>
             </p>
           </div>
@@ -46,16 +49,16 @@ export default function ForgotPasswordForm() {
           <form className="tt-login-card" onSubmit={handleSubmit}>
             <div style={{ fontSize: 32 }}>🔑</div>
             <h1 className="tt-serif" style={{ margin: "8px 0 4px" }}>
-              Reset your password
+              {t("auth.resetTitle")}
             </h1>
             <p className="tt-muted" style={{ marginTop: 0 }}>
-              Enter your email and we&apos;ll send you a reset link
+              {t("auth.resetSub")}
             </p>
 
             <input
               className="tt-input"
               type="email"
-              placeholder="you@restaurant.com"
+              placeholder={t("auth.emailPlaceholder")}
               autoComplete="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
@@ -68,13 +71,13 @@ export default function ForgotPasswordForm() {
               disabled={!email.trim() || loading}
               type="submit"
             >
-              {loading ? "Sending…" : "Send reset link"}
+              {loading ? t("auth.sending") : t("auth.sendResetLink")}
             </button>
 
             <p className="tt-muted" style={{ fontSize: 13, marginTop: 20 }}>
-              Remembered it?{" "}
+              {t("auth.rememberedIt")}{" "}
               <Link href="/login" className="tt-accent">
-                Sign in
+                {t("auth.signIn")}
               </Link>
             </p>
           </form>

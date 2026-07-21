@@ -3,9 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useT } from "@/lib/i18n/context";
 
 /** Email + password sign in for restaurant staff. Redirects to /dashboard. */
 export default function LoginForm() {
+  const t = useT();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -32,16 +34,16 @@ export default function LoginForm() {
         <form className="tt-login-card" onSubmit={handleSubmit}>
           <div style={{ fontSize: 32 }}>🌸</div>
           <h1 className="tt-serif" style={{ margin: "8px 0 4px" }}>
-            Welcome back
+            {t("auth.welcomeBack")}
           </h1>
           <p className="tt-muted" style={{ marginTop: 0 }}>
-            Sign in to your restaurant
+            {t("auth.signInSub")}
           </p>
 
           <input
             className="tt-input"
             type="email"
-            placeholder="you@restaurant.com"
+            placeholder={t("auth.emailPlaceholder")}
             autoComplete="email"
             value={email}
             onChange={e => setEmail(e.target.value)}
@@ -51,7 +53,7 @@ export default function LoginForm() {
           <input
             className="tt-input"
             type="password"
-            placeholder="Password"
+            placeholder={t("auth.passwordPlaceholder")}
             autoComplete="current-password"
             value={password}
             onChange={e => setPassword(e.target.value)}
@@ -64,21 +66,21 @@ export default function LoginForm() {
             disabled={!email || !password || loading}
             type="submit"
           >
-            {loading ? "Signing in…" : "Sign in"}
+            {loading ? t("auth.signingIn") : t("auth.signIn")}
           </button>
 
           <p style={{ fontSize: 13, marginTop: 12, marginBottom: 0 }}>
             <Link href="/forgot-password" className="tt-accent">
-              Forgot your password?
+              {t("auth.forgotPassword")}
             </Link>
           </p>
 
           {error && <p style={{ color: "#c0392b", fontSize: 13 }}>{error}</p>}
 
           <p className="tt-muted" style={{ fontSize: 13, marginTop: 20 }}>
-            New here?{" "}
+            {t("auth.newHere")}{" "}
             <Link href="/signup" className="tt-accent">
-              Create an account
+              {t("auth.createAccountLink")}
             </Link>
           </p>
         </form>
