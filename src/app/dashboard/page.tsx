@@ -4,6 +4,8 @@ import { getMembership, MANAGES } from "@/lib/membership";
 import { getPlatformAdmin } from "@/lib/admin";
 import DashboardHome from "@/components/dashboard/DashboardHome";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
+import { getLocale } from "@/lib/i18n/server";
+import { messagesFor, translate } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -22,12 +24,12 @@ export default async function DashboardPage() {
   if (membership && !MANAGES(membership.role)) redirect("/dashboard/orders");
 
   if (!membership) {
+    const m = messagesFor(await getLocale());
     return (
       <div style={{ padding: 40, fontFamily: "system-ui" }}>
-        <h2>No restaurant linked to this account</h2>
+        <h2>{translate(m, "landing.noRestaurant")}</h2>
         <p className="tt-muted">
-          This account ({user.email}) has no restaurant yet. This normally can&apos;t
-          happen via sign-up — contact support or create a new account.
+          {translate(m, "landing.noRestaurantMsg", { email: user.email ?? "" })}
         </p>
       </div>
     );

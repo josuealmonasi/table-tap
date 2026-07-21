@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useT } from "@/lib/i18n/context";
 
 /** Sets a new password using the recovery session established by /auth/callback. */
 export default function ResetPasswordForm() {
+  const t = useT();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
@@ -28,7 +30,7 @@ export default function ResetPasswordForm() {
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     if (password !== confirm) {
-      setError("Those passwords don't match.");
+      setError(t("auth.passwordsMismatch"));
       return;
     }
     setLoading(true);
@@ -50,14 +52,14 @@ export default function ResetPasswordForm() {
           <div className="tt-login-card">
             <div style={{ fontSize: 32 }}>⌛</div>
             <h1 className="tt-serif" style={{ margin: "8px 0 4px" }}>
-              Link expired
+              {t("auth.linkExpired")}
             </h1>
             <p className="tt-muted" style={{ marginTop: 0 }}>
-              This reset link is invalid or has already been used.
+              {t("auth.linkInvalid")}
             </p>
             <p className="tt-muted" style={{ fontSize: 13, marginTop: 20 }}>
               <Link href="/forgot-password" className="tt-accent">
-                Request a new link
+                {t("auth.requestNewLink")}
               </Link>
             </p>
           </div>
@@ -65,16 +67,16 @@ export default function ResetPasswordForm() {
           <form className="tt-login-card" onSubmit={handleSubmit}>
             <div style={{ fontSize: 32 }}>🔒</div>
             <h1 className="tt-serif" style={{ margin: "8px 0 4px" }}>
-              Choose a new password
+              {t("auth.chooseNewTitle")}
             </h1>
             <p className="tt-muted" style={{ marginTop: 0 }}>
-              Enter and confirm your new password
+              {t("auth.chooseNewSub")}
             </p>
 
             <input
               className="tt-input"
               type="password"
-              placeholder="New password (min 6 characters)"
+              placeholder={t("auth.newPasswordPlaceholder")}
               autoComplete="new-password"
               value={password}
               onChange={e => setPassword(e.target.value)}
@@ -85,7 +87,7 @@ export default function ResetPasswordForm() {
             <input
               className="tt-input"
               type="password"
-              placeholder="Confirm new password"
+              placeholder={t("auth.confirmPasswordPlaceholder")}
               autoComplete="new-password"
               value={confirm}
               onChange={e => setConfirm(e.target.value)}
@@ -99,7 +101,7 @@ export default function ResetPasswordForm() {
               disabled={password.length < 6 || confirm.length < 6 || loading || ready === null}
               type="submit"
             >
-              {loading ? "Saving…" : "Update password"}
+              {loading ? t("auth.saving") : t("auth.updatePassword")}
             </button>
 
             {error && <p style={{ color: "#c0392b", fontSize: 13 }}>{error}</p>}
