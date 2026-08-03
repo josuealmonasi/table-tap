@@ -2,13 +2,13 @@
 
 import { useMemo, useState } from "react";
 import {
-  lineUnitPrice,
   type Category,
   type MenuItem,
   type OrderLineItem,
   type Restaurant,
   type RestaurantTable,
 } from "@/lib/types";
+import { priceCart } from "@/lib/pricing";
 import { useCart, type CartItem } from "@/hooks/useCart";
 import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
@@ -48,16 +48,28 @@ export default function OrderingApp({
   const [soldOut, setSoldOut] = useState<Set<string>>(new Set());
   const [tipPct, setTipPct] = useState(0);
   const [tipCustom, setTipCustom] = useState<number | null>(null);
-  const cart = useCart(restaurant);
+  const cart = useCart();
   const t = useT();
 
   // Totals count only the still-orderable lines (sold-out ones are excluded).
-  const orderableItems = cart.items.filter(i => !soldOut.has(i.itemId));
-  const subtotal = orderableItems.reduce((sum, i) => sum + lineUnitPrice(i) * i.qty, 0);
-  const serviceFee = +(subtotal * (restaurant.service_pct / 100)).toFixed(2);
-  // An exact "Other" amount wins over the percentage chips.
-  const tip = tipCustom ?? +(subtotal * (tipPct / 100)).toFixed(2);
-  const total = +(subtotal + serviceFee + tip).toFixed(2);
+  const orderableItems = useMemo(
+    () => cart.items.filter(i => !soldOut.has(i.itemId)),
+    [cart.items, soldOut],
+  );
+
+  // One pricing pass for the whole screen. /api/checkout runs this same
+  // function against DB prices, so what's shown here is what gets charged.
+  const pricing = useMemo(
+    () =>
+      priceCart({
+        items: orderableItems,
+        servicePct: restaurant.service_pct,
+        serviceEnabled: restaurant.service_enabled,
+        tipPct,
+        tipAmount: tipCustom,
+      }),
+    [orderableItems, restaurant.service_pct, restaurant.service_enabled, tipPct, tipCustom],
+  );
 
   const extrasById = useMemo(() => new Map(extras.map(e => [e.id, e])), [extras]);
 
@@ -191,12 +203,12 @@ export default function OrderingApp({
           table={table}
           items={cart.items}
           soldOut={soldOut}
-          subtotal={subtotal}
-          serviceFee={serviceFee}
-          tip={tip}
+          subtotal={pricing.subtotal}
+          serviceFee={pricing.serviceFee}
+          tip={pricing.tip}
           tipPct={tipPct}
           tipCustom={tipCustom}
-          total={total}
+          total={pricing.total}
           orderNote={orderNote}
           loading={loading}
           canCheckout={orderableItems.length > 0 && restaurant.accepting_orders}
@@ -238,7 +250,7 @@ export default function OrderingApp({
       categories={categories}
       items={items}
       cartCount={cart.count}
-      cartTotal={cart.total}
+      cartTotal={pricing.total}
       onSelectItem={openItem}
       onOpenCart={() => setScreen("cart")}
     />

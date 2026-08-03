@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { platformFeeCents } from "@/lib/money";
+import { priceCart } from "@/lib/pricing";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import type { OrderLineItem, OrderExtra } from "@/lib/types";
 
@@ -108,7 +109,6 @@ export async function POST(req: NextRequest) {
     const priceMap = new Map(dbItems.map(d => [d.id, d]));
 
     // Build verified line items with DB prices for the product and its extras.
-    let subtotal = 0;
     const verified: OrderLineItem[] = [];
     const removedExtras = new Map<string, string>(); // extra id → name (deduped)
     for (const line of items) {
@@ -141,8 +141,6 @@ export async function POST(req: NextRequest) {
       }
 
       const qty = Math.max(1, Math.floor(line.qty));
-      const unit = db.price + verifiedExtras.reduce((s, e) => s + e.price, 0);
-      subtotal += unit * qty;
       verified.push({
         itemId: db.id,
         name: db.name,
@@ -167,15 +165,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // The service charge only applies when the owner switched it on.
+    // THE authoritative price. Same function the customer's cart ran, but fed
+    // DB-verified prices — so the amount charged is never the client's opinion.
+    // It also caps an exact tip at the subtotal (guards fat fingers and abuse).
+    const pricing = priceCart({
+      items: verified,
+      servicePct: restaurant.service_pct,
+      serviceEnabled: restaurant.service_enabled,
+      tipPct,
+      tipAmount,
+    });
+    const { subtotal, serviceFee, tip, total } = pricing;
     const servicePct = restaurant.service_enabled ? restaurant.service_pct : 0;
-    const serviceFee = +(subtotal * (servicePct / 100)).toFixed(2);
-    // An exact tip can't exceed the order itself (guards fat fingers and abuse).
-    const tip =
-      tipAmount !== null
-        ? Math.min(tipAmount, +subtotal.toFixed(2))
-        : +(subtotal * (tipPct / 100)).toFixed(2);
-    const total = +(subtotal + serviceFee + tip).toFixed(2);
 
     // Create the pending order first so the webhook can find it.
     const { data: order, error: oErr } = await supabase

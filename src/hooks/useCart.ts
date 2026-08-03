@@ -1,16 +1,17 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { lineUnitPrice, type OrderLineItem, type Restaurant } from "@/lib/types";
+import { useRef, useState } from "react";
+import type { OrderLineItem } from "@/lib/types";
 
 /** A cart line is an order line item plus a client-side id for list keys/removal. */
 export type CartItem = OrderLineItem & { cartId: number };
 
 /**
- * Holds the in-progress cart and derives its money totals from the
- * restaurant's service charge. The single source of truth for cart state.
+ * Holds the in-progress cart. Money is deliberately NOT computed here — every
+ * total comes from priceCart() in src/lib/pricing.ts, so the customer's preview
+ * and the server's charge can never drift apart.
  */
-export function useCart(restaurant: Restaurant) {
+export function useCart() {
   const [items, setItems] = useState<CartItem[]>([]);
   // Monotonic id for cart lines — a plain counter can't collide the way
   // Date.now() can when two items are added in the same millisecond.
@@ -45,22 +46,7 @@ export function useCart(restaurant: Restaurant) {
     setItems([]);
   }
 
-  const totals = useMemo(() => {
-    const subtotal = items.reduce((sum, i) => sum + lineUnitPrice(i) * i.qty, 0);
-    const serviceFee = +(subtotal * (restaurant.service_pct / 100)).toFixed(2);
-    return { subtotal, serviceFee, total: subtotal + serviceFee };
-  }, [items, restaurant.service_pct]);
-
   const count = items.reduce((sum, i) => sum + i.qty, 0);
 
-  return {
-    items,
-    addItem,
-    removeItem,
-    updateItem,
-    removeExtras,
-    clear,
-    count,
-    ...totals,
-  };
+  return { items, addItem, removeItem, updateItem, removeExtras, clear, count };
 }

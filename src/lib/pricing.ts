@@ -1,0 +1,175 @@
+import type { OrderLineItem } from "@/lib/types";
+import { nextPromoStep, promoCost, type QuantityPromo } from "@/lib/promo-math";
+
+// The single source of truth for what a cart costs. Pure — no IO, no DB — so
+// the customer's preview and the server's actual charge run the exact same
+// maths. The client renders whatever this returns; /api/checkout re-runs it on
+// DB-fetched prices and promos, and that result is what Stripe is told.
+
+/** A quantity deal plus the products it applies to. */
+export interface CartPromo extends QuantityPromo {
+  itemIds: string[];
+}
+
+/** A coupon that has already been looked up and confirmed to exist. */
+export interface AppliedCoupon {
+  code: string;
+  kind: "percent" | "fixed";
+  value: number;
+  minSubtotal?: number;
+}
+
+export interface PriceInput {
+  items: OrderLineItem[];
+  /** Restaurant service charge — applied only when enabled. */
+  servicePct: number;
+  serviceEnabled: boolean;
+  /** Preset tip percentage (ignored when tipAmount is given). */
+  tipPct?: number;
+  /** Exact "other" tip amount, capped at the discounted subtotal. */
+  tipAmount?: number | null;
+  promos?: CartPromo[];
+  coupon?: AppliedCoupon | null;
+}
+
+export interface PricedLine {
+  itemId: string;
+  qty: number;
+  /** Undiscounted cost of this line (base + extras) × qty. */
+  gross: number;
+  /** Unit price once the item's own discount is applied, including extras. */
+  unit: number;
+}
+
+/** "Add 1 more and save $2" — surfaced in the cart and on the item screen. */
+export interface PromoHint {
+  itemId: string;
+  promoName: string;
+  addQty: number;
+  save: number;
+}
+
+export interface PricedCart {
+  grossSubtotal: number;
+  itemDiscount: number;
+  promoDiscount: number;
+  couponDiscount: number;
+  /** Everything taken off, i.e. the three discounts above. */
+  discount: number;
+  /** grossSubtotal − discount. Service fee and tip are based on this. */
+  subtotal: number;
+  serviceFee: number;
+  tip: number;
+  total: number;
+  lines: PricedLine[];
+  hints: PromoHint[];
+}
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+const extrasTotal = (line: OrderLineItem): number =>
+  line.extras?.reduce((sum, e) => sum + e.price, 0) ?? 0;
+
+/** The base price of one unit after the item's own % discount. */
+function discountedBase(line: OrderLineItem): number {
+  // A combo's `price` is already the bundle price — never discount it again.
+  if (line.comboId) return line.price;
+  const pct = Math.min(100, Math.max(0, line.discountPct ?? 0));
+  return round2(line.price * (1 - pct / 100));
+}
+
+export function priceCart(input: PriceInput): PricedCart {
+  const { items, promos = [], coupon = null } = input;
+
+  let grossSubtotal = 0;
+  let itemDiscount = 0;
+  const lines: PricedLine[] = [];
+
+  // 1. Per-line: apply each item's own discount. Extras are always full price.
+  for (const line of items) {
+    const qty = Math.max(0, Math.floor(line.qty));
+    const extras = extrasTotal(line);
+    const grossUnit = line.price + extras;
+    const unit = discountedBase(line) + extras;
+
+    grossSubtotal += grossUnit * qty;
+    itemDiscount += (grossUnit - unit) * qty;
+    lines.push({ itemId: line.itemId, qty, gross: round2(grossUnit * qty), unit });
+  }
+
+  // 2. Quantity deals apply per product, across every line of that product, and
+  //    to the discounted BASE price only — extras are never given away free.
+  const qtyByItem = new Map<string, number>();
+  const baseByItem = new Map<string, number>();
+  for (const line of items) {
+    if (line.comboId) continue; // a combo is priced as a unit, not per product
+    const qty = Math.max(0, Math.floor(line.qty));
+    qtyByItem.set(line.itemId, (qtyByItem.get(line.itemId) ?? 0) + qty);
+    // If the same product appears twice at different prices, the lower one wins
+    // so the customer is never charged more than they were shown.
+    const base = discountedBase(line);
+    const seen = baseByItem.get(line.itemId);
+    baseByItem.set(line.itemId, seen === undefined ? base : Math.min(seen, base));
+  }
+
+  let promoDiscount = 0;
+  const hints: PromoHint[] = [];
+  const claimed = new Set<string>(); // one deal per product — the first wins
+
+  for (const promo of promos) {
+    for (const itemId of promo.itemIds) {
+      const qty = qtyByItem.get(itemId);
+      const base = baseByItem.get(itemId);
+      if (!qty || base === undefined || claimed.has(itemId)) continue;
+      claimed.add(itemId);
+
+      promoDiscount += round2(qty * base - promoCost(promo, qty, base));
+
+      const step = nextPromoStep(promo, qty, base);
+      if (step) {
+        hints.push({ itemId, promoName: promo.name, ...step });
+      }
+    }
+  }
+
+  grossSubtotal = round2(grossSubtotal);
+  itemDiscount = round2(itemDiscount);
+  promoDiscount = round2(promoDiscount);
+
+  // 3. The coupon stacks on top, against what's left after the promos, and can
+  //    never take off more than the goods are worth.
+  const couponBase = round2(grossSubtotal - itemDiscount - promoDiscount);
+  let couponDiscount = 0;
+  if (coupon && couponBase >= (coupon.minSubtotal ?? 0)) {
+    const raw =
+      coupon.kind === "percent"
+        ? round2(couponBase * (coupon.value / 100))
+        : coupon.value;
+    couponDiscount = Math.max(0, Math.min(round2(raw), couponBase));
+  }
+
+  const discount = round2(itemDiscount + promoDiscount + couponDiscount);
+  const subtotal = round2(grossSubtotal - discount);
+
+  // 4. Service charge and tip both follow the discounted subtotal.
+  const servicePct = input.serviceEnabled ? input.servicePct : 0;
+  const serviceFee = round2(subtotal * (servicePct / 100));
+  const tip =
+    input.tipAmount != null && input.tipAmount > 0
+      ? Math.min(round2(input.tipAmount), subtotal)
+      : round2(subtotal * ((input.tipPct ?? 0) / 100));
+
+  return {
+    grossSubtotal,
+    itemDiscount,
+    promoDiscount,
+    couponDiscount,
+    discount,
+    subtotal,
+    serviceFee,
+    tip,
+    total: round2(subtotal + serviceFee + tip),
+    lines,
+    hints,
+  };
+}

@@ -83,6 +83,9 @@ create table if not exists menu_items (
   modifiers     jsonb not null default '[]'::jsonb,
   -- dietary / allergen tag keys (see src/lib/dietary.ts)
   dietary       text[] not null default '{}',
+  -- % off this item's base price (0 = no discount). The customer menu shows the
+  -- original struck through next to the sale price. Extras are never discounted.
+  discount_pct  numeric not null default 0,
   sort_order    int not null default 0,
   created_at    timestamptz not null default now()
 );
@@ -103,6 +106,11 @@ create table if not exists orders (
   -- line items snapshot: [{ name, emoji, price, qty, mods: {}, notes }]
   items         jsonb not null default '[]'::jsonb,
   note          text,                            -- whole-order note
+  -- Money taken off this order (item discounts + promos + coupon), and which
+  -- coupon did it. promo_detail keeps the per-promo breakdown for the records.
+  discount      numeric not null default 0,
+  coupon_code   text,
+  promo_detail  jsonb,
   pay_method    text,                            -- 'card' | 'apple' | 'google' | 'paypal'
   stripe_session_id text,
   stripe_payment_intent text,
@@ -133,6 +141,19 @@ alter table restaurants add column if not exists stripe_charges_enabled boolean 
 alter table orders add column if not exists stripe_refund_id text;
 alter table orders add column if not exists tip numeric not null default 0;
 alter table orders add column if not exists tax_pct numeric not null default 0;
+
+-- Discounts & promotions.
+alter table menu_items add column if not exists discount_pct numeric not null default 0;
+alter table orders     add column if not exists discount numeric not null default 0;
+alter table orders     add column if not exists coupon_code text;
+alter table orders     add column if not exists promo_detail jsonb;
+
+-- A discount can never be negative or wipe out the item entirely (100% off would
+-- also break Stripe's minimum charge). Managers write this through RLS, so the
+-- range has to hold in the DB, not just the form.
+alter table menu_items drop constraint if exists menu_items_discount_pct_range;
+alter table menu_items add constraint menu_items_discount_pct_range
+  check (discount_pct >= 0 and discount_pct < 100);
 
 alter table restaurants drop constraint if exists restaurants_service_pct_range;
 alter table restaurants add constraint restaurants_service_pct_range
@@ -226,6 +247,76 @@ create table if not exists profiles (
   updated_at timestamptz not null default now()
 );
 
+-- ── Promotions (combo packages and quantity deals) ──────────────────────────
+-- Cross-item offers, so they get their own table — a single-item sale price is
+-- just menu_items.discount_pct. Three kinds:
+--   'combo'  — a bundle sold at combo_price (components in promotion_items)
+--   'bogo'   — buy N, pay for M (2x1 => buy_qty 2, pay_qty 1)
+--   'tiered' — bracket pricing, tiers = [{"qty":1,"price":5},{"qty":2,"price":8}]
+-- Public data (customers must see the offers), so anon gets SELECT below.
+create table if not exists promotions (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  kind          text not null check (kind in ('combo', 'bogo', 'tiered')),
+  name          text not null,
+  emoji         text not null default '🎁',
+  description   text,
+  combo_price   numeric,        -- kind='combo'
+  buy_qty       int,            -- kind='bogo'
+  pay_qty       int,            -- kind='bogo'
+  tiers         jsonb,          -- kind='tiered'
+  active        boolean not null default true,
+  sort_order    int not null default 0,
+  created_at    timestamptz not null default now()
+);
+
+-- Which items a promotion covers. For a combo, qty is how many of that item the
+-- bundle includes; for bogo/tiered it's the product the deal applies to.
+create table if not exists promotion_items (
+  promotion_id uuid not null references promotions(id) on delete cascade,
+  item_id      uuid not null references menu_items(id) on delete cascade,
+  qty          int not null default 1,
+  primary key (promotion_id, item_id)
+);
+
+create index if not exists promotions_restaurant_idx on promotions(restaurant_id, sort_order);
+
+-- ── Coupons ─────────────────────────────────────────────────────────────────
+-- Codes an owner/manager hands out (see src/lib/coupons.ts for the format).
+-- SECRET: unlike promotions, this table must never be readable by the browser —
+-- anon SELECT here would hand every customer the whole code list. Validation
+-- happens server-side only, through /api/coupons/validate with the secret key.
+create table if not exists coupons (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  code          text not null,
+  kind          text not null check (kind in ('percent', 'fixed')),
+  value         numeric not null check (value > 0),
+  max_uses      int check (max_uses is null or max_uses > 0),  -- null = unlimited
+  uses_count    int not null default 0,
+  min_subtotal  numeric not null default 0,
+  active        boolean not null default true,
+  starts_at     timestamptz,
+  ends_at       timestamptz,
+  created_by_email text,
+  created_at    timestamptz not null default now()
+);
+-- One code per restaurant, case-insensitively — codes are compared upper-cased.
+create unique index if not exists coupons_code_idx on coupons(restaurant_id, upper(code));
+
+-- Every successful redemption, for the owner's records.
+create table if not exists coupon_redemptions (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  coupon_id     uuid references coupons(id) on delete set null,
+  order_id      uuid references orders(id) on delete set null,
+  code          text not null,
+  amount        numeric not null,
+  created_at    timestamptz not null default now()
+);
+create index if not exists coupon_redemptions_idx
+  on coupon_redemptions(restaurant_id, created_at desc);
+
 -- ── Realtime: broadcast order changes to dashboard + customer ───────────────
 do $$ begin
   alter publication supabase_realtime add table orders;
@@ -264,6 +355,14 @@ create policy "public read restaurants"
 -- `db:create`, so tables added later get stripped too.
 revoke all on all tables in schema public from anon;
 grant select on restaurant_tables, menus, categories, menu_items, item_addons to anon;
+-- Promotions are public offers — the customer menu renders them. Note what is
+-- NOT here: `coupons` and `coupon_redemptions`. A coupon code is a secret the
+-- customer is supposed to be told out-of-band, so anon must never read that
+-- table; codes are checked server-side by /api/coupons/validate. The blanket
+-- revoke above already stripped them, and the belt-and-braces revoke below
+-- keeps that true even if this file is re-ordered.
+grant select on promotions, promotion_items to anon;
+revoke all on coupons, coupon_redemptions from anon;
 
 -- Column-level guard on restaurants: the public (anon) role sees only a
 -- restaurant's display columns — never owner_id or created_at. RLS decides
@@ -523,6 +622,94 @@ create policy "team manages item addons"
   on item_addons for all
   using (has_role((select mi.restaurant_id from menu_items mi where mi.id = product_id), array['manager']))
   with check (has_role((select mi.restaurant_id from menu_items mi where mi.id = product_id), array['manager']));
+
+-- PROMOTIONS: public reads the active offers (they're part of the menu);
+-- owners and managers manage them, same as menus and items.
+alter table promotions      enable row level security;
+alter table promotion_items enable row level security;
+
+drop policy if exists "public read promotions" on promotions;
+create policy "public read promotions"
+  on promotions for select using (active = true);
+
+drop policy if exists "team manages promotions" on promotions;
+create policy "team manages promotions"
+  on promotions for all
+  using (has_role(restaurant_id, array['manager']))
+  with check (has_role(restaurant_id, array['manager']));
+
+drop policy if exists "public read promotion items" on promotion_items;
+create policy "public read promotion items"
+  on promotion_items for select using (true);
+
+drop policy if exists "team manages promotion items" on promotion_items;
+create policy "team manages promotion items"
+  on promotion_items for all
+  using (has_role((select p.restaurant_id from promotions p where p.id = promotion_id), array['manager']))
+  with check (has_role((select p.restaurant_id from promotions p where p.id = promotion_id), array['manager']));
+
+-- COUPONS: owners and managers manage their restaurant's codes. There is
+-- deliberately NO public policy — plus anon has no grant at all (see above), so
+-- a customer cannot read or enumerate codes even if a policy were added by
+-- mistake. Redemption goes through redeem_coupon() with the secret key.
+alter table coupons            enable row level security;
+alter table coupon_redemptions enable row level security;
+
+drop policy if exists "team manages coupons" on coupons;
+create policy "team manages coupons"
+  on coupons for all
+  using (has_role(restaurant_id, array['manager']))
+  with check (has_role(restaurant_id, array['manager']));
+
+-- Redemptions are written server-side only (secret key), so read-only here.
+drop policy if exists "team reads coupon redemptions" on coupon_redemptions;
+create policy "team reads coupon redemptions"
+  on coupon_redemptions for select
+  using (has_role(restaurant_id, array['manager']));
+
+-- Claim one use of a coupon, atomically. The eligibility test lives in the
+-- UPDATE's WHERE clause so Postgres row-locking serialises concurrent callers —
+-- two customers racing for the last use cannot both win. Returns the new count,
+-- or NULL when the coupon didn't qualify (limit reached, inactive, or expired).
+-- Same hardening as rate_limit_hit: SECURITY DEFINER with a pinned search_path,
+-- and executable only by the secret key.
+create or replace function public.redeem_coupon(p_coupon_id uuid)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uses int;
+begin
+  update coupons set uses_count = uses_count + 1
+   where id = p_coupon_id
+     and active
+     and (max_uses is null or uses_count < max_uses)
+     and (starts_at is null or starts_at <= now())
+     and (ends_at   is null or ends_at   >  now())
+  returning uses_count into v_uses;
+  return v_uses;
+end;
+$$;
+revoke all on function public.redeem_coupon(uuid) from public, anon, authenticated;
+grant execute on function public.redeem_coupon(uuid) to service_role;
+
+-- Give a claimed use back when the checkout that reserved it never completed
+-- (Stripe refused the session, or the order was cancelled). Floors at zero so a
+-- double-release can't drive the count negative.
+create or replace function public.release_coupon(p_coupon_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update coupons set uses_count = greatest(0, uses_count - 1) where id = p_coupon_id;
+end;
+$$;
+revoke all on function public.release_coupon(uuid) from public, anon, authenticated;
+grant execute on function public.release_coupon(uuid) to service_role;
 
 -- ============================================================================
 -- Backfill: every restaurant needs at least one menu. Restaurants (and their

@@ -56,6 +56,9 @@ export default function CartScreen({
   onCheckout,
 }: CartScreenProps) {
   const t = useT();
+  // 0 when the fee is switched off, so the totals card doesn't render an empty
+  // "Service (10%) — $0.00" row for a fee nobody is being charged.
+  const effectiveServicePct = restaurant.service_enabled ? restaurant.service_pct : 0;
   return (
     <div className="tt-root">
       <div className="tt-header">
@@ -111,7 +114,7 @@ export default function CartScreen({
           tip={tip}
           tipPct={tipCustom !== null ? 0 : tipPct}
           total={total}
-          servicePct={restaurant.service_pct}
+          servicePct={effectiveServicePct}
           taxPct={restaurant.tax_pct}
           taxBreakdown={restaurant.tax_show_breakdown}
           currency={restaurant.currency}
