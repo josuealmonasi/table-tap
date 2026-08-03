@@ -2,8 +2,10 @@
 
 import type { Restaurant, RestaurantTable } from "@/lib/types";
 import type { CartItem } from "@/hooks/useCart";
+import type { AppliedCoupon } from "@/lib/pricing";
 import { useT } from "@/lib/i18n/context";
 import CartLineRow from "./CartLineRow";
+import CouponBox from "./CouponBox";
 import OrderTotals from "./OrderTotals";
 import TipPicker from "./TipPicker";
 
@@ -14,11 +16,16 @@ interface CartScreenProps {
   /** Product ids that sold out — shown greyed and excluded from the total. */
   soldOut: Set<string>;
   subtotal: number;
+  grossSubtotal: number;
+  discount: number;
   serviceFee: number;
   tip: number;
   tipPct: number;
   tipCustom: number | null;
   total: number;
+  coupon: AppliedCoupon | null;
+  onApplyCoupon: (coupon: AppliedCoupon) => void;
+  onRemoveCoupon: () => void;
   orderNote: string;
   loading: boolean;
   /** False when nothing orderable remains (empty or all sold out). */
@@ -38,6 +45,11 @@ export default function CartScreen({
   table,
   items,
   soldOut,
+  grossSubtotal,
+  discount,
+  coupon,
+  onApplyCoupon,
+  onRemoveCoupon,
   subtotal,
   serviceFee,
   tip,
@@ -108,8 +120,20 @@ export default function CartScreen({
           onCustomTip={onCustomTip}
         />
 
+        <div className="tt-coupon-row">
+          <CouponBox
+            restaurantId={restaurant.id}
+            subtotal={subtotal}
+            applied={coupon}
+            onApply={onApplyCoupon}
+            onRemove={onRemoveCoupon}
+          />
+        </div>
+
         <OrderTotals
           subtotal={subtotal}
+          grossSubtotal={grossSubtotal}
+          discount={discount}
           serviceFee={serviceFee}
           tip={tip}
           tipPct={tipCustom !== null ? 0 : tipPct}

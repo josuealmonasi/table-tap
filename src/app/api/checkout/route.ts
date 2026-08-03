@@ -2,7 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { platformFeeCents } from "@/lib/money";
-import { itemSalePrice, priceCart } from "@/lib/pricing";
+import { itemSalePrice, priceCart, type AppliedCoupon } from "@/lib/pricing";
+import {
+  claimCoupon,
+  couponProblem,
+  findCoupon,
+  logRedemption,
+  releaseCoupon,
+  toAppliedCoupon,
+  type CouponRow,
+} from "@/lib/coupon-service";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import type { OrderLineItem, OrderExtra } from "@/lib/types";
 
@@ -30,6 +39,7 @@ export async function POST(req: NextRequest) {
       note,
       tipPct: rawTipPct,
       tipAmount: rawTipAmount,
+      couponCode,
     } = body as {
       restaurantId: string;
       tableId: string | null;
@@ -38,6 +48,7 @@ export async function POST(req: NextRequest) {
       note?: string;
       tipPct?: number;
       tipAmount?: number;
+      couponCode?: string;
     };
 
     // Tips: either a preset percentage (recomputed from the verified subtotal)
@@ -171,15 +182,48 @@ export async function POST(req: NextRequest) {
     // THE authoritative price. Same function the customer's cart ran, but fed
     // DB-verified prices — so the amount charged is never the client's opinion.
     // It also caps an exact tip at the subtotal (guards fat fingers and abuse).
-    const pricing = priceCart({
-      items: verified,
-      servicePct: restaurant.service_pct,
-      serviceEnabled: restaurant.service_enabled,
-      tipPct,
-      tipAmount,
-    });
+    const priceWith = (coupon: AppliedCoupon | null) =>
+      priceCart({
+        items: verified,
+        servicePct: restaurant.service_pct,
+        serviceEnabled: restaurant.service_enabled,
+        tipPct,
+        tipAmount,
+        coupon,
+      });
+
+    // Price once without the coupon: that subtotal is what its minimum-spend
+    // rule is judged against.
+    const base = priceWith(null);
+
+    // The code is re-checked here from the DB — a client that skipped or faked
+    // /validate gets no advantage, and the claim below is what enforces the
+    // usage cap under concurrency.
+    let coupon: CouponRow | null = null;
+    if (typeof couponCode === "string" && couponCode.trim()) {
+      const found = await findCoupon(restaurantId, couponCode);
+      if (!found) {
+        return NextResponse.json({ couponReason: "notFound" }, { status: 409 });
+      }
+      const problem = couponProblem(found, base.subtotal);
+      if (problem) {
+        return NextResponse.json({ couponReason: problem }, { status: 409 });
+      }
+      // Reserve the use now. If anything below fails we hand it back.
+      if (!(await claimCoupon(found.id))) {
+        return NextResponse.json({ couponReason: "limitReached" }, { status: 409 });
+      }
+      coupon = found;
+    }
+
+    const pricing = coupon ? priceWith(toAppliedCoupon(coupon)) : base;
     const { subtotal, serviceFee, tip, total } = pricing;
     const servicePct = restaurant.service_enabled ? restaurant.service_pct : 0;
+
+    /** Give back a reserved coupon use when this checkout doesn't complete. */
+    const undoClaim = async () => {
+      if (coupon) await releaseCoupon(coupon.id);
+    };
 
     // Create the pending order first so the webhook can find it.
     const { data: order, error: oErr } = await supabase
@@ -194,6 +238,7 @@ export async function POST(req: NextRequest) {
         tip,
         tax_pct: Number(restaurant.tax_pct) || 0,
         discount: pricing.discount,
+        coupon_code: coupon?.code ?? null,
         total,
         currency: restaurant.currency,
         items: verified,
@@ -204,6 +249,7 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (oErr || !order) {
+      await undoClaim();
       return NextResponse.json({ error: "Could not create order" }, { status: 500 });
     }
 
@@ -268,11 +314,35 @@ export async function POST(req: NextRequest) {
     // default) is skimmed as an application fee.
     const appFee = platformFeeCents(Math.round(total * 100));
 
+    // Item discounts are already baked into each line's unit_amount. What's
+    // left — the coupon and any quantity deal — is money off the order as a
+    // whole, and Stripe has no negative line item, so it goes on as a one-off
+    // coupon. The line items minus this equals `total` exactly.
+    const amountOffCents = Math.round(
+      (pricing.couponDiscount + pricing.promoDiscount) * 100,
+    );
+
     let session;
     try {
+      const discounts = amountOffCents > 0
+        ? [
+            {
+              coupon: (
+                await stripe.coupons.create({
+                  amount_off: amountOffCents,
+                  currency: cur,
+                  duration: "once",
+                  name: coupon ? `Coupon ${coupon.code}` : "Discount",
+                })
+              ).id,
+            },
+          ]
+        : undefined;
+
       session = await stripe.checkout.sessions.create({
         mode: "payment",
         line_items,
+        ...(discounts ? { discounts } : {}),
         success_url: `${origin}/order/${order.id}?paid=1`,
         cancel_url: `${origin}/r/${restaurantId}${tableId ? `/t/${tableId}` : ""}?cancelled=1`,
         metadata: { order_id: order.id },
@@ -283,9 +353,11 @@ export async function POST(req: NextRequest) {
         },
       });
     } catch (err) {
-      // Stripe refused the session — the pending order will never be paid,
-      // so remove it instead of leaving an orphan row.
+      // Stripe refused the session — the pending order will never be paid, so
+      // remove it instead of leaving an orphan row, and give back the coupon
+      // use we reserved.
       await supabase.from("orders").delete().eq("id", order.id);
+      await undoClaim();
       const code = err && typeof err === "object" && "code" in err ? err.code : undefined;
       if (code === "amount_too_small") {
         return NextResponse.json(
@@ -297,6 +369,17 @@ export async function POST(req: NextRequest) {
         );
       }
       throw err; // anything else falls through to the generic handler below
+    }
+
+    // The use is committed now that there's a real session to pay for.
+    if (coupon) {
+      await logRedemption({
+        restaurantId,
+        couponId: coupon.id,
+        orderId: order.id,
+        code: coupon.code,
+        amount: pricing.couponDiscount,
+      });
     }
 
     await supabase

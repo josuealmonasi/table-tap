@@ -8,7 +8,7 @@ import {
   type Restaurant,
   type RestaurantTable,
 } from "@/lib/types";
-import { priceCart } from "@/lib/pricing";
+import { priceCart, type AppliedCoupon } from "@/lib/pricing";
 import { useCart, type CartItem } from "@/hooks/useCart";
 import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
@@ -48,6 +48,7 @@ export default function OrderingApp({
   const [soldOut, setSoldOut] = useState<Set<string>>(new Set());
   const [tipPct, setTipPct] = useState(0);
   const [tipCustom, setTipCustom] = useState<number | null>(null);
+  const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
   const cart = useCart();
   const t = useT();
 
@@ -67,8 +68,16 @@ export default function OrderingApp({
         serviceEnabled: restaurant.service_enabled,
         tipPct,
         tipAmount: tipCustom,
+        coupon,
       }),
-    [orderableItems, restaurant.service_pct, restaurant.service_enabled, tipPct, tipCustom],
+    [
+      orderableItems,
+      restaurant.service_pct,
+      restaurant.service_enabled,
+      tipPct,
+      tipCustom,
+      coupon,
+    ],
   );
 
   const extrasById = useMemo(() => new Map(extras.map(e => [e.id, e])), [extras]);
@@ -129,11 +138,20 @@ export default function OrderingApp({
           note: orderNote || undefined,
           tipPct,
           tipAmount: tipCustom ?? undefined,
+          couponCode: coupon?.code,
         }),
       });
       const data = await res.json();
       if (data.url) {
         window.location.href = data.url; // Stripe Checkout
+        return;
+      }
+      // The coupon stopped being usable between applying it and paying (most
+      // likely someone else took the last use). Drop it and let them retry.
+      if (data.couponReason) {
+        setCoupon(null);
+        setNotice(t(`coupon.${data.couponReason}`));
+        setLoading(false);
         return;
       }
       // One or more extras sold out: drop them from the cart, tell the customer,
@@ -204,11 +222,16 @@ export default function OrderingApp({
           items={cart.items}
           soldOut={soldOut}
           subtotal={pricing.subtotal}
+          grossSubtotal={pricing.grossSubtotal}
+          discount={pricing.discount}
           serviceFee={pricing.serviceFee}
           tip={pricing.tip}
           tipPct={tipPct}
           tipCustom={tipCustom}
           total={pricing.total}
+          coupon={coupon}
+          onApplyCoupon={setCoupon}
+          onRemoveCoupon={() => setCoupon(null)}
           orderNote={orderNote}
           loading={loading}
           canCheckout={orderableItems.length > 0 && restaurant.accepting_orders}

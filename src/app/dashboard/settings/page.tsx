@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership, MANAGES } from "@/lib/membership";
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import SettingsForm from "@/components/dashboard/settings/SettingsForm";
 
 export const dynamic = "force-dynamic";
@@ -13,5 +14,10 @@ export default async function SettingsPage() {
   if (!membership) redirect("/login");
   if (!MANAGES(membership.role)) redirect("/dashboard/orders");
 
-  return <SettingsForm restaurant={membership.restaurant} role={membership.role} />;
+  // ConfirmProvider so the coupons panel can ask before deleting a code.
+  return (
+    <ConfirmProvider>
+      <SettingsForm restaurant={membership.restaurant} role={membership.role} />
+    </ConfirmProvider>
+  );
 }
