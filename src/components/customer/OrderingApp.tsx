@@ -257,6 +257,7 @@ export default function OrderingApp({
           coupon={coupon}
           onApplyCoupon={setCoupon}
           onRemoveCoupon={() => setCoupon(null)}
+          hints={pricing.hints}
           orderNote={orderNote}
           loading={loading}
           canCheckout={orderableItems.length > 0 && restaurant.accepting_orders}
@@ -298,6 +299,7 @@ export default function OrderingApp({
       categories={categories}
       items={items}
       combos={combos}
+      promos={promos}
       cartCount={cart.count}
       cartTotal={pricing.total}
       onSelectItem={openItem}
