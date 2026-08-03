@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { platformFeeCents } from "@/lib/money";
-import { priceCart } from "@/lib/pricing";
+import { itemSalePrice, priceCart } from "@/lib/pricing";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import type { OrderLineItem, OrderExtra } from "@/lib/types";
 
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
     ];
     const { data: dbItems, error: iErr } = await supabase
       .from("menu_items")
-      .select("id, name, price, emoji, available")
+      .select("id, name, price, emoji, available, discount_pct")
       .in("id", referencedIds)
       .eq("restaurant_id", restaurantId);
 
@@ -146,6 +146,9 @@ export async function POST(req: NextRequest) {
         name: db.name,
         emoji: db.emoji,
         price: db.price,
+        // From the DB, never the client — a forged discount would otherwise
+        // let a customer set their own price.
+        discountPct: Number(db.discount_pct) || 0,
         qty,
         mods: line.mods ?? {},
         extras: verifiedExtras.length ? verifiedExtras : undefined,
@@ -190,6 +193,7 @@ export async function POST(req: NextRequest) {
         service_fee: serviceFee,
         tip,
         tax_pct: Number(restaurant.tax_pct) || 0,
+        discount: pricing.discount,
         total,
         currency: restaurant.currency,
         items: verified,
@@ -216,7 +220,12 @@ export async function POST(req: NextRequest) {
           ? `Extras: ${v.extras.map(e => e.name).join(", ")}`
           : "";
         const description = [modText, extrasText].filter(Boolean).join(" · ");
-        const unitAmount = v.price + (v.extras?.reduce((s, e) => s + e.price, 0) ?? 0);
+        // Charge the sale price. Discounting the line itself (rather than
+        // bolting a credit on the end) keeps the Stripe receipt honest about
+        // what each item actually cost.
+        const unitAmount =
+          itemSalePrice(v.price, v.discountPct) +
+          (v.extras?.reduce((s, e) => s + e.price, 0) ?? 0);
         return {
           quantity: v.qty,
           price_data: {

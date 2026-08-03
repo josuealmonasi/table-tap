@@ -13,6 +13,7 @@ export const es: Messages = {
     noSearchMatch: "Nada coincide con “{q}” — prueba otro antojo.",
     noDietMatch: "Ningún platillo coincide con esos filtros.",
     popular: "Popular",
+    percentOff: "−{pct}%",
     // Editor de menús (panel)
     title: "Menús",
     hint: "Abre un menú para editarlo · actívalo para mostrarlo a los clientes",
@@ -86,6 +87,9 @@ export const es: Messages = {
     groupBeverageAddons: "Complementos de bebida",
     productNamePlaceholder: "Nombre del producto (p. ej. Hot Dog)",
     pricePlaceholder: "Precio",
+    discountPlaceholder: "% desc.",
+    discountHint: "Opcional — pon un % para poner este platillo en oferta",
+    discountShownToCustomers: "visible para los clientes",
     descriptionPlaceholder: "Descripción (opcional)",
     imageUrlPlaceholder: "URL de imagen (opcional — carga próximamente)",
     markPopular: "Marcar como popular",

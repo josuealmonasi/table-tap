@@ -70,12 +70,21 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
 const extrasTotal = (line: OrderLineItem): number =>
   line.extras?.reduce((sum, e) => sum + e.price, 0) ?? 0;
 
+/**
+ * What one unit of an item costs after its own % discount. Shared with the menu
+ * and item screens so the struck-through price the customer sees is exactly the
+ * number this engine charges.
+ */
+export function itemSalePrice(price: number, discountPct?: number | null): number {
+  const pct = Math.min(100, Math.max(0, discountPct ?? 0));
+  return round2(price * (1 - pct / 100));
+}
+
 /** The base price of one unit after the item's own % discount. */
 function discountedBase(line: OrderLineItem): number {
   // A combo's `price` is already the bundle price — never discount it again.
   if (line.comboId) return line.price;
-  const pct = Math.min(100, Math.max(0, line.discountPct ?? 0));
-  return round2(line.price * (1 - pct / 100));
+  return itemSalePrice(line.price, line.discountPct);
 }
 
 export function priceCart(input: PriceInput): PricedCart {

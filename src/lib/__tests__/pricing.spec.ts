@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { priceCart, type CartPromo, type PriceInput } from "@/lib/pricing";
+import { itemSalePrice, priceCart, type CartPromo, type PriceInput } from "@/lib/pricing";
 import type { OrderLineItem } from "@/lib/types";
 
 function line(over: Partial<OrderLineItem> = {}): OrderLineItem {
@@ -9,6 +9,37 @@ function line(over: Partial<OrderLineItem> = {}): OrderLineItem {
 function price(over: Partial<PriceInput> = {}) {
   return priceCart({ items: [], servicePct: 0, serviceEnabled: false, ...over });
 }
+
+describe("itemSalePrice", () => {
+  it("takes the percentage off", () => {
+    expect(itemSalePrice(13, 50)).toBe(6.5);
+    expect(itemSalePrice(5, 20)).toBe(4);
+  });
+
+  it("returns the full price with no discount", () => {
+    expect(itemSalePrice(13)).toBe(13);
+    expect(itemSalePrice(13, 0)).toBe(13);
+    expect(itemSalePrice(13, null)).toBe(13);
+  });
+
+  it("clamps out-of-range percentages", () => {
+    expect(itemSalePrice(10, -5)).toBe(10);
+    expect(itemSalePrice(10, 150)).toBe(0);
+  });
+
+  it("rounds to cents", () => {
+    expect(itemSalePrice(9.99, 33)).toBe(6.69);
+  });
+
+  it("agrees with what priceCart charges", () => {
+    const r = priceCart({
+      items: [line({ price: 13, qty: 2, discountPct: 50 })],
+      servicePct: 0,
+      serviceEnabled: false,
+    });
+    expect(r.subtotal).toBe(itemSalePrice(13, 50) * 2);
+  });
+});
 
 describe("priceCart — basics", () => {
   it("is all zeroes for an empty cart", () => {
