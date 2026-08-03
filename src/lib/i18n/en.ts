@@ -233,6 +233,23 @@ export const en = {
     deleteConfirm: "Delete “{name}”?",
     deleteMsg: "Customers stop seeing it right away. Past orders keep what they paid.",
     bogoDesc: "Buy {buy}, pay for {pay} — {names}",
+    // Quantity deals
+    newDeal: "New quantity deal",
+    dealHint:
+      "Reward bigger orders: “2 for the price of 1”, or a lower price at 2, 3, 4…",
+    kindBogo: "Buy N, pay for M",
+    kindTiered: "Price breaks",
+    dealNamePlaceholder: "Deal name (e.g. 2x1 Tacos)",
+    buyLabel: "Customer takes",
+    payLabel: "and pays for",
+    tierQty: "Quantity",
+    tierPrice: "Price for that many",
+    addTier: "+ Add a price break",
+    removeTier: "Remove this break",
+    appliesTo: "Applies to",
+    dealPreview: "{qty}× {name}: normally {normal}, with this deal {cost}",
+    addDeal: "+ Add deal",
+    addMoreHint: "Add {qty} more and save {amount}",
   },
   tip: {
     prompt: "Add a tip? 💛",

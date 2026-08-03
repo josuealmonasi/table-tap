@@ -2,7 +2,8 @@
 
 import type { Restaurant, RestaurantTable } from "@/lib/types";
 import type { CartItem } from "@/hooks/useCart";
-import type { AppliedCoupon } from "@/lib/pricing";
+import type { AppliedCoupon, PromoHint } from "@/lib/pricing";
+import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
 import CartLineRow from "./CartLineRow";
 import CouponBox from "./CouponBox";
@@ -26,6 +27,8 @@ interface CartScreenProps {
   coupon: AppliedCoupon | null;
   onApplyCoupon: (coupon: AppliedCoupon) => void;
   onRemoveCoupon: () => void;
+  /** "Add 1 more and save $2" nudges from the pricing engine. */
+  hints: PromoHint[];
   orderNote: string;
   loading: boolean;
   /** False when nothing orderable remains (empty or all sold out). */
@@ -50,6 +53,7 @@ export default function CartScreen({
   coupon,
   onApplyCoupon,
   onRemoveCoupon,
+  hints,
   subtotal,
   serviceFee,
   tip,
@@ -119,6 +123,20 @@ export default function CartScreen({
           onPresetTip={onChangeTip}
           onCustomTip={onCustomTip}
         />
+
+        {hints.length > 0 && (
+          <div className="tt-hints">
+            {hints.map(h => (
+              <p key={`${h.itemId}-${h.promoName}`} className="tt-hint">
+                💡{" "}
+                {t("promos.addMoreHint", {
+                  qty: h.addQty,
+                  amount: formatMoney(h.save, restaurant.currency),
+                })}
+              </p>
+            ))}
+          </div>
+        )}
 
         <div className="tt-coupon-row">
           <CouponBox

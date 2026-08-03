@@ -8,6 +8,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { usePromotions, type PromotionInput } from "@/hooks/usePromotions";
 import type { PromotionWithItems } from "@/lib/promotions";
 import ComboForm from "./ComboForm";
+import QuantityForm from "./QuantityForm";
 
 /** Combo bundles and quantity deals for one restaurant. */
 export default function PromotionsPanel({
@@ -123,6 +124,21 @@ export default function PromotionsPanel({
           {t("promos.comboHint")}
         </p>
         <ComboForm
+          products={products}
+          currency={currency}
+          saving={saving}
+          onSubmit={add}
+        />
+      </div>
+
+      <div className="tt-section" style={{ maxWidth: 620, marginTop: 16 }}>
+        <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 2 }}>
+          {t("promos.newDeal")}
+        </h3>
+        <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
+          {t("promos.dealHint")}
+        </p>
+        <QuantityForm
           products={products}
           currency={currency}
           saving={saving}

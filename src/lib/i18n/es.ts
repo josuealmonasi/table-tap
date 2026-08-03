@@ -226,6 +226,23 @@ export const es: Messages = {
     deleteConfirm: "¿Eliminar “{name}”?",
     deleteMsg: "Los clientes dejan de verla de inmediato. Los pedidos anteriores conservan lo que pagaron.",
     bogoDesc: "Lleva {buy}, paga {pay} — {names}",
+    // Ofertas por cantidad
+    newDeal: "Nueva oferta por cantidad",
+    dealHint:
+      "Premia los pedidos grandes: “2 al precio de 1”, o un precio menor al llevar 2, 3, 4…",
+    kindBogo: "Lleva N, paga M",
+    kindTiered: "Precios por cantidad",
+    dealNamePlaceholder: "Nombre de la oferta (ej. 2x1 en Tacos)",
+    buyLabel: "El cliente lleva",
+    payLabel: "y paga",
+    tierQty: "Cantidad",
+    tierPrice: "Precio por esa cantidad",
+    addTier: "+ Agregar un precio",
+    removeTier: "Quitar este precio",
+    appliesTo: "Aplica a",
+    dealPreview: "{qty}× {name}: normalmente {normal}, con esta oferta {cost}",
+    addDeal: "+ Agregar oferta",
+    addMoreHint: "Agrega {qty} más y ahorra {amount}",
   },
   tip: {
     prompt: "¿Agregar propina? 💛",

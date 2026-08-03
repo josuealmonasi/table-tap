@@ -305,6 +305,35 @@ code {
   font-weight: 500;
 }
 
+/* "2x1 Tacos" badge on an item covered by a quantity deal. */
+.tt-deal {
+  font-size: 10px;
+  background: rgba(216, 143, 30, 0.14);
+  color: #96620c;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  letter-spacing: 0.03em;
+}
+
+/* "Add 1 more and save $2" nudges above the cart totals. */
+.tt-hints {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0 4px;
+}
+
+.tt-hint {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  background: rgba(216, 143, 30, 0.1);
+  border: 1px solid rgba(216, 143, 30, 0.25);
+  color: #7a4f08;
+}
+
 /* Combo card: a subtle tint so a bundle reads as different from a dish. */
 .tt-combo {
   background: linear-gradient(180deg, rgba(22, 138, 74, 0.05), transparent);

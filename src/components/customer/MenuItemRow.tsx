@@ -10,10 +10,13 @@ import { useT } from "@/lib/i18n/context";
 export default function MenuItemRow({
   item,
   currency,
+  promoLabel,
   onSelect,
 }: {
   item: MenuItem;
   currency: string;
+  /** Name of a quantity deal covering this item, e.g. "2x1 Tacos". */
+  promoLabel?: string;
   onSelect: (item: MenuItem) => void;
 }) {
   const t = useT();
@@ -28,6 +31,7 @@ export default function MenuItemRow({
           <strong style={{ fontSize: 15 }}>{item.name}</strong>
           {item.popular && <span className="tt-pop">{t("menu.popular")}</span>}
           {onSale && <span className="tt-sale">{t("menu.percentOff", { pct })}</span>}
+          {promoLabel && <span className="tt-deal">{promoLabel}</span>}
         </div>
         <div className="tt-desc tt-muted">{item.description}</div>
         {dietaryTags(item.dietary).length > 0 && (

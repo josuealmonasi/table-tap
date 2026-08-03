@@ -7,6 +7,7 @@ import { DIETARY_TAGS } from "@/lib/dietary";
 import { recallOrder } from "@/lib/recent-order";
 import { useT } from "@/lib/i18n/context";
 import type { Combo } from "@/lib/promotions";
+import type { CartPromo } from "@/lib/pricing";
 import CategoryTabs from "./CategoryTabs";
 import ComboCard from "./ComboCard";
 import MenuItemRow from "./MenuItemRow";
@@ -21,6 +22,7 @@ export default function MenuScreen({
   categories,
   items,
   combos,
+  promos,
   cartCount,
   cartTotal,
   onSelectItem,
@@ -32,6 +34,7 @@ export default function MenuScreen({
   categories: Category[];
   items: MenuItem[];
   combos: Combo[];
+  promos: CartPromo[];
   cartCount: number;
   cartTotal: number;
   onSelectItem: (item: MenuItem) => void;
@@ -76,6 +79,16 @@ export default function MenuScreen({
     if (diet.length) list = list.filter(i => diet.every(k => (i.dietary ?? []).includes(k)));
     return list;
   }, [activeCat, items, search, diet]);
+
+  // item id → the deal covering it, so the row can advertise it. First deal
+  // wins, matching how the pricing engine picks one deal per product.
+  const promoByItem = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const promo of promos) {
+      for (const id of promo.itemIds) if (!map.has(id)) map.set(id, promo.name);
+    }
+    return map;
+  }, [promos]);
 
   // Combos head the list. They're hidden under a dietary filter (a bundle has
   // no tags of its own, so we can't honestly claim it matches) and under a
@@ -179,6 +192,7 @@ export default function MenuScreen({
             key={item.id}
             item={item}
             currency={restaurant.currency}
+            promoLabel={promoByItem.get(item.id)}
             onSelect={onSelectItem}
           />
         ))}
