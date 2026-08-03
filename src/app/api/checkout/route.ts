@@ -13,7 +13,9 @@ import {
   type CouponRow,
 } from "@/lib/coupon-service";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
-import type { OrderLineItem, OrderExtra } from "@/lib/types";
+import { fetchPromotions } from "@/lib/promotions-data";
+import { buildCombos, toCartPromos } from "@/lib/promotions";
+import type { OrderLineItem, OrderExtra, MenuItem } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -102,10 +104,31 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Promotions come from the DB too, so a combo's price and a quantity deal's
+    // terms are never the client's to decide.
+    const promotions = await fetchPromotions(supabase, restaurantId, { activeOnly: true });
+    const cartPromos = toCartPromos(promotions);
+
+    // Combo lines are priced as a bundle and verified separately below.
+    const comboLines = items.filter(i => i.comboId);
+    const plainLines = items.filter(i => !i.comboId);
+
+    // A combo's components come from ITS promotion row, not from the request —
+    // otherwise a client could list different components than the bundle
+    // actually contains.
+    const requestedComboIds = new Set(comboLines.map(l => l.comboId));
+    const comboComponentIds = promotions
+      .filter(p => requestedComboIds.has(p.id))
+      .flatMap(p => p.items.map(i => i.item_id));
+
     // IMPORTANT: never trust client prices. Re-fetch every referenced item
-    // (products AND extras) and use the DB's real price.
+    // (products AND extras) and use the DB's real price. Combo components are
+    // included so we can check they're all still available.
     const referencedIds = [
-      ...new Set(items.flatMap(i => [i.itemId, ...(i.extras?.map(e => e.id) ?? [])])),
+      ...new Set([
+        ...plainLines.flatMap(i => [i.itemId, ...(i.extras?.map(e => e.id) ?? [])]),
+        ...comboComponentIds,
+      ]),
     ];
     const { data: dbItems, error: iErr } = await supabase
       .from("menu_items")
@@ -122,7 +145,39 @@ export async function POST(req: NextRequest) {
     // Build verified line items with DB prices for the product and its extras.
     const verified: OrderLineItem[] = [];
     const removedExtras = new Map<string, string>(); // extra id → name (deduped)
-    for (const line of items) {
+
+    // Combos: the bundle must still exist, be active, and have every component
+    // available. Its price comes from the promotion row, never the request.
+    const combosById = new Map(
+      buildCombos(promotions, new Map(dbItems.map(d => [d.id, d as unknown as MenuItem]))).map(
+        c => [c.id, c],
+      ),
+    );
+    for (const line of comboLines) {
+      const combo = combosById.get(line.comboId!);
+      if (!combo) {
+        return NextResponse.json(
+          {
+            error: `${line.name} is no longer available.`,
+            unavailableItemId: line.itemId,
+          },
+          { status: 400 },
+        );
+      }
+      verified.push({
+        itemId: combo.id,
+        comboId: combo.id,
+        name: combo.name,
+        emoji: combo.emoji || "🎁",
+        price: combo.price,
+        qty: Math.max(1, Math.floor(line.qty)),
+        mods: {},
+        components: combo.components,
+        notes: line.notes,
+      });
+    }
+
+    for (const line of plainLines) {
       const db = priceMap.get(line.itemId);
       if (!db || !db.available) {
         return NextResponse.json(
@@ -190,6 +245,7 @@ export async function POST(req: NextRequest) {
         tipPct,
         tipAmount,
         coupon,
+        promos: cartPromos,
       });
 
     // Price once without the coupon: that subtotal is what its minimum-spend

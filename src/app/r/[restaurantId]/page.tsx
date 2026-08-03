@@ -24,6 +24,8 @@ export default async function RestaurantPage({
       items={data.items}
       extras={data.extras}
       extrasByProduct={data.extrasByProduct}
+      combos={data.combos}
+      promos={data.promos}
     />
   );
 }

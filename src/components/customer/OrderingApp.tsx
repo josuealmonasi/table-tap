@@ -8,7 +8,8 @@ import {
   type Restaurant,
   type RestaurantTable,
 } from "@/lib/types";
-import { priceCart, type AppliedCoupon } from "@/lib/pricing";
+import { priceCart, type AppliedCoupon, type CartPromo } from "@/lib/pricing";
+import type { Combo } from "@/lib/promotions";
 import { useCart, type CartItem } from "@/hooks/useCart";
 import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
@@ -29,6 +30,8 @@ export default function OrderingApp({
   items,
   extras,
   extrasByProduct,
+  combos = [],
+  promos = [],
 }: {
   restaurant: Restaurant;
   table: RestaurantTable | null;
@@ -36,6 +39,8 @@ export default function OrderingApp({
   items: MenuItem[];
   extras: MenuItem[];
   extrasByProduct: Record<string, string[]>;
+  combos?: Combo[];
+  promos?: CartPromo[];
 }) {
   const [screen, setScreen] = useState<Screen>("menu");
   const [selected, setSelected] = useState<MenuItem | null>(null);
@@ -69,6 +74,7 @@ export default function OrderingApp({
         tipPct,
         tipAmount: tipCustom,
         coupon,
+        promos,
       }),
     [
       orderableItems,
@@ -77,6 +83,7 @@ export default function OrderingApp({
       tipPct,
       tipCustom,
       coupon,
+      promos,
     ],
   );
 
@@ -98,6 +105,24 @@ export default function OrderingApp({
   function addToCart(line: OrderLineItem) {
     cart.addItem(line);
     setScreen("menu");
+  }
+
+  /**
+   * A combo goes in as a single line priced at the bundle price, carrying its
+   * components so the kitchen ticket still lists what to make. Checkout
+   * re-reads the bundle price from the DB before charging.
+   */
+  function addCombo(combo: Combo) {
+    cart.addItem({
+      itemId: combo.id,
+      comboId: combo.id,
+      name: combo.name,
+      emoji: combo.emoji || "🎁",
+      price: combo.price,
+      qty: 1,
+      mods: {},
+      components: combo.components,
+    });
   }
 
   /** Re-opens the item screen prefilled with a cart line's choices. */
@@ -272,9 +297,11 @@ export default function OrderingApp({
       table={table}
       categories={categories}
       items={items}
+      combos={combos}
       cartCount={cart.count}
       cartTotal={pricing.total}
       onSelectItem={openItem}
+      onAddCombo={addCombo}
       onOpenCart={() => setScreen("cart")}
     />
   );

@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Category, MenuItem, Restaurant } from "@/lib/types";
+import { fetchPromotions } from "@/lib/promotions-data";
+import { buildCombos, toCartPromos, type Combo } from "@/lib/promotions";
+import type { CartPromo } from "@/lib/pricing";
 
 /** Everything the customer ordering screens need for one restaurant. */
 export interface OrderingData {
@@ -9,6 +12,10 @@ export interface OrderingData {
   extras: MenuItem[];
   /** product_id → addon_id[] */
   extrasByProduct: Record<string, string[]>;
+  /** Bundles shown as their own menu cards. */
+  combos: Combo[];
+  /** Quantity deals the cart prices and hints about. */
+  promos: CartPromo[];
 }
 
 // Sentinel so an `.in("menu_id", [])` never matches (a restaurant with no active menus).
@@ -76,6 +83,13 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
     }
   }
 
+  // Promotions. Combos are built against live prices and silently dropped when
+  // a component sells out, so a card can never be tapped into a failed checkout.
+  const promotions = await fetchPromotions(supabase, restaurantId, { activeOnly: true });
+  const itemsById = new Map(items.map(i => [i.id, i]));
+  const combos = buildCombos(promotions, itemsById);
+  const promos = toCartPromos(promotions);
+
   // With the service charge switched off, customers see a plain 0% everywhere
   // (cart math and checkout both key off service_pct).
   const r = restaurant as Restaurant | null;
@@ -87,5 +101,7 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
     items,
     extras,
     extrasByProduct,
+    combos,
+    promos,
   };
 }

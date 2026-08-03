@@ -305,6 +305,27 @@ code {
   font-weight: 500;
 }
 
+/* Combo card: a subtle tint so a bundle reads as different from a dish. */
+.tt-combo {
+  background: linear-gradient(180deg, rgba(22, 138, 74, 0.05), transparent);
+  border: 1px solid rgba(22, 138, 74, 0.2);
+}
+
+/* Chip with a quantity stepper, used by the combo product picker. */
+.tt-chip-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tt-chip-qty {
+  margin: 0 6px;
+  font-weight: 700;
+}
+
 /* Coupons panel (dashboard settings). */
 .tt-coupon-list {
   display: flex;

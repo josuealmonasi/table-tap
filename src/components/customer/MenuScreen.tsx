@@ -6,7 +6,9 @@ import type { Category, MenuItem, Restaurant, RestaurantTable } from "@/lib/type
 import { DIETARY_TAGS } from "@/lib/dietary";
 import { recallOrder } from "@/lib/recent-order";
 import { useT } from "@/lib/i18n/context";
+import type { Combo } from "@/lib/promotions";
 import CategoryTabs from "./CategoryTabs";
+import ComboCard from "./ComboCard";
 import MenuItemRow from "./MenuItemRow";
 import CartBar from "./CartBar";
 import ServiceButtons from "./ServiceButtons";
@@ -18,18 +20,22 @@ export default function MenuScreen({
   table,
   categories,
   items,
+  combos,
   cartCount,
   cartTotal,
   onSelectItem,
+  onAddCombo,
   onOpenCart,
 }: {
   restaurant: Restaurant;
   table: RestaurantTable | null;
   categories: Category[];
   items: MenuItem[];
+  combos: Combo[];
   cartCount: number;
   cartTotal: number;
   onSelectItem: (item: MenuItem) => void;
+  onAddCombo: (combo: Combo) => void;
   onOpenCart: () => void;
 }) {
   const t = useT();
@@ -70,6 +76,16 @@ export default function MenuScreen({
     if (diet.length) list = list.filter(i => diet.every(k => (i.dietary ?? []).includes(k)));
     return list;
   }, [activeCat, items, search, diet]);
+
+  // Combos head the list. They're hidden under a dietary filter (a bundle has
+  // no tags of its own, so we can't honestly claim it matches) and under a
+  // category tab, since a bundle spans categories.
+  const shownCombos = useMemo(() => {
+    if (diet.length) return [];
+    const q = search.trim().toLowerCase();
+    if (q) return combos.filter(c => c.name.toLowerCase().includes(q));
+    return activeCat === "all" ? combos : [];
+  }, [combos, diet, search, activeCat]);
 
   return (
     <div className="tt-root">
@@ -143,13 +159,21 @@ export default function MenuScreen({
       </div>
 
       <div style={{ padding: 16 }}>
-        {filtered.length === 0 && (search.trim() || diet.length > 0) && (
+        {filtered.length === 0 && shownCombos.length === 0 && (search.trim() || diet.length > 0) && (
           <p className="tt-muted" style={{ textAlign: "center", fontSize: 14 }}>
             {search.trim()
               ? t("menu.noSearchMatch", { q: search.trim() })
               : t("menu.noDietMatch")}
           </p>
         )}
+        {shownCombos.map(combo => (
+          <ComboCard
+            key={combo.id}
+            combo={combo}
+            currency={restaurant.currency}
+            onAdd={onAddCombo}
+          />
+        ))}
         {filtered.map(item => (
           <MenuItemRow
             key={item.id}
