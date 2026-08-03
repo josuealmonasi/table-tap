@@ -83,6 +83,14 @@ export type OrderExtra = {
 };
 
 // A single line item snapshot stored on the order.
+/** One item inside a combo, kept on the line so the kitchen ticket lists it. */
+export type ComboComponent = {
+  itemId: string;
+  name: string;
+  emoji: string;
+  qty: number;
+};
+
 export type OrderLineItem = {
   itemId: string;
   name: string;
@@ -92,6 +100,11 @@ export type OrderLineItem = {
   mods: Record<string, string | string[]>;
   extras?: OrderExtra[];
   notes?: string;
+  /** % off the base price at the time of ordering (0/absent = full price). */
+  discountPct?: number;
+  /** Set when this line is a combo package; `price` is then the combo price. */
+  comboId?: string;
+  components?: ComboComponent[];
 };
 
 /** Unit price including selected extras (before quantity). */
