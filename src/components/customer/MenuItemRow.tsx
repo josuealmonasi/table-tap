@@ -3,6 +3,7 @@
 import { formatMoney } from "@/lib/format";
 import type { MenuItem } from "@/lib/types";
 import { dietaryTags } from "@/lib/dietary";
+import { itemSalePrice } from "@/lib/pricing";
 import { useT } from "@/lib/i18n/context";
 
 /** A single tappable row in the menu list. */
@@ -16,6 +17,9 @@ export default function MenuItemRow({
   onSelect: (item: MenuItem) => void;
 }) {
   const t = useT();
+  const pct = item.discount_pct ?? 0;
+  const onSale = pct > 0;
+  const sale = itemSalePrice(item.price, pct);
   return (
     <div className="tt-card tt-item" onClick={() => onSelect(item)}>
       <div className="tt-thumb">{item.emoji || "🍽️"}</div>
@@ -23,6 +27,7 @@ export default function MenuItemRow({
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <strong style={{ fontSize: 15 }}>{item.name}</strong>
           {item.popular && <span className="tt-pop">{t("menu.popular")}</span>}
+          {onSale && <span className="tt-sale">{t("menu.percentOff", { pct })}</span>}
         </div>
         <div className="tt-desc tt-muted">{item.description}</div>
         {dietaryTags(item.dietary).length > 0 && (
@@ -39,7 +44,10 @@ export default function MenuItemRow({
           </div>
         )}
         <div className="tt-accent" style={{ fontWeight: 700, fontSize: 16 }}>
-          {formatMoney(item.price, currency)}
+          {onSale && (
+            <s className="tt-was">{formatMoney(item.price, currency)}</s>
+          )}
+          {formatMoney(onSale ? sale : item.price, currency)}
         </div>
       </div>
       <div className="tt-plus">+</div>

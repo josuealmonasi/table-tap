@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import type { MenuItem, Modifier, OrderLineItem } from "@/lib/types";
 import { dietaryTags } from "@/lib/dietary";
+import { itemSalePrice } from "@/lib/pricing";
 import { useT } from "@/lib/i18n/context";
 import ModifierGroup from "./ModifierGroup";
 
@@ -51,14 +52,20 @@ export default function ItemDetailScreen({
 
   const chosenExtras = extras.filter(e => extraIds.includes(e.id));
   const extrasTotal = chosenExtras.reduce((sum, e) => sum + e.price, 0);
-  const unitPrice = item.price + extrasTotal;
+  // Extras are never discounted, so only the base price gets the % off.
+  const onSale = (item.discount_pct ?? 0) > 0;
+  const salePrice = itemSalePrice(item.price, item.discount_pct);
+  const unitPrice = salePrice + extrasTotal;
 
   function handleAdd() {
     onAdd({
       itemId: item.id,
       name: item.name,
       emoji: item.emoji,
+      // The full price plus the discount travels with the line; checkout
+      // re-reads both from the DB, so this is a snapshot, never the authority.
       price: item.price,
+      discountPct: item.discount_pct ?? 0,
       qty,
       mods,
       extras: chosenExtras.map(e => ({
@@ -84,7 +91,10 @@ export default function ItemDetailScreen({
           <h2 className="tt-serif" style={{ margin: 0, fontSize: 24 }}>
             {item.name}
           </h2>
-          <span className="tt-price-lg">{formatMoney(item.price, currency)}</span>
+          <span className="tt-price-lg">
+            {onSale && <s className="tt-was">{formatMoney(item.price, currency)}</s>}
+            {formatMoney(onSale ? salePrice : item.price, currency)}
+          </span>
         </div>
         <p className="tt-muted" style={{ lineHeight: 1.6 }}>
           {item.description}

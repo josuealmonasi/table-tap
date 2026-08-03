@@ -11,6 +11,7 @@ export const en = {
     noSearchMatch: "Nothing matches “{q}” — try another craving.",
     noDietMatch: "No items match those dietary filters.",
     popular: "Popular",
+    percentOff: "−{pct}%",
     // Menu editor (dashboard)
     title: "Menus",
     hint: "Open a menu to edit it · switch it on to show it to customers",
@@ -88,6 +89,9 @@ export const en = {
     // Product form
     productNamePlaceholder: "Product name (e.g. Hot Dog)",
     pricePlaceholder: "Price",
+    discountPlaceholder: "% off",
+    discountHint: "Optional — set a % to put this item on sale",
+    discountShownToCustomers: "shown to customers",
     descriptionPlaceholder: "Description (optional)",
     imageUrlPlaceholder: "Image URL (optional — upload coming soon)",
     markPopular: "Mark as popular",

@@ -259,6 +259,26 @@ code {
   letter-spacing: 0.05em;
 }
 
+/* "−50%" badge on a discounted item. Green so it reads as a saving rather
+   than blending into the accent-coloured "Popular" chip next to it. */
+.tt-sale {
+  font-size: 10px;
+  background: rgba(22, 138, 74, 0.12);
+  color: #168a4a;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  letter-spacing: 0.03em;
+}
+
+/* The original price, struck through and muted next to the sale price. */
+.tt-was {
+  color: var(--tt-muted, #8a8a8a);
+  font-weight: 500;
+  margin-right: 6px;
+  text-decoration: line-through;
+}
+
 /* ── menu header ── */
 /* The identity block scrolls away with the page… */
 .tt-menu-header {

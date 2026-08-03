@@ -39,8 +39,14 @@ export default function ProductForm({
   const [popular, setPopular] = useState(initial?.popular ?? false);
   const [modifiers, setModifiers] = useState<Modifier[]>(initial?.modifiers ?? []);
   const [dietary, setDietary] = useState<string[]>(initial?.dietary ?? []);
+  const [discountPct, setDiscountPct] = useState(String(initial?.discount_pct ?? ""));
   const [picked, setPicked] = useState<string[]>(selectedAddonIds);
   const [saving, setSaving] = useState(false);
+
+  // Clamp to the same 0–99 range the DB constraint enforces.
+  const pct = Math.min(99, Math.max(0, Number(discountPct) || 0));
+  const basePrice = Number(price) || 0;
+  const salePrice = Math.round(basePrice * (1 - pct / 100) * 100) / 100;
 
   function toggleAddon(id: string) {
     setPicked(prev => (prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]));
@@ -70,6 +76,7 @@ export default function ProductForm({
           }))
           .filter(g => g.label && g.options.length > 0),
         dietary,
+        discount_pct: pct,
       },
       picked,
     );
@@ -99,6 +106,31 @@ export default function ProductForm({
           onChange={e => setPrice(e.target.value)}
           required
         />
+      </div>
+
+      <div className="tt-prodform-row">
+        <input
+          className="tt-input"
+          style={{ width: 110 }}
+          type="number"
+          step="1"
+          min="0"
+          max="99"
+          placeholder={t("menu.discountPlaceholder")}
+          value={discountPct}
+          onChange={e => setDiscountPct(e.target.value)}
+        />
+        <span className="tt-muted" style={{ fontSize: 13 }}>
+          {pct > 0 ? (
+            <>
+              <s>{formatMoney(basePrice, currency)}</s>{" "}
+              <strong className="tt-accent">{formatMoney(salePrice, currency)}</strong>{" "}
+              {t("menu.discountShownToCustomers")}
+            </>
+          ) : (
+            t("menu.discountHint")
+          )}
+        </span>
       </div>
 
       <textarea

@@ -22,6 +22,8 @@ export type MenuItem = {
   modifiers: Modifier[];
   /** Dietary / allergen tag keys (see src/lib/dietary.ts). */
   dietary: string[];
+  /** % off the base price (0 = full price). Extras are never discounted. */
+  discount_pct: number;
   sort_order: number;
 };
 
