@@ -19,6 +19,12 @@ export const NAV_ITEMS: NavItem[] = [
     titleKey: "nav.analytics",
     descKey: "nav.analyticsDesc",
   },
+  {
+    href: "/dashboard/promotions",
+    emoji: "🎁",
+    titleKey: "nav.promos",
+    descKey: "nav.promosDesc",
+  },
   { href: "/dashboard/tables", emoji: "🪑", titleKey: "nav.tables", descKey: "nav.tablesDesc" },
   { href: "/dashboard/staff", emoji: "👥", titleKey: "nav.staff", descKey: "nav.staffDesc" },
   {

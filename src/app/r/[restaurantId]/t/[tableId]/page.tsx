@@ -31,6 +31,8 @@ export default async function TablePage({
       items={data.items}
       extras={data.extras}
       extrasByProduct={data.extrasByProduct}
+      combos={data.combos}
+      promos={data.promos}
     />
   );
 }
