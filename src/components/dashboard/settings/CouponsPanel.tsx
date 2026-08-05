@@ -30,6 +30,9 @@ export default function CouponsPanel({
   const [kind, setKind] = useState<"percent" | "fixed">("percent");
   const [value, setValue] = useState("");
   const [maxUses, setMaxUses] = useState("");
+  const [minSubtotal, setMinSubtotal] = useState("");
+  const [startsAt, setStartsAt] = useState("");
+  const [endsAt, setEndsAt] = useState("");
   const [saving, setSaving] = useState(false);
 
   const normalized = normalizeCoupon(code);
@@ -43,7 +46,9 @@ export default function CouponsPanel({
       kind,
       value: Number(value) || 0,
       maxUses: maxUses.trim() === "" ? null : Number(maxUses),
-      minSubtotal: 0,
+      minSubtotal: Number(minSubtotal) || 0,
+      startsAt: startsAt || null,
+      endsAt: endsAt || null,
     });
     setSaving(false);
     if (err) return toast(err, "error");
@@ -51,6 +56,9 @@ export default function CouponsPanel({
     setCode("");
     setValue("");
     setMaxUses("");
+    setMinSubtotal("");
+    setStartsAt("");
+    setEndsAt("");
   }
 
   async function del(c: Coupon) {
@@ -74,7 +82,24 @@ export default function CouponsPanel({
       c.max_uses === null
         ? t("coupons.usedUnlimited", { used: c.uses_count })
         : t("coupons.usedOf", { used: c.uses_count, max: c.max_uses });
-    return `${amount} · ${uses}`;
+
+    const parts = [amount, uses];
+    if (Number(c.min_subtotal) > 0) {
+      parts.push(
+        t("coupons.minSpend", { amount: formatMoney(Number(c.min_subtotal), currency) }),
+      );
+    }
+    // A date-limited coupon needs its window visible; "why isn't my code
+    // working" is almost always a schedule that hasn't started or has passed.
+    const day = (iso: string) => new Date(iso).toLocaleDateString();
+    if (c.starts_at && c.ends_at) {
+      parts.push(t("coupons.between", { from: day(c.starts_at), to: day(c.ends_at) }));
+    } else if (c.starts_at) {
+      parts.push(t("coupons.from", { from: day(c.starts_at) }));
+    } else if (c.ends_at) {
+      parts.push(t("coupons.until", { to: day(c.ends_at) }));
+    }
+    return parts.join(" · ");
   }
 
   return (
@@ -176,6 +201,40 @@ export default function CouponsPanel({
             value={maxUses}
             onChange={e => setMaxUses(e.target.value)}
           />
+        </div>
+
+        <div className="tt-prodform-row">
+          <input
+            className="tt-input"
+            style={{ width: 150 }}
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder={t("coupons.minSubtotalPlaceholder")}
+            value={minSubtotal}
+            onChange={e => setMinSubtotal(e.target.value)}
+            aria-label={t("coupons.minSubtotalPlaceholder")}
+          />
+          <label className="tt-muted" style={{ fontSize: 13 }}>
+            {t("coupons.startsAt")}{" "}
+            <input
+              className="tt-input"
+              style={{ width: 175 }}
+              type="datetime-local"
+              value={startsAt}
+              onChange={e => setStartsAt(e.target.value)}
+            />
+          </label>
+          <label className="tt-muted" style={{ fontSize: 13 }}>
+            {t("coupons.endsAt")}{" "}
+            <input
+              className="tt-input"
+              style={{ width: 175 }}
+              type="datetime-local"
+              value={endsAt}
+              onChange={e => setEndsAt(e.target.value)}
+            />
+          </label>
         </div>
 
         {code && !codeOk && (

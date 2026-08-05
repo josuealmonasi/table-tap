@@ -279,7 +279,7 @@ export default function OrderingApp({
           onAddMore={() => setScreen("menu")}
           onCheckout={checkout}
         />
-        <Modal open={!!notice} onClose={() => setNotice(null)} maxWidth={400}>
+        <Modal open={!!notice} onClose={() => setNotice(null)} maxWidth={400} label={t("notice.heads")}>
           <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 8 }}>
             {t("notice.heads")}
           </h3>

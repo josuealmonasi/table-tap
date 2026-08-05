@@ -269,6 +269,9 @@ code {
   padding: 2px 6px;
   border-radius: 10px;
   letter-spacing: 0.03em;
+  /* Spanish ("Ahorra MX$4.00") is longer than English and was breaking across
+     two lines inside the pill. Keep the badge on one line. */
+  white-space: nowrap;
 }
 
 /* Coupon entry above the totals card. */
