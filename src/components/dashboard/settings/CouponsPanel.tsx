@@ -103,7 +103,7 @@ export default function CouponsPanel({
   }
 
   return (
-    <div className="tt-section" style={{ maxWidth: 520, marginTop: 16 }}>
+    <div className="tt-section">
       <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 2 }}>
         {t("coupons.title")}
       </h3>

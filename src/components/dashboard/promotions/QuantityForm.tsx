@@ -4,21 +4,25 @@ import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
 import { promoCost } from "@/lib/promo-math";
-import type { MenuItem } from "@/lib/types";
+import type { Category, MenuItem } from "@/lib/types";
 import type { PromotionInput } from "@/hooks/usePromotions";
+import ProductPicker from "./ProductPicker";
+import PickedProducts from "./PickedProducts";
 
 /**
- * Builds a quantity deal: either "buy N, pay for M" (2x1, 3x1) or bracket
- * pricing ("1 for 5, 2 for 8"). Both preview what the customer would pay, so
- * a deal that gives away more than intended is obvious before saving.
+ * Builds a quantity deal: "buy N, pay for M" (2x1, 3x1) or bracket pricing
+ * ("1 for 5, 2 for 8"). Like the combo form, the name, the normal-vs-deal
+ * comparison and the submit button share one row.
  */
 export default function QuantityForm({
   products,
+  categories,
   currency,
   saving,
   onSubmit,
 }: {
   products: MenuItem[];
+  categories: Category[];
   currency: string;
   saving: boolean;
   onSubmit: (input: PromotionInput) => void;
@@ -31,9 +35,9 @@ export default function QuantityForm({
   const [tiers, setTiers] = useState<{ qty: string; price: string }[]>([
     { qty: "2", price: "" },
   ]);
-  const [picked, setPicked] = useState<string[]>([]);
+  const [picked, setPicked] = useState<{ id: string; qty: number }[]>([]);
 
-  const firstItem = products.find(p => p.id === picked[0]);
+  const firstItem = products.find(p => p.id === picked[0]?.id);
   const unit = firstItem ? Number(firstItem.price) : 0;
 
   const parsedTiers = tiers
@@ -46,7 +50,7 @@ export default function QuantityForm({
   const ready =
     name.trim() && picked.length > 0 && (kind === "bogo" ? validBogo : parsedTiers.length > 0);
 
-  /** What the customer pays for the deal quantity, using the first product's price. */
+  /** What the customer pays at the deal quantity, using the first product. */
   const preview = (() => {
     if (!firstItem) return null;
     const qty = kind === "bogo" ? buy : Math.max(...parsedTiers.map(x => x.qty), 0);
@@ -59,13 +63,14 @@ export default function QuantityForm({
     return { qty, normal: Math.round(qty * unit * 100) / 100, cost };
   })();
 
-  function toggle(id: string) {
-    setPicked(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+  function bump(id: string, delta: number) {
+    // A quantity deal just needs the product listed, so "−" removes it.
+    if (delta < 0) setPicked(prev => prev.filter(p => p.id !== id));
   }
 
   return (
     <form
-      className="tt-coupon-form"
+      className="tt-promo-form"
       onSubmit={e => {
         e.preventDefault();
         onSubmit({
@@ -75,65 +80,88 @@ export default function QuantityForm({
           buyQty: kind === "bogo" ? buy : null,
           payQty: kind === "bogo" ? pay : null,
           tiers: kind === "tiered" ? parsedTiers : null,
-          items: picked.map(itemId => ({ itemId, qty: 1 })),
+          items: picked.map(p => ({ itemId: p.id, qty: 1 })),
         });
         setName("");
         setPicked([]);
         setTiers([{ qty: "2", price: "" }]);
       }}
     >
-      <div className="tt-prodform-row">
+      <div className="tt-promo-toprow">
         <select
-          className="tt-input"
-          style={{ width: 160 }}
+          className="tt-input tt-promo-kind"
           value={kind}
           onChange={e => setKind(e.target.value as "bogo" | "tiered")}
+          aria-label={t("promos.dealType")}
         >
           <option value="bogo">{t("promos.kindBogo")}</option>
           <option value="tiered">{t("promos.kindTiered")}</option>
         </select>
         <input
-          className="tt-input"
-          style={{ flex: 1 }}
+          className="tt-input tt-promo-name"
           placeholder={t("promos.dealNamePlaceholder")}
           value={name}
           onChange={e => setName(e.target.value)}
           required
         />
+        <div className="tt-promo-compare" aria-live="polite">
+          {preview && preview.normal > preview.cost ? (
+            <>
+              <span className="tt-muted">
+                {preview.qty}× {firstItem!.name}
+              </span>{" "}
+              <s>{formatMoney(preview.normal, currency)}</s>
+              {" → "}
+              <strong className="tt-accent">{formatMoney(preview.cost, currency)}</strong>{" "}
+              <span className="tt-save">
+                {t("promos.saves", {
+                  amount: formatMoney(
+                    Math.round((preview.normal - preview.cost) * 100) / 100,
+                    currency,
+                  ),
+                })}
+              </span>
+            </>
+          ) : (
+            <span className="tt-muted">{t("promos.pickToCompare")}</span>
+          )}
+        </div>
+        <button
+          type="submit"
+          className="tt-btn tt-btn-primary tt-btn-sm"
+          disabled={!ready || saving}
+        >
+          {saving ? t("common.saving") : t("promos.addDeal")}
+        </button>
       </div>
 
       {kind === "bogo" ? (
-        <div className="tt-prodform-row" style={{ alignItems: "center" }}>
-          <span className="tt-muted" style={{ fontSize: 13 }}>
-            {t("promos.buyLabel")}
-          </span>
+        <div className="tt-promo-terms">
+          <span className="tt-muted">{t("promos.buyLabel")}</span>
           <input
-            className="tt-input"
-            style={{ width: 70 }}
+            className="tt-input tt-qty-input"
             type="number"
             min="2"
             value={buyQty}
             onChange={e => setBuyQty(e.target.value)}
+            aria-label={t("promos.buyLabel")}
           />
-          <span className="tt-muted" style={{ fontSize: 13 }}>
-            {t("promos.payLabel")}
-          </span>
+          <span className="tt-muted">{t("promos.payLabel")}</span>
           <input
-            className="tt-input"
-            style={{ width: 70 }}
+            className="tt-input tt-qty-input"
             type="number"
             min="1"
             value={payQty}
             onChange={e => setPayQty(e.target.value)}
+            aria-label={t("promos.payLabel")}
           />
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div className="tt-promo-tiers">
           {tiers.map((row, i) => (
-            <div className="tt-prodform-row" key={i} style={{ alignItems: "center" }}>
+            <div className="tt-promo-terms" key={i}>
               <input
-                className="tt-input"
-                style={{ width: 70 }}
+                className="tt-input tt-qty-input"
                 type="number"
                 min="1"
                 value={row.qty}
@@ -144,8 +172,7 @@ export default function QuantityForm({
               />
               <span className="tt-muted">→</span>
               <input
-                className="tt-input"
-                style={{ width: 110 }}
+                className="tt-input tt-promo-price"
                 type="number"
                 min="0"
                 step="0.01"
@@ -181,38 +208,23 @@ export default function QuantityForm({
         </div>
       )}
 
-      <div className="tt-mod-label">{t("promos.appliesTo")}</div>
-      <div className="tt-chips">
-        {products.map(p => (
-          <button
-            type="button"
-            key={p.id}
-            className={`tt-chip ${picked.includes(p.id) ? "tt-chip-on" : ""}`}
-            onClick={() => toggle(p.id)}
-          >
-            {p.emoji} {p.name} · {formatMoney(Number(p.price), currency)}
-          </button>
-        ))}
-      </div>
+      <ProductPicker
+        products={products}
+        categories={categories}
+        currency={currency}
+        pickedIds={picked.map(p => p.id)}
+        onPick={p => setPicked(prev => [...prev, { id: p.id, qty: 1 }])}
+      />
 
-      {preview && preview.normal > preview.cost && (
-        <p className="tt-muted" style={{ margin: 0, fontSize: 13 }}>
-          {t("promos.dealPreview", {
-            qty: preview.qty,
-            name: firstItem!.name,
-            normal: formatMoney(preview.normal, currency),
-            cost: formatMoney(preview.cost, currency),
-          })}
-        </p>
-      )}
-
-      <button
-        type="submit"
-        className="tt-btn tt-btn-primary tt-btn-sm"
-        disabled={!ready || saving}
-      >
-        {saving ? t("common.saving") : t("promos.addDeal")}
-      </button>
+      <PickedProducts
+        label={t("promos.appliesTo")}
+        emptyLabel={t("promos.nonePicked")}
+        picked={picked}
+        products={products}
+        currency={currency}
+        onBump={bump}
+        showQty={false}
+      />
     </form>
   );
 }

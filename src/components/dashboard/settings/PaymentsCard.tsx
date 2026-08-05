@@ -57,7 +57,7 @@ export default function PaymentsCard() {
   }
 
   return (
-    <div className="tt-section" style={{ maxWidth: 520, marginTop: 16 }}>
+    <div className="tt-section">
       <div className="tt-section-head">
         <h3 className="tt-serif" style={{ margin: 0 }}>
           {t("dash.payments")}
