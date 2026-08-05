@@ -6,6 +6,7 @@ import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { usePromotions, type PromotionInput } from "@/hooks/usePromotions";
+import Breadcrumb from "@/components/layout/Breadcrumb";
 import type { PromotionWithItems } from "@/lib/promotions";
 import ComboForm from "./ComboForm";
 import QuantityForm from "./QuantityForm";
@@ -21,7 +22,7 @@ export default function PromotionsPanel({
   const t = useT();
   const toast = useToast();
   const confirm = useConfirm();
-  const { promotions, products, loading, create, setActive, remove } =
+  const { promotions, products, categories, loading, create, setActive, remove } =
     usePromotions(restaurantId);
   const [saving, setSaving] = useState(false);
 
@@ -66,15 +67,23 @@ export default function PromotionsPanel({
   }
 
   return (
-    <div className="tt-page">
-      <h2 className="tt-serif" style={{ marginBottom: 2 }}>
-        {t("promos.title")}
-      </h2>
-      <p className="tt-muted" style={{ marginTop: 0 }}>
-        {t("promos.hint")}
-      </p>
+    <div className="tt-dash">
+      <div className="container">
+        <header className="tt-dash-head">
+          <Breadcrumb
+            trail={[
+              { labelKey: "nav.dashboard", href: "/dashboard" },
+              { labelKey: "nav.promos" },
+            ]}
+          />
+        </header>
 
-      <div className="tt-section" style={{ maxWidth: 620 }}>
+        <p className="tt-muted" style={{ marginTop: 0, marginBottom: 16 }}>
+          {t("promos.hint")}
+        </p>
+
+        <div className="tt-cols">
+        <div className="tt-section tt-cols-full">
         {loading ? (
           <p className="tt-muted">{t("common.loading")}</p>
         ) : promotions.length === 0 ? (
@@ -116,7 +125,7 @@ export default function PromotionsPanel({
         )}
       </div>
 
-      <div className="tt-section" style={{ maxWidth: 620, marginTop: 16 }}>
+      <div className="tt-section">
         <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 2 }}>
           {t("promos.newCombo")}
         </h3>
@@ -125,13 +134,14 @@ export default function PromotionsPanel({
         </p>
         <ComboForm
           products={products}
+          categories={categories}
           currency={currency}
           saving={saving}
           onSubmit={add}
         />
       </div>
 
-      <div className="tt-section" style={{ maxWidth: 620, marginTop: 16 }}>
+      <div className="tt-section">
         <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 2 }}>
           {t("promos.newDeal")}
         </h3>
@@ -140,11 +150,14 @@ export default function PromotionsPanel({
         </p>
         <QuantityForm
           products={products}
+          categories={categories}
           currency={currency}
           saving={saving}
           onSubmit={add}
         />
+        </div>
       </div>
     </div>
+  </div>
   );
 }

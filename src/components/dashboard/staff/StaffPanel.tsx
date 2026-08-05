@@ -48,7 +48,9 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
           />
         </header>
 
-        <div className="tt-section" style={{ maxWidth: 560 }}>
+        {/* Team logins and the activity log sit side by side on desktop. */}
+        <div className="tt-cols">
+        <div className="tt-section">
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>
               {t("dash.teamLogins")}
@@ -160,6 +162,7 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
         </div>
 
         {children}
+        </div>
       </div>
     </div>
   );

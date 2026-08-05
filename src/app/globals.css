@@ -358,6 +358,166 @@ code {
   font-weight: 700;
 }
 
+/* ── Dashboard desktop layout ─────────────────────────────────────────── */
+/* The page container is 1100px but most cards cap around 520, leaving half
+   the screen empty on a laptop. This pairs cards side by side once there's
+   room, and stacks them exactly as before on tablet and phone. */
+.tt-cols {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (min-width: 1025px) {
+  .tt-cols {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* A card that should keep the full width inside a .tt-cols grid. */
+  .tt-cols-full {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ── Promotion forms ──────────────────────────────────────────────────── */
+.tt-promo-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Name, price, the price comparison and submit share one line, so the
+   manager can weigh the discount without looking away from the price. */
+.tt-promo-toprow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Scoped to the form so these beat the generic `.tt-input { width: 100% }`
+   regardless of where this block sits in the file. */
+.tt-promo-form .tt-emoji-input {
+  width: 60px;
+  flex: 0 0 auto;
+  text-align: center;
+}
+.tt-promo-form .tt-promo-name {
+  flex: 1 1 180px;
+  width: auto;
+  min-width: 140px;
+}
+.tt-promo-form .tt-promo-price {
+  width: 110px;
+  flex: 0 0 auto;
+}
+.tt-promo-form .tt-promo-kind {
+  width: 170px;
+  flex: 0 0 auto;
+}
+.tt-promo-form .tt-qty-input {
+  width: 74px;
+  flex: 0 0 auto;
+}
+
+/* Grows to fill the row, then wraps to its own line on narrow screens. */
+.tt-promo-compare {
+  flex: 1 1 220px;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.tt-warn {
+  color: #c0392b;
+}
+
+.tt-promo-terms {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tt-promo-tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Searchable product picker ────────────────────────────────────────── */
+.tt-picker {
+  position: relative;
+}
+
+.tt-picker-menu {
+  position: absolute;
+  z-index: 60;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  max-height: 280px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--tt-line, #e8e4dd);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+  padding: 6px;
+}
+
+.tt-picker-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tt-picker-active {
+  background: rgba(232, 82, 42, 0.1);
+}
+
+.tt-picker-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tt-picker-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--tt-muted, #6b6b6b);
+}
+
+.tt-picker-cat {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.06);
+  white-space: nowrap;
+}
+
+.tt-picker-empty {
+  margin: 0;
+  padding: 10px;
+  font-size: 13px;
+}
+
+.tt-chip-remove {
+  margin-left: 6px;
+  font-weight: 700;
+}
+
 /* Coupons panel (dashboard settings). */
 .tt-coupon-list {
   display: flex;
@@ -2275,6 +2435,15 @@ code {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+/* Tables get their own QR each, so on desktop they read better as a grid —
+   a full-width row per table made them look like the one-off fast-food QR. */
+@media (min-width: 1025px) {
+  .tt-table-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
 }
 .tt-table-row {
   display: flex;

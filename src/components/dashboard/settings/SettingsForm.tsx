@@ -82,8 +82,10 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
           />
         </header>
 
+        {/* Cards pair up on desktop instead of stacking down one narrow column. */}
+        <div className="tt-cols">
         {isOwner && (
-          <div className="tt-section" style={{ maxWidth: 520 }}>
+          <div className="tt-section">
             <div className="tt-section-head">
               <h3 className="tt-serif" style={{ margin: 0 }}>
                 {t("dash.restaurant")}
@@ -188,7 +190,7 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
         {/* Coupons are a manager-level tool, so this sits outside the isOwner gate. */}
         <CouponsPanel restaurantId={restaurant.id} currency={restaurant.currency} />
 
-        <div className="tt-section" style={{ maxWidth: 520, marginTop: isOwner ? 16 : 0 }}>
+        <div className="tt-section">
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>
               {t("dash.taxTitle")}
@@ -244,7 +246,7 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
           </form>
         </div>
 
-        <div className="tt-section" style={{ maxWidth: 520, marginTop: 16 }}>
+        <div className="tt-section">
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>
               {t("dash.orderingTitle")}
@@ -275,6 +277,7 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
             </span>
           </label>
         </div>
+      </div>
       </div>
     </div>
   );

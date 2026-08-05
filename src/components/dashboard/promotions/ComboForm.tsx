@@ -3,21 +3,25 @@
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
-import type { MenuItem } from "@/lib/types";
+import type { Category, MenuItem } from "@/lib/types";
 import type { PromotionInput } from "@/hooks/usePromotions";
+import ProductPicker from "./ProductPicker";
+import PickedProducts from "./PickedProducts";
 
 /**
- * Builds a combo: pick the products, name it, set the bundle price. Shows the
- * regular total and the saving live, so the manager can see what they're
- * giving away before saving.
+ * Builds a combo: search for products, set a bundle price. The name, price,
+ * regular-vs-combo comparison and the submit button share one row, so the
+ * manager can weigh the discount without looking away from the price field.
  */
 export default function ComboForm({
   products,
+  categories,
   currency,
   saving,
   onSubmit,
 }: {
   products: MenuItem[];
+  categories: Category[];
   currency: string;
   saving: boolean;
   onSubmit: (input: PromotionInput) => void;
@@ -26,27 +30,27 @@ export default function ComboForm({
   const [name, setName] = useState("");
   const [emoji, setEmoji] = useState("🎁");
   const [price, setPrice] = useState("");
-  const [picked, setPicked] = useState<Record<string, number>>({});
+  const [picked, setPicked] = useState<{ id: string; qty: number }[]>([]);
 
-  const chosen = Object.entries(picked).filter(([, qty]) => qty > 0);
-  const regular = chosen.reduce((sum, [id, qty]) => {
-    const p = products.find(i => i.id === id);
-    return sum + (p ? Number(p.price) * qty : 0);
+  const regular = picked.reduce((sum, p) => {
+    const item = products.find(i => i.id === p.id);
+    return sum + (item ? Number(item.price) * p.qty : 0);
   }, 0);
   const comboPrice = Number(price) || 0;
   const savingAmount = Math.round((regular - comboPrice) * 100) / 100;
-  const ready = name.trim() && chosen.length >= 2 && comboPrice > 0;
+  const ready = name.trim() && picked.length >= 2 && comboPrice > 0;
 
   function bump(id: string, delta: number) {
-    setPicked(prev => {
-      const next = Math.max(0, (prev[id] ?? 0) + delta);
-      return { ...prev, [id]: next };
-    });
+    setPicked(prev =>
+      prev
+        .map(p => (p.id === id ? { ...p, qty: p.qty + delta } : p))
+        .filter(p => p.qty > 0),
+    );
   }
 
   return (
     <form
-      className="tt-coupon-form"
+      className="tt-promo-form"
       onSubmit={e => {
         e.preventDefault();
         onSubmit({
@@ -54,94 +58,88 @@ export default function ComboForm({
           name: name.trim(),
           emoji,
           comboPrice,
-          items: chosen.map(([itemId, qty]) => ({ itemId, qty })),
+          items: picked.map(p => ({ itemId: p.id, qty: p.qty })),
         });
         setName("");
         setPrice("");
-        setPicked({});
+        setPicked([]);
       }}
     >
-      <div className="tt-prodform-row">
+      {/* Name, price, the comparison and submit all on one line. */}
+      <div className="tt-promo-toprow">
         <input
-          className="tt-input"
-          style={{ width: 64, textAlign: "center" }}
+          className="tt-input tt-emoji-input"
           value={emoji}
           onChange={e => setEmoji(e.target.value)}
           aria-label={t("promos.emoji")}
         />
         <input
-          className="tt-input"
-          style={{ flex: 1 }}
+          className="tt-input tt-promo-name"
           placeholder={t("promos.namePlaceholder")}
           value={name}
           onChange={e => setName(e.target.value)}
           required
         />
         <input
-          className="tt-input"
-          style={{ width: 110 }}
+          className="tt-input tt-promo-price"
           type="number"
           min="0"
           step="0.01"
           placeholder={t("promos.comboPrice")}
           value={price}
           onChange={e => setPrice(e.target.value)}
+          aria-label={t("promos.comboPrice")}
           required
         />
-      </div>
-
-      <div className="tt-mod-label">{t("promos.pickProducts")}</div>
-      <div className="tt-chips">
-        {products.map(p => {
-          const qty = picked[p.id] ?? 0;
-          return (
-            <span key={p.id} className={`tt-chip ${qty > 0 ? "tt-chip-on" : ""}`}>
-              <button type="button" className="tt-chip-btn" onClick={() => bump(p.id, 1)}>
-                {p.emoji} {p.name} · {formatMoney(Number(p.price), currency)}
-              </button>
-              {qty > 0 && (
-                <>
-                  <span className="tt-chip-qty">×{qty}</span>
-                  <button
-                    type="button"
-                    className="tt-chip-btn"
-                    aria-label={t("promos.removeOne", { name: p.name })}
-                    onClick={() => bump(p.id, -1)}
-                  >
-                    −
-                  </button>
-                </>
-              )}
-            </span>
-          );
-        })}
-      </div>
-
-      {chosen.length > 0 && (
-        <p className="tt-muted" style={{ margin: 0, fontSize: 13 }}>
-          {t("promos.regularTotal")} <s>{formatMoney(regular, currency)}</s>{" "}
-          {comboPrice > 0 && (
+        <div className="tt-promo-compare" aria-live="polite">
+          {picked.length > 0 ? (
             <>
-              → <strong className="tt-accent">{formatMoney(comboPrice, currency)}</strong>{" "}
-              {savingAmount > 0 ? (
-                <span className="tt-save">
-                  {t("promos.saves", { amount: formatMoney(savingAmount, currency) })}
-                </span>
-              ) : (
-                <span style={{ color: "#c0392b" }}>{t("promos.noSaving")}</span>
-              )}
+              <span className="tt-muted">{t("promos.regularTotal")}</span>{" "}
+              <s>{formatMoney(regular, currency)}</s>
+              {comboPrice > 0 &&
+                (savingAmount > 0 ? (
+                  <>
+                    {" → "}
+                    <strong className="tt-accent">
+                      {formatMoney(comboPrice, currency)}
+                    </strong>{" "}
+                    <span className="tt-save">
+                      {t("promos.saves", { amount: formatMoney(savingAmount, currency) })}
+                    </span>
+                  </>
+                ) : (
+                  <span className="tt-warn"> {t("promos.noSaving")}</span>
+                ))}
             </>
+          ) : (
+            <span className="tt-muted">{t("promos.pickToCompare")}</span>
           )}
-        </p>
-      )}
+        </div>
+        <button
+          type="submit"
+          className="tt-btn tt-btn-primary tt-btn-sm"
+          disabled={!ready || saving}
+        >
+          {saving ? t("common.saving") : t("promos.addCombo")}
+        </button>
+      </div>
 
-      <button
-        type="submit"
-        className="tt-btn tt-btn-primary tt-btn-sm"
-        disabled={!ready || saving}
-      >
-        {saving ? t("common.saving") : t("promos.addCombo")}
-      </button>
+      <ProductPicker
+        products={products}
+        categories={categories}
+        currency={currency}
+        pickedIds={picked.map(p => p.id)}
+        onPick={p => setPicked(prev => [...prev, { id: p.id, qty: 1 }])}
+      />
+
+      <PickedProducts
+        label={t("promos.pickProducts")}
+        emptyLabel={t("promos.nonePicked")}
+        picked={picked}
+        products={products}
+        currency={currency}
+        onBump={bump}
+      />
     </form>
   );
 }
