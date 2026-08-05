@@ -304,7 +304,9 @@ create table if not exists coupons (
 -- One code per restaurant, case-insensitively — codes are compared upper-cased.
 create unique index if not exists coupons_code_idx on coupons(restaurant_id, upper(code));
 
--- Every successful redemption, for the owner's records.
+-- Every redemption, for the owner's records. A row is written when checkout
+-- RESERVES a use; confirmed_at is stamped once Stripe says the order was paid.
+-- An unconfirmed row is an in-flight (or abandoned) checkout, not a real use.
 create table if not exists coupon_redemptions (
   id            uuid primary key default gen_random_uuid(),
   restaurant_id uuid not null references restaurants(id) on delete cascade,
@@ -312,8 +314,10 @@ create table if not exists coupon_redemptions (
   order_id      uuid references orders(id) on delete set null,
   code          text not null,
   amount        numeric not null,
+  confirmed_at  timestamptz,
   created_at    timestamptz not null default now()
 );
+alter table coupon_redemptions add column if not exists confirmed_at timestamptz;
 create index if not exists coupon_redemptions_idx
   on coupon_redemptions(restaurant_id, created_at desc);
 

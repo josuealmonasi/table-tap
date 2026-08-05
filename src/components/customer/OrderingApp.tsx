@@ -113,6 +113,13 @@ export default function OrderingApp({
    * re-reads the bundle price from the DB before charging.
    */
   function addCombo(combo: Combo) {
+    // A combo has nothing to customise, so tapping it again means "one more"
+    // rather than a second identical line.
+    const existing = cart.items.find(i => i.comboId === combo.id);
+    if (existing) {
+      cart.updateItem(existing.cartId, { ...existing, qty: existing.qty + 1 });
+      return;
+    }
     cart.addItem({
       itemId: combo.id,
       comboId: combo.id,
