@@ -80,7 +80,12 @@ export default function CouponBox({
         {t("coupon.gotOne")}
       </button>
 
-      <Modal open={open} onClose={() => setOpen(false)} maxWidth={360}>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        maxWidth={360}
+        label={t("coupon.title")}
+      >
         <form onSubmit={submit}>
           <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 4 }}>
             {t("coupon.title")}

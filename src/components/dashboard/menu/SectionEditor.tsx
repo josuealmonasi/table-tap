@@ -197,7 +197,7 @@ export default function SectionEditor({
                   <button className="tt-add-more" onClick={() => setAdding(true)}>
                     {t("menu.addProduct")}
                   </button>
-                  <Modal open={adding} onClose={() => setAdding(false)} maxWidth={720}>
+                  <Modal open={adding} onClose={() => setAdding(false)} maxWidth={720} label={t("menu.addProduct")}>
                     {addForm}
                   </Modal>
                 </>

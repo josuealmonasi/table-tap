@@ -173,7 +173,7 @@ export default function AddonsPanel({
               </div>
             </div>
             {modalForms && (
-              <Modal open={isEditing} onClose={() => setEditingId(null)} maxWidth={520}>
+              <Modal open={isEditing} onClose={() => setEditingId(null)} maxWidth={520} label={t("menu.extrasTitle")}>
                 {editForm}
               </Modal>
             )}
@@ -199,7 +199,7 @@ export default function AddonsPanel({
               <button className="tt-add-more" onClick={() => setAdding(true)}>
                 {t("menu.addExtra")}
               </button>
-              <Modal open={adding} onClose={() => setAdding(false)} maxWidth={520}>
+              <Modal open={adding} onClose={() => setAdding(false)} maxWidth={520} label={t("menu.addExtra")}>
                 {addForm}
               </Modal>
             </>

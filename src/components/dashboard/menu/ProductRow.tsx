@@ -190,12 +190,12 @@ export default function ProductRow({
         </div>
       </div>
       {modalForms && (
-        <Modal open={editing} onClose={() => setEditing(false)} maxWidth={720}>
+        <Modal open={editing} onClose={() => setEditing(false)} maxWidth={720} label={t("menu.edit")}>
           {editForm}
         </Modal>
       )}
       {canMove && (
-        <Modal open={moving} onClose={() => setMoving(false)} maxWidth={460}>
+        <Modal open={moving} onClose={() => setMoving(false)} maxWidth={460} label={t("menu.moveToSection")}>
           <MoveToSection
             productName={product.name}
             categories={(categories ?? []).filter(c => c.id !== product.category_id)}

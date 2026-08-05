@@ -59,7 +59,7 @@ export default function TipPicker({
         </button>
       </div>
 
-      <Modal open={asking} onClose={() => setAsking(false)} maxWidth={360}>
+      <Modal open={asking} onClose={() => setAsking(false)} maxWidth={360} label={t("tip.amountTitle")}>
         <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 8 }}>
           {t("tip.amountTitle")}
         </h3>

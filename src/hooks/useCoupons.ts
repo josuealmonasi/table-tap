@@ -13,6 +13,8 @@ export interface Coupon {
   uses_count: number;
   min_subtotal: number;
   active: boolean;
+  starts_at: string | null;
+  ends_at: string | null;
   created_at: string;
 }
 
@@ -22,6 +24,9 @@ export interface CouponInput {
   value: number;
   maxUses: number | null;
   minSubtotal: number;
+  /** ISO dates; null = no bound on that end. */
+  startsAt?: string | null;
+  endsAt?: string | null;
 }
 
 /**
@@ -36,7 +41,9 @@ export function useCoupons(restaurantId: string) {
   const reload = useCallback(async () => {
     const { data } = await createClient()
       .from("coupons")
-      .select("id, code, kind, value, max_uses, uses_count, min_subtotal, active, created_at")
+      .select(
+        "id, code, kind, value, max_uses, uses_count, min_subtotal, active, starts_at, ends_at, created_at",
+      )
       .eq("restaurant_id", restaurantId)
       .order("created_at", { ascending: false });
     setCoupons((data as Coupon[] | null) ?? []);

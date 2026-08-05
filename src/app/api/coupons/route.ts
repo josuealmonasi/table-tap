@@ -44,7 +44,30 @@ function readFields(body: Record<string, unknown>) {
   }
 
   const minSubtotal = Math.max(0, Number(body.minSubtotal) || 0);
-  return { kind, value, maxUses, minSubtotal };
+
+  // Dates arrive as ISO strings (or empty for "no bound"). Reject anything
+  // unparseable rather than silently storing null and losing the schedule.
+  const readDate = (v: unknown): string | null | { error: string } => {
+    if (v === null || v === undefined || v === "") return null;
+    const d = new Date(String(v));
+    return Number.isNaN(d.getTime()) ? { error: "That date isn't valid." } : d.toISOString();
+  };
+  const startsAt = readDate(body.startsAt);
+  const endsAt = readDate(body.endsAt);
+  if (startsAt && typeof startsAt === "object") return startsAt;
+  if (endsAt && typeof endsAt === "object") return endsAt;
+  if (startsAt && endsAt && new Date(startsAt as string) >= new Date(endsAt as string)) {
+    return { error: "The end date must be after the start date." };
+  }
+
+  return {
+    kind,
+    value,
+    maxUses,
+    minSubtotal,
+    startsAt: startsAt as string | null,
+    endsAt: endsAt as string | null,
+  };
 }
 
 // POST /api/coupons — create a code.
@@ -68,6 +91,8 @@ export async function POST(req: NextRequest) {
     value: fields.value,
     max_uses: fields.maxUses,
     min_subtotal: fields.minSubtotal,
+    starts_at: fields.startsAt,
+    ends_at: fields.endsAt,
     created_by_email: actor.email,
   });
   if (error) {
@@ -112,6 +137,8 @@ export async function PATCH(req: NextRequest) {
       value: fields.value,
       max_uses: fields.maxUses,
       min_subtotal: fields.minSubtotal,
+      starts_at: fields.startsAt,
+      ends_at: fields.endsAt,
       ...(typeof body.active === "boolean" ? { active: body.active } : {}),
     })
     .eq("id", id)
