@@ -295,6 +295,16 @@ export async function POST(req: NextRequest) {
         tax_pct: Number(restaurant.tax_pct) || 0,
         discount: pricing.discount,
         coupon_code: coupon?.code ?? null,
+        // Where the discount came from, so the owner can tell a menu sale from
+        // a quantity deal from a coupon when reviewing an order later.
+        promo_detail:
+          pricing.discount > 0
+            ? {
+                item: pricing.itemDiscount,
+                promos: pricing.promoDiscount,
+                coupon: pricing.couponDiscount,
+              }
+            : null,
         total,
         currency: restaurant.currency,
         items: verified,

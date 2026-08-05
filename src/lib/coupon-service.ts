@@ -97,7 +97,12 @@ export async function releaseCoupon(couponId: string): Promise<void> {
   await createAdminClient().rpc("release_coupon", { p_coupon_id: couponId });
 }
 
-/** Records a successful redemption for the restaurant's records. */
+/**
+ * Records a RESERVED use against an order. `confirmed_at` stays null until the
+ * Stripe webhook reports the order paid — so an abandoned checkout leaves an
+ * unconfirmed row that the expiry handler removes, rather than a phantom
+ * redemption in the owner's records.
+ */
 export async function logRedemption(params: {
   restaurantId: string;
   couponId: string;
