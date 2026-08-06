@@ -54,7 +54,9 @@ export default function QrCard({ title, subtitle, qr, downloadName }: QrCardProp
         `<div style="width:260px">${qr.svg}</div>` +
         `<div style="font-size:20px;font-weight:700;margin-top:12px">${safeTitle}</div>` +
         (safeSubtitle
-          ? `<div style="font-size:13px;color:#666;margin-top:2px">${safeSubtitle}</div>`
+          // Literal, not a token: this markup goes into a separate print
+          // window that never loads globals.css. Kept in step with --tt-muted.
+          ? `<div style="font-size:13px;color:#70707a;margin-top:2px">${safeSubtitle}</div>`
           : "") +
         `</body>`,
     );

@@ -14,6 +14,10 @@ export const es: Messages = {
     noDietMatch: "Ningún platillo coincide con esos filtros.",
     popular: "Popular",
     percentOff: "−{pct}%",
+    filters: "Filtros",
+    filtersTitle: "Filtros de dieta",
+    filtersClear: "Quitar todos",
+    filtersDone: "Ver resultados",
     // Editor de menús (panel)
     title: "Menús",
     hint: "Abre un menú para editarlo · actívalo para mostrarlo a los clientes",
@@ -292,6 +296,15 @@ export const es: Messages = {
     allSoldOut: "Todo en tu carrito se agotó. Agrega algo más para ordenar.",
     network: "Error de red — revisa tu conexión e inténtalo de nuevo.",
     generic: "Algo salió mal. Inténtalo de nuevo.",
+  },
+  fallback: {
+    errorTitle: "No pudimos cargar el menú",
+    errorBody:
+      "Hubo un problema de nuestro lado, no del tuyo. Tu mesa está bien: inténtalo de nuevo.",
+    retry: "Intentar de nuevo",
+    notFoundTitle: "Este código no lleva a ningún lado",
+    notFoundBody:
+      "El código QR que escaneaste no está vinculado a un menú. Pide ayuda a alguien del personal.",
   },
   dietary: {
     vegetarian: "Vegetariano",

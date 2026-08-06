@@ -38,7 +38,7 @@ export default function ComboCard({
               .map(c => (c.qty > 1 ? `${c.qty}× ${c.name}` : c.name))
               .join(" + ")}
         </div>
-        <div className="tt-accent" style={{ fontWeight: 700, fontSize: 16 }}>
+        <div className="tt-price" style={{ fontSize: 16 }}>
           {saving > 0 && (
             <s className="tt-was">{formatMoney(combo.regularPrice, currency)}</s>
           )}

@@ -75,7 +75,7 @@ export default function LoginForm() {
             </Link>
           </p>
 
-          {error && <p style={{ color: "#c0392b", fontSize: 13 }}>{error}</p>}
+          {error && <p className="tt-field-error">{error}</p>}
 
           <p className="tt-muted" style={{ fontSize: 13, marginTop: 20 }}>
             {t("auth.newHere")}{" "}

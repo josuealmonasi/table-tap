@@ -88,7 +88,7 @@ export default function OrderTotals({
       )}
       <div className="tt-row tt-total">
         <span>{t("totals.total")}</span>
-        <span className="tt-accent">{formatMoney(total, currency)}</span>
+        <span className="tt-price">{formatMoney(total, currency)}</span>
       </div>
     </div>
   );

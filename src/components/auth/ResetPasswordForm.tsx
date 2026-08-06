@@ -104,7 +104,7 @@ export default function ResetPasswordForm() {
               {loading ? t("auth.saving") : t("auth.updatePassword")}
             </button>
 
-            {error && <p style={{ color: "#c0392b", fontSize: 13 }}>{error}</p>}
+            {error && <p className="tt-field-error">{error}</p>}
           </form>
         )}
       </div>
