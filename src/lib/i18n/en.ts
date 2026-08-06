@@ -12,6 +12,10 @@ export const en = {
     noDietMatch: "No items match those dietary filters.",
     popular: "Popular",
     percentOff: "−{pct}%",
+    filters: "Filters",
+    filtersTitle: "Dietary filters",
+    filtersClear: "Clear all",
+    filtersDone: "Show results",
     // Menu editor (dashboard)
     title: "Menus",
     hint: "Open a menu to edit it · switch it on to show it to customers",
@@ -299,6 +303,18 @@ export const en = {
     allSoldOut: "Everything in your cart just sold out. Add something else to order.",
     network: "Network error — please check your connection and try again.",
     generic: "Something went wrong. Please try again.",
+  },
+  // Full-page fallbacks for the customer menu routes. "error" is a transient
+  // fault and is worth retrying; "notFound" is permanent, so it offers no
+  // retry button and points the diner at a human instead.
+  fallback: {
+    errorTitle: "We couldn't load the menu",
+    errorBody:
+      "Something went wrong on our side, not yours. Your table is fine — please try again.",
+    retry: "Try again",
+    notFoundTitle: "This code doesn't lead anywhere",
+    notFoundBody:
+      "The QR code you scanned isn't linked to a menu. Please ask a member of staff for help.",
   },
   dietary: {
     vegetarian: "Vegetarian",
