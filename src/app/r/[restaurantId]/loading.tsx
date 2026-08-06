@@ -2,7 +2,7 @@ import { Skeleton, MenuItemRowSkeleton } from "@/components/ui/Skeleton";
 
 export default function RestaurantMenuLoading() {
   return (
-    <div className="tt-root">
+    <div className="tt-root tt-root-wide">
       <div className="tt-menu-header">
         <div className="tt-row" style={{ alignItems: "flex-start" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -18,10 +18,16 @@ export default function RestaurantMenuLoading() {
         </div>
       </div>
 
-      <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-        {Array.from({ length: 5 }).map((_, i) => (
-          <MenuItemRowSkeleton key={i} />
-        ))}
+      {/* .tt-dish-list, so the placeholder is a two-column grid on desktop and
+          a stacked list on a phone — exactly what replaces it. Eight rows fill
+          both columns above the fold on a wide screen; the surplus simply
+          scrolls off on a narrow one. */}
+      <div style={{ padding: 16 }}>
+        <div className="tt-dish-list">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <MenuItemRowSkeleton key={i} />
+          ))}
+        </div>
       </div>
     </div>
   );

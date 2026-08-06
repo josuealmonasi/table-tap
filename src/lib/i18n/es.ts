@@ -15,6 +15,7 @@ export const es: Messages = {
     popular: "Popular",
     percentOff: "−{pct}%",
     filters: "Filtros",
+    addItem: "Agregar {name}",
     filtersTitle: "Filtros de dieta",
     filtersClear: "Quitar todos",
     filtersDone: "Ver resultados",

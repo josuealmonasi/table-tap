@@ -22,9 +22,13 @@
   /* A layer lifted off the ink ground: chips and controls inside the dark
      customer header, which would otherwise disappear into it. */
   --tt-ink-raise: #1e1e22;
-  --tt-paper: #f2f2f3; /* page ground — cards are white, so this makes depth */
-  --tt-surface: #ececef; /* inset tint: thumbnails, hover fills, code, skeletons */
-  --tt-line: #e5e5e9; /* hairlines, dividers, chip fills */
+  /* The page ground is white, not grey. Grey-ground/white-card gets depth from
+     a value difference, which costs contrast everywhere and makes food photos
+     sit in a dull frame. Separation now comes from hairlines instead, so the
+     content is the only bright thing on screen. */
+  --tt-paper: #ffffff;
+  --tt-surface: #f3f3f4; /* inset tint: thumbnails, hover fills, code, skeletons */
+  --tt-line: #e6e6e9; /* hairlines and dividers — these carry the structure now */
   --tt-muted: #70707a;
   --tt-white: #ffffff;
 
@@ -45,15 +49,27 @@
   --tt-success-wash: color-mix(in srgb, var(--tt-success) 10%, transparent);
   --tt-warning: #9a5b06;
   --tt-warning-wash: color-mix(in srgb, var(--tt-warning) 12%, transparent);
-  /* Destructive. Deeper and less orange than the #c0392b it replaces: that
-     one sat in the same hue band we just moved the accent out of, so a
-     delete button read as brand colour. */
-  --tt-danger: #b3261e;
+  /* Destructive. Crimson, pulled to the blue side of red on purpose: the two
+     previous attempts (#c0392b, then #b3261e) both still sat in the orange
+     band we moved the brand out of, so a Delete button kept reading as warm
+     brick. This one cannot be mistaken for orange at any size. */
+  --tt-danger: #a4133c;
+  /* Savings. The one place a loud colour earns its keep: a discount is the
+     thing a diner most wants to spot while scrolling, and the accent can't do
+     it — teal marks "you can press this", which is nearly every row. Kept
+     distinct from --tt-danger so a delete button and a deal never read alike. */
+  --tt-sale: #d92d20;
+  --tt-sale-ink: #ffffff;
 
-  /* Switch "on" state. Deliberately neutral: a toggle reports a setting, not
-     an alert, and the saturated success green was pulling the eye before the
-     label it describes. */
-  --tt-switch-on: #2a2a30;
+  /* Corner radii. Two values, not the eleven that had accumulated: containers
+     agree, and controls inside them agree. Anything rounder is a pill. */
+  --tt-radius: 12px; /* cards, panels, tiles, dialogs, sheets */
+  --tt-radius-sm: 8px; /* inputs, thumbnails, small controls */
+
+  /* Switch "on" state: the accent. One colour means one thing — interactive —
+     across buttons, category chips and switches. (This was graphite for a
+     while; teal reads better against the row it belongs to.) */
+  --tt-switch-on: var(--tt-accent);
 
   /* Legacy names from the warm palette, kept so existing callers keep working.
      All three now point at current tokens rather than being extra brand
@@ -78,14 +94,7 @@ body {
      bare `var(--tt-font), system-ui, …` makes the whole declaration invalid at
      computed-value time and font-family resolves to its initial value — Times.
      Written this way, a missing font degrades to the system sans instead. */
-  font-family: var(
-    --tt-font,
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    Roboto,
-    sans-serif
-  );
+  font-family: var(--tt-font, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
   -webkit-font-smoothing: antialiased;
   display: flex;
   flex-direction: column;
@@ -94,7 +103,7 @@ body {
 code {
   background: var(--tt-surface);
   padding: 1px 6px;
-  border-radius: 6px;
+  border-radius: var(--tt-radius-sm);
   font-size: 0.9em;
 }
 
@@ -148,6 +157,15 @@ h2.tt-serif {
   background: var(--tt-paper);
   position: relative;
 }
+/* The menu, and only the menu, takes the desktop width. A 460px column on a
+   1440px screen wastes most of it and shows a handful of dishes. The cart,
+   tracker and item detail stay narrow on purpose — they're forms and receipts,
+   and a wide measure makes those harder to read, not easier. */
+@media (min-width: 1025px) {
+  .tt-root-wide {
+    max-width: 1080px;
+  }
+}
 .tt-row {
   display: flex;
   justify-content: space-between;
@@ -157,7 +175,7 @@ h2.tt-serif {
 /* ── buttons ── */
 .tt-btn {
   border: none;
-  border-radius: 10px;
+  border-radius: var(--tt-radius-sm);
   font-weight: 600;
   cursor: pointer;
   font-size: 15px;
@@ -204,12 +222,15 @@ h2.tt-serif {
 }
 
 /* ── cards ── */
+/* A white card on a white ground can't be a shadow — there's no value gap for
+   one to sit in, and a soft shadow on white just reads as grubby. A hairline
+   states the edge exactly and costs no contrast. */
 .tt-card {
   background: var(--tt-white);
-  border-radius: 16px;
+  border: 1px solid var(--tt-line);
+  border-radius: 12px;
   overflow: hidden;
   margin-bottom: 12px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
 /* ── badges & chips ── */
@@ -294,7 +315,7 @@ h2.tt-serif {
   top: calc(100% + 8px);
   background: var(--tt-white);
   border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--tt-line);
   min-width: 180px;
   padding: 6px;
   z-index: 60;
@@ -321,13 +342,18 @@ h2.tt-serif {
   font-weight: 700;
   color: var(--tt-accent);
 }
+/* Pink ground, red text — the soft counterpart to the solid red discount pill.
+   Deliberately not the accent: teal is the "you can press this" colour and is
+   already on every row, so it couldn't make anything stand out. Kept a wash
+   rather than a solid so POPULAR supports the dish name instead of shouting
+   over the actual saving next to it. */
 .tt-pop {
   font-size: 10px;
-  background: var(--tt-accent-wash);
-  color: var(--tt-accent);
+  background: color-mix(in srgb, var(--tt-sale) 13%, transparent);
+  color: var(--tt-sale);
   font-weight: 700;
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: var(--tt-radius-sm);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -336,11 +362,11 @@ h2.tt-serif {
    than blending into the accent-coloured "Popular" chip next to it. */
 .tt-sale {
   font-size: 10px;
-  background: var(--tt-success-wash);
-  color: var(--tt-success);
+  background: var(--tt-sale);
+  color: var(--tt-sale-ink);
   font-weight: 700;
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: var(--tt-radius-sm);
   letter-spacing: 0.03em;
   /* Spanish ("Ahorra MX$4.00") is longer than English and was breaking across
      two lines inside the pill. Keep the badge on one line. */
@@ -384,11 +410,11 @@ h2.tt-serif {
 /* "2x1 Tacos" badge on an item covered by a quantity deal. */
 .tt-deal {
   font-size: 10px;
-  background: var(--tt-warning-wash);
-  color: var(--tt-warning);
+  background: var(--tt-sale);
+  color: var(--tt-sale-ink);
   font-weight: 700;
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: var(--tt-radius-sm);
   letter-spacing: 0.03em;
 }
 
@@ -411,9 +437,10 @@ h2.tt-serif {
 }
 
 /* Combo card: a subtle tint so a bundle reads as different from a dish. */
+/* No tint or border: the red savings badge already marks a combo, and a
+   washed panel in the middle of hairline rows read as a rendering glitch. */
 .tt-combo {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tt-success) 6%, transparent), transparent);
-  border: 1px solid color-mix(in srgb, var(--tt-success) 24%, transparent);
+  background: transparent;
 }
 
 /* Chip with a quantity stepper, used by the combo product picker. */
@@ -539,9 +566,8 @@ h2.tt-serif {
   max-height: 280px;
   overflow-y: auto;
   background: var(--tt-white);
-  border: 1px solid var(--tt-line);
   border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+  border: 1px solid var(--tt-line);
   padding: 6px;
 }
 
@@ -630,7 +656,7 @@ h2.tt-serif {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: var(--tt-radius-sm);
   background: rgba(0, 0, 0, 0.06);
   color: var(--tt-muted);
 }
@@ -673,6 +699,48 @@ h2.tt-serif {
   padding: 20px 20px 0;
   color: var(--tt-white);
 }
+/* On desktop this dark block is a panel inside a centred column, not a band
+   across the page, so it needs to look deliberate: room to breathe at the
+   edges and rounded top corners, or it reads as a stray rectangle with white
+   gutters either side. */
+@media (min-width: 1025px) {
+  .tt-menu-header {
+    padding: 30px 32px 0;
+    border-radius: var(--tt-radius) var(--tt-radius) 0 0;
+  }
+  .tt-menu-sticky {
+    padding: 12px 32px 14px;
+  }
+}
+/* The identity block: logo, name, tagline. These were three bare divs relying
+   on line-height alone, which stacked them flush against each other. */
+.tt-brand-logo {
+  font-size: 26px;
+  line-height: 1;
+  margin-bottom: 10px;
+}
+.tt-brand-name {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+.tt-brand-tagline {
+  font-size: 13px;
+  margin-top: 3px;
+}
+@media (min-width: 1025px) {
+  .tt-brand-logo {
+    font-size: 34px;
+    margin-bottom: 12px;
+  }
+  .tt-brand-name {
+    font-size: 30px;
+  }
+  .tt-brand-tagline {
+    font-size: 15px;
+    margin-top: 5px;
+  }
+}
 .tt-menu-header .tt-serif {
   color: var(--tt-white);
 }
@@ -684,11 +752,18 @@ h2.tt-serif {
   top: 0;
   z-index: 10;
   display: flex;
-  align-items: center;
+  /* Top, not centre. .tt-cats carries a 16px bottom padding to hide its
+     scrollbar, so its box is taller than the chips inside it — centring the
+     filter control against that box dropped it 8px below the chips it is
+     supposed to sit level with. */
+  align-items: flex-start;
   gap: 10px;
 }
 /* Categories take the room; the filter button holds its width at the end. */
-.tt-menu-sticky .tt-cats { flex: 1; min-width: 0; }
+.tt-menu-sticky .tt-cats {
+  flex: 1;
+  min-width: 0;
+}
 .tt-cats {
   display: flex;
   gap: 8px;
@@ -714,49 +789,102 @@ h2.tt-serif {
   background: var(--tt-accent);
   color: var(--tt-white);
   font-weight: 700;
-  box-shadow: 0 2px 12px color-mix(in srgb, var(--tt-accent) 50%, transparent);
 }
 
 /* ── menu item rows ── */
+/* ── customer menu list ──────────────────────────────────────────────────
+   Rows separated by hairlines, not one card per dish. A card per dish spends
+   its margin, radius and border on every single item; at 375px that was the
+   difference between two dishes on screen and five. The card look comes back
+   on desktop, where there's width to spend and a grid needs its cells edged. */
+.tt-dish-list {
+  display: flex;
+  flex-direction: column;
+}
 .tt-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
-  padding: 14px;
+  padding: 12px 0;
   cursor: pointer;
+  border-bottom: 1px solid var(--tt-line);
+}
+.tt-item:last-child {
+  border-bottom: 0;
+}
+.tt-item-body {
+  flex: 1;
+  min-width: 0;
+}
+@media (min-width: 1025px) {
+  .tt-dish-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+  .tt-item,
+  /* Match the :last-child specificity above, or the final card in the grid
+     loses the bottom edge it shares with every other card — the rule that
+     removes the trailing hairline is only ever right for the stacked list. */
+  .tt-item:last-child {
+    border: 1px solid var(--tt-line);
+    border-radius: var(--tt-radius);
+    padding: 14px;
+  }
+}
+/* Square, and on the right. Square wins because a dish photo is the thing
+   being judged and a wide-short crop throws most of the plate away; on the
+   right because the name and price are what you scan down, and a left-hand
+   image pushes that column in by the width of the picture. */
+.tt-item-media {
+  position: relative;
+  flex: none;
+  width: 80px;
+  height: 80px;
 }
 .tt-thumb {
-  font-size: 40px;
-  width: 64px;
-  height: 64px;
+  width: 100%;
+  height: 100%;
+  font-size: 42px;
   background: var(--tt-surface);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
 }
 .tt-desc {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.4;
-  margin: 2px 0 6px;
+  margin: 2px 0 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* Sits on the corner of the photo rather than in its own column, which is what
+   frees the row height. White-on-photo, not accent: at one per row a teal
+   button repeated fifteen times down the page stops meaning "primary action". */
 .tt-plus {
+  position: absolute;
+  right: -8px;
+  bottom: -8px;
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--tt-accent);
-  color: var(--tt-white);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  font-size: 20px;
-  font-weight: 300;
+  background: var(--tt-white);
+  color: var(--tt-ink);
+  border: 1px solid var(--tt-line);
+  display: grid;
+  place-items: center;
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+.tt-plus:hover {
+  background: var(--tt-surface);
 }
 
 /* ── item detail ── */
@@ -804,7 +932,7 @@ h2.tt-serif {
 }
 .tt-chip {
   padding: 8px 14px;
-  border-radius: 10px;
+  border-radius: var(--tt-radius-sm);
   font-size: 13px;
   border: 1.5px solid var(--tt-cream);
   background: transparent;
@@ -821,7 +949,7 @@ h2.tt-serif {
 .tt-input {
   width: 100%;
   border: 1.5px solid var(--tt-cream);
-  border-radius: 10px;
+  border-radius: var(--tt-radius-sm);
   padding: 12px;
   font-size: 13px;
   font-family: inherit;
@@ -912,7 +1040,7 @@ h2.tt-serif {
   background: var(--tt-ink);
   color: var(--tt-white);
   border: none;
-  border-radius: 14px;
+  border-radius: var(--tt-radius);
   padding: 16px 20px;
   font-size: 16px;
   font-weight: 700;
@@ -920,7 +1048,6 @@ h2.tt-serif {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 .tt-fab-count {
   background: var(--tt-accent);
@@ -1022,7 +1149,7 @@ h2.tt-serif {
   border-radius: 12px;
   padding: 10px 18px;
   text-align: center;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--tt-line);
   display: flex;
   flex-direction: column;
 }
@@ -1040,9 +1167,9 @@ h2.tt-serif {
 }
 .tt-order-card {
   background: var(--tt-white);
-  border-radius: 16px;
+  border-radius: var(--tt-radius);
   padding: 18px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--tt-line);
 }
 .tt-status-badge {
   font-size: 11px;
@@ -1059,7 +1186,7 @@ h2.tt-serif {
 }
 .tt-empty {
   background: var(--tt-white);
-  border-radius: 16px;
+  border-radius: var(--tt-radius);
   padding: 60px;
   text-align: center;
   display: flex;
@@ -1185,7 +1312,7 @@ h2.tt-serif {
   padding: 9px;
   flex-shrink: 0;
   border: 1px solid var(--tt-cream);
-  border-radius: 10px;
+  border-radius: var(--tt-radius-sm);
   background: var(--tt-surface);
   cursor: pointer;
 }
@@ -1214,7 +1341,7 @@ h2.tt-serif {
   max-width: 300px;
   height: 100%;
   padding: 16px;
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--tt-line);
   display: flex;
   flex-direction: column;
   animation: tt-drawer-in 0.18s ease-out;
@@ -1262,7 +1389,7 @@ h2.tt-serif {
   align-items: center;
   gap: 10px;
   padding: 12px;
-  border-radius: 10px;
+  border-radius: var(--tt-radius-sm);
   text-decoration: none;
   color: var(--tt-ink);
   font-size: 15px;
@@ -1366,9 +1493,8 @@ h2.tt-serif {
   max-height: 320px;
   overflow-y: auto;
   background: var(--tt-white);
-  border: 1px solid var(--tt-cream);
   border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--tt-line);
   padding: 6px;
   z-index: 50;
 }
@@ -1429,7 +1555,7 @@ h2.tt-serif {
   top: calc(100% + 8px);
   background: var(--tt-white);
   border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--tt-line);
   min-width: 190px;
   padding: 6px;
   z-index: 60;
@@ -1529,22 +1655,21 @@ h2.tt-serif {
 }
 .tt-tile {
   background: var(--tt-white);
-  border-radius: 16px;
+  border-radius: var(--tt-radius);
   padding: 24px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
   gap: 4px;
   text-decoration: none;
   color: var(--tt-ink);
-  border: 1px solid transparent;
-  transition:
-    border-color 0.12s,
-    transform 0.12s;
+  border: 1px solid var(--tt-line);
 }
+/* No transform and no transition. A tile that lifts and repaints its border on
+   hover animates the whole dashboard as the pointer crosses it, and an accent
+   outline reads as "selected" rather than "hovered". A flat fill says the same
+   thing instantly and holds still. */
 .tt-tile:hover {
-  border-color: var(--tt-accent);
-  transform: translateY(-2px);
+  background: var(--tt-surface);
 }
 .tt-tile-emoji {
   font-size: 34px;
@@ -1554,9 +1679,9 @@ h2.tt-serif {
   opacity: 0.6;
   cursor: default;
 }
+/* Not clickable yet, so it must not answer the pointer at all. */
 .tt-tile-soon:hover {
-  border-color: transparent;
-  transform: none;
+  background: transparent;
 }
 
 /* ── shimmer / skeleton loading ── */
@@ -1577,7 +1702,7 @@ h2.tt-serif {
   );
   background-size: 200% 100%;
   animation: tt-shimmer 1.4s ease-in-out infinite;
-  border-radius: 6px;
+  border-radius: var(--tt-radius-sm);
 }
 @media (prefers-reduced-motion: reduce) {
   .tt-skeleton {
@@ -1587,7 +1712,7 @@ h2.tt-serif {
 .tt-skel-thumb {
   width: 48px;
   height: 48px;
-  border-radius: 10px;
+  border-radius: var(--tt-radius-sm);
   flex-shrink: 0;
 }
 .tt-skel-line {
@@ -1596,9 +1721,9 @@ h2.tt-serif {
 }
 .tt-skel-tile {
   background: var(--tt-white);
-  border-radius: 16px;
+  border-radius: var(--tt-radius);
   padding: 24px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--tt-line);
 }
 
 /* ── menu manager ── */
@@ -1762,9 +1887,9 @@ h2.tt-serif {
   background: var(--tt-ink);
   color: var(--tt-white);
   padding: 10px 18px;
-  border-radius: 10px;
+  border-radius: var(--tt-radius-sm);
   font-size: 14px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--tt-line);
   pointer-events: auto;
   animation: tt-toast-in 0.15s ease-out;
 }
@@ -1801,9 +1926,9 @@ h2.tt-serif {
 }
 .tt-section {
   background: var(--tt-white);
-  border-radius: 16px;
+  border-radius: var(--tt-radius);
   padding: 18px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--tt-line);
 }
 .tt-section-head {
   display: flex;
@@ -1941,7 +2066,7 @@ h2.tt-serif {
 }
 .tt-prod-selected {
   background: color-mix(in srgb, var(--tt-accent) 6%, transparent);
-  border-radius: 10px;
+  border-radius: var(--tt-radius-sm);
 }
 .tt-bulk-bar {
   position: fixed;
@@ -1955,7 +2080,7 @@ h2.tt-serif {
   background: var(--tt-white);
   border-radius: 999px;
   padding: 10px 18px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+  border: 1px solid var(--tt-line);
 }
 
 /* analytics: stat tiles */
@@ -1965,23 +2090,38 @@ h2.tt-serif {
   gap: 12px;
 }
 @media (max-width: 640px) {
-  .tt-analytics-tiles { grid-template-columns: repeat(2, 1fr); }
+  .tt-analytics-tiles {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 .tt-analytics-tile {
   background: var(--tt-white);
-  border-radius: 16px;
+  border-radius: var(--tt-radius);
   padding: 16px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--tt-line);
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-.tt-analytics-tile strong { font-size: 24px; line-height: 1.1; }
-.tt-analytics-tile span { color: var(--tt-muted); font-size: 13px; }
+.tt-analytics-tile strong {
+  font-size: 24px;
+  line-height: 1.1;
+}
+.tt-analytics-tile span {
+  color: var(--tt-muted);
+  font-size: 13px;
+}
 
 /* analytics: CSS bar charts */
-.tt-bars { display: flex; align-items: flex-end; gap: 6px; height: 160px; }
-.tt-bars-hours { gap: 2px; }
+.tt-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 160px;
+}
+.tt-bars-hours {
+  gap: 2px;
+}
 .tt-bar-col {
   flex: 1;
   min-width: 0;
@@ -1991,17 +2131,29 @@ h2.tt-serif {
   gap: 6px;
   height: 100%;
 }
-.tt-bar-track { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+.tt-bar-track {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+}
 .tt-bar-fill {
   width: 100%;
   min-height: 2px;
   background: var(--tt-accent);
   border-radius: 6px 6px 0 0;
 }
-.tt-bar-label { font-size: 11px; color: var(--tt-muted); white-space: nowrap; }
+.tt-bar-label {
+  font-size: 11px;
+  color: var(--tt-muted);
+  white-space: nowrap;
+}
 
 /* analytics: top-products table */
-.tt-analytics-table { display: flex; flex-direction: column; }
+.tt-analytics-table {
+  display: flex;
+  flex-direction: column;
+}
 .tt-analytics-tr {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 70px 110px;
@@ -2011,7 +2163,9 @@ h2.tt-serif {
   border-top: 1px solid var(--tt-cream);
   font-size: 14px;
 }
-.tt-analytics-tr:first-of-type { border-top: none; }
+.tt-analytics-tr:first-of-type {
+  border-top: none;
+}
 
 /* platform admin tables */
 .tt-admin-table {
@@ -2068,7 +2222,7 @@ h2.tt-serif {
   border-radius: 12px;
   padding: 10px 14px;
   font-size: 14px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--tt-line);
 }
 
 /* Customer menu: call-waiter / request-bill buttons (table QR only) */
@@ -2118,7 +2272,12 @@ h2.tt-serif {
 }
 
 /* Dietary / allergen badges on menu items */
-.tt-diet-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+.tt-diet-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0;
+}
 .tt-diet-badge {
   font-size: 11px;
   padding: 2px 8px;
@@ -2131,7 +2290,11 @@ h2.tt-serif {
 /* Customer menu: dietary filter chips (under the category tabs) */
 /* These now live in the Filters dialog on a light surface, not in the dark
    header strip, so they're styled for light. */
-.tt-diet-filter { display: flex; flex-wrap: wrap; gap: 8px; }
+.tt-diet-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .tt-diet-chip {
   border: 1px solid var(--tt-cream);
   background: var(--tt-white);
@@ -2142,7 +2305,9 @@ h2.tt-serif {
   cursor: pointer;
   font-family: inherit;
 }
-.tt-diet-chip:hover { background: var(--tt-surface); }
+.tt-diet-chip:hover {
+  background: var(--tt-surface);
+}
 .tt-diet-chip-on {
   background: var(--tt-success-wash);
   color: var(--tt-success);
@@ -2166,39 +2331,55 @@ h2.tt-serif {
   cursor: pointer;
   font-family: inherit;
 }
-.tt-icon-round:hover { background: rgba(255, 255, 255, 0.16); }
+.tt-icon-round:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
 
-/* Filters button sits at the end of the category row. */
+/* Filters control at the end of the category row.
+   A fixed 34px circle, identical to the search control it sits opposite. As a
+   text pill it had to guess a vertical padding that matched the category
+   chips' height and was a pixel out, so it never sat on their line; a fixed
+   square box can't drift. */
 .tt-filter-btn {
+  position: relative;
   flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.22);
   background: rgba(255, 255, 255, 0.08);
   color: var(--tt-white);
-  border-radius: 999px;
-  padding: 7px 14px;
-  font-size: 13px;
-  font-weight: 600;
+  display: grid;
+  place-items: center;
   cursor: pointer;
   font-family: inherit;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
+}
+.tt-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
 }
 .tt-filter-btn-on {
   background: var(--tt-accent);
   border-color: var(--tt-accent);
   color: var(--tt-accent-ink);
 }
+/* How many filters are on, now that the label isn't there to say so. Red so
+   it reads as an active state at a glance against the dark header. */
 .tt-filter-count {
+  position: absolute;
+  top: -5px;
+  right: -5px;
   display: grid;
   place-items: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.25);
-  font-size: 11px;
+  background: var(--tt-sale);
+  color: var(--tt-sale-ink);
+  border: 1.5px solid var(--tt-ink);
+  font-size: 10px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2277,7 +2458,7 @@ h2.tt-serif {
 .tt-prod-thumb {
   width: 48px;
   height: 48px;
-  border-radius: 10px;
+  border-radius: var(--tt-radius-sm);
   background: var(--tt-surface);
   flex-shrink: 0;
   display: flex;
@@ -2351,7 +2532,7 @@ h2.tt-serif {
   cursor: pointer;
   font-size: 16px;
   padding: 4px;
-  border-radius: 6px;
+  border-radius: var(--tt-radius-sm);
 }
 .tt-iconbtn:hover {
   background: var(--tt-surface);
@@ -2376,7 +2557,7 @@ h2.tt-serif {
   border: 1px solid var(--tt-cream);
   cursor: pointer;
   color: var(--tt-muted);
-  border-radius: 7px;
+  border-radius: var(--tt-radius-sm);
 }
 .tt-reorder-btn:hover:not(:disabled) {
   background: var(--tt-surface);
@@ -2536,11 +2717,11 @@ h2.tt-serif {
 }
 .tt-dialog {
   background: var(--tt-white);
-  border-radius: 16px;
+  border-radius: var(--tt-radius);
   padding: 24px;
   max-width: 360px;
   width: 100%;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--tt-line);
 }
 .tt-dialog h3 {
   font-size: 18px;
@@ -2695,4 +2876,193 @@ h2.tt-serif {
 }
 .tt-fallback .tt-btn {
   margin-top: 8px;
+}
+
+/* ── bottom sheet ─────────────────────────────────────────────────────────
+   The filters variant of Modal. Anchored to the bottom edge so the controls
+   land under the thumb, full-bleed on a phone, and still a centred panel once
+   there's a pointer and room for one. */
+.tt-overlay-sheet {
+  align-items: flex-end;
+  padding: 0;
+}
+.tt-sheet {
+  width: 100%;
+  max-width: none !important;
+  border-radius: 16px 16px 0 0;
+  max-height: 85vh;
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+  animation: tt-sheet-up 0.18s ease-out;
+}
+/* The grab handle. Purely a signal that this panel came from the bottom edge
+   and can be dismissed downward. */
+.tt-sheet::before {
+  content: "";
+  display: block;
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--tt-line);
+  margin: -6px auto 14px;
+}
+@keyframes tt-sheet-up {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@media (min-width: 700px) {
+  .tt-overlay-sheet {
+    align-items: center;
+    padding: 24px;
+  }
+  .tt-sheet {
+    max-width: 460px !important;
+    border-radius: var(--tt-radius);
+    animation: none;
+  }
+  .tt-sheet::before {
+    display: none;
+  }
+}
+
+/* Discount badges sit on their own line under the price so a long Spanish
+   label ("Ahorra MX$3.05") can't squeeze the dish name. */
+.tt-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* ── dish detail: full screen on a phone, dialog on desktop ───────────────
+   On a phone this is indistinguishable from the full-page screen it replaces.
+   On a wide screen it becomes a centred dialog over the menu, so the customer
+   keeps their place in the list instead of a short form being stretched
+   across an empty 1080px page. */
+.tt-detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--tt-paper);
+  overflow-y: auto;
+}
+.tt-detail-panel {
+  min-height: 100%;
+}
+@media (min-width: 1025px) {
+  .tt-detail-overlay {
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+  }
+  .tt-detail-panel {
+    min-height: 0;
+    width: 100%;
+    max-width: 520px;
+    max-height: 88vh;
+    overflow-y: auto;
+    background: var(--tt-white);
+    border: 1px solid var(--tt-line);
+    border-radius: var(--tt-radius);
+  }
+  /* .tt-root is a full-height page shell; inside the dialog it must size to
+     its content instead. */
+  .tt-detail-panel .tt-root {
+    min-height: 0;
+  }
+}
+
+/* ── customer menu: desktop sidebar ───────────────────────────────────────
+   Below 1025px nothing here applies: the categories stay a scrolling chip row
+   and the filters stay a bottom sheet, which is right for a thumb. Above it
+   there's a column to spare, so both become a standing list. */
+.tt-menu-body {
+  padding: 16px;
+}
+.tt-menu-side {
+  display: none;
+}
+@media (min-width: 1025px) {
+  .tt-menu-body {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 28px;
+    padding: 24px 16px;
+    align-items: start;
+  }
+  .tt-menu-side {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    position: sticky;
+    top: 16px;
+  }
+  /* The chip row and its filter button are the mobile form of this sidebar;
+     showing both would be two controls for one job. */
+  .tt-menu-sticky {
+    display: none;
+  }
+}
+.tt-side-nav {
+  display: flex;
+  flex-direction: column;
+}
+.tt-side-link {
+  background: none;
+  border: 0;
+  border-left: 3px solid transparent;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  padding: 9px 12px;
+  color: var(--tt-ink-2);
+  cursor: pointer;
+  border-radius: 0 var(--tt-radius-sm) var(--tt-radius-sm) 0;
+}
+.tt-side-link:hover {
+  background: var(--tt-surface);
+}
+/* A weight and a rule, not a fill: the selected category should be legible at
+   a glance without becoming the loudest thing on a page full of food. */
+.tt-side-link-on {
+  font-weight: 700;
+  color: var(--tt-ink);
+  border-left-color: var(--tt-accent);
+  background: var(--tt-surface);
+}
+.tt-side-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--tt-line);
+  padding-top: 18px;
+}
+.tt-side-title {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--tt-muted);
+}
+.tt-side-check {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 3px 0;
+}
+.tt-side-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--tt-accent);
+  cursor: pointer;
 }
