@@ -152,6 +152,7 @@ export const es: Messages = {
     title: "Tu pedido",
     empty: "Tu carrito está vacío.",
     addMore: "+ Agregar más platillos",
+    browseMenu: "Ver el menú",
     kitchenNote: "Nota para la cocina",
     kitchenNotePlaceholder: "¿Alguna nota para todo el pedido?",
     proceed: "Ir a pagar",
