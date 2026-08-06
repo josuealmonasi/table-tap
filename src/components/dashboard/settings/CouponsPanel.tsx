@@ -103,7 +103,9 @@ export default function CouponsPanel({
   }
 
   return (
-    <div className="tt-section">
+    // Full row: this card carries a wide form (code, kind, value, claims,
+    // min spend, two dates) plus the list, and it truncates in a half column.
+    <div className="tt-section tt-cols-full">
       <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 2 }}>
         {t("coupons.title")}
       </h3>
@@ -111,44 +113,7 @@ export default function CouponsPanel({
         {t("coupons.hint")}
       </p>
 
-      {loading ? (
-        <p className="tt-muted">{t("common.loading")}</p>
-      ) : coupons.length === 0 ? (
-        <p className="tt-muted">{t("coupons.empty")}</p>
-      ) : (
-        <div className="tt-coupon-list">
-          {coupons.map(c => {
-            const spent = c.max_uses !== null && c.uses_count >= c.max_uses;
-            return (
-              <div key={c.id} className="tt-coupon-item">
-                <div style={{ minWidth: 0 }}>
-                  <code className="tt-coupon-code">{c.code}</code>
-                  {!c.active && <span className="tt-coupon-off">{t("coupons.paused")}</span>}
-                  {spent && <span className="tt-coupon-off">{t("coupons.spent")}</span>}
-                  <div className="tt-muted" style={{ fontSize: 13 }}>
-                    {describe(c)}
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                  <button
-                    className="tt-btn tt-btn-ghost tt-btn-sm"
-                    onClick={async () => {
-                      const err = await setActive(c.id, !c.active);
-                      if (err) toast(err, "error");
-                    }}
-                  >
-                    {c.active ? t("coupons.pause") : t("coupons.resume")}
-                  </button>
-                  <button className="tt-iconbtn" title={t("coupons.delete")} onClick={() => del(c)}>
-                    🗑️
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
+      {/* Create form first — the list grows with every code handed out. */}
       <form onSubmit={add} className="tt-coupon-form">
         <div className="tt-prodform-row">
           <input
@@ -206,7 +171,7 @@ export default function CouponsPanel({
         <div className="tt-prodform-row">
           <input
             className="tt-input"
-            style={{ width: 150 }}
+            style={{ width: 190 }}
             type="number"
             min="0"
             step="0.01"
@@ -251,6 +216,45 @@ export default function CouponsPanel({
           {saving ? t("common.saving") : t("coupons.add")}
         </button>
       </form>
+
+      {loading ? (
+        <p className="tt-muted">{t("common.loading")}</p>
+      ) : coupons.length === 0 ? (
+        <p className="tt-muted">{t("coupons.empty")}</p>
+      ) : (
+        <div className="tt-coupon-list">
+          {coupons.map(c => {
+            const spent = c.max_uses !== null && c.uses_count >= c.max_uses;
+            return (
+              <div key={c.id} className="tt-coupon-item">
+                <div style={{ minWidth: 0 }}>
+                  <code className="tt-coupon-code">{c.code}</code>
+                  {!c.active && <span className="tt-coupon-off">{t("coupons.paused")}</span>}
+                  {spent && <span className="tt-coupon-off">{t("coupons.spent")}</span>}
+                  <div className="tt-muted" style={{ fontSize: 13 }}>
+                    {describe(c)}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button
+                    className="tt-btn tt-btn-ghost tt-btn-sm"
+                    onClick={async () => {
+                      const err = await setActive(c.id, !c.active);
+                      if (err) toast(err, "error");
+                    }}
+                  >
+                    {c.active ? t("coupons.pause") : t("coupons.resume")}
+                  </button>
+                  <button className="tt-iconbtn" title={t("coupons.delete")} onClick={() => del(c)}>
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
     </div>
   );
 }

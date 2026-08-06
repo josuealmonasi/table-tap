@@ -73,6 +73,42 @@ export default function AddonsPanel({
         </p>
       )}
 
+      {/* Above the list: the extras list grows, and the add control
+          shouldn't drift further down the page as it does. */}
+      {(() => {
+        const addForm = (
+          <AddonForm
+            submitLabel={t("menu.addExtra")}
+            onCancel={() => setAdding(false)}
+            onSubmit={async input => {
+              await onAdd(input);
+              setAdding(false);
+            }}
+          />
+        );
+
+        if (modalForms) {
+          return (
+            <>
+              <button className="tt-add-more" onClick={() => setAdding(true)}>
+                {t("menu.addExtra")}
+              </button>
+              <Modal open={adding} onClose={() => setAdding(false)} maxWidth={520} label={t("menu.addExtra")}>
+                {addForm}
+              </Modal>
+            </>
+          );
+        }
+
+        return adding ? (
+          <div className="tt-prod-editing">{addForm}</div>
+        ) : (
+          <button className="tt-add-more" onClick={() => setAdding(true)}>
+            {t("menu.addExtra")}
+          </button>
+        );
+      })()}
+
       {shown.map((addon, i) => {
         const isEditing = editingId === addon.id;
         const editForm = (
@@ -181,39 +217,6 @@ export default function AddonsPanel({
         );
       })}
 
-      {(() => {
-        const addForm = (
-          <AddonForm
-            submitLabel={t("menu.addExtra")}
-            onCancel={() => setAdding(false)}
-            onSubmit={async input => {
-              await onAdd(input);
-              setAdding(false);
-            }}
-          />
-        );
-
-        if (modalForms) {
-          return (
-            <>
-              <button className="tt-add-more" onClick={() => setAdding(true)}>
-                {t("menu.addExtra")}
-              </button>
-              <Modal open={adding} onClose={() => setAdding(false)} maxWidth={520} label={t("menu.addExtra")}>
-                {addForm}
-              </Modal>
-            </>
-          );
-        }
-
-        return adding ? (
-          <div className="tt-prod-editing">{addForm}</div>
-        ) : (
-          <button className="tt-add-more" onClick={() => setAdding(true)}>
-            {t("menu.addExtra")}
-          </button>
-        );
-      })()}
     </div>
   );
 }

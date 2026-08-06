@@ -377,6 +377,14 @@ code {
   .tt-cols-full {
     grid-column: 1 / -1;
   }
+  /* Most cards were written to stack vertically and carry their own
+     margin-top / max-width. In the grid the gap and the column already handle
+     that, and a leftover margin pushes one column out of line with the other.
+     !important because those values are inline styles on the components. */
+  .tt-cols > * {
+    margin-top: 0 !important;
+    max-width: none !important;
+  }
 }
 
 /* ── Promotion forms ──────────────────────────────────────────────────── */
@@ -558,7 +566,11 @@ code {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  align-items: flex-start;
+}
+/* Rows stretch so a `flex: 1` field (like "Max claims") actually grows and its
+   placeholder fits; only the submit button hugs its own width. */
+.tt-coupon-form > button {
+  align-self: flex-start;
 }
 
 /* Money coming off the bill — green, so a saving never reads as a charge. */
@@ -2300,6 +2312,16 @@ code {
 .tt-add-section {
   display: flex;
   gap: 8px;
+}
+/* The input carries `width: 100%`, which squeezed the button until its label
+   wrapped ("+ Add" / "table"). Let the input flex and keep the button intact. */
+.tt-add-section .tt-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tt-add-section .tt-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 /* icon picker accordion */
