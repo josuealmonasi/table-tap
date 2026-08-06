@@ -54,9 +54,7 @@ export default function ModifiersEditor({ value, onChange }: ModifiersEditorProp
               style={{ width: 130 }}
               value={group.type}
               aria-label={t("menu.choiceType")}
-              onChange={e =>
-                patchGroup(i, { type: e.target.value as Modifier["type"] })
-              }
+              onChange={e => patchGroup(i, { type: e.target.value as Modifier["type"] })}
             >
               <option value="single">{t("menu.oneChoice")}</option>
               <option value="multi">{t("menu.anyChoice")}</option>
@@ -70,6 +68,24 @@ export default function ModifiersEditor({ value, onChange }: ModifiersEditorProp
               🗑️
             </button>
           </div>
+
+          {/* Required blocks the customer's "Add to cart" until they choose.
+              Worth it for the groups a dish can't be cooked without — steak
+              doneness, a base for a build-your-own — and a nuisance anywhere
+              else, so it's off by default. */}
+          <label className="tt-check" style={{ marginTop: 8 }}>
+            <input
+              type="checkbox"
+              checked={group.required ?? false}
+              onChange={e => patchGroup(i, { required: e.target.checked })}
+            />
+            <span>
+              {t("menu.groupRequired")}{" "}
+              <span className="tt-muted" style={{ fontWeight: 400 }}>
+                {t("menu.groupRequiredHint")}
+              </span>
+            </span>
+          </label>
 
           <div className="tt-chips" style={{ marginTop: 8 }}>
             {group.options.map(option => (

@@ -78,6 +78,8 @@ export const es: Messages = {
     optionGroupsHint: "(p. ej. “Nivel de picante” — el cliente elige al ordenar)",
     groupNamePlaceholder: "Nombre del grupo (p. ej. Nivel de picante)",
     choiceType: "Tipo de elección",
+    groupRequired: "Obligatorio",
+    groupRequiredHint: "el cliente debe elegir antes de agregar",
     oneChoice: "Una opción",
     anyChoice: "Varias",
     removeGroup: "Quitar grupo",
@@ -142,6 +144,9 @@ export const es: Messages = {
     requestsPlaceholder: "Alergias, preferencias…",
     addToCart: "Agregar al carrito",
     updateItem: "Actualizar platillo",
+    required: "Obligatorio",
+    chooseAny: "(elige los que quieras)",
+    chooseFirst: "Elige {groups} para continuar.",
   },
   cart: {
     title: "Tu pedido",

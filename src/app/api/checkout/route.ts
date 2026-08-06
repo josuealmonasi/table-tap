@@ -15,7 +15,8 @@ import {
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { fetchPromotions } from "@/lib/promotions-data";
 import { buildCombos, toCartPromos } from "@/lib/promotions";
-import type { OrderLineItem, OrderExtra, MenuItem } from "@/lib/types";
+import type { OrderLineItem, OrderExtra, MenuItem, Modifier } from "@/lib/types";
+import { missingRequired } from "@/lib/modifiers";
 
 export const runtime = "nodejs";
 
@@ -132,7 +133,7 @@ export async function POST(req: NextRequest) {
     ];
     const { data: dbItems, error: iErr } = await supabase
       .from("menu_items")
-      .select("id, name, price, emoji, available, discount_pct")
+      .select("id, name, price, emoji, available, discount_pct, modifiers")
       .in("id", referencedIds)
       .eq("restaurant_id", restaurantId);
 
@@ -204,6 +205,26 @@ export async function POST(req: NextRequest) {
           emoji: dbExtra.emoji,
           price: dbExtra.price,
         });
+      }
+
+      // Required option groups, checked against the DB's modifiers rather than
+      // the client's. The customer screen already disables "Add to cart" for
+      // this, but that copy can be stale (a tab left open while the manager
+      // marked a group required) or simply absent, so this is the one that
+      // decides — otherwise the kitchen gets a ticket it can't cook from.
+      const unanswered = missingRequired(
+        (db.modifiers as Modifier[] | null) ?? [],
+        line.mods,
+      );
+      if (unanswered.length > 0) {
+        return NextResponse.json(
+          {
+            error: `Choose ${unanswered.join(", ")} for ${db.name} before ordering.`,
+            missingModifiers: unanswered,
+            unansweredItemId: db.id,
+          },
+          { status: 400 },
+        );
       }
 
       const qty = Math.max(1, Math.floor(line.qty));

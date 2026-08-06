@@ -78,6 +78,8 @@ export const en = {
     optionGroupsHint: "(e.g. “Spice level” — customers pick when ordering)",
     groupNamePlaceholder: "Group name (e.g. Spice level)",
     choiceType: "Choice type",
+    groupRequired: "Required",
+    groupRequiredHint: "the customer must choose before adding",
     oneChoice: "One choice",
     anyChoice: "Any",
     removeGroup: "Remove group",
@@ -148,6 +150,9 @@ export const en = {
     requestsPlaceholder: "Allergies, preferences…",
     addToCart: "Add to cart",
     updateItem: "Update item",
+    required: "Required",
+    chooseAny: "(choose any)",
+    chooseFirst: "Choose {groups} to continue.",
   },
   cart: {
     title: "Your Order",
