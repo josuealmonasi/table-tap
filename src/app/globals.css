@@ -696,7 +696,10 @@ h2.tt-serif {
 /* The identity block scrolls away with the page… */
 .tt-menu-header {
   background: var(--tt-ink);
-  padding: 20px 20px 0;
+  /* The bottom padding matters: the gap under the tagline used to come from
+     the service-button row's own margin, so on a table-less menu (no such
+     row) the tagline sat flush against the edge of the dark block. */
+  padding: 20px 20px 16px;
   color: var(--tt-white);
 }
 /* On desktop this dark block is a panel inside a centred column, not a band
@@ -705,7 +708,7 @@ h2.tt-serif {
    gutters either side. */
 @media (min-width: 1025px) {
   .tt-menu-header {
-    padding: 30px 32px 0;
+    padding: 30px 32px 20px;
     border-radius: var(--tt-radius) var(--tt-radius) 0 0;
   }
   .tt-menu-sticky {
@@ -722,11 +725,12 @@ h2.tt-serif {
 .tt-brand-name {
   font-size: 22px;
   font-weight: 700;
-  line-height: 1.15;
+  line-height: 1.2;
 }
 .tt-brand-tagline {
   font-size: 13px;
-  margin-top: 3px;
+  line-height: 1.4;
+  margin-top: 7px;
 }
 @media (min-width: 1025px) {
   .tt-brand-logo {
@@ -738,7 +742,7 @@ h2.tt-serif {
   }
   .tt-brand-tagline {
     font-size: 15px;
-    margin-top: 5px;
+    margin-top: 9px;
   }
 }
 .tt-menu-header .tt-serif {
@@ -3075,4 +3079,36 @@ h2.tt-serif {
   height: 16px;
   accent-color: var(--tt-accent);
   cursor: pointer;
+}
+
+/* ── dish detail: the add-to-cart bar stays put ───────────────────────────
+   Sticky rather than a fixed footer, so it needs no restructuring of the
+   scroll container and behaves the same in the full-screen mobile view and
+   the desktop dialog. The negative margins let it span the content padding
+   edge to edge, so the list scrolls underneath it rather than beside it. */
+.tt-detail-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  gap: 12px;
+  /* stretch, not center: the stepper is 41px tall and the button 56px, so
+     centring two different heights left neither edge lining up with the
+     other. Stretching makes them one bar. */
+  align-items: stretch;
+  background: var(--tt-white);
+  border-top: 1px solid var(--tt-line);
+  margin: 4px -20px -20px;
+  padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
+}
+
+/* Inside the action bar the stepper is a sibling control, not a standalone
+   widget: it holds its width, matches the button's height and radius, and
+   gets a border so both read as the same kind of thing. */
+.tt-detail-actions .tt-stepper {
+  flex: none;
+  padding: 0 14px;
+  border-radius: var(--tt-radius-sm);
+  border: 1px solid var(--tt-line);
+  background: var(--tt-white);
 }
