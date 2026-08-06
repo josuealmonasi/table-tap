@@ -118,7 +118,7 @@ export default function TablesPanel({
             <>
               {/* Above the list: with a room full of tables you shouldn't have
                   to scroll past every QR code to add one more. */}
-              <div style={{ marginBottom: 14 }}>{addForm}</div>
+              <div className="tt-add-above">{addForm}</div>
               <div className="tt-table-list">
                 {tables.map(({ table, qr }) => (
                   <TableRow

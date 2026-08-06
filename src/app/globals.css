@@ -562,6 +562,12 @@ code {
   color: var(--tt-muted, #6b6b6b);
 }
 
+/* An add control that sits above the list it feeds. One value everywhere, so
+   the gap doesn't drift between Tables, Menus, Coupons and the menu editor. */
+.tt-add-above {
+  margin-bottom: 18px;
+}
+
 .tt-coupon-form {
   display: flex;
   flex-direction: column;
