@@ -1034,10 +1034,34 @@ h2.tt-serif {
 }
 
 /* ── cart FAB ── */
+/* Fixed, not sticky. `position: sticky` only holds an element that would
+   otherwise scroll past its offset — it never pulls one DOWN from a natural
+   position that's already on screen. So as soon as a filter narrowed the menu
+   to one or two dishes, "View cart" stopped being a bar at the bottom and
+   became a button floating in the middle of an empty page. Fixed pins it to
+   the viewport whatever the list length. */
 .tt-fab-wrap {
-  position: sticky;
+  position: fixed;
   bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 460px; /* matches .tt-root */
   padding: 0 16px;
+  z-index: 40;
+}
+@media (min-width: 1025px) {
+  /* The menu column is 1080px here, but a full-width bar at that size is
+     absurd — keep it thumb-sized and centred. */
+  .tt-fab-wrap {
+    max-width: 560px;
+  }
+}
+/* Room for the bar so it never covers the last dish. The bar is only rendered
+   when the cart has something in it, but reserving the space unconditionally
+   keeps the list from shifting the moment the first item is added. */
+.tt-dish-layout {
+  padding-bottom: 92px;
 }
 .tt-fab {
   width: 100%;
@@ -3022,21 +3046,21 @@ h2.tt-serif {
    Below 1025px nothing here applies: the categories stay a scrolling chip row
    and the filters stay a bottom sheet, which is right for a thumb. Above it
    there's a column to spare, so both become a standing list. */
-.tt-menu-body {
+.tt-dish-layout {
   padding: 16px;
 }
-.tt-menu-side {
+.tt-dish-side {
   display: none;
 }
 @media (min-width: 1025px) {
-  .tt-menu-body {
+  .tt-dish-layout {
     display: grid;
     grid-template-columns: 220px minmax(0, 1fr);
     gap: 28px;
     padding: 24px 16px;
     align-items: start;
   }
-  .tt-menu-side {
+  .tt-dish-side {
     display: flex;
     flex-direction: column;
     gap: 22px;

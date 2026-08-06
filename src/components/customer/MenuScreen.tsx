@@ -128,7 +128,15 @@ export default function MenuScreen({
                 className="tt-icon-round"
                 aria-label={t("menu.search")}
                 aria-expanded={searchOpen}
-                onClick={() => setSearchOpen(o => !o)}
+                // Closing clears the query. Hiding the input while keeping the
+                // term left the menu filtered with nothing on screen to say
+                // why — the categories vanish under an active search, so a
+                // diner saw two dishes, no search box, and no way back short
+                // of reloading.
+                onClick={() => {
+                  if (searchOpen) setSearch("");
+                  setSearchOpen(open => !open);
+                }}
               >
                 {searchOpen ? "✕" : "🔍"}
               </button>
@@ -258,13 +266,13 @@ export default function MenuScreen({
         </div>
       </Modal>
 
-      <div className="tt-menu-body">
+      <div className="tt-dish-layout">
         {/* Desktop only. With room for a column there's no reason to hide the
             categories behind a scroller and the filters behind a button and a
             dialog — both become a standing list you can see the state of, and
             picking one no longer costs an open-and-dismiss. Hidden below
             1025px, where the chip row and the sheet are the right shapes. */}
-        <aside className="tt-menu-side" aria-label={t("menu.filtersTitle")}>
+        <aside className="tt-dish-side" aria-label={t("menu.filtersTitle")}>
           {!search.trim() && (
             <nav className="tt-side-nav">
               <button
@@ -315,7 +323,7 @@ export default function MenuScreen({
           )}
         </aside>
 
-        <div className="tt-menu-main">
+        <div className="tt-dish-main">
           {filtered.length === 0 &&
             shownCombos.length === 0 &&
             (search.trim() || diet.length > 0) && (
