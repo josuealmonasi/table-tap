@@ -5,6 +5,7 @@ import { formatMoney } from "@/lib/format";
 import type { MenuItem, Modifier, OrderLineItem } from "@/lib/types";
 import { dietaryTags } from "@/lib/dietary";
 import { itemSalePrice } from "@/lib/pricing";
+import { missingRequired } from "@/lib/modifiers";
 import { useT } from "@/lib/i18n/context";
 import ModifierGroup from "./ModifierGroup";
 
@@ -34,6 +35,12 @@ export default function ItemDetailScreen({
   );
   const [qty, setQty] = useState(initialLine?.qty ?? 1);
   const [notes, setNotes] = useState(initialLine?.notes ?? "");
+  // Only after a blocked attempt — flagging groups red on open would tell a
+  // customer they'd done something wrong before they'd done anything.
+  const [showMissing, setShowMissing] = useState(false);
+
+  // Same rule the checkout route re-runs server-side against DB modifiers.
+  const missing = missingRequired(item.modifiers, mods);
 
   function toggleMod(label: string, option: string, type: Modifier["type"]) {
     setMods(prev => {
@@ -58,6 +65,10 @@ export default function ItemDetailScreen({
   const unitPrice = salePrice + extrasTotal;
 
   function handleAdd() {
+    if (missing.length > 0) {
+      setShowMissing(true);
+      return;
+    }
     onAdd({
       itemId: item.id,
       name: item.name,
@@ -119,6 +130,7 @@ export default function ItemDetailScreen({
             key={mod.label}
             modifier={mod}
             value={mods[mod.label]}
+            missing={showMissing && missing.includes(mod.label)}
             onToggle={option => toggleMod(mod.label, option, mod.type)}
           />
         ))}
@@ -162,6 +174,11 @@ export default function ItemDetailScreen({
             and nine dietary tags pushes this well past the fold, and an
             "Add to cart" you have to go looking for is the one control on the
             screen that must never need finding. */}
+        {missing.length > 0 && (
+          <p className="tt-req-note" role="status">
+            {t("item.chooseFirst", { groups: missing.join(", ") })}
+          </p>
+        )}
         <div className="tt-detail-actions">
           <div className="tt-stepper">
             <button onClick={() => setQty(q => Math.max(1, q - 1))}>−</button>
@@ -171,6 +188,7 @@ export default function ItemDetailScreen({
           <button
             className="tt-btn tt-btn-primary"
             style={{ flex: 1 }}
+            disabled={missing.length > 0}
             onClick={handleAdd}
           >
             {t(initialLine ? "item.updateItem" : "item.addToCart")} —{" "}

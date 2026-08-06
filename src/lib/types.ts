@@ -4,6 +4,12 @@ export type Modifier = {
   label: string;
   type: "single" | "multi";
   options: string[];
+  /**
+   * The customer must pick before the item can be added. Optional so every
+   * modifier already stored without the field keeps working — absent reads as
+   * false, which is how they behaved before this existed.
+   */
+  required?: boolean;
 };
 
 export type MenuItem = {
