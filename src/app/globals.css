@@ -2,17 +2,40 @@
    TableTap — global styles & design tokens
    Palette: sumi ink, rice paper, persimmon accent, sage, gold
    ========================================================================== */
+/* ── "Counter" ────────────────────────────────────────────────────────────
+   White cards on a cool grey ground, near-black ink, and ONE accent that is
+   reserved for actions and prices. Everything else is greyscale, so the eye
+   always knows where the action is.
+
+   The previous palette had page/surface/card within 4% of each other, which
+   is why cards never separated from the background and every screen read
+   flat. --tt-surface is now true white and does that work on its own. */
 :root {
-  --tt-ink: #0f0f0f;
-  --tt-paper: #faf7f2;
-  --tt-accent: #e8522a; /* persimmon */
-  --tt-sage: #7a8c7e;
-  --tt-gold: #c9a84c;
-  --tt-cream: #f0ebe1;
-  --tt-surface: #f5f1eb;
-  --tt-muted: #9b9490;
+  --tt-ink: #111113;
+  --tt-ink-2: #3d3d45; /* secondary text that still needs to be read */
+  --tt-paper: #f2f2f3; /* page ground — cards are white, so this makes depth */
+  --tt-surface: #ececef; /* inset tint: thumbnails, hover fills, code, skeletons */
+  --tt-cream: #e5e5e9; /* hairlines, dividers, chip fills */
+  --tt-muted: #70707a;
   --tt-white: #ffffff;
-  --tt-success: #3a7d5c;
+
+  /* Persimmon, deepened from #e8522a so it holds against white instead of
+     glowing against cream. The single accent — nothing else competes. */
+  --tt-accent: #e24e1b;
+  --tt-accent-ink: #ffffff; /* text on top of the accent */
+  --tt-accent-wash: rgba(226, 78, 27, 0.1);
+
+  /* Semantic, deliberately NOT the accent: these report state, they aren't
+     brand colour. Sage and gold used to stand in for these jobs. */
+  --tt-success: #0f7b4f;
+  --tt-success-wash: rgba(15, 123, 79, 0.1);
+  --tt-warning: #9a5b06;
+  --tt-warning-wash: rgba(154, 91, 6, 0.12);
+
+  /* Kept so the two remaining callers keep working; both now point at the
+     semantic tokens rather than being a third and fourth brand colour. */
+  --tt-sage: var(--tt-muted);
+  --tt-gold: var(--tt-warning);
 }
 
 * {
@@ -27,6 +50,7 @@ body {
   background: var(--tt-paper);
   color: var(--tt-ink);
   font-family:
+    var(--tt-font),
     system-ui,
     -apple-system,
     "Segoe UI",
@@ -44,8 +68,18 @@ code {
   font-size: 0.9em;
 }
 
+/* Was Georgia. Kept as a class name because ~30 components ask for it, but it
+   no longer switches family — hierarchy now comes from weight and tracking in
+   the one typeface. Renaming it across every file would be churn for nothing. */
 .tt-serif {
-  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+}
+/* Big headings want tighter tracking than small ones. */
+h1.tt-serif,
+h2.tt-serif {
+  font-weight: 800;
+  letter-spacing: -0.035em;
 }
 .tt-muted {
   color: var(--tt-muted);
@@ -250,7 +284,7 @@ code {
 }
 .tt-pop {
   font-size: 10px;
-  background: rgba(232, 82, 42, 0.12);
+  background: var(--tt-accent-wash);
   color: var(--tt-accent);
   font-weight: 700;
   padding: 2px 6px;
@@ -263,8 +297,8 @@ code {
    than blending into the accent-coloured "Popular" chip next to it. */
 .tt-sale {
   font-size: 10px;
-  background: rgba(22, 138, 74, 0.12);
-  color: #168a4a;
+  background: var(--tt-success-wash);
+  color: var(--tt-success);
   font-weight: 700;
   padding: 2px 6px;
   border-radius: 10px;
@@ -299,8 +333,8 @@ code {
   padding: 10px 12px;
   border-radius: 12px;
   font-size: 14px;
-  background: rgba(22, 138, 74, 0.08);
-  border: 1px solid rgba(22, 138, 74, 0.25);
+  background: var(--tt-success-wash);
+  border: 1px solid color-mix(in srgb, var(--tt-success) 30%, transparent);
 }
 
 .tt-coupon-applied .tt-linkbtn {
@@ -311,8 +345,8 @@ code {
 /* "2x1 Tacos" badge on an item covered by a quantity deal. */
 .tt-deal {
   font-size: 10px;
-  background: rgba(216, 143, 30, 0.14);
-  color: #96620c;
+  background: var(--tt-warning-wash);
+  color: var(--tt-warning);
   font-weight: 700;
   padding: 2px 6px;
   border-radius: 10px;
@@ -332,15 +366,15 @@ code {
   padding: 8px 12px;
   border-radius: 12px;
   font-size: 13px;
-  background: rgba(216, 143, 30, 0.1);
-  border: 1px solid rgba(216, 143, 30, 0.25);
-  color: #7a4f08;
+  background: var(--tt-warning-wash);
+  border: 1px solid color-mix(in srgb, var(--tt-warning) 30%, transparent);
+  color: var(--tt-warning);
 }
 
 /* Combo card: a subtle tint so a bundle reads as different from a dish. */
 .tt-combo {
-  background: linear-gradient(180deg, rgba(22, 138, 74, 0.05), transparent);
-  border: 1px solid rgba(22, 138, 74, 0.2);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tt-success) 6%, transparent), transparent);
+  border: 1px solid color-mix(in srgb, var(--tt-success) 24%, transparent);
 }
 
 /* Chip with a quantity stepper, used by the combo product picker. */
@@ -488,7 +522,7 @@ code {
 }
 
 .tt-picker-active {
-  background: rgba(232, 82, 42, 0.1);
+  background: var(--tt-accent-wash);
 }
 
 .tt-picker-name {
@@ -581,7 +615,7 @@ code {
 
 /* Money coming off the bill — green, so a saving never reads as a charge. */
 .tt-save {
-  color: #168a4a;
+  color: var(--tt-success);
   font-weight: 600;
 }
 
@@ -636,7 +670,7 @@ code {
   background: var(--tt-accent);
   color: #fff;
   font-weight: 700;
-  box-shadow: 0 2px 12px rgba(232, 82, 42, 0.5);
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--tt-accent) 50%, transparent);
 }
 
 /* ── menu item rows ── */
@@ -736,7 +770,7 @@ code {
 }
 .tt-chip-on {
   border-color: var(--tt-accent);
-  background: rgba(232, 82, 42, 0.08);
+  background: color-mix(in srgb, var(--tt-accent) 8%, transparent);
   color: var(--tt-accent);
   font-weight: 700;
 }
@@ -884,7 +918,7 @@ code {
 }
 .tt-step-active {
   background: var(--tt-accent);
-  box-shadow: 0 0 0 4px rgba(232, 82, 42, 0.19);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--tt-accent) 19%, transparent);
 }
 .tt-step-done {
   background: var(--tt-success);
@@ -916,7 +950,7 @@ code {
 /* Breakpoints: mobile <640px, tablet 640–1024px, desktop >1024px. */
 .tt-dash {
   min-height: 100vh;
-  background: #f0ede8;
+  background: var(--tt-paper);
   padding: 24px 0;
 }
 .tt-dash-head {
@@ -1188,12 +1222,12 @@ code {
   line-height: 1;
 }
 .tt-drawer-link-active {
-  background: rgba(232, 82, 42, 0.1);
+  background: var(--tt-accent-wash);
   color: var(--tt-accent);
   font-weight: 700;
 }
 .tt-drawer-link-active:hover {
-  background: rgba(232, 82, 42, 0.1);
+  background: var(--tt-accent-wash);
 }
 .tt-drawer-link-soon {
   color: var(--tt-muted);
@@ -1570,7 +1604,7 @@ code {
 }
 .tt-menu-row-active {
   border-color: var(--tt-accent);
-  background: rgba(232, 82, 42, 0.06);
+  background: color-mix(in srgb, var(--tt-accent) 6%, transparent);
 }
 .tt-menu-name {
   flex: 1;
@@ -1758,7 +1792,7 @@ code {
 .tt-board-tab-active {
   border-color: var(--tt-accent);
   color: var(--tt-accent);
-  background: rgba(232, 82, 42, 0.06);
+  background: color-mix(in srgb, var(--tt-accent) 6%, transparent);
   font-weight: 600;
 }
 
@@ -1845,7 +1879,7 @@ code {
   cursor: pointer;
 }
 .tt-prod-selected {
-  background: rgba(232, 82, 42, 0.05);
+  background: color-mix(in srgb, var(--tt-accent) 6%, transparent);
   border-radius: 10px;
 }
 .tt-bulk-bar {
@@ -2018,7 +2052,7 @@ code {
 .tt-tip-chip-active {
   border-color: var(--tt-accent);
   color: var(--tt-accent);
-  background: rgba(232, 82, 42, 0.06);
+  background: color-mix(in srgb, var(--tt-accent) 6%, transparent);
   font-weight: 600;
 }
 
@@ -2170,7 +2204,7 @@ code {
 }
 .tt-move-option:hover {
   border-color: var(--tt-accent);
-  background: rgba(232, 82, 42, 0.06);
+  background: color-mix(in srgb, var(--tt-accent) 6%, transparent);
   color: var(--tt-accent);
 }
 .tt-move-option:disabled {

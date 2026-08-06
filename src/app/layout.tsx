@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Archivo } from "next/font/google";
 import "./globals.css";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/membership";
@@ -8,6 +9,15 @@ import Footer from "@/components/layout/Footer";
 import { ToastProvider } from "@/components/ui/Toast";
 import { LocaleProvider } from "@/lib/i18n/context";
 import { getLocale } from "@/lib/i18n/server";
+
+// One family, weight carries the hierarchy. next/font self-hosts the files at
+// build time, so there's no request to a font CDN at runtime and no swap flash.
+const archivo = Archivo({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--tt-font",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "TableTap — Scan, Order, Enjoy",
@@ -24,7 +34,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const locale = await getLocale();
 
   return (
-    <html lang={locale}>
+    <html lang={locale} className={archivo.variable}>
       <body>
         <LocaleProvider locale={locale}>
           <ToastProvider>
