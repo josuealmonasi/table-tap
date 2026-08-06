@@ -128,7 +128,15 @@ export default function MenuScreen({
                 className="tt-icon-round"
                 aria-label={t("menu.search")}
                 aria-expanded={searchOpen}
-                onClick={() => setSearchOpen(o => !o)}
+                // Closing clears the query. Hiding the input while keeping the
+                // term left the menu filtered with nothing on screen to say
+                // why — the categories vanish under an active search, so a
+                // diner saw two dishes, no search box, and no way back short
+                // of reloading.
+                onClick={() => {
+                  if (searchOpen) setSearch("");
+                  setSearchOpen(open => !open);
+                }}
               >
                 {searchOpen ? "✕" : "🔍"}
               </button>
