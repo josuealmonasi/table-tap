@@ -20,6 +20,7 @@ export function Modal({
   children,
   maxWidth = 640,
   label,
+  variant = "center",
 }: {
   open: boolean;
   onClose: () => void;
@@ -27,6 +28,13 @@ export function Modal({
   maxWidth?: number;
   /** Accessible name announced when the dialog opens. */
   label?: string;
+  /**
+   * "sheet" rises from the bottom edge instead of sitting in the middle. On a
+   * phone that puts the controls under the thumb rather than at the top of the
+   * screen, and it keeps the list behind it visible so the filters read as a
+   * change to that list rather than a separate place you've been taken to.
+   */
+  variant?: "center" | "sheet";
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -71,10 +79,13 @@ export function Modal({
   if (!open) return null;
 
   return (
-    <div className="tt-dialog-overlay" onClick={onClose}>
+    <div
+      className={`tt-dialog-overlay ${variant === "sheet" ? "tt-overlay-sheet" : ""}`}
+      onClick={onClose}
+    >
       <div
         ref={dialogRef}
-        className="tt-dialog tt-modal"
+        className={`tt-dialog tt-modal ${variant === "sheet" ? "tt-sheet" : ""}`}
         style={{ maxWidth }}
         role="dialog"
         aria-modal="true"

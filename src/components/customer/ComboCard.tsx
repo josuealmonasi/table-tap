@@ -21,31 +21,43 @@ export default function ComboCard({
   const saving = Math.round((combo.regularPrice - combo.price) * 100) / 100;
 
   return (
-    <div className="tt-card tt-item tt-combo" onClick={() => onAdd(combo)}>
-      <div className="tt-thumb">{combo.emoji || "🎁"}</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+    <div className="tt-item tt-combo" onClick={() => onAdd(combo)}>
+      <div className="tt-item-body">
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           <strong style={{ fontSize: 15 }}>{combo.name}</strong>
-          {saving > 0 && (
+        </div>
+        <div className="tt-price" style={{ fontSize: 15 }}>
+          {saving > 0 && <s className="tt-was">{formatMoney(combo.regularPrice, currency)}</s>}
+          {formatMoney(combo.price, currency)}
+        </div>
+        {saving > 0 && (
+          <div className="tt-tag-row">
             <span className="tt-sale">
               {t("combo.save", { amount: formatMoney(saving, currency) })}
             </span>
-          )}
-        </div>
+          </div>
+        )}
         <div className="tt-desc tt-muted">
           {combo.description ||
             combo.components
               .map(c => (c.qty > 1 ? `${c.qty}× ${c.name}` : c.name))
               .join(" + ")}
         </div>
-        <div className="tt-price" style={{ fontSize: 16 }}>
-          {saving > 0 && (
-            <s className="tt-was">{formatMoney(combo.regularPrice, currency)}</s>
-          )}
-          {formatMoney(combo.price, currency)}
-        </div>
       </div>
-      <div className="tt-plus">+</div>
+      <div className="tt-item-media">
+        <div className="tt-thumb">{combo.emoji || "🎁"}</div>
+        <button
+          type="button"
+          className="tt-plus"
+          aria-label={t("menu.addItem", { name: combo.name })}
+          onClick={e => {
+            e.stopPropagation();
+            onAdd(combo);
+          }}
+        >
+          +
+        </button>
+      </div>
     </div>
   );
 }

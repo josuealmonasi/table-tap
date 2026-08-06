@@ -13,6 +13,7 @@ export const en = {
     popular: "Popular",
     percentOff: "−{pct}%",
     filters: "Filters",
+    addItem: "Add {name}",
     filtersTitle: "Dietary filters",
     filtersClear: "Clear all",
     filtersDone: "Show results",

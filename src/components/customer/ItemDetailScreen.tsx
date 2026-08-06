@@ -103,7 +103,11 @@ export default function ItemDetailScreen({
         {dietaryTags(item.dietary).length > 0 && (
           <div className="tt-diet-row" style={{ marginBottom: 16 }}>
             {dietaryTags(item.dietary).map(tag => (
-              <span key={tag.key} className="tt-diet-badge" title={t(`dietary.${tag.key}`)}>
+              <span
+                key={tag.key}
+                className="tt-diet-badge"
+                title={t(`dietary.${tag.key}`)}
+              >
                 {tag.emoji} {t(`dietary.${tag.key}`)}
               </span>
             ))}
@@ -122,8 +126,7 @@ export default function ItemDetailScreen({
         {extras.length > 0 && (
           <div style={{ marginBottom: 20 }}>
             <div className="tt-mod-label">
-              {t("item.addExtras")}{" "}
-              <span className="tt-muted">{t("item.optional")}</span>
+              {t("item.addExtras")} <span className="tt-muted">{t("item.optional")}</span>
             </div>
             <div className="tt-chips">
               {extras.map(extra => {
@@ -155,7 +158,11 @@ export default function ItemDetailScreen({
           />
         </div>
 
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+        {/* Pinned to the bottom of the scroll area. A dish with a dozen extras
+            and nine dietary tags pushes this well past the fold, and an
+            "Add to cart" you have to go looking for is the one control on the
+            screen that must never need finding. */}
+        <div className="tt-detail-actions">
           <div className="tt-stepper">
             <button onClick={() => setQty(q => Math.max(1, q - 1))}>−</button>
             <span>{qty}</span>

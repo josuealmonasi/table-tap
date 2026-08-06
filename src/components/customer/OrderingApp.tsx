@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   type Category,
   type MenuItem,
@@ -96,6 +96,18 @@ export default function OrderingApp({
       .map(id => extrasById.get(id))
       .filter((e): e is MenuItem => Boolean(e));
   }, [selected, extrasByProduct, extrasById]);
+
+  // Escape closes the dish detail. It reads as a dialog on desktop, and a
+  // dialog that only closes via its own back arrow is a dead end for anyone
+  // on a keyboard.
+  useEffect(() => {
+    if (screen !== "item" && screen !== "edit") return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setScreen(screen === "edit" ? "cart" : "menu");
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [screen]);
 
   function openItem(item: MenuItem) {
     setSelected(item);
@@ -216,36 +228,44 @@ export default function OrderingApp({
     }
   }
 
-  if (screen === "item" && selected) {
-    return (
-      <ItemDetailScreen
-        item={selected}
-        extras={selectedExtras}
-        currency={restaurant.currency}
-        onBack={() => setScreen("menu")}
-        onAdd={addToCart}
-      />
-    );
-  }
+  /**
+   * The dish detail, layered over whatever screen opened it — the menu when
+   * adding, the cart when editing a line.
+   *
+   * It used to replace that screen outright. On a phone that's right and looks
+   * identical to before, but on a wide screen it meant a full-page takeover
+   * for one dish: the customer lost their place in the list and read a short
+   * form stretched across an otherwise empty page. Keeping the list mounted
+   * behind a dialog is both less jarring and a shorter trip back.
+   */
+  const detail =
+    (screen === "item" || screen === "edit") && selected ? (
+      <div
+        className="tt-detail-overlay"
+        onClick={() => setScreen(screen === "edit" ? "cart" : "menu")}
+      >
+        <div className="tt-detail-panel" onClick={e => e.stopPropagation()}>
+          <ItemDetailScreen
+            item={selected}
+            extras={selectedExtras}
+            currency={restaurant.currency}
+            initialLine={screen === "edit" && editingLine ? editingLine : undefined}
+            onBack={() => setScreen(screen === "edit" ? "cart" : "menu")}
+            onAdd={line => {
+              if (screen === "edit" && editingLine) {
+                cart.updateItem(editingLine.cartId, line);
+                setEditingLine(null);
+                setScreen("cart");
+                return;
+              }
+              addToCart(line);
+            }}
+          />
+        </div>
+      </div>
+    ) : null;
 
-  if (screen === "edit" && selected && editingLine) {
-    return (
-      <ItemDetailScreen
-        item={selected}
-        extras={selectedExtras}
-        currency={restaurant.currency}
-        initialLine={editingLine}
-        onBack={() => setScreen("cart")}
-        onAdd={line => {
-          cart.updateItem(editingLine.cartId, line);
-          setEditingLine(null);
-          setScreen("cart");
-        }}
-      />
-    );
-  }
-
-  if (screen === "cart") {
+  if (screen === "cart" || screen === "edit") {
     return (
       <>
         <CartScreen
@@ -279,7 +299,13 @@ export default function OrderingApp({
           onAddMore={() => setScreen("menu")}
           onCheckout={checkout}
         />
-        <Modal open={!!notice} onClose={() => setNotice(null)} maxWidth={400} label={t("notice.heads")}>
+        {detail}
+        <Modal
+          open={!!notice}
+          onClose={() => setNotice(null)}
+          maxWidth={400}
+          label={t("notice.heads")}
+        >
           <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 8 }}>
             {t("notice.heads")}
           </h3>
@@ -300,18 +326,21 @@ export default function OrderingApp({
   }
 
   return (
-    <MenuScreen
-      restaurant={restaurant}
-      table={table}
-      categories={categories}
-      items={items}
-      combos={combos}
-      promos={promos}
-      cartCount={cart.count}
-      cartTotal={pricing.total}
-      onSelectItem={openItem}
-      onAddCombo={addCombo}
-      onOpenCart={() => setScreen("cart")}
-    />
+    <>
+      <MenuScreen
+        restaurant={restaurant}
+        table={table}
+        categories={categories}
+        items={items}
+        combos={combos}
+        promos={promos}
+        cartCount={cart.count}
+        cartTotal={pricing.total}
+        onSelectItem={openItem}
+        onAddCombo={addCombo}
+        onOpenCart={() => setScreen("cart")}
+      />
+      {detail}
+    </>
   );
 }

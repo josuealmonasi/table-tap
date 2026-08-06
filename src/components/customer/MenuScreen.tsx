@@ -79,7 +79,8 @@ export default function MenuScreen({
         ? items
         : items.filter(i => i.category_id === activeCat);
     // An item must carry EVERY selected dietary tag (e.g. vegan AND gluten-free).
-    if (diet.length) list = list.filter(i => diet.every(k => (i.dietary ?? []).includes(k)));
+    if (diet.length)
+      list = list.filter(i => diet.every(k => (i.dietary ?? []).includes(k)));
     return list;
   }, [activeCat, items, search, diet]);
 
@@ -104,20 +105,21 @@ export default function MenuScreen({
   }, [combos, diet, search, activeCat]);
 
   return (
-    <div className="tt-root">
+    <div className="tt-root tt-root-wide">
       <div className="tt-menu-header">
         <div className="tt-row" style={{ alignItems: "flex-start" }}>
           <div>
-            <div style={{ fontSize: 26 }}>{restaurant.logo}</div>
-            <div className="tt-serif" style={{ fontSize: 22, fontWeight: 700 }}>
-              {restaurant.name}
-            </div>
-            <div className="tt-sage" style={{ fontSize: 13 }}>
-              {restaurant.tagline}
-            </div>
+            <div className="tt-brand-logo">{restaurant.logo}</div>
+            <div className="tt-serif tt-brand-name">{restaurant.name}</div>
+            <div className="tt-sage tt-brand-tagline">{restaurant.tagline}</div>
           </div>
           <div
-            style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              gap: 8,
+            }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {/* Search costs nothing until it's wanted — most diners browse. */}
@@ -182,8 +184,26 @@ export default function MenuScreen({
             type="button"
             className={`tt-filter-btn ${diet.length ? "tt-filter-btn-on" : ""}`}
             onClick={() => setFiltersOpen(true)}
+            aria-label={t("menu.filters")}
+            title={t("menu.filters")}
           >
-            {t("menu.filters")}
+            {/* Sliders glyph — placeholder until there's an icon set. Drawn
+                rather than an emoji so it inherits colour and stays crisp. */}
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <line x1="3" y1="8" x2="21" y2="8" />
+              <line x1="3" y1="16" x2="21" y2="16" />
+              <circle cx="9" cy="8" r="2.6" fill="currentColor" stroke="none" />
+              <circle cx="16" cy="16" r="2.6" fill="currentColor" stroke="none" />
+            </svg>
             {diet.length > 0 && <span className="tt-filter-count">{diet.length}</span>}
           </button>
         )}
@@ -194,6 +214,7 @@ export default function MenuScreen({
         onClose={() => setFiltersOpen(false)}
         maxWidth={420}
         label={t("menu.filtersTitle")}
+        variant="sheet"
       >
         <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 12 }}>
           {t("menu.filtersTitle")}
@@ -212,7 +233,12 @@ export default function MenuScreen({
           ))}
         </div>
         <div
-          style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 18 }}
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 8,
+            marginTop: 18,
+          }}
         >
           <button
             type="button"
@@ -232,31 +258,93 @@ export default function MenuScreen({
         </div>
       </Modal>
 
-      <div style={{ padding: 16 }}>
-        {filtered.length === 0 && shownCombos.length === 0 && (search.trim() || diet.length > 0) && (
-          <p className="tt-muted" style={{ textAlign: "center", fontSize: 14 }}>
-            {search.trim()
-              ? t("menu.noSearchMatch", { q: search.trim() })
-              : t("menu.noDietMatch")}
-          </p>
-        )}
-        {shownCombos.map(combo => (
-          <ComboCard
-            key={combo.id}
-            combo={combo}
-            currency={restaurant.currency}
-            onAdd={onAddCombo}
-          />
-        ))}
-        {filtered.map(item => (
-          <MenuItemRow
-            key={item.id}
-            item={item}
-            currency={restaurant.currency}
-            promoLabel={promoByItem.get(item.id)}
-            onSelect={onSelectItem}
-          />
-        ))}
+      <div className="tt-menu-body">
+        {/* Desktop only. With room for a column there's no reason to hide the
+            categories behind a scroller and the filters behind a button and a
+            dialog — both become a standing list you can see the state of, and
+            picking one no longer costs an open-and-dismiss. Hidden below
+            1025px, where the chip row and the sheet are the right shapes. */}
+        <aside className="tt-menu-side" aria-label={t("menu.filtersTitle")}>
+          {!search.trim() && (
+            <nav className="tt-side-nav">
+              <button
+                type="button"
+                className={`tt-side-link ${activeCat === "all" ? "tt-side-link-on" : ""}`}
+                onClick={() => setActiveCat("all")}
+              >
+                {t("menu.all")}
+              </button>
+              {categories.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`tt-side-link ${activeCat === c.id ? "tt-side-link-on" : ""}`}
+                  onClick={() => setActiveCat(c.id)}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </nav>
+          )}
+          {menuTags.length > 0 && (
+            <div className="tt-side-group">
+              <h3 className="tt-side-title">{t("menu.filtersTitle")}</h3>
+              {menuTags.map(tag => (
+                <label key={tag.key} className="tt-side-check">
+                  <input
+                    type="checkbox"
+                    checked={diet.includes(tag.key)}
+                    onChange={() => toggleDiet(tag.key)}
+                  />
+                  <span>
+                    {tag.emoji} {t(`dietary.${tag.key}`)}
+                  </span>
+                </label>
+              ))}
+              {diet.length > 0 && (
+                <button
+                  type="button"
+                  className="tt-btn tt-btn-ghost tt-btn-sm"
+                  style={{ marginTop: 6, alignSelf: "flex-start", padding: "6px 0" }}
+                  onClick={() => setDiet([])}
+                >
+                  {t("menu.filtersClear")}
+                </button>
+              )}
+            </div>
+          )}
+        </aside>
+
+        <div className="tt-menu-main">
+          {filtered.length === 0 &&
+            shownCombos.length === 0 &&
+            (search.trim() || diet.length > 0) && (
+              <p className="tt-muted" style={{ textAlign: "center", fontSize: 14 }}>
+                {search.trim()
+                  ? t("menu.noSearchMatch", { q: search.trim() })
+                  : t("menu.noDietMatch")}
+              </p>
+            )}
+          <div className="tt-dish-list">
+            {shownCombos.map(combo => (
+              <ComboCard
+                key={combo.id}
+                combo={combo}
+                currency={restaurant.currency}
+                onAdd={onAddCombo}
+              />
+            ))}
+            {filtered.map(item => (
+              <MenuItemRow
+                key={item.id}
+                item={item}
+                currency={restaurant.currency}
+                promoLabel={promoByItem.get(item.id)}
+                onSelect={onSelectItem}
+              />
+            ))}
+          </div>
+        </div>
       </div>
 
       <CartBar
