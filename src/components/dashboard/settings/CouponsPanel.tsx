@@ -114,7 +114,7 @@ export default function CouponsPanel({
       </p>
 
       {/* Create form first — the list grows with every code handed out. */}
-      <form onSubmit={add} className="tt-coupon-form">
+      <form onSubmit={add} className="tt-coupon-form tt-add-above">
         <div className="tt-prodform-row">
           <input
             className="tt-input"

@@ -189,11 +189,10 @@ export default function MenusPanel({
         <>
           {/* Above the list so it stays reachable as menus accumulate. */}
           {adding ? (
-            <div style={{ marginBottom: 12 }}>{addForm}</div>
+            <div className="tt-add-above">{addForm}</div>
           ) : (
             <button
               className="tt-add-more"
-              style={{ marginBottom: 12 }}
               onClick={() => setAdding(true)}
             >
               {t("menu.addMenu")}
