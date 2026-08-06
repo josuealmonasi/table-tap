@@ -2972,10 +2972,20 @@ h2.tt-serif {
     border: 1px solid var(--tt-line);
     border-radius: var(--tt-radius);
   }
-  /* .tt-root is a full-height page shell; inside the dialog it must size to
-     its content instead. */
+  /* .tt-root is a full-height 460px page shell. Inside the dialog it must
+     size to its content, and drop the width cap — a 460px column centred in a
+     520px panel left a 30px white gutter down each side, which is why the
+     hero image floated in the middle instead of spanning the dialog. */
   .tt-detail-panel .tt-root {
     min-height: 0;
+    max-width: none;
+  }
+  /* The dish photo is the reason this dialog exists, so give it the room:
+     full-bleed to the panel edges and tall enough to be looked at rather than
+     a thin band with a small glyph adrift in it. */
+  .tt-detail-panel .tt-item-hero {
+    height: 260px;
+    font-size: 128px;
   }
 }
 
