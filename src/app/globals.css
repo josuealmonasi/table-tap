@@ -2657,8 +2657,15 @@ h2.tt-serif {
   padding: 12px 14px;
 }
 /* In a modal the form's own padding is zeroed and the dialog's 24px provides
-   the inset, so the bleed has to match that instead. */
+   the inset, so the bleed has to match that instead.
+   The `bottom` offset is the part that isn't obvious: .tt-modal is BOTH the
+   scroll container and the thing carrying that 24px bottom padding, and a
+   sticky offset resolves against the scrollport — so `bottom: 0` parked the
+   bar 24px above the visible edge and the chips scrolled through the strip
+   underneath it. Cancelling the padding puts it back on the edge. Both -24s
+   below are .tt-dialog's padding; they move together. */
 .tt-modal .tt-prodform-actions {
+  bottom: -24px;
   margin: 6px -24px -24px;
   padding: 14px 24px;
 }
