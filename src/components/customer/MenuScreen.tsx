@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { Category, MenuItem, Restaurant, RestaurantTable } from "@/lib/types";
 import { DIETARY_TAGS } from "@/lib/dietary";
 import { recallOrder } from "@/lib/recent-order";
+import { readMenuParams, syncMenuUrl } from "@/lib/menu-params";
 import { useT } from "@/lib/i18n/context";
 import type { Combo } from "@/lib/promotions";
 import type { CartPromo } from "@/lib/pricing";
@@ -43,10 +45,14 @@ export default function MenuScreen({
   onOpenCart: () => void;
 }) {
   const t = useT();
-  const [activeCat, setActiveCat] = useState<string>("all");
-  const [search, setSearch] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [diet, setDiet] = useState<string[]>([]);
+  // The URL is the starting state, so a shared link and a reload both land on
+  // the same view. Read once — after mount the address bar is an output, not
+  // an input, or every keystroke would fight the field for control of it.
+  const initial = readMenuParams(new URLSearchParams(useSearchParams().toString()));
+  const [activeCat, setActiveCat] = useState<string>(initial.cat);
+  const [search, setSearch] = useState(initial.q);
+  const [searchOpen, setSearchOpen] = useState(Boolean(initial.q));
+  const [diet, setDiet] = useState<string[]>(initial.diet);
   const [filtersOpen, setFiltersOpen] = useState(false);
   // An in-progress order for this restaurant on this device — lets the diner
   // hop back to its live status after returning to the menu to order more.
@@ -63,8 +69,32 @@ export default function MenuScreen({
   }, [items]);
 
   function toggleDiet(key: string): void {
-    setDiet(prev => (prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]));
+    setDiet(prev => {
+      const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
+      syncMenuUrl({ diet: next });
+      return next;
+    });
   }
+
+  function chooseCat(id: string): void {
+    setActiveCat(id);
+    syncMenuUrl({ cat: id });
+  }
+
+  // Typing is debounced: the query only reaches the URL once you pause, so a
+  // seven-letter dish name is one URL write rather than seven.
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function changeSearch(value: string): void {
+    setSearch(value);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => syncMenuUrl({ q: value }), 350);
+  }
+  useEffect(
+    () => () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    },
+    [],
+  );
 
   // Search spans the whole menu; the category tabs + dietary filter narrow it.
   const filtered = useMemo(() => {
@@ -134,7 +164,7 @@ export default function MenuScreen({
                 // diner saw two dishes, no search box, and no way back short
                 // of reloading.
                 onClick={() => {
-                  if (searchOpen) setSearch("");
+                  if (searchOpen) changeSearch("");
                   setSearchOpen(open => !open);
                 }}
               >
@@ -158,7 +188,7 @@ export default function MenuScreen({
             aria-label={t("menu.search")}
             autoFocus
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => changeSearch(e.target.value)}
           />
         )}
         {table && <ServiceButtons restaurantId={restaurant.id} table={table} />}
@@ -184,7 +214,7 @@ export default function MenuScreen({
           <CategoryTabs
             categories={categories}
             activeCat={activeCat}
-            onSelect={setActiveCat}
+            onSelect={chooseCat}
           />
         )}
         {menuTags.length > 0 && (
@@ -252,7 +282,10 @@ export default function MenuScreen({
             type="button"
             className="tt-btn tt-btn-ghost tt-btn-sm"
             disabled={diet.length === 0}
-            onClick={() => setDiet([])}
+            onClick={() => {
+              setDiet([]);
+              syncMenuUrl({ diet: [] });
+            }}
           >
             {t("menu.filtersClear")}
           </button>
@@ -278,7 +311,7 @@ export default function MenuScreen({
               <button
                 type="button"
                 className={`tt-side-link ${activeCat === "all" ? "tt-side-link-on" : ""}`}
-                onClick={() => setActiveCat("all")}
+                onClick={() => chooseCat("all")}
               >
                 {t("menu.all")}
               </button>
@@ -287,7 +320,7 @@ export default function MenuScreen({
                   key={c.id}
                   type="button"
                   className={`tt-side-link ${activeCat === c.id ? "tt-side-link-on" : ""}`}
-                  onClick={() => setActiveCat(c.id)}
+                  onClick={() => chooseCat(c.id)}
                 >
                   {c.name}
                 </button>
@@ -314,7 +347,10 @@ export default function MenuScreen({
                   type="button"
                   className="tt-btn tt-btn-ghost tt-btn-sm"
                   style={{ marginTop: 6, alignSelf: "flex-start", padding: "6px 0" }}
-                  onClick={() => setDiet([])}
+                  onClick={() => {
+                    setDiet([]);
+                    syncMenuUrl({ diet: [] });
+                  }}
                 >
                   {t("menu.filtersClear")}
                 </button>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   type Category,
   type MenuItem,
@@ -12,6 +13,7 @@ import { priceCart, type AppliedCoupon, type CartPromo } from "@/lib/pricing";
 import type { Combo } from "@/lib/promotions";
 import { useCart, type CartItem } from "@/hooks/useCart";
 import { useT } from "@/lib/i18n/context";
+import { readMenuParams, syncMenuUrl } from "@/lib/menu-params";
 import { Modal } from "@/components/ui/Modal";
 import MenuScreen from "./MenuScreen";
 import ItemDetailScreen from "./ItemDetailScreen";
@@ -56,6 +58,27 @@ export default function OrderingApp({
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
   const cart = useCart();
   const t = useT();
+  const sharedItemId = readMenuParams(
+    new URLSearchParams(useSearchParams().toString()),
+  ).item;
+
+  // ?item=<id> opens that dish on load — the "look at this one" link. Runs once:
+  // it seeds the screen from the URL and then leaves it alone, so closing the
+  // detail doesn't immediately get reopened by the param that put it there.
+  useEffect(() => {
+    if (!sharedItemId) return;
+    const shared = items.find(i => i.id === sharedItemId);
+    // A link to a dish that's since been removed or sold out just shows the
+    // menu, which is a better landing than an error for something the sender
+    // couldn't have known about.
+    if (!shared) {
+      syncMenuUrl({ item: null });
+      return;
+    }
+    setSelected(shared);
+    setScreen("item");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Totals count only the still-orderable lines (sold-out ones are excluded).
   const orderableItems = useMemo(
@@ -103,7 +126,7 @@ export default function OrderingApp({
   useEffect(() => {
     if (screen !== "item" && screen !== "edit") return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setScreen(screen === "edit" ? "cart" : "menu");
+      if (e.key === "Escape") closeDetail(screen === "edit" ? "cart" : "menu");
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -112,10 +135,18 @@ export default function OrderingApp({
   function openItem(item: MenuItem) {
     setSelected(item);
     setScreen("item");
+    syncMenuUrl({ item: item.id });
+  }
+
+  /** Leaves the dish detail, and takes it out of the shareable URL. */
+  function closeDetail(to: Screen) {
+    syncMenuUrl({ item: null });
+    setScreen(to);
   }
 
   function addToCart(line: OrderLineItem) {
     cart.addItem(line);
+    syncMenuUrl({ item: null });
     setScreen("menu");
   }
 
@@ -242,7 +273,7 @@ export default function OrderingApp({
     (screen === "item" || screen === "edit") && selected ? (
       <div
         className="tt-detail-overlay"
-        onClick={() => setScreen(screen === "edit" ? "cart" : "menu")}
+        onClick={() => closeDetail(screen === "edit" ? "cart" : "menu")}
       >
         <div className="tt-detail-panel" onClick={e => e.stopPropagation()}>
           <ItemDetailScreen
@@ -250,12 +281,12 @@ export default function OrderingApp({
             extras={selectedExtras}
             currency={restaurant.currency}
             initialLine={screen === "edit" && editingLine ? editingLine : undefined}
-            onBack={() => setScreen(screen === "edit" ? "cart" : "menu")}
+            onBack={() => closeDetail(screen === "edit" ? "cart" : "menu")}
             onAdd={line => {
               if (screen === "edit" && editingLine) {
                 cart.updateItem(editingLine.cartId, line);
                 setEditingLine(null);
-                setScreen("cart");
+                closeDetail("cart");
                 return;
               }
               addToCart(line);
