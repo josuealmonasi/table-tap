@@ -47,7 +47,7 @@ export default function MenuItemRow({
             ))}
           </div>
         )}
-        <div className="tt-accent" style={{ fontWeight: 700, fontSize: 16 }}>
+        <div className="tt-price" style={{ fontSize: 16 }}>
           {onSale && (
             <s className="tt-was">{formatMoney(item.price, currency)}</s>
           )}

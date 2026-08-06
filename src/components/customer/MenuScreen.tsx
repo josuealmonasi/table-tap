@@ -8,6 +8,7 @@ import { recallOrder } from "@/lib/recent-order";
 import { useT } from "@/lib/i18n/context";
 import type { Combo } from "@/lib/promotions";
 import type { CartPromo } from "@/lib/pricing";
+import { Modal } from "@/components/ui/Modal";
 import CategoryTabs from "./CategoryTabs";
 import ComboCard from "./ComboCard";
 import MenuItemRow from "./MenuItemRow";
@@ -44,7 +45,9 @@ export default function MenuScreen({
   const t = useT();
   const [activeCat, setActiveCat] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [diet, setDiet] = useState<string[]>([]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   // An in-progress order for this restaurant on this device — lets the diner
   // hop back to its live status after returning to the menu to order more.
   const [trackId, setTrackId] = useState<string | null>(null);
@@ -116,14 +119,38 @@ export default function MenuScreen({
           <div
             style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}
           >
-            <LanguageToggle />
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {/* Search costs nothing until it's wanted — most diners browse. */}
+              <button
+                type="button"
+                className="tt-icon-round"
+                aria-label={t("menu.search")}
+                aria-expanded={searchOpen}
+                onClick={() => setSearchOpen(o => !o)}
+              >
+                {searchOpen ? "✕" : "🔍"}
+              </button>
+              <LanguageToggle />
+            </div>
             {table && (
-              <span className="tt-badge tt-badge-gold">
+              <span className="tt-badge tt-badge-onink">
                 {t("menu.table", { label: table.label })}
               </span>
             )}
           </div>
         </div>
+
+        {searchOpen && (
+          <input
+            className="tt-input tt-customer-search"
+            type="search"
+            placeholder={t("menu.search")}
+            aria-label={t("menu.search")}
+            autoFocus
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        )}
         {table && <ServiceButtons restaurantId={restaurant.id} table={table} />}
         {trackId && (
           <Link href={`/order/${trackId}`} className="tt-track-banner" role="status">
@@ -139,15 +166,10 @@ export default function MenuScreen({
 
       {/* Only this strip stays pinned while scrolling — the restaurant
           identity above scrolls away with the page. */}
+      {/* One row instead of three: categories scroll, filters live behind a
+          button. Dietary tags matter to a minority but were eating a third of
+          the screen before the first dish. */}
       <div className="tt-menu-sticky">
-        <input
-          className="tt-input tt-customer-search"
-          type="search"
-          placeholder={t("menu.search")}
-          aria-label={t("menu.search")}
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
         {!search.trim() && (
           <CategoryTabs
             categories={categories}
@@ -156,20 +178,59 @@ export default function MenuScreen({
           />
         )}
         {menuTags.length > 0 && (
-          <div className="tt-diet-filter">
-            {menuTags.map(tag => (
-              <button
-                key={tag.key}
-                type="button"
-                className={`tt-diet-chip ${diet.includes(tag.key) ? "tt-diet-chip-on" : ""}`}
-                onClick={() => toggleDiet(tag.key)}
-              >
-                {tag.emoji} {t(`dietary.${tag.key}`)}
-              </button>
-            ))}
-          </div>
+          <button
+            type="button"
+            className={`tt-filter-btn ${diet.length ? "tt-filter-btn-on" : ""}`}
+            onClick={() => setFiltersOpen(true)}
+          >
+            {t("menu.filters")}
+            {diet.length > 0 && <span className="tt-filter-count">{diet.length}</span>}
+          </button>
         )}
       </div>
+
+      <Modal
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        maxWidth={420}
+        label={t("menu.filtersTitle")}
+      >
+        <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 12 }}>
+          {t("menu.filtersTitle")}
+        </h3>
+        <div className="tt-diet-filter">
+          {menuTags.map(tag => (
+            <button
+              key={tag.key}
+              type="button"
+              className={`tt-diet-chip ${diet.includes(tag.key) ? "tt-diet-chip-on" : ""}`}
+              aria-pressed={diet.includes(tag.key)}
+              onClick={() => toggleDiet(tag.key)}
+            >
+              {tag.emoji} {t(`dietary.${tag.key}`)}
+            </button>
+          ))}
+        </div>
+        <div
+          style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 18 }}
+        >
+          <button
+            type="button"
+            className="tt-btn tt-btn-ghost tt-btn-sm"
+            disabled={diet.length === 0}
+            onClick={() => setDiet([])}
+          >
+            {t("menu.filtersClear")}
+          </button>
+          <button
+            type="button"
+            className="tt-btn tt-btn-primary tt-btn-sm"
+            onClick={() => setFiltersOpen(false)}
+          >
+            {t("menu.filtersDone")}
+          </button>
+        </div>
+      </Modal>
 
       <div style={{ padding: 16 }}>
         {filtered.length === 0 && shownCombos.length === 0 && (search.trim() || diet.length > 0) && (

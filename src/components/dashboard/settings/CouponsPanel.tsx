@@ -203,7 +203,7 @@ export default function CouponsPanel({
         </div>
 
         {code && !codeOk && (
-          <p style={{ color: "#c0392b", fontSize: 13, margin: 0 }}>
+          <p className="tt-field-error" style={{ margin: 0 }}>
             {t("coupons.badFormat", { format: COUPON_PATTERN_HINT })}
           </p>
         )}

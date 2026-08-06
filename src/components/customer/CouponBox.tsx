@@ -104,7 +104,7 @@ export default function CouponBox({
             spellCheck={false}
           />
           {error && (
-            <p style={{ color: "#c0392b", fontSize: 13, marginBottom: 0 }}>{error}</p>
+            <p className="tt-field-error">{error}</p>
           )}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
             <button

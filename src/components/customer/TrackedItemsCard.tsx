@@ -39,7 +39,7 @@ export default function TrackedItemsCard({
       </div>
       <div className="tt-row tt-total">
         <span>{t("tracker.totalPaid")}</span>
-        <span className="tt-accent">{formatMoney(total, currency)}</span>
+        <span className="tt-price">{formatMoney(total, currency)}</span>
       </div>
     </div>
   );

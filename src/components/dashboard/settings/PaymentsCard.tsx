@@ -93,7 +93,7 @@ export default function PaymentsCard() {
                 : t("dash.connectBtn")}
           </button>
           {error && (
-            <p style={{ color: "#c0392b", fontSize: 13, marginBottom: 0 }}>{error}</p>
+            <p className="tt-field-error">{error}</p>
           )}
         </>
       )}
