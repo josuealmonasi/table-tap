@@ -187,6 +187,19 @@ export default function MenusPanel({
         </div>
       ) : (
         <>
+          {/* Above the list so it stays reachable as menus accumulate. */}
+          {adding ? (
+            <div style={{ marginBottom: 12 }}>{addForm}</div>
+          ) : (
+            <button
+              className="tt-add-more"
+              style={{ marginBottom: 12 }}
+              onClick={() => setAdding(true)}
+            >
+              {t("menu.addMenu")}
+            </button>
+          )}
+
           <div className="tt-menu-list">
             {menus.map((m, i) => (
               <MenuRow
@@ -205,17 +218,6 @@ export default function MenusPanel({
             ))}
           </div>
 
-          {adding ? (
-            <div style={{ marginTop: 12 }}>{addForm}</div>
-          ) : (
-            <button
-              className="tt-add-more"
-              style={{ marginTop: 12 }}
-              onClick={() => setAdding(true)}
-            >
-              {t("menu.addMenu")}
-            </button>
-          )}
         </>
       )}
     </div>

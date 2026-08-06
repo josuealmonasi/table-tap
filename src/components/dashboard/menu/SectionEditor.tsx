@@ -147,6 +147,52 @@ export default function SectionEditor({
       </div>
 
       <div className="tt-section-right">
+        {/* Add control first: a busy section can run to hundreds of products,
+            and scrolling past all of them to add one more is punishing.
+            The Uncategorized catch-all (section === null) isn't a real
+            category, so nothing can be added to it — only orphans land there. */}
+        {section &&
+          (() => {
+            const addForm = (
+              <ProductForm
+                addons={addons}
+                currency={currency}
+                submitLabel={t("menu.addProduct")}
+                onCancel={() => setAdding(false)}
+                onSubmit={async (input, addonIds) => {
+                  await onAddProduct(section.id, input, addonIds);
+                  setAdding(false);
+                }}
+              />
+            );
+
+            if (modalForms) {
+              return (
+                <>
+                  <button className="tt-add-more" onClick={() => setAdding(true)}>
+                    {t("menu.addProduct")}
+                  </button>
+                  <Modal
+                    open={adding}
+                    onClose={() => setAdding(false)}
+                    maxWidth={720}
+                    label={t("menu.addProduct")}
+                  >
+                    {addForm}
+                  </Modal>
+                </>
+              );
+            }
+
+            return adding ? (
+              <div className="tt-prod tt-prod-editing">{addForm}</div>
+            ) : (
+              <button className="tt-add-more" onClick={() => setAdding(true)}>
+                {t("menu.addProduct")}
+              </button>
+            );
+          })()}
+
         {products.length === 0 && (
           <p className="tt-muted" style={{ fontSize: 13 }}>
             {t("menu.noProducts")}
@@ -174,44 +220,6 @@ export default function SectionEditor({
           />
         ))}
 
-        {/* The Uncategorized catch-all (section === null) isn't a real category,
-            so no products can be added to it — only orphans land here. */}
-        {section &&
-          (() => {
-            const addForm = (
-              <ProductForm
-                addons={addons}
-                currency={currency}
-                submitLabel={t("menu.addProduct")}
-                onCancel={() => setAdding(false)}
-                onSubmit={async (input, addonIds) => {
-                  await onAddProduct(section.id, input, addonIds);
-                  setAdding(false);
-                }}
-              />
-            );
-
-            if (modalForms) {
-              return (
-                <>
-                  <button className="tt-add-more" onClick={() => setAdding(true)}>
-                    {t("menu.addProduct")}
-                  </button>
-                  <Modal open={adding} onClose={() => setAdding(false)} maxWidth={720} label={t("menu.addProduct")}>
-                    {addForm}
-                  </Modal>
-                </>
-              );
-            }
-
-            return adding ? (
-              <div className="tt-prod tt-prod-editing">{addForm}</div>
-            ) : (
-              <button className="tt-add-more" onClick={() => setAdding(true)}>
-                {t("menu.addProduct")}
-              </button>
-            );
-          })()}
       </div>
     </div>
   );
