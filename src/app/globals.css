@@ -2639,10 +2639,28 @@ h2.tt-serif {
   display: flex;
   gap: 8px;
 }
+/* Save stays in view. The product form runs long — modifiers, extras, dietary
+   tags — so the actions scrolled off exactly like add-to-cart did on the
+   customer side, and "Save changes" is the one control you must never have to
+   hunt for. Sticky to the bottom of whatever is scrolling it. */
 .tt-prodform-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: 8px;
+  background: var(--tt-white);
+  border-top: 1px solid var(--tt-line);
+  margin: 6px -14px -14px;
+  padding: 12px 14px;
+}
+/* In a modal the form's own padding is zeroed and the dialog's 24px provides
+   the inset, so the bleed has to match that instead. */
+.tt-modal .tt-prodform-actions {
+  margin: 6px -24px -24px;
+  padding: 14px 24px;
 }
 .tt-check {
   display: flex;
