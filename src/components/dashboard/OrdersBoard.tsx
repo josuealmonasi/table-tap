@@ -10,6 +10,7 @@ import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import OrderCard from "./OrderCard";
 import ServiceRequestsBar from "./ServiceRequestsBar";
+import { EmptyIcon } from "@/components/ui/icons";
 
 interface OrdersBoardProps {
   restaurant: Restaurant;
@@ -141,7 +142,7 @@ export default function OrdersBoard({
 
         {shown.length === 0 ? (
           <div className="tt-empty">
-            <div style={{ fontSize: 48 }}>📭</div>
+            <EmptyIcon size={44} className="tt-empty-icon" />
             <strong>{tab === "live" ? t("orders.noLive") : t("orders.noPast")}</strong>
             <p className="tt-muted">
               {tab === "live" ? t("orders.liveHint") : t("orders.historyHint")}

@@ -5,7 +5,14 @@ import { useStaff, type StaffRole } from "@/hooks/useStaff";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
-import { Icon } from "@/components/ui/icons";
+import {
+  DeleteIcon,
+  InviteIcon,
+  RoleKitchenIcon,
+  RoleManagerIcon,
+  RoleOwnerIcon,
+  RoleWaiterIcon,
+} from "@/components/ui/icons";
 
 interface StaffPanelProps {
   restaurantId: string;
@@ -13,12 +20,12 @@ interface StaffPanelProps {
   children?: React.ReactNode;
 }
 
-const ROLE_EMOJI: Record<StaffRole, string> = {
-  owner: "👑",
-  manager: "🧑‍💼",
-  waiter: "🧑‍🍽️",
-  kitchen: "👨‍🍳",
-};
+const ROLE_ICON = {
+  owner: RoleOwnerIcon,
+  manager: RoleManagerIcon,
+  waiter: RoleWaiterIcon,
+  kitchen: RoleKitchenIcon,
+} satisfies Record<StaffRole, typeof RoleOwnerIcon>;
 
 /** Owner-only team management: create, re-role and remove logins. */
 export default function StaffPanel({ restaurantId, children }: StaffPanelProps) {
@@ -82,7 +89,10 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
                 {members.map(m => (
                   <div key={m.id} className="tt-staff-tr">
                     <span className="tt-staff-cell" title={m.full_name ?? ""}>
-                      {ROLE_EMOJI[m.role]}{" "}
+                      {(() => {
+                        const RoleGlyph = ROLE_ICON[m.role];
+                        return <RoleGlyph size={14} weight="bold" />;
+                      })()}{" "}
                       {m.full_name ? (
                         <strong>{m.full_name}</strong>
                       ) : (
@@ -123,7 +133,7 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
                         }
                       }}
                     >
-                      <Icon.Delete size={16} />
+                      <DeleteIcon size={16} />
                     </button>
                   </div>
                 ))}
@@ -158,7 +168,13 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
                   className="tt-btn tt-btn-primary tt-btn-sm"
                   disabled={busy}
                 >
-                  {busy ? t("dash.sending") : t("dash.sendInvite")}
+                  {busy ? (
+                    t("dash.sending")
+                  ) : (
+                    <>
+                      <InviteIcon size={15} weight="bold" /> {t("dash.sendInvite")}
+                    </>
+                  )}
                 </button>
               </div>
             </form>

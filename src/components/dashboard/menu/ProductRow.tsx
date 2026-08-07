@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import ReorderButtons from "@/components/ui/ReorderButtons";
 import MoveToSection from "./MoveToSection";
 import ProductForm from "./ProductForm";
-import { Icon } from "@/components/ui/icons";
+import { DeleteIcon, EditIcon, MoveToIcon } from "@/components/ui/icons";
 
 interface ProductRowProps {
   product: MenuItem;
@@ -158,7 +158,7 @@ export default function ProductRow({
                   onClick={() => setMoving(true)}
                   title={t("menu.moveToSection")}
                 >
-                  <Icon.MoveTo size={16} />
+                  <MoveToIcon size={16} />
                 </button>
               )}
               <button
@@ -166,7 +166,7 @@ export default function ProductRow({
                 onClick={() => setEditing(true)}
                 title={t("menu.edit")}
               >
-                <Icon.Edit size={16} />
+                <EditIcon size={16} />
               </button>
               <button
                 className="tt-iconbtn"
@@ -184,7 +184,7 @@ export default function ProductRow({
                 }}
                 title={t("menu.delete")}
               >
-                <Icon.Delete size={16} />
+                <DeleteIcon size={16} />
               </button>
             </div>
           </div>

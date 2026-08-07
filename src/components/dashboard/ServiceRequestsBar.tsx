@@ -3,6 +3,7 @@
 import { useServiceRequests } from "@/hooks/useServiceRequests";
 import type { ServiceRequest } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
+import { BillIcon, CallWaiterIcon } from "@/components/ui/icons";
 
 interface ServiceRequestsBarProps {
   restaurantId: string;
@@ -30,7 +31,11 @@ export default function ServiceRequestsBar({
       {requests.map(r => (
         <div key={r.id} className="tt-request-chip">
           <span>
-            {r.kind === "waiter" ? "🛎️" : "🧾"}{" "}
+            {r.kind === "waiter" ? (
+              <CallWaiterIcon size={14} weight="bold" />
+            ) : (
+              <BillIcon size={14} weight="bold" />
+            )}{" "}
             <strong>{t("dash.tableN", { label: r.table_label ?? "" })}</strong>{" "}
             {t(r.kind === "waiter" ? "orders.wantsWaiter" : "orders.wantsBill")}
             <span className="tt-muted"> · {age(r.created_at)}</span>

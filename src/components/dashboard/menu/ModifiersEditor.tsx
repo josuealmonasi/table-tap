@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { Modifier } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
-import { Icon } from "@/components/ui/icons";
+import { CloseIcon, DeleteIcon } from "@/components/ui/icons";
 
 interface ModifiersEditorProps {
   value: Modifier[];
@@ -66,7 +66,7 @@ export default function ModifiersEditor({ value, onChange }: ModifiersEditorProp
               title={t("menu.removeGroup")}
               onClick={() => onChange(value.filter((_, idx) => idx !== i))}
             >
-              <Icon.Delete size={16} />
+              <DeleteIcon size={16} />
             </button>
           </div>
 
@@ -99,7 +99,7 @@ export default function ModifiersEditor({ value, onChange }: ModifiersEditorProp
                   patchGroup(i, { options: group.options.filter(o => o !== option) })
                 }
               >
-                {option} ✕
+                {option} <CloseIcon size={11} weight="bold" />
               </button>
             ))}
           </div>

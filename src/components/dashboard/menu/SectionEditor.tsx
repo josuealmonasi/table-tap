@@ -9,7 +9,7 @@ import { Modal } from "@/components/ui/Modal";
 import ReorderButtons from "@/components/ui/ReorderButtons";
 import ProductRow from "./ProductRow";
 import ProductForm from "./ProductForm";
-import { Icon } from "@/components/ui/icons";
+import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 
 interface SectionEditorProps {
   section: Category | null; // null = "Uncategorized" catch-all
@@ -120,7 +120,7 @@ export default function SectionEditor({
                       setRenaming(true);
                     }}
                   >
-                    <Icon.Edit size={16} />
+                    <EditIcon size={16} />
                   </button>
                   <button
                     className="tt-iconbtn"
@@ -138,7 +138,7 @@ export default function SectionEditor({
                       }
                     }}
                   >
-                    <Icon.Delete size={16} />
+                    <DeleteIcon size={16} />
                   </button>
                 </div>
               )}

@@ -7,6 +7,7 @@ import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import QrCard, { type QrTarget } from "./QrCard";
 import TableRow from "./TableRow";
+import { TableIcon } from "@/components/ui/icons";
 
 /** A table paired with its pre-rendered QR (generated on the server). */
 export interface TableWithQr {
@@ -104,7 +105,7 @@ export default function TablesPanel({
 
           {tables.length === 0 ? (
             <div className="tt-empty">
-              <div className="tt-empty-emoji">🪑</div>
+              <TableIcon size={40} className="tt-empty-icon" />
               <strong>{t("dash.addFirstTable")}</strong>
               <p
                 className="tt-muted"

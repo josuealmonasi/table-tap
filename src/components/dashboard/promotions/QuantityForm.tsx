@@ -8,7 +8,7 @@ import type { Category, MenuItem } from "@/lib/types";
 import type { PromotionInput } from "@/hooks/usePromotions";
 import ProductPicker from "./ProductPicker";
 import PickedProducts from "./PickedProducts";
-import { Icon } from "@/components/ui/icons";
+import { DeleteIcon } from "@/components/ui/icons";
 
 /**
  * Builds a quantity deal: "buy N, pay for M" (2x1, 3x1) or bracket pricing
@@ -199,7 +199,7 @@ export default function QuantityForm({
                   onClick={() => setTiers(prev => prev.filter((_, j) => j !== i))}
                   title={t("promos.removeTier")}
                 >
-                  <Icon.Delete size={16} />
+                  <DeleteIcon size={16} />
                 </button>
               )}
             </div>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { Menu } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
 import MenuSwitcher from "./MenuSwitcher";
+import { SelectIcon } from "@/components/ui/icons";
 
 interface EditorHeaderProps {
   menus: Menu[];
@@ -61,7 +62,13 @@ export default function EditorHeader({
             className={`tt-btn tt-btn-sm ${selecting ? "tt-btn-primary" : "tt-btn-ghost"}`}
             onClick={onToggleSelecting}
           >
-            {selecting ? t("menu.doneBtn") : t("menu.select")}
+            {selecting ? (
+              t("menu.doneBtn")
+            ) : (
+              <>
+                <SelectIcon size={15} /> {t("menu.select")}
+              </>
+            )}
           </button>
         </div>
       )}

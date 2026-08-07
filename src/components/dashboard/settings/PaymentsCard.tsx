@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useT } from "@/lib/i18n/context";
+import { CheckIcon } from "@/components/ui/icons";
 
 interface ConnectStatus {
   connected: boolean;
@@ -73,7 +74,9 @@ export default function PaymentsCard() {
         </p>
       ) : status?.chargesEnabled ? (
         <p style={{ fontSize: 14, margin: 0 }}>
-          <span className="tt-badge tt-badge-green">{t("dash.connected")}</span>{" "}
+          <span className="tt-badge tt-badge-green">
+            <CheckIcon size={12} weight="bold" /> {t("dash.connected")}
+          </span>{" "}
           {t("dash.connectedMsg")}
         </p>
       ) : (

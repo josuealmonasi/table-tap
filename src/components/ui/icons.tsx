@@ -19,6 +19,27 @@
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
 import { ArrowsLeftRight } from "@phosphor-icons/react/dist/ssr/ArrowsLeftRight";
 import { Bell } from "@phosphor-icons/react/dist/ssr/Bell";
+import { ChartBar } from "@phosphor-icons/react/dist/ssr/ChartBar";
+import { Check } from "@phosphor-icons/react/dist/ssr/Check";
+import { CheckSquare } from "@phosphor-icons/react/dist/ssr/CheckSquare";
+import { ChefHat } from "@phosphor-icons/react/dist/ssr/ChefHat";
+import { ClipboardText } from "@phosphor-icons/react/dist/ssr/ClipboardText";
+import { CookingPot } from "@phosphor-icons/react/dist/ssr/CookingPot";
+import { Crown } from "@phosphor-icons/react/dist/ssr/Crown";
+import { DownloadSimple } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
+import { ForkKnife } from "@phosphor-icons/react/dist/ssr/ForkKnife";
+import { Gear } from "@phosphor-icons/react/dist/ssr/Gear";
+import { Gift } from "@phosphor-icons/react/dist/ssr/Gift";
+import { Lightbulb } from "@phosphor-icons/react/dist/ssr/Lightbulb";
+import { NotePencil } from "@phosphor-icons/react/dist/ssr/NotePencil";
+import { PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr/PaperPlaneTilt";
+import { Plus } from "@phosphor-icons/react/dist/ssr/Plus";
+import { Printer } from "@phosphor-icons/react/dist/ssr/Printer";
+import { ShieldCheck } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
+import { Ticket } from "@phosphor-icons/react/dist/ssr/Ticket";
+import { Tray } from "@phosphor-icons/react/dist/ssr/Tray";
+import { UserGear } from "@phosphor-icons/react/dist/ssr/UserGear";
+import { Users } from "@phosphor-icons/react/dist/ssr/Users";
 import { CaretDown } from "@phosphor-icons/react/dist/ssr/CaretDown";
 import { CaretUp } from "@phosphor-icons/react/dist/ssr/CaretUp";
 import { Chair } from "@phosphor-icons/react/dist/ssr/Chair";
@@ -37,32 +58,57 @@ import { User } from "@phosphor-icons/react/dist/ssr/User";
 import { X } from "@phosphor-icons/react/dist/ssr/X";
 
 /**
- * Named for the job, not the picture. Swapping which glyph plays a role is
- * then a one-line change here and nothing moves at the call sites.
+ * Named for the job, not the picture — swapping which glyph plays a role is a
+ * one-line change here and nothing moves at the call sites.
+ *
+ * Exported one const at a time rather than as a single `Icon` object: an
+ * object is one binding, so importing it pulls every glyph in this file into
+ * the route whether or not it's used. That cost 27 kB on the customer bundle
+ * for eight icons.
  */
-export const Icon = {
-  Search: MagnifyingGlass,
-  Close: X,
-  Filters: SlidersHorizontal,
-  Back: ArrowLeft,
-  Edit: PencilSimple,
-  Delete: Trash,
-  Duplicate: Copy,
-  /** Move a product to a different menu or section. */
-  MoveTo: ArrowsLeftRight,
-  MoveUp: CaretUp,
-  MoveDown: CaretDown,
-  Expand: CaretDown,
-  Dashboard: House,
-  SignOut: SignOut,
-  Account: User,
-  CallWaiter: Bell,
-  Bill: Receipt,
-  Table: Chair,
-  Secure: LockSimple,
-  Paused: PauseCircle,
-  Rating: Star,
-} as const;
+export const SearchIcon = MagnifyingGlass;
+export const CloseIcon = X;
+export const FiltersIcon = SlidersHorizontal;
+export const BackIcon = ArrowLeft;
+export const EditIcon = PencilSimple;
+export const DeleteIcon = Trash;
+export const DuplicateIcon = Copy;
+export const MoveToIcon = ArrowsLeftRight;
+export const MoveUpIcon = CaretUp;
+export const MoveDownIcon = CaretDown;
+export const ExpandIcon = CaretDown;
+export const DashboardIcon = House;
+export const SignOutIcon = SignOut;
+export const AccountIcon = User;
+export const CallWaiterIcon = Bell;
+export const BillIcon = Receipt;
+export const TableIcon = Chair;
+export const SecureIcon = LockSimple;
+export const PausedIcon = PauseCircle;
+export const RatingIcon = Star;
+export const OrdersIcon = ClipboardText;
+export const AnalyticsIcon = ChartBar;
+export const PromotionsIcon = Gift;
+export const StaffIcon = Users;
+export const SettingsIcon = Gear;
+export const PlatformAdminIcon = ShieldCheck;
+export const RoleOwnerIcon = Crown;
+export const RoleManagerIcon = UserGear;
+export const RoleWaiterIcon = ForkKnife;
+export const RoleKitchenIcon = ChefHat;
+export const StatusReceivedIcon = ClipboardText;
+export const StatusPreparingIcon = CookingPot;
+export const StatusReadyIcon = ForkKnife;
+export const HintIcon = Lightbulb;
+export const CouponIcon = Ticket;
+export const CheckIcon = Check;
+export const SelectIcon = CheckSquare;
+export const NoteIcon = NotePencil;
+export const AddIcon = Plus;
+export const DownloadIcon = DownloadSimple;
+export const PrintIcon = Printer;
+export const InviteIcon = PaperPlaneTilt;
+export const EmptyIcon = Tray;
 
 /**
  * Icon weight paired to the text it sits beside. Archivo carries hierarchy
@@ -76,4 +122,20 @@ export const ICON_WEIGHT = {
   bold: "bold",
   /** Solid — for a selected star or an active state that must read as "on". */
   fill: "fill",
+} as const;
+
+/**
+ * The dashboard nav resolves its glyph from a key held in plain data
+ * (src/lib/nav.ts), so it needs a lookup rather than a direct import. Kept to
+ * the seven nav glyphs so importing it doesn't drag the whole set in — only
+ * dashboard routes touch this.
+ */
+export const NAV_ICONS = {
+  Orders: OrdersIcon,
+  Analytics: AnalyticsIcon,
+  Promotions: PromotionsIcon,
+  Table: TableIcon,
+  Staff: StaffIcon,
+  Settings: SettingsIcon,
+  PlatformAdmin: PlatformAdminIcon,
 } as const;

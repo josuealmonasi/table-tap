@@ -13,6 +13,7 @@ import AddonsPanel from "./AddonsPanel";
 import AddSectionForm from "./AddSectionForm";
 import SectionEditor from "./SectionEditor";
 import EditorHeader from "./EditorHeader";
+import { OrdersIcon } from "@/components/ui/icons";
 
 interface MenuEditorProps {
   restaurant: Restaurant;
@@ -107,7 +108,7 @@ export default function MenuEditor({
           // A fresh menu: invite the first section instead of showing the bare form.
           <div className="tt-section">
             <div className="tt-empty">
-              <div className="tt-empty-emoji">🍽️</div>
+              <OrdersIcon size={40} className="tt-empty-icon" />
               <strong>{t("menu.addFirstSection")}</strong>
               <p
                 className="tt-muted"

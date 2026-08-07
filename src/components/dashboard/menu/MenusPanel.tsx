@@ -6,6 +6,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { menuSlug } from "@/lib/slug";
 import { useT } from "@/lib/i18n/context";
 import MenuRow from "./MenuRow";
+import { OrdersIcon } from "@/components/ui/icons";
 
 interface MenusPanelProps {
   menus: Menu[];
@@ -175,7 +176,7 @@ export default function MenusPanel({
 
       {empty ? (
         <div className="tt-empty">
-          <div className="tt-empty-emoji">📋</div>
+          <OrdersIcon size={40} className="tt-empty-icon" />
           <strong>{t("menu.createFirst")}</strong>
           <p
             className="tt-muted"

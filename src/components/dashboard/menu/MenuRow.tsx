@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { Menu } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
 import ReorderButtons from "@/components/ui/ReorderButtons";
-import { Icon } from "@/components/ui/icons";
+import { DeleteIcon, DuplicateIcon, EditIcon } from "@/components/ui/icons";
 
 interface MenuRowProps {
   menu: Menu;
@@ -122,21 +122,21 @@ export default function MenuRow({
                 setRenaming(true);
               }}
             >
-              <Icon.Edit size={16} />
+              <EditIcon size={16} />
             </button>
             <button
               className="tt-iconbtn"
               title={t("menu.duplicateMenu")}
               onClick={() => onDuplicate(menu)}
             >
-              <Icon.Duplicate size={16} />
+              <DuplicateIcon size={16} />
             </button>
             <button
               className="tt-iconbtn"
               title={t("menu.deleteMenu")}
               onClick={() => onDelete(menu)}
             >
-              <Icon.Delete size={16} />
+              <DeleteIcon size={16} />
             </button>
           </div>
         </div>

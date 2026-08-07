@@ -10,6 +10,7 @@ import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import { Skeleton } from "@/components/ui/Skeleton";
 import MenusPanel from "@/components/dashboard/menu/MenusPanel";
+import { NAV_ICONS } from "@/components/ui/icons";
 
 interface DashboardHomeProps {
   restaurant: Restaurant;
@@ -68,10 +69,11 @@ export default function DashboardHome({ restaurant, role }: DashboardHomeProps) 
         )}
 
         <div className="tt-tiles" style={{ marginTop: 16 }}>
-          {navItemsFor(role).map(tile =>
-            tile.soon ? (
+          {navItemsFor(role).map(tile => {
+            const Glyph = NAV_ICONS[tile.icon];
+            return tile.soon ? (
               <div key={tile.href} className="tt-tile tt-tile-soon">
-                <div className="tt-tile-emoji">{tile.emoji}</div>
+                <Glyph size={26} className="tt-tile-emoji" />
                 <strong>{t(tile.titleKey)}</strong>
                 <span className="tt-muted">{t(tile.descKey)}</span>
                 <span className="tt-badge" style={{ marginTop: 8 }}>
@@ -80,12 +82,12 @@ export default function DashboardHome({ restaurant, role }: DashboardHomeProps) 
               </div>
             ) : (
               <Link key={tile.href} href={tile.href} className="tt-tile">
-                <div className="tt-tile-emoji">{tile.emoji}</div>
+                <Glyph size={26} className="tt-tile-emoji" />
                 <strong>{t(tile.titleKey)}</strong>
                 <span className="tt-muted">{t(tile.descKey)}</span>
               </Link>
-            ),
-          )}
+            );
+          })}
         </div>
       </div>
     </div>
