@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useT } from "@/lib/i18n/context";
+import { Icon } from "@/components/ui/icons";
 
 type IconGroup = { group: string; items: { emoji: string; label: string }[] };
 
@@ -117,7 +118,13 @@ export default function IconPicker({
                 <span>{t(GROUP_KEY[g.group] ?? g.group)}</span>
                 <span className="tt-acc-right">
                   {selected && <span style={{ fontSize: 15 }}>{selected.emoji}</span>}
-                  <span className="tt-acc-chevron">{isOpen ? "▾" : "▸"}</span>
+                  <span className="tt-acc-chevron">
+                    <Icon.Expand
+                      size={13}
+                      weight="bold"
+                      style={{ transform: isOpen ? undefined : "rotate(-90deg)" }}
+                    />
+                  </span>
                 </span>
               </button>
               {isOpen && (

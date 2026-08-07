@@ -12,6 +12,7 @@ import {
   isValidCouponFormat,
   normalizeCoupon,
 } from "@/lib/coupons";
+import { Icon } from "@/components/ui/icons";
 
 /** Coupon codes an owner or manager hands out, with their usage so far. */
 export default function CouponsPanel({
@@ -229,7 +230,9 @@ export default function CouponsPanel({
               <div key={c.id} className="tt-coupon-item">
                 <div style={{ minWidth: 0 }}>
                   <code className="tt-coupon-code">{c.code}</code>
-                  {!c.active && <span className="tt-coupon-off">{t("coupons.paused")}</span>}
+                  {!c.active && (
+                    <span className="tt-coupon-off">{t("coupons.paused")}</span>
+                  )}
                   {spent && <span className="tt-coupon-off">{t("coupons.spent")}</span>}
                   <div className="tt-muted" style={{ fontSize: 13 }}>
                     {describe(c)}
@@ -245,8 +248,12 @@ export default function CouponsPanel({
                   >
                     {c.active ? t("coupons.pause") : t("coupons.resume")}
                   </button>
-                  <button className="tt-iconbtn" title={t("coupons.delete")} onClick={() => del(c)}>
-                    🗑️
+                  <button
+                    className="tt-iconbtn"
+                    title={t("coupons.delete")}
+                    onClick={() => del(c)}
+                  >
+                    <Icon.Delete size={16} />
                   </button>
                 </div>
               </div>
@@ -254,7 +261,6 @@ export default function CouponsPanel({
           })}
         </div>
       )}
-
     </div>
   );
 }

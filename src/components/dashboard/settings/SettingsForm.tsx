@@ -84,200 +84,200 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
 
         {/* Cards pair up on desktop instead of stacking down one narrow column. */}
         <div className="tt-cols">
-        {isOwner && (
+          {isOwner && (
+            <div className="tt-section">
+              <div className="tt-section-head">
+                <h3 className="tt-serif" style={{ margin: 0 }}>
+                  {t("dash.restaurant")}
+                </h3>
+                <span className="tt-muted" style={{ fontSize: 12 }}>
+                  {t("dash.shownToCustomers")}
+                </span>
+              </div>
+
+              <form className="tt-prodform" onSubmit={saveRestaurant}>
+                <div className="tt-prodform-row">
+                  <input
+                    className="tt-input"
+                    style={{ flex: 1 }}
+                    placeholder={t("dash.restaurantName")}
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    required
+                  />
+                  <input
+                    className="tt-input"
+                    style={{ width: 80, textAlign: "center" }}
+                    placeholder="🍱"
+                    aria-label={t("dash.logoEmoji")}
+                    value={logo}
+                    onChange={e => setLogo(e.target.value)}
+                  />
+                </div>
+
+                <input
+                  className="tt-input"
+                  placeholder={t("dash.tagline")}
+                  value={tagline}
+                  onChange={e => setTagline(e.target.value)}
+                />
+
+                <label className="tt-field" style={{ maxWidth: 200 }}>
+                  <span className="tt-mod-label">{t("dash.currency")}</span>
+                  <select
+                    className="tt-input"
+                    value={currency}
+                    onChange={e => setCurrency(e.target.value)}
+                  >
+                    {CURRENCIES.map(c => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="tt-settings-toggle">
+                  <span>
+                    <strong>{t("dash.serviceFee")}</strong>
+                    <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
+                      {t("dash.serviceFeeHint")}
+                    </span>
+                  </span>
+                  <span
+                    className="tt-switch"
+                    title={t(serviceEnabled ? "dash.serviceOn" : "dash.serviceOff")}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={serviceEnabled}
+                      onChange={e => setServiceEnabled(e.target.checked)}
+                    />
+                    <span className="tt-switch-track" />
+                  </span>
+                </label>
+
+                {serviceEnabled && (
+                  <label className="tt-field" style={{ width: 150 }}>
+                    <span className="tt-mod-label">{t("dash.serviceFeePct")}</span>
+                    <input
+                      className="tt-input"
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      max="30"
+                      value={servicePct}
+                      onChange={e => setServicePct(e.target.value)}
+                    />
+                  </label>
+                )}
+
+                <div className="tt-prodform-actions">
+                  <button
+                    type="submit"
+                    className="tt-btn tt-btn-primary tt-btn-sm"
+                    disabled={!name.trim() || saving}
+                  >
+                    {saving ? t("common.saving") : t("common.save")}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {isOwner && <PaymentsCard />}
+
+          {/* Coupons are a manager-level tool, so this sits outside the isOwner gate. */}
+          <CouponsPanel restaurantId={restaurant.id} currency={restaurant.currency} />
+
           <div className="tt-section">
             <div className="tt-section-head">
               <h3 className="tt-serif" style={{ margin: 0 }}>
-                {t("dash.restaurant")}
+                {t("dash.taxTitle")}
               </h3>
               <span className="tt-muted" style={{ fontSize: 12 }}>
-                {t("dash.shownToCustomers")}
+                {t("dash.taxHint")}
               </span>
             </div>
 
-            <form className="tt-prodform" onSubmit={saveRestaurant}>
-              <div className="tt-prodform-row">
+            <form className="tt-prodform" onSubmit={saveTax}>
+              <label className="tt-field" style={{ width: 150 }}>
+                <span className="tt-mod-label">{t("dash.ivaPct")}</span>
                 <input
                   className="tt-input"
-                  style={{ flex: 1 }}
-                  placeholder={t("dash.restaurantName")}
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  required
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max="100"
+                  value={taxPct}
+                  onChange={e => setTaxPct(e.target.value)}
                 />
-                <input
-                  className="tt-input"
-                  style={{ width: 80, textAlign: "center" }}
-                  placeholder="🍱"
-                  aria-label={t("dash.logoEmoji")}
-                  value={logo}
-                  onChange={e => setLogo(e.target.value)}
-                />
-              </div>
-
-              <input
-                className="tt-input"
-                placeholder={t("dash.tagline")}
-                value={tagline}
-                onChange={e => setTagline(e.target.value)}
-              />
-
-              <label className="tt-field" style={{ maxWidth: 200 }}>
-                <span className="tt-mod-label">{t("dash.currency")}</span>
-                <select
-                  className="tt-input"
-                  value={currency}
-                  onChange={e => setCurrency(e.target.value)}
-                >
-                  {CURRENCIES.map(c => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
               </label>
 
               <label className="tt-settings-toggle">
                 <span>
-                  <strong>{t("dash.serviceFee")}</strong>
+                  <strong>{t("dash.showBreakdown")}</strong>
                   <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
-                    {t("dash.serviceFeeHint")}
+                    {t("dash.showBreakdownHint")}
                   </span>
                 </span>
                 <span
                   className="tt-switch"
-                  title={t(serviceEnabled ? "dash.serviceOn" : "dash.serviceOff")}
+                  title={t(taxBreakdown ? "dash.breakdownShown" : "dash.breakdownHidden")}
                 >
                   <input
                     type="checkbox"
-                    checked={serviceEnabled}
-                    onChange={e => setServiceEnabled(e.target.checked)}
+                    checked={taxBreakdown}
+                    onChange={e => setTaxBreakdown(e.target.checked)}
                   />
                   <span className="tt-switch-track" />
                 </span>
               </label>
 
-              {serviceEnabled && (
-                <label className="tt-field" style={{ width: 150 }}>
-                  <span className="tt-mod-label">{t("dash.serviceFeePct")}</span>
-                  <input
-                    className="tt-input"
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    max="30"
-                    value={servicePct}
-                    onChange={e => setServicePct(e.target.value)}
-                  />
-                </label>
-              )}
-
               <div className="tt-prodform-actions">
                 <button
                   type="submit"
                   className="tt-btn tt-btn-primary tt-btn-sm"
-                  disabled={!name.trim() || saving}
+                  disabled={saving}
                 >
-                  {saving ? t("common.saving") : t("common.save")}
+                  {saving ? t("common.saving") : t("dash.saveTax")}
                 </button>
               </div>
             </form>
           </div>
-        )}
 
-        {isOwner && <PaymentsCard />}
-
-        {/* Coupons are a manager-level tool, so this sits outside the isOwner gate. */}
-        <CouponsPanel restaurantId={restaurant.id} currency={restaurant.currency} />
-
-        <div className="tt-section">
-          <div className="tt-section-head">
-            <h3 className="tt-serif" style={{ margin: 0 }}>
-              {t("dash.taxTitle")}
-            </h3>
-            <span className="tt-muted" style={{ fontSize: 12 }}>
-              {t("dash.taxHint")}
-            </span>
-          </div>
-
-          <form className="tt-prodform" onSubmit={saveTax}>
-            <label className="tt-field" style={{ width: 150 }}>
-              <span className="tt-mod-label">{t("dash.ivaPct")}</span>
-              <input
-                className="tt-input"
-                type="number"
-                step="0.5"
-                min="0"
-                max="100"
-                value={taxPct}
-                onChange={e => setTaxPct(e.target.value)}
-              />
-            </label>
+          <div className="tt-section">
+            <div className="tt-section-head">
+              <h3 className="tt-serif" style={{ margin: 0 }}>
+                {t("dash.orderingTitle")}
+              </h3>
+              <span className="tt-muted" style={{ fontSize: 12 }}>
+                {t("dash.orderingHint")}
+              </span>
+            </div>
 
             <label className="tt-settings-toggle">
               <span>
-                <strong>{t("dash.showBreakdown")}</strong>
+                <strong>{t("dash.acceptingOrders")}</strong>
                 <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
-                  {t("dash.showBreakdownHint")}
+                  {t("dash.acceptingOrdersHint")}
                 </span>
               </span>
               <span
                 className="tt-switch"
-                title={t(taxBreakdown ? "dash.breakdownShown" : "dash.breakdownHidden")}
+                title={t(acceptingOrders ? "dash.accepting" : "dash.paused")}
               >
                 <input
                   type="checkbox"
-                  checked={taxBreakdown}
-                  onChange={e => setTaxBreakdown(e.target.checked)}
+                  checked={acceptingOrders}
+                  disabled={saving}
+                  onChange={e => toggleAcceptingOrders(e.target.checked)}
                 />
                 <span className="tt-switch-track" />
               </span>
             </label>
-
-            <div className="tt-prodform-actions">
-              <button
-                type="submit"
-                className="tt-btn tt-btn-primary tt-btn-sm"
-                disabled={saving}
-              >
-                {saving ? t("common.saving") : t("dash.saveTax")}
-              </button>
-            </div>
-          </form>
-        </div>
-
-        <div className="tt-section">
-          <div className="tt-section-head">
-            <h3 className="tt-serif" style={{ margin: 0 }}>
-              {t("dash.orderingTitle")}
-            </h3>
-            <span className="tt-muted" style={{ fontSize: 12 }}>
-              {t("dash.orderingHint")}
-            </span>
           </div>
-
-          <label className="tt-settings-toggle">
-            <span>
-              <strong>{t("dash.acceptingOrders")}</strong>
-              <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
-                {t("dash.acceptingOrdersHint")}
-              </span>
-            </span>
-            <span
-              className="tt-switch"
-              title={t(acceptingOrders ? "dash.accepting" : "dash.paused")}
-            >
-              <input
-                type="checkbox"
-                checked={acceptingOrders}
-                disabled={saving}
-                onChange={e => toggleAcceptingOrders(e.target.checked)}
-              />
-              <span className="tt-switch-track" />
-            </span>
-          </label>
         </div>
-      </div>
       </div>
     </div>
   );

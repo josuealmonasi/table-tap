@@ -3,10 +3,10 @@
 export const en = {
   lang: { label: "Language" },
   menu: {
-    search: "🔍 Search the menu…",
+    search: "Search the menu…",
     all: "All",
     closed: "⏸️ We're not taking orders right now — please check back soon.",
-    table: "🪑 Table {label}",
+    table: "Table {label}",
     trackOrder: "🧾 You have an order in progress — track it →",
     noSearchMatch: "Nothing matches “{q}” — try another craving.",
     noDietMatch: "No items match those dietary filters.",
@@ -163,7 +163,7 @@ export const en = {
     kitchenNotePlaceholder: "Any notes for the whole order?",
     proceed: "Proceed to Payment",
     redirecting: "Redirecting to payment…",
-    securedBy: "🔒 Secured by Stripe · card, Apple Pay & Google Pay",
+    securedBy: "Secured by Stripe · card, Apple Pay & Google Pay",
     soldOut: "Sold out",
     editItem: "Edit item",
     viewCart: "View Cart",
@@ -286,10 +286,10 @@ export const en = {
     confirm: "Confirm tip",
   },
   service: {
-    callWaiter: "🛎️ Call waiter",
-    waiterSent: "🛎️ On the way!",
-    getBill: "🧾 Get the bill",
-    billSent: "🧾 Bill requested",
+    callWaiter: "Call waiter",
+    waiterSent: "On the way!",
+    getBill: "Get the bill",
+    billSent: "Bill requested",
   },
   tracker: {
     received: "Order received!",
@@ -360,6 +360,7 @@ export const en = {
     soon: "Soon",
   },
   common: {
+    back: "Back",
     save: "Save changes",
     saving: "Saving…",
     cancel: "Cancel",
@@ -416,7 +417,8 @@ export const en = {
     paymentsChecking: "Checking your payment setup…",
     connected: "✓ Connected",
     connectedMsg: "Payments for your orders go straight to your Stripe account.",
-    connectAlmost: "Your Stripe setup is almost done — finish it so you can start taking orders.",
+    connectAlmost:
+      "Your Stripe setup is almost done — finish it so you can start taking orders.",
     connectPrompt:
       "Connect a Stripe account so customer payments land in your bank. Until then, customers can’t check out.",
     connectBtn: "Connect Stripe",
@@ -427,7 +429,8 @@ export const en = {
     teamLogins: "Team logins",
     teamHint:
       "Kitchen & waiter: orders board only · Manager: + menus, tables, settings, refunds · Owner: everything (max 3)",
-    noStaff: "No staff yet. Invite your kitchen team below — they'll get an email to set their own password.",
+    noStaff:
+      "No staff yet. Invite your kitchen team below — they'll get an email to set their own password.",
     name: "Name",
     email: "Email",
     role: "Role",
@@ -563,8 +566,7 @@ export const en = {
     created: "Created",
     deleteRestaurant: "Delete restaurant",
     deleteRestaurantConfirm: "Delete “{name}”?",
-    deleteRestaurantMsg:
-      "Menus, orders, tables and team logins are erased permanently.",
+    deleteRestaurantMsg: "Menus, orders, tables and team logins are erased permanently.",
     editLogin: "Edit login",
     deleteLogin: "Delete login",
     deleteLoginConfirm: "Delete {email}?",
@@ -582,7 +584,8 @@ export const en = {
     you: "you",
     createUser: "Create a login",
     editUser: "Edit login",
-    createHint: "Admins rule the platform; owners can also be founded with a fresh restaurant",
+    createHint:
+      "Admins rule the platform; owners can also be founded with a fresh restaurant",
     newRestaurantOption: "➕ New restaurant…",
     editUserTitle: "Edit {email}",
     keepPassword: "Leave the password empty to keep the current one.",

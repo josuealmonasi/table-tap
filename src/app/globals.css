@@ -235,6 +235,9 @@ h2.tt-serif {
 
 /* ── badges & chips ── */
 .tt-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -910,6 +913,9 @@ h2.tt-serif {
   border-radius: 50%;
   width: 36px;
   height: 36px;
+  display: grid;
+  place-items: center;
+  color: var(--tt-ink);
   font-size: 18px;
   cursor: pointer;
 }
@@ -2261,6 +2267,10 @@ h2.tt-serif {
 }
 .tt-service-btn {
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: 1px solid var(--tt-cream);
   background: var(--tt-white);
   border-radius: 999px;
@@ -2560,6 +2570,9 @@ h2.tt-serif {
   cursor: pointer;
   font-size: 16px;
   padding: 4px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--tt-ink-2);
   border-radius: var(--tt-radius-sm);
 }
 .tt-iconbtn:hover {

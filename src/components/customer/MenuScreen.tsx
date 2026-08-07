@@ -17,6 +17,7 @@ import MenuItemRow from "./MenuItemRow";
 import CartBar from "./CartBar";
 import ServiceButtons from "./ServiceButtons";
 import LanguageToggle from "./LanguageToggle";
+import { Icon } from "@/components/ui/icons";
 
 /** The menu browsing screen: restaurant header, category filter, item list, cart bar. */
 export default function MenuScreen({
@@ -168,12 +169,17 @@ export default function MenuScreen({
                   setSearchOpen(open => !open);
                 }}
               >
-                {searchOpen ? "✕" : "🔍"}
+                {searchOpen ? (
+                  <Icon.Close size={17} weight="bold" />
+                ) : (
+                  <Icon.Search size={17} weight="bold" />
+                )}
               </button>
               <LanguageToggle />
             </div>
             {table && (
               <span className="tt-badge tt-badge-onink">
+                <Icon.Table size={13} weight="bold" />
                 {t("menu.table", { label: table.label })}
               </span>
             )}
@@ -225,23 +231,7 @@ export default function MenuScreen({
             aria-label={t("menu.filters")}
             title={t("menu.filters")}
           >
-            {/* Sliders glyph — placeholder until there's an icon set. Drawn
-                rather than an emoji so it inherits colour and stays crisp. */}
-            <svg
-              width="17"
-              height="17"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              aria-hidden="true"
-            >
-              <line x1="3" y1="8" x2="21" y2="8" />
-              <line x1="3" y1="16" x2="21" y2="16" />
-              <circle cx="9" cy="8" r="2.6" fill="currentColor" stroke="none" />
-              <circle cx="16" cy="16" r="2.6" fill="currentColor" stroke="none" />
-            </svg>
+            <Icon.Filters size={17} weight="bold" />
             {diet.length > 0 && <span className="tt-filter-count">{diet.length}</span>}
           </button>
         )}

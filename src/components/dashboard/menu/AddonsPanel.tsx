@@ -9,6 +9,7 @@ import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
 import ReorderButtons from "@/components/ui/ReorderButtons";
 import IconPicker from "./IconPicker";
+import { Icon } from "@/components/ui/icons";
 
 interface AddonsPanelProps {
   addons: MenuItem[];
@@ -93,7 +94,12 @@ export default function AddonsPanel({
               <button className="tt-add-more" onClick={() => setAdding(true)}>
                 {t("menu.addExtra")}
               </button>
-              <Modal open={adding} onClose={() => setAdding(false)} maxWidth={520} label={t("menu.addExtra")}>
+              <Modal
+                open={adding}
+                onClose={() => setAdding(false)}
+                maxWidth={520}
+                label={t("menu.addExtra")}
+              >
                 {addForm}
               </Modal>
             </>
@@ -185,7 +191,7 @@ export default function AddonsPanel({
                       title={t("menu.edit")}
                       onClick={() => setEditingId(addon.id)}
                     >
-                      ✏️
+                      <Icon.Edit size={16} />
                     </button>
                     <button
                       className="tt-iconbtn"
@@ -202,21 +208,25 @@ export default function AddonsPanel({
                         }
                       }}
                     >
-                      🗑️
+                      <Icon.Delete size={16} />
                     </button>
                   </div>
                 </div>
               </div>
             </div>
             {modalForms && (
-              <Modal open={isEditing} onClose={() => setEditingId(null)} maxWidth={520} label={t("menu.extrasTitle")}>
+              <Modal
+                open={isEditing}
+                onClose={() => setEditingId(null)}
+                maxWidth={520}
+                label={t("menu.extrasTitle")}
+              >
                 {editForm}
               </Modal>
             )}
           </div>
         );
       })}
-
     </div>
   );
 }

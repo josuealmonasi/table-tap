@@ -103,10 +103,10 @@ export default function CouponBox({
             autoComplete="off"
             spellCheck={false}
           />
-          {error && (
-            <p className="tt-field-error">{error}</p>
-          )}
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+          {error && <p className="tt-field-error">{error}</p>}
+          <div
+            style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}
+          >
             <button
               type="button"
               className="tt-btn tt-btn-ghost tt-btn-sm"

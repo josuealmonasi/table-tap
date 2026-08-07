@@ -53,7 +53,9 @@ export default function ProductForm({
   }
 
   function toggleDietary(key: string) {
-    setDietary(prev => (prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]));
+    setDietary(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key],
+    );
   }
 
   async function handleSubmit(e: React.FormEvent) {

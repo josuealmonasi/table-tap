@@ -2,7 +2,7 @@
   "name": "tabletap",
   "version": "0.1.0",
   "private": true,
-  "description": "QR-code table ordering for restaurants \u2014 scan, browse, order, pay, track.",
+  "description": "QR-code table ordering for restaurants — scan, browse, order, pay, track.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -29,6 +29,7 @@
     "db:promos:prod": "node scripts/seed-promos.mjs --prod"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "@stripe/stripe-js": "^4.0.0",
     "@supabase/ssr": "^0.5.0",
     "@supabase/supabase-js": "^2.45.0",

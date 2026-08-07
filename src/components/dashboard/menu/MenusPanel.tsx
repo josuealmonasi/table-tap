@@ -191,10 +191,7 @@ export default function MenusPanel({
           {adding ? (
             <div className="tt-add-above">{addForm}</div>
           ) : (
-            <button
-              className="tt-add-more"
-              onClick={() => setAdding(true)}
-            >
+            <button className="tt-add-more" onClick={() => setAdding(true)}>
               {t("menu.addMenu")}
             </button>
           )}
@@ -216,7 +213,6 @@ export default function MenusPanel({
               />
             ))}
           </div>
-
         </>
       )}
     </div>

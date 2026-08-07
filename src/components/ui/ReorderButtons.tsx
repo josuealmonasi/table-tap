@@ -1,6 +1,7 @@
 "use client";
 
 import { useT } from "@/lib/i18n/context";
+import { Icon } from "@/components/ui/icons";
 
 interface ReorderButtonsProps {
   canMoveUp: boolean;
@@ -9,7 +10,7 @@ interface ReorderButtonsProps {
   onMoveDown: () => void;
 }
 
-/** Stacked ▲▼ buttons for moving a row up/down within its sibling group. */
+/** Stacked up/down buttons for moving a row within its sibling group. */
 export default function ReorderButtons({
   canMoveUp,
   canMoveDown,
@@ -29,7 +30,7 @@ export default function ReorderButtons({
         disabled={!canMoveUp}
         onClick={onMoveUp}
       >
-        ▲
+        <Icon.MoveUp size={13} weight="bold" />
       </button>
       <button
         type="button"
@@ -38,7 +39,7 @@ export default function ReorderButtons({
         disabled={!canMoveDown}
         onClick={onMoveDown}
       >
-        ▼
+        <Icon.MoveDown size={13} weight="bold" />
       </button>
     </div>
   );
