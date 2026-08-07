@@ -19,6 +19,7 @@
     "db:mock": "node scripts/db.mjs mock",
     "db:dropmock": "node scripts/db.mjs dropmock",
     "db:promos": "node scripts/seed-promos.mjs",
+    "db:ratings": "node scripts/seed-ratings.mjs",
     "db:create:prod": "node scripts/db.mjs create --prod",
     "db:seed:prod": "node scripts/db.mjs seed --prod",
     "db:reset:prod": "node scripts/db.mjs reset --prod",
@@ -26,7 +27,8 @@
     "db:purge:prod": "node scripts/db.mjs purge --prod",
     "db:mock:prod": "node scripts/db.mjs mock --prod",
     "db:dropmock:prod": "node scripts/db.mjs dropmock --prod",
-    "db:promos:prod": "node scripts/seed-promos.mjs --prod"
+    "db:promos:prod": "node scripts/seed-promos.mjs --prod",
+    "db:ratings:prod": "node scripts/seed-ratings.mjs --prod"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
