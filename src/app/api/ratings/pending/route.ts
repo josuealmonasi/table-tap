@@ -1,0 +1,60 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { rateableDishes } from "@/lib/ratings";
+import type { OrderLineItem } from "@/lib/types";
+
+/**
+ * What this device is entitled to rate.
+ *
+ * The browser sends the order ids it remembers placing; this returns only the
+ * dishes from those orders that are paid, belong to this restaurant, and
+ * haven't been rated yet. An id for someone else's order yields nothing, so
+ * the response can't be used to discover what another table ordered.
+ */
+export async function POST(req: NextRequest) {
+  if (await isRateLimited(`rating-pending:${clientIp(req)}`, 30, 60)) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
+  let body: { restaurantId?: string; orderIds?: string[] };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Bad request" }, { status: 400 });
+  }
+
+  const { restaurantId, orderIds } = body;
+  if (!restaurantId || !Array.isArray(orderIds) || orderIds.length === 0) {
+    return NextResponse.json({ dishes: [] });
+  }
+
+  const supabase = createAdminClient();
+  const ids = [...new Set(orderIds.filter(id => typeof id === "string"))].slice(0, 20);
+
+  const { data: orders, error } = await supabase
+    .from("orders")
+    .select("id, items")
+    .in("id", ids)
+    .eq("restaurant_id", restaurantId)
+    .eq("paid", true);
+
+  if (error) {
+    return NextResponse.json({ error: "Could not load orders" }, { status: 503 });
+  }
+  if (!orders?.length) return NextResponse.json({ dishes: [] });
+
+  // Already-rated pairs drop out, so re-asking after a partial submit only
+  // offers what's left rather than starting over.
+  const { data: rated } = await supabase
+    .from("dish_ratings")
+    .select("order_id, item_id")
+    .in("order_id", orders.map(o => o.id));
+
+  const dishes = rateableDishes(
+    orders.map(o => ({ id: o.id, items: (o.items ?? []) as OrderLineItem[] })),
+    (rated ?? []).map(r => ({ orderId: r.order_id, itemId: r.item_id })),
+  );
+
+  return NextResponse.json({ dishes });
+}

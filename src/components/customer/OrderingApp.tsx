@@ -34,6 +34,7 @@ export default function OrderingApp({
   extrasByProduct,
   combos = [],
   promos = [],
+  ratings = {},
 }: {
   restaurant: Restaurant;
   table: RestaurantTable | null;
@@ -43,6 +44,7 @@ export default function OrderingApp({
   extrasByProduct: Record<string, string[]>;
   combos?: Combo[];
   promos?: CartPromo[];
+  ratings?: Record<string, { avg: number; count: number }>;
 }) {
   const [screen, setScreen] = useState<Screen>("menu");
   const [selected, setSelected] = useState<MenuItem | null>(null);
@@ -365,6 +367,7 @@ export default function OrderingApp({
         items={items}
         combos={combos}
         promos={promos}
+        ratings={ratings}
         cartCount={cart.count}
         cartTotal={pricing.total}
         onSelectItem={openItem}

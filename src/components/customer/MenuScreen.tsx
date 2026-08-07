@@ -33,6 +33,7 @@ export default function MenuScreen({
   items,
   combos,
   promos,
+  ratings,
   cartCount,
   cartTotal,
   onSelectItem,
@@ -45,6 +46,7 @@ export default function MenuScreen({
   items: MenuItem[];
   combos: Combo[];
   promos: CartPromo[];
+  ratings: Record<string, { avg: number; count: number }>;
   cartCount: number;
   cartTotal: number;
   onSelectItem: (item: MenuItem) => void;
@@ -380,6 +382,7 @@ export default function MenuScreen({
                 item={item}
                 currency={restaurant.currency}
                 promoLabel={promoByItem.get(item.id)}
+              rating={ratings[item.id]}
                 onSelect={onSelectItem}
               />
             ))}

@@ -5,18 +5,22 @@ import type { MenuItem } from "@/lib/types";
 import { dietaryTags } from "@/lib/dietary";
 import { itemSalePrice } from "@/lib/pricing";
 import { useT } from "@/lib/i18n/context";
+import { RatingIcon } from "@/components/ui/icons";
 
 /** A single tappable row in the menu list. */
 export default function MenuItemRow({
   item,
   currency,
   promoLabel,
+  rating,
   onSelect,
 }: {
   item: MenuItem;
   currency: string;
   /** Name of a quantity deal covering this item, e.g. "2x1 Tacos". */
   promoLabel?: string;
+  /** Average score, only present once the dish has enough ratings to show one. */
+  rating?: { avg: number; count: number };
   onSelect: (item: MenuItem) => void;
 }) {
   const t = useT();
@@ -41,6 +45,13 @@ export default function MenuItemRow({
           <div className="tt-tag-row">
             {onSale && <span className="tt-sale">{t("menu.percentOff", { pct })}</span>}
             {promoLabel && <span className="tt-deal">{promoLabel}</span>}
+          </div>
+        )}
+        {rating && (
+          <div className="tt-rating-inline">
+            <RatingIcon size={12} weight="fill" className="tt-star-on" />
+            {rating.avg.toFixed(1)}
+            <span className="tt-rating-count">({rating.count})</span>
           </div>
         )}
         <div className="tt-desc tt-muted">{item.description}</div>

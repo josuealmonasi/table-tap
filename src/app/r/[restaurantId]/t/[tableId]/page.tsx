@@ -41,6 +41,7 @@ export default async function TablePage({
       extrasByProduct={data.extrasByProduct}
       combos={data.combos}
       promos={data.promos}
+      ratings={data.ratings}
     />
   );
 }

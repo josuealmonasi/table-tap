@@ -323,6 +323,18 @@ export const en = {
     notFoundBody:
       "The QR code you scanned isn't linked to a menu. Please ask a member of staff for help.",
   },
+  rating: {
+    title: "How was everything?",
+    subtitle: "Rate what you had — optional, and it helps the kitchen.",
+    rate: "Rate this dish",
+    rateDish: "Rate {name}",
+    rateN: "{n} of 5 stars",
+    scoreOf: "Rated {score} out of 5",
+    skip: "No thanks",
+    submit: "Send rating",
+    submitMany: "Send {count} ratings",
+    reviews: "{count} ratings",
+  },
   dietary: {
     vegetarian: "Vegetarian",
     vegan: "Vegan",
