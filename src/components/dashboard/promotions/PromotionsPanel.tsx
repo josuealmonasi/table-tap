@@ -11,6 +11,7 @@ import type { PromotionWithItems } from "@/lib/promotions";
 import ComboForm from "./ComboForm";
 import QuantityForm from "./QuantityForm";
 import { DeleteIcon } from "@/components/ui/icons";
+import { ListSkeleton } from "@/components/ui/Skeleton";
 
 /** Combo bundles and quantity deals for one restaurant. */
 export default function PromotionsPanel({
@@ -86,7 +87,7 @@ export default function PromotionsPanel({
         <div className="tt-cols">
           <div className="tt-section tt-cols-full">
             {loading ? (
-              <p className="tt-muted">{t("common.loading")}</p>
+              <ListSkeleton rows={3} />
             ) : promotions.length === 0 ? (
               <p className="tt-muted">{t("promos.empty")}</p>
             ) : (

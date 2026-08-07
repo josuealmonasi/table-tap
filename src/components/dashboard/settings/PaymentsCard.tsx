@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { CheckIcon } from "@/components/ui/icons";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 interface ConnectStatus {
   connected: boolean;
@@ -69,9 +70,9 @@ export default function PaymentsCard() {
       </div>
 
       {loading ? (
-        <p className="tt-muted" style={{ fontSize: 14, margin: 0 }}>
-          {t("dash.paymentsChecking")}
-        </p>
+        // One line, not list rows: this reports a connection status, so the
+        // placeholder should be the shape of the sentence that replaces it.
+        <Skeleton width="72%" height={14} />
       ) : status?.chargesEnabled ? (
         <p style={{ fontSize: 14, margin: 0 }}>
           <span className="tt-badge tt-badge-green">

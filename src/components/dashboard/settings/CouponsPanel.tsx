@@ -13,6 +13,7 @@ import {
   normalizeCoupon,
 } from "@/lib/coupons";
 import { DeleteIcon } from "@/components/ui/icons";
+import { ListSkeleton } from "@/components/ui/Skeleton";
 
 /** Coupon codes an owner or manager hands out, with their usage so far. */
 export default function CouponsPanel({
@@ -219,7 +220,7 @@ export default function CouponsPanel({
       </form>
 
       {loading ? (
-        <p className="tt-muted">{t("common.loading")}</p>
+        <ListSkeleton rows={3} />
       ) : coupons.length === 0 ? (
         <p className="tt-muted">{t("coupons.empty")}</p>
       ) : (
