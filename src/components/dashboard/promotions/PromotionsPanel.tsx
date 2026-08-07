@@ -10,6 +10,7 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 import type { PromotionWithItems } from "@/lib/promotions";
 import ComboForm from "./ComboForm";
 import QuantityForm from "./QuantityForm";
+import { Icon } from "@/components/ui/icons";
 
 /** Combo bundles and quantity deals for one restaurant. */
 export default function PromotionsPanel({
@@ -83,81 +84,83 @@ export default function PromotionsPanel({
         </p>
 
         <div className="tt-cols">
-        <div className="tt-section tt-cols-full">
-        {loading ? (
-          <p className="tt-muted">{t("common.loading")}</p>
-        ) : promotions.length === 0 ? (
-          <p className="tt-muted">{t("promos.empty")}</p>
-        ) : (
-          <div className="tt-coupon-list">
-            {promotions.map(p => (
-              <div key={p.id} className="tt-coupon-item">
-                <div style={{ minWidth: 0 }}>
-                  <strong>
-                    {p.emoji} {p.name}
-                  </strong>
-                  {!p.active && <span className="tt-coupon-off">{t("promos.paused")}</span>}
-                  <div className="tt-muted" style={{ fontSize: 13 }}>
-                    {describe(p)}
+          <div className="tt-section tt-cols-full">
+            {loading ? (
+              <p className="tt-muted">{t("common.loading")}</p>
+            ) : promotions.length === 0 ? (
+              <p className="tt-muted">{t("promos.empty")}</p>
+            ) : (
+              <div className="tt-coupon-list">
+                {promotions.map(p => (
+                  <div key={p.id} className="tt-coupon-item">
+                    <div style={{ minWidth: 0 }}>
+                      <strong>
+                        {p.emoji} {p.name}
+                      </strong>
+                      {!p.active && (
+                        <span className="tt-coupon-off">{t("promos.paused")}</span>
+                      )}
+                      <div className="tt-muted" style={{ fontSize: 13 }}>
+                        {describe(p)}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                      <button
+                        className="tt-btn tt-btn-ghost tt-btn-sm"
+                        onClick={async () => {
+                          const err = await setActive(p.id, !p.active);
+                          if (err) toast(err, "error");
+                        }}
+                      >
+                        {p.active ? t("promos.pause") : t("promos.resume")}
+                      </button>
+                      <button
+                        className="tt-iconbtn"
+                        title={t("promos.delete")}
+                        onClick={() => del(p)}
+                      >
+                        <Icon.Delete size={16} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                  <button
-                    className="tt-btn tt-btn-ghost tt-btn-sm"
-                    onClick={async () => {
-                      const err = await setActive(p.id, !p.active);
-                      if (err) toast(err, "error");
-                    }}
-                  >
-                    {p.active ? t("promos.pause") : t("promos.resume")}
-                  </button>
-                  <button
-                    className="tt-iconbtn"
-                    title={t("promos.delete")}
-                    onClick={() => del(p)}
-                  >
-                    🗑️
-                  </button>
-                </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
-      </div>
 
-      <div className="tt-section">
-        <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 2 }}>
-          {t("promos.newCombo")}
-        </h3>
-        <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
-          {t("promos.comboHint")}
-        </p>
-        <ComboForm
-          products={products}
-          categories={categories}
-          currency={currency}
-          saving={saving}
-          onSubmit={add}
-        />
-      </div>
+          <div className="tt-section">
+            <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 2 }}>
+              {t("promos.newCombo")}
+            </h3>
+            <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
+              {t("promos.comboHint")}
+            </p>
+            <ComboForm
+              products={products}
+              categories={categories}
+              currency={currency}
+              saving={saving}
+              onSubmit={add}
+            />
+          </div>
 
-      <div className="tt-section">
-        <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 2 }}>
-          {t("promos.newDeal")}
-        </h3>
-        <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
-          {t("promos.dealHint")}
-        </p>
-        <QuantityForm
-          products={products}
-          categories={categories}
-          currency={currency}
-          saving={saving}
-          onSubmit={add}
-        />
+          <div className="tt-section">
+            <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 2 }}>
+              {t("promos.newDeal")}
+            </h3>
+            <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
+              {t("promos.dealHint")}
+            </p>
+            <QuantityForm
+              products={products}
+              categories={categories}
+              currency={currency}
+              saving={saving}
+              onSubmit={add}
+            />
+          </div>
         </div>
       </div>
     </div>
-  </div>
   );
 }

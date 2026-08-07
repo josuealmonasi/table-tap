@@ -99,7 +99,8 @@ export default function NavDrawer({
               {navItemsFor(role).map(item =>
                 item.soon ? (
                   <span key={item.href} className="tt-drawer-link tt-drawer-link-soon">
-                    <span className="tt-drawer-emoji">{item.emoji}</span> {t(item.titleKey)}
+                    <span className="tt-drawer-emoji">{item.emoji}</span>{" "}
+                    {t(item.titleKey)}
                     <span className="tt-badge" style={{ marginLeft: "auto" }}>
                       {t("nav.soon")}
                     </span>
@@ -112,7 +113,8 @@ export default function NavDrawer({
                     aria-current={isActive(item.href) ? "page" : undefined}
                     onClick={() => setOpen(false)}
                   >
-                    <span className="tt-drawer-emoji">{item.emoji}</span> {t(item.titleKey)}
+                    <span className="tt-drawer-emoji">{item.emoji}</span>{" "}
+                    {t(item.titleKey)}
                   </Link>
                 ),
               )}

@@ -9,6 +9,7 @@ import CartLineRow from "./CartLineRow";
 import CouponBox from "./CouponBox";
 import OrderTotals from "./OrderTotals";
 import TipPicker from "./TipPicker";
+import { Icon } from "@/components/ui/icons";
 
 interface CartScreenProps {
   restaurant: Restaurant;
@@ -188,6 +189,7 @@ export default function CartScreen({
               className="tt-muted"
               style={{ textAlign: "center", fontSize: 12, marginTop: 12 }}
             >
+              <Icon.Secure size={12} weight="bold" style={{ verticalAlign: "-1px" }} />{" "}
               {t("cart.securedBy")}
             </p>
           </>

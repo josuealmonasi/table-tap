@@ -98,7 +98,9 @@ export default function ResetPasswordForm() {
             <button
               className="tt-btn tt-btn-primary"
               style={{ width: "100%" }}
-              disabled={password.length < 6 || confirm.length < 6 || loading || ready === null}
+              disabled={
+                password.length < 6 || confirm.length < 6 || loading || ready === null
+              }
               type="submit"
             >
               {loading ? t("auth.saving") : t("auth.updatePassword")}

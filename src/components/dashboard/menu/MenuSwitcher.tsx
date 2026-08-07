@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Menu } from "@/lib/types";
 import { menuSlug } from "@/lib/slug";
 import { useT } from "@/lib/i18n/context";
+import { Icon } from "@/components/ui/icons";
 
 /**
  * Breadcrumb-style control for the menu editor header: shows the current menu
@@ -108,7 +109,9 @@ export default function MenuSwitcher({
         onClick={() => setOpen(o => !o)}
       >
         {currentName}
-        {menus.length > 1 && <span className="tt-menu-switcher-caret">▾</span>}
+        {menus.length > 1 && (
+          <Icon.Expand size={13} weight="bold" className="tt-menu-switcher-caret" />
+        )}
       </button>
       <button
         type="button"
@@ -121,7 +124,7 @@ export default function MenuSwitcher({
           setOpen(false);
         }}
       >
-        ✏️
+        <Icon.Edit size={16} />
       </button>
 
       {open && menus.length > 1 && (

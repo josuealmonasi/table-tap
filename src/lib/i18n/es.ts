@@ -5,10 +5,10 @@ import type { Messages } from "./en";
 export const es: Messages = {
   lang: { label: "Idioma" },
   menu: {
-    search: "🔍 Busca en el menú…",
+    search: "Busca en el menú…",
     all: "Todo",
     closed: "⏸️ No estamos tomando pedidos en este momento — vuelve pronto.",
-    table: "🪑 Mesa {label}",
+    table: "Mesa {label}",
     trackOrder: "🧾 Tienes un pedido en curso — síguelo →",
     noSearchMatch: "Nada coincide con “{q}” — prueba otro antojo.",
     noDietMatch: "Ningún platillo coincide con esos filtros.",
@@ -119,7 +119,8 @@ export const es: Messages = {
     noProducts: "Aún no hay productos.",
     extrasTitle: "🧂 Extras",
     attachToProducts: "Adjúntalos a los productos",
-    noExtras: "Aún no hay extras. Crea uno (p. ej. Cátsup) para ofrecerlo en los productos.",
+    noExtras:
+      "Aún no hay extras. Crea uno (p. ej. Cátsup) para ofrecerlo en los productos.",
     noExtrasSearch: "Ningún extra coincide con tu búsqueda.",
     deleteExtraConfirm: "¿Eliminar el extra “{name}”?",
     addExtra: "+ Agregar extra",
@@ -157,7 +158,7 @@ export const es: Messages = {
     kitchenNotePlaceholder: "¿Alguna nota para todo el pedido?",
     proceed: "Ir a pagar",
     redirecting: "Redirigiendo al pago…",
-    securedBy: "🔒 Protegido por Stripe · tarjeta, Apple Pay y Google Pay",
+    securedBy: "Protegido por Stripe · tarjeta, Apple Pay y Google Pay",
     soldOut: "Agotado",
     editItem: "Editar platillo",
     viewCart: "Ver carrito",
@@ -214,7 +215,8 @@ export const es: Messages = {
     resume: "Reanudar",
     delete: "Eliminar cupón",
     deleteConfirm: "¿Eliminar {code}?",
-    deleteMsg: "Los clientes ya no podrán usarlo. Los usos anteriores quedan en tus registros.",
+    deleteMsg:
+      "Los clientes ya no podrán usarlo. Los usos anteriores quedan en tus registros.",
     created: "Cupón creado",
     deleted: "Cupón eliminado",
   },
@@ -249,7 +251,8 @@ export const es: Messages = {
     resume: "Reanudar",
     delete: "Eliminar promoción",
     deleteConfirm: "¿Eliminar “{name}”?",
-    deleteMsg: "Los clientes dejan de verla de inmediato. Los pedidos anteriores conservan lo que pagaron.",
+    deleteMsg:
+      "Los clientes dejan de verla de inmediato. Los pedidos anteriores conservan lo que pagaron.",
     bogoDesc: "Lleva {buy}, paga {pay} — {names}",
     // Ofertas por cantidad
     newDeal: "Nueva oferta por cantidad",
@@ -279,10 +282,10 @@ export const es: Messages = {
     confirm: "Confirmar propina",
   },
   service: {
-    callWaiter: "🛎️ Llamar al mesero",
-    waiterSent: "🛎️ ¡En camino!",
-    getBill: "🧾 Pedir la cuenta",
-    billSent: "🧾 Cuenta solicitada",
+    callWaiter: "Llamar al mesero",
+    waiterSent: "¡En camino!",
+    getBill: "Pedir la cuenta",
+    billSent: "Cuenta solicitada",
   },
   tracker: {
     received: "¡Pedido recibido!",
@@ -350,6 +353,7 @@ export const es: Messages = {
     soon: "Pronto",
   },
   common: {
+    back: "Atrás",
     save: "Guardar cambios",
     saving: "Guardando…",
     cancel: "Cancelar",
@@ -366,7 +370,8 @@ export const es: Messages = {
     addMenu: "+ Agregar menú",
     open: "Abrir →",
     comingSoon: "Próximamente",
-    ordersPausedBanner: "⏸️ Los pedidos están pausados — los clientes pueden ver pero no ordenar.",
+    ordersPausedBanner:
+      "⏸️ Los pedidos están pausados — los clientes pueden ver pero no ordenar.",
     resumeInSettings: "Reanudar en Ajustes",
     settingsTitle: "Ajustes",
     restaurant: "Restaurante",
@@ -376,7 +381,8 @@ export const es: Messages = {
     tagline: "Eslogan (opcional)",
     currency: "Moneda",
     serviceFee: "Cobrar cargo por servicio",
-    serviceFeeHint: "Se añade a cada pedido como % del subtotal — desactivado por defecto",
+    serviceFeeHint:
+      "Se añade a cada pedido como % del subtotal — desactivado por defecto",
     serviceFeePct: "% de servicio",
     serviceOn: "Servicio activado",
     serviceOff: "Servicio desactivado",
@@ -403,7 +409,8 @@ export const es: Messages = {
     paymentsChecking: "Revisando tu configuración de pagos…",
     connected: "✓ Conectado",
     connectedMsg: "Los pagos de tus pedidos van directo a tu cuenta de Stripe.",
-    connectAlmost: "Tu configuración de Stripe casi está lista — termínala para empezar a recibir pedidos.",
+    connectAlmost:
+      "Tu configuración de Stripe casi está lista — termínala para empezar a recibir pedidos.",
     connectPrompt:
       "Conecta una cuenta de Stripe para que los pagos lleguen a tu banco. Hasta entonces, los clientes no pueden pagar.",
     connectBtn: "Conectar Stripe",
@@ -413,7 +420,8 @@ export const es: Messages = {
     teamLogins: "Accesos del equipo",
     teamHint:
       "Cocina y mesero: solo el tablero de pedidos · Gerente: + menús, mesas, ajustes, reembolsos · Dueño: todo (máx. 3)",
-    noStaff: "Aún no hay personal. Invita a tu equipo de cocina abajo — recibirán un correo para crear su contraseña.",
+    noStaff:
+      "Aún no hay personal. Invita a tu equipo de cocina abajo — recibirán un correo para crear su contraseña.",
     name: "Nombre",
     email: "Correo",
     role: "Rol",
@@ -562,7 +570,8 @@ export const es: Messages = {
     you: "tú",
     createUser: "Crear un acceso",
     editUser: "Editar acceso",
-    createHint: "Los admins gobiernan la plataforma; los dueños también se pueden crear con un restaurante nuevo",
+    createHint:
+      "Los admins gobiernan la plataforma; los dueños también se pueden crear con un restaurante nuevo",
     newRestaurantOption: "➕ Nuevo restaurante…",
     editUserTitle: "Editar {email}",
     keepPassword: "Deja la contraseña vacía para conservar la actual.",

@@ -47,7 +47,11 @@ export default function MenuItemRow({
         {dietaryTags(item.dietary).length > 0 && (
           <div className="tt-diet-row">
             {dietaryTags(item.dietary).map(tag => (
-              <span key={tag.key} className="tt-diet-badge" title={t(`dietary.${tag.key}`)}>
+              <span
+                key={tag.key}
+                className="tt-diet-badge"
+                title={t(`dietary.${tag.key}`)}
+              >
                 {tag.emoji} {t(`dietary.${tag.key}`)}
               </span>
             ))}

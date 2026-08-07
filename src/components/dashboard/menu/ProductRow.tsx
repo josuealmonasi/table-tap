@@ -10,6 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import ReorderButtons from "@/components/ui/ReorderButtons";
 import MoveToSection from "./MoveToSection";
 import ProductForm from "./ProductForm";
+import { Icon } from "@/components/ui/icons";
 
 interface ProductRowProps {
   product: MenuItem;
@@ -157,7 +158,7 @@ export default function ProductRow({
                   onClick={() => setMoving(true)}
                   title={t("menu.moveToSection")}
                 >
-                  📤
+                  <Icon.MoveTo size={16} />
                 </button>
               )}
               <button
@@ -165,7 +166,7 @@ export default function ProductRow({
                 onClick={() => setEditing(true)}
                 title={t("menu.edit")}
               >
-                ✏️
+                <Icon.Edit size={16} />
               </button>
               <button
                 className="tt-iconbtn"
@@ -183,19 +184,29 @@ export default function ProductRow({
                 }}
                 title={t("menu.delete")}
               >
-                🗑️
+                <Icon.Delete size={16} />
               </button>
             </div>
           </div>
         </div>
       </div>
       {modalForms && (
-        <Modal open={editing} onClose={() => setEditing(false)} maxWidth={720} label={t("menu.edit")}>
+        <Modal
+          open={editing}
+          onClose={() => setEditing(false)}
+          maxWidth={720}
+          label={t("menu.edit")}
+        >
           {editForm}
         </Modal>
       )}
       {canMove && (
-        <Modal open={moving} onClose={() => setMoving(false)} maxWidth={460} label={t("menu.moveToSection")}>
+        <Modal
+          open={moving}
+          onClose={() => setMoving(false)}
+          maxWidth={460}
+          label={t("menu.moveToSection")}
+        >
           <MoveToSection
             productName={product.name}
             categories={(categories ?? []).filter(c => c.id !== product.category_id)}

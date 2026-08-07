@@ -92,9 +92,7 @@ export default function PaymentsCard() {
                 ? t("dash.finishBtn")
                 : t("dash.connectBtn")}
           </button>
-          {error && (
-            <p className="tt-field-error">{error}</p>
-          )}
+          {error && <p className="tt-field-error">{error}</p>}
         </>
       )}
     </div>

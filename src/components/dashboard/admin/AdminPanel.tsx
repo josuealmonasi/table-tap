@@ -7,6 +7,7 @@ import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import AdminCreateUser from "./AdminCreateUser";
 import AdminEditUser from "./AdminEditUser";
+import { Icon } from "@/components/ui/icons";
 
 export interface AdminRestaurantRow {
   id: string;
@@ -126,7 +127,7 @@ export default function AdminPanel({
                     }
                   }}
                 >
-                  🗑️
+                  <Icon.Delete size={16} />
                 </button>
               </div>
             ))}
@@ -176,7 +177,7 @@ export default function AdminPanel({
                       disabled={busy}
                       onClick={() => setEditing(u)}
                     >
-                      ✏️
+                      <Icon.Edit size={16} />
                     </button>
                     <button
                       className="tt-iconbtn"
@@ -195,7 +196,7 @@ export default function AdminPanel({
                         }
                       }}
                     >
-                      🗑️
+                      <Icon.Delete size={16} />
                     </button>
                   </span>
                 )}

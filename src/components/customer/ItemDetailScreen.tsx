@@ -8,6 +8,7 @@ import { itemSalePrice } from "@/lib/pricing";
 import { missingRequired } from "@/lib/modifiers";
 import { useT } from "@/lib/i18n/context";
 import ModifierGroup from "./ModifierGroup";
+import { Icon } from "@/components/ui/icons";
 
 /** Item customisation screen: modifiers, extras, special requests, qty → add to cart. */
 export default function ItemDetailScreen({
@@ -93,8 +94,8 @@ export default function ItemDetailScreen({
     <div className="tt-root">
       <div className="tt-item-hero">
         <span>{item.emoji || "🍽️"}</span>
-        <button className="tt-back" onClick={onBack}>
-          ←
+        <button className="tt-back" onClick={onBack} aria-label={t("common.back")}>
+          <Icon.Back size={18} weight="bold" />
         </button>
       </div>
       <div style={{ padding: 20 }}>

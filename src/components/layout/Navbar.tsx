@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n/context";
 import LanguageToggle from "@/components/customer/LanguageToggle";
 import NavDrawer from "./NavDrawer";
+import { Icon } from "@/components/ui/icons";
 
 /**
  * Site-wide nav for logged-in restaurant users: brand top-left, user menu
@@ -81,7 +82,7 @@ export default function Navbar({
               aria-label={t("nav.account")}
               onClick={() => setOpen(o => !o)}
             >
-              👤
+              <Icon.Account size={18} weight="bold" />
             </button>
 
             {open && (

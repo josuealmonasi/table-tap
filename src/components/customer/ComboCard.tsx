@@ -27,7 +27,9 @@ export default function ComboCard({
           <strong style={{ fontSize: 15 }}>{combo.name}</strong>
         </div>
         <div className="tt-price" style={{ fontSize: 15 }}>
-          {saving > 0 && <s className="tt-was">{formatMoney(combo.regularPrice, currency)}</s>}
+          {saving > 0 && (
+            <s className="tt-was">{formatMoney(combo.regularPrice, currency)}</s>
+          )}
           {formatMoney(combo.price, currency)}
         </div>
         {saving > 0 && (

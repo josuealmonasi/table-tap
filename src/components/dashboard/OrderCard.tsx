@@ -17,7 +17,11 @@ function nextAction(
   status: OrderStatus,
 ): { labelKey: string; to: OrderStatus; variant: string } | null {
   if (status === "received")
-    return { labelKey: "orders.startPreparing", to: "preparing", variant: "tt-btn-primary" };
+    return {
+      labelKey: "orders.startPreparing",
+      to: "preparing",
+      variant: "tt-btn-primary",
+    };
   if (status === "preparing")
     return { labelKey: "orders.markReady", to: "ready", variant: "tt-btn-success" };
   if (status === "ready")

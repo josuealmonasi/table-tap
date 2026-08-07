@@ -8,6 +8,7 @@ import type { Category, MenuItem } from "@/lib/types";
 import type { PromotionInput } from "@/hooks/usePromotions";
 import ProductPicker from "./ProductPicker";
 import PickedProducts from "./PickedProducts";
+import { Icon } from "@/components/ui/icons";
 
 /**
  * Builds a quantity deal: "buy N, pay for M" (2x1, 3x1) or bracket pricing
@@ -48,7 +49,9 @@ export default function QuantityForm({
   const pay = Math.floor(Number(payQty));
   const validBogo = buy >= 2 && pay >= 1 && pay < buy;
   const ready =
-    name.trim() && picked.length > 0 && (kind === "bogo" ? validBogo : parsedTiers.length > 0);
+    name.trim() &&
+    picked.length > 0 &&
+    (kind === "bogo" ? validBogo : parsedTiers.length > 0);
 
   /** What the customer pays at the deal quantity, using the first product. */
   const preview = (() => {
@@ -112,7 +115,9 @@ export default function QuantityForm({
               </span>{" "}
               <s>{formatMoney(preview.normal, currency)}</s>
               {" → "}
-              <strong className="tt-accent">{formatMoney(preview.cost, currency)}</strong>{" "}
+              <strong className="tt-accent">
+                {formatMoney(preview.cost, currency)}
+              </strong>{" "}
               <span className="tt-save">
                 {t("promos.saves", {
                   amount: formatMoney(
@@ -166,7 +171,9 @@ export default function QuantityForm({
                 min="1"
                 value={row.qty}
                 onChange={e =>
-                  setTiers(prev => prev.map((r, j) => (j === i ? { ...r, qty: e.target.value } : r)))
+                  setTiers(prev =>
+                    prev.map((r, j) => (j === i ? { ...r, qty: e.target.value } : r)),
+                  )
                 }
                 aria-label={t("promos.tierQty")}
               />
@@ -192,7 +199,7 @@ export default function QuantityForm({
                   onClick={() => setTiers(prev => prev.filter((_, j) => j !== i))}
                   title={t("promos.removeTier")}
                 >
-                  🗑️
+                  <Icon.Delete size={16} />
                 </button>
               )}
             </div>

@@ -13,7 +13,9 @@ interface AdminEditUserProps {
 
 /** True when the role lives in a staff row and can be switched here. */
 function roleEditable(role: AdminUserRow["role"]): boolean {
-  return role === "owner" || role === "manager" || role === "waiter" || role === "kitchen";
+  return (
+    role === "owner" || role === "manager" || role === "waiter" || role === "kitchen"
+  );
 }
 
 /** Edit a login: name, email, an optional password reset, and (staff) role. */
@@ -117,7 +119,11 @@ export default function AdminEditUser({ user, onClose }: AdminEditUserProps) {
           >
             {t("common.cancel")}
           </button>
-          <button type="submit" className="tt-btn tt-btn-primary tt-btn-sm" disabled={busy}>
+          <button
+            type="submit"
+            className="tt-btn tt-btn-primary tt-btn-sm"
+            disabled={busy}
+          >
             {busy ? t("common.saving") : t("common.save")}
           </button>
         </div>

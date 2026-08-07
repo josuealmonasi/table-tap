@@ -10,7 +10,7 @@ describe("translate", () => {
   });
 
   it("fills in {vars}", () => {
-    expect(translate(en, "menu.table", { label: "7" })).toBe("🪑 Table 7");
+    expect(translate(en, "menu.table", { label: "7" })).toBe("Table 7");
   });
 
   it("replaces every occurrence of a var", () => {
@@ -27,7 +27,7 @@ describe("translate", () => {
   });
 
   it("coerces numeric vars to strings", () => {
-    expect(translate(en, "menu.table", { label: 12 })).toBe("🪑 Table 12");
+    expect(translate(en, "menu.table", { label: 12 })).toBe("Table 12");
   });
 });
 

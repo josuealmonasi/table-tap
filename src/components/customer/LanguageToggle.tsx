@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n";
+import { Icon } from "@/components/ui/icons";
 
 /**
  * Language switcher: a button showing the current language that opens a dropdown
@@ -48,7 +49,7 @@ export default function LanguageToggle({
       >
         {current.flag} {current.short}
         <span className="tt-lang-caret" aria-hidden="true">
-          ▾
+          <Icon.Expand size={11} weight="bold" />
         </span>
       </button>
 
