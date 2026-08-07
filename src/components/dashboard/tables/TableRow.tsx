@@ -5,7 +5,7 @@ import type { RestaurantTable } from "@/lib/types";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useT } from "@/lib/i18n/context";
 import QrCard, { type QrTarget } from "./QrCard";
-import { Icon } from "@/components/ui/icons";
+import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 
 interface TableRowProps {
   table: RestaurantTable;
@@ -77,10 +77,10 @@ export default function TableRow({ table, qr, onRename, onDelete }: TableRowProp
               title={t("dash.rename")}
               onClick={() => setRenaming(true)}
             >
-              <Icon.Edit size={16} />
+              <EditIcon size={16} />
             </button>
             <button className="tt-iconbtn" title={t("dash.deleteTable")} onClick={remove}>
-              <Icon.Delete size={16} />
+              <DeleteIcon size={16} />
             </button>
           </div>
         )}

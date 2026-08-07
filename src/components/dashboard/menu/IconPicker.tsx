@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useT } from "@/lib/i18n/context";
-import { Icon } from "@/components/ui/icons";
+import { ExpandIcon } from "@/components/ui/icons";
 
 type IconGroup = { group: string; items: { emoji: string; label: string }[] };
 
@@ -119,7 +119,7 @@ export default function IconPicker({
                 <span className="tt-acc-right">
                   {selected && <span style={{ fontSize: 15 }}>{selected.emoji}</span>}
                   <span className="tt-acc-chevron">
-                    <Icon.Expand
+                    <ExpandIcon
                       size={13}
                       weight="bold"
                       style={{ transform: isOpen ? undefined : "rotate(-90deg)" }}

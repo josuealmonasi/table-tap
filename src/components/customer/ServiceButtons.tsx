@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { RestaurantTable } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
-import { Icon } from "@/components/ui/icons";
+import { BillIcon, CallWaiterIcon } from "@/components/ui/icons";
 
 interface ServiceButtonsProps {
   restaurantId: string;
@@ -66,9 +66,9 @@ export default function ServiceButtons({ restaurantId, table }: ServiceButtonsPr
           onClick={() => send(kind)}
         >
           {kind === "waiter" ? (
-            <Icon.CallWaiter size={16} weight="bold" />
+            <CallWaiterIcon size={16} weight="bold" />
           ) : (
-            <Icon.Bill size={16} weight="bold" />
+            <BillIcon size={16} weight="bold" />
           )}
           {t(sent.has(kind) ? KEYS[kind].sent : KEYS[kind].idle)}
         </button>

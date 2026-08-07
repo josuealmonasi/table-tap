@@ -5,6 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
 import { COUPON_PATTERN_HINT, normalizeCoupon } from "@/lib/coupons";
 import type { AppliedCoupon } from "@/lib/pricing";
+import { CouponIcon } from "@/components/ui/icons";
 
 /**
  * "Got a coupon?" link that opens a small dialog to enter a code. Checking the
@@ -65,7 +66,8 @@ export default function CouponBox({
     return (
       <div className="tt-coupon-applied">
         <span>
-          🎟️ <strong>{applied.code}</strong> {t("coupon.applied")}
+          <CouponIcon size={15} weight="bold" /> <strong>{applied.code}</strong>{" "}
+          {t("coupon.applied")}
         </span>
         <button type="button" className="tt-linkbtn" onClick={onRemove}>
           {t("coupon.remove")}
@@ -77,7 +79,7 @@ export default function CouponBox({
   return (
     <>
       <button type="button" className="tt-linkbtn" onClick={() => setOpen(true)}>
-        {t("coupon.gotOne")}
+        <CouponIcon size={14} weight="bold" /> {t("coupon.gotOne")}
       </button>
 
       <Modal

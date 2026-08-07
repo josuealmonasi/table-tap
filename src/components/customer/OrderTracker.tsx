@@ -10,6 +10,11 @@ import { useT } from "@/lib/i18n/context";
 import OrderStatusTimeline from "./OrderStatusTimeline";
 import TrackedItemsCard from "./TrackedItemsCard";
 import LanguageToggle from "./LanguageToggle";
+import {
+  StatusPreparingIcon,
+  StatusReadyIcon,
+  StatusReceivedIcon,
+} from "@/components/ui/icons";
 
 const TERMINAL: OrderStatus[] = ["completed", "cancelled"];
 
@@ -20,10 +25,10 @@ function toDisplayStatus(status: OrderStatus): OrderStatus {
   return status;
 }
 
-const HERO: Record<string, { headlineKey: string; emoji: string }> = {
-  ready: { headlineKey: "tracker.ready", emoji: "🍱" },
-  preparing: { headlineKey: "tracker.preparing", emoji: "👨‍🍳" },
-  received: { headlineKey: "tracker.received", emoji: "📋" },
+const HERO: Record<string, { headlineKey: string; Glyph: typeof StatusReadyIcon }> = {
+  ready: { headlineKey: "tracker.ready", Glyph: StatusReadyIcon },
+  preparing: { headlineKey: "tracker.preparing", Glyph: StatusPreparingIcon },
+  received: { headlineKey: "tracker.received", Glyph: StatusReceivedIcon },
 };
 
 interface OrderTrackerProps {
@@ -55,7 +60,7 @@ export default function OrderTracker({ initialOrder }: OrderTrackerProps) {
         <div style={{ position: "absolute", top: 16, right: 16 }}>
           <LanguageToggle />
         </div>
-        <div style={{ fontSize: 48 }}>{hero.emoji}</div>
+        <hero.Glyph size={46} weight="duotone" />
         <h2 className="tt-serif" style={{ margin: 0, fontSize: 22 }}>
           {t(hero.headlineKey)}
         </h2>

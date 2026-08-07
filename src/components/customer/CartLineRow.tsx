@@ -4,6 +4,7 @@ import { formatMoney } from "@/lib/format";
 import { lineUnitPrice } from "@/lib/types";
 import type { CartItem } from "@/hooks/useCart";
 import { useT } from "@/lib/i18n/context";
+import { EditIcon } from "@/components/ui/icons";
 
 interface CartLineRowProps {
   item: CartItem;
@@ -83,7 +84,7 @@ export default function CartLineRow({
               aria-label={`${t("cart.editItem")} — ${item.name}`}
               onClick={() => onEdit(item)}
             >
-              ✏️
+              <EditIcon size={15} />
             </button>
           )}
         </div>

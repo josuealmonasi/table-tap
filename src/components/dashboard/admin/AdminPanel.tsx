@@ -7,7 +7,7 @@ import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import AdminCreateUser from "./AdminCreateUser";
 import AdminEditUser from "./AdminEditUser";
-import { Icon } from "@/components/ui/icons";
+import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 
 export interface AdminRestaurantRow {
   id: string;
@@ -34,13 +34,13 @@ interface AdminPanelProps {
   restaurantOptions: { id: string; name: string }[];
 }
 
-const ROLE_META: Record<AdminUserRow["role"], { emoji: string; key: string }> = {
-  admin: { emoji: "🛡️", key: "admin.platformAdmin" },
-  owner: { emoji: "👑", key: "dash.owner" },
-  manager: { emoji: "🧑‍💼", key: "dash.manager" },
-  waiter: { emoji: "🧑‍🍽️", key: "dash.waiter" },
-  kitchen: { emoji: "👨‍🍳", key: "dash.kitchen" },
-  none: { emoji: "", key: "" },
+const ROLE_META: Record<AdminUserRow["role"], { key: string }> = {
+  admin: { key: "admin.platformAdmin" },
+  owner: { key: "dash.owner" },
+  manager: { key: "dash.manager" },
+  waiter: { key: "dash.waiter" },
+  kitchen: { key: "dash.kitchen" },
+  none: { key: "" },
 };
 
 /** The platform admin's home: every restaurant and login, with full control. */
@@ -56,7 +56,7 @@ export default function AdminPanel({
   const [editing, setEditing] = useState<AdminUserRow | null>(null);
   const roleLabel = (role: AdminUserRow["role"]): string => {
     const m = ROLE_META[role];
-    return m.key ? `${m.emoji} ${t(m.key)}` : "—";
+    return m.key ? t(m.key) : "—";
   };
 
   return (
@@ -127,7 +127,7 @@ export default function AdminPanel({
                     }
                   }}
                 >
-                  <Icon.Delete size={16} />
+                  <DeleteIcon size={16} />
                 </button>
               </div>
             ))}
@@ -177,7 +177,7 @@ export default function AdminPanel({
                       disabled={busy}
                       onClick={() => setEditing(u)}
                     >
-                      <Icon.Edit size={16} />
+                      <EditIcon size={16} />
                     </button>
                     <button
                       className="tt-iconbtn"
@@ -196,7 +196,7 @@ export default function AdminPanel({
                         }
                       }}
                     >
-                      <Icon.Delete size={16} />
+                      <DeleteIcon size={16} />
                     </button>
                   </span>
                 )}

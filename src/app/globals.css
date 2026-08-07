@@ -3207,3 +3207,11 @@ h2.tt-serif {
   text-align: center;
   padding: 48px 16px 56px;
 }
+
+/* Empty-state pictogram, now a glyph rather than a 48px emoji. Muted, because
+   an empty state should be quiet — it's the absence of content, not an alert. */
+.tt-empty-icon {
+  display: block;
+  margin: 0 auto 10px;
+  color: var(--tt-line);
+}

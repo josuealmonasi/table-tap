@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { navItemsFor } from "@/lib/nav";
 import { createClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n/context";
+import { CloseIcon, DashboardIcon, SignOutIcon, NAV_ICONS } from "@/components/ui/icons";
 
 /**
  * Mobile-only navigation: a hamburger button that opens a backdrop drawer
@@ -80,7 +81,7 @@ export default function NavDrawer({
                 aria-label={t("nav.closeMenu")}
                 onClick={() => setOpen(false)}
               >
-                ✕
+                <CloseIcon size={18} weight="bold" />
               </button>
             </div>
 
@@ -92,15 +93,16 @@ export default function NavDrawer({
                   aria-current={isActive("/dashboard") ? "page" : undefined}
                   onClick={() => setOpen(false)}
                 >
-                  <span className="tt-drawer-emoji">🏠</span> {t("nav.dashboard")}
+                  <DashboardIcon size={18} className="tt-drawer-emoji" />{" "}
+                  {t("nav.dashboard")}
                 </Link>
               )}
 
-              {navItemsFor(role).map(item =>
-                item.soon ? (
+              {navItemsFor(role).map(item => {
+                const Glyph = NAV_ICONS[item.icon];
+                return item.soon ? (
                   <span key={item.href} className="tt-drawer-link tt-drawer-link-soon">
-                    <span className="tt-drawer-emoji">{item.emoji}</span>{" "}
-                    {t(item.titleKey)}
+                    <Glyph size={18} className="tt-drawer-emoji" /> {t(item.titleKey)}
                     <span className="tt-badge" style={{ marginLeft: "auto" }}>
                       {t("nav.soon")}
                     </span>
@@ -113,11 +115,10 @@ export default function NavDrawer({
                     aria-current={isActive(item.href) ? "page" : undefined}
                     onClick={() => setOpen(false)}
                   >
-                    <span className="tt-drawer-emoji">{item.emoji}</span>{" "}
-                    {t(item.titleKey)}
+                    <Glyph size={18} className="tt-drawer-emoji" /> {t(item.titleKey)}
                   </Link>
-                ),
-              )}
+                );
+              })}
             </nav>
 
             <button
@@ -125,7 +126,7 @@ export default function NavDrawer({
               className="tt-drawer-link tt-drawer-signout"
               onClick={signOut}
             >
-              <span className="tt-drawer-emoji">🚪</span> {t("nav.signOut")}
+              <SignOutIcon size={18} className="tt-drawer-emoji" /> {t("nav.signOut")}
             </button>
           </aside>
         </div>

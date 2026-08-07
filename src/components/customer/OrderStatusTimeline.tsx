@@ -2,12 +2,17 @@
 
 import type { OrderStatus } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
+import {
+  StatusPreparingIcon,
+  StatusReadyIcon,
+  StatusReceivedIcon,
+} from "@/components/ui/icons";
 
-const STEPS: { key: OrderStatus; labelKey: string; emoji: string }[] = [
-  { key: "received", labelKey: "tracker.stepReceived", emoji: "📋" },
-  { key: "preparing", labelKey: "tracker.stepPreparing", emoji: "👨‍🍳" },
-  { key: "ready", labelKey: "tracker.stepReady", emoji: "🍱" },
-];
+const STEPS = [
+  { key: "received", labelKey: "tracker.stepReceived", Glyph: StatusReceivedIcon },
+  { key: "preparing", labelKey: "tracker.stepPreparing", Glyph: StatusPreparingIcon },
+  { key: "ready", labelKey: "tracker.stepReady", Glyph: StatusReadyIcon },
+] satisfies { key: OrderStatus; labelKey: string; Glyph: typeof StatusReadyIcon }[];
 
 /** The three-step progress tracker (Received → Preparing → Ready) plus its footer note. */
 export default function OrderStatusTimeline({
@@ -33,7 +38,7 @@ export default function OrderStatusTimeline({
                 <div
                   className={`tt-step-dot ${active ? "tt-step-active" : done ? "tt-step-done" : ""}`}
                 >
-                  {step.emoji}
+                  <step.Glyph size={20} weight="bold" />
                 </div>
                 <span
                   className={`tt-step-label ${

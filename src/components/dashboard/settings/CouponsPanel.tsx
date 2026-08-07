@@ -12,7 +12,7 @@ import {
   isValidCouponFormat,
   normalizeCoupon,
 } from "@/lib/coupons";
-import { Icon } from "@/components/ui/icons";
+import { DeleteIcon } from "@/components/ui/icons";
 
 /** Coupon codes an owner or manager hands out, with their usage so far. */
 export default function CouponsPanel({
@@ -253,7 +253,7 @@ export default function CouponsPanel({
                     title={t("coupons.delete")}
                     onClick={() => del(c)}
                   >
-                    <Icon.Delete size={16} />
+                    <DeleteIcon size={16} />
                   </button>
                 </div>
               </div>

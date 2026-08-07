@@ -1,7 +1,7 @@
 "use client";
 
 import { useT } from "@/lib/i18n/context";
-import { Icon } from "@/components/ui/icons";
+import { MoveDownIcon, MoveUpIcon } from "@/components/ui/icons";
 
 interface ReorderButtonsProps {
   canMoveUp: boolean;
@@ -30,7 +30,7 @@ export default function ReorderButtons({
         disabled={!canMoveUp}
         onClick={onMoveUp}
       >
-        <Icon.MoveUp size={13} weight="bold" />
+        <MoveUpIcon size={13} weight="bold" />
       </button>
       <button
         type="button"
@@ -39,7 +39,7 @@ export default function ReorderButtons({
         disabled={!canMoveDown}
         onClick={onMoveDown}
       >
-        <Icon.MoveDown size={13} weight="bold" />
+        <MoveDownIcon size={13} weight="bold" />
       </button>
     </div>
   );

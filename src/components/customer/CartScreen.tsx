@@ -9,7 +9,7 @@ import CartLineRow from "./CartLineRow";
 import CouponBox from "./CouponBox";
 import OrderTotals from "./OrderTotals";
 import TipPicker from "./TipPicker";
-import { Icon } from "@/components/ui/icons";
+import { BackIcon, HintIcon, SecureIcon } from "@/components/ui/icons";
 
 interface CartScreenProps {
   restaurant: Restaurant;
@@ -80,7 +80,7 @@ export default function CartScreen({
     <div className="tt-root">
       <div className="tt-header">
         <button className="tt-back-inline" onClick={onAddMore}>
-          ←
+          <BackIcon size={18} weight="bold" />
         </button>
         <h2 className="tt-serif" style={{ margin: 0, fontSize: 20 }}>
           {t("cart.title")}
@@ -143,7 +143,7 @@ export default function CartScreen({
               <div className="tt-hints">
                 {hints.map(h => (
                   <p key={`${h.itemId}-${h.promoName}`} className="tt-hint">
-                    💡{" "}
+                    <HintIcon size={14} weight="fill" />{" "}
                     {t("promos.addMoreHint", {
                       qty: h.addQty,
                       amount: formatMoney(h.save, restaurant.currency),
@@ -189,7 +189,7 @@ export default function CartScreen({
               className="tt-muted"
               style={{ textAlign: "center", fontSize: 12, marginTop: 12 }}
             >
-              <Icon.Secure size={12} weight="bold" style={{ verticalAlign: "-1px" }} />{" "}
+              <SecureIcon size={12} weight="bold" style={{ verticalAlign: "-1px" }} />{" "}
               {t("cart.securedBy")}
             </p>
           </>

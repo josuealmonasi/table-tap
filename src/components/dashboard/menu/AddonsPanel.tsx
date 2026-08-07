@@ -9,7 +9,7 @@ import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
 import ReorderButtons from "@/components/ui/ReorderButtons";
 import IconPicker from "./IconPicker";
-import { Icon } from "@/components/ui/icons";
+import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 
 interface AddonsPanelProps {
   addons: MenuItem[];
@@ -191,7 +191,7 @@ export default function AddonsPanel({
                       title={t("menu.edit")}
                       onClick={() => setEditingId(addon.id)}
                     >
-                      <Icon.Edit size={16} />
+                      <EditIcon size={16} />
                     </button>
                     <button
                       className="tt-iconbtn"
@@ -208,7 +208,7 @@ export default function AddonsPanel({
                         }
                       }}
                     >
-                      <Icon.Delete size={16} />
+                      <DeleteIcon size={16} />
                     </button>
                   </div>
                 </div>

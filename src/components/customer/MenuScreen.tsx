@@ -17,7 +17,13 @@ import MenuItemRow from "./MenuItemRow";
 import CartBar from "./CartBar";
 import ServiceButtons from "./ServiceButtons";
 import LanguageToggle from "./LanguageToggle";
-import { Icon } from "@/components/ui/icons";
+import {
+  BillIcon,
+  CloseIcon,
+  FiltersIcon,
+  SearchIcon,
+  TableIcon,
+} from "@/components/ui/icons";
 
 /** The menu browsing screen: restaurant header, category filter, item list, cart bar. */
 export default function MenuScreen({
@@ -170,16 +176,16 @@ export default function MenuScreen({
                 }}
               >
                 {searchOpen ? (
-                  <Icon.Close size={17} weight="bold" />
+                  <CloseIcon size={17} weight="bold" />
                 ) : (
-                  <Icon.Search size={17} weight="bold" />
+                  <SearchIcon size={17} weight="bold" />
                 )}
               </button>
               <LanguageToggle />
             </div>
             {table && (
               <span className="tt-badge tt-badge-onink">
-                <Icon.Table size={13} weight="bold" />
+                <TableIcon size={13} weight="bold" />
                 {t("menu.table", { label: table.label })}
               </span>
             )}
@@ -200,7 +206,7 @@ export default function MenuScreen({
         {table && <ServiceButtons restaurantId={restaurant.id} table={table} />}
         {trackId && (
           <Link href={`/order/${trackId}`} className="tt-track-banner" role="status">
-            {t("menu.trackOrder")}
+            <BillIcon size={14} weight="bold" /> {t("menu.trackOrder")}
           </Link>
         )}
         {!restaurant.accepting_orders && (
@@ -231,7 +237,7 @@ export default function MenuScreen({
             aria-label={t("menu.filters")}
             title={t("menu.filters")}
           >
-            <Icon.Filters size={17} weight="bold" />
+            <FiltersIcon size={17} weight="bold" />
             {diet.length > 0 && <span className="tt-filter-count">{diet.length}</span>}
           </button>
         )}

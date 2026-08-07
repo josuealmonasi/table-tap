@@ -10,7 +10,7 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 import type { PromotionWithItems } from "@/lib/promotions";
 import ComboForm from "./ComboForm";
 import QuantityForm from "./QuantityForm";
-import { Icon } from "@/components/ui/icons";
+import { DeleteIcon } from "@/components/ui/icons";
 
 /** Combo bundles and quantity deals for one restaurant. */
 export default function PromotionsPanel({
@@ -119,7 +119,7 @@ export default function PromotionsPanel({
                         title={t("promos.delete")}
                         onClick={() => del(p)}
                       >
-                        <Icon.Delete size={16} />
+                        <DeleteIcon size={16} />
                       </button>
                     </div>
                   </div>

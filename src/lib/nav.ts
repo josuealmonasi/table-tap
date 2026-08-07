@@ -1,6 +1,19 @@
 export type NavItem = {
   href: string;
-  emoji: string;
+  /**
+   * Key into the shared icon set (src/components/ui/icons.tsx). A key rather
+   * than a component, because this module is plain data — importing React
+   * components here would drag the icon bundle into anything that reads the
+   * nav, including the server.
+   */
+  icon:
+    | "Orders"
+    | "Analytics"
+    | "Promotions"
+    | "Table"
+    | "Staff"
+    | "Settings"
+    | "PlatformAdmin";
   /** i18n keys resolved with t() where the item is rendered. */
   titleKey: string;
   descKey: string;
@@ -12,24 +25,39 @@ export type NavItem = {
  * are listed dynamically on the dashboard, so they're not part of this list.
  */
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard/orders", emoji: "🧾", titleKey: "nav.orders", descKey: "nav.ordersDesc" },
+  {
+    href: "/dashboard/orders",
+    icon: "Orders",
+    titleKey: "nav.orders",
+    descKey: "nav.ordersDesc",
+  },
   {
     href: "/dashboard/analytics",
-    emoji: "📊",
+    icon: "Analytics",
     titleKey: "nav.analytics",
     descKey: "nav.analyticsDesc",
   },
   {
     href: "/dashboard/promotions",
-    emoji: "🎁",
+    icon: "Promotions",
     titleKey: "nav.promos",
     descKey: "nav.promosDesc",
   },
-  { href: "/dashboard/tables", emoji: "🪑", titleKey: "nav.tables", descKey: "nav.tablesDesc" },
-  { href: "/dashboard/staff", emoji: "👥", titleKey: "nav.staff", descKey: "nav.staffDesc" },
+  {
+    href: "/dashboard/tables",
+    icon: "Table",
+    titleKey: "nav.tables",
+    descKey: "nav.tablesDesc",
+  },
+  {
+    href: "/dashboard/staff",
+    icon: "Staff",
+    titleKey: "nav.staff",
+    descKey: "nav.staffDesc",
+  },
   {
     href: "/dashboard/settings",
-    emoji: "⚙️",
+    icon: "Settings",
     titleKey: "nav.settings",
     descKey: "nav.settingsDesc",
   },
@@ -47,7 +75,7 @@ export function navItemsFor(role: DashboardRole): NavItem[] {
     return [
       {
         href: "/dashboard/admin",
-        emoji: "🛡️",
+        icon: "PlatformAdmin",
         titleKey: "nav.admin",
         descKey: "nav.adminDesc",
       },
