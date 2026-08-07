@@ -741,3 +741,63 @@ end $$;
 --   pnpm db:create  → this file (structure only)
 --   pnpm db:seed    → seed.sql  (demo restaurant + menu)
 --   pnpm db:reset   → drop + create + seed
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Dish ratings
+-- ═══════════════════════════════════════════════════════════════════════════
+-- One 1–5 star rating per dish per order. Keying on the ORDER, not a person,
+-- is what makes "only people who bought it can rate it" enforceable without
+-- accounts: a rating must name a paid order that actually contains the dish,
+-- so the cost of a fake review is the price of the dish.
+create table if not exists dish_ratings (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  item_id       uuid not null references menu_items(id) on delete cascade,
+  order_id      uuid not null references orders(id) on delete cascade,
+  rating        int  not null check (rating between 1 and 5),
+  created_at    timestamptz not null default now(),
+  -- Rate a dish once per order. Ordering it twice on separate visits earns a
+  -- second say; clicking the stars twice on one visit does not.
+  unique (order_id, item_id)
+);
+create index if not exists dish_ratings_item_idx on dish_ratings(item_id);
+create index if not exists dish_ratings_restaurant_idx
+  on dish_ratings(restaurant_id, created_at desc);
+
+alter table dish_ratings enable row level security;
+
+-- The team can read its own ratings (for a future reviews view). Nobody writes
+-- through the API: every insert goes through the server route, which re-checks
+-- the order against the database first.
+create policy "team reads dish ratings" on dish_ratings for select
+  using (has_role(restaurant_id, array['manager']));
+
+-- Customers must never read the raw rows — that would expose which order rated
+-- what, and at a quiet table that is one diner's opinion with their name in
+-- reach. The blanket anon lockdown earlier in this file ran before this table
+-- existed (the same trap rate_limits and coupons hit), so revoke here too.
+revoke all on dish_ratings from anon, authenticated;
+
+-- Aggregates only, for the menu. security definer so it can read past the RLS
+-- above while still returning nothing that identifies an order.
+--
+-- Below MIN_RATINGS the dish is reported as unrated rather than shown with a
+-- thin average: one 5-star rating displayed as "5.0" reads as a track record
+-- and isn't one.
+create or replace function public.dish_rating_stats(p_restaurant_id uuid)
+returns table (item_id uuid, avg_rating numeric, rating_count bigint)
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select r.item_id,
+         round(avg(r.rating)::numeric, 1) as avg_rating,
+         count(*)                          as rating_count
+    from dish_ratings r
+   where r.restaurant_id = p_restaurant_id
+   group by r.item_id
+  having count(*) >= 3;
+$$;
+revoke all on function public.dish_rating_stats(uuid) from public;
+grant execute on function public.dish_rating_stats(uuid) to anon, authenticated;

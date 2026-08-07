@@ -3215,3 +3215,75 @@ h2.tt-serif {
   margin: 0 auto 10px;
   color: var(--tt-line);
 }
+
+/* ── dish ratings ─────────────────────────────────────────────────────────
+   Stars are amber, not the accent: a rating reports what other people thought,
+   which is a different kind of thing from "you can press this". */
+.tt-stars {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+}
+.tt-star-on {
+  color: #e8a020;
+}
+.tt-star-off {
+  color: var(--tt-line);
+}
+.tt-star-btn {
+  background: none;
+  border: 0;
+  padding: 2px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  line-height: 0;
+}
+.tt-rate-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 14px;
+}
+.tt-rate-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--tt-line);
+}
+.tt-rate-row:last-child {
+  border-bottom: 0;
+}
+.tt-rate-dish {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  min-width: 0;
+}
+.tt-rate-emoji {
+  font-size: 20px;
+  line-height: 1;
+}
+.tt-rate-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 18px;
+}
+/* The score beside a dish on the menu. Muted — it informs, it doesn't sell. */
+.tt-rating-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--tt-ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.tt-rating-count {
+  font-weight: 400;
+  color: var(--tt-muted);
+}

@@ -316,6 +316,18 @@ export const es: Messages = {
     notFoundBody:
       "El código QR que escaneaste no está vinculado a un menú. Pide ayuda a alguien del personal.",
   },
+  rating: {
+    title: "¿Qué tal estuvo todo?",
+    subtitle: "Califica lo que pediste — es opcional y ayuda a la cocina.",
+    rate: "Califica este platillo",
+    rateDish: "Califica {name}",
+    rateN: "{n} de 5 estrellas",
+    scoreOf: "Calificado {score} de 5",
+    skip: "No, gracias",
+    submit: "Enviar calificación",
+    submitMany: "Enviar {count} calificaciones",
+    reviews: "{count} calificaciones",
+  },
   dietary: {
     vegetarian: "Vegetariano",
     vegan: "Vegano",

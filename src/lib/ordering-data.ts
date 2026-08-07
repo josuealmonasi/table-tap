@@ -16,6 +16,8 @@ export interface OrderingData {
   combos: Combo[];
   /** Quantity deals the cart prices and hints about. */
   promos: CartPromo[];
+  /** item id → average score, for dishes with enough ratings to show one. */
+  ratings: Record<string, { avg: number; count: number }>;
 }
 
 // Sentinel so an `.in("menu_id", [])` never matches (a restaurant with no active menus).
@@ -129,6 +131,21 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
   const combos = buildCombos(promotions, itemsById);
   const promos = toCartPromos(promotions);
 
+  // Ratings are aggregates from a security-definer function: it returns an
+  // average and a count per dish and nothing that identifies an order, and it
+  // withholds dishes below the minimum count entirely. A failure here costs a
+  // decoration, so it degrades to "no ratings" rather than taking the menu
+  // down with it.
+  const ratings: OrderingData["ratings"] = {};
+  const { data: stats } = await supabase.rpc("dish_rating_stats", {
+    p_restaurant_id: restaurantId,
+  });
+  for (const row of (stats as
+    | { item_id: string; avg_rating: number; rating_count: number }[]
+    | null) ?? []) {
+    ratings[row.item_id] = { avg: Number(row.avg_rating), count: Number(row.rating_count) };
+  }
+
   // With the service charge switched off, customers see a plain 0% everywhere
   // (cart math and checkout both key off service_pct).
   if (restaurant && !restaurant.service_enabled) restaurant.service_pct = 0;
@@ -141,5 +158,6 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
     extrasByProduct,
     combos,
     promos,
+    ratings,
   };
 }
