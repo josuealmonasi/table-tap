@@ -21,6 +21,7 @@ interface Body {
   kind?: PromotionKind;
   name?: string;
   emoji?: string;
+  description?: string | null;
   comboPrice?: number | null;
   buyQty?: number | null;
   payQty?: number | null;
@@ -86,6 +87,7 @@ export async function POST(req: NextRequest) {
       kind: body.kind,
       name: body.name!.trim(),
       emoji: body.emoji || "🎁",
+      description: body.description?.trim() || null,
       combo_price: body.kind === "combo" ? Number(body.comboPrice) : null,
       buy_qty: body.kind === "bogo" ? Math.floor(Number(body.buyQty)) : null,
       pay_qty: body.kind === "bogo" ? Math.floor(Number(body.payQty)) : null,
@@ -118,17 +120,66 @@ export async function PATCH(req: NextRequest) {
   const restaurantId = await actingManagerRestaurant();
   if (!restaurantId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { id, active } = await req.json();
-  if (!id || typeof active !== "boolean") {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  const body = (await req.json()) as Body & { id?: string; active?: boolean };
+  if (!body.id) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+
+  const db = createAdminClient();
+
+  // Pause/resume: a lone `active` flag, and nothing else moves.
+  if (typeof body.active === "boolean" && !body.name) {
+    const { error } = await db
+      .from("promotions")
+      .update({ active: body.active })
+      .eq("id", body.id)
+      .eq("restaurant_id", restaurantId);
+    if (error) return NextResponse.json({ error: "Could not update." }, { status: 500 });
+    return NextResponse.json({ ok: true });
   }
 
-  const { error } = await createAdminClient()
+  // A full edit. Validated exactly as a create is — an edit can put a
+  // promotion into every invalid state a create can.
+  const bad = validate(body);
+  if (bad) return NextResponse.json(bad, { status: 400 });
+
+  const itemIds = body.items!.map(i => i.itemId);
+  const { data: owned } = await db
+    .from("menu_items")
+    .select("id")
+    .eq("restaurant_id", restaurantId)
+    .in("id", itemIds);
+  if ((owned?.length ?? 0) !== itemIds.length) {
+    return NextResponse.json({ error: "Unknown product." }, { status: 400 });
+  }
+
+  const { error } = await db
     .from("promotions")
-    .update({ active })
-    .eq("id", id)
+    .update({
+      kind: body.kind,
+      name: body.name!.trim(),
+      emoji: body.emoji || "🎁",
+      description: body.description?.trim() || null,
+      combo_price: body.kind === "combo" ? Number(body.comboPrice) : null,
+      buy_qty: body.kind === "bogo" ? Math.floor(Number(body.buyQty)) : null,
+      pay_qty: body.kind === "bogo" ? Math.floor(Number(body.payQty)) : null,
+      tiers: body.kind === "tiered" ? body.tiers : null,
+    })
+    .eq("id", body.id)
     .eq("restaurant_id", restaurantId);
   if (error) return NextResponse.json({ error: "Could not update." }, { status: 500 });
+
+  // Replace the product list wholesale. Diffing it would be more code for the
+  // same result, and the rows carry nothing worth preserving.
+  await db.from("promotion_items").delete().eq("promotion_id", body.id);
+  const { error: linkErr } = await db.from("promotion_items").insert(
+    body.items!.map(i => ({
+      promotion_id: body.id,
+      item_id: i.itemId,
+      qty: Math.max(1, Math.floor(i.qty || 1)),
+    })),
+  );
+  if (linkErr) {
+    return NextResponse.json({ error: "Could not attach the products." }, { status: 500 });
+  }
   return NextResponse.json({ ok: true });
 }
 

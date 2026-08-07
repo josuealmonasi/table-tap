@@ -230,6 +230,12 @@ export const en = {
     save: "Save {amount}",
   },
   promos: {
+    editCombo: "Edit combo",
+    editDeal: "Edit deal",
+    edit: "Edit promotion",
+    updated: "Promotion updated",
+    saveChanges: "Save changes",
+    descriptionPlaceholder: "Description (optional) — shown under the deal",
     oneMore: "Add {qty} more to save {amount}",
     title: "Promotions",
     hint: "Bundles and quantity deals. They show on the customer menu as soon as they're on.",

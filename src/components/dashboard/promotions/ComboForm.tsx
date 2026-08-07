@@ -5,6 +5,7 @@ import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
 import type { Category, MenuItem } from "@/lib/types";
 import type { PromotionInput } from "@/hooks/usePromotions";
+import type { PromotionWithItems } from "@/lib/promotions";
 import ProductPicker from "./ProductPicker";
 import PickedProducts from "./PickedProducts";
 
@@ -19,18 +20,28 @@ export default function ComboForm({
   currency,
   saving,
   onSubmit,
+  initial,
+  onCancel,
 }: {
   products: MenuItem[];
   categories: Category[];
   currency: string;
   saving: boolean;
   onSubmit: (input: PromotionInput) => void;
+  /** Present when editing an existing deal rather than creating one. */
+  initial?: PromotionWithItems;
+  onCancel?: () => void;
 }) {
   const t = useT();
-  const [name, setName] = useState("");
-  const [emoji, setEmoji] = useState("🎁");
-  const [price, setPrice] = useState("");
-  const [picked, setPicked] = useState<{ id: string; qty: number }[]>([]);
+  const [name, setName] = useState(initial?.name ?? "");
+  const [emoji, setEmoji] = useState(initial?.emoji ?? "🎁");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [price, setPrice] = useState(
+    initial?.combo_price != null ? String(initial.combo_price) : "",
+  );
+  const [picked, setPicked] = useState<{ id: string; qty: number }[]>(
+    initial?.items.map(i => ({ id: i.item_id, qty: i.qty })) ?? [],
+  );
 
   const regular = picked.reduce((sum, p) => {
     const item = products.find(i => i.id === p.id);
@@ -57,10 +68,14 @@ export default function ComboForm({
           kind: "combo",
           name: name.trim(),
           emoji,
+          description: description.trim() || null,
           comboPrice,
           items: picked.map(p => ({ itemId: p.id, qty: p.qty })),
         });
+        // Editing keeps its values — the form is replaced by the list on save.
+        if (initial) return;
         setName("");
+        setDescription("");
         setPrice("");
         setPicked([]);
       }}
@@ -120,9 +135,32 @@ export default function ComboForm({
           className="tt-btn tt-btn-primary tt-btn-sm"
           disabled={!ready || saving}
         >
-          {saving ? t("common.saving") : t("promos.addCombo")}
+          {saving
+            ? t("common.saving")
+            : initial
+              ? t("promos.saveChanges")
+              : t("promos.addCombo")}
         </button>
+        {initial && onCancel && (
+          <button
+            type="button"
+            className="tt-btn tt-btn-ghost tt-btn-sm"
+            onClick={onCancel}
+          >
+            {t("menu.cancel")}
+          </button>
+        )}
       </div>
+
+      {/* Optional: shows under the deal on the customer menu. Without it the
+          card falls back to listing the components, which is serviceable but
+          says nothing about why the deal is worth having. */}
+      <input
+        className="tt-input"
+        placeholder={t("promos.descriptionPlaceholder")}
+        value={description}
+        onChange={e => setDescription(e.target.value)}
+      />
 
       <ProductPicker
         products={products}
