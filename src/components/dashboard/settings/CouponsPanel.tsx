@@ -14,6 +14,7 @@ import {
 } from "@/lib/coupons";
 import { DeleteIcon } from "@/components/ui/icons";
 import { ListSkeleton } from "@/components/ui/Skeleton";
+import { useRowMemory } from "@/hooks/useRowMemory";
 
 /** Coupon codes an owner or manager hands out, with their usage so far. */
 export default function CouponsPanel({
@@ -27,6 +28,7 @@ export default function CouponsPanel({
   const toast = useToast();
   const confirm = useConfirm();
   const { coupons, loading, create, setActive, remove } = useCoupons(restaurantId);
+  const rows = useRowMemory("coupons", 3, loading ? undefined : coupons.length);
 
   const [code, setCode] = useState("");
   const [kind, setKind] = useState<"percent" | "fixed">("percent");
@@ -220,7 +222,7 @@ export default function CouponsPanel({
       </form>
 
       {loading ? (
-        <ListSkeleton rows={3} />
+        <ListSkeleton rows={rows} />
       ) : coupons.length === 0 ? (
         <p className="tt-muted">{t("coupons.empty")}</p>
       ) : (

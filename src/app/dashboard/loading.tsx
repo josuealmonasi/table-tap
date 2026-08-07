@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/Skeleton";
+import { navItemsFor } from "@/lib/nav";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 
 export default function DashboardLoading() {
@@ -19,7 +20,7 @@ export default function DashboardLoading() {
         </div>
 
         <div className="tt-tiles" style={{ marginTop: 16 }}>
-          {Array.from({ length: 2 }).map((_, i) => (
+          {Array.from({ length: navItemsFor("owner").length }).map((_, i) => (
             <div
               key={i}
               className="tt-skel-tile"

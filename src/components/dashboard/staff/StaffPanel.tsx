@@ -14,6 +14,7 @@ import {
   RoleWaiterIcon,
 } from "@/components/ui/icons";
 import { StaffTableSkeleton } from "@/components/ui/DashSkeletons";
+import { useRowMemory } from "@/hooks/useRowMemory";
 
 interface StaffPanelProps {
   restaurantId: string;
@@ -33,6 +34,7 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
   const t = useT();
   const { members, loading, busy, addMember, updateRole, removeMember } =
     useStaff(restaurantId);
+  const staffRows = useRowMemory("staff", 3, loading ? undefined : members.length);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<StaffRole>("kitchen");
   const confirm = useConfirm();
@@ -69,7 +71,7 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
               </span>
             </div>
 
-            {loading && <StaffTableSkeleton rows={3} />}
+            {loading && <StaffTableSkeleton rows={staffRows} />}
             {!loading && members.length === 0 && (
               <p className="tt-muted" style={{ fontSize: 13 }}>
                 {t("dash.noStaff")}

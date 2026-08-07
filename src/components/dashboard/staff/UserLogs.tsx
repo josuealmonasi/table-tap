@@ -3,6 +3,7 @@
 import { useUserLogs } from "@/hooks/useUserLogs";
 import { useT } from "@/lib/i18n/context";
 import { LogRowsSkeleton } from "@/components/ui/DashSkeletons";
+import { useRowMemory } from "@/hooks/useRowMemory";
 
 interface UserLogsProps {
   restaurantId: string;
@@ -12,6 +13,7 @@ interface UserLogsProps {
 export default function UserLogs({ restaurantId }: UserLogsProps) {
   const t = useT();
   const { logs, loading, page, pages, total, setPage } = useUserLogs(restaurantId);
+  const logRows = useRowMemory("logs", 4, loading ? undefined : logs.length);
 
   // "manager1@… created a new kitchen user" — role name is localised too.
   const describe = (action: string, role: string): string => {
@@ -32,7 +34,7 @@ export default function UserLogs({ restaurantId }: UserLogsProps) {
         </span>
       </div>
 
-      {loading && <LogRowsSkeleton rows={4} />}
+      {loading && <LogRowsSkeleton rows={logRows} />}
       {!loading && total === 0 && (
         <p className="tt-muted" style={{ fontSize: 13 }}>
           {t("dash.logsEmpty")}

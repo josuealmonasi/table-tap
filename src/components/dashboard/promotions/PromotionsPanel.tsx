@@ -12,6 +12,7 @@ import ComboForm from "./ComboForm";
 import QuantityForm from "./QuantityForm";
 import { DeleteIcon } from "@/components/ui/icons";
 import { ListSkeleton } from "@/components/ui/Skeleton";
+import { useRowMemory } from "@/hooks/useRowMemory";
 
 /** Combo bundles and quantity deals for one restaurant. */
 export default function PromotionsPanel({
@@ -26,6 +27,7 @@ export default function PromotionsPanel({
   const confirm = useConfirm();
   const { promotions, products, categories, loading, create, setActive, remove } =
     usePromotions(restaurantId);
+  const rows = useRowMemory("promotions", 3, loading ? undefined : promotions.length);
   const [saving, setSaving] = useState(false);
 
   async function add(input: PromotionInput) {
@@ -87,7 +89,7 @@ export default function PromotionsPanel({
         <div className="tt-cols">
           <div className="tt-section tt-cols-full">
             {loading ? (
-              <ListSkeleton rows={3} />
+              <ListSkeleton rows={rows} />
             ) : promotions.length === 0 ? (
               <p className="tt-muted">{t("promos.empty")}</p>
             ) : (
