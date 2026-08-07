@@ -11,6 +11,7 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 import { Skeleton } from "@/components/ui/Skeleton";
 import MenusPanel from "@/components/dashboard/menu/MenusPanel";
 import { NAV_ICONS } from "@/components/ui/icons";
+import { useRowMemory } from "@/hooks/useRowMemory";
 
 interface DashboardHomeProps {
   restaurant: Restaurant;
@@ -22,6 +23,11 @@ interface DashboardHomeProps {
 export default function DashboardHome({ restaurant, role }: DashboardHomeProps) {
   const t = useT();
   const editor = useMenuEditor(restaurant.id);
+  const menuRows = useRowMemory(
+    "menus",
+    2,
+    editor.loading ? undefined : editor.menus.length,
+  );
   const router = useRouter();
 
   const openMenu = (menu: Menu) => router.push(`/dashboard/${menuSlug(menu.name)}`);
@@ -52,8 +58,9 @@ export default function DashboardHome({ restaurant, role }: DashboardHomeProps) 
             style={{ display: "flex", flexDirection: "column", gap: 12 }}
           >
             <Skeleton width={120} height={18} />
-            <Skeleton width="100%" height={44} radius={12} />
-            <Skeleton width="100%" height={44} radius={12} />
+            {Array.from({ length: menuRows }).map((_, i) => (
+              <Skeleton key={i} width="100%" height={44} radius={12} />
+            ))}
           </div>
         ) : (
           <MenusPanel
