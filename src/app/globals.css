@@ -67,19 +67,23 @@
   --tt-radius-sm: 8px; /* inputs, thumbnails, small controls */
 
   /* ── customer header ────────────────────────────────────────────────────
-     "Paper": the header is the page rather than a dark band across it, so the
+     "Lime Wash": a green-grey breath over the white page. The header still
+     reads as part of the page rather than a dark band across it, but it now
+     separates from the white dish list without a rule doing the work, and the
+     Agave chips sit in a family they belong to instead of on bare white.
      dish photos are the only strong thing on screen and the accent chips read
      as the accent instead of as the one bright object in a dark box.
 
      Held as tokens rather than literals because every control inside the
      header — icon buttons, category chips, the table badge — assumed white-on
      -dark. Going back to a dark header is now this block, not forty edits. */
-  --tt-header-bg: var(--tt-paper);
+  --tt-header-lime: #f4f5f2;
+  --tt-header-bg: var(--tt-header-lime);
   --tt-header-ink: var(--tt-ink);
   --tt-header-sub: var(--tt-muted);
   --tt-header-ctrl-bg: rgba(17, 17, 19, 0.04);
   --tt-header-ctrl-border: rgba(17, 17, 19, 0.14);
-  --tt-header-chip-bg: var(--tt-surface);
+  --tt-header-chip-bg: color-mix(in srgb, var(--tt-ink) 5%, var(--tt-header-lime));
   --tt-header-chip-ink: var(--tt-ink-2);
 
   /* Switch "on" state: the accent. One colour means one thing — interactive —
