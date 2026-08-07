@@ -137,6 +137,18 @@ export function priceCart(input: PriceInput): PricedCart {
 
   let promoDiscount = 0;
   const promoSavings: Record<string, ItemPromoSaving> = {};
+
+  // A combo is already sold at its bundle price, so there's nothing left to
+  // discount — but the cart should still show what the bundle saved, the same
+  // way the menu card does. This records the saving for display only; it
+  // deliberately does NOT touch promoDiscount, or the bundle would be
+  // discounted twice.
+  for (const line of items) {
+    if (!line.comboId || !line.comboRegular) continue;
+    const qty = Math.max(0, Math.floor(line.qty));
+    const saved = round2((line.comboRegular - line.price) * qty);
+    if (saved > 0) promoSavings[line.itemId] = { saved, promoName: line.name };
+  }
   const hints: PromoHint[] = [];
   const claimed = new Set<string>(); // one deal per product — the first wins
 

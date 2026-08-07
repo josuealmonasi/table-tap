@@ -32,11 +32,19 @@ export default function CartLineRow({
   promoSaving,
 }: CartLineRowProps) {
   const t = useT();
-  const gross = lineUnitPrice(item) * item.qty;
+  const charged = lineUnitPrice(item) * item.qty;
+  // What to strike through. For a quantity deal that's the line's own gross —
+  // the saving comes off it. A combo is different: it is already sold at the
+  // bundle price, so striking that would show a discount off the discount.
+  // Strike what the components cost separately instead, which is exactly what
+  // the menu card shows.
+  const regular = item.comboRegular
+    ? Math.round(item.comboRegular * item.qty * 100) / 100
+    : charged;
   // The deal's saving is spread across every line of that product, so a line
   // shows what it actually costs after the offer.
   const dealPrice = promoSaving
-    ? Math.round((gross - promoSaving.saved) * 100) / 100
+    ? Math.round((regular - promoSaving.saved) * 100) / 100
     : null;
   return (
     <div
@@ -60,9 +68,9 @@ export default function CartLineRow({
               style={soldOut ? { textDecoration: "line-through" } : undefined}
             >
               {dealPrice !== null && !soldOut && (
-                <s className="tt-was">{formatMoney(gross, currency)}</s>
+                <s className="tt-was">{formatMoney(regular, currency)}</s>
               )}
-              {formatMoney(dealPrice !== null && !soldOut ? dealPrice : gross, currency)}
+              {formatMoney(dealPrice !== null && !soldOut ? dealPrice : charged, currency)}
             </strong>
           </div>
           {promoSaving && !soldOut && (
