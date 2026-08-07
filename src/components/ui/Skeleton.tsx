@@ -70,3 +70,37 @@ export function MenuItemRowSkeleton() {
     </div>
   );
 }
+
+/**
+ * Placeholder rows for a list that's still fetching.
+ *
+ * The word "Loading…" tells you the app is busy but not what's coming, so the
+ * layout jumps the moment it arrives. A shimmer in the shape of the rows keeps
+ * the page still and reads as content on its way.
+ */
+export function ListSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }} aria-hidden="true">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div
+          key={i}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: "12px 14px",
+            border: "1px solid var(--tt-line)",
+            borderRadius: "var(--tt-radius)",
+          }}
+        >
+          <Skeleton width={32} height={32} radius={8} />
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+            <Skeleton width={`${52 + ((i * 13) % 26)}%`} height={13} />
+            <Skeleton width={`${30 + ((i * 17) % 22)}%`} height={11} />
+          </div>
+          <Skeleton width={54} height={22} radius={999} />
+        </div>
+      ))}
+    </div>
+  );
+}

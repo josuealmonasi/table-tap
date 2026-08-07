@@ -3307,3 +3307,37 @@ h2.tt-serif {
   font-size: 22px;
   line-height: 1;
 }
+
+/* The deal, stated on the dish screen — before the customer commits, not after
+   it has quietly applied in the cart. */
+.tt-promo-callout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: color-mix(in srgb, var(--tt-sale) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tt-sale) 25%, transparent);
+  border-radius: var(--tt-radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tt-ink-2);
+}
+
+/* The product name doubles as the edit control. Styled as text, not a button:
+   it should read as the name it is, and only reveal itself on hover. */
+.tt-prod-name {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--tt-ink);
+  cursor: pointer;
+  text-align: left;
+  border-bottom: 1px solid transparent;
+}
+.tt-prod-name:hover {
+  border-bottom-color: var(--tt-line);
+}

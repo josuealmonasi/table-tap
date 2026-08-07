@@ -2,6 +2,7 @@
 
 import { useUserLogs } from "@/hooks/useUserLogs";
 import { useT } from "@/lib/i18n/context";
+import { ListSkeleton } from "@/components/ui/Skeleton";
 
 interface UserLogsProps {
   restaurantId: string;
@@ -31,11 +32,7 @@ export default function UserLogs({ restaurantId }: UserLogsProps) {
         </span>
       </div>
 
-      {loading && (
-        <p className="tt-muted" style={{ fontSize: 13 }}>
-          {t("common.loading")}
-        </p>
-      )}
+      {loading && <ListSkeleton rows={4} />}
       {!loading && total === 0 && (
         <p className="tt-muted" style={{ fontSize: 13 }}>
           {t("dash.logsEmpty")}

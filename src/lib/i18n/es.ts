@@ -225,6 +225,7 @@ export const es: Messages = {
     save: "Ahorra {amount}",
   },
   promos: {
+    oneMore: "Agrega {qty} más para ahorrar {amount}",
     title: "Promociones",
     hint: "Combos y ofertas por cantidad. Aparecen en el menú del cliente en cuanto las activas.",
     empty: "Aún no hay promociones. Crea una abajo.",
@@ -271,7 +272,7 @@ export const es: Messages = {
     appliesTo: "Aplica a",
     dealPreview: "{qty}× {name}: normalmente {normal}, con esta oferta {cost}",
     addDeal: "+ Agregar oferta",
-    addMoreHint: "Agrega {qty} más y ahorra {amount}",
+    addMoreHint: "Agrega {qty} más de {name} para {promo} — ahorra {amount}",
   },
   tip: {
     prompt: "¿Agregar propina? 💛",

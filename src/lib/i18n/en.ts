@@ -230,6 +230,7 @@ export const en = {
     save: "Save {amount}",
   },
   promos: {
+    oneMore: "Add {qty} more to save {amount}",
     title: "Promotions",
     hint: "Bundles and quantity deals. They show on the customer menu as soon as they're on.",
     empty: "No promotions yet. Create one below.",
@@ -275,7 +276,7 @@ export const en = {
     appliesTo: "Applies to",
     dealPreview: "{qty}× {name}: normally {normal}, with this deal {cost}",
     addDeal: "+ Add deal",
-    addMoreHint: "Add {qty} more and save {amount}",
+    addMoreHint: "Add {qty} more {name} for {promo} — save {amount}",
   },
   tip: {
     prompt: "Add a tip? 💛",
