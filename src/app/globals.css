@@ -66,6 +66,22 @@
   --tt-radius: 12px; /* cards, panels, tiles, dialogs, sheets */
   --tt-radius-sm: 8px; /* inputs, thumbnails, small controls */
 
+  /* ── customer header ────────────────────────────────────────────────────
+     "Paper": the header is the page rather than a dark band across it, so the
+     dish photos are the only strong thing on screen and the accent chips read
+     as the accent instead of as the one bright object in a dark box.
+
+     Held as tokens rather than literals because every control inside the
+     header — icon buttons, category chips, the table badge — assumed white-on
+     -dark. Going back to a dark header is now this block, not forty edits. */
+  --tt-header-bg: var(--tt-paper);
+  --tt-header-ink: var(--tt-ink);
+  --tt-header-sub: var(--tt-muted);
+  --tt-header-ctrl-bg: rgba(17, 17, 19, 0.04);
+  --tt-header-ctrl-border: rgba(17, 17, 19, 0.14);
+  --tt-header-chip-bg: var(--tt-surface);
+  --tt-header-chip-ink: var(--tt-ink-2);
+
   /* Switch "on" state: the accent. One colour means one thing — interactive —
      across buttons, category chips and switches. (This was graphite for a
      while; teal reads better against the row it belongs to.) */
@@ -262,9 +278,9 @@ h2.tt-serif {
    colour (which it did) or the accent. White-on-ink also clears contrast,
    which the dark amber did not. */
 .tt-badge-onink {
-  background: rgba(255, 255, 255, 0.12);
-  color: var(--tt-white);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--tt-header-ctrl-bg);
+  color: var(--tt-header-ink);
+  border: 1px solid var(--tt-header-ctrl-border);
 }
 
 /* Customer EN/ES language switch (menu + tracker headers). */
@@ -698,12 +714,12 @@ h2.tt-serif {
 /* ── menu header ── */
 /* The identity block scrolls away with the page… */
 .tt-menu-header {
-  background: var(--tt-ink);
+  background: var(--tt-header-bg);
   /* The bottom padding matters: the gap under the tagline used to come from
      the service-button row's own margin, so on a table-less menu (no such
      row) the tagline sat flush against the edge of the dark block. */
   padding: 20px 20px 16px;
-  color: var(--tt-white);
+  color: var(--tt-header-ink);
 }
 /* On desktop this dark block is a panel inside a centred column, not a band
    across the page, so it needs to look deliberate: room to breathe at the
@@ -712,7 +728,6 @@ h2.tt-serif {
 @media (min-width: 1025px) {
   .tt-menu-header {
     padding: 30px 32px 20px;
-    border-radius: var(--tt-radius) var(--tt-radius) 0 0;
   }
   .tt-menu-sticky {
     padding: 12px 32px 14px;
@@ -731,6 +746,7 @@ h2.tt-serif {
   line-height: 1.2;
 }
 .tt-brand-tagline {
+  color: var(--tt-header-sub);
   font-size: 13px;
   line-height: 1.4;
   margin-top: 7px;
@@ -749,11 +765,14 @@ h2.tt-serif {
   }
 }
 .tt-menu-header .tt-serif {
-  color: var(--tt-white);
+  color: var(--tt-header-ink);
 }
 /* …while the search + category strip stays pinned. */
 .tt-menu-sticky {
-  background: var(--tt-ink);
+  background: var(--tt-header-bg);
+  /* On a dark band the edge came free. On paper the strip needs a rule, or
+     the menu appears to start halfway through the chips. */
+  border-bottom: 1px solid var(--tt-line);
   padding: 10px 20px;
   position: sticky;
   top: 0;
@@ -786,8 +805,8 @@ h2.tt-serif {
   border-radius: 100px;
   border: none;
   flex-shrink: 0;
-  background: var(--tt-ink-raise);
-  color: var(--tt-muted);
+  background: var(--tt-header-chip-bg);
+  color: var(--tt-header-chip-ink);
   font-weight: 400;
   font-size: 13px;
   cursor: pointer;
@@ -1669,12 +1688,8 @@ h2.tt-serif {
   outline: 2px solid var(--tt-accent);
   outline-offset: 2px;
 }
-/* The accent is a dark teal, so on the near-black customer header the ring
-   vanishes into the background. White is the only thing that reads there. */
-.tt-menu-header :focus-visible,
-.tt-menu-sticky :focus-visible {
-  outline-color: var(--tt-white);
-}
+/* The header is paper now, so the accent ring reads on it exactly as it does
+   everywhere else — no override needed. */
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
@@ -2359,9 +2374,9 @@ h2.tt-serif {
   height: 34px;
   flex: none;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--tt-white);
+  border: 1px solid var(--tt-header-ctrl-border);
+  background: var(--tt-header-ctrl-bg);
+  color: var(--tt-header-ink);
   font-size: 15px;
   line-height: 1;
   display: grid;
@@ -2385,16 +2400,16 @@ h2.tt-serif {
   height: 32px;
   padding: 0;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--tt-white);
+  border: 1px solid var(--tt-header-ctrl-border);
+  background: var(--tt-header-ctrl-bg);
+  color: var(--tt-header-ink);
   display: grid;
   place-items: center;
   cursor: pointer;
   font-family: inherit;
 }
 .tt-filter-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--tt-surface);
 }
 .tt-filter-btn-on {
   background: var(--tt-accent);
@@ -2415,7 +2430,7 @@ h2.tt-serif {
   border-radius: 999px;
   background: var(--tt-sale);
   color: var(--tt-sale-ink);
-  border: 1.5px solid var(--tt-ink);
+  border: 1.5px solid var(--tt-header-bg);
   font-size: 10px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
