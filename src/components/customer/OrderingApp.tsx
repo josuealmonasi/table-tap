@@ -18,8 +18,9 @@ import { Modal } from "@/components/ui/Modal";
 import MenuScreen from "./MenuScreen";
 import ItemDetailScreen from "./ItemDetailScreen";
 import CartScreen from "./CartScreen";
+import ComboDetailScreen from "./ComboDetailScreen";
 
-type Screen = "menu" | "item" | "edit" | "cart";
+type Screen = "menu" | "item" | "combo" | "edit" | "cart";
 
 /**
  * The QR-target customer app. Owns which screen is showing and the cart, and
@@ -48,6 +49,7 @@ export default function OrderingApp({
 }) {
   const [screen, setScreen] = useState<Screen>("menu");
   const [selected, setSelected] = useState<MenuItem | null>(null);
+  const [selectedCombo, setSelectedCombo] = useState<Combo | null>(null);
   const [editingLine, setEditingLine] = useState<CartItem | null>(null);
   const [orderNote, setOrderNote] = useState("");
   const [loading, setLoading] = useState(false);
@@ -113,6 +115,7 @@ export default function OrderingApp({
   );
 
   const extrasById = useMemo(() => new Map(extras.map(e => [e.id, e])), [extras]);
+  const itemsById = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
 
   // The available extra items offered by the currently selected product.
   const selectedExtras = useMemo(() => {
@@ -153,28 +156,23 @@ export default function OrderingApp({
   }
 
   /**
-   * A combo goes in as a single line priced at the bundle price, carrying its
-   * components so the kitchen ticket still lists what to make. Checkout
-   * re-reads the bundle price from the DB before charging.
+   * Opens the bundle for configuration rather than adding it.
+   *
+   * It used to drop straight into the cart on the assumption a combo has
+   * nothing to customise — but its components are ordinary dishes, with their
+   * own options and paid extras, and a deal containing a coffee had no way to
+   * ask for oat milk. Two bundles configured differently are also genuinely
+   * different lines now, so tapping twice no longer merges them.
    */
-  function addCombo(combo: Combo) {
-    // A combo has nothing to customise, so tapping it again means "one more"
-    // rather than a second identical line.
-    const existing = cart.items.find(i => i.comboId === combo.id);
-    if (existing) {
-      cart.updateItem(existing.cartId, { ...existing, qty: existing.qty + 1 });
-      return;
-    }
-    cart.addItem({
-      itemId: combo.id,
-      comboId: combo.id,
-      name: combo.name,
-      emoji: combo.emoji || "🎁",
-      price: combo.price,
-      qty: 1,
-      mods: {},
-      components: combo.components,
-    });
+  function openCombo(combo: Combo) {
+    setSelectedCombo(combo);
+    setScreen("combo");
+  }
+
+  function addConfiguredCombo(line: OrderLineItem) {
+    cart.addItem(line);
+    setSelectedCombo(null);
+    setScreen("menu");
   }
 
   /** Re-opens the item screen prefilled with a cart line's choices. */
@@ -298,6 +296,23 @@ export default function OrderingApp({
       </div>
     ) : null;
 
+  if (screen === "combo" && selectedCombo) {
+    return (
+      <ComboDetailScreen
+        combo={selectedCombo}
+        currency={restaurant.currency}
+        itemsById={itemsById}
+        extrasById={extrasById}
+        extrasByProduct={extrasByProduct}
+        onBack={() => {
+          setSelectedCombo(null);
+          setScreen("menu");
+        }}
+        onAdd={addConfiguredCombo}
+      />
+    );
+  }
+
   if (screen === "cart" || screen === "edit") {
     return (
       <>
@@ -371,7 +386,7 @@ export default function OrderingApp({
         cartCount={cart.count}
         cartTotal={pricing.total}
         onSelectItem={openItem}
-        onAddCombo={addCombo}
+        onAddCombo={openCombo}
         onOpenCart={() => setScreen("cart")}
       />
       {detail}

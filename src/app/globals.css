@@ -3287,3 +3287,23 @@ h2.tt-serif {
   font-weight: 400;
   color: var(--tt-muted);
 }
+
+/* ── combo configuration ──────────────────────────────────────────────────
+   Each component of a bundle is its own block, so a choice reads as belonging
+   to one plate rather than to the deal as a whole. */
+.tt-combo-part {
+  border-top: 1px solid var(--tt-line);
+  padding-top: 16px;
+  margin-top: 16px;
+}
+.tt-combo-part-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  margin-bottom: 12px;
+}
+.tt-combo-part-emoji {
+  font-size: 22px;
+  line-height: 1;
+}
