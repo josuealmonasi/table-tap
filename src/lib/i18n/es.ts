@@ -221,6 +221,7 @@ export const es: Messages = {
     deleted: "Cupón eliminado",
   },
   combo: {
+    extrasCharged: "(se cobran además del paquete)",
     save: "Ahorra {amount}",
   },
   promos: {

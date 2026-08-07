@@ -97,6 +97,19 @@ export type ComboComponent = {
   name: string;
   emoji: string;
   qty: number;
+  /**
+   * Choices made for this component of the bundle. A combo is several dishes
+   * sold as one line, so "no onions" has to attach to the burger rather than
+   * to the deal — the kitchen needs to know which plate it applies to.
+   */
+  mods?: Record<string, string | string[]>;
+  /**
+   * Paid additions for this component. These are charged on top of the bundle
+   * price: the deal fixes what the dishes cost, not what an oat-milk upgrade
+   * costs. They are also copied onto the cart line's own `extras`, which is
+   * what the pricing engine actually sums.
+   */
+  extras?: OrderExtra[];
 };
 
 export type OrderLineItem = {

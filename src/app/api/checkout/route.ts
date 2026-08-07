@@ -107,7 +107,9 @@ export async function POST(req: NextRequest) {
 
     // Promotions come from the DB too, so a combo's price and a quantity deal's
     // terms are never the client's to decide.
-    const promotions = await fetchPromotions(supabase, restaurantId, { activeOnly: true });
+    const promotions = await fetchPromotions(supabase, restaurantId, {
+      activeOnly: true,
+    });
     const cartPromos = toCartPromos(promotions);
 
     // Combo lines are priced as a bundle and verified separately below.
@@ -129,6 +131,10 @@ export async function POST(req: NextRequest) {
       ...new Set([
         ...plainLines.flatMap(i => [i.itemId, ...(i.extras?.map(e => e.id) ?? [])]),
         ...comboComponentIds,
+        // A bundle's extras are priced from the DB too, so they have to be
+        // fetched here — without this they'd be missing from priceMap and the
+        // verification below would drop every one as "unavailable".
+        ...comboLines.flatMap(i => i.extras?.map(e => e.id) ?? []),
       ]),
     ];
     const { data: dbItems, error: iErr } = await supabase
@@ -150,9 +156,10 @@ export async function POST(req: NextRequest) {
     // Combos: the bundle must still exist, be active, and have every component
     // available. Its price comes from the promotion row, never the request.
     const combosById = new Map(
-      buildCombos(promotions, new Map(dbItems.map(d => [d.id, d as unknown as MenuItem]))).map(
-        c => [c.id, c],
-      ),
+      buildCombos(
+        promotions,
+        new Map(dbItems.map(d => [d.id, d as unknown as MenuItem])),
+      ).map(c => [c.id, c]),
     );
     for (const line of comboLines) {
       const combo = combosById.get(line.comboId!);
@@ -165,15 +172,66 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
+      // Extras chosen inside the bundle are charged on top of it, so they get
+      // the same treatment as an ordinary line's: re-priced from the DB and
+      // dropped if they've gone unavailable. Trusting the client here would
+      // let a forged payload attach a MX$0 truffle oil to a MX$5 deal.
+      const comboExtras: OrderExtra[] = [];
+      for (const extra of line.extras ?? []) {
+        const dbExtra = priceMap.get(extra.id);
+        if (!dbExtra || !dbExtra.available) {
+          removedExtras.set(extra.id, extra.name);
+          continue;
+        }
+        comboExtras.push({
+          id: dbExtra.id,
+          name: dbExtra.name,
+          emoji: dbExtra.emoji,
+          price: dbExtra.price,
+        });
+      }
+
+      // Required option groups apply per component: a deal containing a steak
+      // can't be ordered without its doneness any more than the steak could
+      // be on its own.
+      for (const component of line.components ?? []) {
+        const product = priceMap.get(component.itemId);
+        if (!product) continue;
+        const unanswered = missingRequired(
+          (product.modifiers as Modifier[] | null) ?? [],
+          component.mods,
+        );
+        if (unanswered.length > 0) {
+          return NextResponse.json(
+            {
+              error: `Choose ${unanswered.join(", ")} for ${component.name} before ordering.`,
+              missingModifiers: unanswered,
+              unansweredItemId: component.itemId,
+            },
+            { status: 400 },
+          );
+        }
+      }
+
       verified.push({
         itemId: combo.id,
         comboId: combo.id,
         name: combo.name,
         emoji: combo.emoji || "🎁",
+        // The bundle price, from the promotion row. Extras sit alongside it and
+        // priceCart sums them — the deal fixes what the dishes cost, not what
+        // an upgrade costs.
         price: combo.price,
         qty: Math.max(1, Math.floor(line.qty)),
         mods: {},
-        components: combo.components,
+        // The client's per-component choices are kept for the kitchen ticket
+        // (they're instructions, not money), but every component and its
+        // structure comes from the DB-built combo.
+        components: combo.components.map(c => {
+          const chosen = (line.components ?? []).find(x => x.itemId === c.itemId);
+          return chosen ? { ...c, mods: chosen.mods, extras: chosen.extras } : c;
+        }),
+        ...(comboExtras.length > 0 ? { extras: comboExtras } : {}),
         notes: line.notes,
       });
     }
@@ -411,20 +469,21 @@ export async function POST(req: NextRequest) {
 
     let session;
     try {
-      const discounts = amountOffCents > 0
-        ? [
-            {
-              coupon: (
-                await stripe.coupons.create({
-                  amount_off: amountOffCents,
-                  currency: cur,
-                  duration: "once",
-                  name: coupon ? `Coupon ${coupon.code}` : "Discount",
-                })
-              ).id,
-            },
-          ]
-        : undefined;
+      const discounts =
+        amountOffCents > 0
+          ? [
+              {
+                coupon: (
+                  await stripe.coupons.create({
+                    amount_off: amountOffCents,
+                    currency: cur,
+                    duration: "once",
+                    name: coupon ? `Coupon ${coupon.code}` : "Discount",
+                  })
+                ).id,
+              },
+            ]
+          : undefined;
 
       session = await stripe.checkout.sessions.create({
         mode: "payment",

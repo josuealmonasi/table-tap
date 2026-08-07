@@ -226,6 +226,7 @@ export const en = {
     deleted: "Coupon deleted",
   },
   combo: {
+    extrasCharged: "(charged on top of the deal)",
     save: "Save {amount}",
   },
   promos: {

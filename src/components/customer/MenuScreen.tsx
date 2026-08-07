@@ -382,7 +382,7 @@ export default function MenuScreen({
                 item={item}
                 currency={restaurant.currency}
                 promoLabel={promoByItem.get(item.id)}
-              rating={ratings[item.id]}
+                rating={ratings[item.id]}
                 onSelect={onSelectItem}
               />
             ))}
