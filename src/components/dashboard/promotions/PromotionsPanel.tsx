@@ -10,7 +10,7 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 import type { PromotionWithItems } from "@/lib/promotions";
 import ComboForm from "./ComboForm";
 import QuantityForm from "./QuantityForm";
-import { DeleteIcon } from "@/components/ui/icons";
+import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { useRowMemory } from "@/hooks/useRowMemory";
 
@@ -25,16 +25,33 @@ export default function PromotionsPanel({
   const t = useT();
   const toast = useToast();
   const confirm = useConfirm();
-  const { promotions, products, categories, loading, create, setActive, remove } =
+  const [editing, setEditing] = useState<PromotionWithItems | null>(null);
+  const { promotions, products, categories, loading, create, update, setActive, remove } =
     usePromotions(restaurantId);
   const rows = useRowMemory("promotions", 3, loading ? undefined : promotions.length);
+  const editingCombo = editing?.kind === "combo" ? editing : null;
+  const editingDeal = editing && editing.kind !== "combo" ? editing : null;
+
+  /** Both forms live below the list, so an edit has to bring one into view. */
+  function startEdit(p: PromotionWithItems) {
+    setEditing(p);
+    const id = p.kind === "combo" ? "promo-combo-form" : "promo-deal-form";
+    requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
   const [saving, setSaving] = useState(false);
 
-  async function add(input: PromotionInput) {
+  /** One path for both, so an edit can't drift from a create. */
+  async function save(input: PromotionInput) {
     setSaving(true);
-    const err = await create(input);
+    const err = editing ? await update(editing.id, input) : await create(input);
     setSaving(false);
-    toast(err ?? t("promos.created"), err ? "error" : "info");
+    if (!err) setEditing(null);
+    toast(
+      err ?? (editing ? t("promos.updated") : t("promos.created")),
+      err ? "error" : "info",
+    );
   }
 
   async function del(p: PromotionWithItems) {
@@ -98,7 +115,14 @@ export default function PromotionsPanel({
                   <div key={p.id} className="tt-coupon-item">
                     <div style={{ minWidth: 0 }}>
                       <strong>
-                        {p.emoji} {p.name}
+                        <button
+                          type="button"
+                          className="tt-prod-name"
+                          onClick={() => startEdit(p)}
+                          title={t("promos.edit")}
+                        >
+                          {p.emoji} {p.name}
+                        </button>
                       </strong>
                       {!p.active && (
                         <span className="tt-coupon-off">{t("promos.paused")}</span>
@@ -119,6 +143,13 @@ export default function PromotionsPanel({
                       </button>
                       <button
                         className="tt-iconbtn"
+                        title={t("promos.edit")}
+                        onClick={() => startEdit(p)}
+                      >
+                        <EditIcon size={16} />
+                      </button>
+                      <button
+                        className="tt-iconbtn"
                         title={t("promos.delete")}
                         onClick={() => del(p)}
                       >
@@ -131,35 +162,41 @@ export default function PromotionsPanel({
             )}
           </div>
 
-          <div className="tt-section">
+          <div className="tt-section" id="promo-combo-form">
             <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 2 }}>
-              {t("promos.newCombo")}
+              {editingCombo ? t("promos.editCombo") : t("promos.newCombo")}
             </h3>
             <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
               {t("promos.comboHint")}
             </p>
             <ComboForm
+              key={editingCombo?.id ?? "new-combo"}
               products={products}
               categories={categories}
               currency={currency}
               saving={saving}
-              onSubmit={add}
+              initial={editingCombo ?? undefined}
+              onCancel={() => setEditing(null)}
+              onSubmit={input => save(input)}
             />
           </div>
 
-          <div className="tt-section">
+          <div className="tt-section" id="promo-deal-form">
             <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 2 }}>
-              {t("promos.newDeal")}
+              {editingDeal ? t("promos.editDeal") : t("promos.newDeal")}
             </h3>
             <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
               {t("promos.dealHint")}
             </p>
             <QuantityForm
+              key={editingDeal?.id ?? "new-deal"}
               products={products}
               categories={categories}
               currency={currency}
               saving={saving}
-              onSubmit={add}
+              initial={editingDeal ?? undefined}
+              onCancel={() => setEditing(null)}
+              onSubmit={input => save(input)}
             />
           </div>
         </div>

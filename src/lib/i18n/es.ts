@@ -225,6 +225,12 @@ export const es: Messages = {
     save: "Ahorra {amount}",
   },
   promos: {
+    editCombo: "Editar combo",
+    editDeal: "Editar oferta",
+    edit: "Editar promoción",
+    updated: "Promoción actualizada",
+    saveChanges: "Guardar cambios",
+    descriptionPlaceholder: "Descripción (opcional) — se muestra bajo el paquete",
     oneMore: "Agrega {qty} más para ahorrar {amount}",
     title: "Promociones",
     hint: "Combos y ofertas por cantidad. Aparecen en el menú del cliente en cuanto las activas.",

@@ -11,6 +11,8 @@ export interface PromotionInput {
   kind: PromotionKind;
   name: string;
   emoji: string;
+  /** Optional blurb shown under the deal on the customer menu. */
+  description?: string | null;
   comboPrice?: number | null;
   buyQty?: number | null;
   payQty?: number | null;
@@ -77,6 +79,7 @@ export function usePromotions(restaurantId: string) {
     categories,
     loading,
     create: (input: PromotionInput) => send("POST", input),
+    update: (id: string, input: PromotionInput) => send("PATCH", { id, ...input }),
     setActive: (id: string, active: boolean) => send("PATCH", { id, active }),
     remove: (id: string) => send("DELETE", { id }),
   };

@@ -662,6 +662,20 @@ h2.tt-serif {
   border-radius: 12px;
 }
 
+/* On a phone the name, the summary and three controls can't share a line —
+   the name wraps to four lines and the buttons squeeze. Stack instead, and
+   let the controls sit on their own row where they're comfortably tappable. */
+@media (max-width: 560px) {
+  .tt-coupon-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .tt-coupon-item > div:last-child {
+    justify-content: flex-end;
+  }
+}
+
 .tt-coupon-code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-weight: 700;

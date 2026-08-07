@@ -9,6 +9,7 @@ import type { PromotionInput } from "@/hooks/usePromotions";
 import ProductPicker from "./ProductPicker";
 import PickedProducts from "./PickedProducts";
 import { DeleteIcon } from "@/components/ui/icons";
+import type { PromotionWithItems } from "@/lib/promotions";
 
 /**
  * Builds a quantity deal: "buy N, pay for M" (2x1, 3x1) or bracket pricing
@@ -21,22 +22,34 @@ export default function QuantityForm({
   currency,
   saving,
   onSubmit,
+  initial,
+  onCancel,
 }: {
   products: MenuItem[];
   categories: Category[];
   currency: string;
   saving: boolean;
   onSubmit: (input: PromotionInput) => void;
+  /** Present when editing an existing deal rather than creating one. */
+  initial?: PromotionWithItems;
+  onCancel?: () => void;
 }) {
   const t = useT();
-  const [kind, setKind] = useState<"bogo" | "tiered">("bogo");
-  const [name, setName] = useState("");
-  const [buyQty, setBuyQty] = useState("2");
-  const [payQty, setPayQty] = useState("1");
-  const [tiers, setTiers] = useState<{ qty: string; price: string }[]>([
-    { qty: "2", price: "" },
-  ]);
-  const [picked, setPicked] = useState<{ id: string; qty: number }[]>([]);
+  const [kind, setKind] = useState<"bogo" | "tiered">(
+    initial?.kind === "tiered" ? "tiered" : "bogo",
+  );
+  const [name, setName] = useState(initial?.name ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [buyQty, setBuyQty] = useState(String(initial?.buy_qty ?? 2));
+  const [payQty, setPayQty] = useState(String(initial?.pay_qty ?? 1));
+  const [tiers, setTiers] = useState<{ qty: string; price: string }[]>(
+    initial?.tiers?.map(t => ({ qty: String(t.qty), price: String(t.price) })) ?? [
+      { qty: "2", price: "" },
+    ],
+  );
+  const [picked, setPicked] = useState<{ id: string; qty: number }[]>(
+    initial?.items.map(i => ({ id: i.item_id, qty: i.qty })) ?? [],
+  );
 
   const firstItem = products.find(p => p.id === picked[0]?.id);
   const unit = firstItem ? Number(firstItem.price) : 0;
@@ -80,12 +93,15 @@ export default function QuantityForm({
           kind,
           name: name.trim(),
           emoji: kind === "bogo" ? "🏷️" : "🔖",
+          description: description.trim() || null,
           buyQty: kind === "bogo" ? buy : null,
           payQty: kind === "bogo" ? pay : null,
           tiers: kind === "tiered" ? parsedTiers : null,
           items: picked.map(p => ({ itemId: p.id, qty: 1 })),
         });
+        if (initial) return; // editing keeps its values; the list replaces the form
         setName("");
+        setDescription("");
         setPicked([]);
         setTiers([{ qty: "2", price: "" }]);
       }}
@@ -136,9 +152,29 @@ export default function QuantityForm({
           className="tt-btn tt-btn-primary tt-btn-sm"
           disabled={!ready || saving}
         >
-          {saving ? t("common.saving") : t("promos.addDeal")}
+          {saving
+            ? t("common.saving")
+            : initial
+              ? t("promos.saveChanges")
+              : t("promos.addDeal")}
         </button>
+        {initial && onCancel && (
+          <button
+            type="button"
+            className="tt-btn tt-btn-ghost tt-btn-sm"
+            onClick={onCancel}
+          >
+            {t("menu.cancel")}
+          </button>
+        )}
       </div>
+
+      <input
+        className="tt-input"
+        placeholder={t("promos.descriptionPlaceholder")}
+        value={description}
+        onChange={e => setDescription(e.target.value)}
+      />
 
       {kind === "bogo" ? (
         <div className="tt-promo-terms">
