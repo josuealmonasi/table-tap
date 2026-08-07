@@ -6,6 +6,8 @@ import type { MenuItem, Modifier, OrderLineItem } from "@/lib/types";
 import { dietaryTags } from "@/lib/dietary";
 import { itemSalePrice } from "@/lib/pricing";
 import { missingRequired } from "@/lib/modifiers";
+import { nextPromoStep } from "@/lib/promo-math";
+import type { CartPromo } from "@/lib/pricing";
 import { useT } from "@/lib/i18n/context";
 import ModifierGroup from "./ModifierGroup";
 import { BackIcon } from "@/components/ui/icons";
@@ -18,6 +20,8 @@ export default function ItemDetailScreen({
   onBack,
   onAdd,
   initialLine,
+  promo,
+  inCartQty = 0,
 }: {
   item: MenuItem;
   extras: MenuItem[];
@@ -26,6 +30,10 @@ export default function ItemDetailScreen({
   onAdd: (line: OrderLineItem) => void;
   /** Editing an existing cart line: prefills choices and relabels the button. */
   initialLine?: OrderLineItem;
+  /** A quantity deal covering this dish, so the screen can explain it. */
+  promo?: CartPromo;
+  /** How many of this dish are already in the cart, for the "one more" maths. */
+  inCartQty?: number;
 }) {
   const t = useT();
   const [mods, setMods] = useState<Record<string, string | string[]>>(
@@ -64,6 +72,12 @@ export default function ItemDetailScreen({
   const onSale = (item.discount_pct ?? 0) > 0;
   const salePrice = itemSalePrice(item.price, item.discount_pct);
   const unitPrice = salePrice + extrasTotal;
+
+  // What this deal is, and what one more would earn. A dish covered by a 2x1
+  // used to look exactly like any other on this screen — the offer only
+  // surfaced once it had already applied in the cart, which is too late to
+  // influence the decision it exists to influence.
+  const step = promo ? nextPromoStep(promo, inCartQty + qty, unitPrice) : null;
 
   function handleAdd() {
     if (missing.length > 0) {
@@ -111,6 +125,20 @@ export default function ItemDetailScreen({
         <p className="tt-muted" style={{ lineHeight: 1.6 }}>
           {item.description}
         </p>
+
+        {promo && (
+          <div className="tt-promo-callout">
+            <span className="tt-deal">{promo.name}</span>
+            {step && (
+              <span>
+                {t("promos.oneMore", {
+                  qty: step.addQty,
+                  amount: formatMoney(step.save, currency),
+                })}
+              </span>
+            )}
+          </div>
+        )}
 
         {dietaryTags(item.dietary).length > 0 && (
           <div className="tt-diet-row" style={{ marginBottom: 16 }}>

@@ -49,6 +49,13 @@ export interface PromoHint {
   save: number;
 }
 
+export interface ItemPromoSaving {
+  /** What the deal takes off this product's lines, in total. */
+  saved: number;
+  /** The deal's name, so the cart can say WHICH offer applied. */
+  promoName: string;
+}
+
 export interface PricedCart {
   grossSubtotal: number;
   itemDiscount: number;
@@ -63,6 +70,13 @@ export interface PricedCart {
   total: number;
   lines: PricedLine[];
   hints: PromoHint[];
+  /**
+   * Per-product deal savings, so the cart can strike the original price rather
+   * than only moving the order total. Without this the customer saw "5×
+   * Sparkling Water MX$12.50" with the 2x1 applied silently three lines down,
+   * which reads as the deal not having worked.
+   */
+  promoSavings: Record<string, ItemPromoSaving>;
 }
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
@@ -122,6 +136,7 @@ export function priceCart(input: PriceInput): PricedCart {
   }
 
   let promoDiscount = 0;
+  const promoSavings: Record<string, ItemPromoSaving> = {};
   const hints: PromoHint[] = [];
   const claimed = new Set<string>(); // one deal per product — the first wins
 
@@ -132,7 +147,9 @@ export function priceCart(input: PriceInput): PricedCart {
       if (!qty || base === undefined || claimed.has(itemId)) continue;
       claimed.add(itemId);
 
-      promoDiscount += round2(qty * base - promoCost(promo, qty, base));
+      const saved = round2(qty * base - promoCost(promo, qty, base));
+      promoDiscount += saved;
+      if (saved > 0) promoSavings[itemId] = { saved, promoName: promo.name };
 
       const step = nextPromoStep(promo, qty, base);
       if (step) {
@@ -180,5 +197,6 @@ export function priceCart(input: PriceInput): PricedCart {
     total: round2(subtotal + serviceFee + tip),
     lines,
     hints,
+    promoSavings,
   };
 }

@@ -2,7 +2,7 @@
 
 import type { Restaurant, RestaurantTable } from "@/lib/types";
 import type { CartItem } from "@/hooks/useCart";
-import type { AppliedCoupon, PromoHint } from "@/lib/pricing";
+import type { AppliedCoupon, ItemPromoSaving, PromoHint } from "@/lib/pricing";
 import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
 import CartLineRow from "./CartLineRow";
@@ -30,6 +30,8 @@ interface CartScreenProps {
   onRemoveCoupon: () => void;
   /** "Add 1 more and save $2" nudges from the pricing engine. */
   hints: PromoHint[];
+  /** product id → what a deal took off it, for the struck-through line price. */
+  promoSavings: Record<string, ItemPromoSaving>;
   orderNote: string;
   loading: boolean;
   /** False when nothing orderable remains (empty or all sold out). */
@@ -55,6 +57,7 @@ export default function CartScreen({
   onApplyCoupon,
   onRemoveCoupon,
   hints,
+  promoSavings,
   subtotal,
   serviceFee,
   tip,
@@ -110,6 +113,7 @@ export default function CartScreen({
                 key={item.cartId}
                 item={item}
                 currency={restaurant.currency}
+                promoSaving={promoSavings[item.itemId]}
                 soldOut={soldOut.has(item.itemId)}
                 onRemove={onRemoveItem}
                 onEdit={onEditItem}
@@ -146,6 +150,11 @@ export default function CartScreen({
                     <HintIcon size={14} weight="fill" />{" "}
                     {t("promos.addMoreHint", {
                       qty: h.addQty,
+                      // The hint carried the dish and the deal all along; the
+                      // copy just never used them, so it read as "add 2 more"
+                      // of nothing in particular.
+                      name: items.find(i => i.itemId === h.itemId)?.name ?? "",
+                      promo: h.promoName,
                       amount: formatMoney(h.save, restaurant.currency),
                     })}
                   </p>

@@ -120,7 +120,18 @@ export default function ProductRow({
             <div
               style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}
             >
-              <strong>{product.name}</strong>
+              {/* The name opens the editor. The pencil is easy to miss in a
+                  row of four icons, and clicking a thing to change it is what
+                  people try first — the pencil stays for anyone who looks for
+                  it. */}
+              <button
+                type="button"
+                className="tt-prod-name"
+                onClick={() => setEditing(true)}
+                title={t("menu.edit")}
+              >
+                {product.name}
+              </button>
               {product.popular && <span className="tt-pop">{t("menu.popular")}</span>}
               {!product.available && (
                 <span className="tt-badge">{t("menu.unavailable")}</span>

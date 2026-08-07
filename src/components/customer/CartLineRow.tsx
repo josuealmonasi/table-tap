@@ -14,6 +14,12 @@ interface CartLineRowProps {
   onRemove: (cartId: number) => void;
   /** Re-opens the item screen prefilled to change extras/notes/quantity. */
   onEdit?: (item: CartItem) => void;
+  /**
+   * What a quantity deal takes off this product, if one applied. Shown on the
+   * line so the offer is visible where the price is — moving only the order
+   * total reads as the deal not having worked.
+   */
+  promoSaving?: { saved: number; promoName: string };
 }
 
 /** A single line in the cart, with its modifiers, notes, edit and remove. */
@@ -23,8 +29,15 @@ export default function CartLineRow({
   soldOut = false,
   onRemove,
   onEdit,
+  promoSaving,
 }: CartLineRowProps) {
   const t = useT();
+  const gross = lineUnitPrice(item) * item.qty;
+  // The deal's saving is spread across every line of that product, so a line
+  // shows what it actually costs after the offer.
+  const dealPrice = promoSaving
+    ? Math.round((gross - promoSaving.saved) * 100) / 100
+    : null;
   return (
     <div
       className={`tt-card ${soldOut ? "tt-cart-soldout" : ""}`}
@@ -46,9 +59,20 @@ export default function CartLineRow({
               className={soldOut ? "tt-muted" : "tt-accent"}
               style={soldOut ? { textDecoration: "line-through" } : undefined}
             >
-              {formatMoney(lineUnitPrice(item) * item.qty, currency)}
+              {dealPrice !== null && !soldOut && (
+                <s className="tt-was">{formatMoney(gross, currency)}</s>
+              )}
+              {formatMoney(dealPrice !== null && !soldOut ? dealPrice : gross, currency)}
             </strong>
           </div>
+          {promoSaving && !soldOut && (
+            <div className="tt-tag-row">
+              <span className="tt-deal">{promoSaving.promoName}</span>
+              <span className="tt-save" style={{ fontSize: 12, fontWeight: 700 }}>
+                −{formatMoney(promoSaving.saved, currency)}
+              </span>
+            </div>
+          )}
           {Object.entries(item.mods).map(([k, v]) => (
             <div key={k} className="tt-muted" style={{ fontSize: 12 }}>
               {k}: {Array.isArray(v) ? v.join(", ") : v}

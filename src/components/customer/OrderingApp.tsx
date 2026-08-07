@@ -129,9 +129,11 @@ export default function OrderingApp({
   // dialog that only closes via its own back arrow is a dead end for anyone
   // on a keyboard.
   useEffect(() => {
-    if (screen !== "item" && screen !== "edit") return;
+    if (screen !== "item" && screen !== "edit" && screen !== "combo") return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") closeDetail(screen === "edit" ? "cart" : "menu");
+      if (e.key !== "Escape") return;
+      if (screen === "combo") closeCombo();
+      else closeDetail(screen === "edit" ? "cart" : "menu");
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -167,6 +169,11 @@ export default function OrderingApp({
   function openCombo(combo: Combo) {
     setSelectedCombo(combo);
     setScreen("combo");
+  }
+
+  function closeCombo() {
+    setSelectedCombo(null);
+    setScreen("menu");
   }
 
   function addConfiguredCombo(line: OrderLineItem) {
@@ -281,6 +288,10 @@ export default function OrderingApp({
             extras={selectedExtras}
             currency={restaurant.currency}
             initialLine={screen === "edit" && editingLine ? editingLine : undefined}
+            promo={promos.find(p => p.itemIds.includes(selected.id))}
+            inCartQty={cart.items
+              .filter(i => i.itemId === selected.id && !i.comboId)
+              .reduce((n, i) => n + i.qty, 0)}
             onBack={() => closeDetail(screen === "edit" ? "cart" : "menu")}
             onAdd={line => {
               if (screen === "edit" && editingLine) {
@@ -296,22 +307,22 @@ export default function OrderingApp({
       </div>
     ) : null;
 
-  if (screen === "combo" && selectedCombo) {
-    return (
-      <ComboDetailScreen
-        combo={selectedCombo}
-        currency={restaurant.currency}
-        itemsById={itemsById}
-        extrasById={extrasById}
-        extrasByProduct={extrasByProduct}
-        onBack={() => {
-          setSelectedCombo(null);
-          setScreen("menu");
-        }}
-        onAdd={addConfiguredCombo}
-      />
-    );
-  }
+  const comboDetail =
+    screen === "combo" && selectedCombo ? (
+      <div className="tt-detail-overlay" onClick={closeCombo}>
+        <div className="tt-detail-panel" onClick={e => e.stopPropagation()}>
+          <ComboDetailScreen
+            combo={selectedCombo}
+            currency={restaurant.currency}
+            itemsById={itemsById}
+            extrasById={extrasById}
+            extrasByProduct={extrasByProduct}
+            onBack={closeCombo}
+            onAdd={addConfiguredCombo}
+          />
+        </div>
+      </div>
+    ) : null;
 
   if (screen === "cart" || screen === "edit") {
     return (
@@ -333,6 +344,7 @@ export default function OrderingApp({
           onApplyCoupon={setCoupon}
           onRemoveCoupon={() => setCoupon(null)}
           hints={pricing.hints}
+          promoSavings={pricing.promoSavings}
           orderNote={orderNote}
           loading={loading}
           canCheckout={orderableItems.length > 0 && restaurant.accepting_orders}
@@ -390,6 +402,7 @@ export default function OrderingApp({
         onOpenCart={() => setScreen("cart")}
       />
       {detail}
+      {comboDetail}
     </>
   );
 }
