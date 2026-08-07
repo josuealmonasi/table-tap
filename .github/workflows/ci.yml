@@ -34,3 +34,18 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      # The other three steps never compile the app, so anything that only
+      # fails at build time reached production unchallenged — that's how the
+      # font regression got in (next/font fetches at build time, so a broken
+      # font is a build failure and nothing else). Env vars are dummies: this
+      # proves it compiles, it doesn't talk to Supabase or Stripe.
+      - name: Build
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: build-only-placeholder
+          SUPABASE_SECRET_KEY: build-only-placeholder
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_build_only
+          STRIPE_SECRET_KEY: sk_test_build_only
+          STRIPE_WEBHOOK_SECRET: whsec_build_only
