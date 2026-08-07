@@ -324,66 +324,55 @@ export default function OrderingApp({
       </div>
     ) : null;
 
-  if (screen === "cart" || screen === "edit") {
-    return (
-      <>
-        <CartScreen
-          restaurant={restaurant}
-          table={table}
-          items={cart.items}
-          soldOut={soldOut}
-          subtotal={pricing.subtotal}
-          grossSubtotal={pricing.grossSubtotal}
-          discount={pricing.discount}
-          serviceFee={pricing.serviceFee}
-          tip={pricing.tip}
-          tipPct={tipPct}
-          tipCustom={tipCustom}
-          total={pricing.total}
-          coupon={coupon}
-          onApplyCoupon={setCoupon}
-          onRemoveCoupon={() => setCoupon(null)}
-          hints={pricing.hints}
-          promoSavings={pricing.promoSavings}
-          orderNote={orderNote}
-          loading={loading}
-          canCheckout={orderableItems.length > 0 && restaurant.accepting_orders}
-          onChangeNote={setOrderNote}
-          onChangeTip={pct => {
-            setTipPct(pct);
-            setTipCustom(null); // picking a preset clears the exact amount
-          }}
-          onCustomTip={setTipCustom}
-          onRemoveItem={cart.removeItem}
-          onEditItem={editLine}
-          onAddMore={() => setScreen("menu")}
-          onCheckout={checkout}
-        />
-        {detail}
-        <Modal
-          open={!!notice}
-          onClose={() => setNotice(null)}
-          maxWidth={400}
-          label={t("notice.heads")}
+  /**
+   * The cart, layered over the menu rather than replacing it — the same
+   * treatment the dish detail already gets. On a phone the overlay is opaque
+   * and full-bleed, so nothing changes; on a wide screen a checkout form
+   * stretched across an empty page was both harder to read and a longer trip
+   * back to the food.
+   */
+  const cartScreen =
+    screen === "cart" || screen === "edit" ? (
+      <div className="tt-detail-overlay" onClick={() => setScreen("menu")}>
+        <div
+          className="tt-detail-panel tt-detail-panel-wide"
+          onClick={e => e.stopPropagation()}
         >
-          <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 8 }}>
-            {t("notice.heads")}
-          </h3>
-          <p className="tt-muted" style={{ marginTop: 0 }}>
-            {notice}
-          </p>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-            <button
-              className="tt-btn tt-btn-primary tt-btn-sm"
-              onClick={() => setNotice(null)}
-            >
-              {t("notice.ok")}
-            </button>
-          </div>
-        </Modal>
-      </>
-    );
-  }
+          <CartScreen
+            restaurant={restaurant}
+            table={table}
+            items={cart.items}
+            soldOut={soldOut}
+            subtotal={pricing.subtotal}
+            grossSubtotal={pricing.grossSubtotal}
+            discount={pricing.discount}
+            serviceFee={pricing.serviceFee}
+            tip={pricing.tip}
+            tipPct={tipPct}
+            tipCustom={tipCustom}
+            total={pricing.total}
+            coupon={coupon}
+            onApplyCoupon={setCoupon}
+            onRemoveCoupon={() => setCoupon(null)}
+            hints={pricing.hints}
+            promoSavings={pricing.promoSavings}
+            orderNote={orderNote}
+            loading={loading}
+            canCheckout={orderableItems.length > 0 && restaurant.accepting_orders}
+            onChangeNote={setOrderNote}
+            onChangeTip={pct => {
+              setTipPct(pct);
+              setTipCustom(null); // picking a preset clears the exact amount
+            }}
+            onCustomTip={setTipCustom}
+            onRemoveItem={cart.removeItem}
+            onEditItem={editLine}
+            onAddMore={() => setScreen("menu")}
+            onCheckout={checkout}
+          />
+        </div>
+      </div>
+    ) : null;
 
   return (
     <>
@@ -401,8 +390,30 @@ export default function OrderingApp({
         onAddCombo={openCombo}
         onOpenCart={() => setScreen("cart")}
       />
+      {cartScreen}
       {detail}
       {comboDetail}
+      <Modal
+        open={!!notice}
+        onClose={() => setNotice(null)}
+        maxWidth={400}
+        label={t("notice.heads")}
+      >
+        <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 8 }}>
+          {t("notice.heads")}
+        </h3>
+        <p className="tt-muted" style={{ marginTop: 0 }}>
+          {notice}
+        </p>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+          <button
+            className="tt-btn tt-btn-primary tt-btn-sm"
+            onClick={() => setNotice(null)}
+          >
+            {t("notice.ok")}
+          </button>
+        </div>
+      </Modal>
     </>
   );
 }

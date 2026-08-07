@@ -3082,6 +3082,12 @@ h2.tt-serif {
     height: 260px;
     font-size: 128px;
   }
+  /* The cart carries more than a dish does — lines, tip picker, totals — so it
+     gets a wider panel and more of the viewport before it starts scrolling. */
+  .tt-detail-panel-wide {
+    max-width: 600px;
+    max-height: 92vh;
+  }
 }
 
 /* ── customer menu: desktop sidebar ───────────────────────────────────────
