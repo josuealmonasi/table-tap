@@ -1,7 +1,16 @@
 import { Skeleton } from "@/components/ui/Skeleton";
+import {
+  FormSkeleton,
+  ListSkeletonCard,
+  SectionSkeletonCard,
+} from "@/components/ui/DashSkeletons";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 
-/** Shaped like the Settings page: a Restaurant card and an Ordering card. */
+/**
+ * Shaped like Settings: Restaurant, Payments, Coupons, Tax and Ordering cards
+ * inside the same .tt-cols grid the real page uses, in the same order — two
+ * columns from 1025px up, one below.
+ */
 export default function SettingsLoading() {
   return (
     <div className="tt-dash">
@@ -12,27 +21,24 @@ export default function SettingsLoading() {
           />
         </header>
 
-        <div
-          className="tt-section"
-          style={{ maxWidth: 520, display: "flex", flexDirection: "column", gap: 12 }}
-        >
-          <Skeleton width={160} height={18} />
-          <div style={{ display: "flex", gap: 12 }}>
-            <Skeleton width="100%" height={40} radius={10} />
-            <Skeleton width={80} height={40} radius={10} />
-          </div>
-          <Skeleton width="100%" height={40} radius={10} />
-          <Skeleton width={200} height={40} radius={10} />
-          <Skeleton width="100%" height={64} radius={12} />
-          <Skeleton width={140} height={36} radius={10} style={{ alignSelf: "flex-end" }} />
-        </div>
+        <div className="tt-cols">
+          <SectionSkeletonCard headWidth={160}>
+            <FormSkeleton fields={4} />
+          </SectionSkeletonCard>
 
-        <div
-          className="tt-section"
-          style={{ maxWidth: 520, marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}
-        >
-          <Skeleton width={100} height={18} />
-          <Skeleton width="100%" height={64} radius={12} />
+          <SectionSkeletonCard headWidth={110}>
+            <Skeleton width="72%" height={14} />
+          </SectionSkeletonCard>
+
+          <ListSkeletonCard headWidth={120} rows={3} />
+
+          <SectionSkeletonCard headWidth={90}>
+            <FormSkeleton fields={1} />
+          </SectionSkeletonCard>
+
+          <SectionSkeletonCard headWidth={120}>
+            <Skeleton width="100%" height={64} radius={12} />
+          </SectionSkeletonCard>
         </div>
       </div>
     </div>

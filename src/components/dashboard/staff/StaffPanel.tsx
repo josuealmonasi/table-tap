@@ -13,7 +13,7 @@ import {
   RoleOwnerIcon,
   RoleWaiterIcon,
 } from "@/components/ui/icons";
-import { ListSkeleton } from "@/components/ui/Skeleton";
+import { StaffTableSkeleton } from "@/components/ui/DashSkeletons";
 
 interface StaffPanelProps {
   restaurantId: string;
@@ -69,7 +69,7 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
               </span>
             </div>
 
-            {loading && <ListSkeleton rows={3} />}
+            {loading && <StaffTableSkeleton rows={3} />}
             {!loading && members.length === 0 && (
               <p className="tt-muted" style={{ fontSize: 13 }}>
                 {t("dash.noStaff")}
