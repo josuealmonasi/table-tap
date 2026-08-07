@@ -60,7 +60,7 @@ export default function OrderingApp({
   const [tipPct, setTipPct] = useState(0);
   const [tipCustom, setTipCustom] = useState<number | null>(null);
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
-  const cart = useCart();
+  const cart = useCart(restaurant.id);
   const t = useT();
   const sharedItemId = readMenuParams(
     new URLSearchParams(useSearchParams().toString()),
