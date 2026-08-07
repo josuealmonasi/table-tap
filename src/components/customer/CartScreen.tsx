@@ -89,93 +89,109 @@ export default function CartScreen({
         )}
       </div>
       <div style={{ padding: 16 }}>
-        {items.length === 0 && <p className="tt-muted">{t("cart.empty")}</p>}
-        {items.map(item => (
-          <CartLineRow
-            key={item.cartId}
-            item={item}
-            currency={restaurant.currency}
-            soldOut={soldOut.has(item.itemId)}
-            onRemove={onRemoveItem}
-            onEdit={onEditItem}
-          />
-        ))}
-
-        <button className="tt-add-more" onClick={onAddMore}>
-          {t("cart.addMore")}
-        </button>
-
-        <div style={{ marginBottom: 20 }}>
-          <div className="tt-mod-label">{t("cart.kitchenNote")}</div>
-          <textarea
-            className="tt-input"
-            rows={2}
-            placeholder={t("cart.kitchenNotePlaceholder")}
-            value={orderNote}
-            onChange={e => onChangeNote(e.target.value)}
-          />
-        </div>
-
-        <TipPicker
-          currency={restaurant.currency}
-          tipPct={tipPct}
-          tipCustom={tipCustom}
-          onPresetTip={onChangeTip}
-          onCustomTip={onCustomTip}
-        />
-
-        {hints.length > 0 && (
-          <div className="tt-hints">
-            {hints.map(h => (
-              <p key={`${h.itemId}-${h.promoName}`} className="tt-hint">
-                💡{" "}
-                {t("promos.addMoreHint", {
-                  qty: h.addQty,
-                  amount: formatMoney(h.save, restaurant.currency),
-                })}
-              </p>
-            ))}
+        {/* Nothing in the cart means nothing to tip on, discount, or pay for.
+            Showing the note field, tip picker, coupon link and a MX$0.00 total
+            behind a dead "Ir a pagar" just gives the diner a wall of controls
+            that can't do anything. One way out instead. */}
+        {items.length === 0 ? (
+          <div className="tt-cart-empty">
+            <p className="tt-muted" style={{ margin: 0 }}>
+              {t("cart.empty")}
+            </p>
+            <button className="tt-btn tt-btn-primary" onClick={onAddMore}>
+              {t("cart.browseMenu")}
+            </button>
           </div>
+        ) : (
+          <>
+            {items.map(item => (
+              <CartLineRow
+                key={item.cartId}
+                item={item}
+                currency={restaurant.currency}
+                soldOut={soldOut.has(item.itemId)}
+                onRemove={onRemoveItem}
+                onEdit={onEditItem}
+              />
+            ))}
+
+            <button className="tt-add-more" onClick={onAddMore}>
+              {t("cart.addMore")}
+            </button>
+
+            <div style={{ marginBottom: 20 }}>
+              <div className="tt-mod-label">{t("cart.kitchenNote")}</div>
+              <textarea
+                className="tt-input"
+                rows={2}
+                placeholder={t("cart.kitchenNotePlaceholder")}
+                value={orderNote}
+                onChange={e => onChangeNote(e.target.value)}
+              />
+            </div>
+
+            <TipPicker
+              currency={restaurant.currency}
+              tipPct={tipPct}
+              tipCustom={tipCustom}
+              onPresetTip={onChangeTip}
+              onCustomTip={onCustomTip}
+            />
+
+            {hints.length > 0 && (
+              <div className="tt-hints">
+                {hints.map(h => (
+                  <p key={`${h.itemId}-${h.promoName}`} className="tt-hint">
+                    💡{" "}
+                    {t("promos.addMoreHint", {
+                      qty: h.addQty,
+                      amount: formatMoney(h.save, restaurant.currency),
+                    })}
+                  </p>
+                ))}
+              </div>
+            )}
+
+            <div className="tt-coupon-row">
+              <CouponBox
+                restaurantId={restaurant.id}
+                subtotal={subtotal}
+                applied={coupon}
+                onApply={onApplyCoupon}
+                onRemove={onRemoveCoupon}
+              />
+            </div>
+
+            <OrderTotals
+              subtotal={subtotal}
+              grossSubtotal={grossSubtotal}
+              discount={discount}
+              serviceFee={serviceFee}
+              tip={tip}
+              tipPct={tipCustom !== null ? 0 : tipPct}
+              total={total}
+              servicePct={effectiveServicePct}
+              taxPct={restaurant.tax_pct}
+              taxBreakdown={restaurant.tax_show_breakdown}
+              currency={restaurant.currency}
+            />
+
+            <button
+              className="tt-btn tt-btn-primary tt-btn-lg"
+              style={{ width: "100%", marginTop: 20 }}
+              disabled={!canCheckout || loading}
+              onClick={onCheckout}
+            >
+              {t(loading ? "cart.redirecting" : "cart.proceed")}
+            </button>
+            <p
+              className="tt-muted"
+              style={{ textAlign: "center", fontSize: 12, marginTop: 12 }}
+            >
+              {t("cart.securedBy")}
+            </p>
+          </>
         )}
-
-        <div className="tt-coupon-row">
-          <CouponBox
-            restaurantId={restaurant.id}
-            subtotal={subtotal}
-            applied={coupon}
-            onApply={onApplyCoupon}
-            onRemove={onRemoveCoupon}
-          />
-        </div>
-
-        <OrderTotals
-          subtotal={subtotal}
-          grossSubtotal={grossSubtotal}
-          discount={discount}
-          serviceFee={serviceFee}
-          tip={tip}
-          tipPct={tipCustom !== null ? 0 : tipPct}
-          total={total}
-          servicePct={effectiveServicePct}
-          taxPct={restaurant.tax_pct}
-          taxBreakdown={restaurant.tax_show_breakdown}
-          currency={restaurant.currency}
-        />
-
-        <button
-          className="tt-btn tt-btn-primary tt-btn-lg"
-          style={{ width: "100%", marginTop: 20 }}
-          disabled={!canCheckout || loading}
-          onClick={onCheckout}
-        >
-          {t(loading ? "cart.redirecting" : "cart.proceed")}
-        </button>
-        <p
-          className="tt-muted"
-          style={{ textAlign: "center", fontSize: 12, marginTop: 12 }}
-        >
-          {t("cart.securedBy")}
-        </p>
       </div>
     </div>
   );

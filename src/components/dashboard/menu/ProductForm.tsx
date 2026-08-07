@@ -67,12 +67,19 @@ export default function ProductForm({
         image_url: imageUrl.trim() || null,
         emoji,
         popular,
-        // Only keep groups that actually have a name and choices.
+        // Only keep groups that actually have a name and choices. Every field
+        // the group carries has to be listed here — this rebuilds the object
+        // rather than spreading it, so anything omitted is silently dropped on
+        // save. `required` was, which meant a manager could tick the box, save,
+        // and the customer would still be able to add without choosing.
         modifiers: modifiers
           .map(g => ({
             label: g.label.trim(),
             type: g.type,
             options: g.options.map(o => o.trim()).filter(Boolean),
+            // Written only when true, so groups that don't need it stay clean
+            // in the stored JSON.
+            ...(g.required ? { required: true } : {}),
           }))
           .filter(g => g.label && g.options.length > 0),
         dietary,
