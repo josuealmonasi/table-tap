@@ -120,19 +120,24 @@ export function priceCart(input: PriceInput): PricedCart {
     lines.push({ itemId: line.itemId, qty, gross: round2(grossUnit * qty), unit });
   }
 
-  // 2. Quantity deals apply per product, across every line of that product, and
-  //    to the discounted BASE price only — extras are never given away free.
+  // 2. Quantity deals apply per product, across every line of that product, to
+  //    the WHOLE unit price — the discounted base plus whatever extras that
+  //    unit carries. A free unit of a 2x1 is free as ordered: a $5 dish with a
+  //    $2 extra is a $7 unit, so two cost $7, not $7 plus both extras again.
+  //    (Combos are the other way round by design — extras there are charged on
+  //    top of the bundle price, because the bundle is the discount.)
   const qtyByItem = new Map<string, number>();
-  const baseByItem = new Map<string, number>();
+  const unitByItem = new Map<string, number>();
   for (const line of items) {
     if (line.comboId) continue; // a combo is priced as a unit, not per product
     const qty = Math.max(0, Math.floor(line.qty));
     qtyByItem.set(line.itemId, (qtyByItem.get(line.itemId) ?? 0) + qty);
-    // If the same product appears twice at different prices, the lower one wins
-    // so the customer is never charged more than they were shown.
-    const base = discountedBase(line);
-    const seen = baseByItem.get(line.itemId);
-    baseByItem.set(line.itemId, seen === undefined ? base : Math.min(seen, base));
+    // If the same product appears twice at different prices — a different set
+    // of extras, say — the lower one wins, so the deal never takes more off
+    // than the cheapest unit was worth.
+    const unit = discountedBase(line) + extrasTotal(line);
+    const seen = unitByItem.get(line.itemId);
+    unitByItem.set(line.itemId, seen === undefined ? unit : Math.min(seen, unit));
   }
 
   let promoDiscount = 0;
@@ -155,15 +160,15 @@ export function priceCart(input: PriceInput): PricedCart {
   for (const promo of promos) {
     for (const itemId of promo.itemIds) {
       const qty = qtyByItem.get(itemId);
-      const base = baseByItem.get(itemId);
-      if (!qty || base === undefined || claimed.has(itemId)) continue;
+      const unit = unitByItem.get(itemId);
+      if (!qty || unit === undefined || claimed.has(itemId)) continue;
       claimed.add(itemId);
 
-      const saved = round2(qty * base - promoCost(promo, qty, base));
+      const saved = round2(qty * unit - promoCost(promo, qty, unit));
       promoDiscount += saved;
       if (saved > 0) promoSavings[itemId] = { saved, promoName: promo.name };
 
-      const step = nextPromoStep(promo, qty, base);
+      const step = nextPromoStep(promo, qty, unit);
       if (step) {
         hints.push({ itemId, promoName: promo.name, ...step });
       }

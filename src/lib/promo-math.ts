@@ -87,8 +87,9 @@ export function nextPromoStep(
  * first one is there. Pricing the cart before and after and taking the
  * difference is the only figure that matches what checkout will charge.
  *
- * `base` is the unit price after the item's own % discount; `extrasPerUnit` is
- * added afterwards because extras are never discounted.
+ * `base` is the unit price after the item's own % discount and `extrasPerUnit`
+ * is folded into it, because a quantity deal applies to the whole unit: the
+ * free half of a 2x1 is free as ordered, extras included.
  */
 export function addedLineCost(
   promo: QuantityPromo | null | undefined,
@@ -97,7 +98,8 @@ export function addedLineCost(
   base: number,
   extrasPerUnit = 0,
 ): number {
-  const before = promo ? promoCost(promo, otherQty, base) : otherQty * base;
-  const after = promo ? promoCost(promo, otherQty + qty, base) : (otherQty + qty) * base;
-  return round2(after - before + extrasPerUnit * qty);
+  const unit = base + extrasPerUnit;
+  const before = promo ? promoCost(promo, otherQty, unit) : otherQty * unit;
+  const after = promo ? promoCost(promo, otherQty + qty, unit) : (otherQty + qty) * unit;
+  return round2(after - before);
 }

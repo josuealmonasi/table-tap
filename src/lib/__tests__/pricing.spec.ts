@@ -3,7 +3,15 @@ import { itemSalePrice, priceCart, type CartPromo, type PriceInput } from "@/lib
 import type { OrderLineItem } from "@/lib/types";
 
 function line(over: Partial<OrderLineItem> = {}): OrderLineItem {
-  return { itemId: "taco", name: "Taco", emoji: "🌮", price: 5, qty: 1, mods: {}, ...over };
+  return {
+    itemId: "taco",
+    name: "Taco",
+    emoji: "🌮",
+    price: 5,
+    qty: 1,
+    mods: {},
+    ...over,
+  };
 }
 
 function price(over: Partial<PriceInput> = {}) {
@@ -91,7 +99,12 @@ describe("priceCart — item discounts", () => {
 
 describe("priceCart — quantity promos", () => {
   const twoForOne: CartPromo = {
-    id: "p", name: "2x1 Tacos", kind: "bogo", buyQty: 2, payQty: 1, itemIds: ["taco"],
+    id: "p",
+    name: "2x1 Tacos",
+    kind: "bogo",
+    buyQty: 2,
+    payQty: 1,
+    itemIds: ["taco"],
   };
 
   it("applies 2x1 across the cart", () => {
@@ -124,7 +137,7 @@ describe("priceCart — quantity promos", () => {
   });
 
   it("only lets one deal claim a product", () => {
-    const other: CartPromo = { ...twoForOne, id: "p2", name: "3x1" , buyQty: 3 };
+    const other: CartPromo = { ...twoForOne, id: "p2", name: "3x1", buyQty: 3 };
     const r = price({ items: [line({ qty: 2 })], promos: [twoForOne, other] });
     expect(r.promoDiscount).toBe(5); // not double-counted
   });
@@ -159,7 +172,9 @@ describe("priceCart — coupons", () => {
   it("stacks on top of promos and item discounts", () => {
     const r = price({
       items: [line({ qty: 2, discountPct: 50 })],
-      promos: [{ id: "p", name: "2x1", kind: "bogo", buyQty: 2, payQty: 1, itemIds: ["taco"] }],
+      promos: [
+        { id: "p", name: "2x1", kind: "bogo", buyQty: 2, payQty: 1, itemIds: ["taco"] },
+      ],
       coupon: { code: "OFF-1", kind: "fixed", value: 1 },
     });
     // 10 gross → 5 item discount → 2.50 promo → 2.50 left → 1 coupon
@@ -277,7 +292,16 @@ describe("priceCart — combos", () => {
   it("is never re-discounted by an item % or a quantity deal", () => {
     const r = price({
       items: [{ ...combo, discountPct: 50 }],
-      promos: [{ id: "p", name: "2x1", kind: "bogo", buyQty: 2, payQty: 1, itemIds: ["combo-1"] }],
+      promos: [
+        {
+          id: "p",
+          name: "2x1",
+          kind: "bogo",
+          buyQty: 2,
+          payQty: 1,
+          itemIds: ["combo-1"],
+        },
+      ],
     });
     expect(r.itemDiscount).toBe(0);
     expect(r.promoDiscount).toBe(0);
@@ -311,7 +335,14 @@ describe("priceCart — money safety", () => {
       serviceEnabled: true,
       tipPct: 15,
     });
-    for (const v of [r.grossSubtotal, r.discount, r.subtotal, r.serviceFee, r.tip, r.total]) {
+    for (const v of [
+      r.grossSubtotal,
+      r.discount,
+      r.subtotal,
+      r.serviceFee,
+      r.tip,
+      r.total,
+    ]) {
       expect(v).toBe(Math.round(v * 100) / 100);
     }
   });
@@ -319,7 +350,9 @@ describe("priceCart — money safety", () => {
   it("discount always equals the sum of its parts", () => {
     const r = price({
       items: [line({ qty: 3, discountPct: 20 })],
-      promos: [{ id: "p", name: "2x1", kind: "bogo", buyQty: 2, payQty: 1, itemIds: ["taco"] }],
+      promos: [
+        { id: "p", name: "2x1", kind: "bogo", buyQty: 2, payQty: 1, itemIds: ["taco"] },
+      ],
       coupon: { code: "OFF-1", kind: "fixed", value: 1 },
     });
     expect(r.discount).toBeCloseTo(
@@ -327,5 +360,47 @@ describe("priceCart — money safety", () => {
       10,
     );
     expect(r.subtotal).toBeCloseTo(r.grossSubtotal - r.discount, 10);
+  });
+});
+
+describe("priceCart — quantity deals cover extras", () => {
+  const bogo = {
+    id: "p",
+    name: "2x1",
+    kind: "bogo" as const,
+    buyQty: 2,
+    payQty: 1,
+    itemIds: ["taco"],
+  };
+
+  it("treats the extra as part of the unit the deal gives away", () => {
+    // 5.00 dish + 2.00 extra = a 7.00 unit. Two of them under a 2x1 cost 7.00.
+    // The extra used to be charged on both units, landing at 9.00.
+    const r = price({
+      items: [line({ qty: 2, price: 5, extras: [{ id: "x", name: "Extra", emoji: "🧀", price: 2 }] })],
+      promos: [bogo],
+    });
+    expect(r.grossSubtotal).toBe(14);
+    expect(r.promoDiscount).toBe(7);
+    expect(r.subtotal).toBe(7);
+  });
+
+  it("never takes off more than the cheapest unit was worth", () => {
+    // One line carries the extra, one doesn't — the deal frees the plain unit.
+    const r = price({
+      items: [
+        line({
+          itemId: "taco",
+          qty: 1,
+          price: 5,
+          extras: [{ id: "x", name: "E", emoji: "🧀", price: 2 }],
+        }),
+        line({ itemId: "taco", qty: 1, price: 5 }),
+      ],
+      promos: [bogo],
+    });
+    expect(r.grossSubtotal).toBe(12);
+    expect(r.promoDiscount).toBe(5);
+    expect(r.subtotal).toBe(7);
   });
 });
