@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { listTimeZones } from "@/lib/timezones";
+import { ZONE_GROUPS, offsetLabel } from "@/lib/timezones";
 import type { Restaurant } from "@/lib/types";
 import type { Role } from "@/lib/membership";
 import { useSettings } from "@/hooks/useSettings";
@@ -131,10 +131,14 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
                     value={timezone}
                     onChange={e => setTimezone(e.target.value)}
                   >
-                    {listTimeZones().map(z => (
-                      <option key={z} value={z}>
-                        {z.replace(/_/g, " ")}
-                      </option>
+                    {ZONE_GROUPS.map(group => (
+                      <optgroup key={group.labelKey} label={t(group.labelKey)}>
+                        {group.zones.map(z => (
+                          <option key={z.zone} value={z.zone}>
+                            {t(z.labelKey)} ({offsetLabel(z.zone)})
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
                   <span className="tt-muted" style={{ fontSize: 12 }}>
