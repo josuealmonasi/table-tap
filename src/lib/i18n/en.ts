@@ -424,6 +424,7 @@ export const en = {
     soon: "Soon",
   },
   apiErr: {
+    badTimezone: "Pick a valid time zone.",
     schedNoRules: "Add at least one period.",
     schedNoDays: "Pick at least one day.",
     schedBadTime: "Enter a valid start and end time.",
@@ -529,6 +530,11 @@ export const en = {
     optional: "(optional)",
   },
   dash: {
+    settingsSaved: "Settings saved",
+    settingsSaveFailed: "Couldn't save settings.",
+    networkError: "Network error — please try again.",
+    timezone: "Time zone",
+    timezoneHint: "Menu opening hours are read in this zone.",
     // Dashboard home
     menusTitle: "Menus",
     menusHint: "Open a menu to edit it · switch it on to show it to customers",

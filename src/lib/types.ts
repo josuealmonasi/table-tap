@@ -74,6 +74,9 @@ export type Restaurant = {
   tax_pct: number;
   /** Show the net + IVA split to customers, or just the total. */
   tax_show_breakdown: boolean;
+  /** IANA zone the menu schedules are evaluated in. Only the dashboard reads
+   *  it — the customer payload stays as narrow as it was. */
+  timezone?: string;
 };
 
 export type RestaurantTable = {

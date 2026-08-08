@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { isKnownTimeZone } from "@/lib/timezones";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMembership, MANAGES } from "@/lib/membership";
@@ -13,6 +14,7 @@ const OWNER_FIELDS = new Set([
   "logo",
   "tagline",
   "currency",
+  "timezone",
   "service_pct",
   "service_enabled",
   "tax_pct",
@@ -43,6 +45,12 @@ export async function POST(req: NextRequest) {
   }
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ ok: true });
+  }
+
+  // Only a real IANA zone: schedules are evaluated against it, and an
+  // unknown name would make Intl throw on every customer page load.
+  if ("timezone" in update && !isKnownTimeZone(String(update.timezone))) {
+    return await apiError("apiErr.badTimezone");
   }
 
   // Clamp the numeric ranges the DB constraints also enforce.
