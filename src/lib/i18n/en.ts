@@ -197,6 +197,8 @@ export const en = {
     tooMany: "Too many tries — please wait a moment.",
   },
   coupons: {
+    edit: "Edit coupon",
+    updated: "Coupon updated",
     addAction: "Add coupon",
     newTitle: "New coupon",
     title: "Coupons",
