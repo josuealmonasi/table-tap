@@ -12,7 +12,7 @@ import {
   isValidCouponFormat,
   normalizeCoupon,
 } from "@/lib/coupons";
-import { DeleteIcon } from "@/components/ui/icons";
+import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { Modal } from "@/components/ui/Modal";
 import { useRowMemory } from "@/hooks/useRowMemory";
@@ -28,9 +28,11 @@ export default function CouponsPanel({
   const t = useT();
   const toast = useToast();
   const confirm = useConfirm();
-  const { coupons, loading, create, setActive, remove } = useCoupons(restaurantId);
+  const { coupons, loading, create, update, setActive, remove } =
+    useCoupons(restaurantId);
   const rows = useRowMemory("coupons", 3, loading ? undefined : coupons.length);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<Coupon | null>(null);
 
   const [code, setCode] = useState("");
   const [kind, setKind] = useState<"percent" | "fixed">("percent");
@@ -44,10 +46,37 @@ export default function CouponsPanel({
   const normalized = normalizeCoupon(code);
   const codeOk = isValidCouponFormat(normalized);
 
+  /** Fills the form from a code and opens the dialog on it. */
+  function startEdit(c: Coupon) {
+    setEditing(c);
+    setCode(c.code);
+    setKind(c.kind);
+    setValue(String(c.value));
+    setMaxUses(c.max_uses === null ? "" : String(c.max_uses));
+    setMinSubtotal(String(c.min_subtotal ?? 0));
+    // The inputs are datetime-local, which only accepts YYYY-MM-DDTHH:mm —
+    // a date-only value is rejected silently and the field comes up blank,
+    // which would let a save quietly clear the coupon's schedule.
+    setStartsAt(c.starts_at ? c.starts_at.slice(0, 16) : "");
+    setEndsAt(c.ends_at ? c.ends_at.slice(0, 16) : "");
+    setAdding(true);
+  }
+
+  function closeForm() {
+    setAdding(false);
+    setEditing(null);
+    setCode("");
+    setValue("");
+    setMaxUses("");
+    setMinSubtotal("");
+    setStartsAt("");
+    setEndsAt("");
+  }
+
   async function add(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    const err = await create({
+    const input = {
       code: normalized,
       kind,
       value: Number(value) || 0,
@@ -55,17 +84,12 @@ export default function CouponsPanel({
       minSubtotal: Number(minSubtotal) || 0,
       startsAt: startsAt || null,
       endsAt: endsAt || null,
-    });
+    };
+    const err = editing ? await update(editing.id, input) : await create(input);
     setSaving(false);
     if (err) return toast(err, "error");
-    toast(t("coupons.created"));
-    setCode("");
-    setValue("");
-    setMaxUses("");
-    setMinSubtotal("");
-    setStartsAt("");
-    setEndsAt("");
-    setAdding(false);
+    toast(t(editing ? "coupons.updated" : "coupons.created"));
+    closeForm();
   }
 
   async function del(c: Coupon) {
@@ -134,9 +158,13 @@ export default function CouponsPanel({
 
       <Modal
         open={adding}
-        onClose={() => setAdding(false)}
+        onClose={closeForm}
         maxWidth={640}
-        title={t("coupons.newTitle")}
+        title={
+          editing
+            ? t("common.editingNamed", { name: editing.code })
+            : t("coupons.newTitle")
+        }
       >
         <form onSubmit={add} className="tt-coupon-form">
           <div className="tt-prodform-row">
@@ -238,12 +266,16 @@ export default function CouponsPanel({
               className="tt-btn tt-btn-primary tt-btn-sm"
               disabled={!codeOk || !value || saving}
             >
-              {saving ? t("common.saving") : t("coupons.addAction")}
+              {saving
+                ? t("common.saving")
+                : editing
+                  ? t("promos.saveChanges")
+                  : t("coupons.addAction")}
             </button>
             <button
               type="button"
               className="tt-btn tt-btn-ghost tt-btn-sm"
-              onClick={() => setAdding(false)}
+              onClick={closeForm}
             >
               {t("menu.cancel")}
             </button>
@@ -262,7 +294,14 @@ export default function CouponsPanel({
             return (
               <div key={c.id} className="tt-coupon-item">
                 <div style={{ minWidth: 0 }}>
-                  <code className="tt-coupon-code">{c.code}</code>
+                  <button
+                    type="button"
+                    className="tt-prod-name"
+                    onClick={() => startEdit(c)}
+                    title={t("coupons.edit")}
+                  >
+                    <code className="tt-coupon-code">{c.code}</code>
+                  </button>
                   {!c.active && (
                     <span className="tt-coupon-off">{t("coupons.paused")}</span>
                   )}
@@ -280,6 +319,13 @@ export default function CouponsPanel({
                     }}
                   >
                     {c.active ? t("coupons.pause") : t("coupons.resume")}
+                  </button>
+                  <button
+                    className="tt-iconbtn"
+                    title={t("coupons.edit")}
+                    onClick={() => startEdit(c)}
+                  >
+                    <EditIcon size={16} />
                   </button>
                   <button
                     className="tt-iconbtn"

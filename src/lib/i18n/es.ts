@@ -191,6 +191,8 @@ export const es: Messages = {
     tooMany: "Demasiados intentos — espera un momento.",
   },
   coupons: {
+    edit: "Editar cupón",
+    updated: "Cupón actualizado",
     addAction: "Agregar cupón",
     newTitle: "Nuevo cupón",
     title: "Cupones",
