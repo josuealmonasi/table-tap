@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { RestaurantTable } from "@/lib/types";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useT } from "@/lib/i18n/context";
+import { useToast } from "@/components/ui/Toast";
 import QrCard, { type QrTarget } from "./QrCard";
 import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 import { Modal } from "@/components/ui/Modal";
@@ -18,6 +19,7 @@ interface TableRowProps {
 /** One table: its QR plus rename (inline) and delete (confirmed) actions. */
 export default function TableRow({ table, qr, onRename, onDelete }: TableRowProps) {
   const t = useT();
+  const toast = useToast();
   const [renaming, setRenaming] = useState(false);
   const [value, setValue] = useState(table.label);
   const confirm = useConfirm();
@@ -55,7 +57,10 @@ export default function TableRow({ table, qr, onRename, onDelete }: TableRowProp
             onSubmit={async e => {
               e.preventDefault();
               const label = value.trim();
-              if (label && label !== table.label) await onRename(table.id, label);
+              if (label && label !== table.label) {
+                await onRename(table.id, label);
+                toast(t("done.tableRenamed"));
+              }
               setRenaming(false);
             }}
           >

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import type { Menu } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
+import { useToast } from "@/components/ui/Toast";
 import ReorderButtons from "@/components/ui/ReorderButtons";
 import { DeleteIcon, DuplicateIcon, EditIcon } from "@/components/ui/icons";
 
@@ -35,6 +36,7 @@ export default function MenuRow({
   nameTaken,
 }: MenuRowProps) {
   const t = useT();
+  const toast = useToast();
   const [renaming, setRenaming] = useState(false);
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +60,7 @@ export default function MenuRow({
               return;
             }
             await onRename(menu.id, name);
+            toast(t("done.menuRenamed"));
             setRenaming(false);
           }}
         >

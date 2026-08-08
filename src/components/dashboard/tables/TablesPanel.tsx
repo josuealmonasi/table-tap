@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { RestaurantTable } from "@/lib/types";
 import { useTables } from "@/hooks/useTables";
 import { useT } from "@/lib/i18n/context";
+import { useToast } from "@/components/ui/Toast";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import QrCard, { type QrTarget } from "./QrCard";
 import TableRow from "./TableRow";
@@ -31,23 +32,25 @@ export default function TablesPanel({
   tables,
 }: TablesPanelProps) {
   const t = useT();
+  const toast = useToast();
   const { busy, addTable, renameTable, deleteTable } = useTables(restaurantId);
   const [newLabel, setNewLabel] = useState("");
 
-  async function submitAdd(e: React.FormEvent): Promise<void> {
+  async function submitAdd(e: React.FormEvent): Promise<boolean> {
     e.preventDefault();
     const label = newLabel.trim();
-    if (!label) return;
+    if (!label) return false;
     await addTable(label);
     setNewLabel("");
+    toast(t("done.tableAdded"));
+    return true;
   }
 
   const addForm = (close: () => void) => (
     <form
       className="tt-prodform"
       onSubmit={async e => {
-        await submitAdd(e);
-        close();
+        if (await submitAdd(e)) close();
       }}
     >
       <input
