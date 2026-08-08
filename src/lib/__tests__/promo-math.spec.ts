@@ -142,9 +142,10 @@ describe("addedLineCost", () => {
     expect(addedLineCost(null, 0, 2, 6)).toBe(12);
   });
 
-  it("never discounts extras", () => {
-    // Two pies at 2x1 (6) plus 1.50 of extras on each.
-    expect(addedLineCost(bogo, 0, 2, 6, 1.5)).toBe(9);
+  it("gives the free unit away with its extras, not stripped of them", () => {
+    // A 5.00 dish with a 2.00 extra is a 7.00 unit. Two of them under a 2x1
+    // cost 7.00 — not 7.00 plus a second helping of extras.
+    expect(addedLineCost(bogo, 0, 2, 5, 2)).toBe(7);
   });
 
   it("handles tiered pricing across the whole product", () => {
