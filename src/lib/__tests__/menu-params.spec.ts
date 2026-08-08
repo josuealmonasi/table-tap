@@ -7,7 +7,7 @@ const apply = (qs: string, patch: Parameters<typeof applyMenuParams>[1]) =>
 
 describe("readMenuParams", () => {
   it("defaults an empty query to a clean view", () => {
-    expect(read("")).toEqual({ q: "", cat: "all", diet: [], item: null });
+    expect(read("")).toEqual({ q: "", cat: "all", diet: [], item: null, combo: null });
   });
 
   it("reads every key", () => {
@@ -16,6 +16,7 @@ describe("readMenuParams", () => {
       cat: "c1",
       diet: ["vegan", "gluten_free"],
       item: "i9",
+      combo: null,
     });
   });
 
@@ -34,7 +35,7 @@ describe("readMenuParams", () => {
 
 describe("applyMenuParams", () => {
   it("drops keys at their default instead of writing empties", () => {
-    expect(apply("", { q: "", cat: "all", diet: [], item: null })).toBe("");
+    expect(apply("", { q: "", cat: "all", diet: [], item: null, combo: null })).toBe("");
   });
 
   it("writes only what changed and leaves the rest alone", () => {
@@ -61,6 +62,7 @@ describe("applyMenuParams", () => {
       cat: "c2",
       diet: ["vegan", "halal"],
       item: "i1",
+      combo: null,
     });
   });
 });
@@ -72,5 +74,24 @@ describe("toQueryString", () => {
 
   it("prefixes with ? when there is something to carry", () => {
     expect(toQueryString(new URLSearchParams("q=a"))).toBe("?q=a");
+  });
+});
+
+describe("combo param", () => {
+  it("round-trips an open combo", () => {
+    const qs = apply("", { combo: "cb1" });
+    expect(qs).toContain("combo=cb1");
+    expect(read(qs).combo).toBe("cb1");
+  });
+
+  it("drops the key when the combo closes", () => {
+    expect(apply("?combo=cb1", { combo: null })).toBe("");
+  });
+
+  it("keeps item and combo independent", () => {
+    const qs = apply("", { item: "i1", combo: "cb1" });
+    const back = read(qs);
+    expect(back.item).toBe("i1");
+    expect(back.combo).toBe("cb1");
   });
 });

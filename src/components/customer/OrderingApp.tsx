@@ -62,9 +62,9 @@ export default function OrderingApp({
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
   const cart = useCart(restaurant.id);
   const t = useT();
-  const sharedItemId = readMenuParams(
-    new URLSearchParams(useSearchParams().toString()),
-  ).item;
+  const sharedParams = readMenuParams(new URLSearchParams(useSearchParams().toString()));
+  const sharedItemId = sharedParams.item;
+  const sharedComboId = sharedParams.combo;
 
   // ?item=<id> opens that dish on load — the "look at this one" link. Runs once:
   // it seeds the screen from the URL and then leaves it alone, so closing the
@@ -81,6 +81,22 @@ export default function OrderingApp({
     }
     setSelected(shared);
     setScreen("item");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Same for ?combo=<id>. Reloading with a combo open used to drop you back on
+  // the menu and lose whatever had been configured in it; now the dialog comes
+  // back. A combo that's been paused or had a component go unavailable isn't
+  // in `combos` at all, so the menu is the right landing.
+  useEffect(() => {
+    if (!sharedComboId) return;
+    const shared = combos.find(c => c.id === sharedComboId);
+    if (!shared) {
+      syncMenuUrl({ combo: null });
+      return;
+    }
+    setSelectedCombo(shared);
+    setScreen("combo");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -169,11 +185,13 @@ export default function OrderingApp({
   function openCombo(combo: Combo) {
     setSelectedCombo(combo);
     setScreen("combo");
+    syncMenuUrl({ combo: combo.id });
   }
 
   function closeCombo() {
     setSelectedCombo(null);
     setScreen("menu");
+    syncMenuUrl({ combo: null });
   }
 
   function addConfiguredCombo(line: OrderLineItem) {
