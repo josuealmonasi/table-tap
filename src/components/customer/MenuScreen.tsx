@@ -152,14 +152,7 @@ export default function MenuScreen({
             <div className="tt-serif tt-brand-name">{restaurant.name}</div>
             <div className="tt-sage tt-brand-tagline">{restaurant.tagline}</div>
           </div>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-end",
-              gap: 8,
-            }}
-          >
+          <div className="tt-head-controls">
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {/* Search costs nothing until it's wanted — most diners browse. */}
               <button
