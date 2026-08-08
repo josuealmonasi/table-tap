@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
 import type { Category, MenuItem } from "@/lib/types";
@@ -34,6 +35,7 @@ export default function ProductPicker({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const boxRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const categoryName = useMemo(() => {
     const map = new Map(categories.map(c => [c.id, c.name]));
@@ -56,14 +58,45 @@ export default function ProductPicker({
   // Reset the highlight whenever the result set changes under it.
   useEffect(() => setActive(0), [query]);
 
+  /**
+   * The results float in a fixed layer rather than sitting in the form.
+   *
+   * In the page they were absolutely positioned, which a dialog clips: the
+   * dialog is the scroll container, so options below its edge were
+   * unreachable. Putting them in flow fixed that but made the dialog grow and
+   * shrink as the list opened and closed. A fixed layer outside the dialog is
+   * neither clipped nor part of its layout, so the dialog holds still.
+   */
+  const [rect, setRect] = useState<{ top: number; left: number; width: number } | null>(
+    null,
+  );
+
+  const place = useCallback(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setRect({ top: r.bottom + 6, left: r.left, width: r.width });
+  }, []);
+
   useEffect(() => {
     if (!open) return;
+    place();
     const onClick = (e: MouseEvent) => {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      const inField = boxRef.current?.contains(target);
+      const inMenu = menuRef.current?.contains(target);
+      if (!inField && !inMenu) setOpen(false);
     };
+    // `true` so it fires for the dialog's own scrolling, not just the window's.
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
     document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [open]);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+      document.removeEventListener("mousedown", onClick);
+    };
+  }, [open, place]);
 
   function choose(p: MenuItem) {
     onPick(p);
@@ -117,37 +150,46 @@ export default function ProductPicker({
         onKeyDown={onKeyDown}
       />
 
-      {open && (
-        <div className="tt-picker-menu" id="tt-picker-list" role="listbox">
-          {matches.length === 0 ? (
-            <p className="tt-muted tt-picker-empty">
-              {query.trim() ? t("promos.noProductMatch") : t("promos.allPicked")}
-            </p>
-          ) : (
-            matches.map((p, i) => (
-              <button
-                type="button"
-                key={p.id}
-                role="option"
-                aria-selected={i === active}
-                className={`tt-picker-option ${i === active ? "tt-picker-active" : ""}`}
-                onMouseEnter={() => setActive(i)}
-                onClick={() => choose(p)}
-              >
-                <span className="tt-picker-name">
-                  {p.emoji} {p.name}
-                </span>
-                <span className="tt-picker-meta">
-                  {categoryName(p.category_id) && (
-                    <span className="tt-picker-cat">{categoryName(p.category_id)}</span>
-                  )}
-                  {formatMoney(Number(p.price), currency)}
-                </span>
-              </button>
-            ))
-          )}
-        </div>
-      )}
+      {open &&
+        rect &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="tt-picker-menu"
+            id="tt-picker-list"
+            role="listbox"
+            style={{ top: rect.top, left: rect.left, width: rect.width }}
+          >
+            {matches.length === 0 ? (
+              <p className="tt-muted tt-picker-empty">
+                {query.trim() ? t("promos.noProductMatch") : t("promos.allPicked")}
+              </p>
+            ) : (
+              matches.map((p, i) => (
+                <button
+                  type="button"
+                  key={p.id}
+                  role="option"
+                  aria-selected={i === active}
+                  className={`tt-picker-option ${i === active ? "tt-picker-active" : ""}`}
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => choose(p)}
+                >
+                  <span className="tt-picker-name">
+                    {p.emoji} {p.name}
+                  </span>
+                  <span className="tt-picker-meta">
+                    {categoryName(p.category_id) && (
+                      <span className="tt-picker-cat">{categoryName(p.category_id)}</span>
+                    )}
+                    {formatMoney(Number(p.price), currency)}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
