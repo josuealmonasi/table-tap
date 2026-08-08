@@ -48,6 +48,9 @@ export default function ComboDetailScreen({
   const missing = comboMissingRequired(combo.components, choices, itemsById);
   const extrasCost = comboExtras(choices, extrasById).reduce((s, e) => s + e.price, 0);
   const total = combo.price + extrasCost;
+  // Extras cost the same either way, so the comparison is bundle vs components
+  // with the extras carried on both sides.
+  const fullPrice = Math.round((combo.regularPrice + extrasCost) * 100) / 100;
 
   function choiceFor(itemId: string): ComponentChoice {
     return choices.find(c => c.itemId === itemId) ?? { itemId, mods: {}, extraIds: [] };
@@ -199,7 +202,13 @@ export default function ComboDetailScreen({
             disabled={missing.length > 0}
             onClick={handleAdd}
           >
-            {t("item.addToCart")} — {formatMoney(total, currency)}
+            <span>{t("item.addToCart")}</span>
+            <span className="tt-btn-price">
+              {total < fullPrice && (
+                <s className="tt-was">{formatMoney(fullPrice, currency)}</s>
+              )}
+              {formatMoney(total, currency)}
+            </span>
           </button>
         </div>
       </div>

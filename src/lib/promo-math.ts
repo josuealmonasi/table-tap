@@ -77,3 +77,27 @@ export function nextPromoStep(
   }
   return null;
 }
+
+/**
+ * What adding `qty` more of a product actually costs, given `otherQty` of it
+ * already in the cart.
+ *
+ * A quantity deal applies across every line of the product, so a line's cost
+ * is not `qty * unit` — the second unit of a 2x1 is free only because the
+ * first one is there. Pricing the cart before and after and taking the
+ * difference is the only figure that matches what checkout will charge.
+ *
+ * `base` is the unit price after the item's own % discount; `extrasPerUnit` is
+ * added afterwards because extras are never discounted.
+ */
+export function addedLineCost(
+  promo: QuantityPromo | null | undefined,
+  otherQty: number,
+  qty: number,
+  base: number,
+  extrasPerUnit = 0,
+): number {
+  const before = promo ? promoCost(promo, otherQty, base) : otherQty * base;
+  const after = promo ? promoCost(promo, otherQty + qty, base) : (otherQty + qty) * base;
+  return round2(after - before + extrasPerUnit * qty);
+}
