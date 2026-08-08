@@ -6,7 +6,7 @@ import type { MenuItem, Modifier, OrderLineItem } from "@/lib/types";
 import { dietaryTags } from "@/lib/dietary";
 import { itemSalePrice } from "@/lib/pricing";
 import { missingRequired } from "@/lib/modifiers";
-import { nextPromoStep } from "@/lib/promo-math";
+import { addedLineCost, nextPromoStep } from "@/lib/promo-math";
 import type { CartPromo } from "@/lib/pricing";
 import { useT } from "@/lib/i18n/context";
 import ModifierGroup from "./ModifierGroup";
@@ -66,6 +66,7 @@ export default function ItemDetailScreen({
     setExtraIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
   }
 
+  const round2 = (n: number): number => Math.round(n * 100) / 100;
   const chosenExtras = extras.filter(e => extraIds.includes(e.id));
   const extrasTotal = chosenExtras.reduce((sum, e) => sum + e.price, 0);
   // Extras are never discounted, so only the base price gets the % off.
@@ -77,7 +78,16 @@ export default function ItemDetailScreen({
   // used to look exactly like any other on this screen — the offer only
   // surfaced once it had already applied in the cart, which is too late to
   // influence the decision it exists to influence.
-  const step = promo ? nextPromoStep(promo, inCartQty + qty, unitPrice) : null;
+  // Quantity deals apply across every line of this product, so what the diner
+  // already has in the cart decides what this one costs. When editing a line,
+  // its own quantity is excluded — it is being replaced, not added to.
+  const otherQty = Math.max(0, inCartQty - (initialLine?.qty ?? 0));
+  const lineTotal = addedLineCost(promo, otherQty, qty, salePrice, extrasTotal);
+  // What the same items would cost without the deal, so the saving is visible
+  // before committing rather than only once it lands in the cart.
+  const fullPrice = round2(unitPrice * qty);
+
+  const step = promo ? nextPromoStep(promo, otherQty + qty, unitPrice) : null;
 
   function handleAdd() {
     if (missing.length > 0) {
@@ -220,8 +230,13 @@ export default function ItemDetailScreen({
             disabled={missing.length > 0}
             onClick={handleAdd}
           >
-            {t(initialLine ? "item.updateItem" : "item.addToCart")} —{" "}
-            {formatMoney(unitPrice * qty, currency)}
+            <span>{t(initialLine ? "item.updateItem" : "item.addToCart")}</span>
+            <span className="tt-btn-price">
+              {lineTotal < fullPrice && (
+                <s className="tt-was">{formatMoney(fullPrice, currency)}</s>
+              )}
+              {formatMoney(lineTotal, currency)}
+            </span>
           </button>
         </div>
       </div>

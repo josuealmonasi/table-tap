@@ -753,6 +753,25 @@ h2.tt-serif {
   margin-right: 6px;
   text-decoration: line-through;
 }
+/* Same role on the accent-filled button, where the muted grey would vanish.
+   Scoped rather than changing .tt-was, which five other places rely on. */
+.tt-btn-primary .tt-was {
+  color: rgba(255, 255, 255, 0.72);
+  margin-right: 5px;
+}
+/* The add button carries a label and now two prices. Laid out as a row with
+   the prices grouped, the label keeps one line instead of breaking mid-phrase
+   to make room for them. */
+.tt-detail-actions .tt-btn-primary {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.tt-btn-price {
+  font-variant-numeric: tabular-nums;
+}
 
 /* ── menu header ── */
 /* The identity block scrolls away with the page… */
