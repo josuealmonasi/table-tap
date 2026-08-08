@@ -20,6 +20,7 @@ export function Modal({
   children,
   maxWidth = 640,
   label,
+  title,
   variant = "center",
 }: {
   open: boolean;
@@ -28,6 +29,9 @@ export function Modal({
   maxWidth?: number;
   /** Accessible name announced when the dialog opens. */
   label?: string;
+  /** Visible heading, e.g. "Editing Beef Tacos". Also names the dialog for
+   *  screen readers when no explicit `label` is given. */
+  title?: string;
   /**
    * "sheet" rises from the bottom edge instead of sitting in the middle. On a
    * phone that puts the controls under the thumb rather than at the top of the
@@ -89,10 +93,11 @@ export function Modal({
         style={{ maxWidth }}
         role="dialog"
         aria-modal="true"
-        aria-label={label}
+        aria-label={label ?? title}
         tabIndex={-1}
         onClick={e => e.stopPropagation()}
       >
+        {title && <h3 className="tt-modal-title">{title}</h3>}
         {children}
       </div>
     </div>

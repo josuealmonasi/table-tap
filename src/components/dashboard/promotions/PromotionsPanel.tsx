@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
@@ -10,7 +10,8 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 import type { PromotionWithItems } from "@/lib/promotions";
 import ComboForm from "./ComboForm";
 import QuantityForm from "./QuantityForm";
-import { DeleteIcon, EditIcon } from "@/components/ui/icons";
+import { DeleteIcon, EditIcon, WarningIcon } from "@/components/ui/icons";
+import { comboReachProblem } from "@/lib/combo-reach";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { Modal } from "@/components/ui/Modal";
 import { useRowMemory } from "@/hooks/useRowMemory";
@@ -27,9 +28,24 @@ export default function PromotionsPanel({
   const toast = useToast();
   const confirm = useConfirm();
   const [editing, setEditing] = useState<PromotionWithItems | null>(null);
-  const { promotions, products, categories, loading, create, update, setActive, remove } =
-    usePromotions(restaurantId);
+  const {
+    promotions,
+    products,
+    categories,
+    activeMenuIds,
+    loading,
+    create,
+    update,
+    setActive,
+    remove,
+  } = usePromotions(restaurantId);
   const rows = useRowMemory("promotions", 3, loading ? undefined : promotions.length);
+  const itemsById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
+  const categoriesById = useMemo(
+    () => new Map(categories.map(c => [c.id, c])),
+    [categories],
+  );
+
   const editingCombo = editing?.kind === "combo" ? editing : null;
   const editingDeal = editing && editing.kind !== "combo" ? editing : null;
 
@@ -123,6 +139,30 @@ export default function PromotionsPanel({
                       <div className="tt-muted" style={{ fontSize: 13 }}>
                         {describe(p)}
                       </div>
+                      {(() => {
+                        const problem = comboReachProblem(
+                          p,
+                          itemsById,
+                          categoriesById,
+                          activeMenuIds,
+                        );
+                        if (!problem) return null;
+                        return (
+                          <div className="tt-promo-warn">
+                            <WarningIcon size={14} weight="bold" />
+                            <span>
+                              {problem.itemName
+                                ? t(
+                                    problem.reason === "unavailable"
+                                      ? "promos.hiddenUnavailable"
+                                      : "promos.hiddenOffMenu",
+                                    { item: problem.itemName },
+                                  )
+                                : t("promos.hiddenMissing")}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                       <button
@@ -197,7 +237,7 @@ export default function PromotionsPanel({
         open={!!editing}
         onClose={() => setEditing(null)}
         maxWidth={720}
-        label={editing ? t("promos.edit") : ""}
+        title={editing ? t("common.editingNamed", { name: editing.name }) : ""}
       >
         {editingCombo && (
           <ComboForm

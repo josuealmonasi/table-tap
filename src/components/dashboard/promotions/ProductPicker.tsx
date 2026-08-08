@@ -69,12 +69,17 @@ export default function ProductPicker({
     onPick(p);
     setQuery("");
     setActive(0);
-    // Stay open so several products can be added in a row.
-    setOpen(true);
+    // Close on pick: the list covered the save button, so leaving it open meant
+    // scrolling past results to commit. Typing again reopens it, which is the
+    // cheaper gesture of the two.
+    setOpen(false);
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
+      // Only the list closes. Without stopping here the dialog's own Escape
+      // handler also fired, so dismissing the results threw away the edit.
+      if (open) e.stopPropagation();
       setOpen(false);
       return;
     }

@@ -3401,3 +3401,37 @@ h2.tt-serif {
 .tt-prod-name:hover {
   border-bottom-color: var(--tt-line);
 }
+
+/* A combo the diner can't actually see. Amber rather than the danger crimson:
+   nothing is broken or lost, the owner just needs to know before they wonder
+   why nobody is ordering it. */
+.tt-promo-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: #8a6100;
+}
+.tt-promo-warn svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.tt-modal-title {
+  font-family: var(--tt-serif, inherit);
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 14px;
+}
+
+/* Inside a dialog the results can't float: .tt-modal is the scroll container,
+   so an absolutely positioned list is clipped at the dialog's edge and the
+   options below the fold become unreachable. In flow it pushes the form down
+   and the dialog scrolls to it instead. */
+.tt-modal .tt-picker-menu {
+  position: static;
+  margin-top: 6px;
+  max-height: 240px;
+}
