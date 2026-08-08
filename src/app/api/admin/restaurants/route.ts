@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -9,10 +10,10 @@ export const runtime = "nodejs";
 // The founding owner's LOGIN survives; delete it separately if wanted.
 export async function DELETE(req: NextRequest) {
   const admin = await getPlatformAdmin();
-  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!admin) return await apiError("apiErr.forbidden", 403);
 
   const { id } = await req.json();
-  if (!id) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  if (!id) return await apiError("apiErr.invalidRequest", 400);
 
   const db = createAdminClient();
 
@@ -27,11 +28,7 @@ export async function DELETE(req: NextRequest) {
   }
 
   const { error } = await db.from("restaurants").delete().eq("id", id);
-  if (error)
-    return NextResponse.json(
-      { error: "Could not delete the restaurant." },
-      { status: 500 },
-    );
+  if (error) return await apiError("apiErr.restaurantDelete", 500);
 
   return NextResponse.json({ ok: true });
 }

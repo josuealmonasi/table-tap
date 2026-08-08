@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { platformFeeCents } from "@/lib/money";
@@ -27,10 +28,7 @@ export async function POST(req: NextRequest) {
   try {
     // Throttle abusive callers before we create any orders or Stripe sessions.
     if (await isRateLimited(`checkout:${clientIp(req)}`, 10, 60)) {
-      return NextResponse.json(
-        { error: "Too many attempts — please wait a moment and try again." },
-        { status: 429 },
-      );
+      return await apiError("apiErr.tooManyAttempts", 429);
     }
 
     const body = await req.json();
@@ -64,7 +62,7 @@ export async function POST(req: NextRequest) {
         : null;
 
     if (!restaurantId || !items?.length) {
-      return NextResponse.json({ error: "Missing order data" }, { status: 400 });
+      return await apiError("apiErr.orderData", 400);
     }
 
     const supabase = createAdminClient();
@@ -79,17 +77,12 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (rErr || !restaurant) {
-      return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
+      return await apiError("apiErr.restaurantNotFound", 404);
     }
 
     // Kill switch: the owner paused orders (maybe after this page loaded).
     if (!restaurant.accepting_orders) {
-      return NextResponse.json(
-        {
-          error: "The restaurant isn't taking orders right now. Please try again later.",
-        },
-        { status: 409 },
-      );
+      return await apiError("apiErr.notAccepting", 409);
     }
 
     // No payouts without a connected Stripe account: refuse to charge a card
@@ -144,7 +137,7 @@ export async function POST(req: NextRequest) {
       .eq("restaurant_id", restaurantId);
 
     if (iErr || !dbItems) {
-      return NextResponse.json({ error: "Could not verify items" }, { status: 400 });
+      return await apiError("apiErr.verifyItems", 400);
     }
 
     const priceMap = new Map(dbItems.map(d => [d.id, d]));
@@ -395,7 +388,7 @@ export async function POST(req: NextRequest) {
 
     if (oErr || !order) {
       await undoClaim();
-      return NextResponse.json({ error: "Could not create order" }, { status: 500 });
+      return await apiError("apiErr.orderCreate", 500);
     }
 
     const origin = req.headers.get("origin") ?? new URL(req.url).origin;
@@ -536,6 +529,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ url: session.url, orderId: order.id });
   } catch (err) {
     console.error("checkout error", err);
-    return NextResponse.json({ error: "Checkout failed" }, { status: 500 });
+    return await apiError("apiErr.checkoutFailed", 500);
   }
 }

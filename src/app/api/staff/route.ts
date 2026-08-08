@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -79,14 +80,14 @@ export async function POST(req: NextRequest) {
   const { email, role } = await req.json();
 
   if (typeof email !== "string" || !/^\S+@\S+\.\S+$/.test(email)) {
-    return NextResponse.json({ error: "Enter a valid email." }, { status: 400 });
+    return await apiError("apiErr.email", 400);
   }
   if (!ROLES.includes(role)) {
-    return NextResponse.json({ error: "Pick a role." }, { status: 400 });
+    return await apiError("apiErr.pickRole", 400);
   }
 
   const actor = await actingOwner();
-  if (!actor) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!actor) return await apiError("apiErr.forbidden", 403);
 
   if (role === "owner" && !(await ownerSlotFree(actor.restaurantId))) {
     return NextResponse.json(
@@ -124,10 +125,7 @@ export async function POST(req: NextRequest) {
   });
   if (staffErr) {
     await admin.auth.admin.deleteUser(invited.user.id); // roll back the invite
-    return NextResponse.json(
-      { error: "Could not add the team member." },
-      { status: 500 },
-    );
+    return await apiError("apiErr.staffAdd", 500);
   }
 
   await log(actor.restaurantId, actor.email, "created", role, email);
@@ -138,11 +136,11 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const { id, role } = await req.json();
   if (!id || !ROLES.includes(role)) {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    return await apiError("apiErr.invalidRequest", 400);
   }
 
   const actor = await actingOwner();
-  if (!actor) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!actor) return await apiError("apiErr.forbidden", 403);
 
   const admin = createAdminClient();
   const { data: member } = await admin
@@ -151,7 +149,7 @@ export async function PATCH(req: NextRequest) {
     .eq("id", id)
     .single();
   if (!member || member.restaurant_id !== actor.restaurantId) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return await apiError("apiErr.notFound", 404);
   }
   if (member.role === role) return NextResponse.json({ ok: true });
 
@@ -163,8 +161,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const { error } = await admin.from("staff").update({ role }).eq("id", id);
-  if (error)
-    return NextResponse.json({ error: "Could not update the role." }, { status: 500 });
+  if (error) return await apiError("apiErr.staffRole", 500);
 
   await log(actor.restaurantId, actor.email, "updated", role, member.email);
   return NextResponse.json({ ok: true });
@@ -174,10 +171,10 @@ export async function PATCH(req: NextRequest) {
 // cascades away with the auth user).
 export async function DELETE(req: NextRequest) {
   const { id } = await req.json();
-  if (!id) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  if (!id) return await apiError("apiErr.invalidRequest", 400);
 
   const actor = await actingOwner();
-  if (!actor) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!actor) return await apiError("apiErr.forbidden", 403);
 
   const admin = createAdminClient();
   const { data: member } = await admin
@@ -186,12 +183,11 @@ export async function DELETE(req: NextRequest) {
     .eq("id", id)
     .single();
   if (!member || member.restaurant_id !== actor.restaurantId) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return await apiError("apiErr.notFound", 404);
   }
 
   const { error } = await admin.auth.admin.deleteUser(member.user_id);
-  if (error)
-    return NextResponse.json({ error: "Could not remove the login." }, { status: 500 });
+  if (error) return await apiError("apiErr.loginRemove", 500);
 
   await log(actor.restaurantId, actor.email, "deleted", member.role, member.email);
   return NextResponse.json({ ok: true });
