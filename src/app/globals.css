@@ -2018,11 +2018,21 @@ h2.tt-serif {
   padding: 18px;
   border: 1px solid var(--tt-line);
 }
+/* The heading and its hint share a line, but the hint is a full sentence and a
+   flex item won't shrink past its min-content width — on a narrow phone that
+   forces the whole card wider than the screen, which pushes every control in
+   it off the right edge. Wrapping lets the hint drop to its own line instead. */
 .tt-section-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   margin-bottom: 12px;
+}
+@media (max-width: 700px) {
+  .tt-section-head > span {
+    flex-basis: 100%;
+  }
 }
 .tt-section-head h3 {
   font-size: 18px;
