@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { rateableDishes } from "@/lib/ratings";
@@ -14,14 +15,14 @@ import type { OrderLineItem } from "@/lib/types";
  */
 export async function POST(req: NextRequest) {
   if (await isRateLimited(`rating-pending:${clientIp(req)}`, 30, 60)) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    return await apiError("apiErr.tooManyRequests", 429);
   }
 
   let body: { restaurantId?: string; orderIds?: string[] };
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Bad request" }, { status: 400 });
+    return await apiError("apiErr.badRequest", 400);
   }
 
   const { restaurantId, orderIds } = body;
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
     .eq("paid", true);
 
   if (error) {
-    return NextResponse.json({ error: "Could not load orders" }, { status: 503 });
+    return await apiError("apiErr.ordersLoad", 503);
   }
   if (!orders?.length) return NextResponse.json({ dishes: [] });
 
@@ -49,7 +50,10 @@ export async function POST(req: NextRequest) {
   const { data: rated } = await supabase
     .from("dish_ratings")
     .select("order_id, item_id")
-    .in("order_id", orders.map(o => o.id));
+    .in(
+      "order_id",
+      orders.map(o => o.id),
+    );
 
   const dishes = rateableDishes(
     orders.map(o => ({ id: o.id, items: (o.items ?? []) as OrderLineItem[] })),

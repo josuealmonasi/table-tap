@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -13,14 +14,14 @@ export async function PATCH(req: NextRequest) {
   // /api/orders/cancel so a paid order is always refunded first.
   const allowed = ["received", "preparing", "ready", "completed"];
   if (!id || !allowed.includes(status)) {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    return await apiError("apiErr.invalidRequest", 400);
   }
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user) return await apiError("apiErr.unauthorized", 401);
 
   // Authorisation is the RLS read itself: only the owner and their staff can
   // SELECT an order (works_at policy), so seeing it means they may advance it.
@@ -30,7 +31,7 @@ export async function PATCH(req: NextRequest) {
     .eq("id", id)
     .single();
   if (!order) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return await apiError("apiErr.forbidden", 403);
   }
 
   // Ownership is verified above. Orders have no client UPDATE policy (writes are

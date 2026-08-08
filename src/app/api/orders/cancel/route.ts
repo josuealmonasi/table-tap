@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { stripe } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -10,13 +11,13 @@ export const runtime = "nodejs";
 // so an order can never be cancelled without its refund.
 export async function POST(req: NextRequest) {
   const { id } = await req.json();
-  if (!id) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  if (!id) return await apiError("apiErr.invalidRequest", 400);
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user) return await apiError("apiErr.unauthorized", 401);
 
   // Refunds move money, so only the owner or a manager may cancel. The RLS
   // read proves membership; the role check separates them from kitchen.
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
     visible as { restaurants?: { owner_id?: string } | { owner_id?: string }[] } | null
   )?.restaurants;
   const ownerId = Array.isArray(rel) ? rel[0]?.owner_id : rel?.owner_id;
-  if (!visible) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!visible) return await apiError("apiErr.forbidden", 403);
   if (ownerId !== user.id) {
     const { data: me } = await supabase
       .from("staff")
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
       .eq("user_id", user.id)
       .single();
     if (me?.role !== "manager" && me?.role !== "owner") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return await apiError("apiErr.forbidden", 403);
     }
   }
 
@@ -48,13 +49,10 @@ export async function POST(req: NextRequest) {
     .select("id, status, paid, stripe_payment_intent, stripe_refund_id")
     .eq("id", id)
     .single();
-  if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
+  if (!order) return await apiError("apiErr.orderNotFound", 404);
 
   if (order.status !== "received" && order.status !== "preparing") {
-    return NextResponse.json(
-      { error: "Only new or preparing orders can be cancelled." },
-      { status: 409 },
-    );
+    return await apiError("apiErr.cancelStatus", 409);
   }
 
   // Paid orders must be refunded before they can be cancelled.
@@ -63,10 +61,7 @@ export async function POST(req: NextRequest) {
     if (!order.stripe_payment_intent) {
       // Paid but the webhook hasn't recorded the payment yet — don't cancel
       // silently without a refund.
-      return NextResponse.json(
-        { error: "Payment is still settling — try again in a moment." },
-        { status: 409 },
-      );
+      return await apiError("apiErr.settling", 409);
     }
     try {
       // The idempotency key makes a double-submit return the same refund
@@ -78,10 +73,7 @@ export async function POST(req: NextRequest) {
       refundId = refund.id;
     } catch (err) {
       console.error("refund error", err);
-      return NextResponse.json(
-        { error: "Refund failed — the order was NOT cancelled. Try again." },
-        { status: 500 },
-      );
+      return await apiError("apiErr.refundFailed", 500);
     }
   }
 

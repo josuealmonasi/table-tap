@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMembership, MANAGES } from "@/lib/membership";
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const membership = await getMembership(supabase);
   if (!membership || !MANAGES(membership.role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return await apiError("apiErr.forbidden", 403);
   }
 
   const body = (await req.json()) as Record<string, unknown>;
@@ -36,10 +37,7 @@ export async function POST(req: NextRequest) {
   const update: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(body)) {
     if (!allowed.has(key)) {
-      return NextResponse.json(
-        { error: "You can't change that setting." },
-        { status: 403 },
-      );
+      return await apiError("apiErr.settingNotAllowed", 403);
     }
     update[key] = value;
   }

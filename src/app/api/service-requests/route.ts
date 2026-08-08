@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 
@@ -10,16 +11,13 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   // A table needs only a handful of calls a minute; block spam past that.
   if (await isRateLimited(`service:${clientIp(req)}`, 8, 60)) {
-    return NextResponse.json(
-      { error: "Too many requests — please wait a moment." },
-      { status: 429 },
-    );
+    return await apiError("apiErr.tooManyWait", 429);
   }
 
   const { restaurantId, tableId, kind } = await req.json();
 
   if (!restaurantId || !tableId || (kind !== "waiter" && kind !== "bill")) {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    return await apiError("apiErr.invalidRequest", 400);
   }
 
   const admin = createAdminClient();
@@ -31,7 +29,7 @@ export async function POST(req: NextRequest) {
     .eq("id", tableId)
     .eq("restaurant_id", restaurantId)
     .single();
-  if (!table) return NextResponse.json({ error: "Table not found" }, { status: 404 });
+  if (!table) return await apiError("apiErr.tableNotFound", 404);
 
   // Don't stack duplicates: one open request per table+kind is enough.
   const { data: existing } = await admin
@@ -49,8 +47,7 @@ export async function POST(req: NextRequest) {
     table_label: table.label,
     kind,
   });
-  if (error)
-    return NextResponse.json({ error: "Could not send request" }, { status: 500 });
+  if (error) return await apiError("apiErr.requestSend", 500);
 
   return NextResponse.json({ ok: true });
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 
@@ -11,19 +12,13 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   // Cap account-creation attempts per IP to blunt signup spam.
   if (await isRateLimited(`signup:${clientIp(req)}`, 5, 60)) {
-    return NextResponse.json(
-      { error: "Too many attempts — please wait a moment and try again." },
-      { status: 429 },
-    );
+    return await apiError("apiErr.tooManyAttempts", 429);
   }
 
   const { restaurantName, email, password } = await req.json();
 
   if (!restaurantName?.trim() || !email || !password || password.length < 6) {
-    return NextResponse.json(
-      { error: "Restaurant name, email and a 6+ character password are required." },
-      { status: 400 },
-    );
+    return await apiError("apiErr.signupFields", 400);
   }
 
   const admin = createAdminClient();

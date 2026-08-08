@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { fetchTrackedOrder } from "@/lib/order-tracking";
 
 export const dynamic = "force-dynamic";
@@ -8,10 +9,10 @@ export const dynamic = "force-dynamic";
 // (server-side); returns only the customer-facing fields.
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const id = req.nextUrl.searchParams.get("id");
-  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+  if (!id) return await apiError("apiErr.missingId", 400);
 
   const order = await fetchTrackedOrder(id);
-  if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!order) return await apiError("apiErr.notFound", 404);
 
   return NextResponse.json(order);
 }

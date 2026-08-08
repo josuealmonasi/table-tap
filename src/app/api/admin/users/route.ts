@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -29,30 +30,24 @@ async function log(
 // (owner/manager/kitchen) of an existing restaurant.
 export async function POST(req: NextRequest) {
   const admin = await getPlatformAdmin();
-  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!admin) return await apiError("apiErr.forbidden", 403);
 
   const { email, password, role, restaurantId, restaurantName } = await req.json();
   if (typeof email !== "string" || !/^\S+@\S+\.\S+$/.test(email)) {
-    return NextResponse.json({ error: "Enter a valid email." }, { status: 400 });
+    return await apiError("apiErr.email", 400);
   }
   if (typeof password !== "string" || password.length < 8) {
-    return NextResponse.json(
-      { error: "Password must be at least 8 characters." },
-      { status: 400 },
-    );
+    return await apiError("apiErr.password8", 400);
   }
   if (!ROLES.includes(role)) {
-    return NextResponse.json({ error: "Pick a role." }, { status: 400 });
+    return await apiError("apiErr.pickRole", 400);
   }
   if (
     role !== "admin" &&
     !restaurantId &&
     !(role === "owner" && restaurantName?.trim())
   ) {
-    return NextResponse.json(
-      { error: "Pick a restaurant (or name a new one for an owner)." },
-      { status: 400 },
-    );
+    return await apiError("apiErr.pickRestaurant", 400);
   }
 
   const db = createAdminClient();
@@ -112,10 +107,7 @@ export async function POST(req: NextRequest) {
     }
   } catch {
     await db.auth.admin.deleteUser(created.user.id); // roll back the login
-    return NextResponse.json(
-      { error: "Could not attach the new login." },
-      { status: 500 },
-    );
+    return await apiError("apiErr.loginAttach", 500);
   }
 
   return NextResponse.json({ ok: true });
@@ -126,21 +118,18 @@ export async function POST(req: NextRequest) {
 // members — the role. Founding-owner and admin roles can't be changed here.
 export async function PATCH(req: NextRequest) {
   const admin = await getPlatformAdmin();
-  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!admin) return await apiError("apiErr.forbidden", 403);
 
   const { userId, fullName, email, password, role } = await req.json();
-  if (!userId) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  if (!userId) return await apiError("apiErr.invalidRequest", 400);
   if (email !== undefined && !/^\S+@\S+\.\S+$/.test(email)) {
-    return NextResponse.json({ error: "Enter a valid email." }, { status: 400 });
+    return await apiError("apiErr.email", 400);
   }
   if (password !== undefined && (typeof password !== "string" || password.length < 8)) {
-    return NextResponse.json(
-      { error: "New password must be at least 8 characters." },
-      { status: 400 },
-    );
+    return await apiError("apiErr.newPassword8", 400);
   }
   if (role !== undefined && !["owner", "manager", "waiter", "kitchen"].includes(role)) {
-    return NextResponse.json({ error: "Pick a valid role." }, { status: 400 });
+    return await apiError("apiErr.pickValidRole", 400);
   }
 
   const db = createAdminClient();
@@ -153,10 +142,7 @@ export async function PATCH(req: NextRequest) {
   // Role changes only make sense for team members (a founding owner's or
   // admin's role isn't a staff row).
   if (role !== undefined && !member) {
-    return NextResponse.json(
-      { error: "Only team members' roles can be changed." },
-      { status: 400 },
-    );
+    return await apiError("apiErr.teamRolesOnly", 400);
   }
   if (role === "owner" && member && member.role !== "owner") {
     const { data: r } = await db
@@ -194,8 +180,7 @@ export async function PATCH(req: NextRequest) {
       full_name: String(fullName).trim(),
       updated_at: new Date().toISOString(),
     });
-    if (error)
-      return NextResponse.json({ error: "Could not save the name." }, { status: 500 });
+    if (error) return await apiError("apiErr.nameSave", 500);
   }
 
   // Keep the denormalised emails + role in sync.
@@ -205,8 +190,7 @@ export async function PATCH(req: NextRequest) {
     if (role !== undefined && role !== member.role) changes.role = role;
     if (Object.keys(changes).length > 0) {
       const { error } = await db.from("staff").update(changes).eq("id", member.id);
-      if (error)
-        return NextResponse.json({ error: "Could not update the team row." }, { status: 500 });
+      if (error) return await apiError("apiErr.staffRow", 500);
     }
     await log(
       member.restaurant_id,
@@ -227,15 +211,12 @@ export async function PATCH(req: NextRequest) {
 // owners must have their restaurant deleted (or transferred) first.
 export async function DELETE(req: NextRequest) {
   const admin = await getPlatformAdmin();
-  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!admin) return await apiError("apiErr.forbidden", 403);
 
   const { userId } = await req.json();
-  if (!userId) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  if (!userId) return await apiError("apiErr.invalidRequest", 400);
   if (userId === admin.userId) {
-    return NextResponse.json(
-      { error: "You can't delete your own admin login." },
-      { status: 409 },
-    );
+    return await apiError("apiErr.ownAdminLogin", 409);
   }
 
   const db = createAdminClient();
@@ -260,8 +241,7 @@ export async function DELETE(req: NextRequest) {
     .single();
 
   const { error } = await db.auth.admin.deleteUser(userId);
-  if (error)
-    return NextResponse.json({ error: "Could not delete the login." }, { status: 500 });
+  if (error) return await apiError("apiErr.loginDelete", 500);
 
   if (member)
     await log(member.restaurant_id, admin.email, "deleted", member.role, member.email);

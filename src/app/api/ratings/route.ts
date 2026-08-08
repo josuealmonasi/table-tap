@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { acceptableRatings, rateableDishes, type SubmittedRating } from "@/lib/ratings";
@@ -19,24 +20,24 @@ import type { OrderLineItem } from "@/lib/types";
 export async function POST(req: NextRequest) {
   // A rating is cheap to send and permanent once stored, so cap the rate.
   if (await isRateLimited(`rating:${clientIp(req)}`, 20, 60)) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    return await apiError("apiErr.tooManyRequests", 429);
   }
 
   let body: { restaurantId?: string; ratings?: SubmittedRating[] };
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Bad request" }, { status: 400 });
+    return await apiError("apiErr.badRequest", 400);
   }
 
   const { restaurantId, ratings } = body;
   if (!restaurantId || !Array.isArray(ratings) || ratings.length === 0) {
-    return NextResponse.json({ error: "Bad request" }, { status: 400 });
+    return await apiError("apiErr.badRequest", 400);
   }
 
   const orderIds = [...new Set(ratings.map(r => r.orderId).filter(Boolean))];
   if (orderIds.length === 0 || orderIds.length > 20) {
-    return NextResponse.json({ error: "Bad request" }, { status: 400 });
+    return await apiError("apiErr.badRequest", 400);
   }
 
   const supabase = createAdminClient();
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
     .eq("paid", true);
 
   if (error) {
-    return NextResponse.json({ error: "Could not verify orders" }, { status: 503 });
+    return await apiError("apiErr.verifyOrders", 503);
   }
 
   const entitled = rateableDishes(
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest) {
   );
 
   if (insertError) {
-    return NextResponse.json({ error: "Could not save ratings" }, { status: 503 });
+    return await apiError("apiErr.ratingsSave", 503);
   }
   return NextResponse.json({ saved: accepted.length });
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/membership";
 import { createOnboardingLink, ensureConnectAccount } from "@/lib/stripe-connect";
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const membership = await getMembership(supabase);
   if (!membership || membership.role !== "owner") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return await apiError("apiErr.forbidden", 403);
   }
 
   const {
@@ -30,9 +31,6 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     // Surface a clean message, not a 500, if Stripe rejects the request.
     console.error("connect onboard error", err);
-    return NextResponse.json(
-      { error: "Couldn't start Stripe onboarding. Please try again shortly." },
-      { status: 502 },
-    );
+    return await apiError("apiErr.stripeOnboard", 502);
   }
 }

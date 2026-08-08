@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError } from "@/lib/api-error";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMembership, MANAGES } from "@/lib/membership";
@@ -25,13 +26,23 @@ async function actingManager(): Promise<Actor | null> {
   return { restaurantId: membership.restaurant.id, email: user?.email ?? "staff" };
 }
 
+/** The normalised fields, or the i18n key naming what's wrong with them. */
+interface CouponFields {
+  kind: "percent" | "fixed";
+  value: number;
+  maxUses: number | null;
+  minSubtotal: number;
+  startsAt: string | null;
+  endsAt: string | null;
+}
+
 /** Validates and normalises the editable fields shared by POST and PATCH. */
-function readFields(body: Record<string, unknown>) {
+function readFields(body: Record<string, unknown>): CouponFields | { key: string } {
   const kind = body.kind === "fixed" ? "fixed" : "percent";
   const value = Number(body.value);
-  if (!Number.isFinite(value) || value <= 0) return { error: "Enter an amount above 0." };
+  if (!Number.isFinite(value) || value <= 0) return { key: "apiErr.couponAmount" };
   if (kind === "percent" && value > 100) {
-    return { error: "A percentage can't be above 100." };
+    return { key: "apiErr.couponPct" };
   }
 
   const rawMax = body.maxUses;
@@ -40,24 +51,24 @@ function readFields(body: Record<string, unknown>) {
       ? null
       : Math.floor(Number(rawMax));
   if (maxUses !== null && (!Number.isFinite(maxUses) || maxUses < 1)) {
-    return { error: "Uses must be 1 or more, or left empty for unlimited." };
+    return { key: "apiErr.couponUses" };
   }
 
   const minSubtotal = Math.max(0, Number(body.minSubtotal) || 0);
 
   // Dates arrive as ISO strings (or empty for "no bound"). Reject anything
   // unparseable rather than silently storing null and losing the schedule.
-  const readDate = (v: unknown): string | null | { error: string } => {
+  const readDate = (v: unknown): string | null | { key: string } => {
     if (v === null || v === undefined || v === "") return null;
     const d = new Date(String(v));
-    return Number.isNaN(d.getTime()) ? { error: "That date isn't valid." } : d.toISOString();
+    return Number.isNaN(d.getTime()) ? { key: "apiErr.couponDate" } : d.toISOString();
   };
   const startsAt = readDate(body.startsAt);
   const endsAt = readDate(body.endsAt);
   if (startsAt && typeof startsAt === "object") return startsAt;
   if (endsAt && typeof endsAt === "object") return endsAt;
   if (startsAt && endsAt && new Date(startsAt as string) >= new Date(endsAt as string)) {
-    return { error: "The end date must be after the start date." };
+    return { key: "apiErr.couponDateOrder" };
   }
 
   return {
@@ -73,16 +84,16 @@ function readFields(body: Record<string, unknown>) {
 // POST /api/coupons — create a code.
 export async function POST(req: NextRequest) {
   const actor = await actingManager();
-  if (!actor) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!actor) return await apiError("apiErr.forbidden", 403);
 
   const body = (await req.json()) as Record<string, unknown>;
   const code = normalizeCoupon(String(body.code ?? ""));
   if (!isValidCouponFormat(code)) {
-    return NextResponse.json({ error: "That code isn't the right shape." }, { status: 400 });
+    return await apiError("apiErr.couponShape", 400);
   }
 
   const fields = readFields(body);
-  if ("error" in fields) return NextResponse.json(fields, { status: 400 });
+  if ("key" in fields) return await apiError(fields.key);
 
   const { error } = await createAdminClient().from("coupons").insert({
     restaurant_id: actor.restaurantId,
@@ -110,11 +121,11 @@ export async function POST(req: NextRequest) {
 // PATCH /api/coupons — edit a code's terms, or switch it on/off.
 export async function PATCH(req: NextRequest) {
   const actor = await actingManager();
-  if (!actor) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!actor) return await apiError("apiErr.forbidden", 403);
 
   const body = (await req.json()) as Record<string, unknown>;
   const id = String(body.id ?? "");
-  if (!id) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  if (!id) return await apiError("apiErr.invalidRequest", 400);
 
   // Pausing is a single-field update and skips the rest of the validation.
   if (typeof body.active === "boolean" && Object.keys(body).length === 2) {
@@ -123,12 +134,12 @@ export async function PATCH(req: NextRequest) {
       .update({ active: body.active })
       .eq("id", id)
       .eq("restaurant_id", actor.restaurantId);
-    if (error) return NextResponse.json({ error: "Could not update." }, { status: 500 });
+    if (error) return await apiError("apiErr.promoUpdate", 500);
     return NextResponse.json({ ok: true });
   }
 
   const fields = readFields(body);
-  if ("error" in fields) return NextResponse.json(fields, { status: 400 });
+  if ("key" in fields) return await apiError(fields.key);
 
   const { error } = await createAdminClient()
     .from("coupons")
@@ -144,7 +155,7 @@ export async function PATCH(req: NextRequest) {
     .eq("id", id)
     // Scoped to the caller's restaurant so an id from elsewhere can't be edited.
     .eq("restaurant_id", actor.restaurantId);
-  if (error) return NextResponse.json({ error: "Could not update." }, { status: 500 });
+  if (error) return await apiError("apiErr.promoUpdate", 500);
   return NextResponse.json({ ok: true });
 }
 
@@ -152,16 +163,16 @@ export async function PATCH(req: NextRequest) {
 // (coupon_id is ON DELETE SET NULL and the code text is copied onto the row).
 export async function DELETE(req: NextRequest) {
   const actor = await actingManager();
-  if (!actor) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!actor) return await apiError("apiErr.forbidden", 403);
 
   const { id } = await req.json();
-  if (!id) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  if (!id) return await apiError("apiErr.invalidRequest", 400);
 
   const { error } = await createAdminClient()
     .from("coupons")
     .delete()
     .eq("id", id)
     .eq("restaurant_id", actor.restaurantId);
-  if (error) return NextResponse.json({ error: "Could not delete." }, { status: 500 });
+  if (error) return await apiError("apiErr.promoDelete", 500);
   return NextResponse.json({ ok: true });
 }
