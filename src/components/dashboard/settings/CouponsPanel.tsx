@@ -14,6 +14,7 @@ import {
 } from "@/lib/coupons";
 import { DeleteIcon } from "@/components/ui/icons";
 import { ListSkeleton } from "@/components/ui/Skeleton";
+import { Modal } from "@/components/ui/Modal";
 import { useRowMemory } from "@/hooks/useRowMemory";
 
 /** Coupon codes an owner or manager hands out, with their usage so far. */
@@ -29,6 +30,7 @@ export default function CouponsPanel({
   const confirm = useConfirm();
   const { coupons, loading, create, setActive, remove } = useCoupons(restaurantId);
   const rows = useRowMemory("coupons", 3, loading ? undefined : coupons.length);
+  const [adding, setAdding] = useState(false);
 
   const [code, setCode] = useState("");
   const [kind, setKind] = useState<"percent" | "fixed">("percent");
@@ -63,6 +65,7 @@ export default function CouponsPanel({
     setMinSubtotal("");
     setStartsAt("");
     setEndsAt("");
+    setAdding(false);
   }
 
   async function del(c: Coupon) {
@@ -117,109 +120,136 @@ export default function CouponsPanel({
         {t("coupons.hint")}
       </p>
 
-      {/* Create form first — the list grows with every code handed out. */}
-      <form onSubmit={add} className="tt-coupon-form tt-add-above">
-        <div className="tt-prodform-row">
-          <input
-            className="tt-input"
-            style={{ flex: 1 }}
-            placeholder={COUPON_PATTERN_HINT}
-            value={code}
-            onChange={e => setCode(e.target.value.toUpperCase())}
-            autoCapitalize="characters"
-            autoComplete="off"
-            spellCheck={false}
-          />
-          <button
-            type="button"
-            className="tt-btn tt-btn-ghost tt-btn-sm"
-            onClick={() => setCode(generateCouponCode())}
-          >
-            {t("coupons.generate")}
-          </button>
-        </div>
-
-        <div className="tt-prodform-row">
-          <select
-            className="tt-input"
-            style={{ width: 130 }}
-            value={kind}
-            onChange={e => setKind(e.target.value as "percent" | "fixed")}
-          >
-            <option value="percent">{t("coupons.kindPercent")}</option>
-            <option value="fixed">{t("coupons.kindFixed")}</option>
-          </select>
-          <input
-            className="tt-input"
-            style={{ width: 100 }}
-            type="number"
-            min="1"
-            step={kind === "percent" ? "1" : "0.01"}
-            placeholder={kind === "percent" ? "%" : currency}
-            value={value}
-            onChange={e => setValue(e.target.value)}
-            required
-          />
-          <input
-            className="tt-input"
-            style={{ flex: 1, minWidth: 110 }}
-            type="number"
-            min="1"
-            step="1"
-            placeholder={t("coupons.maxUsesPlaceholder")}
-            value={maxUses}
-            onChange={e => setMaxUses(e.target.value)}
-          />
-        </div>
-
-        <div className="tt-prodform-row">
-          <input
-            className="tt-input"
-            style={{ width: 190 }}
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder={t("coupons.minSubtotalPlaceholder")}
-            value={minSubtotal}
-            onChange={e => setMinSubtotal(e.target.value)}
-            aria-label={t("coupons.minSubtotalPlaceholder")}
-          />
-          <label className="tt-muted" style={{ fontSize: 13 }}>
-            {t("coupons.startsAt")}{" "}
-            <input
-              className="tt-input"
-              style={{ width: 175 }}
-              type="datetime-local"
-              value={startsAt}
-              onChange={e => setStartsAt(e.target.value)}
-            />
-          </label>
-          <label className="tt-muted" style={{ fontSize: 13 }}>
-            {t("coupons.endsAt")}{" "}
-            <input
-              className="tt-input"
-              style={{ width: 175 }}
-              type="datetime-local"
-              value={endsAt}
-              onChange={e => setEndsAt(e.target.value)}
-            />
-          </label>
-        </div>
-
-        {code && !codeOk && (
-          <p className="tt-field-error" style={{ margin: 0 }}>
-            {t("coupons.badFormat", { format: COUPON_PATTERN_HINT })}
-          </p>
-        )}
-
+      {/* Creating happens in a dialog, the same as products and promotions —
+          an always-open form put an empty create step above the codes that
+          already exist. */}
+      <div className="tt-promo-add" style={{ margin: "12px 0 16px" }}>
         <button
-          type="submit"
           className="tt-btn tt-btn-primary tt-btn-sm"
-          disabled={!codeOk || !value || saving}
+          onClick={() => setAdding(true)}
         >
-          {saving ? t("common.saving") : t("coupons.add")}
+          {t("coupons.add")}
         </button>
-      </form>
+      </div>
+
+      <Modal
+        open={adding}
+        onClose={() => setAdding(false)}
+        maxWidth={640}
+        title={t("coupons.newTitle")}
+      >
+        <form onSubmit={add} className="tt-coupon-form">
+          <div className="tt-prodform-row">
+            <input
+              className="tt-input"
+              style={{ flex: 1 }}
+              placeholder={COUPON_PATTERN_HINT}
+              value={code}
+              onChange={e => setCode(e.target.value.toUpperCase())}
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              className="tt-btn tt-btn-ghost tt-btn-sm"
+              onClick={() => setCode(generateCouponCode())}
+            >
+              {t("coupons.generate")}
+            </button>
+          </div>
+
+          <div className="tt-prodform-row">
+            <select
+              className="tt-input"
+              style={{ width: 130 }}
+              value={kind}
+              onChange={e => setKind(e.target.value as "percent" | "fixed")}
+            >
+              <option value="percent">{t("coupons.kindPercent")}</option>
+              <option value="fixed">{t("coupons.kindFixed")}</option>
+            </select>
+            <input
+              className="tt-input"
+              style={{ width: 100 }}
+              type="number"
+              min="1"
+              step={kind === "percent" ? "1" : "0.01"}
+              placeholder={kind === "percent" ? "%" : currency}
+              value={value}
+              onChange={e => setValue(e.target.value)}
+              required
+            />
+            <input
+              className="tt-input"
+              style={{ flex: 1, minWidth: 110 }}
+              type="number"
+              min="1"
+              step="1"
+              placeholder={t("coupons.maxUsesPlaceholder")}
+              value={maxUses}
+              onChange={e => setMaxUses(e.target.value)}
+            />
+          </div>
+
+          <div className="tt-prodform-row">
+            <input
+              className="tt-input"
+              style={{ width: 190 }}
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder={t("coupons.minSubtotalPlaceholder")}
+              value={minSubtotal}
+              onChange={e => setMinSubtotal(e.target.value)}
+              aria-label={t("coupons.minSubtotalPlaceholder")}
+            />
+            <label className="tt-muted" style={{ fontSize: 13 }}>
+              {t("coupons.startsAt")}{" "}
+              <input
+                className="tt-input"
+                style={{ width: 175 }}
+                type="datetime-local"
+                value={startsAt}
+                onChange={e => setStartsAt(e.target.value)}
+              />
+            </label>
+            <label className="tt-muted" style={{ fontSize: 13 }}>
+              {t("coupons.endsAt")}{" "}
+              <input
+                className="tt-input"
+                style={{ width: 175 }}
+                type="datetime-local"
+                value={endsAt}
+                onChange={e => setEndsAt(e.target.value)}
+              />
+            </label>
+          </div>
+
+          {code && !codeOk && (
+            <p className="tt-field-error" style={{ margin: 0 }}>
+              {t("coupons.badFormat", { format: COUPON_PATTERN_HINT })}
+            </p>
+          )}
+
+          <div className="tt-prodform-actions">
+            <button
+              type="submit"
+              className="tt-btn tt-btn-primary tt-btn-sm"
+              disabled={!codeOk || !value || saving}
+            >
+              {saving ? t("common.saving") : t("coupons.addAction")}
+            </button>
+            <button
+              type="button"
+              className="tt-btn tt-btn-ghost tt-btn-sm"
+              onClick={() => setAdding(false)}
+            >
+              {t("menu.cancel")}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {loading ? (
         <ListSkeleton rows={rows} />

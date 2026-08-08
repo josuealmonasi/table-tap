@@ -195,6 +195,8 @@ export const en = {
     tooMany: "Too many tries — please wait a moment.",
   },
   coupons: {
+    addAction: "Add coupon",
+    newTitle: "New coupon",
     title: "Coupons",
     hint: "Codes customers can enter at checkout. Each one can be capped to a number of claims.",
     empty: "No coupons yet. Create one below.",

@@ -189,6 +189,8 @@ export const es: Messages = {
     tooMany: "Demasiados intentos — espera un momento.",
   },
   coupons: {
+    addAction: "Agregar cupón",
+    newTitle: "Nuevo cupón",
     title: "Cupones",
     hint: "Códigos que los clientes escriben al pagar. Cada uno puede limitarse a cierto número de usos.",
     empty: "Aún no hay cupones. Crea uno abajo.",
