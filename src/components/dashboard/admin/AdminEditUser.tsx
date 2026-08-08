@@ -44,7 +44,12 @@ export default function AdminEditUser({ user, onClose }: AdminEditUserProps) {
   }
 
   return (
-    <Modal open onClose={onClose} maxWidth={460} label={t("admin.editUser")}>
+    <Modal
+      open
+      onClose={onClose}
+      maxWidth={460}
+      title={t("common.editingNamed", { name: user.full_name || user.email })}
+    >
       <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 4 }}>
         {t("admin.editUserTitle", { email: user.email })}
       </h3>

@@ -273,9 +273,13 @@ export default function MenuScreen({
             type="button"
             className="tt-btn tt-btn-ghost tt-btn-sm"
             disabled={diet.length === 0}
+            // Clearing leaves nothing to look at, so the sheet closes with it —
+            // staying open just to show empty checkboxes makes the diner tap
+            // twice to get back to the food.
             onClick={() => {
               setDiet([]);
               syncMenuUrl({ diet: [] });
+              setFiltersOpen(false);
             }}
           >
             {t("menu.filtersClear")}

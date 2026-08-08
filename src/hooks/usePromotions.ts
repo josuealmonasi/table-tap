@@ -29,11 +29,14 @@ export function usePromotions(restaurantId: string) {
   const [promotions, setPromotions] = useState<PromotionWithItems[]>([]);
   const [products, setProducts] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  // Which menus customers can currently see — a combo whose component lives on
+  // a hidden menu never renders, and the panel has to be able to say so.
+  const [activeMenuIds, setActiveMenuIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
     const supabase = createClient();
-    const [promos, { data: items }, { data: cats }] = await Promise.all([
+    const [promos, { data: items }, { data: cats }, { data: menus }] = await Promise.all([
       fetchPromotions(supabase, restaurantId),
       supabase
         .from("menu_items")
@@ -47,10 +50,16 @@ export function usePromotions(restaurantId: string) {
         .select("*")
         .eq("restaurant_id", restaurantId)
         .order("sort_order"),
+      supabase
+        .from("menus")
+        .select("id, active")
+        .eq("restaurant_id", restaurantId)
+        .eq("active", true),
     ]);
     setPromotions(promos);
     setProducts((items as MenuItem[] | null) ?? []);
     setCategories((cats as Category[] | null) ?? []);
+    setActiveMenuIds(new Set(((menus as { id: string }[] | null) ?? []).map(m => m.id)));
     setLoading(false);
   }, [restaurantId]);
 
@@ -59,7 +68,10 @@ export function usePromotions(restaurantId: string) {
   }, [reload]);
 
   const send = useCallback(
-    async (method: "POST" | "PATCH" | "DELETE", body: unknown): Promise<string | null> => {
+    async (
+      method: "POST" | "PATCH" | "DELETE",
+      body: unknown,
+    ): Promise<string | null> => {
       const res = await fetch("/api/promotions", {
         method,
         headers: { "Content-Type": "application/json" },
@@ -77,6 +89,7 @@ export function usePromotions(restaurantId: string) {
     promotions,
     products,
     categories,
+    activeMenuIds,
     loading,
     create: (input: PromotionInput) => send("POST", input),
     update: (id: string, input: PromotionInput) => send("PATCH", { id, ...input }),

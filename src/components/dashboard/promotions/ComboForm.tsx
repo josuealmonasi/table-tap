@@ -130,26 +130,6 @@ export default function ComboForm({
             <span className="tt-muted">{t("promos.pickToCompare")}</span>
           )}
         </div>
-        <button
-          type="submit"
-          className="tt-btn tt-btn-primary tt-btn-sm"
-          disabled={!ready || saving}
-        >
-          {saving
-            ? t("common.saving")
-            : initial
-              ? t("promos.saveChanges")
-              : t("promos.addCombo")}
-        </button>
-        {initial && onCancel && (
-          <button
-            type="button"
-            className="tt-btn tt-btn-ghost tt-btn-sm"
-            onClick={onCancel}
-          >
-            {t("menu.cancel")}
-          </button>
-        )}
       </div>
 
       {/* Optional: shows under the deal on the customer menu. Without it the
@@ -178,6 +158,32 @@ export default function ComboForm({
         currency={currency}
         onBump={bump}
       />
+
+      {/* Actions live at the foot of the form, sticky, exactly as the product
+          editor does — in a dialog the buttons belong under the fields they
+          commit, not above them. */}
+      <div className="tt-prodform-actions">
+        <button
+          type="submit"
+          className="tt-btn tt-btn-primary tt-btn-sm"
+          disabled={!ready || saving}
+        >
+          {saving
+            ? t("common.saving")
+            : initial
+              ? t("promos.saveChanges")
+              : t("promos.addCombo")}
+        </button>
+        {initial && onCancel && (
+          <button
+            type="button"
+            className="tt-btn tt-btn-ghost tt-btn-sm"
+            onClick={onCancel}
+          >
+            {t("menu.cancel")}
+          </button>
+        )}
+      </div>
     </form>
   );
 }

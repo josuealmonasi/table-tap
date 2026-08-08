@@ -225,6 +225,10 @@ export const es: Messages = {
     save: "Ahorra {amount}",
   },
   promos: {
+    hiddenOffMenu: "{item} no está en un menú activo — los clientes no verán este combo",
+    hiddenUnavailable:
+      "{item} está marcado como no disponible — los clientes no verán este combo",
+    hiddenMissing: "Un producto de este combo ya no existe — los clientes no lo verán",
     editCombo: "Editar combo",
     editDeal: "Editar oferta",
     edit: "Editar promoción",
@@ -373,6 +377,7 @@ export const es: Messages = {
     soon: "Pronto",
   },
   common: {
+    editingNamed: "Editando {name}",
     back: "Atrás",
     save: "Guardar cambios",
     saving: "Guardando…",

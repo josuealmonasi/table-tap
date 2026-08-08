@@ -230,6 +230,9 @@ export const en = {
     save: "Save {amount}",
   },
   promos: {
+    hiddenOffMenu: "{item} isn't on an active menu — customers won't see this combo",
+    hiddenUnavailable: "{item} is marked unavailable — customers won't see this combo",
+    hiddenMissing: "A product in this combo no longer exists — customers won't see it",
     editCombo: "Edit combo",
     editDeal: "Edit deal",
     edit: "Edit promotion",
@@ -380,6 +383,7 @@ export const en = {
     soon: "Soon",
   },
   common: {
+    editingNamed: "Editing {name}",
     back: "Back",
     save: "Save changes",
     saving: "Saving…",

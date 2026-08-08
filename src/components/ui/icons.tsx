@@ -56,6 +56,7 @@ import { Star } from "@phosphor-icons/react/dist/ssr/Star";
 import { Trash } from "@phosphor-icons/react/dist/ssr/Trash";
 import { User } from "@phosphor-icons/react/dist/ssr/User";
 import { X } from "@phosphor-icons/react/dist/ssr/X";
+import { Warning } from "@phosphor-icons/react/dist/ssr/Warning";
 
 /**
  * Named for the job, not the picture — swapping which glyph plays a role is a
@@ -72,6 +73,7 @@ export const FiltersIcon = SlidersHorizontal;
 export const BackIcon = ArrowLeft;
 export const EditIcon = PencilSimple;
 export const DeleteIcon = Trash;
+export const WarningIcon = Warning;
 export const DuplicateIcon = Copy;
 export const MoveToIcon = ArrowsLeftRight;
 export const MoveUpIcon = CaretUp;

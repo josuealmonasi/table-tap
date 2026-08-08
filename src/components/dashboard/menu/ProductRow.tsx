@@ -206,7 +206,7 @@ export default function ProductRow({
           open={editing}
           onClose={() => setEditing(false)}
           maxWidth={720}
-          label={t("menu.edit")}
+          title={t("common.editingNamed", { name: product.name })}
         >
           {editForm}
         </Modal>
