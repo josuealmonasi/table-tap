@@ -126,6 +126,12 @@ export type OrderLineItem = {
   /** Set when this line is a combo package; `price` is then the combo price. */
   comboId?: string;
   components?: ComboComponent[];
+  /**
+   * What a combo's components would cost separately. Display only — it lets
+   * the cart strike the regular price the way the menu card does. Money is
+   * always re-derived server-side from `price`, never from this.
+   */
+  comboRegular?: number;
 };
 
 /** Unit price including selected extras (before quantity). */

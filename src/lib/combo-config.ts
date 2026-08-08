@@ -91,6 +91,7 @@ export function comboCartLine(
     // The bundle price. Extras ride alongside and are summed by priceCart, so
     // this stays exactly what the menu advertised.
     price: combo.price,
+    comboRegular: combo.regularPrice,
     qty: 1,
     mods: {},
     components: applyChoices(combo.components, choices, extrasById),
