@@ -2138,6 +2138,14 @@ h2.tt-serif {
   .tt-staff-tr:first-of-type {
     border-top: 1px solid var(--tt-line);
   }
+  /* Every cell has to be allowed to shrink and wrap. .tt-staff-cell sets
+     white-space: nowrap for the desktop table, and a grid item's automatic
+     min-width is min-content — together a long email refuses to shrink and
+     drags the whole card past the edge of the screen. */
+  .tt-staff-tr > * {
+    min-width: 0;
+    max-width: 100%;
+  }
   /* name spans the row, email under it, then the controls */
   .tt-staff-tr > *:nth-child(1) {
     grid-column: 1 / -1;
@@ -2147,6 +2155,8 @@ h2.tt-serif {
   .tt-staff-tr > *:nth-child(2) {
     grid-column: 1 / -1;
     font-size: 13px;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
   .tt-staff-tr > *:nth-child(3) {
     margin-top: 6px;

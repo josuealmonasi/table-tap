@@ -71,7 +71,15 @@ export default function SectionEditor({
   const t = useT();
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState(false);
+
   const [name, setName] = useState(section?.name ?? "");
+
+  const nameChanged = Boolean(section && name.trim() && name.trim() !== section.name);
+
+  function cancelRename() {
+    setName(section?.name ?? "");
+    setRenaming(false);
+  }
   const confirm = useConfirm();
 
   return (
@@ -81,9 +89,22 @@ export default function SectionEditor({
           {section && renaming ? (
             <form
               style={{ display: "flex", gap: 8, flex: 1 }}
+              // Escape and clicking away both abandon the edit, which is what
+              // every other text field on the page does. Without it the only
+              // way out was to save something.
+              onBlur={e => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) cancelRename();
+              }}
+              onKeyDown={e => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  cancelRename();
+                }
+              }}
               onSubmit={async e => {
                 e.preventDefault();
-                if (name.trim()) await onRename(section.id, name.trim());
+                if (!nameChanged) return;
+                await onRename(section.id, name.trim());
                 setRenaming(false);
               }}
             >
@@ -93,7 +114,13 @@ export default function SectionEditor({
                 onChange={e => setName(e.target.value)}
                 autoFocus
               />
-              <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">
+              <button
+                className="tt-btn tt-btn-primary tt-btn-sm"
+                type="submit"
+                // Nothing to save until the name actually differs; an enabled
+                // Save that does nothing reads as a broken button.
+                disabled={!nameChanged}
+              >
                 {t("menu.save")}
               </button>
             </form>
