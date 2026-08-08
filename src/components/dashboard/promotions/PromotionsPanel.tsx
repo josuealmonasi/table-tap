@@ -12,6 +12,7 @@ import ComboForm from "./ComboForm";
 import QuantityForm from "./QuantityForm";
 import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 import { ListSkeleton } from "@/components/ui/Skeleton";
+import { Modal } from "@/components/ui/Modal";
 import { useRowMemory } from "@/hooks/useRowMemory";
 
 /** Combo bundles and quantity deals for one restaurant. */
@@ -32,14 +33,6 @@ export default function PromotionsPanel({
   const editingCombo = editing?.kind === "combo" ? editing : null;
   const editingDeal = editing && editing.kind !== "combo" ? editing : null;
 
-  /** Both forms live below the list, so an edit has to bring one into view. */
-  function startEdit(p: PromotionWithItems) {
-    setEditing(p);
-    const id = p.kind === "combo" ? "promo-combo-form" : "promo-deal-form";
-    requestAnimationFrame(() => {
-      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  }
   const [saving, setSaving] = useState(false);
 
   /** One path for both, so an edit can't drift from a create. */
@@ -118,7 +111,7 @@ export default function PromotionsPanel({
                         <button
                           type="button"
                           className="tt-prod-name"
-                          onClick={() => startEdit(p)}
+                          onClick={() => setEditing(p)}
                           title={t("promos.edit")}
                         >
                           {p.emoji} {p.name}
@@ -144,7 +137,7 @@ export default function PromotionsPanel({
                       <button
                         className="tt-iconbtn"
                         title={t("promos.edit")}
-                        onClick={() => startEdit(p)}
+                        onClick={() => setEditing(p)}
                       >
                         <EditIcon size={16} />
                       </button>
@@ -162,45 +155,75 @@ export default function PromotionsPanel({
             )}
           </div>
 
-          <div className="tt-section" id="promo-combo-form">
+          <div className="tt-section">
             <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 2 }}>
-              {editingCombo ? t("promos.editCombo") : t("promos.newCombo")}
+              {t("promos.newCombo")}
             </h3>
             <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
               {t("promos.comboHint")}
             </p>
             <ComboForm
-              key={editingCombo?.id ?? "new-combo"}
               products={products}
               categories={categories}
               currency={currency}
               saving={saving}
-              initial={editingCombo ?? undefined}
-              onCancel={() => setEditing(null)}
               onSubmit={input => save(input)}
             />
           </div>
 
-          <div className="tt-section" id="promo-deal-form">
+          <div className="tt-section">
             <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 2 }}>
-              {editingDeal ? t("promos.editDeal") : t("promos.newDeal")}
+              {t("promos.newDeal")}
             </h3>
             <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
               {t("promos.dealHint")}
             </p>
             <QuantityForm
-              key={editingDeal?.id ?? "new-deal"}
               products={products}
               categories={categories}
               currency={currency}
               saving={saving}
-              initial={editingDeal ?? undefined}
-              onCancel={() => setEditing(null)}
               onSubmit={input => save(input)}
             />
           </div>
         </div>
       </div>
+
+      {/* Editing happens in a dialog, the same as products, sections and
+          add-ons. Filling the create form further down the page meant the
+          click appeared to do nothing until you scrolled, and the form's
+          heading was the only clue you were no longer creating. */}
+      <Modal
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        maxWidth={720}
+        label={editing ? t("promos.edit") : ""}
+      >
+        {editingCombo && (
+          <ComboForm
+            key={editingCombo.id}
+            products={products}
+            categories={categories}
+            currency={currency}
+            saving={saving}
+            initial={editingCombo}
+            onCancel={() => setEditing(null)}
+            onSubmit={input => save(input)}
+          />
+        )}
+        {editingDeal && (
+          <QuantityForm
+            key={editingDeal.id}
+            products={products}
+            categories={categories}
+            currency={currency}
+            saving={saving}
+            initial={editingDeal}
+            onCancel={() => setEditing(null)}
+            onSubmit={input => save(input)}
+          />
+        )}
+      </Modal>
     </div>
   );
 }
