@@ -2925,6 +2925,15 @@ h2.tt-serif {
     align-items: start;
   }
 }
+/* On a wide desktop two columns leave a card stretched across ~700px for a
+   140px QR and three short lines, so a third column earns its place. Below
+   this the URL starts wrapping to three lines and the card gets taller than
+   its own QR, which is why it isn't lower. */
+@media (min-width: 1600px) {
+  .tt-table-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
 .tt-table-row {
   display: flex;
   align-items: center;
