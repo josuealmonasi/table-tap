@@ -98,7 +98,7 @@ export default function AddonsPanel({
                 open={adding}
                 onClose={() => setAdding(false)}
                 maxWidth={520}
-                label={t("menu.addExtra")}
+                title={t("menu.newExtra")}
               >
                 {addForm}
               </Modal>
@@ -219,7 +219,7 @@ export default function AddonsPanel({
                 open={isEditing}
                 onClose={() => setEditingId(null)}
                 maxWidth={520}
-                label={t("menu.extrasTitle")}
+                title={t("common.editingNamed", { name: addon.name })}
               >
                 {editForm}
               </Modal>

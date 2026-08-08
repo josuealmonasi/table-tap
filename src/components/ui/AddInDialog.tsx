@@ -41,7 +41,10 @@ export default function AddInDialog({
         open={open}
         onClose={() => setOpen(false)}
         maxWidth={maxWidth}
-        title={title}
+        // Several trigger strings start with "+" because they label a button.
+        // A heading shouldn't carry it, so it's stripped here rather than
+        // duplicating every string just to drop one character.
+        title={title.replace(/^\+\s*/, "")}
       >
         {children(() => setOpen(false))}
       </Modal>

@@ -123,7 +123,7 @@ export default function CouponsPanel({
       {/* Creating happens in a dialog, the same as products and promotions —
           an always-open form put an empty create step above the codes that
           already exist. */}
-      <div className="tt-promo-add" style={{ margin: "12px 0 16px" }}>
+      <div className="tt-promo-add">
         <button
           className="tt-btn tt-btn-primary tt-btn-sm"
           onClick={() => setAdding(true)}
