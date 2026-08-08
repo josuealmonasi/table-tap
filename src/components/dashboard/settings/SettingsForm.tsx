@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { listTimeZones } from "@/lib/timezones";
 import type { Restaurant } from "@/lib/types";
 import type { Role } from "@/lib/membership";
 import { useSettings } from "@/hooks/useSettings";
@@ -28,6 +29,7 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
   const [logo, setLogo] = useState(restaurant.logo);
   const [tagline, setTagline] = useState(restaurant.tagline ?? "");
   const [currency, setCurrency] = useState(restaurant.currency);
+  const [timezone, setTimezone] = useState(restaurant.timezone || "America/Mexico_City");
   const [servicePct, setServicePct] = useState(String(restaurant.service_pct));
   const [serviceEnabled, setServiceEnabled] = useState(restaurant.service_enabled);
 
@@ -45,6 +47,7 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
       logo: logo.trim() || "🍱",
       tagline: tagline.trim() || null,
       currency,
+      timezone,
       service_pct: Math.min(30, Math.max(0, Number(servicePct) || 0)),
       service_enabled: serviceEnabled,
     });
@@ -121,6 +124,24 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
                   onChange={e => setTagline(e.target.value)}
                 />
 
+                <label className="tt-field" style={{ maxWidth: 260 }}>
+                  <span className="tt-mod-label">{t("dash.timezone")}</span>
+                  <select
+                    className="tt-input"
+                    value={timezone}
+                    onChange={e => setTimezone(e.target.value)}
+                  >
+                    {listTimeZones().map(z => (
+                      <option key={z} value={z}>
+                        {z.replace(/_/g, " ")}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="tt-muted" style={{ fontSize: 12 }}>
+                    {t("dash.timezoneHint")}
+                  </span>
+                </label>
+
                 <label className="tt-field" style={{ maxWidth: 200 }}>
                   <span className="tt-mod-label">{t("dash.currency")}</span>
                   <select
@@ -185,7 +206,6 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
           )}
 
           {isOwner && <PaymentsCard />}
-
 
           <div className="tt-section">
             <div className="tt-section-head">

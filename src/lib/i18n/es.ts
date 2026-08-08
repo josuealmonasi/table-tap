@@ -418,6 +418,7 @@ export const es: Messages = {
     soon: "Pronto",
   },
   apiErr: {
+    badTimezone: "Elige una zona horaria válida.",
     schedNoRules: "Agrega al menos un periodo.",
     schedNoDays: "Elige al menos un día.",
     schedBadTime: "Ingresa una hora de inicio y fin válidas.",
@@ -526,6 +527,11 @@ export const es: Messages = {
     optional: "(opcional)",
   },
   dash: {
+    settingsSaved: "Ajustes guardados",
+    settingsSaveFailed: "No se pudieron guardar los ajustes.",
+    networkError: "Error de red — inténtalo de nuevo.",
+    timezone: "Zona horaria",
+    timezoneHint: "El horario de los menús se interpreta en esta zona.",
     menusTitle: "Menús",
     menusHint: "Abre un menú para editarlo · actívalo para mostrarlo a los clientes",
     addMenu: "+ Agregar menú",

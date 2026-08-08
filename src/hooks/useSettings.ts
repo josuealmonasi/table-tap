@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/lib/i18n/context";
 import type { Restaurant } from "@/lib/types";
 
 /** The restaurant fields editable from Settings (server enforces per role). */
@@ -12,6 +13,7 @@ export type SettingsInput = Pick<
   | "logo"
   | "tagline"
   | "currency"
+  | "timezone"
   | "service_pct"
   | "service_enabled"
   | "tax_pct"
@@ -27,11 +29,13 @@ export type SettingsInput = Pick<
 export function useSettings() {
   const router = useRouter();
   const toast = useToast();
+  const t = useT();
   const [saving, setSaving] = useState(false);
 
+  /** @param messageKey i18n key for the success toast. */
   async function save(
     input: Partial<SettingsInput>,
-    message = "Settings saved",
+    messageKey = "dash.settingsSaved",
   ): Promise<boolean> {
     setSaving(true);
     try {
@@ -42,14 +46,15 @@ export function useSettings() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast(data.error ?? "Couldn't save settings.", "error");
+        // The route already answers in the caller's language.
+        toast(data.error ?? t("dash.settingsSaveFailed"), "error");
         return false;
       }
-      toast(message);
+      toast(t(messageKey));
       router.refresh();
       return true;
     } catch {
-      toast("Network error — please try again.", "error");
+      toast(t("dash.networkError"), "error");
       return false;
     } finally {
       setSaving(false);
