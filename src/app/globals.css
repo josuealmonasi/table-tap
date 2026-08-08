@@ -313,21 +313,27 @@ h2.tt-serif {
   margin-left: 4px;
   opacity: 0.7;
 }
+/* Sits in the customer header beside the round search button, so it takes the
+   same header tokens and the same 34px height. It used to hard-code white ink
+   on a translucent white fill — correct when the header was a dark band, but
+   once the header went light the label became white-on-near-white and read as
+   an empty pill. Tokens mean it follows the header wherever it goes next. */
 .tt-lang-toggle {
   display: inline-flex;
   align-items: center;
+  height: 34px;
   font-size: 13px;
   font-weight: 700;
-  padding: 6px 12px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.14);
-  color: var(--tt-white);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--tt-header-ctrl-bg);
+  color: var(--tt-header-ink);
+  border: 1px solid var(--tt-header-ctrl-border);
   cursor: pointer;
   white-space: nowrap;
 }
 .tt-lang-toggle:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: color-mix(in srgb, var(--tt-header-ink) 9%, transparent);
 }
 /* Navbar variant — dark text for the light header. */
 .tt-lang-toggle-nav {
@@ -2418,7 +2424,7 @@ h2.tt-serif {
   font-family: inherit;
 }
 .tt-icon-round:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: color-mix(in srgb, var(--tt-header-ink) 9%, transparent);
 }
 
 /* Filters control at the end of the category row.
