@@ -247,6 +247,28 @@ describe("priceCart — combos", () => {
     ],
   });
 
+  it("reports what the bundle saved without discounting it twice", () => {
+    const withRegular = { ...combo, comboRegular: 15 };
+    const r = price({ items: [withRegular] });
+    // Shown to the customer: 15 struck through, 12 charged, 3 saved.
+    expect(r.promoSavings["combo-1"]).toEqual({ saved: 3, promoName: "Taco Combo" });
+    // The money is untouched — the bundle price already IS the discount.
+    expect(r.promoDiscount).toBe(0);
+    expect(r.subtotal).toBe(12);
+    expect(r.total).toBe(12);
+  });
+
+  it("scales the reported saving with quantity", () => {
+    const r = price({ items: [{ ...combo, comboRegular: 15, qty: 2 }] });
+    expect(r.promoSavings["combo-1"].saved).toBe(6);
+    expect(r.subtotal).toBe(24);
+  });
+
+  it("reports nothing when the bundle is not cheaper", () => {
+    const r = price({ items: [{ ...combo, comboRegular: 12 }] });
+    expect(r.promoSavings["combo-1"]).toBeUndefined();
+  });
+
   it("charges the bundle price", () => {
     const r = price({ items: [combo] });
     expect(r.subtotal).toBe(12);

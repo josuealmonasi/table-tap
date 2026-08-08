@@ -289,6 +289,21 @@ h2.tt-serif {
 
 /* Customer EN/ES language switch (menu + tracker headers). */
 /* Language switcher: a dropdown (button + menu), styled like the account menu. */
+/* The header's search and language controls.
+   Their box already sits 20px from the edge, the same as the logo, but they
+   read as further in: the logo is a bare glyph whose ink starts at 20px,
+   while these are pills carrying 12px of their own padding, so their ink
+   landed at 33px. Pulling the cluster out by 4px lands the pill's edge on 16px
+   — exactly where the account button in the navbar directly above it sits, so
+   the two rows of right-hand controls line up as one edge. */
+.tt-head-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  margin-right: -4px;
+}
+
 .tt-lang {
   position: relative;
   display: inline-block;
