@@ -28,6 +28,13 @@ export default function PromotionsPanel({
   const toast = useToast();
   const confirm = useConfirm();
   const [editing, setEditing] = useState<PromotionWithItems | null>(null);
+  const [creating, setCreating] = useState<"combo" | "deal" | null>(null);
+
+  /** One dialog serves both jobs, so create and edit can't drift apart. */
+  function closeForm() {
+    setEditing(null);
+    setCreating(null);
+  }
   const {
     promotions,
     products,
@@ -56,7 +63,7 @@ export default function PromotionsPanel({
     setSaving(true);
     const err = editing ? await update(editing.id, input) : await create(input);
     setSaving(false);
-    if (!err) setEditing(null);
+    if (!err) closeForm();
     toast(
       err ?? (editing ? t("promos.updated") : t("promos.created")),
       err ? "error" : "info",
@@ -108,9 +115,28 @@ export default function PromotionsPanel({
           />
         </header>
 
-        <p className="tt-muted" style={{ marginTop: 0, marginBottom: 16 }}>
+        <p className="tt-muted" style={{ marginTop: 0, marginBottom: 12 }}>
           {t("promos.hint")}
         </p>
+
+        {/* Both create forms used to sit open on the page below the list, which
+            meant the page led with two empty forms instead of the deals that
+            already exist. They're behind these buttons now, in the same dialog
+            editing uses. */}
+        <div className="tt-promo-add" style={{ marginBottom: 16 }}>
+          <button
+            className="tt-btn tt-btn-primary tt-btn-sm"
+            onClick={() => setCreating("combo")}
+          >
+            + {t("promos.newCombo")}
+          </button>
+          <button
+            className="tt-btn tt-btn-primary tt-btn-sm"
+            onClick={() => setCreating("deal")}
+          >
+            + {t("promos.newDeal")}
+          </button>
+        </div>
 
         <div className="tt-cols">
           <div className="tt-section tt-cols-full">
@@ -194,38 +220,6 @@ export default function PromotionsPanel({
               </div>
             )}
           </div>
-
-          <div className="tt-section">
-            <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 2 }}>
-              {t("promos.newCombo")}
-            </h3>
-            <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
-              {t("promos.comboHint")}
-            </p>
-            <ComboForm
-              products={products}
-              categories={categories}
-              currency={currency}
-              saving={saving}
-              onSubmit={input => save(input)}
-            />
-          </div>
-
-          <div className="tt-section">
-            <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 2 }}>
-              {t("promos.newDeal")}
-            </h3>
-            <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
-              {t("promos.dealHint")}
-            </p>
-            <QuantityForm
-              products={products}
-              categories={categories}
-              currency={currency}
-              saving={saving}
-              onSubmit={input => save(input)}
-            />
-          </div>
         </div>
       </div>
 
@@ -234,32 +228,40 @@ export default function PromotionsPanel({
           click appeared to do nothing until you scrolled, and the form's
           heading was the only clue you were no longer creating. */}
       <Modal
-        open={!!editing}
-        onClose={() => setEditing(null)}
+        open={!!editing || !!creating}
+        onClose={closeForm}
         maxWidth={720}
-        title={editing ? t("common.editingNamed", { name: editing.name }) : ""}
+        title={
+          editing
+            ? t("common.editingNamed", { name: editing.name })
+            : creating === "combo"
+              ? t("promos.newCombo")
+              : creating === "deal"
+                ? t("promos.newDeal")
+                : ""
+        }
       >
-        {editingCombo && (
+        {(editingCombo || creating === "combo") && (
           <ComboForm
-            key={editingCombo.id}
+            key={editingCombo?.id ?? "new-combo"}
             products={products}
             categories={categories}
             currency={currency}
             saving={saving}
-            initial={editingCombo}
-            onCancel={() => setEditing(null)}
+            initial={editingCombo ?? undefined}
+            onCancel={closeForm}
             onSubmit={input => save(input)}
           />
         )}
-        {editingDeal && (
+        {(editingDeal || creating === "deal") && (
           <QuantityForm
-            key={editingDeal.id}
+            key={editingDeal?.id ?? "new-deal"}
             products={products}
             categories={categories}
             currency={currency}
             saving={saving}
-            initial={editingDeal}
-            onCancel={() => setEditing(null)}
+            initial={editingDeal ?? undefined}
+            onCancel={closeForm}
             onSubmit={input => save(input)}
           />
         )}
