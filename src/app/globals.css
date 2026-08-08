@@ -2114,6 +2114,17 @@ h2.tt-serif {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Truncation only makes sense inside a wide table. On a phone there are no
+   columns left to protect, and nowrap instead forces the content past the
+   viewport — so every cell wraps and is allowed to shrink. */
+@media (max-width: 700px) {
+  .tt-staff-cell {
+    white-space: normal;
+    overflow: visible;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
 .tt-role-select {
   padding: 6px 8px;
   font-size: 13px;
@@ -2348,6 +2359,23 @@ h2.tt-serif {
 }
 .tt-log-row:first-of-type {
   border-top: none;
+}
+/* The log line is a sentence, not a table cell. It used to borrow
+   .tt-staff-cell, whose white-space: nowrap turned every entry into one
+   unbreakable line — wide enough to push the whole page past the viewport on a
+   phone and drag every card and control off the right edge with it. The
+   shimmer had no text, which is why loading looked correct and the loaded
+   page did not. */
+.tt-log-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 700px) {
+  .tt-log-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
 }
 .tt-log-pager {
   display: flex;
