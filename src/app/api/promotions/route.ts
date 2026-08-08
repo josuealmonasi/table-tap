@@ -151,7 +151,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Unknown product." }, { status: 400 });
   }
 
-  const { error } = await db
+  const { data: updated, error } = await db
     .from("promotions")
     .update({
       kind: body.kind,
@@ -164,11 +164,20 @@ export async function PATCH(req: NextRequest) {
       tiers: body.kind === "tiered" ? body.tiers : null,
     })
     .eq("id", body.id)
-    .eq("restaurant_id", restaurantId);
+    .eq("restaurant_id", restaurantId)
+    .select("id");
   if (error) return NextResponse.json({ error: "Could not update." }, { status: 500 });
+  // A promotion belonging to another restaurant matches no row here, and
+  // Postgres does not call an empty update an error. Without this check the
+  // code below would go on to delete and rewrite that restaurant's components
+  // — the id is the only thing scoping them.
+  if (!updated?.length) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   // Replace the product list wholesale. Diffing it would be more code for the
-  // same result, and the rows carry nothing worth preserving.
+  // same result, and the rows carry nothing worth preserving. Safe to scope by
+  // promotion_id alone now that ownership is proven above.
   await db.from("promotion_items").delete().eq("promotion_id", body.id);
   const { error: linkErr } = await db.from("promotion_items").insert(
     body.items!.map(i => ({
