@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import AddInDialog from "@/components/ui/AddInDialog";
 import { useT } from "@/lib/i18n/context";
 
 interface AddSectionFormProps {
@@ -17,26 +18,37 @@ export default function AddSectionForm({
   const [name, setName] = useState("");
 
   return (
-    <form
-      className="tt-add-section"
-      onSubmit={async e => {
-        e.preventDefault();
-        if (name.trim()) {
-          await onAdd(name.trim());
-          setName("");
-        }
-      }}
-    >
-      <input
-        className="tt-input"
-        placeholder={t("menu.newSectionPlaceholder")}
-        value={name}
-        onChange={e => setName(e.target.value)}
-        autoFocus={autoFocus}
-      />
-      <button className="tt-btn tt-btn-primary" type="submit" disabled={!name.trim()}>
-        {t("menu.addSection")}
-      </button>
-    </form>
+    <AddInDialog label={t("menu.addSection")} title={t("menu.addSection")} maxWidth={520}>
+      {close => (
+        <form
+          className="tt-prodform"
+          onSubmit={async e => {
+            e.preventDefault();
+            if (name.trim()) {
+              await onAdd(name.trim());
+              setName("");
+              close();
+            }
+          }}
+        >
+          <input
+            className="tt-input"
+            placeholder={t("menu.newSectionPlaceholder")}
+            value={name}
+            onChange={e => setName(e.target.value)}
+            autoFocus={autoFocus}
+          />
+          <div className="tt-prodform-actions">
+            <button
+              className="tt-btn tt-btn-primary tt-btn-sm"
+              type="submit"
+              disabled={!name.trim()}
+            >
+              {t("menu.addSection")}
+            </button>
+          </div>
+        </form>
+      )}
+    </AddInDialog>
   );
 }

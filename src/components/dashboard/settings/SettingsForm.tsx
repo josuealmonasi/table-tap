@@ -7,7 +7,6 @@ import { useSettings } from "@/hooks/useSettings";
 import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import PaymentsCard from "./PaymentsCard";
-import CouponsPanel from "./CouponsPanel";
 
 interface SettingsFormProps {
   restaurant: Restaurant;
@@ -187,8 +186,6 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
 
           {isOwner && <PaymentsCard />}
 
-          {/* Coupons are a manager-level tool, so this sits outside the isOwner gate. */}
-          <CouponsPanel restaurantId={restaurant.id} currency={restaurant.currency} />
 
           <div className="tt-section">
             <div className="tt-section-head">

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/icons";
 import { StaffTableSkeleton } from "@/components/ui/DashSkeletons";
 import { useRowMemory } from "@/hooks/useRowMemory";
+import AddInDialog from "@/components/ui/AddInDialog";
 
 interface StaffPanelProps {
   restaurantId: string;
@@ -139,44 +140,58 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
               </div>
             )}
 
-            <form className="tt-prodform" style={{ marginTop: 16 }} onSubmit={handleAdd}>
-              <input
-                className="tt-input"
-                type="email"
-                placeholder={t("dash.staffEmailPlaceholder")}
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-              />
-              <label className="tt-field" style={{ maxWidth: 220 }}>
-                <span className="tt-mod-label">{t("dash.role")}</span>
-                <select
-                  className="tt-input"
-                  value={role}
-                  onChange={e => setRole(e.target.value as StaffRole)}
+            <AddInDialog
+              label={t("dash.sendInvite")}
+              title={t("dash.sendInvite")}
+              maxWidth={520}
+            >
+              {close => (
+                <form
+                  className="tt-prodform"
+                  onSubmit={async e => {
+                    await handleAdd(e);
+                    close();
+                  }}
                 >
-                  <option value="kitchen">{t("dash.roleKitchen")}</option>
-                  <option value="waiter">{t("dash.roleWaiter")}</option>
-                  <option value="manager">{t("dash.roleManager")}</option>
-                  <option value="owner">{t("dash.roleOwner")}</option>
-                </select>
-              </label>
-              <div className="tt-prodform-actions">
-                <button
-                  type="submit"
-                  className="tt-btn tt-btn-primary tt-btn-sm"
-                  disabled={busy}
-                >
-                  {busy ? (
-                    t("dash.sending")
-                  ) : (
-                    <>
-                      <InviteIcon size={15} weight="bold" /> {t("dash.sendInvite")}
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
+                  <input
+                    className="tt-input"
+                    type="email"
+                    placeholder={t("dash.staffEmailPlaceholder")}
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    required
+                  />
+                  <label className="tt-field" style={{ maxWidth: 220 }}>
+                    <span className="tt-mod-label">{t("dash.role")}</span>
+                    <select
+                      className="tt-input"
+                      value={role}
+                      onChange={e => setRole(e.target.value as StaffRole)}
+                    >
+                      <option value="kitchen">{t("dash.roleKitchen")}</option>
+                      <option value="waiter">{t("dash.roleWaiter")}</option>
+                      <option value="manager">{t("dash.roleManager")}</option>
+                      <option value="owner">{t("dash.roleOwner")}</option>
+                    </select>
+                  </label>
+                  <div className="tt-prodform-actions">
+                    <button
+                      type="submit"
+                      className="tt-btn tt-btn-primary tt-btn-sm"
+                      disabled={busy}
+                    >
+                      {busy ? (
+                        t("dash.sending")
+                      ) : (
+                        <>
+                          <InviteIcon size={15} weight="bold" /> {t("dash.sendInvite")}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </AddInDialog>
           </div>
 
           {children}

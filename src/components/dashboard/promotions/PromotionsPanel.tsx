@@ -12,6 +12,7 @@ import ComboForm from "./ComboForm";
 import QuantityForm from "./QuantityForm";
 import { DeleteIcon, EditIcon, WarningIcon } from "@/components/ui/icons";
 import { comboReachProblem } from "@/lib/combo-reach";
+import CouponsPanel from "./CouponsPanel";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { Modal } from "@/components/ui/Modal";
 import { useRowMemory } from "@/hooks/useRowMemory";
@@ -220,6 +221,9 @@ export default function PromotionsPanel({
               </div>
             )}
           </div>
+          {/* Coupons are the third kind of discount, so they belong beside the
+              other two rather than buried in Settings. */}
+          <CouponsPanel restaurantId={restaurantId} currency={currency} />
         </div>
       </div>
 

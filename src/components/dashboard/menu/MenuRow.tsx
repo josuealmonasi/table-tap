@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Modal } from "@/components/ui/Modal";
 import type { Menu } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
 import ReorderButtons from "@/components/ui/ReorderButtons";
@@ -38,12 +39,16 @@ export default function MenuRow({
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  if (renaming) {
-    return (
+  const renameDialog = (
+    <Modal
+      open={renaming}
+      onClose={() => setRenaming(false)}
+      maxWidth={460}
+      title={t("common.editingNamed", { name: menu.name })}
+    >
       <div>
         <form
-          className="tt-menu-row"
-          style={{ gap: 8 }}
+          className="tt-prodform"
           onSubmit={async e => {
             e.preventDefault();
             const name = value.trim();
@@ -66,24 +71,27 @@ export default function MenuRow({
             }}
             autoFocus
           />
-          <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">
-            {t("menu.save")}
-          </button>
-          <button
-            type="button"
-            className="tt-btn tt-btn-ghost tt-btn-sm"
-            onClick={() => setRenaming(false)}
-          >
-            {t("menu.cancel")}
-          </button>
+          <div className="tt-prodform-actions">
+            <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">
+              {t("menu.save")}
+            </button>
+            <button
+              type="button"
+              className="tt-btn tt-btn-ghost tt-btn-sm"
+              onClick={() => setRenaming(false)}
+            >
+              {t("menu.cancel")}
+            </button>
+          </div>
         </form>
         {error && <p className="tt-field-error">{error}</p>}
       </div>
-    );
-  }
+    </Modal>
+  );
 
   return (
     <div className="tt-menu-row">
+      {renameDialog}
       <ReorderButtons
         canMoveUp={canMoveUp}
         canMoveDown={canMoveDown}

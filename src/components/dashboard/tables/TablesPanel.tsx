@@ -8,6 +8,7 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 import QrCard, { type QrTarget } from "./QrCard";
 import TableRow from "./TableRow";
 import { TableIcon } from "@/components/ui/icons";
+import AddInDialog from "@/components/ui/AddInDialog";
 
 /** A table paired with its pre-rendered QR (generated on the server). */
 export interface TableWithQr {
@@ -41,22 +42,36 @@ export default function TablesPanel({
     setNewLabel("");
   }
 
-  const addForm = (
-    <form className="tt-add-section" onSubmit={submitAdd}>
+  const addForm = (close: () => void) => (
+    <form
+      className="tt-prodform"
+      onSubmit={async e => {
+        await submitAdd(e);
+        close();
+      }}
+    >
       <input
         className="tt-input"
         placeholder={t("dash.tableLabelPlaceholder")}
         value={newLabel}
         onChange={e => setNewLabel(e.target.value)}
       />
-      <button
-        className="tt-btn tt-btn-primary"
-        type="submit"
-        disabled={!newLabel.trim() || busy}
-      >
-        {t("dash.addTable")}
-      </button>
+      <div className="tt-prodform-actions">
+        <button
+          className="tt-btn tt-btn-primary tt-btn-sm"
+          type="submit"
+          disabled={!newLabel.trim() || busy}
+        >
+          {t("dash.addTable")}
+        </button>
+      </div>
     </form>
+  );
+
+  const addTableDialog = (
+    <AddInDialog label={t("dash.addTable")} title={t("dash.addTable")} maxWidth={520}>
+      {addForm}
+    </AddInDialog>
   );
 
   return (
@@ -113,13 +128,13 @@ export default function TablesPanel({
               >
                 {t("dash.addFirstTableDesc")}
               </p>
-              {addForm}
+              {addTableDialog}
             </div>
           ) : (
             <>
               {/* Above the list: with a room full of tables you shouldn't have
                   to scroll past every QR code to add one more. */}
-              <div className="tt-add-above">{addForm}</div>
+              {addTableDialog}
               <div className="tt-table-list">
                 {tables.map(({ table, qr }) => (
                   <TableRow
