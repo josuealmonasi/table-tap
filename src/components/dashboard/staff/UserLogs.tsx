@@ -43,7 +43,7 @@ export default function UserLogs({ restaurantId }: UserLogsProps) {
 
       {logs.map(l => (
         <div key={l.id} className="tt-log-row">
-          <span className="tt-staff-cell">
+          <span className="tt-log-text">
             <strong>{l.actor_email}</strong> {describe(l.action, l.target_role)}{" "}
             <span className="tt-muted">({l.target_email})</span>
           </span>
