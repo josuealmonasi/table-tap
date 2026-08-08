@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import AddInDialog from "@/components/ui/AddInDialog";
 import type { Menu } from "@/lib/types";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { menuSlug } from "@/lib/slug";
@@ -38,7 +39,6 @@ export default function MenusPanel({
   onMove,
 }: MenusPanelProps) {
   const t = useT();
-  const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
   const confirm = useConfirm();
@@ -106,10 +106,10 @@ export default function MenusPanel({
     if (ok) await onDuplicate(menu.id);
   }
 
-  const addForm = (
+  const addForm = (close: () => void) => (
     <>
       <form
-        className="tt-add-section"
+        className="tt-prodform"
         onSubmit={async e => {
           e.preventDefault();
           const name = newName.trim();
@@ -121,7 +121,7 @@ export default function MenusPanel({
           const id = await onAdd(name);
           setNewName("");
           setAddError(null);
-          setAdding(false);
+          close();
           // Open the new menu right away so the user can start adding items.
           if (id) onOpen({ id, name } as Menu);
         }}
@@ -136,29 +136,35 @@ export default function MenusPanel({
           }}
           autoFocus
         />
-        <button
-          className="tt-btn tt-btn-primary"
-          type="submit"
-          disabled={!newName.trim()}
-        >
-          {t("menu.addMenu")}
-        </button>
-        {!empty && (
+        <div className="tt-prodform-actions">
+          <button
+            className="tt-btn tt-btn-primary tt-btn-sm"
+            type="submit"
+            disabled={!newName.trim()}
+          >
+            {t("menu.addMenu")}
+          </button>
           <button
             type="button"
-            className="tt-btn tt-btn-ghost"
+            className="tt-btn tt-btn-ghost tt-btn-sm"
             onClick={() => {
-              setAdding(false);
               setNewName("");
               setAddError(null);
+              close();
             }}
           >
             {t("menu.cancel")}
           </button>
-        )}
+        </div>
       </form>
       {addError && <p className="tt-field-error">{addError}</p>}
     </>
+  );
+
+  const addMenuDialog = (
+    <AddInDialog label={t("menu.addMenu")} title={t("menu.addMenu")} maxWidth={520}>
+      {addForm}
+    </AddInDialog>
   );
 
   return (
@@ -184,18 +190,12 @@ export default function MenusPanel({
           >
             {t("menu.createFirstDesc")}
           </p>
-          {addForm}
+          {addMenuDialog}
         </div>
       ) : (
         <>
           {/* Above the list so it stays reachable as menus accumulate. */}
-          {adding ? (
-            <div className="tt-add-above">{addForm}</div>
-          ) : (
-            <button className="tt-add-more" onClick={() => setAdding(true)}>
-              {t("menu.addMenu")}
-            </button>
-          )}
+          {addMenuDialog}
 
           <div className="tt-menu-list">
             {menus.map((m, i) => (

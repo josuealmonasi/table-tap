@@ -6,6 +6,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useT } from "@/lib/i18n/context";
 import QrCard, { type QrTarget } from "./QrCard";
 import { DeleteIcon, EditIcon } from "@/components/ui/icons";
+import { Modal } from "@/components/ui/Modal";
 
 interface TableRowProps {
   table: RestaurantTable;
@@ -40,9 +41,17 @@ export default function TableRow({ table, qr, onRename, onDelete }: TableRowProp
         downloadName={`table-${table.label}`}
       />
       <div className="tt-table-actions">
-        {renaming ? (
+        <Modal
+          open={renaming}
+          onClose={() => {
+            setValue(table.label);
+            setRenaming(false);
+          }}
+          maxWidth={460}
+          title={t("common.editingNamed", { name: table.label })}
+        >
           <form
-            className="tt-add-section"
+            className="tt-prodform"
             onSubmit={async e => {
               e.preventDefault();
               const label = value.trim();
@@ -56,34 +65,36 @@ export default function TableRow({ table, qr, onRename, onDelete }: TableRowProp
               onChange={e => setValue(e.target.value)}
               autoFocus
             />
-            <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">
-              {t("dash.saveShort")}
-            </button>
-            <button
-              type="button"
-              className="tt-btn tt-btn-ghost tt-btn-sm"
-              onClick={() => {
-                setValue(table.label);
-                setRenaming(false);
-              }}
-            >
-              {t("common.cancel")}
-            </button>
+            <div className="tt-prodform-actions">
+              <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">
+                {t("dash.saveShort")}
+              </button>
+              <button
+                type="button"
+                className="tt-btn tt-btn-ghost tt-btn-sm"
+                onClick={() => {
+                  setValue(table.label);
+                  setRenaming(false);
+                }}
+              >
+                {t("common.cancel")}
+              </button>
+            </div>
           </form>
-        ) : (
-          <div className="tt-prod-actions">
-            <button
-              className="tt-iconbtn"
-              title={t("dash.rename")}
-              onClick={() => setRenaming(true)}
-            >
-              <EditIcon size={16} />
-            </button>
-            <button className="tt-iconbtn" title={t("dash.deleteTable")} onClick={remove}>
-              <DeleteIcon size={16} />
-            </button>
-          </div>
-        )}
+        </Modal>
+
+        <div className="tt-prod-actions">
+          <button
+            className="tt-iconbtn"
+            title={t("dash.rename")}
+            onClick={() => setRenaming(true)}
+          >
+            <EditIcon size={16} />
+          </button>
+          <button className="tt-iconbtn" title={t("dash.deleteTable")} onClick={remove}>
+            <DeleteIcon size={16} />
+          </button>
+        </div>
       </div>
     </div>
   );

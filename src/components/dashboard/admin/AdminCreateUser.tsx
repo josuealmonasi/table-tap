@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAdminActions, type NewUserInput } from "@/hooks/useAdminActions";
 import { useT } from "@/lib/i18n/context";
+import AddInDialog from "@/components/ui/AddInDialog";
 
 interface AdminCreateUserProps {
   restaurantOptions: { id: string; name: string }[];
@@ -50,86 +51,102 @@ export default function AdminCreateUser({ restaurantOptions }: AdminCreateUserPr
         </span>
       </div>
 
-      <form className="tt-prodform" onSubmit={handleSubmit}>
-        <div className="tt-prodform-row">
-          <input
-            className="tt-input"
-            style={{ flex: 1 }}
-            type="email"
-            placeholder={t("admin.emailPlaceholder")}
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            required
-          />
-          <input
-            className="tt-input"
-            style={{ flex: 1 }}
-            type="password"
-            placeholder={t("admin.passwordPlaceholder")}
-            minLength={8}
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-          />
-        </div>
-
-        <div className="tt-prodform-row">
-          <label className="tt-field" style={{ flex: 1 }}>
-            <span className="tt-mod-label">{t("dash.role")}</span>
-            <select
-              className="tt-input"
-              value={role}
-              onChange={e => setRole(e.target.value as NewUserInput["role"])}
-            >
-              <option value="kitchen">{t("dash.kitchen")}</option>
-              <option value="waiter">{t("dash.waiter")}</option>
-              <option value="manager">{t("dash.manager")}</option>
-              <option value="owner">{t("dash.owner")}</option>
-              <option value="admin">{t("admin.platformAdmin")}</option>
-            </select>
-          </label>
-
-          {needsRestaurant && (
-            <label className="tt-field" style={{ flex: 1.4 }}>
-              <span className="tt-mod-label">{t("admin.restaurant")}</span>
-              <select
-                className="tt-input"
-                value={restaurantId}
-                onChange={e => setRestaurantId(e.target.value)}
-              >
-                {restaurantOptions.map(r => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-                {role === "owner" && (
-                  <option value={NEW_RESTAURANT}>{t("admin.newRestaurantOption")}</option>
-                )}
-              </select>
-            </label>
-          )}
-        </div>
-
-        {creatingNew && (
-          <input
-            className="tt-input"
-            placeholder={t("admin.newRestaurantName")}
-            value={restaurantName}
-            onChange={e => setRestaurantName(e.target.value)}
-            required
-          />
-        )}
-
-        <div className="tt-prodform-actions">
-          <button
-            type="submit"
-            className="tt-btn tt-btn-primary tt-btn-sm"
-            disabled={busy}
+      <AddInDialog
+        label={t("admin.createLogin")}
+        title={t("admin.createLogin")}
+        maxWidth={560}
+      >
+        {close => (
+          <form
+            className="tt-prodform"
+            onSubmit={async e => {
+              await handleSubmit(e);
+              close();
+            }}
           >
-            {busy ? t("common.working") : t("admin.createLogin")}
-          </button>
-        </div>
-      </form>
+            <div className="tt-prodform-row">
+              <input
+                className="tt-input"
+                style={{ flex: 1 }}
+                type="email"
+                placeholder={t("admin.emailPlaceholder")}
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+              />
+              <input
+                className="tt-input"
+                style={{ flex: 1 }}
+                type="password"
+                placeholder={t("admin.passwordPlaceholder")}
+                minLength={8}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="tt-prodform-row">
+              <label className="tt-field" style={{ flex: 1 }}>
+                <span className="tt-mod-label">{t("dash.role")}</span>
+                <select
+                  className="tt-input"
+                  value={role}
+                  onChange={e => setRole(e.target.value as NewUserInput["role"])}
+                >
+                  <option value="kitchen">{t("dash.kitchen")}</option>
+                  <option value="waiter">{t("dash.waiter")}</option>
+                  <option value="manager">{t("dash.manager")}</option>
+                  <option value="owner">{t("dash.owner")}</option>
+                  <option value="admin">{t("admin.platformAdmin")}</option>
+                </select>
+              </label>
+
+              {needsRestaurant && (
+                <label className="tt-field" style={{ flex: 1.4 }}>
+                  <span className="tt-mod-label">{t("admin.restaurant")}</span>
+                  <select
+                    className="tt-input"
+                    value={restaurantId}
+                    onChange={e => setRestaurantId(e.target.value)}
+                  >
+                    {restaurantOptions.map(r => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                    {role === "owner" && (
+                      <option value={NEW_RESTAURANT}>
+                        {t("admin.newRestaurantOption")}
+                      </option>
+                    )}
+                  </select>
+                </label>
+              )}
+            </div>
+
+            {creatingNew && (
+              <input
+                className="tt-input"
+                placeholder={t("admin.newRestaurantName")}
+                value={restaurantName}
+                onChange={e => setRestaurantName(e.target.value)}
+                required
+              />
+            )}
+
+            <div className="tt-prodform-actions">
+              <button
+                type="submit"
+                className="tt-btn tt-btn-primary tt-btn-sm"
+                disabled={busy}
+              >
+                {busy ? t("common.working") : t("admin.createLogin")}
+              </button>
+            </div>
+          </form>
+        )}
+      </AddInDialog>
     </div>
   );
 }
