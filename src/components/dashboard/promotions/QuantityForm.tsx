@@ -61,9 +61,22 @@ export default function QuantityForm({
   const buy = Math.floor(Number(buyQty));
   const pay = Math.floor(Number(payQty));
   const validBogo = buy >= 2 && pay >= 1 && pay < buy;
+  // Every price break has to beat buying that many one by one — judged on the
+  // cheapest product the deal covers, since a break that beats the steak can
+  // still overcharge for the water. The API enforces the same rule.
+  const cheapestUnit = Math.min(
+    ...picked.map(p => Number(products.find(x => x.id === p.id)?.price ?? Infinity)),
+    Infinity,
+  );
+  const badTier =
+    kind === "tiered" &&
+    Number.isFinite(cheapestUnit) &&
+    parsedTiers.some(x => x.price >= Math.round(x.qty * cheapestUnit * 100) / 100);
+
   const ready =
     name.trim() &&
     picked.length > 0 &&
+    !badTier &&
     (kind === "bogo" ? validBogo : parsedTiers.length > 0);
 
   /** What the customer pays at the deal quantity, using the first product. */

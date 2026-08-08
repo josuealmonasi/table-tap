@@ -79,7 +79,7 @@ export default function PromotionsPanel({
     });
     if (!ok) return;
     const err = await remove(p.id);
-    if (err) toast(err, "error");
+    toast(err ?? t("promos.deleted"), err ? "error" : "info");
   }
 
   /** One line describing what the promotion does. */
@@ -194,9 +194,15 @@ export default function PromotionsPanel({
                     <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                       <button
                         className="tt-btn tt-btn-ghost tt-btn-sm"
+                        // Confirm the pause too: without it the only feedback
+                        // was the label flipping, which is easy to miss.
                         onClick={async () => {
-                          const err = await setActive(p.id, !p.active);
-                          if (err) toast(err, "error");
+                          const next = !p.active;
+                          const err = await setActive(p.id, next);
+                          toast(
+                            err ?? t(next ? "promos.resumed_ok" : "promos.paused_ok"),
+                            err ? "error" : "info",
+                          );
                         }}
                       >
                         {p.active ? t("promos.pause") : t("promos.resume")}
