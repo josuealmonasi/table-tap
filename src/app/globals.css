@@ -3435,3 +3435,11 @@ h2.tt-serif {
   margin-top: 6px;
   max-height: 240px;
 }
+
+/* The two "add" buttons above the promotions list. They wrap rather than
+   shrink on a phone, so neither label truncates. */
+.tt-promo-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
