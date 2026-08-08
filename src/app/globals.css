@@ -603,10 +603,14 @@ h2.tt-serif {
 
 /* Rendered into <body> and positioned from the field's rect, so it is neither
    clipped by a dialog nor part of its layout — the dialog holds still as the
-   list opens and closes. z-index clears the dialog's own 60. */
+   list opens and closes.
+
+   z-index has to clear .tt-dialog-overlay's 100, not the dialog's own 60: the
+   overlay paints the scrim, so anything below it comes out dimmed and behind
+   the dialog even though it is on top in the DOM. */
 .tt-picker-menu {
   position: fixed;
-  z-index: 80;
+  z-index: 120;
   max-height: 280px;
   overflow-y: auto;
   background: var(--tt-white);
