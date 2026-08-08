@@ -6,6 +6,7 @@ import type { Menu } from "@/lib/types";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { menuSlug } from "@/lib/slug";
 import { useT } from "@/lib/i18n/context";
+import { useToast } from "@/components/ui/Toast";
 import MenuRow from "./MenuRow";
 import { OrdersIcon } from "@/components/ui/icons";
 
@@ -39,6 +40,7 @@ export default function MenusPanel({
   onMove,
 }: MenusPanelProps) {
   const t = useT();
+  const toast = useToast();
   const [newName, setNewName] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
   const confirm = useConfirm();
@@ -119,6 +121,7 @@ export default function MenusPanel({
             return;
           }
           const id = await onAdd(name);
+          toast(t("done.menuAdded"));
           setNewName("");
           setAddError(null);
           close();

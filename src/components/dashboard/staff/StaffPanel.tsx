@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useStaff, type StaffRole } from "@/hooks/useStaff";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useT } from "@/lib/i18n/context";
+import { useToast } from "@/components/ui/Toast";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import {
   DeleteIcon,
@@ -33,6 +34,7 @@ const ROLE_ICON = {
 /** Owner-only team management: create, re-role and remove logins. */
 export default function StaffPanel({ restaurantId, children }: StaffPanelProps) {
   const t = useT();
+  const toast = useToast();
   const { members, loading, busy, addMember, updateRole, removeMember } =
     useStaff(restaurantId);
   const staffRows = useRowMemory("staff", 3, loading ? undefined : members.length);
@@ -40,12 +42,14 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
   const [role, setRole] = useState<StaffRole>("kitchen");
   const confirm = useConfirm();
 
-  async function handleAdd(e: React.FormEvent): Promise<void> {
+  /** Returns whether the invite landed, so a failure keeps the dialog open. */
+  async function handleAdd(e: React.FormEvent): Promise<boolean> {
     e.preventDefault();
-    if (await addMember(email.trim(), role)) {
-      setEmail("");
-      setRole("kitchen");
-    }
+    if (!(await addMember(email.trim(), role))) return false;
+    setEmail("");
+    setRole("kitchen");
+    toast(t("done.inviteSent"));
+    return true;
   }
 
   return (
@@ -148,9 +152,10 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
               {close => (
                 <form
                   className="tt-prodform"
+                  // Only close on success — closing on failure would throw
+                  // away what they typed along with the error.
                   onSubmit={async e => {
-                    await handleAdd(e);
-                    close();
+                    if (await handleAdd(e)) close();
                   }}
                 >
                   <input

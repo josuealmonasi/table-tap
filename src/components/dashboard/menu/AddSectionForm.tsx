@@ -3,6 +3,7 @@
 import { useState } from "react";
 import AddInDialog from "@/components/ui/AddInDialog";
 import { useT } from "@/lib/i18n/context";
+import { useToast } from "@/components/ui/Toast";
 
 interface AddSectionFormProps {
   onAdd: (name: string) => Promise<unknown>;
@@ -15,6 +16,7 @@ export default function AddSectionForm({
   autoFocus = false,
 }: AddSectionFormProps) {
   const t = useT();
+  const toast = useToast();
   const [name, setName] = useState("");
 
   return (
@@ -26,6 +28,7 @@ export default function AddSectionForm({
             e.preventDefault();
             if (name.trim()) {
               await onAdd(name.trim());
+              toast(t("done.sectionAdded"));
               setName("");
               close();
             }

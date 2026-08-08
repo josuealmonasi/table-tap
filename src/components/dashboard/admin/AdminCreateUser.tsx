@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAdminActions, type NewUserInput } from "@/hooks/useAdminActions";
 import { useT } from "@/lib/i18n/context";
+import { useToast } from "@/components/ui/Toast";
 import AddInDialog from "@/components/ui/AddInDialog";
 
 interface AdminCreateUserProps {
@@ -14,6 +15,7 @@ const NEW_RESTAURANT = "__new__";
 /** Create any kind of login: admin, founding owner, co-owner, manager, kitchen. */
 export default function AdminCreateUser({ restaurantOptions }: AdminCreateUserProps) {
   const t = useT();
+  const toast = useToast();
   const { busy, createUser } = useAdminActions();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -24,7 +26,8 @@ export default function AdminCreateUser({ restaurantOptions }: AdminCreateUserPr
   const needsRestaurant = role !== "admin";
   const creatingNew = role === "owner" && restaurantId === NEW_RESTAURANT;
 
-  async function handleSubmit(e: React.FormEvent): Promise<void> {
+  /** Returns whether the login was created, so a failure keeps the dialog open. */
+  async function handleSubmit(e: React.FormEvent): Promise<boolean> {
     e.preventDefault();
     const ok = await createUser({
       email: email.trim(),
@@ -33,11 +36,12 @@ export default function AdminCreateUser({ restaurantOptions }: AdminCreateUserPr
       restaurantId: needsRestaurant && !creatingNew ? restaurantId : undefined,
       restaurantName: creatingNew ? restaurantName.trim() : undefined,
     });
-    if (ok) {
-      setEmail("");
-      setPassword("");
-      setRestaurantName("");
-    }
+    if (!ok) return false;
+    setEmail("");
+    setPassword("");
+    setRestaurantName("");
+    toast(t("done.loginCreated"));
+    return true;
   }
 
   return (
@@ -60,8 +64,7 @@ export default function AdminCreateUser({ restaurantOptions }: AdminCreateUserPr
           <form
             className="tt-prodform"
             onSubmit={async e => {
-              await handleSubmit(e);
-              close();
+              if (await handleSubmit(e)) close();
             }}
           >
             <div className="tt-prodform-row">
