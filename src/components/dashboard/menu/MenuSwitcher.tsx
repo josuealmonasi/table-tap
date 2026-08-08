@@ -65,10 +65,33 @@ export default function MenuSwitcher({
     router.replace(`/dashboard/${menuSlug(name)}`);
   }
 
+  const current = menus.find(m => m.id === currentId);
+  const renameChanged = Boolean(value.trim() && value.trim() !== (current?.name ?? ""));
+
+  function cancelRename() {
+    setValue(current?.name ?? "");
+    setError(null);
+    setRenaming(false);
+  }
+
   if (renaming) {
     return (
       <div ref={ref} style={{ display: "inline-block" }}>
-        <form className="tt-menu-switcher-rename" onSubmit={submitRename}>
+        <form
+          className="tt-menu-switcher-rename"
+          onSubmit={submitRename}
+          // Escape or clicking away abandons the edit, matching every other
+          // text field on the page.
+          onBlur={e => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) cancelRename();
+          }}
+          onKeyDown={e => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              cancelRename();
+            }
+          }}
+        >
           <input
             className="tt-input"
             style={{ width: 220 }}
@@ -80,7 +103,11 @@ export default function MenuSwitcher({
             autoFocus
             onFocus={e => e.target.select()}
           />
-          <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">
+          <button
+            className="tt-btn tt-btn-primary tt-btn-sm"
+            type="submit"
+            disabled={!renameChanged}
+          >
             {t("menu.save")}
           </button>
           <button
