@@ -227,6 +227,8 @@ export const en = {
     tooMany: "Too many tries — please wait a moment.",
   },
   coupons: {
+    paused_ok: "Coupon paused",
+    resumed_ok: "Coupon resumed",
     edit: "Edit coupon",
     updated: "Coupon updated",
     addAction: "Add coupon",
@@ -266,6 +268,9 @@ export const en = {
     save: "Save {amount}",
   },
   promos: {
+    deleted: "Promotion deleted",
+    paused_ok: "Promotion paused",
+    resumed_ok: "Promotion resumed",
     hiddenOffMenu: "{item} isn't on an active menu — customers won't see this combo",
     hiddenUnavailable: "{item} is marked unavailable — customers won't see this combo",
     hiddenMissing: "A product in this combo no longer exists — customers won't see it",

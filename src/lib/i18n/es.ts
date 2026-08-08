@@ -221,6 +221,8 @@ export const es: Messages = {
     tooMany: "Demasiados intentos — espera un momento.",
   },
   coupons: {
+    paused_ok: "Cupón pausado",
+    resumed_ok: "Cupón reanudado",
     edit: "Editar cupón",
     updated: "Cupón actualizado",
     addAction: "Agregar cupón",
@@ -261,6 +263,9 @@ export const es: Messages = {
     save: "Ahorra {amount}",
   },
   promos: {
+    deleted: "Promoción eliminada",
+    paused_ok: "Promoción pausada",
+    resumed_ok: "Promoción reanudada",
     hiddenOffMenu: "{item} no está en un menú activo — los clientes no verán este combo",
     hiddenUnavailable:
       "{item} está marcado como no disponible — los clientes no verán este combo",

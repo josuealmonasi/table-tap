@@ -49,7 +49,10 @@ export default function ComboForm({
   }, 0);
   const comboPrice = Number(price) || 0;
   const savingAmount = Math.round((regular - comboPrice) * 100) / 100;
-  const ready = name.trim() && picked.length >= 2 && comboPrice > 0;
+  // A bundle dearer than its parts is never what the owner meant, so the form
+  // won't submit one. The API enforces the same rule as the real gate.
+  const beatsParts = regular <= 0 || comboPrice < regular;
+  const ready = name.trim() && picked.length >= 2 && comboPrice > 0 && beatsParts;
 
   function bump(id: string, delta: number) {
     setPicked(prev =>

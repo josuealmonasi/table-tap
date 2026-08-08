@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMembership, MANAGES } from "@/lib/membership";
+import {
+  promoPricingError,
+  type PricedProduct,
+  type PromoShape,
+} from "@/lib/promo-guard";
 import type { PromotionKind } from "@/lib/promotions";
 
 export const runtime = "nodejs";
@@ -50,7 +55,9 @@ function validate(body: Body): { error: string } | null {
     }
     if (pay >= buy) return { error: "They must pay for fewer than they take." };
   } else if (body.kind === "tiered") {
-    const tiers = (body.tiers ?? []).filter(t => Number(t.qty) > 0 && Number(t.price) >= 0);
+    const tiers = (body.tiers ?? []).filter(
+      t => Number(t.qty) > 0 && Number(t.price) >= 0,
+    );
     if (tiers.length === 0) return { error: "Add at least one price break." };
   } else {
     return { error: "Pick a promotion type." };
@@ -73,12 +80,21 @@ export async function POST(req: NextRequest) {
   const itemIds = body.items!.map(i => i.itemId);
   const { data: owned } = await db
     .from("menu_items")
-    .select("id")
+    .select("id, price, discount_pct")
     .eq("restaurant_id", restaurantId)
     .in("id", itemIds);
   if ((owned?.length ?? 0) !== itemIds.length) {
     return NextResponse.json({ error: "Unknown product." }, { status: 400 });
   }
+
+  // A promotion that costs more than buying the products one by one is always
+  // a mistake, and nothing downstream would catch it — the pricing engine
+  // applies whatever the deal says.
+  const pricingError = promoPricingError(
+    body as PromoShape,
+    new Map((owned as PricedProduct[]).map(p => [p.id, p])),
+  );
+  if (pricingError) return NextResponse.json({ error: pricingError }, { status: 400 });
 
   const { data: created, error } = await db
     .from("promotions")
@@ -96,7 +112,10 @@ export async function POST(req: NextRequest) {
     .select("id")
     .single();
   if (error || !created) {
-    return NextResponse.json({ error: "Could not create the promotion." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Could not create the promotion." },
+      { status: 500 },
+    );
   }
 
   const { error: linkErr } = await db.from("promotion_items").insert(
@@ -109,7 +128,10 @@ export async function POST(req: NextRequest) {
   if (linkErr) {
     // Don't leave a promotion with no products — it would price as nothing.
     await db.from("promotions").delete().eq("id", created.id);
-    return NextResponse.json({ error: "Could not attach the products." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Could not attach the products." },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({ ok: true });
@@ -144,12 +166,21 @@ export async function PATCH(req: NextRequest) {
   const itemIds = body.items!.map(i => i.itemId);
   const { data: owned } = await db
     .from("menu_items")
-    .select("id")
+    .select("id, price, discount_pct")
     .eq("restaurant_id", restaurantId)
     .in("id", itemIds);
   if ((owned?.length ?? 0) !== itemIds.length) {
     return NextResponse.json({ error: "Unknown product." }, { status: 400 });
   }
+
+  // A promotion that costs more than buying the products one by one is always
+  // a mistake, and nothing downstream would catch it — the pricing engine
+  // applies whatever the deal says.
+  const pricingError = promoPricingError(
+    body as PromoShape,
+    new Map((owned as PricedProduct[]).map(p => [p.id, p])),
+  );
+  if (pricingError) return NextResponse.json({ error: pricingError }, { status: 400 });
 
   const { data: updated, error } = await db
     .from("promotions")
@@ -187,7 +218,10 @@ export async function PATCH(req: NextRequest) {
     })),
   );
   if (linkErr) {
-    return NextResponse.json({ error: "Could not attach the products." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Could not attach the products." },
+      { status: 500 },
+    );
   }
   return NextResponse.json({ ok: true });
 }

@@ -314,8 +314,12 @@ export default function CouponsPanel({
                   <button
                     className="tt-btn tt-btn-ghost tt-btn-sm"
                     onClick={async () => {
-                      const err = await setActive(c.id, !c.active);
-                      if (err) toast(err, "error");
+                      const next = !c.active;
+                      const err = await setActive(c.id, next);
+                      toast(
+                        err ?? t(next ? "coupons.resumed_ok" : "coupons.paused_ok"),
+                        err ? "error" : "info",
+                      );
                     }}
                   >
                     {c.active ? t("coupons.pause") : t("coupons.resume")}
