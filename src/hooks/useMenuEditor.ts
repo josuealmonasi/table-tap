@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
+import type { MenuSchedule } from "@/lib/menu-schedule";
 import { useT } from "@/lib/i18n/context";
 import {
   fetchMenuData,
@@ -134,6 +135,23 @@ export function useMenuEditor(restaurantId: string) {
     run("write.deleteMenu", supabase.from("menus").delete().eq("id", id));
   const moveMenu = (id: string, direction: "up" | "down") =>
     move("write.reorderMenus", "menus", menus, id, direction);
+
+  /**
+   * Opening hours for one menu. Null clears them, which returns the menu to
+   * being driven by its switch alone.
+   */
+  async function setMenuSchedule(
+    id: string,
+    schedule: MenuSchedule | null,
+  ): Promise<void> {
+    const prev = menus;
+    setMenus(m => m.map(x => (x.id === id ? { ...x, schedule } : x)));
+    const { error } = await supabase.from("menus").update({ schedule }).eq("id", id);
+    if (error) {
+      setMenus(prev);
+      reportError("write.updateMenu", error);
+    }
+  }
 
   async function setMenuActive(id: string, active: boolean): Promise<void> {
     const prev = menus;
@@ -298,6 +316,7 @@ export function useMenuEditor(restaurantId: string) {
     renameMenu,
     deleteMenu,
     setMenuActive,
+    setMenuSchedule,
     duplicateMenu,
     moveMenu,
     addSection,

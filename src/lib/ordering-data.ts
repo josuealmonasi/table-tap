@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Category, MenuItem, Restaurant } from "@/lib/types";
 import { fetchPromotions } from "@/lib/promotions-data";
 import { buildCombos, toCartPromos, type Combo } from "@/lib/promotions";
+import { isMenuOpen, type MenuSchedule } from "@/lib/menu-schedule";
 import type { CartPromo } from "@/lib/pricing";
 
 /** Everything the customer ordering screens need for one restaurant. */
@@ -68,14 +69,29 @@ export function unwrap<T>(
 export async function loadOrderingData(restaurantId: string): Promise<OrderingData> {
   const supabase = await createClient();
 
-  // Only active menus are shown to customers (the union of their content).
-  const menusRes = await supabase
-    .from("menus")
-    .select("id")
-    .eq("restaurant_id", restaurantId)
-    .eq("active", true);
-  const activeMenus = unwrap<{ id: string }[]>(menusRes, "menus") ?? [];
-  const activeMenuIds = activeMenus.map(m => m.id);
+  // Only menus that are switched on AND inside their opening hours, if they
+  // have any. The switch is filtered in SQL; the hours can't be, so they're
+  // applied here in the restaurant's own timezone. A menu with no schedule
+  // passes straight through, which is how every menu behaved before.
+  const [menusRes, zoneRes] = await Promise.all([
+    supabase
+      .from("menus")
+      .select("id, active, schedule")
+      .eq("restaurant_id", restaurantId)
+      .eq("active", true),
+    supabase.from("restaurants").select("timezone").eq("id", restaurantId).single(),
+  ]);
+  const menuRows =
+    unwrap<{ id: string; active: boolean; schedule: MenuSchedule | null }[]>(
+      menusRes,
+      "menus",
+    ) ?? [];
+  const timeZone =
+    (zoneRes.data as { timezone?: string } | null)?.timezone || "America/Mexico_City";
+  const now = new Date();
+  const activeMenuIds = menuRows
+    .filter(m => isMenuOpen(m.active, m.schedule, now, timeZone))
+    .map(m => m.id);
   const menuFilter = activeMenuIds.length ? activeMenuIds : [NO_MENU];
 
   const [restaurantRes, categoriesRes, menuItemsRes] = await Promise.all([
@@ -141,9 +157,11 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
     p_restaurant_id: restaurantId,
   });
   for (const row of (stats as
-    | { item_id: string; avg_rating: number; rating_count: number }[]
-    | null) ?? []) {
-    ratings[row.item_id] = { avg: Number(row.avg_rating), count: Number(row.rating_count) };
+    { item_id: string; avg_rating: number; rating_count: number }[] | null) ?? []) {
+    ratings[row.item_id] = {
+      avg: Number(row.avg_rating),
+      count: Number(row.rating_count),
+    };
   }
 
   // With the service charge switched off, customers see a plain 0% everywhere

@@ -49,6 +49,21 @@ create table if not exists menus (
   created_at    timestamptz not null default now()
 );
 
+-- Optional opening hours for a menu. Null (or disabled) means the menu is
+-- driven by `active` alone, which is how every menu behaved before this
+-- existed. Shape:
+--   { "enabled": true,
+--     "rules": [{ "days": [1,2,3,4,5], "allDay": false,
+--                 "start": "12:00", "end": "17:00" }] }
+-- days are 0=Sunday..6=Saturday. `active` still wins: a menu switched off is
+-- off whatever the schedule says.
+alter table menus add column if not exists schedule jsonb;
+
+-- Opening hours are local to the restaurant, so they need a zone to be
+-- evaluated in. IANA name; the default matches the app's MXN/es-MX footing.
+alter table restaurants add column if not exists timezone text not null
+  default 'America/Mexico_City';
+
 -- Menu names are unique within a restaurant (case-insensitive, trimmed). Also
 -- keeps the /dashboard/{menu-name} URL unambiguous.
 create unique index if not exists menus_restaurant_name_unique
