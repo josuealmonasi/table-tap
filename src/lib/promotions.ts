@@ -87,6 +87,52 @@ export function buildCombos(
   return combos;
 }
 
+/** Why a component keeps its combo off the customer menu. */
+export type ComboIssueReason = "missing" | "unavailable" | "offMenu";
+
+/**
+ * A component that stops its combo from rendering, and why. `missing` carries
+ * no name — the product is gone, so there is nothing left to name.
+ */
+export type ComboIssue =
+  | { itemId: string; reason: "missing" }
+  | { itemId: string; reason: "unavailable" | "offMenu"; name: string };
+
+/**
+ * The components that keep a combo off the customer menu — the same conditions
+ * `buildCombos` and `loadOrderingData` silently drop a combo for, reported
+ * rather than applied.
+ *
+ * Dropping is right for the diner (better no card than one that fails at
+ * checkout) but invisible to the owner, who goes on believing an active combo
+ * is live. The dashboard calls this to say which product is at fault.
+ *
+ * `itemsById` must be ALL of the restaurant's products, not just the visible
+ * ones — that's what tells a hidden product apart from a deleted one.
+ */
+export function findComboIssues(
+  promo: PromotionWithItems,
+  itemsById: Map<string, MenuItem>,
+  activeMenuIds: Set<string>,
+): ComboIssue[] {
+  if (promo.kind !== "combo") return [];
+
+  const issues: ComboIssue[] = [];
+  for (const { item_id } of promo.items) {
+    const item = itemsById.get(item_id);
+    if (!item) {
+      issues.push({ itemId: item_id, reason: "missing" });
+    } else if (!item.available) {
+      issues.push({ itemId: item_id, reason: "unavailable", name: item.name });
+    } else if (!item.menu_id || !activeMenuIds.has(item.menu_id)) {
+      // A null menu_id is unreachable too: the customer query filters on a
+      // list of active menu ids, which no NULL row can match.
+      issues.push({ itemId: item_id, reason: "offMenu", name: item.name });
+    }
+  }
+  return issues;
+}
+
 /**
  * The quantity deals (bogo/tiered) in a form the pricing engine understands.
  * Combos are left out — they're priced as their own cart line.
