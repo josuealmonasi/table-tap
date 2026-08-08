@@ -68,6 +68,7 @@ export default function DashboardHome({ restaurant, role }: DashboardHomeProps) 
             onOpen={openMenu}
             onAdd={editor.addMenu}
             onRename={editor.renameMenu}
+            onSetSchedule={editor.setMenuSchedule}
             onDelete={editor.deleteMenu}
             onToggleActive={editor.setMenuActive}
             onDuplicate={editor.duplicateMenu}

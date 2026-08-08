@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { MenuSchedule } from "@/lib/menu-schedule";
 import AddInDialog from "@/components/ui/AddInDialog";
 import type { Menu } from "@/lib/types";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -15,6 +16,7 @@ interface MenusPanelProps {
   onOpen: (menu: Menu) => void;
   onAdd: (name: string) => Promise<string | undefined>;
   onRename: (id: string, name: string) => Promise<void>;
+  onSetSchedule: (id: string, schedule: MenuSchedule | null) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onToggleActive: (id: string, active: boolean) => Promise<void>;
   onDuplicate: (id: string) => Promise<string | undefined>;
@@ -34,6 +36,7 @@ export default function MenusPanel({
   onOpen,
   onAdd,
   onRename,
+  onSetSchedule,
   onDelete,
   onToggleActive,
   onDuplicate,
@@ -209,6 +212,7 @@ export default function MenusPanel({
                 canMoveDown={i < menus.length - 1}
                 onOpen={onOpen}
                 onRename={onRename}
+                onSetSchedule={onSetSchedule}
                 onToggle={toggle}
                 onDuplicate={duplicate}
                 onDelete={remove}

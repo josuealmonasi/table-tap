@@ -1,3 +1,4 @@
+import type { MenuSchedule } from "@/lib/menu-schedule";
 // Shared types matching the database schema.
 
 export type Modifier = {
@@ -56,6 +57,8 @@ export type Menu = {
   name: string;
   active: boolean;
   sort_order: number;
+  /** Optional opening hours; null means the switch decides. */
+  schedule?: MenuSchedule | null;
 };
 
 export type Restaurant = {

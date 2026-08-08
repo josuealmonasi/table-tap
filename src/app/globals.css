@@ -3580,3 +3580,77 @@ h2.tt-serif {
     width: 100%;
   }
 }
+
+/* ── Menu opening hours ──────────────────────────────────────────────────── */
+
+/* The summary sits under the menu name, between what it is and what you can do
+   to it. Muted and small: it's a status, not a control. */
+.tt-menu-sched {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--tt-muted);
+  min-width: 0;
+}
+.tt-menu-sched > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tt-menu-sched svg {
+  flex: none;
+}
+
+.tt-sched-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 14px 0 12px;
+}
+.tt-sched-rule {
+  border: 1px solid var(--tt-line);
+  border-radius: var(--tt-radius);
+  padding: 12px;
+}
+/* Days wrap rather than shrink, so no abbreviation is ever clipped. */
+.tt-sched-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tt-sched-day {
+  min-width: 44px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--tt-line);
+  background: var(--tt-white);
+  font-size: 13px;
+  cursor: pointer;
+}
+.tt-sched-day-on {
+  background: var(--tt-accent);
+  border-color: var(--tt-accent);
+  color: var(--tt-white);
+  font-weight: 600;
+}
+.tt-sched-when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.tt-sched-times {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tt-sched-times .tt-input {
+  width: auto;
+  min-width: 0;
+}
+.tt-danger-text {
+  color: var(--tt-danger);
+}
