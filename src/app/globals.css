@@ -601,12 +601,12 @@ h2.tt-serif {
   position: relative;
 }
 
+/* Rendered into <body> and positioned from the field's rect, so it is neither
+   clipped by a dialog nor part of its layout — the dialog holds still as the
+   list opens and closes. z-index clears the dialog's own 60. */
 .tt-picker-menu {
-  position: absolute;
-  z-index: 60;
-  left: 0;
-  right: 0;
-  top: calc(100% + 6px);
+  position: fixed;
+  z-index: 80;
   max-height: 280px;
   overflow-y: auto;
   background: var(--tt-white);
@@ -3435,15 +3435,6 @@ h2.tt-serif {
   margin: 0 0 14px;
 }
 
-/* Inside a dialog the results can't float: .tt-modal is the scroll container,
-   so an absolutely positioned list is clipped at the dialog's edge and the
-   options below the fold become unreachable. In flow it pushes the form down
-   and the dialog scrolls to it instead. */
-.tt-modal .tt-picker-menu {
-  position: static;
-  margin-top: 6px;
-  max-height: 240px;
-}
 
 /* The two "add" buttons above the promotions list. They wrap rather than
    shrink on a phone, so neither label truncates. */
