@@ -762,15 +762,28 @@ h2.tt-serif {
 /* The add button carries a label and now two prices. Laid out as a row with
    the prices grouped, the label keeps one line instead of breaking mid-phrase
    to make room for them. */
+/* Label and prices side by side when they fit, price dropping to its own line
+   when they don't.
+   The two pieces each refuse to break internally — "Add to cart" split across
+   three lines to make room for the price, which looked broken — while the
+   button itself wraps between them and can shrink. That keeps the CTA whole at
+   every width instead of trading an overflow for a mangled label. */
 .tt-detail-actions .tt-btn-primary {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: center;
-  gap: 10px;
+  gap: 2px 10px;
+  min-width: 0;
+  padding-inline: 14px;
+  line-height: 1.25;
+}
+.tt-detail-actions .tt-btn-primary > span {
   white-space: nowrap;
 }
 .tt-btn-price {
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* ── menu header ── */

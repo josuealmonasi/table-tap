@@ -16,9 +16,18 @@ export interface MenuParams {
   diet: string[];
   /** A product to open on load — the "share this dish" case. */
   item: string | null;
+  /** A combo to open on load. Separate from `item` because their ids live in
+   *  different tables and the two dialogs render different components. */
+  combo: string | null;
 }
 
-export const EMPTY_MENU_PARAMS: MenuParams = { q: "", cat: "all", diet: [], item: null };
+export const EMPTY_MENU_PARAMS: MenuParams = {
+  q: "",
+  cat: "all",
+  diet: [],
+  item: null,
+  combo: null,
+};
 
 export function readMenuParams(search: URLSearchParams): MenuParams {
   const diet = (search.get("diet") ?? "")
@@ -32,6 +41,7 @@ export function readMenuParams(search: URLSearchParams): MenuParams {
     // the same filter count twice.
     diet: [...new Set(diet)],
     item: search.get("item") || null,
+    combo: search.get("combo") || null,
   };
 }
 
@@ -54,6 +64,7 @@ export function applyMenuParams(
   if (patch.cat !== undefined) set("cat", patch.cat === "all" ? "" : patch.cat);
   if (patch.diet !== undefined) set("diet", [...new Set(patch.diet)].join(","));
   if (patch.item !== undefined) set("item", patch.item ?? "");
+  if (patch.combo !== undefined) set("combo", patch.combo ?? "");
   return next;
 }
 
