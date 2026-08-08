@@ -2022,11 +2022,21 @@ h2.tt-serif {
   padding: 18px;
   border: 1px solid var(--tt-line);
 }
+/* The heading and its hint share a line, but the hint is a full sentence and a
+   flex item won't shrink past its min-content width — on a narrow phone that
+   forces the whole card wider than the screen, which pushes every control in
+   it off the right edge. Wrapping lets the hint drop to its own line instead. */
 .tt-section-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   margin-bottom: 12px;
+}
+@media (max-width: 700px) {
+  .tt-section-head > span {
+    flex-basis: 100%;
+  }
 }
 .tt-section-head h3 {
   font-size: 18px;
@@ -2107,6 +2117,45 @@ h2.tt-serif {
 .tt-role-select {
   padding: 6px 8px;
   font-size: 13px;
+}
+
+/* On a phone the four-column grid gives the name ~59px and the email ~86px, so
+   both truncate to an ellipsis and the row reads as empty. Each row becomes a
+   card instead: name and email get a full line each, the role and delete share
+   the last one. The header row has nothing left to label, so it goes. */
+@media (max-width: 700px) {
+  .tt-staff-thead {
+    display: none;
+  }
+  .tt-staff-tr {
+    grid-template-columns: 1fr auto;
+    gap: 4px 10px;
+    padding: 12px;
+    border: 1px solid var(--tt-line);
+    border-radius: var(--tt-radius-sm);
+    margin-bottom: 8px;
+  }
+  .tt-staff-tr:first-of-type {
+    border-top: 1px solid var(--tt-line);
+  }
+  /* name spans the row, email under it, then the controls */
+  .tt-staff-tr > *:nth-child(1) {
+    grid-column: 1 / -1;
+    white-space: normal;
+    font-weight: 600;
+  }
+  .tt-staff-tr > *:nth-child(2) {
+    grid-column: 1 / -1;
+    font-size: 13px;
+  }
+  .tt-staff-tr > *:nth-child(3) {
+    margin-top: 6px;
+    width: 100%;
+  }
+  .tt-staff-tr > *:nth-child(4) {
+    margin-top: 6px;
+    justify-self: end;
+  }
 }
 
 /* menu editor tools (search + select), sized to mirror the Extras column:
@@ -3440,10 +3489,24 @@ h2.tt-serif {
 }
 
 
-/* The two "add" buttons above the promotions list. They wrap rather than
-   shrink on a phone, so neither label truncates. */
+/* The "add" buttons that open a create dialog. They wrap rather than shrink on
+   a phone, so no label truncates, and they carry their own spacing — sitting
+   flush between a section heading and its list made them look wedged in. */
 .tt-promo-add {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin: 14px 0 16px;
+}
+/* On a phone two filled buttons side by side eat nearly the whole row and read
+   as one solid slab rather than two choices. Stacked and full width they stay
+   distinct and comfortably tappable. */
+@media (max-width: 560px) {
+  .tt-promo-add {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .tt-promo-add .tt-btn {
+    width: 100%;
+  }
 }

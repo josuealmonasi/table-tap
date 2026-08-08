@@ -177,7 +177,7 @@ export default function SectionEditor({
                     open={adding}
                     onClose={() => setAdding(false)}
                     maxWidth={720}
-                    label={t("menu.addProduct")}
+                    title={t("menu.newProduct")}
                   >
                     {addForm}
                   </Modal>

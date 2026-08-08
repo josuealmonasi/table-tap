@@ -5,6 +5,8 @@ import type { Messages } from "./en";
 export const es: Messages = {
   lang: { label: "Idioma" },
   menu: {
+    newProduct: "Nuevo producto",
+    newExtra: "Nuevo extra",
     search: "Busca en el menú…",
     all: "Todo",
     closed: "⏸️ No estamos tomando pedidos en este momento — vuelve pronto.",

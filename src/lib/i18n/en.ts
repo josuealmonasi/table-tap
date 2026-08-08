@@ -3,6 +3,8 @@
 export const en = {
   lang: { label: "Language" },
   menu: {
+    newProduct: "New product",
+    newExtra: "New extra",
     search: "Search the menu…",
     all: "All",
     closed: "⏸️ We're not taking orders right now — please check back soon.",
