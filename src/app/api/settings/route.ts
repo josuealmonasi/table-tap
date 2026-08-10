@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
-import { isKnownTimeZone } from "@/lib/timezones";
+import { isAllowedTimeZone } from "@/lib/timezones";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMembership, MANAGES } from "@/lib/membership";
@@ -47,9 +47,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  // Only a real IANA zone: schedules are evaluated against it, and an
-  // unknown name would make Intl throw on every customer page load.
-  if ("timezone" in update && !isKnownTimeZone(String(update.timezone))) {
+  // Only a zone the selector actually offers. An arbitrary string would make
+  // Intl throw on every customer page load, and there's no reason to store one.
+  if ("timezone" in update && !isAllowedTimeZone(String(update.timezone))) {
     return await apiError("apiErr.badTimezone");
   }
 
