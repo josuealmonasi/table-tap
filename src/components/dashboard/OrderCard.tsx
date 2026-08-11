@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { formatMoney } from "@/lib/format";
+import { backwardOptions } from "@/lib/order-flow";
+import { MoveToIcon } from "@/components/ui/icons";
 import { orderCode, type Order, type OrderStatus } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
 
@@ -47,6 +50,19 @@ export default function OrderCard({
   const t = useT();
   const meta = STATUS_META[order.status] ?? STATUS_META.completed;
   const action = nextAction(order.status);
+  const moveBack = backwardOptions(order.status);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const moveRef = useRef<HTMLDivElement>(null);
+
+  // Close on a click anywhere else, the way every other menu in the app does.
+  useEffect(() => {
+    if (!moveOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!moveRef.current?.contains(e.target as Node)) setMoveOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [moveOpen]);
   const cancellable = order.status === "received" || order.status === "preparing";
   const placedAt = new Date(order.created_at).toLocaleTimeString([], {
     hour: "2-digit",
@@ -113,6 +129,39 @@ export default function OrderCard({
       <div className="tt-row" style={{ alignItems: "center" }}>
         <strong className="tt-accent">{formatMoney(order.total, currency)}</strong>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {/* Sending a ticket back a stage — a plate returned, a mis-tap. Only
+              earlier stages appear: forward is what the main button does, and
+              offering both here would make the obvious action ambiguous. */}
+          {moveBack.length > 0 && (
+            <div className="tt-move" ref={moveRef}>
+              <button
+                className="tt-iconbtn"
+                aria-haspopup="menu"
+                aria-expanded={moveOpen}
+                title={t("orders.moveBack")}
+                onClick={() => setMoveOpen(o => !o)}
+              >
+                <MoveToIcon size={16} />
+              </button>
+              {moveOpen && (
+                <div className="tt-move-menu" role="menu">
+                  {moveBack.map(status => (
+                    <button
+                      key={status}
+                      role="menuitem"
+                      className="tt-move-item"
+                      onClick={() => {
+                        setMoveOpen(false);
+                        onAdvance(order.id, status);
+                      }}
+                    >
+                      {t("orders.moveTo", { status: t(STATUS_META[status].labelKey) })}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {cancellable && onCancel && (
             <button
               className="tt-btn tt-btn-ghost tt-btn-sm"
