@@ -38,6 +38,8 @@ interface OrderCardProps {
   onAdvance: (id: string, status: OrderStatus) => void;
   /** Cancel + refund; offered on new/preparing orders only. */
   onCancel?: (order: Order) => void;
+  /** False for waiters: complete only, no stage moves. */
+  canMove?: boolean;
 }
 
 /** One order on the kitchen board: table, items, total, and its advance button. */
@@ -46,11 +48,15 @@ export default function OrderCard({
   currency,
   onAdvance,
   onCancel,
+  canMove = true,
 }: OrderCardProps) {
   const t = useT();
   const meta = STATUS_META[order.status] ?? STATUS_META.completed;
   const action = nextAction(order.status);
-  const moveBack = backwardOptions(order.status);
+  // A waiter closes out a handed-over order and nothing else; the kitchen
+  // owns every other stage change.
+  const moveBack = canMove ? backwardOptions(order.status) : [];
+  const canAdvance = canMove || action?.to === "completed";
   const [moveOpen, setMoveOpen] = useState(false);
   const moveRef = useRef<HTMLDivElement>(null);
 
@@ -170,7 +176,7 @@ export default function OrderCard({
               {t("common.cancel")}
             </button>
           )}
-          {action ? (
+          {action && canAdvance ? (
             <button
               className={`tt-btn ${action.variant} tt-btn-sm`}
               onClick={() => onAdvance(order.id, action.to)}

@@ -421,6 +421,7 @@ export const es: Messages = {
     soon: "Pronto",
   },
   apiErr: {
+    notYourStage: "Solo la cocina puede mover un pedido entre etapas.",
     closedNow:
       "La cocina no está sirviendo en este momento. Inténtalo durante el horario de servicio.",
     badTimezone: "Elige una zona horaria válida.",
