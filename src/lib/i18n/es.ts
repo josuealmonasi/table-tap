@@ -36,7 +36,8 @@ export const es: Messages = {
   },
   menu: {
     closedNowTitle: "Estamos cerrados en este momento",
-    closedNowBody: "No hay nada en servicio a esta hora. Vuelve durante el horario de atención.",
+    closedNowBody:
+      "No hay nada en servicio a esta hora. Vuelve durante el horario de atención.",
     newProduct: "Nuevo producto",
     newExtra: "Nuevo extra",
     search: "Busca en el menú…",
@@ -420,7 +421,8 @@ export const es: Messages = {
     soon: "Pronto",
   },
   apiErr: {
-    closedNow: "La cocina no está sirviendo en este momento. Inténtalo durante el horario de servicio.",
+    closedNow:
+      "La cocina no está sirviendo en este momento. Inténtalo durante el horario de servicio.",
     badTimezone: "Elige una zona horaria válida.",
     schedNoRules: "Agrega al menos un periodo.",
     schedNoDays: "Elige al menos un día.",
@@ -493,6 +495,8 @@ export const es: Messages = {
       "No se pudo iniciar la configuración de Stripe. Inténtalo en un momento.",
   },
   sched: {
+    servingNow: "En servicio",
+    outsideHours: "Fuera de horario",
     day0: "Dom",
     day1: "Lun",
     day2: "Mar",
