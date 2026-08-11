@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import type { Menu } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
@@ -10,6 +10,7 @@ import { DeleteIcon, DuplicateIcon, EditIcon, ScheduleIcon } from "@/components/
 import ScheduleDialog from "./ScheduleDialog";
 import {
   hasLiveSchedule,
+  isMenuOpen,
   summarizeSchedule,
   type MenuSchedule,
 } from "@/lib/menu-schedule";
@@ -21,6 +22,7 @@ interface MenuRowProps {
   onOpen: (menu: Menu) => void;
   onRename: (id: string, name: string) => Promise<void>;
   onSetSchedule: (id: string, schedule: MenuSchedule | null) => Promise<void>;
+  timeZone: string;
   onToggle: (menu: Menu, next: boolean) => Promise<void>;
   onDuplicate: (menu: Menu) => Promise<void>;
   onDelete: (menu: Menu) => Promise<void>;
@@ -37,6 +39,7 @@ export default function MenuRow({
   onOpen,
   onRename,
   onSetSchedule,
+  timeZone,
   onToggle,
   onDuplicate,
   onDelete,
@@ -59,6 +62,30 @@ export default function MenuRow({
         )
       : null;
   const paused = Boolean(menu.schedule?.rules?.length) && !menu.schedule?.enabled;
+
+  /**
+   * Whether the schedule is serving *right now*.
+   *
+   * Computed after mount rather than during render: the server and the browser
+   * evaluate "now" a moment apart, and a menu whose window has just opened
+   * would hydrate with one answer and re-render with the other. Null until
+   * mounted, so the badge simply isn't there for that first paint.
+   *
+   * Re-checked every 30s so the badge flips at the boundary instead of going
+   * stale until the page is reloaded.
+   */
+  const [servingNow, setServingNow] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!summary) {
+      setServingNow(null);
+      return;
+    }
+    const check = () =>
+      setServingNow(isMenuOpen(menu.active, menu.schedule, new Date(), timeZone));
+    check();
+    const id = setInterval(check, 30_000);
+    return () => clearInterval(id);
+  }, [summary, menu.active, menu.schedule, timeZone]);
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -142,6 +169,16 @@ export default function MenuRow({
         {(summary || paused) && (
           <div className="tt-menu-sched" title={summary?.join(" · ")}>
             <ScheduleIcon size={13} weight="bold" />
+            {/* The hours alone don't say whether the menu is showing to
+                customers at this moment, which is the thing an owner is
+                actually checking. */}
+            {summary && servingNow !== null && (
+              <span
+                className={`tt-sched-state ${servingNow ? "tt-sched-live" : "tt-sched-off"}`}
+              >
+                {t(servingNow ? "sched.servingNow" : "sched.outsideHours")}
+              </span>
+            )}
             <span>{paused ? t("sched.pausedSummary") : summary!.join(" · ")}</span>
           </div>
         )}

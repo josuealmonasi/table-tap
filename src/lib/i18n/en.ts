@@ -34,7 +34,8 @@ export const en = {
   },
   menu: {
     closedNowTitle: "We're closed right now",
-    closedNowBody: "Nothing is being served at this hour. Please check back during opening hours.",
+    closedNowBody:
+      "Nothing is being served at this hour. Please check back during opening hours.",
     newProduct: "New product",
     newExtra: "New extra",
     search: "Search the menu…",
@@ -426,7 +427,8 @@ export const en = {
     soon: "Soon",
   },
   apiErr: {
-    closedNow: "The kitchen isn't serving right now. Please try again during opening hours.",
+    closedNow:
+      "The kitchen isn't serving right now. Please try again during opening hours.",
     badTimezone: "Pick a valid time zone.",
     schedNoRules: "Add at least one period.",
     schedNoDays: "Pick at least one day.",
@@ -496,6 +498,8 @@ export const en = {
     stripeOnboard: "Couldn't start Stripe onboarding. Please try again shortly.",
   },
   sched: {
+    servingNow: "Serving now",
+    outsideHours: "Outside hours",
     day0: "Sun",
     day1: "Mon",
     day2: "Tue",

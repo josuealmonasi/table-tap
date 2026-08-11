@@ -3675,3 +3675,23 @@ h2.tt-serif {
   margin: 0;
   font-size: 14px;
 }
+
+/* Whether a scheduled menu is showing to customers at this moment. The hours
+   beside it say when; this says now. Green reads as live without borrowing the
+   accent, which already means "interactive" elsewhere. */
+.tt-sched-state {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.tt-sched-live {
+  background: color-mix(in srgb, #1f7a4d 14%, transparent);
+  color: #14603a;
+}
+.tt-sched-off {
+  background: color-mix(in srgb, var(--tt-ink) 7%, transparent);
+  color: var(--tt-muted);
+}

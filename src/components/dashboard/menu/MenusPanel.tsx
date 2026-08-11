@@ -17,6 +17,8 @@ interface MenusPanelProps {
   onAdd: (name: string) => Promise<string | undefined>;
   onRename: (id: string, name: string) => Promise<void>;
   onSetSchedule: (id: string, schedule: MenuSchedule | null) => Promise<void>;
+  /** The restaurant's zone — the rows say whether a menu is live right now. */
+  timeZone: string;
   onDelete: (id: string) => Promise<void>;
   onToggleActive: (id: string, active: boolean) => Promise<void>;
   onDuplicate: (id: string) => Promise<string | undefined>;
@@ -37,6 +39,7 @@ export default function MenusPanel({
   onAdd,
   onRename,
   onSetSchedule,
+  timeZone,
   onDelete,
   onToggleActive,
   onDuplicate,
@@ -213,6 +216,7 @@ export default function MenusPanel({
                 onOpen={onOpen}
                 onRename={onRename}
                 onSetSchedule={onSetSchedule}
+                timeZone={timeZone}
                 onToggle={toggle}
                 onDuplicate={duplicate}
                 onDelete={remove}
