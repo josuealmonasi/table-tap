@@ -6,6 +6,16 @@ export type Role = "owner" | "manager" | "waiter" | "kitchen";
 /** Owner + manager run the business (money, settings). Waiter + kitchen are floor/back staff. */
 export const MANAGES = (role: Role): boolean => role === "owner" || role === "manager";
 
+/**
+ * Who may move a ticket between kitchen stages.
+ *
+ * Waiters run the floor, not the pass: they mark an order completed when they
+ * hand it over, but starting and finishing the cooking is the kitchen's call.
+ * Letting the floor drag tickets backwards would lose the kitchen's own record
+ * of what it is working on.
+ */
+export const MOVES_ORDERS = (role: Role): boolean => role !== "waiter";
+
 export interface Membership {
   restaurant: Restaurant;
   role: Role;

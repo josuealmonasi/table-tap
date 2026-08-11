@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { formatMoney } from "@/lib/format";
+import { backwardOptions } from "@/lib/order-flow";
+import { MoveToIcon } from "@/components/ui/icons";
 import { orderCode, type Order, type OrderStatus } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
 
@@ -35,6 +38,8 @@ interface OrderCardProps {
   onAdvance: (id: string, status: OrderStatus) => void;
   /** Cancel + refund; offered on new/preparing orders only. */
   onCancel?: (order: Order) => void;
+  /** False for waiters: complete only, no stage moves. */
+  canMove?: boolean;
 }
 
 /** One order on the kitchen board: table, items, total, and its advance button. */
@@ -43,10 +48,27 @@ export default function OrderCard({
   currency,
   onAdvance,
   onCancel,
+  canMove = true,
 }: OrderCardProps) {
   const t = useT();
   const meta = STATUS_META[order.status] ?? STATUS_META.completed;
   const action = nextAction(order.status);
+  // A waiter closes out a handed-over order and nothing else; the kitchen
+  // owns every other stage change.
+  const moveBack = canMove ? backwardOptions(order.status) : [];
+  const canAdvance = canMove || action?.to === "completed";
+  const [moveOpen, setMoveOpen] = useState(false);
+  const moveRef = useRef<HTMLDivElement>(null);
+
+  // Close on a click anywhere else, the way every other menu in the app does.
+  useEffect(() => {
+    if (!moveOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!moveRef.current?.contains(e.target as Node)) setMoveOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [moveOpen]);
   const cancellable = order.status === "received" || order.status === "preparing";
   const placedAt = new Date(order.created_at).toLocaleTimeString([], {
     hour: "2-digit",
@@ -55,27 +77,28 @@ export default function OrderCard({
 
   return (
     <div className="tt-order-card" style={{ borderLeft: `4px solid ${meta.color}` }}>
-      <div className="tt-row">
-        <div>
+      {/* Two rows, each with an anchor on both sides: what the order is
+          (table, code) above how it stands (placed at, status). The code used
+          to sit under the table name where it read as a subtitle rather than
+          the other half of the identity. */}
+      <div className="tt-order-head">
+        <div className="tt-row">
           <strong style={{ fontSize: 16 }}>
             {t("dash.tableN", { label: order.table_label ?? "" })}
           </strong>
-          {/* The code is what a waiter reads off the ticket to match food to
-              table, so it gets the table's size. Left unbold so the table still
-              leads — two bold lines would compete rather than rank. */}
-          <div className="tt-order-code-row">
-            <span className="tt-order-code">{orderCode(order.id)}</span>
-            <span className="tt-muted" style={{ fontSize: 12 }}>
-              {placedAt}
-            </span>
-          </div>
+          <span className="tt-order-code">{orderCode(order.id)}</span>
         </div>
-        <span
-          className="tt-status-badge"
-          style={{ color: meta.color, background: `${meta.color}1a` }}
-        >
-          {t(meta.labelKey)}
-        </span>
+        <div className="tt-row">
+          <span className="tt-muted" style={{ fontSize: 12 }}>
+            {placedAt}
+          </span>
+          <span
+            className="tt-status-badge"
+            style={{ color: meta.color, background: `${meta.color}1a` }}
+          >
+            {t(meta.labelKey)}
+          </span>
+        </div>
       </div>
 
       <div className="tt-order-items">
@@ -113,6 +136,39 @@ export default function OrderCard({
       <div className="tt-row" style={{ alignItems: "center" }}>
         <strong className="tt-accent">{formatMoney(order.total, currency)}</strong>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {/* Sending a ticket back a stage — a plate returned, a mis-tap. Only
+              earlier stages appear: forward is what the main button does, and
+              offering both here would make the obvious action ambiguous. */}
+          {moveBack.length > 0 && (
+            <div className="tt-move" ref={moveRef}>
+              <button
+                className="tt-iconbtn"
+                aria-haspopup="menu"
+                aria-expanded={moveOpen}
+                title={t("orders.moveBack")}
+                onClick={() => setMoveOpen(o => !o)}
+              >
+                <MoveToIcon size={16} />
+              </button>
+              {moveOpen && (
+                <div className="tt-move-menu" role="menu">
+                  {moveBack.map(status => (
+                    <button
+                      key={status}
+                      role="menuitem"
+                      className="tt-move-item"
+                      onClick={() => {
+                        setMoveOpen(false);
+                        onAdvance(order.id, status);
+                      }}
+                    >
+                      {t("orders.moveTo", { status: t(STATUS_META[status].labelKey) })}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {cancellable && onCancel && (
             <button
               className="tt-btn tt-btn-ghost tt-btn-sm"
@@ -121,7 +177,7 @@ export default function OrderCard({
               {t("common.cancel")}
             </button>
           )}
-          {action ? (
+          {action && canAdvance ? (
             <button
               className={`tt-btn ${action.variant} tt-btn-sm`}
               onClick={() => onAdvance(order.id, action.to)}

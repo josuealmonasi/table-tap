@@ -422,6 +422,7 @@ export const es: Messages = {
     soon: "Pronto",
   },
   apiErr: {
+    notYourStage: "Solo la cocina puede mover un pedido entre etapas.",
     closedNow:
       "La cocina no está sirviendo en este momento. Inténtalo durante el horario de servicio.",
     badTimezone: "Elige una zona horaria válida.",
@@ -685,6 +686,12 @@ export const es: Messages = {
     pageOf: "Página {page} de {pages}",
   },
   orders: {
+    colNew: "Nuevos",
+    colPreparing: "En preparación",
+    colReady: "Listos",
+    colEmpty: "Nada aquí",
+    moveBack: "Mover a una etapa anterior",
+    moveTo: "Mover a {status}",
     active: "Activos",
     today: "Hoy",
     live: "En vivo",

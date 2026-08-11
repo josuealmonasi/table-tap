@@ -428,6 +428,7 @@ export const en = {
     soon: "Soon",
   },
   apiErr: {
+    notYourStage: "Only the kitchen can move an order between stages.",
     closedNow:
       "The kitchen isn't serving right now. Please try again during opening hours.",
     badTimezone: "Pick a valid time zone.",
@@ -696,6 +697,12 @@ export const en = {
     pageOf: "Page {page} of {pages}",
   },
   orders: {
+    colNew: "New",
+    colPreparing: "In progress",
+    colReady: "Ready",
+    colEmpty: "Nothing here",
+    moveBack: "Move to an earlier stage",
+    moveTo: "Move to {status}",
     active: "Active",
     today: "Today",
     live: "Live",

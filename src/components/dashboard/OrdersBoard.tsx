@@ -9,6 +9,7 @@ import { orderCode, type Order, type Restaurant, type ServiceRequest } from "@/l
 import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import OrderCard from "./OrderCard";
+import { BOARD_COLUMNS, columnOrders } from "@/lib/order-flow";
 import ServiceRequestsBar from "./ServiceRequestsBar";
 import { EmptyIcon } from "@/components/ui/icons";
 
@@ -18,6 +19,8 @@ interface OrdersBoardProps {
   initialRequests: ServiceRequest[];
   /** Cancelling triggers refunds, so only the owner gets the button. */
   canCancel: boolean;
+  /** False for waiters: complete only, no stage moves. */
+  canMove: boolean;
   /** Kitchen doesn't get the daily takings stat. */
   showRevenue: boolean;
   /** Today's takings from orders NOT in the loaded set (server-computed). */
@@ -36,6 +39,7 @@ export default function OrdersBoard({
   initialOrders,
   initialRequests,
   canCancel,
+  canMove,
   showRevenue,
   revenueBase,
   todayStartMs,
@@ -147,6 +151,40 @@ export default function OrdersBoard({
             <p className="tt-muted">
               {tab === "live" ? t("orders.liveHint") : t("orders.historyHint")}
             </p>
+          </div>
+        ) : tab === "live" ? (
+          /* Live orders are a queue, not a pile: one column per stage, each
+             ticket sitting under the ones that arrived before it. History stays
+             a plain grid — it's browsed, not worked. */
+          <div className="tt-board">
+            {BOARD_COLUMNS.map(col => {
+              const inColumn = columnOrders(live, col.status);
+              return (
+                <section key={col.status} className="tt-board-col">
+                  <header className="tt-board-head">
+                    <span className="tt-board-dot" style={{ background: col.color }} />
+                    <h3>{t(col.labelKey)}</h3>
+                    <span className="tt-board-count">{inColumn.length}</span>
+                  </header>
+                  <div className="tt-board-stack">
+                    {inColumn.length === 0 ? (
+                      <p className="tt-board-empty">{t("orders.colEmpty")}</p>
+                    ) : (
+                      inColumn.map(order => (
+                        <OrderCard
+                          key={order.id}
+                          order={order}
+                          currency={restaurant.currency}
+                          onAdvance={updateStatus}
+                          onCancel={canCancel ? handleCancel : undefined}
+                          canMove={canMove}
+                        />
+                      ))
+                    )}
+                  </div>
+                </section>
+              );
+            })}
           </div>
         ) : (
           <div className="tt-orders-grid">

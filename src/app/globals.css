@@ -3699,11 +3699,15 @@ h2.tt-serif {
 /* Order code on a kitchen ticket. Same size as the table number because it is
    the other half of the same question — which food goes where — but normal
    weight so the table still leads. Muted 12px hid it at a glance. */
-.tt-order-code-row {
+.tt-order-head {
   display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
+}
+/* Each header row keeps a little air between its two ends so a long table name
+   and a code never touch on a narrow card. */
+.tt-order-head .tt-row {
+  gap: 10px;
 }
 .tt-order-code {
   font-size: 16px;
@@ -3712,6 +3716,100 @@ h2.tt-serif {
   color: var(--tt-ink);
 }
 
+/* ── Orders board ────────────────────────────────────────────────────────── */
+
+/* One column per stage. Fixed-width tracks that scroll sideways rather than
+   flexible ones that squeeze: a ticket squeezed to 180px stops being readable
+   across a kitchen, which is the whole point of the card. */
+.tt-board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(300px, 1fr);
+  gap: 16px;
+  align-items: start;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+.tt-board-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.tt-board-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+}
+.tt-board-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+.tt-board-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+/* The count is what tells a chef the queue is growing, so it reads as a figure
+   rather than a label. */
+.tt-board-count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--tt-muted);
+  background: color-mix(in srgb, var(--tt-ink) 6%, transparent);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.tt-board-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tt-board-empty {
+  margin: 0;
+  padding: 18px 2px;
+  font-size: 13px;
+  color: var(--tt-muted);
+  border: 1px dashed var(--tt-line);
+  border-radius: var(--tt-radius);
+  text-align: center;
+}
+
+/* Move-to-earlier-stage menu. */
+.tt-move {
+  position: relative;
+}
+.tt-move-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 40;
+  min-width: 190px;
+  padding: 6px;
+  background: var(--tt-white);
+  border: 1px solid var(--tt-line);
+  border-radius: 12px;
+}
+.tt-move-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--tt-ink);
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.tt-move-item:hover {
+  background: var(--tt-surface);
 /* Checkout stays reachable however long the cart runs — same rule as the dish
    detail's add button, which is pinned for exactly this reason. */
 .tt-cart-actions {
