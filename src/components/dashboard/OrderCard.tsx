@@ -60,8 +60,14 @@ export default function OrderCard({
           <strong style={{ fontSize: 16 }}>
             {t("dash.tableN", { label: order.table_label ?? "" })}
           </strong>
-          <div className="tt-muted" style={{ fontSize: 12 }}>
-            {orderCode(order.id)} · {placedAt}
+          {/* The code is what a waiter reads off the ticket to match food to
+              table, so it gets the table's size. Left unbold so the table still
+              leads — two bold lines would compete rather than rank. */}
+          <div className="tt-order-code-row">
+            <span className="tt-order-code">{orderCode(order.id)}</span>
+            <span className="tt-muted" style={{ fontSize: 12 }}>
+              {placedAt}
+            </span>
           </div>
         </div>
         <span
