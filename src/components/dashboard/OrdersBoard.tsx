@@ -19,6 +19,8 @@ interface OrdersBoardProps {
   initialRequests: ServiceRequest[];
   /** Cancelling triggers refunds, so only the owner gets the button. */
   canCancel: boolean;
+  /** False for waiters: complete only, no stage moves. */
+  canMove: boolean;
   /** Kitchen doesn't get the daily takings stat. */
   showRevenue: boolean;
   /** Today's takings from orders NOT in the loaded set (server-computed). */
@@ -37,6 +39,7 @@ export default function OrdersBoard({
   initialOrders,
   initialRequests,
   canCancel,
+  canMove,
   showRevenue,
   revenueBase,
   todayStartMs,
@@ -174,6 +177,7 @@ export default function OrdersBoard({
                           currency={restaurant.currency}
                           onAdvance={updateStatus}
                           onCancel={canCancel ? handleCancel : undefined}
+                          canMove={canMove}
                         />
                       ))
                     )}

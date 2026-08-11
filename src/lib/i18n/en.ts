@@ -427,6 +427,7 @@ export const en = {
     soon: "Soon",
   },
   apiErr: {
+    notYourStage: "Only the kitchen can move an order between stages.",
     closedNow:
       "The kitchen isn't serving right now. Please try again during opening hours.",
     badTimezone: "Pick a valid time zone.",
