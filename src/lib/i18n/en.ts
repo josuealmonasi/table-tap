@@ -695,6 +695,12 @@ export const en = {
     pageOf: "Page {page} of {pages}",
   },
   orders: {
+    colNew: "New",
+    colPreparing: "In progress",
+    colReady: "Ready",
+    colEmpty: "Nothing here",
+    moveBack: "Move to an earlier stage",
+    moveTo: "Move to {status}",
     active: "Active",
     today: "Today",
     live: "Live",
