@@ -20,7 +20,7 @@ export default function AdminLoading() {
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <Breadcrumb trail={[{ label: "Platform Admin" }]} />
+          <Breadcrumb trail={[{ labelKey: "admin.title" }]} />
         </header>
 
         <div className="tt-section">
