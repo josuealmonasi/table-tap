@@ -8,6 +8,7 @@ import { DIETARY_TAGS } from "@/lib/dietary";
 import { recallOrder } from "@/lib/recent-order";
 import { readMenuParams, syncMenuUrl } from "@/lib/menu-params";
 import { useT } from "@/lib/i18n/context";
+import MenuClosed from "./MenuClosed";
 import type { Combo } from "@/lib/promotions";
 import type { CartPromo } from "@/lib/pricing";
 import { Modal } from "@/components/ui/Modal";
@@ -21,6 +22,7 @@ import {
   BillIcon,
   CloseIcon,
   FiltersIcon,
+  ScheduleIcon,
   SearchIcon,
   TableIcon,
 } from "@/components/ui/icons";
@@ -34,6 +36,7 @@ export default function MenuScreen({
   combos,
   promos,
   ratings,
+  closedNow = false,
   cartCount,
   cartTotal,
   onSelectItem,
@@ -47,6 +50,8 @@ export default function MenuScreen({
   combos: Combo[];
   promos: CartPromo[];
   ratings: Record<string, { avg: number; count: number }>;
+  /** No menu is serving at this hour — show why instead of an empty list. */
+  closedNow?: boolean;
   cartCount: number;
   cartTotal: number;
   onSelectItem: (item: MenuItem) => void;
@@ -216,176 +221,187 @@ export default function MenuScreen({
       {/* One row instead of three: categories scroll, filters live behind a
           button. Dietary tags matter to a minority but were eating a third of
           the screen before the first dish. */}
-      <div className="tt-menu-sticky">
-        {!search.trim() && (
-          <CategoryTabs
-            categories={categories}
-            activeCat={activeCat}
-            onSelect={chooseCat}
-          />
-        )}
-        {menuTags.length > 0 && (
-          <button
-            type="button"
-            className={`tt-filter-btn ${diet.length ? "tt-filter-btn-on" : ""}`}
-            onClick={() => setFiltersOpen(true)}
-            aria-label={t("menu.filters")}
-            title={t("menu.filters")}
-          >
-            <FiltersIcon size={17} weight="bold" />
-            {diet.length > 0 && <span className="tt-filter-count">{diet.length}</span>}
-          </button>
-        )}
-      </div>
-
-      <Modal
-        open={filtersOpen}
-        onClose={() => setFiltersOpen(false)}
-        maxWidth={420}
-        label={t("menu.filtersTitle")}
-        variant="sheet"
-      >
-        <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 12 }}>
-          {t("menu.filtersTitle")}
-        </h3>
-        <div className="tt-diet-filter">
-          {menuTags.map(tag => (
-            <button
-              key={tag.key}
-              type="button"
-              className={`tt-diet-chip ${diet.includes(tag.key) ? "tt-diet-chip-on" : ""}`}
-              aria-pressed={diet.includes(tag.key)}
-              onClick={() => toggleDiet(tag.key)}
-            >
-              {tag.emoji} {t(`dietary.${tag.key}`)}
-            </button>
-          ))}
-        </div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 8,
-            marginTop: 18,
-          }}
-        >
-          <button
-            type="button"
-            className="tt-btn tt-btn-ghost tt-btn-sm"
-            disabled={diet.length === 0}
-            // Clearing leaves nothing to look at, so the sheet closes with it —
-            // staying open just to show empty checkboxes makes the diner tap
-            // twice to get back to the food.
-            onClick={() => {
-              setDiet([]);
-              syncMenuUrl({ diet: [] });
-              setFiltersOpen(false);
-            }}
-          >
-            {t("menu.filtersClear")}
-          </button>
-          <button
-            type="button"
-            className="tt-btn tt-btn-primary tt-btn-sm"
-            onClick={() => setFiltersOpen(false)}
-          >
-            {t("menu.filtersDone")}
-          </button>
-        </div>
-      </Modal>
-
-      <div className="tt-dish-layout">
-        {/* Desktop only. With room for a column there's no reason to hide the
-            categories behind a scroller and the filters behind a button and a
-            dialog — both become a standing list you can see the state of, and
-            picking one no longer costs an open-and-dismiss. Hidden below
-            1025px, where the chip row and the sheet are the right shapes. */}
-        <aside className="tt-dish-side" aria-label={t("menu.filtersTitle")}>
-          {!search.trim() && (
-            <nav className="tt-side-nav">
+      {/* Nothing is serving: say so instead of rendering an empty menu,
+          which reads as a failed load. The filter strip goes too — there
+          is nothing left to filter. */}
+      {closedNow ? (
+        <MenuClosed />
+      ) : (
+        <>
+          <div className="tt-menu-sticky">
+            {!search.trim() && (
+              <CategoryTabs
+                categories={categories}
+                activeCat={activeCat}
+                onSelect={chooseCat}
+              />
+            )}
+            {menuTags.length > 0 && (
               <button
                 type="button"
-                className={`tt-side-link ${activeCat === "all" ? "tt-side-link-on" : ""}`}
-                onClick={() => chooseCat("all")}
+                className={`tt-filter-btn ${diet.length ? "tt-filter-btn-on" : ""}`}
+                onClick={() => setFiltersOpen(true)}
+                aria-label={t("menu.filters")}
+                title={t("menu.filters")}
               >
-                {t("menu.all")}
+                <FiltersIcon size={17} weight="bold" />
+                {diet.length > 0 && (
+                  <span className="tt-filter-count">{diet.length}</span>
+                )}
               </button>
-              {categories.map(c => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className={`tt-side-link ${activeCat === c.id ? "tt-side-link-on" : ""}`}
-                  onClick={() => chooseCat(c.id)}
-                >
-                  {c.name}
-                </button>
-              ))}
-            </nav>
-          )}
-          {menuTags.length > 0 && (
-            <div className="tt-side-group">
-              <h3 className="tt-side-title">{t("menu.filtersTitle")}</h3>
-              {menuTags.map(tag => (
-                <label key={tag.key} className="tt-side-check">
-                  <input
-                    type="checkbox"
-                    checked={diet.includes(tag.key)}
-                    onChange={() => toggleDiet(tag.key)}
-                  />
-                  <span>
-                    {tag.emoji} {t(`dietary.${tag.key}`)}
-                  </span>
-                </label>
-              ))}
-              {diet.length > 0 && (
-                <button
-                  type="button"
-                  className="tt-btn tt-btn-ghost tt-btn-sm"
-                  style={{ marginTop: 6, alignSelf: "flex-start", padding: "6px 0" }}
-                  onClick={() => {
-                    setDiet([]);
-                    syncMenuUrl({ diet: [] });
-                  }}
-                >
-                  {t("menu.filtersClear")}
-                </button>
-              )}
-            </div>
-          )}
-        </aside>
-
-        <div className="tt-dish-main">
-          {filtered.length === 0 &&
-            shownCombos.length === 0 &&
-            (search.trim() || diet.length > 0) && (
-              <p className="tt-muted" style={{ textAlign: "center", fontSize: 14 }}>
-                {search.trim()
-                  ? t("menu.noSearchMatch", { q: search.trim() })
-                  : t("menu.noDietMatch")}
-              </p>
             )}
-          <div className="tt-dish-list">
-            {shownCombos.map(combo => (
-              <ComboCard
-                key={combo.id}
-                combo={combo}
-                currency={restaurant.currency}
-                onAdd={onAddCombo}
-              />
-            ))}
-            {filtered.map(item => (
-              <MenuItemRow
-                key={item.id}
-                item={item}
-                currency={restaurant.currency}
-                promoLabel={promoByItem.get(item.id)}
-                rating={ratings[item.id]}
-                onSelect={onSelectItem}
-              />
-            ))}
           </div>
-        </div>
-      </div>
+
+          <Modal
+            open={filtersOpen}
+            onClose={() => setFiltersOpen(false)}
+            maxWidth={420}
+            label={t("menu.filtersTitle")}
+            variant="sheet"
+          >
+            <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 12 }}>
+              {t("menu.filtersTitle")}
+            </h3>
+            <div className="tt-diet-filter">
+              {menuTags.map(tag => (
+                <button
+                  key={tag.key}
+                  type="button"
+                  className={`tt-diet-chip ${diet.includes(tag.key) ? "tt-diet-chip-on" : ""}`}
+                  aria-pressed={diet.includes(tag.key)}
+                  onClick={() => toggleDiet(tag.key)}
+                >
+                  {tag.emoji} {t(`dietary.${tag.key}`)}
+                </button>
+              ))}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 8,
+                marginTop: 18,
+              }}
+            >
+              <button
+                type="button"
+                className="tt-btn tt-btn-ghost tt-btn-sm"
+                disabled={diet.length === 0}
+                // Clearing leaves nothing to look at, so the sheet closes with it —
+                // staying open just to show empty checkboxes makes the diner tap
+                // twice to get back to the food.
+                onClick={() => {
+                  setDiet([]);
+                  syncMenuUrl({ diet: [] });
+                  setFiltersOpen(false);
+                }}
+              >
+                {t("menu.filtersClear")}
+              </button>
+              <button
+                type="button"
+                className="tt-btn tt-btn-primary tt-btn-sm"
+                onClick={() => setFiltersOpen(false)}
+              >
+                {t("menu.filtersDone")}
+              </button>
+            </div>
+          </Modal>
+
+          <div className="tt-dish-layout">
+            {/* Desktop only. With room for a column there's no reason to hide the
+              categories behind a scroller and the filters behind a button and a
+              dialog — both become a standing list you can see the state of, and
+              picking one no longer costs an open-and-dismiss. Hidden below
+              1025px, where the chip row and the sheet are the right shapes. */}
+            <aside className="tt-dish-side" aria-label={t("menu.filtersTitle")}>
+              {!search.trim() && (
+                <nav className="tt-side-nav">
+                  <button
+                    type="button"
+                    className={`tt-side-link ${activeCat === "all" ? "tt-side-link-on" : ""}`}
+                    onClick={() => chooseCat("all")}
+                  >
+                    {t("menu.all")}
+                  </button>
+                  {categories.map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className={`tt-side-link ${activeCat === c.id ? "tt-side-link-on" : ""}`}
+                      onClick={() => chooseCat(c.id)}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </nav>
+              )}
+              {menuTags.length > 0 && (
+                <div className="tt-side-group">
+                  <h3 className="tt-side-title">{t("menu.filtersTitle")}</h3>
+                  {menuTags.map(tag => (
+                    <label key={tag.key} className="tt-side-check">
+                      <input
+                        type="checkbox"
+                        checked={diet.includes(tag.key)}
+                        onChange={() => toggleDiet(tag.key)}
+                      />
+                      <span>
+                        {tag.emoji} {t(`dietary.${tag.key}`)}
+                      </span>
+                    </label>
+                  ))}
+                  {diet.length > 0 && (
+                    <button
+                      type="button"
+                      className="tt-btn tt-btn-ghost tt-btn-sm"
+                      style={{ marginTop: 6, alignSelf: "flex-start", padding: "6px 0" }}
+                      onClick={() => {
+                        setDiet([]);
+                        syncMenuUrl({ diet: [] });
+                      }}
+                    >
+                      {t("menu.filtersClear")}
+                    </button>
+                  )}
+                </div>
+              )}
+            </aside>
+
+            <div className="tt-dish-main">
+              {filtered.length === 0 &&
+                shownCombos.length === 0 &&
+                (search.trim() || diet.length > 0) && (
+                  <p className="tt-muted" style={{ textAlign: "center", fontSize: 14 }}>
+                    {search.trim()
+                      ? t("menu.noSearchMatch", { q: search.trim() })
+                      : t("menu.noDietMatch")}
+                  </p>
+                )}
+              <div className="tt-dish-list">
+                {shownCombos.map(combo => (
+                  <ComboCard
+                    key={combo.id}
+                    combo={combo}
+                    currency={restaurant.currency}
+                    onAdd={onAddCombo}
+                  />
+                ))}
+                {filtered.map(item => (
+                  <MenuItemRow
+                    key={item.id}
+                    item={item}
+                    currency={restaurant.currency}
+                    promoLabel={promoByItem.get(item.id)}
+                    rating={ratings[item.id]}
+                    onSelect={onSelectItem}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       <CartBar
         count={cartCount}

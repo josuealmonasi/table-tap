@@ -27,6 +27,7 @@ export default async function RestaurantPage({
       combos={data.combos}
       promos={data.promos}
       ratings={data.ratings}
+      closedNow={data.closedNow}
     />
   );
 }

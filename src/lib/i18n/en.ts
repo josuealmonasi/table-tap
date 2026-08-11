@@ -33,6 +33,8 @@ export const en = {
     deleteSelected: "Couldn't delete the selected items",
   },
   menu: {
+    closedNowTitle: "We're closed right now",
+    closedNowBody: "Nothing is being served at this hour. Please check back during opening hours.",
     newProduct: "New product",
     newExtra: "New extra",
     search: "Search the menu…",
@@ -424,6 +426,7 @@ export const en = {
     soon: "Soon",
   },
   apiErr: {
+    closedNow: "The kitchen isn't serving right now. Please try again during opening hours.",
     badTimezone: "Pick a valid time zone.",
     schedNoRules: "Add at least one period.",
     schedNoDays: "Pick at least one day.",
