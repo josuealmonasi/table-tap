@@ -3810,6 +3810,8 @@ h2.tt-serif {
 }
 .tt-move-item:hover {
   background: var(--tt-surface);
+}
+
 /* Checkout stays reachable however long the cart runs — same rule as the dish
    detail's add button, which is pinned for exactly this reason. */
 .tt-cart-actions {
