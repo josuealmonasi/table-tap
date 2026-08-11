@@ -179,6 +179,7 @@ export const en = {
     moveDown: "Move down",
   },
   item: {
+    noteLimit: "Up to {max} characters",
     addExtras: "Add extras",
     optional: "(optional)",
     specialRequests: "Special requests",

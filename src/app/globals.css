@@ -3811,3 +3811,47 @@ h2.tt-serif {
 .tt-move-item:hover {
   background: var(--tt-surface);
 }
+
+/* Checkout stays reachable however long the cart runs — same rule as the dish
+   detail's add button, which is pinned for exactly this reason. */
+.tt-cart-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--tt-white);
+  border-top: 1px solid var(--tt-line);
+  margin: 16px -20px -20px;
+  padding: 14px 20px calc(16px + env(safe-area-inset-bottom));
+}
+.tt-modal .tt-cart-actions,
+.tt-detail-panel .tt-cart-actions {
+  margin-bottom: -24px;
+}
+
+/* Kitchen note character count. */
+.tt-note-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.tt-note-count {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tt-muted);
+}
+.tt-note-full {
+  color: var(--tt-danger);
+  font-weight: 600;
+}
+.tt-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

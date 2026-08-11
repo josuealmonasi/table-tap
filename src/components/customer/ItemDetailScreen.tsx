@@ -7,6 +7,7 @@ import { dietaryTags } from "@/lib/dietary";
 import { itemSalePrice } from "@/lib/pricing";
 import { missingRequired } from "@/lib/modifiers";
 import { addedLineCost, nextPromoStep } from "@/lib/promo-math";
+import NoteField from "./NoteField";
 import type { CartPromo } from "@/lib/pricing";
 import { useT } from "@/lib/i18n/context";
 import ModifierGroup from "./ModifierGroup";
@@ -199,13 +200,11 @@ export default function ItemDetailScreen({
         )}
 
         <div style={{ marginBottom: 20 }}>
-          <div className="tt-mod-label">{t("item.specialRequests")}</div>
-          <textarea
-            className="tt-input"
-            rows={2}
+          <NoteField
+            label={t("item.specialRequests")}
             placeholder={t("item.requestsPlaceholder")}
             value={notes}
-            onChange={e => setNotes(e.target.value)}
+            onChange={setNotes}
           />
         </div>
 
