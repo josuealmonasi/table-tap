@@ -3699,11 +3699,15 @@ h2.tt-serif {
 /* Order code on a kitchen ticket. Same size as the table number because it is
    the other half of the same question — which food goes where — but normal
    weight so the table still leads. Muted 12px hid it at a glance. */
-.tt-order-code-row {
+.tt-order-head {
   display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
+}
+/* Each header row keeps a little air between its two ends so a long table name
+   and a code never touch on a narrow card. */
+.tt-order-head .tt-row {
+  gap: 10px;
 }
 .tt-order-code {
   font-size: 16px;

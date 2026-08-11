@@ -55,27 +55,28 @@ export default function OrderCard({
 
   return (
     <div className="tt-order-card" style={{ borderLeft: `4px solid ${meta.color}` }}>
-      <div className="tt-row">
-        <div>
+      {/* Two rows, each with an anchor on both sides: what the order is
+          (table, code) above how it stands (placed at, status). The code used
+          to sit under the table name where it read as a subtitle rather than
+          the other half of the identity. */}
+      <div className="tt-order-head">
+        <div className="tt-row">
           <strong style={{ fontSize: 16 }}>
             {t("dash.tableN", { label: order.table_label ?? "" })}
           </strong>
-          {/* The code is what a waiter reads off the ticket to match food to
-              table, so it gets the table's size. Left unbold so the table still
-              leads — two bold lines would compete rather than rank. */}
-          <div className="tt-order-code-row">
-            <span className="tt-order-code">{orderCode(order.id)}</span>
-            <span className="tt-muted" style={{ fontSize: 12 }}>
-              {placedAt}
-            </span>
-          </div>
+          <span className="tt-order-code">{orderCode(order.id)}</span>
         </div>
-        <span
-          className="tt-status-badge"
-          style={{ color: meta.color, background: `${meta.color}1a` }}
-        >
-          {t(meta.labelKey)}
-        </span>
+        <div className="tt-row">
+          <span className="tt-muted" style={{ fontSize: 12 }}>
+            {placedAt}
+          </span>
+          <span
+            className="tt-status-badge"
+            style={{ color: meta.color, background: `${meta.color}1a` }}
+          >
+            {t(meta.labelKey)}
+          </span>
+        </div>
       </div>
 
       <div className="tt-order-items">
