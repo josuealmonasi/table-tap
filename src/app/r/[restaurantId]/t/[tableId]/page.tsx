@@ -42,6 +42,7 @@ export default async function TablePage({
       combos={data.combos}
       promos={data.promos}
       ratings={data.ratings}
+      closedNow={data.closedNow}
     />
   );
 }

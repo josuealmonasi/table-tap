@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Category, MenuItem, Restaurant } from "@/lib/types";
 import { fetchPromotions } from "@/lib/promotions-data";
 import { buildCombos, toCartPromos, type Combo } from "@/lib/promotions";
-import { isMenuOpen, type MenuSchedule } from "@/lib/menu-schedule";
+import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
 import type { CartPromo } from "@/lib/pricing";
 
 /** Everything the customer ordering screens need for one restaurant. */
@@ -19,6 +19,8 @@ export interface OrderingData {
   promos: CartPromo[];
   /** item id → average score, for dishes with enough ratings to show one. */
   ratings: Record<string, { avg: number; count: number }>;
+  /** The restaurant has menus, but none is serving at this hour. */
+  closedNow: boolean;
 }
 
 // Sentinel so an `.in("menu_id", [])` never matches (a restaurant with no active menus).
@@ -69,29 +71,20 @@ export function unwrap<T>(
 export async function loadOrderingData(restaurantId: string): Promise<OrderingData> {
   const supabase = await createClient();
 
-  // Only menus that are switched on AND inside their opening hours, if they
-  // have any. The switch is filtered in SQL; the hours can't be, so they're
-  // applied here in the restaurant's own timezone. A menu with no schedule
-  // passes straight through, which is how every menu behaved before.
+  // Which menus a customer may order from now. The decision is shared with
+  // /api/checkout so the page and the charge can't disagree about what's on
+  // offer — a menu that closes while the page sits open must stop both.
   const [menusRes, zoneRes] = await Promise.all([
     supabase
       .from("menus")
       .select("id, active, schedule")
-      .eq("restaurant_id", restaurantId)
-      .eq("active", true),
+      .eq("restaurant_id", restaurantId),
     supabase.from("restaurants").select("timezone").eq("id", restaurantId).single(),
   ]);
-  const menuRows =
-    unwrap<{ id: string; active: boolean; schedule: MenuSchedule | null }[]>(
-      menusRes,
-      "menus",
-    ) ?? [];
+  const menuRows = (menusRes.data as MenuOpenState[] | null) ?? [];
   const timeZone =
-    (zoneRes.data as { timezone?: string } | null)?.timezone || "America/Mexico_City";
-  const now = new Date();
-  const activeMenuIds = menuRows
-    .filter(m => isMenuOpen(m.active, m.schedule, now, timeZone))
-    .map(m => m.id);
+    (zoneRes.data as { timezone?: string } | null)?.timezone ?? DEFAULT_TIME_ZONE;
+  const { ids: activeMenuIds, closedNow } = openMenuIds(menuRows, timeZone);
   const menuFilter = activeMenuIds.length ? activeMenuIds : [NO_MENU];
 
   const [restaurantRes, categoriesRes, menuItemsRes] = await Promise.all([
@@ -169,6 +162,7 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
   if (restaurant && !restaurant.service_enabled) restaurant.service_pct = 0;
 
   return {
+    closedNow,
     restaurant,
     categories,
     items,

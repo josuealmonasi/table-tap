@@ -35,6 +35,8 @@ export const es: Messages = {
     deleteSelected: "No se pudieron eliminar los elementos seleccionados",
   },
   menu: {
+    closedNowTitle: "Estamos cerrados en este momento",
+    closedNowBody: "No hay nada en servicio a esta hora. Vuelve durante el horario de atención.",
     newProduct: "Nuevo producto",
     newExtra: "Nuevo extra",
     search: "Busca en el menú…",
@@ -418,6 +420,7 @@ export const es: Messages = {
     soon: "Pronto",
   },
   apiErr: {
+    closedNow: "La cocina no está sirviendo en este momento. Inténtalo durante el horario de servicio.",
     badTimezone: "Elige una zona horaria válida.",
     schedNoRules: "Agrega al menos un periodo.",
     schedNoDays: "Elige al menos un día.",

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { platformFeeCents } from "@/lib/money";
@@ -85,6 +86,37 @@ export async function POST(req: NextRequest) {
       return await apiError("apiErr.notAccepting", 409);
     }
 
+    // A menu switched off — or outside its opening hours — stops being
+    // orderable, not just invisible. Without this a page left open through
+    // closing time could still check out, and so could a hand-made request.
+    const [menusRes, zoneRes, catsRes] = await Promise.all([
+      supabase
+        .from("menus")
+        .select("id, active, schedule")
+        .eq("restaurant_id", restaurantId),
+      supabase.from("restaurants").select("timezone").eq("id", restaurantId).single(),
+      supabase.from("categories").select("id, menu_id").eq("restaurant_id", restaurantId),
+    ]);
+    const { ids: openIds, closedNow } = openMenuIds(
+      (menusRes.data as MenuOpenState[] | null) ?? [],
+      (zoneRes.data as { timezone?: string } | null)?.timezone ?? DEFAULT_TIME_ZONE,
+    );
+    if (closedNow) {
+      return await apiError("apiErr.closedNow", 409);
+    }
+    const menuOfCategory = new Map(
+      ((catsRes.data as { id: string; menu_id: string | null }[] | null) ?? []).map(c => [
+        c.id,
+        c.menu_id,
+      ]),
+    );
+    /** Extras have no category of their own; they ride with their product. */
+    const onOpenMenu = (categoryId: string | null): boolean => {
+      if (!categoryId) return true;
+      const menuId = menuOfCategory.get(categoryId);
+      return !menuId || openIds.includes(menuId);
+    };
+
     // No payouts without a connected Stripe account: refuse to charge a card
     // when we'd have nowhere to send the money. The owner completes onboarding
     // in Settings → Payments before customers can check out.
@@ -132,7 +164,7 @@ export async function POST(req: NextRequest) {
     ];
     const { data: dbItems, error: iErr } = await supabase
       .from("menu_items")
-      .select("id, name, price, emoji, available, discount_pct, modifiers")
+      .select("id, name, price, emoji, available, discount_pct, modifiers, category_id")
       .in("id", referencedIds)
       .eq("restaurant_id", restaurantId);
 
@@ -165,6 +197,22 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
+      // A bundle is only orderable while every component is. buildCombos
+      // already hides a combo whose components have gone, but a cart left open
+      // through closing time would otherwise still reach here.
+      for (const component of combo.components) {
+        const part = priceMap.get(component.itemId);
+        if (!part || !part.available || !onOpenMenu(part.category_id ?? null)) {
+          return NextResponse.json(
+            {
+              error: `${line.name} is no longer available.`,
+              unavailableItemId: line.itemId,
+            },
+            { status: 400 },
+          );
+        }
+      }
+
       // Extras chosen inside the bundle are charged on top of it, so they get
       // the same treatment as an ordinary line's: re-priced from the DB and
       // dropped if they've gone unavailable. Trusting the client here would
@@ -231,7 +279,7 @@ export async function POST(req: NextRequest) {
 
     for (const line of plainLines) {
       const db = priceMap.get(line.itemId);
-      if (!db || !db.available) {
+      if (!db || !db.available || !onOpenMenu(db.category_id ?? null)) {
         return NextResponse.json(
           {
             error: `${line.name} is no longer available.`,

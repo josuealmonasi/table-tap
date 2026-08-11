@@ -36,6 +36,7 @@ export default function OrderingApp({
   combos = [],
   promos = [],
   ratings = {},
+  closedNow = false,
 }: {
   restaurant: Restaurant;
   table: RestaurantTable | null;
@@ -46,6 +47,8 @@ export default function OrderingApp({
   combos?: Combo[];
   promos?: CartPromo[];
   ratings?: Record<string, { avg: number; count: number }>;
+  /** No menu is serving at this hour. */
+  closedNow?: boolean;
 }) {
   const [screen, setScreen] = useState<Screen>("menu");
   const [selected, setSelected] = useState<MenuItem | null>(null);
@@ -402,6 +405,7 @@ export default function OrderingApp({
         combos={combos}
         promos={promos}
         ratings={ratings}
+        closedNow={closedNow}
         cartCount={cart.count}
         cartTotal={pricing.total}
         onSelectItem={openItem}
