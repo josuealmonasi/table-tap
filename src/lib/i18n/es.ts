@@ -174,6 +174,7 @@ export const es: Messages = {
     moveDown: "Bajar",
   },
   item: {
+    noteLimit: "Hasta {max} caracteres",
     addExtras: "Agregar extras",
     optional: "(opcional)",
     specialRequests: "Peticiones especiales",

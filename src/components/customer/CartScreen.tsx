@@ -5,6 +5,7 @@ import type { CartItem } from "@/hooks/useCart";
 import type { AppliedCoupon, ItemPromoSaving, PromoHint } from "@/lib/pricing";
 import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
+import NoteField from "./NoteField";
 import CartLineRow from "./CartLineRow";
 import CouponBox from "./CouponBox";
 import OrderTotals from "./OrderTotals";
@@ -125,13 +126,11 @@ export default function CartScreen({
             </button>
 
             <div style={{ marginBottom: 20 }}>
-              <div className="tt-mod-label">{t("cart.kitchenNote")}</div>
-              <textarea
-                className="tt-input"
-                rows={2}
+              <NoteField
+                label={t("cart.kitchenNote")}
                 placeholder={t("cart.kitchenNotePlaceholder")}
                 value={orderNote}
-                onChange={e => onChangeNote(e.target.value)}
+                onChange={onChangeNote}
               />
             </div>
 
@@ -186,21 +185,27 @@ export default function CartScreen({
               currency={restaurant.currency}
             />
 
-            <button
-              className="tt-btn tt-btn-primary tt-btn-lg"
-              style={{ width: "100%", marginTop: 20 }}
-              disabled={!canCheckout || loading}
-              onClick={onCheckout}
-            >
-              {t(loading ? "cart.redirecting" : "cart.proceed")}
-            </button>
-            <p
-              className="tt-muted"
-              style={{ textAlign: "center", fontSize: 12, marginTop: 12 }}
-            >
-              <SecureIcon size={12} weight="bold" style={{ verticalAlign: "-1px" }} />{" "}
-              {t("cart.securedBy")}
-            </p>
+            {/* Pinned to the foot of the scroll area. A cart with long
+                special requests pushes this well past the fold, and the one
+                control the diner came here for must never need finding — the
+                same rule the dish detail already follows. */}
+            <div className="tt-cart-actions">
+              <button
+                className="tt-btn tt-btn-primary tt-btn-lg"
+                style={{ width: "100%" }}
+                disabled={!canCheckout || loading}
+                onClick={onCheckout}
+              >
+                {t(loading ? "cart.redirecting" : "cart.proceed")}
+              </button>
+              <p
+                className="tt-muted"
+                style={{ textAlign: "center", fontSize: 12, marginTop: 12 }}
+              >
+                <SecureIcon size={12} weight="bold" style={{ verticalAlign: "-1px" }} />{" "}
+                {t("cart.securedBy")}
+              </p>
+            </div>
           </>
         )}
       </div>

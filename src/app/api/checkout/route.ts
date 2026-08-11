@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { capNote } from "@/lib/notes";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -273,7 +274,7 @@ export async function POST(req: NextRequest) {
           return chosen ? { ...c, mods: chosen.mods, extras: chosen.extras } : c;
         }),
         ...(comboExtras.length > 0 ? { extras: comboExtras } : {}),
-        notes: line.notes,
+        notes: capNote(line.notes),
       });
     }
 
@@ -338,7 +339,7 @@ export async function POST(req: NextRequest) {
         qty,
         mods: line.mods ?? {},
         extras: verifiedExtras.length ? verifiedExtras : undefined,
-        notes: line.notes,
+        notes: capNote(line.notes),
       });
     }
 
@@ -428,7 +429,7 @@ export async function POST(req: NextRequest) {
         total,
         currency: restaurant.currency,
         items: verified,
-        note: note ?? null,
+        note: capNote(note) ?? null,
         paid: false,
       })
       .select("id")
