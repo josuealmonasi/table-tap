@@ -3695,3 +3695,19 @@ h2.tt-serif {
   background: color-mix(in srgb, var(--tt-ink) 7%, transparent);
   color: var(--tt-muted);
 }
+
+/* Order code on a kitchen ticket. Same size as the table number because it is
+   the other half of the same question — which food goes where — but normal
+   weight so the table still leads. Muted 12px hid it at a glance. */
+.tt-order-code-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tt-order-code {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  color: var(--tt-ink);
+}
