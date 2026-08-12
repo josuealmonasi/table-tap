@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useT } from "@/lib/i18n/context";
 
 /** A coupon as the dashboard lists it. */
 export interface Coupon {
@@ -35,6 +36,7 @@ export interface CouponInput {
  * which re-checks the role server-side.
  */
 export function useCoupons(restaurantId: string) {
+  const t = useT();
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -63,7 +65,7 @@ export function useCoupons(restaurantId: string) {
         body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) return data.error ?? "Something went wrong.";
+      if (!res.ok) return data.error ?? t("apiErr.generic");
       await reload();
       return null;
     },

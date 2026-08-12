@@ -485,6 +485,10 @@ export const es: Messages = {
     cancelStatus: "Solo se pueden cancelar pedidos nuevos o en preparación.",
     settling: "El pago aún se está procesando — inténtalo en un momento.",
     refundFailed: "El reembolso falló — el pedido NO se canceló. Inténtalo de nuevo.",
+    orderCancel: "No se pudo cancelar el pedido.",
+    // Último recurso cuando una petición falla sin cuerpo legible — una
+    // conexión caída, o un 500 que devolvió una página de error en HTML.
+    generic: "Algo salió mal.",
     notAccepting:
       "El restaurante no está recibiendo pedidos en este momento. Inténtalo más tarde.",
     checkoutFailed: "El pago falló",
@@ -547,6 +551,7 @@ export const es: Messages = {
     save: "Guardar cambios",
     saving: "Guardando…",
     cancel: "Cancelar",
+    confirm: "Confirmar",
     delete: "Eliminar",
     remove: "Quitar",
     add: "Agregar",
