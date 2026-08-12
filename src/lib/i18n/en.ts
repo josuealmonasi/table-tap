@@ -491,6 +491,11 @@ export const en = {
     settling: "Payment is still settling — try again in a moment.",
     refundFailed: "Refund failed — the order was NOT cancelled. Try again.",
     orderCancel: "Could not cancel the order.",
+    // Shown to a diner at checkout when the menu moved under them.
+    itemGone: "{name} is no longer available.",
+    chooseFirst: "Choose {options} for {name} before ordering.",
+    noCardPayments:
+      "This restaurant isn't set up to take card payments yet. Please let the staff know.",
     // Last resort when a request fails without a readable body — a dropped
     // connection, or a 500 that returned an HTML error page.
     generic: "Something went wrong.",
