@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Archivo } from "next/font/google";
 import "./globals.css";
-import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/membership";
 import { getPlatformAdmin } from "@/lib/admin";
 import Navbar from "@/components/layout/Navbar";
@@ -28,9 +27,8 @@ export const dynamic = "force-dynamic";
 
 // Site-wide chrome: Navbar only for logged-in restaurant users, Footer always.
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
   const admin = await getPlatformAdmin();
-  const membership = admin ? null : await getMembership(supabase);
+  const membership = admin ? null : await getMembership();
   const locale = await getLocale();
 
   return (

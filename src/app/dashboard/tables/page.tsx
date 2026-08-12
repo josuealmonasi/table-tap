@@ -6,19 +6,18 @@ import { qrSvg } from "@/lib/qr";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import TablesPanel, { type TableWithQr } from "@/components/dashboard/tables/TablesPanel";
 import type { RestaurantTable } from "@/lib/types";
+import { currentUser } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 
 // /dashboard/tables — manage tables and their QR codes. Requires login.
 export default async function TablesPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await currentUser();
   if (!user) redirect("/login");
 
   // Owners and managers may manage tables; kitchen goes back to its board.
-  const membership = await getMembership(supabase);
+  const membership = await getMembership();
   if (!membership) redirect("/dashboard");
   if (!MANAGES(membership.role)) redirect("/dashboard/orders");
   const r = membership.restaurant;

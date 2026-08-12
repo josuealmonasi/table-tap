@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
-import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/membership";
 import { createOnboardingLink, ensureConnectAccount } from "@/lib/stripe-connect";
+import { currentUser } from "@/lib/current-user";
 
 export const runtime = "nodejs";
 
@@ -10,15 +10,12 @@ export const runtime = "nodejs";
 // Returns a one-time Stripe-hosted onboarding URL for the client to redirect to.
 // Owner-only: connecting a bank account is the owner's decision, not a manager's.
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const membership = await getMembership(supabase);
+  const membership = await getMembership();
   if (!membership || membership.role !== "owner") {
     return await apiError("apiErr.forbidden", 403);
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await currentUser();
   const origin = req.headers.get("origin") ?? new URL(req.url).origin;
 
   try {

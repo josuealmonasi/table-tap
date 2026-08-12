@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMembership, MANAGES } from "@/lib/membership";
 import { isValidCouponFormat, normalizeCoupon } from "@/lib/coupons";
+import { currentUser } from "@/lib/current-user";
 
 export const runtime = "nodejs";
 
@@ -17,12 +17,9 @@ interface Actor {
 }
 
 async function actingManager(): Promise<Actor | null> {
-  const supabase = await createClient();
-  const membership = await getMembership(supabase);
+  const membership = await getMembership();
   if (!membership || !MANAGES(membership.role)) return null;
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await currentUser();
   return { restaurantId: membership.restaurant.id, email: user?.email ?? "staff" };
 }
 

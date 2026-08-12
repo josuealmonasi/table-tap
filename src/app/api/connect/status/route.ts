@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
-import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/membership";
 import { syncConnectStatus } from "@/lib/stripe-connect";
 
@@ -10,8 +9,7 @@ export const runtime = "nodejs";
 // account state (also syncing stripe_charges_enabled in the DB), so the
 // Payments card can show whether the restaurant can take orders yet.
 export async function GET() {
-  const supabase = await createClient();
-  const membership = await getMembership(supabase);
+  const membership = await getMembership();
   if (!membership || membership.role !== "owner") {
     return await apiError("apiErr.forbidden", 403);
   }
