@@ -27,6 +27,12 @@ create table if not exists restaurants (
   created_at  timestamptz not null default now()
 );
 
+-- The hottest lookup in the app: getMembership asks "which restaurant does this
+-- user own?" on every request, and has_role() asks it again inside every RLS
+-- policy check. Without this it is a sequential scan — free at seven rows,
+-- linear in the number of restaurants on the platform.
+create index if not exists restaurants_owner_idx on restaurants(owner_id);
+
 -- ── Tables (physical tables in the restaurant) ──────────────────────────────
 create table if not exists restaurant_tables (
   id            uuid primary key default gen_random_uuid(),
