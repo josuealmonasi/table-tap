@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useT } from "@/lib/i18n/context";
 import { fetchPromotions } from "@/lib/promotions-data";
 import type { PromotionKind, PromotionWithItems } from "@/lib/promotions";
 import type { Category, MenuItem } from "@/lib/types";
@@ -26,6 +27,7 @@ export interface PromotionInput {
  * built from. Writes go through /api/promotions, which re-checks the role.
  */
 export function usePromotions(restaurantId: string) {
+  const t = useT();
   const [promotions, setPromotions] = useState<PromotionWithItems[]>([]);
   const [products, setProducts] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -78,7 +80,7 @@ export function usePromotions(restaurantId: string) {
         body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) return data.error ?? "Something went wrong.";
+      if (!res.ok) return data.error ?? t("apiErr.generic");
       await reload();
       return null;
     },

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useT } from "@/lib/i18n/context";
 import type { Order, OrderStatus } from "@/lib/types";
 
 /** Short, gentle ping so kitchen staff notice a new order without looking. */
@@ -27,6 +28,7 @@ function playPing() {
  * with optimistic UI.
  */
 export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]) {
+  const t = useT();
   const [orders, setOrders] = useState<Order[]>(initialOrders);
 
   useEffect(() => {
@@ -95,7 +97,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
         body: JSON.stringify({ id }),
       });
       const data = await res.json();
-      if (!res.ok) return data.error ?? "Could not cancel the order.";
+      if (!res.ok) return data.error ?? t("apiErr.orderCancel");
       setOrders(prev => prev.map(o => (o.id === id ? { ...o, status: "cancelled" } : o)));
       return null;
     } catch {

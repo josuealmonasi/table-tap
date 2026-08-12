@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useT } from "@/lib/i18n/context";
 
 /** Basic options for a confirm/cancel dialog. */
 export type ConfirmOptions = {
@@ -67,6 +68,8 @@ function Dialog({
   options: ConfirmOptions;
   onResolve: (result: boolean) => void;
 }) {
+  const t = useT();
+
   // Escape cancels.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -94,14 +97,14 @@ function Dialog({
         )}
         <div className="tt-dialog-actions">
           <button className="tt-btn tt-btn-ghost" onClick={() => onResolve(false)}>
-            {options.cancelLabel ?? "Cancel"}
+            {options.cancelLabel ?? t("common.cancel")}
           </button>
           <button
             className={`tt-btn ${options.danger ? "tt-btn-danger" : "tt-btn-primary"}`}
             onClick={() => onResolve(true)}
             autoFocus
           >
-            {options.confirmLabel ?? "Confirm"}
+            {options.confirmLabel ?? t("common.confirm")}
           </button>
         </div>
       </div>

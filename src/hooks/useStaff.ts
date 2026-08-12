@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/lib/i18n/context";
 
 export type StaffRole = "owner" | "manager" | "waiter" | "kitchen";
 
@@ -52,6 +53,7 @@ async function fetchMembers(restaurantId: string): Promise<StaffMember[]> {
  * through /api/staff because creating/deleting logins needs the secret key.
  */
 export function useStaff(restaurantId: string) {
+  const t = useT();
   const [members, setMembers] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -85,7 +87,7 @@ export function useStaff(restaurantId: string) {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast(data.error ?? "Could not add the staff member.", "error");
+        toast(data.error ?? t("apiErr.staffAdd"), "error");
         return false;
       }
       toast(`Invite sent to ${email}`);
@@ -109,7 +111,7 @@ export function useStaff(restaurantId: string) {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast(data.error ?? "Could not update the role.", "error");
+        toast(data.error ?? t("apiErr.staffRole"), "error");
         return;
       }
       toast("Role updated");
@@ -131,7 +133,7 @@ export function useStaff(restaurantId: string) {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast(data.error ?? "Could not remove the login.", "error");
+        toast(data.error ?? t("apiErr.loginRemove"), "error");
         return;
       }
       toast("Staff login removed");

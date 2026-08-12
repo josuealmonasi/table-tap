@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/lib/i18n/context";
 
 export interface NewUserInput {
   email: string;
@@ -14,6 +15,7 @@ export interface NewUserInput {
 
 /** Platform-admin mutations; the page's server data refreshes after each. */
 export function useAdminActions() {
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -33,7 +35,7 @@ export function useAdminActions() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast(data.error ?? "Something went wrong.", "error");
+        toast(data.error ?? t("apiErr.generic"), "error");
         return false;
       }
       toast(okMsg);

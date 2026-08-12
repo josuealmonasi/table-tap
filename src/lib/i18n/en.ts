@@ -490,6 +490,10 @@ export const en = {
     cancelStatus: "Only new or preparing orders can be cancelled.",
     settling: "Payment is still settling — try again in a moment.",
     refundFailed: "Refund failed — the order was NOT cancelled. Try again.",
+    orderCancel: "Could not cancel the order.",
+    // Last resort when a request fails without a readable body — a dropped
+    // connection, or a 500 that returned an HTML error page.
+    generic: "Something went wrong.",
     notAccepting: "The restaurant isn't taking orders right now. Please try again later.",
     checkoutFailed: "Checkout failed",
     verifyItems: "Could not verify items",
@@ -550,6 +554,7 @@ export const en = {
     save: "Save changes",
     saving: "Saving…",
     cancel: "Cancel",
+    confirm: "Confirm",
     delete: "Delete",
     remove: "Remove",
     add: "Add",
