@@ -1084,6 +1084,61 @@ h2.tt-serif {
   text-align: center;
 }
 
+/* Compact variant for a cart line, where the stepper sits beside the price
+   rather than owning a row of its own. */
+.tt-stepper-sm {
+  gap: 6px;
+  padding: 4px 8px;
+}
+.tt-stepper-sm button {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--tt-muted);
+}
+.tt-stepper-sm button:hover {
+  background: var(--tt-white);
+  color: var(--tt-ink);
+}
+/* Stepping below one deletes the line, so it reads as a delete. */
+.tt-stepper-sm .tt-stepper-del:hover {
+  color: var(--tt-danger);
+}
+.tt-stepper-sm span {
+  font-size: 14px;
+  min-width: 16px;
+}
+
+/* Edit and the stepper share one level, so the line has a single row of
+   controls instead of a stack. It sits under the dish rather than beside the
+   price: alongside, it took enough width to wrap every dish name onto two
+   lines. */
+.tt-line-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+}
+/* Edit gets the stepper's pill so the two read as one group of controls
+   rather than a loose icon parked beside a button. */
+.tt-line-actions .tt-iconbtn {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tt-surface);
+  border-radius: 12px;
+  color: var(--tt-muted);
+}
+.tt-line-actions .tt-iconbtn:hover {
+  color: var(--tt-ink);
+}
+
 /* ── header (cart) ── */
 .tt-header {
   background: var(--tt-white);

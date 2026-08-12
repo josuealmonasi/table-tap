@@ -41,6 +41,7 @@ interface CartScreenProps {
   onChangeTip: (pct: number) => void;
   onCustomTip: (amount: number | null) => void;
   onRemoveItem: (cartId: number) => void;
+  onChangeQty: (cartId: number, qty: number) => void;
   onEditItem: (item: CartItem) => void;
   onAddMore: () => void;
   onCheckout: () => void;
@@ -72,6 +73,7 @@ export default function CartScreen({
   onChangeTip,
   onCustomTip,
   onRemoveItem,
+  onChangeQty,
   onEditItem,
   onAddMore,
   onCheckout,
@@ -117,6 +119,7 @@ export default function CartScreen({
                 promoSaving={promoSavings[item.itemId]}
                 soldOut={soldOut.has(item.itemId)}
                 onRemove={onRemoveItem}
+                onChangeQty={onChangeQty}
                 onEdit={onEditItem}
               />
             ))}

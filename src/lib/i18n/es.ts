@@ -197,6 +197,11 @@ export const es: Messages = {
     securedBy: "Protegido por Stripe · tarjeta, Apple Pay y Google Pay",
     soldOut: "Agotado",
     editItem: "Editar platillo",
+    increase: "Agregar uno más",
+    decrease: "Quitar uno",
+    removeItem: "Quitar del carrito",
+    removeConfirm: "¿Quitar {name}?",
+    removeConfirmMsg: "Vuelve al menú — puedes agregarlo de nuevo cuando quieras.",
     viewCart: "Ver carrito",
   },
   totals: {

@@ -68,6 +68,17 @@ export function useCart(restaurantId: string) {
     setItems(prev => prev.filter(i => i.cartId !== cartId));
   }
 
+  /**
+   * Sets how many of a line are ordered, from the cart's own stepper.
+   *
+   * Never drops to zero: removing is a separate, confirmed action, so a line
+   * can't quietly vanish from under the customer.
+   */
+  function setQty(cartId: number, qty: number) {
+    const next = Math.max(1, Math.floor(qty));
+    setItems(prev => prev.map(i => (i.cartId === cartId ? { ...i, qty: next } : i)));
+  }
+
   /** Replaces a line's choices (extras, mods, notes, qty) keeping its place. */
   function updateItem(cartId: number, line: OrderLineItem) {
     setItems(prev => prev.map(i => (i.cartId === cartId ? { ...line, cartId } : i)));
@@ -91,5 +102,5 @@ export function useCart(restaurantId: string) {
 
   const count = items.reduce((sum, i) => sum + i.qty, 0);
 
-  return { items, addItem, removeItem, updateItem, removeExtras, clear, count };
+  return { items, addItem, removeItem, setQty, updateItem, removeExtras, clear, count };
 }

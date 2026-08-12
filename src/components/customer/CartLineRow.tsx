@@ -4,7 +4,8 @@ import { formatMoney } from "@/lib/format";
 import { lineUnitPrice } from "@/lib/types";
 import type { CartItem } from "@/hooks/useCart";
 import { useT } from "@/lib/i18n/context";
-import { EditIcon } from "@/components/ui/icons";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { AddIcon, DeleteIcon, EditIcon, RemoveIcon } from "@/components/ui/icons";
 
 interface CartLineRowProps {
   item: CartItem;
@@ -12,6 +13,8 @@ interface CartLineRowProps {
   /** Sold out at checkout: greyed, price struck through, not counted. */
   soldOut?: boolean;
   onRemove: (cartId: number) => void;
+  /** Changes how many of this line are ordered. */
+  onChangeQty: (cartId: number, qty: number) => void;
   /** Re-opens the item screen prefilled to change extras/notes/quantity. */
   onEdit?: (item: CartItem) => void;
   /**
@@ -28,10 +31,31 @@ export default function CartLineRow({
   currency,
   soldOut = false,
   onRemove,
+  onChangeQty,
   onEdit,
   promoSaving,
 }: CartLineRowProps) {
   const t = useT();
+  const confirm = useConfirm();
+
+  /**
+   * Stepping down from one removes the line, so it asks first. Every other
+   * step is a single tap with no confirmation — undoing a wrong "+" is one
+   * tap on "−", but a removal would cost the customer their extras and notes.
+   */
+  async function stepDown() {
+    if (item.qty > 1 && !soldOut) {
+      onChangeQty(item.cartId, item.qty - 1);
+      return;
+    }
+    const ok = await confirm({
+      title: t("cart.removeConfirm", { name: item.name }),
+      message: t("cart.removeConfirmMsg"),
+      confirmLabel: t("common.remove"),
+      danger: true,
+    });
+    if (ok) onRemove(item.cartId);
+  }
   const charged = lineUnitPrice(item) * item.qty;
   // What to strike through. For a quantity deal that's the line's own gross —
   // the saving comes off it. A combo is different: it is already sold at the
@@ -96,29 +120,46 @@ export default function CartLineRow({
               &ldquo;{item.notes}&rdquo;
             </div>
           )}
-        </div>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 6,
-            alignItems: "center",
-          }}
-        >
-          <button className="tt-x" onClick={() => onRemove(item.cartId)}>
-            ×
-          </button>
-          {onEdit && !soldOut && (
-            <button
-              className="tt-iconbtn"
-              style={{ fontSize: 14 }}
-              title={t("cart.editItem")}
-              aria-label={`${t("cart.editItem")} — ${item.name}`}
-              onClick={() => onEdit(item)}
-            >
-              <EditIcon size={15} />
-            </button>
-          )}
+          <div className="tt-line-actions">
+            {onEdit && !soldOut && (
+              <button
+                className="tt-iconbtn"
+                title={t("cart.editItem")}
+                aria-label={`${t("cart.editItem")} — ${item.name}`}
+                onClick={() => onEdit(item)}
+              >
+                <EditIcon size={16} />
+              </button>
+            )}
+            {/* Reuses .tt-stepper from the item screen — same control, so it
+                should look the same; -sm only tightens it for a cart line.
+                A sold-out line can't be ordered at any quantity, so it offers
+                removal alone rather than a stepper that changes nothing. */}
+            <div className="tt-stepper tt-stepper-sm">
+              <button
+                className={item.qty > 1 && !soldOut ? undefined : "tt-stepper-del"}
+                aria-label={`${item.qty > 1 && !soldOut ? t("cart.decrease") : t("cart.removeItem")} — ${item.name}`}
+                onClick={stepDown}
+              >
+                {item.qty > 1 && !soldOut ? (
+                  <RemoveIcon size={15} />
+                ) : (
+                  <DeleteIcon size={15} />
+                )}
+              </button>
+              {!soldOut && (
+                <>
+                  <span aria-live="polite">{item.qty}</span>
+                  <button
+                    aria-label={`${t("cart.increase")} — ${item.name}`}
+                    onClick={() => onChangeQty(item.cartId, item.qty + 1)}
+                  >
+                    <AddIcon size={15} />
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
