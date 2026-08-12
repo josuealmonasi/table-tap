@@ -486,6 +486,11 @@ export const es: Messages = {
     settling: "El pago aún se está procesando — inténtalo en un momento.",
     refundFailed: "El reembolso falló — el pedido NO se canceló. Inténtalo de nuevo.",
     orderCancel: "No se pudo cancelar el pedido.",
+    // Se le muestra al comensal cuando el menú cambió mientras ordenaba.
+    itemGone: "{name} ya no está disponible.",
+    chooseFirst: "Elige {options} para {name} antes de ordenar.",
+    noCardPayments:
+      "Este restaurante todavía no puede aceptar pagos con tarjeta. Avísale al personal.",
     // Último recurso cuando una petición falla sin cuerpo legible — una
     // conexión caída, o un 500 que devolvió una página de error en HTML.
     generic: "Algo salió mal.",

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { capNote } from "@/lib/notes";
+import { messagesFor, translate } from "@/lib/i18n";
+import { getLocale } from "@/lib/i18n/server";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -17,11 +19,28 @@ import {
 } from "@/lib/coupon-service";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { fetchPromotions } from "@/lib/promotions-data";
-import { buildCombos, toCartPromos } from "@/lib/promotions";
-import type { OrderLineItem, OrderExtra, MenuItem, Modifier } from "@/lib/types";
-import { missingRequired } from "@/lib/modifiers";
+import { toCartPromos } from "@/lib/promotions";
+import { verifyCart, type VerifiableItem } from "@/lib/verify-cart";
+import type { OrderLineItem } from "@/lib/types";
 
 export const runtime = "nodejs";
+
+/**
+ * A translated cart error that keeps the machine-readable fields alongside it.
+ *
+ * The customer screen acts on `unavailableItemId` / `missingModifiers` to
+ * highlight the offending line, so the message can't just be a bare string —
+ * and it can't stay English either, which is what it was until now.
+ */
+async function cartError(
+  key: string,
+  vars: Record<string, string | number>,
+  status: number,
+  extra: Record<string, unknown>,
+): Promise<NextResponse> {
+  const messages = messagesFor(await getLocale());
+  return NextResponse.json({ error: translate(messages, key, vars), ...extra }, { status });
+}
 
 // POST /api/checkout
 // Body: { restaurantId, tableId, tableLabel, items: OrderLineItem[], note }
@@ -122,13 +141,7 @@ export async function POST(req: NextRequest) {
     // when we'd have nowhere to send the money. The owner completes onboarding
     // in Settings → Payments before customers can check out.
     if (!restaurant.stripe_account_id || !restaurant.stripe_charges_enabled) {
-      return NextResponse.json(
-        {
-          error:
-            "This restaurant isn't set up to take card payments yet. Please let the staff know.",
-        },
-        { status: 409 },
-      );
+      return await apiError("apiErr.noCardPayments", 409);
     }
 
     // Promotions come from the DB too, so a combo's price and a quantity deal's
@@ -138,29 +151,16 @@ export async function POST(req: NextRequest) {
     });
     const cartPromos = toCartPromos(promotions);
 
-    // Combo lines are priced as a bundle and verified separately below.
-    const comboLines = items.filter(i => i.comboId);
-    const plainLines = items.filter(i => !i.comboId);
-
-    // A combo's components come from ITS promotion row, not from the request —
-    // otherwise a client could list different components than the bundle
-    // actually contains.
-    const requestedComboIds = new Set(comboLines.map(l => l.comboId));
-    const comboComponentIds = promotions
-      .filter(p => requestedComboIds.has(p.id))
-      .flatMap(p => p.items.map(i => i.item_id));
-
     // IMPORTANT: never trust client prices. Re-fetch every referenced item
-    // (products AND extras) and use the DB's real price. Combo components are
-    // included so we can check they're all still available.
+    // (products AND extras) plus every combo component, so the verification
+    // below can price them from the DB and check they're all still orderable.
+    const comboComponentIds = promotions
+      .filter(p => items.some(i => i.comboId === p.id))
+      .flatMap(p => p.items.map(i => i.item_id));
     const referencedIds = [
       ...new Set([
-        ...plainLines.flatMap(i => [i.itemId, ...(i.extras?.map(e => e.id) ?? [])]),
+        ...items.flatMap(i => [i.itemId, ...(i.extras?.map(e => e.id) ?? [])]),
         ...comboComponentIds,
-        // A bundle's extras are priced from the DB too, so they have to be
-        // fetched here — without this they'd be missing from priceMap and the
-        // verification below would drop every one as "unavailable".
-        ...comboLines.flatMap(i => i.extras?.map(e => e.id) ?? []),
       ]),
     ];
     const { data: dbItems, error: iErr } = await supabase
@@ -173,187 +173,33 @@ export async function POST(req: NextRequest) {
       return await apiError("apiErr.verifyItems", 400);
     }
 
-    const priceMap = new Map(dbItems.map(d => [d.id, d]));
-
-    // Build verified line items with DB prices for the product and its extras.
-    const verified: OrderLineItem[] = [];
-    const removedExtras = new Map<string, string>(); // extra id → name (deduped)
-
-    // Combos: the bundle must still exist, be active, and have every component
-    // available. Its price comes from the promotion row, never the request.
-    const combosById = new Map(
-      buildCombos(
-        promotions,
-        new Map(dbItems.map(d => [d.id, d as unknown as MenuItem])),
-      ).map(c => [c.id, c]),
-    );
-    for (const line of comboLines) {
-      const combo = combosById.get(line.comboId!);
-      if (!combo) {
-        return NextResponse.json(
-          {
-            error: `${line.name} is no longer available.`,
-            unavailableItemId: line.itemId,
-          },
-          { status: 400 },
-        );
-      }
-      // A bundle is only orderable while every component is. buildCombos
-      // already hides a combo whose components have gone, but a cart left open
-      // through closing time would otherwise still reach here.
-      for (const component of combo.components) {
-        const part = priceMap.get(component.itemId);
-        if (!part || !part.available || !onOpenMenu(part.category_id ?? null)) {
-          return NextResponse.json(
-            {
-              error: `${line.name} is no longer available.`,
-              unavailableItemId: line.itemId,
-            },
-            { status: 400 },
-          );
-        }
-      }
-
-      // Extras chosen inside the bundle are charged on top of it, so they get
-      // the same treatment as an ordinary line's: re-priced from the DB and
-      // dropped if they've gone unavailable. Trusting the client here would
-      // let a forged payload attach a MX$0 truffle oil to a MX$5 deal.
-      const comboExtras: OrderExtra[] = [];
-      for (const extra of line.extras ?? []) {
-        const dbExtra = priceMap.get(extra.id);
-        if (!dbExtra || !dbExtra.available) {
-          removedExtras.set(extra.id, extra.name);
-          continue;
-        }
-        comboExtras.push({
-          id: dbExtra.id,
-          name: dbExtra.name,
-          emoji: dbExtra.emoji,
-          price: dbExtra.price,
+    const result = verifyCart({
+      items,
+      promotions,
+      dbItems: dbItems as VerifiableItem[],
+      isOnOpenMenu: onOpenMenu,
+    });
+    if (!result.ok) {
+      const r = result.rejection;
+      if (r.kind === "unavailable") {
+        return await cartError("apiErr.itemGone", { name: r.name }, 400, {
+          unavailableItemId: r.itemId,
         });
       }
-
-      // Required option groups apply per component: a deal containing a steak
-      // can't be ordered without its doneness any more than the steak could
-      // be on its own.
-      for (const component of line.components ?? []) {
-        const product = priceMap.get(component.itemId);
-        if (!product) continue;
-        const unanswered = missingRequired(
-          (product.modifiers as Modifier[] | null) ?? [],
-          component.mods,
-        );
-        if (unanswered.length > 0) {
-          return NextResponse.json(
-            {
-              error: `Choose ${unanswered.join(", ")} for ${component.name} before ordering.`,
-              missingModifiers: unanswered,
-              unansweredItemId: component.itemId,
-            },
-            { status: 400 },
-          );
-        }
-      }
-
-      verified.push({
-        itemId: combo.id,
-        comboId: combo.id,
-        name: combo.name,
-        emoji: combo.emoji || "🎁",
-        // The bundle price, from the promotion row. Extras sit alongside it and
-        // priceCart sums them — the deal fixes what the dishes cost, not what
-        // an upgrade costs.
-        price: combo.price,
-        qty: Math.max(1, Math.floor(line.qty)),
-        mods: {},
-        // The client's per-component choices are kept for the kitchen ticket
-        // (they're instructions, not money), but every component and its
-        // structure comes from the DB-built combo.
-        components: combo.components.map(c => {
-          const chosen = (line.components ?? []).find(x => x.itemId === c.itemId);
-          return chosen ? { ...c, mods: chosen.mods, extras: chosen.extras } : c;
-        }),
-        ...(comboExtras.length > 0 ? { extras: comboExtras } : {}),
-        notes: capNote(line.notes),
-      });
-    }
-
-    for (const line of plainLines) {
-      const db = priceMap.get(line.itemId);
-      if (!db || !db.available || !onOpenMenu(db.category_id ?? null)) {
-        return NextResponse.json(
-          {
-            error: `${line.name} is no longer available.`,
-            unavailableItemId: line.itemId,
-          },
-          { status: 400 },
+      if (r.kind === "missingModifiers") {
+        return await cartError(
+          "apiErr.chooseFirst",
+          { options: r.unanswered.join(", "), name: r.forName },
+          400,
+          { missingModifiers: r.unanswered, unansweredItemId: r.itemId },
         );
       }
-
-      // An extra that went unavailable is never charged. We collect them and,
-      // below, tell the client to drop them + review before paying.
-      const verifiedExtras: OrderExtra[] = [];
-      for (const extra of line.extras ?? []) {
-        const dbExtra = priceMap.get(extra.id);
-        if (!dbExtra || !dbExtra.available) {
-          removedExtras.set(extra.id, extra.name);
-          continue;
-        }
-        verifiedExtras.push({
-          id: dbExtra.id,
-          name: dbExtra.name,
-          emoji: dbExtra.emoji,
-          price: dbExtra.price,
-        });
-      }
-
-      // Required option groups, checked against the DB's modifiers rather than
-      // the client's. The customer screen already disables "Add to cart" for
-      // this, but that copy can be stale (a tab left open while the manager
-      // marked a group required) or simply absent, so this is the one that
-      // decides — otherwise the kitchen gets a ticket it can't cook from.
-      const unanswered = missingRequired(
-        (db.modifiers as Modifier[] | null) ?? [],
-        line.mods,
-      );
-      if (unanswered.length > 0) {
-        return NextResponse.json(
-          {
-            error: `Choose ${unanswered.join(", ")} for ${db.name} before ordering.`,
-            missingModifiers: unanswered,
-            unansweredItemId: db.id,
-          },
-          { status: 400 },
-        );
-      }
-
-      const qty = Math.max(1, Math.floor(line.qty));
-      verified.push({
-        itemId: db.id,
-        name: db.name,
-        emoji: db.emoji,
-        price: db.price,
-        // From the DB, never the client — a forged discount would otherwise
-        // let a customer set their own price.
-        discountPct: Number(db.discount_pct) || 0,
-        qty,
-        mods: line.mods ?? {},
-        extras: verifiedExtras.length ? verifiedExtras : undefined,
-        notes: capNote(line.notes),
-      });
-    }
-
-    // If any extras dropped out, don't charge yet — let the customer see what
-    // changed and confirm. The client removes them and re-submits.
-    if (removedExtras.size > 0) {
       return NextResponse.json(
-        {
-          removedExtraIds: [...removedExtras.keys()],
-          removedExtraNames: [...removedExtras.values()],
-        },
+        { removedExtraIds: r.ids, removedExtraNames: r.names },
         { status: 409 },
       );
     }
+    const verified = result.lines;
 
     // THE authoritative price. Same function the customer's cart ran, but fed
     // DB-verified prices — so the amount charged is never the client's opinion.
