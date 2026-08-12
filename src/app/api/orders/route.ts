@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getMembership, MOVES_ORDERS } from "@/lib/membership";
-import { currentUser } from "@/lib/current-user";
+import { MOVES_ORDERS } from "@/lib/membership";
+import { actingStaff } from "@/lib/api-guard";
 
 export const runtime = "nodejs";
 
@@ -20,15 +20,13 @@ export async function PATCH(req: NextRequest) {
   }
 
   const supabase = await createClient();
-  const user = await currentUser();
-  if (!user) return await apiError("apiErr.unauthorized", 401);
 
   // A waiter may only close out an order they're handing over. Every other
   // stage change belongs to the kitchen, and the UI hiding the control is not
   // enforcement — this is.
-  const membership = await getMembership();
-  if (!membership) return await apiError("apiErr.forbidden", 403);
-  if (!MOVES_ORDERS(membership.role) && status !== "completed") {
+  const actor = await actingStaff();
+  if (!actor) return await apiError("apiErr.forbidden", 403);
+  if (!MOVES_ORDERS(actor.role) && status !== "completed") {
     return await apiError("apiErr.notYourStage", 403);
   }
 

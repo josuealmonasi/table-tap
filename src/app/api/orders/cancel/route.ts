@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { stripe } from "@/lib/stripe";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { currentUser } from "@/lib/current-user";
+import { actingManager } from "@/lib/api-guard";
 
 export const runtime = "nodejs";
 
@@ -14,40 +13,22 @@ export async function POST(req: NextRequest) {
   const { id } = await req.json();
   if (!id) return await apiError("apiErr.invalidRequest", 400);
 
-  const supabase = await createClient();
-  const user = await currentUser();
-  if (!user) return await apiError("apiErr.unauthorized", 401);
-
-  // Refunds move money, so only the owner or a manager may cancel. The RLS
-  // read proves membership; the role check separates them from kitchen.
-  const { data: visible } = await supabase
-    .from("orders")
-    .select("id, restaurants(owner_id)")
-    .eq("id", id)
-    .single();
-  const rel = (
-    visible as { restaurants?: { owner_id?: string } | { owner_id?: string }[] } | null
-  )?.restaurants;
-  const ownerId = Array.isArray(rel) ? rel[0]?.owner_id : rel?.owner_id;
-  if (!visible) return await apiError("apiErr.forbidden", 403);
-  if (ownerId !== user.id) {
-    const { data: me } = await supabase
-      .from("staff")
-      .select("role")
-      .eq("user_id", user.id)
-      .single();
-    if (me?.role !== "manager" && me?.role !== "owner") {
-      return await apiError("apiErr.forbidden", 403);
-    }
-  }
+  // Refunds move money, so only the owner or a manager may cancel.
+  const actor = await actingManager();
+  if (!actor) return await apiError("apiErr.forbidden", 403);
 
   // Re-read the authoritative row: guards double-clicks and two tabs racing.
+  // Scoped to the caller's restaurant, so another tenant's order id simply
+  // isn't found. This used to lean on the RLS visibility of an earlier read
+  // to prove tenancy, which was sound but left the write itself scoped by id
+  // alone — the boundary is worth stating outright on a path that refunds.
   const admin = createAdminClient();
   const { data: order } = await admin
     .from("orders")
     .select("id, status, paid, stripe_payment_intent, stripe_refund_id")
     .eq("id", id)
-    .single();
+    .eq("restaurant_id", actor.restaurantId)
+    .maybeSingle();
   if (!order) return await apiError("apiErr.orderNotFound", 404);
 
   if (order.status !== "received" && order.status !== "preparing") {
@@ -79,7 +60,8 @@ export async function POST(req: NextRequest) {
   const { error } = await admin
     .from("orders")
     .update({ status: "cancelled", stripe_refund_id: refundId })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("restaurant_id", actor.restaurantId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true });

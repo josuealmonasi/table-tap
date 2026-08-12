@@ -69,7 +69,7 @@ export function useCoupons(restaurantId: string) {
       await reload();
       return null;
     },
-    [reload],
+    [reload, t],
   );
 
   return {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { isAllowedTimeZone } from "@/lib/timezones";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getMembership, MANAGES } from "@/lib/membership";
+import { actingManager } from "@/lib/api-guard";
 
 export const runtime = "nodejs";
 
@@ -26,13 +26,11 @@ const MANAGER_FIELDS = new Set(["tax_pct", "tax_show_breakdown", "accepting_orde
 // allowed field set enforced by role. Writes with the secret key after the
 // membership check (managers can't update `restaurants` under RLS).
 export async function POST(req: NextRequest) {
-  const membership = await getMembership();
-  if (!membership || !MANAGES(membership.role)) {
-    return await apiError("apiErr.forbidden", 403);
-  }
+  const actor = await actingManager();
+  if (!actor) return await apiError("apiErr.forbidden", 403);
 
   const body = (await req.json()) as Record<string, unknown>;
-  const allowed = membership.role === "owner" ? OWNER_FIELDS : MANAGER_FIELDS;
+  const allowed = actor.role === "owner" ? OWNER_FIELDS : MANAGER_FIELDS;
 
   const update: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(body)) {
@@ -62,7 +60,7 @@ export async function POST(req: NextRequest) {
   const { error } = await createAdminClient()
     .from("restaurants")
     .update(update)
-    .eq("id", membership.restaurant.id);
+    .eq("id", actor.restaurantId);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

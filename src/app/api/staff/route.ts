@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { currentUser } from "@/lib/current-user";
+import { actingOwner } from "@/lib/api-guard";
 
 export const runtime = "nodejs";
 
@@ -10,34 +9,6 @@ const ROLES: readonly string[] = ["owner", "manager", "waiter", "kitchen"];
 
 /** Owners a restaurant may have, counting the founding owner. */
 const MAX_OWNERS = 3;
-
-interface Actor {
-  restaurantId: string;
-  email: string;
-}
-
-/** The caller as an owner (founding or co-owner) — null when they're neither. */
-async function actingOwner(): Promise<Actor | null> {
-  const supabase = await createClient();
-  const user = await currentUser();
-  if (!user) return null;
-
-  const { data: owned } = await supabase
-    .from("restaurants")
-    .select("id")
-    .eq("owner_id", user.id)
-    .single();
-  if (owned) return { restaurantId: owned.id, email: user.email ?? "owner" };
-
-  const { data: co } = await supabase
-    .from("staff")
-    .select("restaurant_id, role")
-    .eq("user_id", user.id)
-    .single();
-  if (co?.role === "owner")
-    return { restaurantId: co.restaurant_id, email: user.email ?? "owner" };
-  return null;
-}
 
 /** Every user-management action lands in the restaurant's activity log. */
 async function log(

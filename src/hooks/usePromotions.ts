@@ -84,7 +84,7 @@ export function usePromotions(restaurantId: string) {
       await reload();
       return null;
     },
-    [reload],
+    [reload, t],
   );
 
   return {
