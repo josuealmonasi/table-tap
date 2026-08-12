@@ -366,6 +366,8 @@ export const es: Messages = {
     heads: "Atención",
     ok: "OK",
     allSoldOut: "Todo en tu carrito se agotó. Agrega algo más para ordenar.",
+    markedSoldOut:
+      "Lo marcamos como agotado — quítalo, o paga el resto de tu pedido.",
     network: "Error de red — revisa tu conexión e inténtalo de nuevo.",
     generic: "Algo salió mal. Inténtalo de nuevo.",
   },

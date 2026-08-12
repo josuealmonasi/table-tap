@@ -75,28 +75,19 @@ export default function CartLineRow({
       className={`tt-card ${soldOut ? "tt-cart-soldout" : ""}`}
       style={{ padding: 14 }}
     >
-      <div style={{ display: "flex", gap: 12 }}>
+      {/* Centred, so the price and the controls sit on the dish's own line
+          instead of stepping down it. */}
+      <div className="tt-line">
         <span style={{ fontSize: 28 }}>{item.emoji || "🍽️"}</span>
-        <div style={{ flex: 1 }}>
-          <div className="tt-row">
-            <strong>
-              {item.qty}× {item.name}
-              {soldOut && (
-                <span className="tt-badge" style={{ marginLeft: 8 }}>
-                  {t("cart.soldOut")}
-                </span>
-              )}
-            </strong>
-            <strong
-              className={soldOut ? "tt-muted" : "tt-accent"}
-              style={soldOut ? { textDecoration: "line-through" } : undefined}
-            >
-              {dealPrice !== null && !soldOut && (
-                <s className="tt-was">{formatMoney(regular, currency)}</s>
-              )}
-              {formatMoney(dealPrice !== null && !soldOut ? dealPrice : charged, currency)}
-            </strong>
-          </div>
+        <div className="tt-line-body">
+          <strong>
+            {item.qty}× {item.name}
+            {soldOut && (
+              <span className="tt-badge" style={{ marginLeft: 8 }}>
+                {t("cart.soldOut")}
+              </span>
+            )}
+          </strong>
           {promoSaving && !soldOut && (
             <div className="tt-tag-row">
               <span className="tt-deal">{promoSaving.promoName}</span>
@@ -120,45 +111,54 @@ export default function CartLineRow({
               &ldquo;{item.notes}&rdquo;
             </div>
           )}
-          <div className="tt-line-actions">
-            {onEdit && !soldOut && (
-              <button
-                className="tt-iconbtn"
-                title={t("cart.editItem")}
-                aria-label={`${t("cart.editItem")} — ${item.name}`}
-                onClick={() => onEdit(item)}
-              >
-                <EditIcon size={16} />
-              </button>
+        </div>
+        <div className="tt-line-actions">
+          <strong
+            className={soldOut ? "tt-muted" : "tt-accent"}
+            style={soldOut ? { textDecoration: "line-through" } : undefined}
+          >
+            {dealPrice !== null && !soldOut && (
+              <s className="tt-was">{formatMoney(regular, currency)}</s>
             )}
-            {/* Reuses .tt-stepper from the item screen — same control, so it
+            {formatMoney(dealPrice !== null && !soldOut ? dealPrice : charged, currency)}
+          </strong>
+          {onEdit && !soldOut && (
+            <button
+              className="tt-iconbtn"
+              title={t("cart.editItem")}
+              aria-label={`${t("cart.editItem")} — ${item.name}`}
+              onClick={() => onEdit(item)}
+            >
+              <EditIcon size={16} />
+            </button>
+          )}
+          {/* Reuses .tt-stepper from the item screen — same control, so it
                 should look the same; -sm only tightens it for a cart line.
                 A sold-out line can't be ordered at any quantity, so it offers
                 removal alone rather than a stepper that changes nothing. */}
-            <div className="tt-stepper tt-stepper-sm">
-              <button
-                className={item.qty > 1 && !soldOut ? undefined : "tt-stepper-del"}
-                aria-label={`${item.qty > 1 && !soldOut ? t("cart.decrease") : t("cart.removeItem")} — ${item.name}`}
-                onClick={stepDown}
-              >
-                {item.qty > 1 && !soldOut ? (
-                  <RemoveIcon size={15} />
-                ) : (
-                  <DeleteIcon size={15} />
-                )}
-              </button>
-              {!soldOut && (
-                <>
-                  <span aria-live="polite">{item.qty}</span>
-                  <button
-                    aria-label={`${t("cart.increase")} — ${item.name}`}
-                    onClick={() => onChangeQty(item.cartId, item.qty + 1)}
-                  >
-                    <AddIcon size={15} />
-                  </button>
-                </>
+          <div className="tt-stepper tt-stepper-sm">
+            <button
+              className={item.qty > 1 && !soldOut ? undefined : "tt-stepper-del"}
+              aria-label={`${item.qty > 1 && !soldOut ? t("cart.decrease") : t("cart.removeItem")} — ${item.name}`}
+              onClick={stepDown}
+            >
+              {item.qty > 1 && !soldOut ? (
+                <RemoveIcon size={15} />
+              ) : (
+                <DeleteIcon size={15} />
               )}
-            </div>
+            </button>
+            {!soldOut && (
+              <>
+                <span aria-live="polite">{item.qty}</span>
+                <button
+                  aria-label={`${t("cart.increase")} — ${item.name}`}
+                  onClick={() => onChangeQty(item.cartId, item.qty + 1)}
+                >
+                  <AddIcon size={15} />
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
