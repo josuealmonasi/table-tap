@@ -340,6 +340,7 @@ export const es: Messages = {
     other: "Otro",
     amountTitle: "Monto de propina",
     amountPrompt: "¿Cuánto te gustaría dejar de propina?",
+    max: "Lo máximo que puedes dejar en este pedido: {max}",
     cancel: "Cancelar",
     confirm: "Confirmar propina",
   },

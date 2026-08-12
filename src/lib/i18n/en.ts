@@ -343,6 +343,7 @@ export const en = {
     other: "Other",
     amountTitle: "Tip amount",
     amountPrompt: "How much would you like to tip?",
+    max: "Most you can tip on this order: {max}",
     cancel: "Cancel",
     confirm: "Confirm tip",
   },
