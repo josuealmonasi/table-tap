@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getMembership, MANAGES } from "@/lib/membership";
+import { actingManager } from "@/lib/api-guard";
 import {
   promoPricingError,
   type PricedProduct,
@@ -14,12 +14,6 @@ export const runtime = "nodejs";
 // Promotion management for owners and managers: combo bundles and quantity
 // deals. Same shape as /api/coupons — role check, then write with the secret
 // key, always scoped to the caller's restaurant.
-
-async function actingManagerRestaurant(): Promise<string | null> {
-  const membership = await getMembership();
-  if (!membership || !MANAGES(membership.role)) return null;
-  return membership.restaurant.id;
-}
 
 interface Body {
   kind?: PromotionKind;
@@ -66,8 +60,9 @@ function validate(body: Body): { key: string } | null {
 
 // POST /api/promotions — create a promotion and link its products.
 export async function POST(req: NextRequest) {
-  const restaurantId = await actingManagerRestaurant();
-  if (!restaurantId) return await apiError("apiErr.forbidden", 403);
+  const actor = await actingManager();
+  if (!actor) return await apiError("apiErr.forbidden", 403);
+  const restaurantId = actor.restaurantId;
 
   const body = (await req.json()) as Body;
   const bad = validate(body);
@@ -132,8 +127,9 @@ export async function POST(req: NextRequest) {
 
 // PATCH /api/promotions — pause or resume.
 export async function PATCH(req: NextRequest) {
-  const restaurantId = await actingManagerRestaurant();
-  if (!restaurantId) return await apiError("apiErr.forbidden", 403);
+  const actor = await actingManager();
+  if (!actor) return await apiError("apiErr.forbidden", 403);
+  const restaurantId = actor.restaurantId;
 
   const body = (await req.json()) as Body & { id?: string; active?: boolean };
   if (!body.id) return await apiError("apiErr.invalidRequest", 400);
@@ -218,8 +214,9 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE /api/promotions — remove it (promotion_items cascades).
 export async function DELETE(req: NextRequest) {
-  const restaurantId = await actingManagerRestaurant();
-  if (!restaurantId) return await apiError("apiErr.forbidden", 403);
+  const actor = await actingManager();
+  if (!actor) return await apiError("apiErr.forbidden", 403);
+  const restaurantId = actor.restaurantId;
 
   const { id } = await req.json();
   if (!id) return await apiError("apiErr.invalidRequest", 400);
