@@ -20,6 +20,7 @@ import ItemDetailScreen from "./ItemDetailScreen";
 import CartScreen from "./CartScreen";
 import ComboDetailScreen from "./ComboDetailScreen";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
+import { useMenuFreshness } from "@/hooks/useMenuFreshness";
 
 type Screen = "menu" | "item" | "combo" | "edit" | "cart";
 
@@ -62,9 +63,31 @@ export default function OrderingApp({
   // and excluded from the total and the next payment attempt.
   const [soldOut, setSoldOut] = useState<Set<string>>(new Set());
   const [tipPct, setTipPct] = useState(0);
+
+  // Re-asks the server what is being served, so a dish pulled while this page
+  // sat open stops being orderable here too.
+  useMenuFreshness();
   const [tipCustom, setTipCustom] = useState<number | null>(null);
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
   const cart = useCart(restaurant.id);
+
+  // When a refresh drops a dish the diner already added, mark it sold out —
+  // the same state the checkout would have produced, reached before they are
+  // standing at the payment step. Extras live in their own list, so only
+  // products are judged here.
+  const liveIds = useMemo(() => new Set(items.map(i => i.id)), [items]);
+  useEffect(() => {
+    const gone = cart.items
+      .filter(line => !line.comboId && !liveIds.has(line.itemId))
+      .map(line => line.itemId);
+    if (gone.length === 0) return;
+    setSoldOut(prev => {
+      if (gone.every(id => prev.has(id))) return prev;
+      const next = new Set(prev);
+      gone.forEach(id => next.add(id));
+      return next;
+    });
+  }, [cart.items, liveIds]);
   const t = useT();
   const sharedParams = readMenuParams(new URLSearchParams(useSearchParams().toString()));
   const sharedItemId = sharedParams.item;
