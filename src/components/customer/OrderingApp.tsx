@@ -275,9 +275,7 @@ export default function OrderingApp({
       // sold out (it greys out and drops from the total) so the rest can pay.
       if (data.unavailableItemId) {
         setSoldOut(prev => new Set(prev).add(data.unavailableItemId));
-        setNotice(
-          `${data.error} We've marked it sold out — remove it or pay for the rest of your order.`,
-        );
+        setNotice(`${data.error} ${t("notice.markedSoldOut")}`);
       } else {
         setNotice(data.error ?? t("notice.generic"));
       }

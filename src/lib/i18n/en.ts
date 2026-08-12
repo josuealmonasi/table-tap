@@ -369,6 +369,8 @@ export const en = {
     heads: "Heads up",
     ok: "OK",
     allSoldOut: "Everything in your cart just sold out. Add something else to order.",
+    markedSoldOut:
+      "We've marked it sold out — remove it, or pay for the rest of your order.",
     network: "Network error — please check your connection and try again.",
     generic: "Something went wrong. Please try again.",
   },
