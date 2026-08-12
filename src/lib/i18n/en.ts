@@ -202,6 +202,11 @@ export const en = {
     securedBy: "Secured by Stripe · card, Apple Pay & Google Pay",
     soldOut: "Sold out",
     editItem: "Edit item",
+    increase: "Add one more",
+    decrease: "Remove one",
+    removeItem: "Remove from cart",
+    removeConfirm: "Remove {name}?",
+    removeConfirmMsg: "It goes back on the menu — you can add it again any time.",
     viewCart: "View Cart",
   },
   totals: {

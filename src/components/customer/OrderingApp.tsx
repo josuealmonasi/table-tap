@@ -19,6 +19,7 @@ import MenuScreen from "./MenuScreen";
 import ItemDetailScreen from "./ItemDetailScreen";
 import CartScreen from "./CartScreen";
 import ComboDetailScreen from "./ComboDetailScreen";
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 
 type Screen = "menu" | "item" | "combo" | "edit" | "cart";
 
@@ -387,6 +388,7 @@ export default function OrderingApp({
             }}
             onCustomTip={setTipCustom}
             onRemoveItem={cart.removeItem}
+            onChangeQty={cart.setQty}
             onEditItem={editLine}
             onAddMore={() => setScreen("menu")}
             onCheckout={checkout}
@@ -396,7 +398,10 @@ export default function OrderingApp({
     ) : null;
 
   return (
-    <>
+    // The cart's remove asks before it deletes, and useConfirm needs its
+    // provider above it — the dashboard has one per page, the customer app
+    // is a single screen so it wraps the lot.
+    <ConfirmProvider>
       <MenuScreen
         restaurant={restaurant}
         table={table}
@@ -436,6 +441,6 @@ export default function OrderingApp({
           </button>
         </div>
       </Modal>
-    </>
+    </ConfirmProvider>
   );
 }
