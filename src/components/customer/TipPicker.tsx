@@ -10,6 +10,14 @@ interface TipPickerProps {
   tipPct: number;
   /** An exact amount chosen via "Other" — overrides the percentage. */
   tipCustom: number | null;
+  /**
+   * The most this order can be tipped — the discounted subtotal, which is
+   * what priceCart caps an exact tip at. Passed in so the chip shows what
+   * will actually be charged: it used to show the typed figure, so a
+   * mistyped MX$10,000 on a MX$1,445 bill displayed as MX$10,000 while the
+   * total quietly used MX$1,416.20.
+   */
+  maxTip: number;
   onPresetTip: (pct: number) => void;
   onCustomTip: (amount: number | null) => void;
 }
@@ -19,6 +27,7 @@ export default function TipPicker({
   currency,
   tipPct,
   tipCustom,
+  maxTip,
   onPresetTip,
   onCustomTip,
 }: TipPickerProps) {
@@ -28,7 +37,14 @@ export default function TipPicker({
 
   function confirmCustom(e: React.FormEvent): void {
     e.preventDefault();
-    const amount = +(Number(draft) || 0).toFixed(2);
+    // Clamped here as well as in priceCart. The engine is what protects the
+    // charge; this is what keeps the screen honest about it.
+    //
+    // Deliberately not a `max` on the input: that blocks submission with the
+    // browser's own message, which follows the browser's language rather than
+    // the one the diner chose here. The limit is stated above the field in
+    // our copy instead, and anything larger folds down to it.
+    const amount = Math.min(+(Number(draft) || 0).toFixed(2), maxTip);
     onCustomTip(amount > 0 ? amount : null);
     setAsking(false);
   }
@@ -55,7 +71,9 @@ export default function TipPicker({
             setAsking(true);
           }}
         >
-          {tipCustom !== null ? formatMoney(tipCustom, currency) : t("tip.other")}
+          {tipCustom !== null
+            ? formatMoney(Math.min(tipCustom, maxTip), currency)
+            : t("tip.other")}
         </button>
       </div>
 
@@ -70,6 +88,9 @@ export default function TipPicker({
         </h3>
         <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
           {t("tip.amountPrompt")}
+        </p>
+        <p className="tt-muted" style={{ marginTop: 0, fontSize: 12 }}>
+          {t("tip.max", { max: formatMoney(maxTip, currency) })}
         </p>
         <form onSubmit={confirmCustom}>
           <input

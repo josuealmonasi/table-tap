@@ -141,6 +141,7 @@ export default function CartScreen({
               currency={restaurant.currency}
               tipPct={tipPct}
               tipCustom={tipCustom}
+              maxTip={subtotal}
               onPresetTip={onChangeTip}
               onCustomTip={onCustomTip}
             />
