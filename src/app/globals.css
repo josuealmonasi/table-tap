@@ -1087,8 +1087,8 @@ h2.tt-serif {
 /* Compact variant for a cart line, where the stepper sits beside the price
    rather than owning a row of its own. */
 .tt-stepper-sm {
-  gap: 6px;
-  padding: 4px 8px;
+  gap: 2px;
+  padding: 3px 4px;
 }
 .tt-stepper-sm button {
   width: 26px;
@@ -1116,18 +1116,33 @@ h2.tt-serif {
    controls instead of a stack. It sits under the dish rather than beside the
    price: alongside, it took enough width to wrap every dish name onto two
    lines. */
+/* One cart line: emoji, the dish and its details, then price + controls.
+   Centred as a group so the price and the icons land on the dish's line
+   rather than stepping down below it. */
+.tt-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tt-line-body {
+  flex: 1;
+  /* Without this a long dish name refuses to wrap and pushes the price off. */
+  min-width: 0;
+}
+/* The customer column is capped at 460px on every screen, so the price and
+   both controls share a line with the dish name in about 400px. Everything
+   here is sized to leave the name as much of that as possible. */
 .tt-line-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 4px;
+  flex-shrink: 0;
 }
 /* Edit gets the stepper's pill so the two read as one group of controls
    rather than a loose icon parked beside a button. */
 .tt-line-actions .tt-iconbtn {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
