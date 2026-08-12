@@ -5,6 +5,7 @@ import MenuEditor from "@/components/dashboard/menu/MenuEditor";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { menuSlug } from "@/lib/slug";
 import type { Menu } from "@/lib/types";
+import { currentUser } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 
@@ -16,13 +17,11 @@ export default async function MenuEditorPage({
 }) {
   const { menu: slug } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await currentUser();
   if (!user) redirect("/login");
 
   // Owners and managers may edit menus; kitchen goes back to its board.
-  const membership = await getMembership(supabase);
+  const membership = await getMembership();
   if (!membership) redirect("/dashboard");
   if (!MANAGES(membership.role)) redirect("/dashboard/orders");
   const restaurant = membership.restaurant;

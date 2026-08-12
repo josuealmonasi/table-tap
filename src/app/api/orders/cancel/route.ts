@@ -3,6 +3,7 @@ import { apiError } from "@/lib/api-error";
 import { stripe } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { currentUser } from "@/lib/current-user";
 
 export const runtime = "nodejs";
 
@@ -14,9 +15,7 @@ export async function POST(req: NextRequest) {
   if (!id) return await apiError("apiErr.invalidRequest", 400);
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await currentUser();
   if (!user) return await apiError("apiErr.unauthorized", 401);
 
   // Refunds move money, so only the owner or a manager may cancel. The RLS

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { currentUser } from "@/lib/current-user";
 
 export const runtime = "nodejs";
 
@@ -18,9 +19,7 @@ interface Actor {
 /** The caller as an owner (founding or co-owner) — null when they're neither. */
 async function actingOwner(): Promise<Actor | null> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await currentUser();
   if (!user) return null;
 
   const { data: owned } = await supabase

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ProfileForm from "@/components/dashboard/profile/ProfileForm";
+import { currentUser } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 
@@ -8,9 +9,7 @@ export const dynamic = "force-dynamic";
 // their own name, email and password here.
 export default async function ProfilePage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await currentUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase

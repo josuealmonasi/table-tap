@@ -19,7 +19,7 @@ export default async function AnalyticsPage({
   searchParams: Promise<{ period?: string }>;
 }) {
   const supabase = await createClient();
-  const membership = await getMembership(supabase);
+  const membership = await getMembership();
   if (!membership) redirect("/login");
   if (!MANAGES(membership.role)) redirect("/dashboard/orders");
 

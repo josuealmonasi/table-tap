@@ -1,4 +1,6 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { cache } from "react";
+import { currentUser } from "@/lib/current-user";
+import { createClient } from "@/lib/supabase/server";
 import type { Restaurant } from "@/lib/types";
 
 export type Role = "owner" | "manager" | "waiter" | "kitchen";
@@ -21,44 +23,51 @@ export interface Membership {
   role: Role;
 }
 
+/** A staff row with its restaurant pulled in by the same query. */
+interface StaffRow {
+  role: string;
+  restaurant: Restaurant | null;
+}
+
 /**
  * Resolves which restaurant the logged-in user belongs to and as what: the
- * owner, a manager (menus/tables/orders), or kitchen (orders board only).
- * Null when logged out or unaffiliated.
+ * owner, a manager (menus/tables/orders), waiter, or kitchen (orders board
+ * only). Null when logged out or unaffiliated.
+ *
+ * The two ways of belonging — founding owner via `restaurants.owner_id`, or a
+ * `staff` row — are independent, so they are asked in parallel and the staff
+ * side embeds its restaurant rather than fetching it afterwards. This used to
+ * be three sequential queries where the first was a guaranteed miss for every
+ * non-owner.
+ *
+ * Cached per request: the layout renders a navbar from this and the page
+ * guards on it, and they should not each pay for the lookup.
+ *
+ * Still runs on the user-scoped client, so RLS applies exactly as before —
+ * this is a round-trip change, not a permission change.
  */
-export async function getMembership(
-  supabase: SupabaseClient,
-): Promise<Membership | null> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export const getMembership = cache(async (): Promise<Membership | null> => {
+  const user = await currentUser();
   if (!user) return null;
 
-  const { data: owned } = await supabase
-    .from("restaurants")
-    .select("*")
-    .eq("owner_id", user.id)
-    .single();
-  if (owned) return { restaurant: owned as Restaurant, role: "owner" };
+  const supabase = await createClient();
+  const [ownedRes, staffRes] = await Promise.all([
+    supabase.from("restaurants").select("*").eq("owner_id", user.id).maybeSingle(),
+    supabase
+      .from("staff")
+      .select("role, restaurant:restaurants(*)")
+      .eq("user_id", user.id)
+      .maybeSingle<StaffRow>(),
+  ]);
 
-  const { data: membership } = await supabase
-    .from("staff")
-    .select("restaurant_id, role")
-    .eq("user_id", user.id)
-    .single();
-  if (!membership) return null;
+  if (ownedRes.data) return { restaurant: ownedRes.data as Restaurant, role: "owner" };
 
-  const { data: restaurant } = await supabase
-    .from("restaurants")
-    .select("*")
-    .eq("id", membership.restaurant_id)
-    .single();
-  if (!restaurant) return null;
+  const staff = staffRes.data;
+  if (!staff?.restaurant) return null;
   // Co-owners (staff role 'owner') get the full owner experience; other roles
-  // map through directly.
+  // map through directly. An unrecognised role falls back to the least
+  // privileged one rather than being trusted.
   const known: Role[] = ["owner", "manager", "waiter", "kitchen"];
-  const role: Role = known.includes(membership.role as Role)
-    ? (membership.role as Role)
-    : "kitchen";
-  return { restaurant: restaurant as Restaurant, role };
-}
+  const role: Role = known.includes(staff.role as Role) ? (staff.role as Role) : "kitchen";
+  return { restaurant: staff.restaurant, role };
+});

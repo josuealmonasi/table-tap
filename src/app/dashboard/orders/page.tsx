@@ -4,6 +4,7 @@ import { getMembership, MANAGES, MOVES_ORDERS } from "@/lib/membership";
 import OrdersBoard from "@/components/dashboard/OrdersBoard";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import type { Order, ServiceRequest } from "@/lib/types";
+import { currentUser } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 
@@ -12,12 +13,10 @@ export const dynamic = "force-dynamic";
 // board keeps them live via realtime. Cancelling (refunds) stays owner-only.
 export default async function OrdersPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await currentUser();
   if (!user) redirect("/login");
 
-  const membership = await getMembership(supabase);
+  const membership = await getMembership();
   if (!membership) redirect("/dashboard");
   const r = membership.restaurant;
 

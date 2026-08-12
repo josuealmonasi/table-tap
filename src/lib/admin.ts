@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { cache } from "react";
+import { currentUser } from "@/lib/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface PlatformAdmin {
@@ -11,11 +12,8 @@ export interface PlatformAdmin {
  * has no client policies, so the check always runs with the secret key —
  * a client can't fake or even see admin status.
  */
-export async function getPlatformAdmin(): Promise<PlatformAdmin | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export const getPlatformAdmin = cache(async (): Promise<PlatformAdmin | null> => {
+  const user = await currentUser();
   if (!user) return null;
 
   const { data } = await createAdminClient()
@@ -24,4 +22,4 @@ export async function getPlatformAdmin(): Promise<PlatformAdmin | null> {
     .eq("user_id", user.id)
     .single();
   return data ? { userId: data.user_id, email: data.email } : null;
-}
+});
