@@ -32,6 +32,11 @@ create table if not exists restaurants (
 alter table restaurants add column if not exists cover_url text;
 alter table restaurants add column if not exists cover_enabled boolean not null default false;
 
+-- The restaurant's own mark, shown as the avatar over the cover and beside the
+-- name. Takes precedence over the `logo` emoji, which stays as the fallback for
+-- a restaurant that hasn't got artwork.
+alter table restaurants add column if not exists logo_url text;
+
 -- The hottest lookup in the app: getMembership asks "which restaurant does this
 -- user own?" on every request, and has_role() asks it again inside every RLS
 -- policy check. Without this it is a sequential scan — free at seven rows,
@@ -454,7 +459,7 @@ revoke all on coupons, coupon_redemptions from anon;
 -- Column-scoped on purpose: owner_id, Stripe ids and timestamps stay unreadable.
 -- A new column is invisible to customers until it is listed here, and it fails
 -- silently — the value simply reads as null.
-grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled) on restaurants to anon;
+grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url) on restaurants to anon;
 grant select on restaurants to authenticated;
 
 -- authenticated (logged-in staff) keeps the DML its dashboard needs — those

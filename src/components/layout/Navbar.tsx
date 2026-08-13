@@ -7,6 +7,7 @@ import { useT } from "@/lib/i18n/context";
 import LanguageToggle from "@/components/customer/LanguageToggle";
 import NavDrawer from "./NavDrawer";
 import { AccountIcon } from "@/components/ui/icons";
+import RestaurantMark from "@/components/ui/RestaurantMark";
 
 /**
  * Site-wide nav for logged-in restaurant users: brand top-left, user menu
@@ -15,10 +16,12 @@ import { AccountIcon } from "@/components/ui/icons";
 export default function Navbar({
   restaurantName,
   restaurantLogo,
+  restaurantLogoUrl,
   role,
 }: {
   restaurantName: string;
   restaurantLogo: string | null;
+  restaurantLogoUrl?: string | null;
   /** Managers lose Settings/Staff; waiter/kitchen only get the orders board. */
   role: "owner" | "manager" | "waiter" | "kitchen" | "admin";
 }) {
@@ -54,6 +57,7 @@ export default function Navbar({
           <NavDrawer
             restaurantName={restaurantName}
             restaurantLogo={restaurantLogo}
+            restaurantLogoUrl={restaurantLogoUrl}
             role={role}
           />
           <Link
@@ -66,7 +70,16 @@ export default function Navbar({
             }
             className="tt-navbar-brand"
           >
-            <span className="tt-navbar-logo">{restaurantLogo || "🍴"}</span>
+            <span className="tt-navbar-logo">
+              {/* The fork is the product's own mark: dashboard chrome should
+                  not have a hole where a restaurant hasn't set anything. */}
+              <RestaurantMark
+                logoUrl={restaurantLogoUrl}
+                emoji={restaurantLogo || "🍴"}
+                name={restaurantName}
+                size={26}
+              />
+            </span>
             <strong>{restaurantName}</strong>
           </Link>
         </div>

@@ -67,6 +67,8 @@ export type Restaurant = {
   tagline: string | null;
   /** Emoji standing in for the restaurant. Optional — null means show none. */
   logo: string | null;
+  /** Uploaded mark. Takes precedence over the emoji when present. */
+  logo_url?: string | null;
   currency: string;
   service_pct: number;
   service_enabled: boolean;

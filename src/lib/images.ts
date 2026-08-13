@@ -15,6 +15,11 @@ export function coverPath(restaurantId: string, ext = "webp"): string {
   return `${restaurantId}/cover.${ext}`;
 }
 
+/** The restaurant's own mark. One per restaurant, so it overwrites. */
+export function logoPath(restaurantId: string, ext = "webp"): string {
+  return `${restaurantId}/logo.${ext}`;
+}
+
 /** A dish photo. Keyed by item so re-uploading replaces rather than accumulates. */
 export function itemPath(restaurantId: string, itemId: string, ext = "webp"): string {
   return `${restaurantId}/items/${itemId}.${ext}`;
@@ -49,6 +54,18 @@ export const DISH: ImageSpec = {
   height: 800,
   minWidth: 400,
   maxBytes: 5 * 1024 * 1024,
+};
+
+/**
+ * Square, and small: it renders at 84px at the largest, so anything bigger is
+ * bytes a diner downloads for nothing. Kept at 256 rather than 84 so it stays
+ * sharp on a 3x screen and survives a future larger placement.
+ */
+export const LOGO: ImageSpec = {
+  width: 256,
+  height: 256,
+  minWidth: 128,
+  maxBytes: 2 * 1024 * 1024,
 };
 
 export const ACCEPTED = ["image/jpeg", "image/png", "image/webp"];

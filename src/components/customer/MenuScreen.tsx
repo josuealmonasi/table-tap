@@ -27,6 +27,7 @@ import {
   TableIcon,
 } from "@/components/ui/icons";
 import CoverBanner from "./CoverBanner";
+import RestaurantMark, { hasMark } from "@/components/ui/RestaurantMark";
 
 /** The menu browsing screen: restaurant header, category filter, item list, cart bar. */
 export default function MenuScreen({
@@ -199,8 +200,14 @@ export default function MenuScreen({
           </>
         )}
         <div className="tt-menu-header">
-          {restaurant.logo && (
-            <div className="tt-brand-logo">{restaurant.logo}</div>
+          {hasMark(restaurant.logo_url, restaurant.logo) && (
+            <div className="tt-brand-logo">
+              <RestaurantMark
+                logoUrl={restaurant.logo_url}
+                emoji={restaurant.logo}
+                name={restaurant.name}
+              />
+            </div>
           )}
           <div className="tt-row tt-brand-row">
             <div className="tt-serif tt-brand-name">{restaurant.name}</div>
