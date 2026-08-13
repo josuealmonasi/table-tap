@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
       tipPct: rawTipPct,
       tipAmount: rawTipAmount,
       couponCode,
+      payLater,
     } = body as {
       restaurantId: string;
       tableId: string | null;
@@ -71,6 +72,8 @@ export async function POST(req: NextRequest) {
       tipPct?: number;
       tipAmount?: number;
       couponCode?: string;
+      /** Dine-in: send the food now and settle at the end. */
+      payLater?: boolean;
     };
 
     // Tips: either a preset percentage (recomputed from the verified subtotal)
@@ -92,7 +95,7 @@ export async function POST(req: NextRequest) {
     const { data: restaurant, error: rErr } = await supabase
       .from("restaurants")
       .select(
-        "id, currency, service_pct, service_enabled, accepting_orders, tax_pct, stripe_account_id, stripe_charges_enabled",
+        "id, currency, service_pct, service_enabled, accepting_orders, tax_pct, stripe_account_id, stripe_charges_enabled, allow_pay_later",
       )
       .eq("id", restaurantId)
       .single();
@@ -137,10 +140,20 @@ export async function POST(req: NextRequest) {
       return !menuId || openIds.includes(menuId);
     };
 
+    // Settling at the end is a dine-in arrangement, and only where the owner
+    // has asked for it. Decided from the database, never from the request: a
+    // client claiming payLater on a fast-food QR would otherwise walk off with
+    // food nobody can chase, since there is no table to go back to.
+    const deferred = Boolean(payLater) && Boolean(tableId) && Boolean(restaurant.allow_pay_later);
+    if (payLater && !deferred) {
+      return await apiError("apiErr.payLaterNotAllowed", 403);
+    }
+
     // No payouts without a connected Stripe account: refuse to charge a card
     // when we'd have nowhere to send the money. The owner completes onboarding
-    // in Settings → Payments before customers can check out.
-    if (!restaurant.stripe_account_id || !restaurant.stripe_charges_enabled) {
+    // in Settings → Payments before customers can check out. A deferred order
+    // takes no card here, so it is exempt — the waiter settles it later.
+    if (!deferred && (!restaurant.stripe_account_id || !restaurant.stripe_charges_enabled)) {
       return await apiError("apiErr.noCardPayments", 409);
     }
 
@@ -255,7 +268,12 @@ export async function POST(req: NextRequest) {
         restaurant_id: restaurantId,
         table_id: tableId,
         table_label: tableLabel,
-        status: "pending_payment",
+        // A deferred order skips the payment gate and goes straight to the
+        // pass: the kitchen starts cooking, `paid` stays false, and the table
+        // settles at the end. `pending_payment` is what hides an order from the
+        // board until Stripe confirms, which is exactly what must not happen
+        // here.
+        status: deferred ? "received" : "pending_payment",
         subtotal,
         service_fee: serviceFee,
         tip,
@@ -284,6 +302,12 @@ export async function POST(req: NextRequest) {
     if (oErr || !order) {
       await undoClaim();
       return await apiError("apiErr.orderCreate", 500);
+    }
+
+    // Nothing to charge now: the order is with the kitchen and the table owes
+    // for it. The bill screen picks it up from here.
+    if (deferred) {
+      return NextResponse.json({ orderId: order.id, deferred: true });
     }
 
     const origin = req.headers.get("origin") ?? new URL(req.url).origin;

@@ -84,6 +84,8 @@ export type Restaurant = {
   cover_url?: string | null;
   /** Whether to show it. Off by default, so nothing changes until asked. */
   cover_enabled?: boolean;
+  /** Dine-in tables may order first and settle at the end. Off by default. */
+  allow_pay_later?: boolean;
 };
 
 export type RestaurantTable = {

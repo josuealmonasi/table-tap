@@ -191,6 +191,11 @@ export const en = {
     chooseFirst: "Choose {groups} to continue.",
   },
   cart: {
+    payNow: "Pay now",
+    payLater: "Order now, pay at the end",
+    placeOrder: "Place order",
+    placedTitle: "Order sent to the kitchen",
+    placedBody: "Pay whenever you're ready — your bill is under the receipt button.",
     title: "Your Order",
     empty: "Your cart is empty.",
     addMore: "+ Add more items",
@@ -468,6 +473,7 @@ export const en = {
       "The kitchen isn't serving right now. Please try again during opening hours.",
     badTimezone: "Pick a valid time zone.",
     badCover: "That image must be uploaded here, not linked from elsewhere.",
+    payLaterNotAllowed: "This restaurant takes payment when you order.",
     schedNoRules: "Add at least one period.",
     schedNoDays: "Pick at least one day.",
     schedBadTime: "Enter a valid start and end time.",
@@ -604,6 +610,8 @@ export const en = {
     optional: "(optional)",
   },
   dash: {
+    payLaterTitle: "Let tables pay at the end",
+    payLaterHint: "Dine-in only. Food goes to the kitchen before it's paid for.",
     settingsSaved: "Settings saved",
     settingsSaveFailed: "Couldn't save settings.",
     networkError: "Network error — please try again.",

@@ -186,6 +186,11 @@ export const es: Messages = {
     chooseFirst: "Elige {groups} para continuar.",
   },
   cart: {
+    payNow: "Pagar ahora",
+    payLater: "Ordenar y pagar al final",
+    placeOrder: "Ordenar",
+    placedTitle: "Pedido enviado a la cocina",
+    placedBody: "Paga cuando quieras — tu cuenta está en el botón de la nota.",
     title: "Tu pedido",
     empty: "Tu carrito está vacío.",
     addMore: "+ Agregar más platillos",
@@ -462,6 +467,7 @@ export const es: Messages = {
       "La cocina no está sirviendo en este momento. Inténtalo durante el horario de servicio.",
     badTimezone: "Elige una zona horaria válida.",
     badCover: "Esa imagen debe subirse aquí, no enlazarse desde otro sitio.",
+    payLaterNotAllowed: "Este restaurante cobra al momento de ordenar.",
     schedNoRules: "Agrega al menos un periodo.",
     schedNoDays: "Elige al menos un día.",
     schedBadTime: "Ingresa una hora de inicio y fin válidas.",
@@ -601,6 +607,8 @@ export const es: Messages = {
     optional: "(opcional)",
   },
   dash: {
+    payLaterTitle: "Permitir que las mesas paguen al final",
+    payLaterHint: "Solo para consumo en mesa. La comida va a la cocina antes de pagarse.",
     settingsSaved: "Ajustes guardados",
     settingsSaveFailed: "No se pudieron guardar los ajustes.",
     networkError: "Error de red — inténtalo de nuevo.",

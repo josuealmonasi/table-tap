@@ -21,6 +21,7 @@ import CartScreen from "./CartScreen";
 import ComboDetailScreen from "./ComboDetailScreen";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { useMenuFreshness } from "@/hooks/useMenuFreshness";
+import { rememberOrder } from "@/lib/my-orders";
 
 type Screen = "menu" | "item" | "combo" | "edit" | "cart";
 
@@ -236,7 +237,7 @@ export default function OrderingApp({
     setScreen("edit");
   }
 
-  async function checkout() {
+  async function checkout(payLater = false) {
     // Only pay for the still-orderable lines (any already-sold-out ones stay
     // greyed in the cart for the customer to see).
     if (orderableItems.length === 0) {
@@ -266,9 +267,19 @@ export default function OrderingApp({
           tipPct,
           tipAmount: tipCustom ?? undefined,
           couponCode: coupon?.code,
+          payLater,
         }),
       });
       const data = await res.json();
+      // Deferred: the food is already with the kitchen, so there is no Stripe
+      // hop. Remember the id — it is the only thing that tells this phone's
+      // share apart from the rest of the table's on the bill.
+      if (data.deferred && data.orderId) {
+        rememberOrder(restaurant.id, data.orderId);
+        cart.clear();
+        window.location.href = `/order/${data.orderId}`;
+        return;
+      }
       if (data.url) {
         window.location.href = data.url; // Stripe Checkout
         return;
@@ -413,6 +424,7 @@ export default function OrderingApp({
             onEditItem={editLine}
             onAddMore={() => setScreen("menu")}
             onCheckout={checkout}
+            payLaterAllowed={Boolean(table) && Boolean(restaurant.allow_pay_later)}
           />
         </div>
       </div>

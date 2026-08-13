@@ -66,7 +66,7 @@ export async function loadCoverState(
   const supabase = await createClient();
   const res = await supabase
     .from("restaurants")
-    .select("id, cover_url, cover_enabled")
+    .select("id, cover_url, cover_enabled, allow_pay_later")
     .eq("id", restaurantId)
     .maybeSingle();
   const row = unwrap(res, "the restaurant") as
