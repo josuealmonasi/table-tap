@@ -864,30 +864,15 @@ h2.tt-serif {
   );
   pointer-events: none;
 }
-/* Desktop is a different picture: the menu sits in a 1080px column, so the
-   photo becomes a contained card rather than a band across the page. It keeps
-   a clean edge here — the fade is there to hide a seam on a full-bleed phone
-   layout, and there is no seam to hide once the photo has corners of its own.
-   The logo lifts out of the header and overlaps that edge as an avatar, which
-   is what ties the two blocks together instead. */
+/* Desktop differs only in proportion: same square edges, same fade into the
+   header, same avatar — one treatment at both sizes, so the menu doesn't feel
+   like two designs. */
 @media (min-width: 1025px) {
   .tt-cover {
-    border-radius: 16px;
     /* Half the height of the phone crop. The column is 1080px wide here, so
        the phone's 8:3 would run to 405px and push the first dish off the
        screen — the photo is an introduction, not the page. */
     aspect-ratio: 1600 / 300;
-  }
-  .tt-cover::after {
-    display: none;
-  }
-  .tt-cover + .tt-menu-header .tt-brand-logo {
-    margin-top: -42px;
-    margin-bottom: 14px;
-    width: 84px;
-    height: 84px;
-    font-size: 38px;
-    box-shadow: 0 0 0 5px var(--tt-header-bg);
   }
 }
 
@@ -915,6 +900,19 @@ h2.tt-serif {
   /* A ring in the page colour, so the avatar reads as cut out of the photo
      rather than pasted on top of it. */
   box-shadow: 0 0 0 4px var(--tt-header-bg);
+}
+/* Bigger where the band is. Must come after the rule above: same specificity,
+   so source order is what decides — placed before it, the phone size won at
+   every width. */
+@media (min-width: 1025px) {
+  .tt-cover + .tt-menu-header .tt-brand-logo {
+    margin-top: -42px;
+    margin-bottom: 14px;
+    width: 84px;
+    height: 84px;
+    font-size: 38px;
+    box-shadow: 0 0 0 5px var(--tt-header-bg);
+  }
 }
 
 /* Settings preview: the same banner, plus a placeholder holding its shape so
@@ -3774,7 +3772,6 @@ h2.tt-serif {
   font-weight: 600;
   margin: 0 0 14px;
 }
-
 
 /* The "add" buttons that open a create dialog. They wrap rather than shrink on
    a phone, so no label truncates, and they carry their own spacing — sitting
