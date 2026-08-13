@@ -364,6 +364,8 @@ export const es: Messages = {
     readyTable: "🎉 ¡Nuestro equipo lo llevará a la Mesa {label}!",
   },
   img: {
+    dishTitle: "Foto",
+    dishHint: "Opcional. Cuadrada funciona mejor — la ajustamos a {w}px.",
     logoTitle: "Logotipo",
     logoHint: "Se muestra junto a tu nombre y sobre la foto de portada.",
     logoSize: "Cuadrado, de al menos {min}px. Un PNG con fondo transparente se ve mejor.",

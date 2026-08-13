@@ -13,6 +13,7 @@ import ProductForm from "./ProductForm";
 import { DeleteIcon, EditIcon, MoveToIcon } from "@/components/ui/icons";
 
 interface ProductRowProps {
+  restaurantId: string;
   product: MenuItem;
   addons: MenuItem[];
   linkedAddonIds: string[];
@@ -37,6 +38,7 @@ interface ProductRowProps {
 
 /** One product in a section: image/emoji, price, availability switch, add-ons, edit/delete. */
 export default function ProductRow({
+  restaurantId,
   product,
   addons,
   linkedAddonIds,
@@ -65,6 +67,7 @@ export default function ProductRow({
 
   const editForm = (
     <ProductForm
+      restaurantId={restaurantId}
       initial={product}
       addons={addons}
       selectedAddonIds={linkedAddonIds}

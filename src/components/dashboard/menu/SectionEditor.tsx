@@ -12,6 +12,7 @@ import ProductForm from "./ProductForm";
 import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 
 interface SectionEditorProps {
+  restaurantId: string;
   section: Category | null; // null = "Uncategorized" catch-all
   products: MenuItem[];
   addons: MenuItem[];
@@ -46,6 +47,7 @@ interface SectionEditorProps {
 
 /** One menu section (category) with its products and an add-product form. */
 export default function SectionEditor({
+  restaurantId,
   section,
   products,
   addons,
@@ -183,6 +185,7 @@ export default function SectionEditor({
           (() => {
             const addForm = (
               <ProductForm
+                restaurantId={restaurantId}
                 addons={addons}
                 currency={currency}
                 submitLabel={t("menu.addProduct")}
@@ -228,6 +231,7 @@ export default function SectionEditor({
         )}
         {products.map((p, i) => (
           <ProductRow
+            restaurantId={restaurantId}
             key={p.id}
             product={p}
             addons={addons}

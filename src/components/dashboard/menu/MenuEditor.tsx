@@ -147,6 +147,7 @@ export default function MenuEditor({
                 while a search filters the view (indices wouldn't be real). */}
               {shownSections.map((section, i) => (
                 <SectionEditor
+                  restaurantId={restaurant.id}
                   key={section.id}
                   section={section}
                   products={shownProducts.filter(p => p.category_id === section.id)}
@@ -176,6 +177,7 @@ export default function MenuEditor({
 
               {uncategorized.length > 0 && (
                 <SectionEditor
+                  restaurantId={restaurant.id}
                   section={null}
                   products={uncategorized}
                   addons={menuAddons}

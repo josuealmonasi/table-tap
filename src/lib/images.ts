@@ -20,9 +20,26 @@ export function logoPath(restaurantId: string, ext = "webp"): string {
   return `${restaurantId}/logo.${ext}`;
 }
 
-/** A dish photo. Keyed by item so re-uploading replaces rather than accumulates. */
-export function itemPath(restaurantId: string, itemId: string, ext = "webp"): string {
-  return `${restaurantId}/items/${itemId}.${ext}`;
+/**
+ * A dish photo.
+ *
+ * Keyed by a fresh id per upload rather than by the dish, because a product
+ * being created has no id yet — the form would otherwise have to save first
+ * and attach the photo afterwards. The caller deletes the previous object when
+ * replacing one, so this does not accumulate.
+ */
+export function itemPath(restaurantId: string, photoId: string, ext = "webp"): string {
+  return `${restaurantId}/items/${photoId}.${ext}`;
+}
+
+/**
+ * The storage path inside one of our own public URLs, for deleting the object
+ * a dish used to point at. Null when the URL isn't ours.
+ */
+export function pathFromUrl(url: string): string | null {
+  if (!isOwnStorageUrl(url)) return null;
+  const base = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`;
+  return url.slice(base.length).split("?")[0] || null;
 }
 
 /**

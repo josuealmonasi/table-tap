@@ -367,6 +367,8 @@ export const en = {
     readyTable: "🎉 Our team will bring it to Table {label}!",
   },
   img: {
+    dishTitle: "Photo",
+    dishHint: "Optional. Square works best — we resize to {w}px.",
     logoTitle: "Logo",
     logoHint: "Shown beside your name, and over the cover photo.",
     logoSize: "Square, at least {min}px. A PNG with a transparent background looks best.",

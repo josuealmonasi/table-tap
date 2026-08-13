@@ -1138,6 +1138,41 @@ h2.tt-serif {
   place-items: center;
   overflow: hidden;
 }
+/* A dish photo fills its container completely — the thumbnail and the hero are
+   both fixed-size with overflow hidden, so a photograph occupies exactly the
+   room the emoji did and neither the row nor its skeleton changes shape. */
+.tt-dish-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Product form: the photo control, with the customer's own thumbnail beside
+   its buttons so an owner sees the size a diner gets. */
+.tt-dish-photo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--tt-cream);
+  border-radius: 12px;
+}
+.tt-dish-photo-preview {
+  flex: none;
+  width: 84px;
+  height: 84px;
+  font-size: 38px;
+  background: var(--tt-surface);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.tt-dish-photo-actions {
+  min-width: 0;
+}
+
 .tt-desc {
   font-size: 13px;
   line-height: 1.4;

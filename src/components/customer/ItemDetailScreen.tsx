@@ -12,6 +12,7 @@ import type { CartPromo } from "@/lib/pricing";
 import { useT } from "@/lib/i18n/context";
 import ModifierGroup from "./ModifierGroup";
 import { BackIcon } from "@/components/ui/icons";
+import DishImage from "./DishImage";
 
 /** Item customisation screen: modifiers, extras, special requests, qty → add to cart. */
 export default function ItemDetailScreen({
@@ -118,7 +119,7 @@ export default function ItemDetailScreen({
   return (
     <div className="tt-root">
       <div className="tt-item-hero">
-        <span>{item.emoji || "🍽️"}</span>
+        <DishImage url={item.image_url} emoji={item.emoji} name={item.name} variant="hero" />
         <button className="tt-back" onClick={onBack} aria-label={t("common.back")}>
           <BackIcon size={18} weight="bold" />
         </button>

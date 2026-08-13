@@ -6,6 +6,7 @@ import { dietaryTags } from "@/lib/dietary";
 import { itemSalePrice } from "@/lib/pricing";
 import { useT } from "@/lib/i18n/context";
 import { RatingIcon } from "@/components/ui/icons";
+import DishImage from "./DishImage";
 
 /** A single tappable row in the menu list. */
 export default function MenuItemRow({
@@ -70,7 +71,9 @@ export default function MenuItemRow({
         )}
       </div>
       <div className="tt-item-media">
-        <div className="tt-thumb">{item.emoji || "🍽️"}</div>
+        <div className="tt-thumb">
+          <DishImage url={item.image_url} emoji={item.emoji} name={item.name} />
+        </div>
         <button
           type="button"
           className="tt-plus"
