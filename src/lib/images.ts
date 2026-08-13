@@ -64,3 +64,17 @@ export function fileError(file: { type: string; size: number }, spec: ImageSpec)
 export function ratio(spec: ImageSpec): string {
   return `${spec.width} / ${spec.height}`;
 }
+
+/**
+ * Is this a URL we ourselves serve?
+ *
+ * The cover is rendered to every diner who scans the QR code, so it must come
+ * from our storage rather than wherever a request happened to say. An outside
+ * URL would hand whoever hosts it the IP of every customer who opens the menu,
+ * and would let the image be swapped for something else after we approved it.
+ */
+export function isOwnStorageUrl(url: string): boolean {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!base) return false;
+  return url.startsWith(`${base}/storage/v1/object/public/${BUCKET}/`);
+}

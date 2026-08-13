@@ -92,7 +92,7 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
     supabase
       .from("restaurants")
       .select(
-        "id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown",
+        "id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled",
       )
       .eq("id", restaurantId)
       .single(),

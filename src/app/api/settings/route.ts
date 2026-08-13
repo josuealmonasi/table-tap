@@ -3,6 +3,7 @@ import { apiError } from "@/lib/api-error";
 import { isAllowedTimeZone } from "@/lib/timezones";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { actingManager } from "@/lib/api-guard";
+import { isOwnStorageUrl } from "@/lib/images";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,8 @@ const OWNER_FIELDS = new Set([
   "tax_pct",
   "tax_show_breakdown",
   "accepting_orders",
+  "cover_url",
+  "cover_enabled",
 ]);
 const MANAGER_FIELDS = new Set(["tax_pct", "tax_show_breakdown", "accepting_orders"]);
 
@@ -47,6 +50,15 @@ export async function POST(req: NextRequest) {
   // Intl throw on every customer page load, and there's no reason to store one.
   if ("timezone" in update && !isAllowedTimeZone(String(update.timezone))) {
     return await apiError("apiErr.badTimezone");
+  }
+
+  // The cover must live in our own storage, not wherever the client says. An
+  // arbitrary URL would be rendered to every diner who scans the QR code, and
+  // would leak their IP to whoever is hosting it. Clearing it is allowed.
+  if ("cover_url" in update && update.cover_url) {
+    if (!isOwnStorageUrl(String(update.cover_url))) {
+      return await apiError("apiErr.badCover", 400);
+    }
   }
 
   // Clamp the numeric ranges the DB constraints also enforce.

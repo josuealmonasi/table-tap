@@ -8,6 +8,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import PaymentsCard from "./PaymentsCard";
+import CoverCard from "./CoverCard";
 
 interface SettingsFormProps {
   restaurant: Restaurant;
@@ -210,6 +211,8 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
           )}
 
           {isOwner && <PaymentsCard />}
+
+          {isOwner && <CoverCard restaurant={restaurant} />}
 
           <div className="tt-section">
             <div className="tt-section-head">
