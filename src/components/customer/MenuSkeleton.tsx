@@ -11,30 +11,50 @@ import { MenuItemRowSkeleton, Skeleton } from "@/components/ui/Skeleton";
  *
  * @param table a table-scoped menu also shows a table badge and service buttons
  */
-export default function MenuSkeleton({ table = false }: { table?: boolean }) {
+export default function MenuSkeleton({
+  table = false,
+  cover = false,
+}: {
+  table?: boolean;
+  /**
+   * Reserve the cover band. Only restaurants that actually show a photo get
+   * it — a band held for everyone would be a gap on most menus, which is the
+   * same jump in the other direction.
+   */
+  cover?: boolean;
+}) {
   return (
     <div className="tt-root tt-root-wide">
-      <div className="tt-menu-header">
-        <div className="tt-row" style={{ alignItems: "flex-start" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <Skeleton width={26} height={26} radius={6} />
-            <Skeleton width={160} height={20} />
-            <Skeleton width={120} height={12} />
+      <div className="tt-cover-stack">
+        {/* Same element and ratio as the real banner, so it holds exactly the
+            height the photo will take at both breakpoints. */}
+        {cover && <div className="tt-cover" />}
+        <div className="tt-menu-header">
+          {/* With a photo the mark is an avatar straddling its edge; without
+              one it is a small square at the top of the header. */}
+          <div className="tt-brand-logo">
+            <Skeleton
+              width={cover ? 64 : 26}
+              height={cover ? 64 : 26}
+              radius={cover ? 999 : 6}
+            />
           </div>
-          {/* Search and language sit opposite the name at every width. */}
-          <div className="tt-head-controls">
-            <div style={{ display: "flex", gap: 8 }}>
+          <div className="tt-row tt-brand-row">
+            <Skeleton width={160} height={22} />
+            {/* Search sits on the name's line, opposite the name. */}
+            <div className="tt-head-controls">
               <Skeleton width={34} height={34} radius={999} />
-              <Skeleton width={72} height={34} radius={999} />
+              {!cover && <Skeleton width={72} height={34} radius={999} />}
             </div>
           </div>
+          <Skeleton width={120} height={12} style={{ marginTop: 7 }} />
+          {table && (
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <Skeleton width={96} height={26} radius={999} />
+              <Skeleton width={110} height={26} radius={999} />
+            </div>
+          )}
         </div>
-        {table && (
-          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-            <Skeleton width={96} height={26} radius={999} />
-            <Skeleton width={110} height={26} radius={999} />
-          </div>
-        )}
       </div>
 
       {/* Phone and tablet only — the real strip is hidden from 1025px up, where

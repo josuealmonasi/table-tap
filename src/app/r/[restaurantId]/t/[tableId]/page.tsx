@@ -1,20 +1,21 @@
+import { Suspense } from "react";
+import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import OrderingApp from "@/components/customer/OrderingApp";
-import { loadOrderingData, unwrap } from "@/lib/ordering-data";
+import MenuSkeleton from "@/components/customer/MenuSkeleton";
+import { loadCoverState, loadOrderingData, unwrap } from "@/lib/ordering-data";
 import type { RestaurantTable } from "@/lib/types";
-import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-// /r/[restaurantId]/t/[tableId] — the page a table QR points to. Same menu as
-// the fast-food route, but the order is tagged with this table.
-export default async function TablePage({
-  params,
+/** The menu itself. Split out so the shell can render while this loads. */
+async function Menu({
+  restaurantId,
+  tableId,
 }: {
-  params: Promise<{ restaurantId: string; tableId: string }>;
+  restaurantId: string;
+  tableId: string;
 }) {
-  const { restaurantId, tableId } = await params;
-
   const supabase = await createClient();
   const [data, tableRes] = await Promise.all([
     loadOrderingData(restaurantId),
@@ -44,5 +45,26 @@ export default async function TablePage({
       ratings={data.ratings}
       closedNow={data.closedNow}
     />
+  );
+}
+
+// /r/[restaurantId]/t/[tableId] — the page a table QR points to. Same menu as
+// the fast-food route, but the order is tagged with this table.
+//
+// The cover state is fetched first so the skeleton reserves the right height;
+// see the note on the fast-food route.
+export default async function TablePage({
+  params,
+}: {
+  params: Promise<{ restaurantId: string; tableId: string }>;
+}) {
+  const { restaurantId, tableId } = await params;
+  const { exists, cover } = await loadCoverState(restaurantId);
+  if (!exists) notFound();
+
+  return (
+    <Suspense fallback={<MenuSkeleton table cover={cover} />}>
+      <Menu restaurantId={restaurantId} tableId={tableId} />
+    </Suspense>
   );
 }
