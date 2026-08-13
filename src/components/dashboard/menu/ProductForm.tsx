@@ -8,8 +8,12 @@ import { DIETARY_TAGS } from "@/lib/dietary";
 import { useT } from "@/lib/i18n/context";
 import IconPicker from "./IconPicker";
 import ModifiersEditor from "./ModifiersEditor";
+import DishPhotoField from "./DishPhotoField";
 
 interface ProductFormProps {
+  /** Photos are stored under the restaurant's own folder, which is what the
+   *  storage policy checks — so the form has to know which restaurant. */
+  restaurantId: string;
   /** The product being edited; omit to add a new one. */
   initial?: Partial<MenuItem>;
   addons: MenuItem[];
@@ -22,6 +26,7 @@ interface ProductFormProps {
 
 /** Add/edit form for a product, including which add-on items it offers. */
 export default function ProductForm({
+  restaurantId,
   initial,
   addons,
   selectedAddonIds = [],
@@ -150,11 +155,12 @@ export default function ProductForm({
         onChange={e => setDescription(e.target.value)}
       />
 
-      <input
-        className="tt-input"
-        placeholder={t("menu.imageUrlPlaceholder")}
-        value={imageUrl}
-        onChange={e => setImageUrl(e.target.value)}
+      <DishPhotoField
+        restaurantId={restaurantId}
+        value={imageUrl || null}
+        onChange={url => setImageUrl(url ?? "")}
+        emoji={emoji}
+        name={name}
       />
 
       <label className="tt-check">
