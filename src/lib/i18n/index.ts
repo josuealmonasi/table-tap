@@ -3,6 +3,15 @@ import { es } from "./es";
 
 export type Locale = "en" | "es";
 export const LOCALES: Locale[] = ["en", "es"];
+
+/**
+ * What we serve when nothing says otherwise.
+ *
+ * TableTap launches in Mexico, so Spanish is the assumption and English is the
+ * exception a browser has to ask for. Every fallback in the app reads this,
+ * rather than each picking its own.
+ */
+export const DEFAULT_LOCALE: Locale = "es";
 export const LOCALE_COOKIE = "tt-locale";
 export type { Messages };
 
@@ -17,9 +26,9 @@ export const LOCALE_LABELS: Record<
 
 const DICTS: Record<Locale, Messages> = { en, es };
 
-/** The message catalog for a locale (English if somehow unknown). */
+/** The message catalog for a locale, falling back to the default. */
 export function messagesFor(locale: Locale): Messages {
-  return DICTS[locale] ?? en;
+  return DICTS[locale] ?? DICTS[DEFAULT_LOCALE];
 }
 
 export function isLocale(value: string | null | undefined): value is Locale {
