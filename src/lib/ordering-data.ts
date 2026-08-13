@@ -52,6 +52,29 @@ const NOT_A_FAULT = new Set(["PGRST116", "22P02"]);
  * 404. Everything else throws, which renders the error boundary ("try again")
  * and surfaces the fault.
  */
+/**
+ * Just enough to draw the shell: does this restaurant show a cover?
+ *
+ * One indexed row, asked before the menu itself, so the skeleton can reserve
+ * the right height. Without it the skeleton has no way to know — Next gives
+ * `loading.tsx` no params — and the page jumped by the height of the photo
+ * when the data landed.
+ */
+export async function loadCoverState(
+  restaurantId: string,
+): Promise<{ exists: boolean; cover: boolean }> {
+  const supabase = await createClient();
+  const res = await supabase
+    .from("restaurants")
+    .select("id, cover_url, cover_enabled")
+    .eq("id", restaurantId)
+    .maybeSingle();
+  const row = unwrap(res, "the restaurant") as
+    | { cover_url: string | null; cover_enabled: boolean }
+    | null;
+  return { exists: Boolean(row), cover: Boolean(row?.cover_enabled && row?.cover_url) };
+}
+
 export function unwrap<T>(
   res: { data: T | null; error: { code?: string; message: string } | null },
   what: string,
