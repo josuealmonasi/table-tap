@@ -27,7 +27,7 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
 
   // Restaurant (owner-only) fields.
   const [name, setName] = useState(restaurant.name);
-  const [logo, setLogo] = useState(restaurant.logo);
+  const [logo, setLogo] = useState(restaurant.logo ?? "");
   const [tagline, setTagline] = useState(restaurant.tagline ?? "");
   const [currency, setCurrency] = useState(restaurant.currency);
   const [timezone, setTimezone] = useState(restaurant.timezone || "America/Mexico_City");
@@ -45,7 +45,9 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
     e.preventDefault();
     await save({
       name: name.trim(),
-      logo: logo.trim() || "🍱",
+      // Empty means none. This used to substitute the default emoji, so
+      // clearing the field appeared to do nothing at all.
+      logo: logo.trim() || null,
       tagline: tagline.trim() || null,
       currency,
       timezone,

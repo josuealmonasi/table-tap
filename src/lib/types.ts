@@ -65,7 +65,8 @@ export type Restaurant = {
   id: string;
   name: string;
   tagline: string | null;
-  logo: string;
+  /** Emoji standing in for the restaurant. Optional — null means show none. */
+  logo: string | null;
   currency: string;
   service_pct: number;
   service_enabled: boolean;

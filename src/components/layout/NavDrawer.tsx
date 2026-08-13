@@ -19,7 +19,7 @@ export default function NavDrawer({
   role,
 }: {
   restaurantName: string;
-  restaurantLogo: string;
+  restaurantLogo: string | null;
   /** Managers lose Staff/Settings; kitchen only gets the orders board. */
   role: "owner" | "manager" | "waiter" | "kitchen" | "admin";
 }) {
