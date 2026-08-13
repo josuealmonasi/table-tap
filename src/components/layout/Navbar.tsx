@@ -18,7 +18,7 @@ export default function Navbar({
   role,
 }: {
   restaurantName: string;
-  restaurantLogo: string;
+  restaurantLogo: string | null;
   /** Managers lose Settings/Staff; waiter/kitchen only get the orders board. */
   role: "owner" | "manager" | "waiter" | "kitchen" | "admin";
 }) {

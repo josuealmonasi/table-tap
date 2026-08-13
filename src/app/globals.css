@@ -881,7 +881,13 @@ h2.tt-serif {
    phone, where the band is only about 170px tall and an 84px disc would eat
    half of it. */
 .tt-cover + .tt-menu-header {
+  /* The avatar supplies the gap between photo and name. */
   padding-top: 0;
+}
+/* No icon, no avatar — so the padding has to come back, or the name sits
+   flush against the photo. */
+.tt-cover + .tt-menu-header:not(:has(.tt-brand-logo)) {
+  padding-top: 18px;
 }
 .tt-cover + .tt-menu-header .tt-brand-logo {
   position: relative;

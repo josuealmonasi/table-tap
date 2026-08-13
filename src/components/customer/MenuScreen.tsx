@@ -199,7 +199,9 @@ export default function MenuScreen({
           </>
         )}
         <div className="tt-menu-header">
-          <div className="tt-brand-logo">{restaurant.logo}</div>
+          {restaurant.logo && (
+            <div className="tt-brand-logo">{restaurant.logo}</div>
+          )}
           <div className="tt-row tt-brand-row">
             <div className="tt-serif tt-brand-name">{restaurant.name}</div>
             <div className="tt-head-controls">
