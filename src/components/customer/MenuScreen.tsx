@@ -26,6 +26,7 @@ import {
   SearchIcon,
   TableIcon,
 } from "@/components/ui/icons";
+import CoverBanner from "./CoverBanner";
 
 /** The menu browsing screen: restaurant header, category filter, item list, cart bar. */
 export default function MenuScreen({
@@ -148,72 +149,95 @@ export default function MenuScreen({
     return activeCat === "all" ? combos : [];
   }, [combos, diet, search, activeCat]);
 
+  const showCover = Boolean(restaurant.cover_enabled && restaurant.cover_url);
+
+  // Over the photo when there is one, otherwise beside the search. It is the
+  // one control a diner may need before reading anything, so it sits highest.
+  const langToggle = <LanguageToggle />;
+
+  // Search sits on the name's line, opposite the name — it belongs to the menu
+  // below it rather than to the photo above.
+  const searchBtn = (
+    <button
+      type="button"
+      className="tt-icon-round"
+      aria-label={t("menu.search")}
+      aria-expanded={searchOpen}
+      // Closing clears the query. Hiding the input while keeping the term left
+      // the menu filtered with nothing on screen to say why — the categories
+      // vanish under an active search, so a diner saw two dishes, no search
+      // box, and no way back short of reloading.
+      onClick={() => {
+        if (searchOpen) changeSearch("");
+        setSearchOpen(open => !open);
+      }}
+    >
+      {searchOpen ? (
+        <CloseIcon size={17} weight="bold" />
+      ) : (
+        <SearchIcon size={17} weight="bold" />
+      )}
+    </button>
+  );
+
   return (
     <div className="tt-root tt-root-wide">
-      <div className="tt-menu-header">
-        <div className="tt-row" style={{ alignItems: "flex-start" }}>
-          <div>
-            <div className="tt-brand-logo">{restaurant.logo}</div>
+      {/* Photo, floating controls and identity share one box on purpose: it is
+          what the sticky controls are bounded by, so they pin while the photo
+          and the name scroll under them and then hand over to the category bar
+          at the bottom of it, which keeps its own behaviour unchanged. */}
+      <div className="tt-cover-stack">
+        {showCover && (
+          <>
+            <div className="tt-cover-controls">{langToggle}</div>
+            <CoverBanner
+              url={restaurant.cover_url}
+              enabled={restaurant.cover_enabled}
+              name={restaurant.name}
+              priority
+            />
+          </>
+        )}
+        <div className="tt-menu-header">
+          <div className="tt-brand-logo">{restaurant.logo}</div>
+          <div className="tt-row tt-brand-row">
             <div className="tt-serif tt-brand-name">{restaurant.name}</div>
-            <div className="tt-sage tt-brand-tagline">{restaurant.tagline}</div>
-          </div>
-          <div className="tt-head-controls">
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {/* Search costs nothing until it's wanted — most diners browse. */}
-              <button
-                type="button"
-                className="tt-icon-round"
-                aria-label={t("menu.search")}
-                aria-expanded={searchOpen}
-                // Closing clears the query. Hiding the input while keeping the
-                // term left the menu filtered with nothing on screen to say
-                // why — the categories vanish under an active search, so a
-                // diner saw two dishes, no search box, and no way back short
-                // of reloading.
-                onClick={() => {
-                  if (searchOpen) changeSearch("");
-                  setSearchOpen(open => !open);
-                }}
-              >
-                {searchOpen ? (
-                  <CloseIcon size={17} weight="bold" />
-                ) : (
-                  <SearchIcon size={17} weight="bold" />
-                )}
-              </button>
-              <LanguageToggle />
+            <div className="tt-head-controls">
+              {!showCover && langToggle}
+              {searchBtn}
             </div>
-            {table && (
-              <span className="tt-badge tt-badge-onink">
-                <TableIcon size={13} weight="bold" />
-                {t("menu.table", { label: table.label })}
-              </span>
-            )}
           </div>
-        </div>
+          <div className="tt-sage tt-brand-tagline">{restaurant.tagline}</div>
+          {table && (
+            <span className="tt-badge tt-badge-onink tt-table-badge">
+              <TableIcon size={13} weight="bold" />
+              {t("menu.table", { label: table.label })}
+            </span>
+          )}
 
-        {searchOpen && (
-          <input
-            className="tt-input tt-customer-search"
-            type="search"
-            placeholder={t("menu.search")}
-            aria-label={t("menu.search")}
-            autoFocus
-            value={search}
-            onChange={e => changeSearch(e.target.value)}
-          />
-        )}
-        {table && <ServiceButtons restaurantId={restaurant.id} table={table} />}
-        {trackId && (
-          <Link href={`/order/${trackId}`} className="tt-track-banner" role="status">
-            <BillIcon size={14} weight="bold" /> {t("menu.trackOrder")}
-          </Link>
-        )}
-        {!restaurant.accepting_orders && (
-          <div className="tt-closed-banner" role="status">
-            {t("menu.closed")}
-          </div>
-        )}
+          {searchOpen && (
+            <input
+              className="tt-input tt-customer-search"
+              type="search"
+              placeholder={t("menu.search")}
+              aria-label={t("menu.search")}
+              autoFocus
+              value={search}
+              onChange={e => changeSearch(e.target.value)}
+            />
+          )}
+          {table && <ServiceButtons restaurantId={restaurant.id} table={table} />}
+          {trackId && (
+            <Link href={`/order/${trackId}`} className="tt-track-banner" role="status">
+              <BillIcon size={14} weight="bold" /> {t("menu.trackOrder")}
+            </Link>
+          )}
+          {!restaurant.accepting_orders && (
+            <div className="tt-closed-banner" role="status">
+              {t("menu.closed")}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Only this strip stays pinned while scrolling — the restaurant

@@ -788,6 +788,151 @@ h2.tt-serif {
 
 /* ── menu header ── */
 /* The identity block scrolls away with the page… */
+/* The language toggle rides over the photo, top right. Absolute so it takes
+   no space in the flow — it is not sticky on purpose: it belongs to the photo,
+   and pinning it left it hovering over the dishes. */
+.tt-cover-stack {
+  position: relative;
+}
+.tt-cover-controls {
+  position: absolute;
+  top: 12px;
+  /* Same inset as the header's own padding, so it lines up with the name and
+     search below it. */
+  right: 20px;
+  z-index: 20;
+}
+/* On the header band the control is a 4%-black wash, which is legible against
+   a known colour and invisible against a photograph. Over the cover it takes
+   the app's own surface and ink so it reads whatever the owner uploaded, with
+   a soft shadow to lift it off a busy image. */
+.tt-cover-controls .tt-lang-toggle {
+  background: var(--tt-white);
+  border-color: var(--tt-line);
+  color: var(--tt-ink);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--tt-ink) 25%, transparent);
+}
+.tt-cover-controls .tt-lang-toggle:hover {
+  background: var(--tt-surface);
+}
+/* With the photo carrying the language toggle, the header's copy would be a
+   second one. :has keeps this to menus that actually have a photo. */
+.tt-cover-stack:has(.tt-cover) .tt-menu-header .tt-lang {
+  display: none;
+}
+
+/* Name and search share a line, at opposite ends. */
+.tt-brand-row {
+  align-items: center;
+  gap: 12px;
+}
+.tt-brand-row .tt-head-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.tt-table-badge {
+  margin-top: 10px;
+}
+
+/* Cover photo, above the header band. The ratio is reserved before the photo
+   arrives so the menu doesn't jump when it loads, and the corners follow the
+   header's own rounding on desktop where both sit inside a centred column. */
+.tt-cover {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: var(--tt-surface);
+  /* Reserved before the photo arrives, so the menu doesn't jump on load.
+     Lives here rather than inline so the desktop breakpoint can override it. */
+  aspect-ratio: 1600 / 600;
+}
+/* The photo dissolves into the header rather than stopping at a hard line, so
+   the two read as one block. The gradient lands on the header's own colour, so
+   there is no seam to notice and nothing to keep in sync by hand. */
+.tt-cover::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 55%;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--tt-header-bg) 55%, transparent) 55%,
+    var(--tt-header-bg) 100%
+  );
+  pointer-events: none;
+}
+/* Desktop differs only in proportion: same square edges, same fade into the
+   header, same avatar — one treatment at both sizes, so the menu doesn't feel
+   like two designs. */
+@media (min-width: 1025px) {
+  .tt-cover {
+    /* Half the height of the phone crop. The column is 1080px wide here, so
+       the phone's 8:3 would run to 405px and push the first dish off the
+       screen — the photo is an introduction, not the page. */
+    aspect-ratio: 1600 / 300;
+  }
+}
+
+/* Wherever there is a photo, the logo becomes an avatar straddling its bottom
+   edge — it is what ties the photo and the name together. Sized down on a
+   phone, where the band is only about 170px tall and an 84px disc would eat
+   half of it. */
+.tt-cover + .tt-menu-header {
+  padding-top: 0;
+}
+.tt-cover + .tt-menu-header .tt-brand-logo {
+  position: relative;
+  z-index: 1;
+  /* Half the disc sits over the photo. */
+  margin-top: -32px;
+  margin-bottom: 10px;
+  width: 64px;
+  height: 64px;
+  font-size: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--tt-white);
+  /* A ring in the page colour, so the avatar reads as cut out of the photo
+     rather than pasted on top of it. */
+  box-shadow: 0 0 0 4px var(--tt-header-bg);
+}
+/* Bigger where the band is. Must come after the rule above: same specificity,
+   so source order is what decides — placed before it, the phone size won at
+   every width. */
+@media (min-width: 1025px) {
+  .tt-cover + .tt-menu-header .tt-brand-logo {
+    margin-top: -42px;
+    margin-bottom: 14px;
+    width: 84px;
+    height: 84px;
+    font-size: 38px;
+    box-shadow: 0 0 0 5px var(--tt-header-bg);
+  }
+}
+
+/* Settings preview: the same banner, plus a placeholder holding its shape so
+   the card doesn't resize the moment a photo lands. */
+.tt-cover-preview {
+  margin-top: 12px;
+}
+.tt-cover-preview .tt-cover {
+  border-radius: 12px;
+}
+.tt-cover-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  border: 1px dashed var(--tt-line);
+  border-radius: 12px;
+  background: var(--tt-surface);
+}
+
 .tt-menu-header {
   background: var(--tt-header-bg);
   /* The bottom padding matters: the gap under the tagline used to come from
@@ -2712,10 +2857,20 @@ h2.tt-serif {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 12px;
+  padding: 14px 12px;
   border: 1px solid var(--tt-cream);
   border-radius: 12px;
   cursor: pointer;
+}
+/* The label and its explanation were set on consecutive lines with nothing
+   between them, so the pair read as one dense block. */
+.tt-settings-toggle > span > strong {
+  display: block;
+  line-height: 1.35;
+}
+.tt-settings-toggle > span > .tt-muted {
+  margin-top: 4px;
+  line-height: 1.45;
 }
 
 /* AddonsPanel wraps each row (row + its edit modal) in a .tt-addon div, so the
@@ -3627,7 +3782,6 @@ h2.tt-serif {
   font-weight: 600;
   margin: 0 0 14px;
 }
-
 
 /* The "add" buttons that open a create dialog. They wrap rather than shrink on
    a phone, so no label truncates, and they carry their own spacing — sitting

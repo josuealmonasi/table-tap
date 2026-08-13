@@ -19,6 +19,8 @@ export type SettingsInput = Pick<
   | "tax_pct"
   | "tax_show_breakdown"
   | "accepting_orders"
+  | "cover_url"
+  | "cover_enabled"
 >;
 
 /**
