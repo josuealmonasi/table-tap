@@ -66,7 +66,7 @@ export async function loadCoverState(
   const supabase = await createClient();
   const res = await supabase
     .from("restaurants")
-    .select("id, cover_url, cover_enabled, allow_pay_later")
+    .select("id, cover_url, cover_enabled")
     .eq("id", restaurantId)
     .maybeSingle();
   const row = unwrap(res, "the restaurant") as
@@ -115,7 +115,7 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
     supabase
       .from("restaurants")
       .select(
-        "id, name, tagline, logo, logo_url, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled",
+        "id, name, tagline, logo, logo_url, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, allow_pay_later",
       )
       .eq("id", restaurantId)
       .single(),

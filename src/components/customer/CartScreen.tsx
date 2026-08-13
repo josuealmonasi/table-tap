@@ -197,10 +197,11 @@ export default function CartScreen({
                 control the diner came here for must never need finding — the
                 same rule the dish detail already follows. */}
             <div className="tt-cart-actions">
-              {/* At a table where the restaurant allows it, ordering and paying
-                  are two separate decisions: send it to the kitchen now and
-                  settle at the end, or pay for it here. Everywhere else there
-                  is only one, so only one button appears. */}
+              {/* At a table that settles later this places the order; the
+                  bill it opens is where paying happens, and it is the same
+                  bill whether they pay now or after dessert. Everywhere else
+                  the card is taken here, because there is no table to settle
+                  against. */}
               <button
                 className="tt-btn tt-btn-primary tt-btn-lg"
                 style={{ width: "100%" }}
@@ -215,16 +216,6 @@ export default function CartScreen({
                       : "cart.proceed",
                 )}
               </button>
-              {payLaterAllowed && (
-                <button
-                  className="tt-btn tt-btn-ghost tt-btn-lg"
-                  style={{ width: "100%", marginTop: 8 }}
-                  disabled={!canCheckout || loading}
-                  onClick={() => onCheckout(false)}
-                >
-                  {t("cart.payNow")}
-                </button>
-              )}
               <p
                 className="tt-muted"
                 style={{ textAlign: "center", fontSize: 12, marginTop: 12 }}

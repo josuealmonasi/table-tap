@@ -22,6 +22,8 @@ import ComboDetailScreen from "./ComboDetailScreen";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { useMenuFreshness } from "@/hooks/useMenuFreshness";
 import { rememberOrder } from "@/lib/my-orders";
+import { useTableBill } from "@/hooks/useTableBill";
+import BillSheet from "./BillSheet";
 
 type Screen = "menu" | "item" | "combo" | "edit" | "cart";
 
@@ -63,6 +65,11 @@ export default function OrderingApp({
   // Product ids that sold out at checkout — kept in the cart but greyed out
   // and excluded from the total and the next payment attempt.
   const [soldOut, setSoldOut] = useState<Set<string>>(new Set());
+  // What the table still owes. Only meaningful at a table: a fast-food QR pays
+  // as it orders, so there is never an open bill.
+  const { bill, reload: reloadBill } = useTableBill(restaurant.id, table?.id ?? null);
+  const [billOpen, setBillOpen] = useState(false);
+
   const [tipPct, setTipPct] = useState(0);
 
   // Re-asks the server what is being served, so a dish pulled while this page
@@ -277,7 +284,12 @@ export default function OrderingApp({
       if (data.deferred && data.orderId) {
         rememberOrder(restaurant.id, data.orderId);
         cart.clear();
-        window.location.href = `/order/${data.orderId}`;
+        // Straight to the bill: paying is the next thing worth making easy, and
+        // it is one dismissal away from carrying on eating.
+        setScreen("menu");
+        reloadBill();
+        setBillOpen(true);
+        setLoading(false);
         return;
       }
       if (data.url) {
@@ -449,8 +461,24 @@ export default function OrderingApp({
         onSelectItem={openItem}
         onAddCombo={openCombo}
         onOpenCart={() => setScreen("cart")}
+        billDue={Boolean(table && bill && !bill.settled)}
+        onOpenBill={() => {
+          reloadBill();
+          setBillOpen(true);
+        }}
       />
       {cartScreen}
+      {table && bill && !bill.settled && (
+        <BillSheet
+          open={billOpen}
+          onClose={() => setBillOpen(false)}
+          bill={bill}
+          restaurantId={restaurant.id}
+          tableId={table.id}
+          tableLabel={table.label}
+          currency={restaurant.currency}
+        />
+      )}
       {detail}
       {comboDetail}
       <Modal

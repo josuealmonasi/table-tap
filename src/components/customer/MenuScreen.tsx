@@ -44,6 +44,8 @@ export default function MenuScreen({
   onSelectItem,
   onAddCombo,
   onOpenCart,
+  billDue = false,
+  onOpenBill,
 }: {
   restaurant: Restaurant;
   table: RestaurantTable | null;
@@ -59,6 +61,9 @@ export default function MenuScreen({
   onSelectItem: (item: MenuItem) => void;
   onAddCombo: (combo: Combo) => void;
   onOpenCart: () => void;
+  /** The table has unpaid orders, so the bill is worth offering. */
+  billDue?: boolean;
+  onOpenBill?: () => void;
 }) {
   const t = useT();
   // The URL is the starting state, so a shared link and a reload both land on
@@ -213,6 +218,19 @@ export default function MenuScreen({
             <div className="tt-serif tt-brand-name">{restaurant.name}</div>
             <div className="tt-head-controls">
               {!showCover && langToggle}
+              {/* Only while something is owed — with nothing outstanding there
+                  is no bill to look at, which is what made the old "get the
+                  bill" button meaningless. */}
+              {billDue && onOpenBill && (
+                <button
+                  type="button"
+                  className="tt-icon-round"
+                  aria-label={t("bill.open")}
+                  onClick={onOpenBill}
+                >
+                  <BillIcon size={17} weight="bold" />
+                </button>
+              )}
               {searchBtn}
             </div>
           </div>
@@ -235,7 +253,11 @@ export default function MenuScreen({
               onChange={e => changeSearch(e.target.value)}
             />
           )}
-          {table && <ServiceButtons restaurantId={restaurant.id} table={table} />}
+          {table && <ServiceButtons
+              restaurantId={restaurant.id}
+              table={table}
+              billOnBill={Boolean(restaurant.allow_pay_later)}
+            />}
           {trackId && (
             <Link href={`/order/${trackId}`} className="tt-track-banner" role="status">
               <BillIcon size={14} weight="bold" /> {t("menu.trackOrder")}

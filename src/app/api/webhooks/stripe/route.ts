@@ -28,6 +28,21 @@ export async function POST(req: NextRequest) {
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
+    // A bill settlement pays for several orders at once; a cart checkout pays
+    // for the one it just created. Both arrive here, and only here is a
+    // payment believed — a browser coming back from Stripe proves nothing.
+    const settleIds = (session.metadata?.settle_order_ids ?? "")
+      .split(",")
+      .map(id => id.trim())
+      .filter(Boolean);
+    if (settleIds.length > 0 && session.payment_status === "paid") {
+      await createAdminClient()
+        .from("orders")
+        .update({ paid: true, pay_method: "card" })
+        .in("id", settleIds);
+      return NextResponse.json({ received: true });
+    }
+
     const orderId = session.metadata?.order_id;
 
     if (orderId && session.payment_status === "paid") {
