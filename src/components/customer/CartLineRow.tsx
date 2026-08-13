@@ -97,17 +97,17 @@ export default function CartLineRow({
             </div>
           )}
           {Object.entries(item.mods).map(([k, v]) => (
-            <div key={k} className="tt-muted" style={{ fontSize: 12 }}>
+            <div key={k} className="tt-muted tt-subline" style={{ fontSize: 12 }}>
               {k}: {Array.isArray(v) ? v.join(", ") : v}
             </div>
           ))}
           {item.extras && item.extras.length > 0 && (
-            <div className="tt-muted" style={{ fontSize: 12 }}>
+            <div className="tt-muted tt-subline" style={{ fontSize: 12 }}>
               + {item.extras.map(e => e.name).join(", ")}
             </div>
           )}
           {item.notes && (
-            <div className="tt-muted" style={{ fontSize: 12, fontStyle: "italic" }}>
+            <div className="tt-muted tt-subline" style={{ fontSize: 12, fontStyle: "italic" }}>
               &ldquo;{item.notes}&rdquo;
             </div>
           )}

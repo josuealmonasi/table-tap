@@ -1138,6 +1138,15 @@ h2.tt-serif {
   place-items: center;
   overflow: hidden;
 }
+/* A detail line under an item's name — chosen options, extras, a note for the
+   kitchen. These were set flush against the name, so each item and its details
+   read as one dense block. Spacing only: the callers keep their own size and
+   emphasis, since a kitchen note and a list of extras are not the same voice. */
+.tt-subline {
+  margin-top: 4px;
+  line-height: 1.45;
+}
+
 /* A dish photo fills its container completely — the thumbnail and the hero are
    both fixed-size with overflow hidden, so a photograph occupies exactly the
    room the emoji did and neither the row nor its skeleton changes shape. */
