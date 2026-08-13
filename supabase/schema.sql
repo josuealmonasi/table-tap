@@ -37,6 +37,11 @@ alter table restaurants add column if not exists cover_enabled boolean not null 
 -- a restaurant that hasn't got artwork.
 alter table restaurants add column if not exists logo_url text;
 
+-- Dine-in tables may order first and settle at the end. Off by default: it lets
+-- food leave the kitchen before it is paid for, which is the restaurant's risk
+-- to accept rather than ours to assume on their behalf.
+alter table restaurants add column if not exists allow_pay_later boolean not null default false;
+
 -- The hottest lookup in the app: getMembership asks "which restaurant does this
 -- user own?" on every request, and has_role() asks it again inside every RLS
 -- policy check. Without this it is a sequential scan — free at seven rows,
@@ -214,10 +219,20 @@ create table if not exists service_requests (
   restaurant_id uuid not null references restaurants(id) on delete cascade,
   table_id      uuid references restaurant_tables(id) on delete cascade,
   table_label   text not null,
-  kind          text not null check (kind in ('waiter', 'bill')),
+  kind          text not null check (kind in ('waiter', 'bill', 'pay')),
   status        text not null default 'open',  -- 'open' | 'done'
   created_at    timestamptz not null default now()
 );
+
+-- 'pay' arrives when a table asks to settle in person: the waiter takes cash or
+-- a card at the table and marks the orders paid. Existing rows predate it, so
+-- the constraint is replaced rather than assumed.
+do $$ begin
+  alter table service_requests drop constraint if exists service_requests_kind_check;
+  alter table service_requests add constraint service_requests_kind_check
+    check (kind in ('waiter', 'bill', 'pay'));
+exception when others then null;
+end $$;
 
 create index if not exists service_requests_open_idx
   on service_requests(restaurant_id, status, created_at desc);
@@ -459,7 +474,7 @@ revoke all on coupons, coupon_redemptions from anon;
 -- Column-scoped on purpose: owner_id, Stripe ids and timestamps stay unreadable.
 -- A new column is invisible to customers until it is listed here, and it fails
 -- silently — the value simply reads as null.
-grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url) on restaurants to anon;
+grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later) on restaurants to anon;
 grant select on restaurants to authenticated;
 
 -- authenticated (logged-in staff) keeps the DML its dashboard needs — those
