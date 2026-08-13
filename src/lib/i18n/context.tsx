@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { LOCALE_COOKIE, messagesFor, translate, type Locale } from "./index";
+import { DEFAULT_LOCALE, LOCALE_COOKIE, messagesFor, translate, type Locale } from "./index";
 
 type TFunction = (key: string, vars?: Record<string, string | number>) => string;
 
@@ -50,5 +50,8 @@ export function useT(): TFunction {
 /** The current locale + a setter for the language toggle. */
 export function useLocale(): { locale: Locale; setLocale: (next: Locale) => void } {
   const ctx = useContext(LocaleContext);
-  return { locale: ctx?.locale ?? "en", setLocale: ctx?.setLocale ?? (() => {}) };
+  return {
+    locale: ctx?.locale ?? DEFAULT_LOCALE,
+    setLocale: ctx?.setLocale ?? (() => {}),
+  };
 }
