@@ -77,6 +77,10 @@ export type Restaurant = {
   /** IANA zone the menu schedules are evaluated in. Only the dashboard reads
    *  it — the customer payload stays as narrow as it was. */
   timezone?: string;
+  /** Cover photo above the menu header. Null until one is uploaded. */
+  cover_url?: string | null;
+  /** Whether to show it. Off by default, so nothing changes until asked. */
+  cover_enabled?: boolean;
 };
 
 export type RestaurantTable = {

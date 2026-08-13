@@ -27,6 +27,11 @@ create table if not exists restaurants (
   created_at  timestamptz not null default now()
 );
 
+-- Cover photo shown above the menu header. Off by default, so a restaurant
+-- that never sets one looks exactly as it did before this existed.
+alter table restaurants add column if not exists cover_url text;
+alter table restaurants add column if not exists cover_enabled boolean not null default false;
+
 -- The hottest lookup in the app: getMembership asks "which restaurant does this
 -- user own?" on every request, and has_role() asks it again inside every RLS
 -- policy check. Without this it is a sequential scan — free at seven rows,
@@ -342,6 +347,59 @@ alter table coupon_redemptions add column if not exists confirmed_at timestamptz
 create index if not exists coupon_redemptions_idx
   on coupon_redemptions(restaurant_id, created_at desc);
 
+-- ── Image storage ───────────────────────────────────────────────────────────
+-- One public bucket for menu photography: the restaurant cover and per-dish
+-- pictures. Public read is deliberate — these are printed on a QR poster and
+-- shown to anyone who scans it, so there is nothing to protect on the way out.
+--
+-- Writes are the part that matters. The first path segment is the restaurant
+-- id, so `has_role` decides who may upload where:
+--     <restaurantId>/cover.webp
+--     <restaurantId>/items/<itemId>.webp
+-- Uploads go straight from the owner's browser with their own session, so the
+-- secret key never touches this path and RLS is the only thing granting it.
+insert into storage.buckets (id, name, public)
+values ('menu', 'menu', true)
+on conflict (id) do nothing;
+
+-- Reads the restaurant id out of an object path, or null when the path is not
+-- shaped like one. Kept as a function because a bare `::uuid` cast raises on
+-- anything else, and a policy that can raise is a policy that can be tripped
+-- over by a junk key. has_role(null, ...) is false, so null denies.
+create or replace function public.storage_restaurant(object_name text)
+returns uuid
+language plpgsql
+immutable
+set search_path = public
+as $$
+begin
+  return (split_part(object_name, '/', 1))::uuid;
+exception when others then
+  return null;
+end $$;
+revoke all on function public.storage_restaurant(text) from public;
+grant execute on function public.storage_restaurant(text) to anon, authenticated;
+
+do $$ begin
+  create policy "menu images are public to read" on storage.objects
+    for select using (bucket_id = 'menu');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "team manages its own menu images" on storage.objects
+    for all
+    using (
+      bucket_id = 'menu'
+      and has_role(storage_restaurant(name), array['manager'])
+    )
+    with check (
+      bucket_id = 'menu'
+      and has_role(storage_restaurant(name), array['manager'])
+    );
+exception when duplicate_object then null;
+end $$;
+
 -- ── Realtime: broadcast order changes to dashboard + customer ───────────────
 do $$ begin
   alter publication supabase_realtime add table orders;
@@ -393,7 +451,10 @@ revoke all on coupons, coupon_redemptions from anon;
 -- restaurant's display columns — never owner_id or created_at. RLS decides
 -- which ROWS are visible; this decides which COLUMNS. The dashboard
 -- (authenticated owner) and the secret key keep full access.
-grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown) on restaurants to anon;
+-- Column-scoped on purpose: owner_id, Stripe ids and timestamps stay unreadable.
+-- A new column is invisible to customers until it is listed here, and it fails
+-- silently — the value simply reads as null.
+grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled) on restaurants to anon;
 grant select on restaurants to authenticated;
 
 -- authenticated (logged-in staff) keeps the DML its dashboard needs — those
