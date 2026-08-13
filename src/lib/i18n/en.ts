@@ -367,6 +367,12 @@ export const en = {
     readyTable: "🎉 Our team will bring it to Table {label}!",
   },
   img: {
+    logoTitle: "Logo",
+    logoHint: "Shown beside your name, and over the cover photo.",
+    logoSize: "Square, at least {min}px. A PNG with a transparent background looks best.",
+    logoOrIcon: "No logo? Pick an emoji in Restaurant above and it will be used instead.",
+    logoRemoveConfirm: "Remove the logo?",
+    logoRemoveMsg: "Your emoji icon takes over, or nothing if you haven't set one.",
     coverTitle: "Cover photo",
     coverHint: "Shown above your menu when a customer scans the QR code.",
     show: "Show the cover photo",

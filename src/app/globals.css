@@ -921,6 +921,39 @@ h2.tt-serif {
   }
 }
 
+/* An uploaded mark fills the avatar; the emoji fallback is just text. */
+.tt-mark-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+/* The navbar's mark is small and square-ish, so it keeps its own size. */
+.tt-navbar-logo .tt-mark-img {
+  width: 22px;
+  height: 22px;
+}
+/* Logo card: the avatar at the size the menu draws it, beside its guidance. */
+.tt-logo-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+}
+.tt-logo-preview {
+  flex: none;
+  width: 84px;
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 38px;
+  border-radius: 50%;
+  background: var(--tt-white);
+  border: 1px solid var(--tt-line);
+  overflow: hidden;
+}
+
 /* Settings preview: the same banner, plus a placeholder holding its shape so
    the card doesn't resize the moment a photo lands. */
 .tt-cover-preview {

@@ -22,6 +22,7 @@ const OWNER_FIELDS = new Set([
   "accepting_orders",
   "cover_url",
   "cover_enabled",
+  "logo_url",
 ]);
 const MANAGER_FIELDS = new Set(["tax_pct", "tax_show_breakdown", "accepting_orders"]);
 
@@ -55,8 +56,8 @@ export async function POST(req: NextRequest) {
   // The cover must live in our own storage, not wherever the client says. An
   // arbitrary URL would be rendered to every diner who scans the QR code, and
   // would leak their IP to whoever is hosting it. Clearing it is allowed.
-  if ("cover_url" in update && update.cover_url) {
-    if (!isOwnStorageUrl(String(update.cover_url))) {
+  for (const field of ["cover_url", "logo_url"] as const) {
+    if (field in update && update[field] && !isOwnStorageUrl(String(update[field]))) {
       return await apiError("apiErr.badCover", 400);
     }
   }

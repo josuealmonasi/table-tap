@@ -21,6 +21,7 @@ export type SettingsInput = Pick<
   | "accepting_orders"
   | "cover_url"
   | "cover_enabled"
+  | "logo_url"
 >;
 
 /**

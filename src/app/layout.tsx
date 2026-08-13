@@ -43,6 +43,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Navbar
                 restaurantName={membership.restaurant.name}
                 restaurantLogo={membership.restaurant.logo}
+                restaurantLogoUrl={membership.restaurant.logo_url}
                 role={membership.role}
               />
             )}

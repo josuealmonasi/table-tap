@@ -9,6 +9,7 @@ import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import PaymentsCard from "./PaymentsCard";
 import CoverCard from "./CoverCard";
+import LogoCard from "./LogoCard";
 
 interface SettingsFormProps {
   restaurant: Restaurant;
@@ -213,6 +214,8 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
           )}
 
           {isOwner && <PaymentsCard />}
+
+          {isOwner && <LogoCard restaurant={restaurant} />}
 
           {isOwner && <CoverCard restaurant={restaurant} />}
 

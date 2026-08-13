@@ -7,6 +7,7 @@ import { navItemsFor } from "@/lib/nav";
 import { createClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n/context";
 import { CloseIcon, DashboardIcon, SignOutIcon, NAV_ICONS } from "@/components/ui/icons";
+import RestaurantMark from "@/components/ui/RestaurantMark";
 
 /**
  * Mobile-only navigation: a hamburger button that opens a backdrop drawer
@@ -16,10 +17,12 @@ import { CloseIcon, DashboardIcon, SignOutIcon, NAV_ICONS } from "@/components/u
 export default function NavDrawer({
   restaurantName,
   restaurantLogo,
+  restaurantLogoUrl,
   role,
 }: {
   restaurantName: string;
   restaurantLogo: string | null;
+  restaurantLogoUrl?: string | null;
   /** Managers lose Staff/Settings; kitchen only gets the orders board. */
   role: "owner" | "manager" | "waiter" | "kitchen" | "admin";
 }) {
@@ -73,7 +76,16 @@ export default function NavDrawer({
             onClick={e => e.stopPropagation()}
           >
             <div className="tt-drawer-head">
-              <span className="tt-navbar-logo">{restaurantLogo || "🍴"}</span>
+              <span className="tt-navbar-logo">
+              {/* The fork is the product's own mark: dashboard chrome should
+                  not have a hole where a restaurant hasn't set anything. */}
+              <RestaurantMark
+                logoUrl={restaurantLogoUrl}
+                emoji={restaurantLogo || "🍴"}
+                name={restaurantName}
+                size={26}
+              />
+            </span>
               <strong>{restaurantName}</strong>
               <button
                 type="button"

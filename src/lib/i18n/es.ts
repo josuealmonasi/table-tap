@@ -364,6 +364,12 @@ export const es: Messages = {
     readyTable: "🎉 ¡Nuestro equipo lo llevará a la Mesa {label}!",
   },
   img: {
+    logoTitle: "Logotipo",
+    logoHint: "Se muestra junto a tu nombre y sobre la foto de portada.",
+    logoSize: "Cuadrado, de al menos {min}px. Un PNG con fondo transparente se ve mejor.",
+    logoOrIcon: "¿Sin logotipo? Elige un emoji en Restaurante arriba y se usará en su lugar.",
+    logoRemoveConfirm: "¿Quitar el logotipo?",
+    logoRemoveMsg: "Tu emoji toma su lugar, o nada si no has puesto uno.",
     coverTitle: "Foto de portada",
     coverHint: "Se muestra arriba de tu menú cuando un cliente escanea el código QR.",
     show: "Mostrar la foto de portada",
