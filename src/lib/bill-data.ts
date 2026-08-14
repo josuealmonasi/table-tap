@@ -17,7 +17,8 @@ import type { Order } from "@/lib/types";
  */
 
 /** Only the columns the bill screen and the waiter's modal actually show. */
-const FIELDS = "id, table_label, status, items, subtotal, service_fee, tip, total, currency, paid, created_at";
+const FIELDS =
+  "id, table_label, status, items, subtotal, service_fee, tip, total, currency, paid, written_off, created_at";
 
 export async function fetchTableBill(
   restaurantId: string,
@@ -31,6 +32,8 @@ export async function fetchTableBill(
     .eq("restaurant_id", restaurantId)
     .eq("table_id", tableId)
     .eq("paid", false)
+    // Written off: recorded as never paid, but no longer owed by anyone.
+    .eq("written_off", false)
     .neq("status", "pending_payment")
     .order("created_at", { ascending: true });
 

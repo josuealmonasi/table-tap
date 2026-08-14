@@ -170,6 +170,8 @@ export type Order = {
   note: string | null;
   pay_method: string | null;
   paid: boolean;
+  /** Served but never paid for; out of revenue, and no longer owed. */
+  written_off?: boolean;
   stripe_payment_intent: string | null;
   stripe_refund_id: string | null;
   created_at: string;
@@ -181,7 +183,8 @@ export type ServiceRequest = {
   restaurant_id: string;
   table_id: string | null;
   table_label: string;
-  kind: "waiter" | "bill";
+  /** 'pay' means the table wants to settle in person. */
+  kind: "waiter" | "bill" | "pay";
   status: "open" | "done";
   created_at: string;
 };

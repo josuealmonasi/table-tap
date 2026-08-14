@@ -54,6 +54,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .eq("restaurant_id", restaurantId)
     .eq("table_id", tableId)
     .eq("paid", false)
+    .eq("written_off", false)
     .neq("status", "pending_payment")
     .neq("status", "cancelled")
     .in("id", orderIds);

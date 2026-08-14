@@ -152,6 +152,11 @@ create table if not exists orders (
   stripe_payment_intent text,
   stripe_refund_id text,                         -- set when a cancelled order was refunded
   paid          boolean not null default false,
+  -- Served but never paid for: a dine-in table that left without settling. Not
+  -- cancelled — the food went out and the kitchen spent it — and not paid, so
+  -- it stays out of revenue. Recording it is what lets the board be cleared
+  -- without pretending the money arrived.
+  written_off   boolean not null default false,
   created_at    timestamptz not null default now()
 );
 
