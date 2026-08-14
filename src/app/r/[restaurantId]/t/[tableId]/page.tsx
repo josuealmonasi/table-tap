@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import OrderingApp from "@/components/customer/OrderingApp";
 import MenuSkeleton from "@/components/customer/MenuSkeleton";
 import { loadCoverState, loadOrderingData, unwrap } from "@/lib/ordering-data";
@@ -16,10 +16,18 @@ async function Menu({
   restaurantId: string;
   tableId: string;
 }) {
-  const supabase = await createClient();
+  // Read with the secret key, scoped to both ids in the URL. Tables are not
+  // readable with the publishable key on purpose — listable table ids would let
+  // anyone see any table's bill, or charge an order to it — so the QR code the
+  // diner scanned is what proves which table this is.
   const [data, tableRes] = await Promise.all([
     loadOrderingData(restaurantId),
-    supabase.from("restaurant_tables").select("*").eq("id", tableId).single(),
+    createAdminClient()
+      .from("restaurant_tables")
+      .select("*")
+      .eq("id", tableId)
+      .eq("restaurant_id", restaurantId)
+      .single(),
   ]);
 
   // An unknown table id is fine — the menu still works, the order just isn't
