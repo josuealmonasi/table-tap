@@ -10,6 +10,7 @@ import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import OrderCard from "./OrderCard";
 import { BOARD_COLUMNS, columnOrders } from "@/lib/order-flow";
+import { useRouter } from "next/navigation";
 import ServiceRequestsBar from "./ServiceRequestsBar";
 import { EmptyIcon } from "@/components/ui/icons";
 
@@ -44,6 +45,7 @@ export default function OrdersBoard({
   revenueBase,
   todayStartMs,
 }: OrdersBoardProps) {
+  const router = useRouter();
   const t = useT();
   const { orders, updateStatus, cancelOrder } = useRestaurantOrders(
     restaurant.id,
@@ -120,6 +122,8 @@ export default function OrdersBoard({
         <ServiceRequestsBar
           restaurantId={restaurant.id}
           initialRequests={initialRequests}
+          currency={restaurant.currency}
+          onSettled={() => router.refresh()}
         />
 
         <div className="tt-board-tabs" role="tablist">

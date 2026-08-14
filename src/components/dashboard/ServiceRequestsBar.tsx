@@ -4,19 +4,28 @@ import { useServiceRequests } from "@/hooks/useServiceRequests";
 import type { ServiceRequest } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
 import { BillIcon, CallWaiterIcon } from "@/components/ui/icons";
+import { useState } from "react";
+import SettleTableDialog from "./SettleTableDialog";
 
 interface ServiceRequestsBarProps {
   restaurantId: string;
   initialRequests: ServiceRequest[];
+  currency: string;
+  /** Refreshes the board after a table is settled. */
+  onSettled?: () => void;
 }
 
 /** Open call-waiter / request-bill taps, pinned above the orders grid. */
 export default function ServiceRequestsBar({
   restaurantId,
   initialRequests,
+  currency,
+  onSettled,
 }: ServiceRequestsBarProps) {
   const t = useT();
   const { requests, markDone } = useServiceRequests(restaurantId, initialRequests);
+  // The table whose bill the waiter is collecting, if any.
+  const [settling, setSettling] = useState<ServiceRequest | null>(null);
 
   // Rough "how long ago" — kitchens think in minutes.
   const age = (createdAt: string): string => {
@@ -37,17 +46,53 @@ export default function ServiceRequestsBar({
               <BillIcon size={14} weight="bold" />
             )}{" "}
             <strong>{t("dash.tableN", { label: r.table_label ?? "" })}</strong>{" "}
-            {t(r.kind === "waiter" ? "orders.wantsWaiter" : "orders.wantsBill")}
+            {t(
+              r.kind === "waiter"
+                ? "orders.wantsWaiter"
+                : r.kind === "pay"
+                  ? "settle.wantsToPay"
+                  : "orders.wantsBill",
+            )}
             <span className="tt-muted"> · {age(r.created_at)}</span>
           </span>
-          <button
-            className="tt-btn tt-btn-ghost tt-btn-sm"
-            onClick={() => markDone(r.id)}
-          >
-            {t("orders.requestDone")}
-          </button>
+          {/* A table waiting to pay needs the bill, not a "done" button —
+              pressing done would clear the request and leave the money
+              uncollected. */}
+          {r.kind === "pay" && r.table_id ? (
+            <button
+              className="tt-btn tt-btn-primary tt-btn-sm"
+              onClick={() => setSettling(r)}
+            >
+              {t("settle.open")}
+            </button>
+          ) : (
+            <button
+              className="tt-btn tt-btn-ghost tt-btn-sm"
+              onClick={() => markDone(r.id)}
+            >
+              {t("orders.requestDone")}
+            </button>
+          )}
         </div>
       ))}
+
+      {settling?.table_id && (
+        <SettleTableDialog
+          open
+          onClose={() => setSettling(null)}
+          restaurantId={restaurantId}
+          tableId={settling.table_id}
+          tableLabel={settling.table_label ?? ""}
+          currency={currency}
+          onSettled={() => {
+            // Drop the chip here as well as relying on the realtime update:
+            // the waiter is standing at the table and the request is answered,
+            // so it must not still be asking on their own screen.
+            markDone(settling.id);
+            onSettled?.();
+          }}
+        />
+      )}
     </div>
   );
 }

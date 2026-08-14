@@ -117,7 +117,7 @@ export default function OrderCard({
               </span>
             )}
             {item.notes && (
-              <div className="tt-accent" style={{ fontSize: 11, fontStyle: "italic" }}>
+              <div className="tt-accent tt-subline" style={{ fontSize: 11, fontStyle: "italic" }}>
                 ↳ {item.notes}
               </div>
             )}

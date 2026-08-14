@@ -34,6 +34,13 @@ export function useServiceRequests(
 ) {
   const [requests, setRequests] = useState<ServiceRequest[]>(initialRequests);
 
+  // A fresh server render is the truth. Without this the list was seeded once
+  // and never corrected, so a request answered elsewhere — or settled through
+  // the till — kept asking on this screen until a full reload.
+  useEffect(() => {
+    setRequests(initialRequests);
+  }, [initialRequests]);
+
   useEffect(() => {
     const supabase = createClient();
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -63,6 +70,26 @@ export function useServiceRequests(
               prev.some(r => r.id === row.id) ? prev : [row, ...prev],
             );
             playChime();
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "service_requests",
+            filter: `restaurant_id=eq.${restaurantId}`,
+          },
+          payload => {
+            // A request answered anywhere else — the settle dialog closing one
+            // server-side, or another waiter's phone marking it done — has to
+            // leave this board too. Without this only the device that pressed
+            // the button stopped showing it, so everyone else kept being asked
+            // to handle something already handled.
+            const row = payload.new as ServiceRequest;
+            if (row.status !== "open") {
+              setRequests(prev => prev.filter(r => r.id !== row.id));
+            }
           },
         )
         .subscribe();

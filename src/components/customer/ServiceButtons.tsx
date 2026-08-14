@@ -11,6 +11,8 @@ import { BillIcon, CallWaiterIcon } from "@/components/ui/icons";
 interface ServiceButtonsProps {
   restaurantId: string;
   table: RestaurantTable;
+  /** The bill screen handles settling, so asking for a bill is redundant. */
+  billOnBill?: boolean;
 }
 
 type Kind = "waiter" | "bill";
@@ -26,7 +28,11 @@ const KEYS: Record<Kind, { idle: string; sent: string }> = {
  * service request and then rests for a minute so a tapping child can't spam
  * the kitchen.
  */
-export default function ServiceButtons({ restaurantId, table }: ServiceButtonsProps) {
+export default function ServiceButtons({
+  billOnBill = false,
+  restaurantId,
+  table,
+}: ServiceButtonsProps) {
   const t = useT();
   const [sent, setSent] = useState<Set<Kind>>(new Set());
   // Asking for the bill is the moment the meal is over, which is the only
@@ -90,22 +96,27 @@ export default function ServiceButtons({ restaurantId, table }: ServiceButtonsPr
   return (
     <>
       <div className="tt-service-row">
-        {(Object.keys(KEYS) as Kind[]).map(kind => (
-          <button
-            key={kind}
-            type="button"
-            className="tt-service-btn"
-            disabled={sent.has(kind)}
-            onClick={() => send(kind)}
-          >
-            {kind === "waiter" ? (
-              <CallWaiterIcon size={16} weight="bold" />
-            ) : (
-              <BillIcon size={16} weight="bold" />
-            )}
-            {t(sent.has(kind) ? KEYS[kind].sent : KEYS[kind].idle)}
-          </button>
-        ))}
+        {(Object.keys(KEYS) as Kind[])
+          // Where the diner can see and settle the bill themselves, "get the
+          // bill" is the button that had nothing behind it — the complaint
+          // that started this. Calling a waiter still means something.
+          .filter(kind => !(billOnBill && kind === "bill"))
+          .map(kind => (
+            <button
+              key={kind}
+              type="button"
+              className="tt-service-btn"
+              disabled={sent.has(kind)}
+              onClick={() => send(kind)}
+            >
+              {kind === "waiter" ? (
+                <CallWaiterIcon size={16} weight="bold" />
+              ) : (
+                <BillIcon size={16} weight="bold" />
+              )}
+              {t(sent.has(kind) ? KEYS[kind].sent : KEYS[kind].idle)}
+            </button>
+          ))}
       </div>
       <RateDishesSheet
         open={rateable.length > 0}

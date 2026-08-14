@@ -41,6 +41,7 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
 
   // Ordering (owner + manager) — instant-save.
   const [acceptingOrders, setAcceptingOrders] = useState(restaurant.accepting_orders);
+  const [payLater, setPayLater] = useState(Boolean(restaurant.allow_pay_later));
 
   async function saveRestaurant(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -74,6 +75,14 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
       t(next ? "dash.acceptingAgain" : "dash.ordersPaused"),
     );
     if (!ok) setAcceptingOrders(!next); // roll back on failure
+  }
+
+  // Off by default and saved immediately, like the kill switch: turning it on
+  // lets food leave the kitchen before it is paid for, so it should be a
+  // deliberate act with an obvious result.
+  async function togglePayLater(next: boolean): Promise<void> {
+    setPayLater(next);
+    if (!(await save({ allow_pay_later: next }))) setPayLater(!next);
   }
 
   return (
@@ -305,6 +314,26 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
                 <span className="tt-switch-track" />
               </span>
             </label>
+
+            {isOwner && (
+              <label className="tt-settings-toggle" style={{ marginTop: 10 }}>
+                <span>
+                  <strong>{t("dash.payLaterTitle")}</strong>
+                  <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
+                    {t("dash.payLaterHint")}
+                  </span>
+                </span>
+                <span className="tt-switch">
+                  <input
+                    type="checkbox"
+                    checked={payLater}
+                    disabled={saving}
+                    onChange={e => togglePayLater(e.target.checked)}
+                  />
+                  <span className="tt-switch-track" />
+                </span>
+              </label>
+            )}
           </div>
         </div>
       </div>

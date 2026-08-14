@@ -23,6 +23,7 @@ const OWNER_FIELDS = new Set([
   "cover_url",
   "cover_enabled",
   "logo_url",
+  "allow_pay_later",
 ]);
 const MANAGER_FIELDS = new Set(["tax_pct", "tax_show_breakdown", "accepting_orders"]);
 

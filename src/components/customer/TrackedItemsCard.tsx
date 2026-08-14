@@ -30,7 +30,7 @@ export default function TrackedItemsCard({
               </span>
             </div>
             {item.extras && item.extras.length > 0 && (
-              <div className="tt-muted" style={{ fontSize: 12, paddingLeft: 18 }}>
+              <div className="tt-muted tt-subline" style={{ fontSize: 12, paddingLeft: 18 }}>
                 + {item.extras.map(e => e.name).join(", ")}
               </div>
             )}

@@ -16,7 +16,10 @@ export async function POST(req: NextRequest) {
 
   const { restaurantId, tableId, kind } = await req.json();
 
-  if (!restaurantId || !tableId || (kind !== "waiter" && kind !== "bill")) {
+  // 'pay' means a table wants to settle in person; the waiter takes cash or a
+  // card and marks the orders paid.
+  const KINDS = ["waiter", "bill", "pay"];
+  if (!restaurantId || !tableId || !KINDS.includes(kind)) {
     return await apiError("apiErr.invalidRequest", 400);
   }
 

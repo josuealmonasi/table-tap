@@ -44,7 +44,9 @@ interface CartScreenProps {
   onChangeQty: (cartId: number, qty: number) => void;
   onEditItem: (item: CartItem) => void;
   onAddMore: () => void;
-  onCheckout: () => void;
+  onCheckout: (payLater?: boolean) => void;
+  /** Dine-in at a table, where the owner allows settling at the end. */
+  payLaterAllowed?: boolean;
 }
 
 /** The review-and-pay screen: line items, kitchen note, totals, checkout button. */
@@ -77,6 +79,7 @@ export default function CartScreen({
   onEditItem,
   onAddMore,
   onCheckout,
+  payLaterAllowed = false,
 }: CartScreenProps) {
   const t = useT();
   // 0 when the fee is switched off, so the totals card doesn't render an empty
@@ -194,13 +197,24 @@ export default function CartScreen({
                 control the diner came here for must never need finding — the
                 same rule the dish detail already follows. */}
             <div className="tt-cart-actions">
+              {/* At a table that settles later this places the order; the
+                  bill it opens is where paying happens, and it is the same
+                  bill whether they pay now or after dessert. Everywhere else
+                  the card is taken here, because there is no table to settle
+                  against. */}
               <button
                 className="tt-btn tt-btn-primary tt-btn-lg"
                 style={{ width: "100%" }}
                 disabled={!canCheckout || loading}
-                onClick={onCheckout}
+                onClick={() => onCheckout(payLaterAllowed)}
               >
-                {t(loading ? "cart.redirecting" : "cart.proceed")}
+                {t(
+                  loading
+                    ? "cart.redirecting"
+                    : payLaterAllowed
+                      ? "cart.placeOrder"
+                      : "cart.proceed",
+                )}
               </button>
               <p
                 className="tt-muted"
