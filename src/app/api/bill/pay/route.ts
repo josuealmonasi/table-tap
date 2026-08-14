@@ -4,6 +4,15 @@ import { apiError } from "@/lib/api-error";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { platformFeeCents } from "@/lib/money";
+import { applyCoupon } from "@/lib/pricing";
+import {
+  claimCoupon,
+  couponProblem,
+  findCoupon,
+  logRedemption,
+  releaseCoupon,
+  toAppliedCoupon,
+} from "@/lib/coupon-service";
 import type { Order } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -27,13 +36,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
 
-  const { restaurantId, tableId, orderIds, tipPct, tipAmount } = (await req.json()) as {
-    restaurantId?: string;
-    tableId?: string;
-    orderIds?: string[];
-    tipPct?: number;
-    tipAmount?: number;
-  };
+  const { restaurantId, tableId, orderIds, tipPct, tipAmount, couponCode } =
+    (await req.json()) as {
+      restaurantId?: string;
+      tableId?: string;
+      orderIds?: string[];
+      tipPct?: number;
+      tipAmount?: number;
+      couponCode?: string;
+    };
   if (!restaurantId || !tableId || !Array.isArray(orderIds) || orderIds.length === 0) {
     return await apiError("apiErr.invalidRequest", 400);
   }
@@ -56,7 +67,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // matters most.
   const { data: rows } = await db
     .from("orders")
-    .select("id, total, currency, items, paid, status")
+    .select("id, total, currency, items, paid, status, coupon_code")
     .eq("restaurant_id", restaurantId)
     .eq("table_id", tableId)
     .eq("paid", false)
@@ -65,22 +76,58 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .neq("status", "cancelled")
     .in("id", orderIds);
 
-  const orders = (rows ?? []) as Pick<Order, "id" | "total" | "items">[];
+  const orders = (rows ?? []) as (Pick<Order, "id" | "total" | "items"> & {
+    coupon_code: string | null;
+  })[];
   if (orders.length === 0) return await apiError("apiErr.billSettled", 409);
 
-  const food = orders.reduce((sum, o) => sum + Number(o.total), 0);
+  const food = round2(orders.reduce((sum, o) => sum + Number(o.total), 0));
+
+
+  // A coupon here discounts the share being settled, which is what lets two
+  // people at one table each use their own on their own food. Two rules keep
+  // it honest:
+  //
+  //   - an order that already carries a code was discounted when it was
+  //     placed, and that discount is inside its total; a second one would take
+  //     the same money off twice.
+  //   - the code, its limits and the amount are all resolved here from the
+  //     database. The request chooses which orders to settle, nothing more.
+  let discount = 0;
+  let coupon: Awaited<ReturnType<typeof findCoupon>> = null;
+  if (typeof couponCode === "string" && couponCode.trim()) {
+    if (orders.some(o => o.coupon_code)) {
+      return await apiError("apiErr.couponAlreadyUsed", 409);
+    }
+    coupon = await findCoupon(restaurantId, couponCode);
+    if (!coupon) return await apiError("apiErr.couponNotFound", 400);
+    if (couponProblem(coupon, food)) return await apiError("apiErr.couponNotValid", 400);
+
+    // Reserve before charging. If the last use has gone, the diner is told now
+    // rather than after their card has been taken.
+    if (!(await claimCoupon(coupon.id))) {
+      return await apiError("apiErr.couponNotValid", 409);
+    }
+    discount = applyCoupon(toAppliedCoupon(coupon), food);
+  }
+
+  const payable = round2(food - discount);
 
   // The tip is the one figure the diner sets, so it is clamped the same way the
   // cart clamps it: never negative, never more than the food it is thanking
   // somebody for. A percentage is recomputed here rather than trusted, so a
   // request cannot claim 15% and send a different number.
+  // Tip follows the discounted amount, the same order the cart uses.
   const pct = Math.min(100, Math.max(0, Number(tipPct) || 0));
-  const asked = tipAmount != null ? Number(tipAmount) : (food * pct) / 100;
-  const tip = Math.min(Math.max(0, round2(asked)), food);
+  const asked = tipAmount != null ? Number(tipAmount) : (payable * pct) / 100;
+  const tip = Math.min(Math.max(0, round2(asked)), payable);
 
-  const amount = round2(food + tip);
+  const amount = round2(payable + tip);
   const cents = Math.round(amount * 100);
-  if (cents <= 0) return await apiError("apiErr.billSettled", 409);
+  if (cents <= 0) {
+    if (coupon) await releaseCoupon(coupon.id);
+    return await apiError("apiErr.billSettled", 409);
+  }
 
   const origin = req.headers.get("origin") ?? new URL(req.url).origin;
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -111,6 +158,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           // on one of the settled orders rather than being split across them:
           // a tip is for the table's service, not attributable to a dish.
           settle_tip: String(tip),
+          settle_coupon: coupon?.code ?? "",
+          settle_discount: String(discount),
         },
         payment_intent_data: {
           application_fee_amount: platformFeeCents(cents),
@@ -121,8 +170,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { stripeAccount: restaurant.stripe_account_id },
     );
 
+    // Reserved, not yet real: the webhook confirms it when the money lands,
+    // and the expiry handler gives it back if the diner walks away from Stripe.
+    // Attached to the first settled order, the same row that carries the tip.
+    if (coupon) {
+      await logRedemption({
+        restaurantId,
+        couponId: coupon.id,
+        orderId: orders[0].id,
+        code: coupon.code,
+        amount: discount,
+      });
+    }
+
     return NextResponse.json({ url: session.url });
   } catch {
+    // The charge never happened, so the reserved use goes back.
+    if (coupon) await releaseCoupon(coupon.id);
     return await apiError("apiErr.checkoutFailed", 502);
   }
 }

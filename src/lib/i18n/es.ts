@@ -269,6 +269,8 @@ export const es: Messages = {
     expired: "Ese cupón ya no está disponible.",
     limitReached: "Este cupón alcanzó su límite de usos.",
     minSubtotal: "Tu pedido aún no alcanza el mínimo para este cupón.",
+    alreadyUsed: "Uno de estos pedidos ya usó un cupón.",
+    onlyYours: "El cupón se aplica a la parte de la cuenta que vas a pagar.",
     tooMany: "Demasiados intentos — espera un momento.",
   },
   coupons: {
@@ -506,6 +508,9 @@ export const es: Messages = {
     badCover: "Esa imagen debe subirse aquí, no enlazarse desde otro sitio.",
     payLaterNotAllowed: "Este restaurante cobra al momento de ordenar.",
     billSettled: "Esa cuenta ya fue pagada.",
+    couponNotFound: "No encontramos ese cupón.",
+    couponNotValid: "Ese cupón no se puede usar en esta cuenta.",
+    couponAlreadyUsed: "Uno de estos pedidos ya usó un cupón al hacerse.",
     schedNoRules: "Agrega al menos un periodo.",
     schedNoDays: "Elige al menos un día.",
     schedBadTime: "Ingresa una hora de inicio y fin válidas.",
