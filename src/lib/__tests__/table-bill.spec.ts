@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canPayMineOnly,
+  openTables,
   ordersToPay,
   tableBill,
   unpaidOrders,
@@ -128,3 +129,49 @@ describe("money", () => {
 function round(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+describe("which tables owe money", () => {
+  const at = (id: string, table: string | null, total: number, when: string, paid = false) => ({
+    ...order(id, total, { paid }),
+    table_id: table,
+    table_label: table,
+    created_at: when,
+  });
+
+  it("groups a table's unpaid orders into one debt", () => {
+    const rows = [
+      at("a", "t1", 100, "2026-08-13T12:00:00Z"),
+      at("b", "t1", 50, "2026-08-13T12:30:00Z"),
+    ];
+    const [table] = openTables(rows);
+    expect(table.total).toBe(150);
+    expect(table.orderCount).toBe(2);
+  });
+
+  it("dates a table by its oldest unpaid order, not its newest", () => {
+    // How long they have been sitting on the debt is the useful number.
+    const rows = [
+      at("a", "t1", 100, "2026-08-13T12:30:00Z"),
+      at("b", "t1", 50, "2026-08-13T12:00:00Z"),
+    ];
+    expect(openTables(rows)[0].since).toBe("2026-08-13T12:00:00Z");
+  });
+
+  it("lists the longest-waiting table first", () => {
+    const rows = [
+      at("a", "t2", 10, "2026-08-13T13:00:00Z"),
+      at("b", "t1", 10, "2026-08-13T11:00:00Z"),
+    ];
+    expect(openTables(rows).map(t => t.tableId)).toEqual(["t1", "t2"]);
+  });
+
+  it("ignores paid tables and orders with no table at all", () => {
+    // A fast-food QR pays before the kitchen sees it, so an unpaid one is a
+    // cart mid-Stripe rather than a debt anyone can collect.
+    const rows = [
+      at("a", "t1", 100, "2026-08-13T12:00:00Z", true),
+      at("b", null, 80, "2026-08-13T12:00:00Z"),
+    ];
+    expect(openTables(rows)).toEqual([]);
+  });
+});

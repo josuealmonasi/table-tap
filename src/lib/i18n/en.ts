@@ -206,6 +206,10 @@ export const en = {
     failed: "Couldn't load the bill. Please try again.",
   },
   settle: {
+    openTables: "Tables still to pay",
+    openTablesHint: "Longest wait first",
+    tableOwes: "{n} order · {amount}",
+    tableOwesPlural: "{n} orders · {amount}",
     title: "Table {label} · settle up",
     items: "What they ordered",
     total: "Total to collect",

@@ -1138,6 +1138,41 @@ h2.tt-serif {
   place-items: center;
   overflow: hidden;
 }
+/* Tables that still owe, above the kitchen board. Bordered rather than filled:
+   it is a standing fact about the floor, not an alert. */
+.tt-open-tables {
+  border: 1px solid var(--tt-line);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.tt-open-tables-head {
+  align-items: center;
+}
+.tt-open-tables-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+.tt-open-table {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--tt-line);
+  border-radius: 10px;
+  background: var(--tt-white);
+  font: inherit;
+  cursor: pointer;
+}
+.tt-open-table:hover {
+  background: var(--tt-surface);
+}
+
 /* The bill's running total, ruled off from the items above it. */
 .tt-bill-total {
   border-top: 1px solid var(--tt-line);

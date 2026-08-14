@@ -12,6 +12,7 @@ import OrderCard from "./OrderCard";
 import { BOARD_COLUMNS, columnOrders } from "@/lib/order-flow";
 import { useRouter } from "next/navigation";
 import ServiceRequestsBar from "./ServiceRequestsBar";
+import OpenTablesBar from "./OpenTablesBar";
 import { EmptyIcon } from "@/components/ui/icons";
 
 interface OrdersBoardProps {
@@ -118,6 +119,30 @@ export default function OrdersBoard({
             )}
           </div>
         </header>
+
+        {/* Who hasn't paid, above what the kitchen is cooking: a table that has
+
+
+            been sitting on an unpaid bill is the more urgent of the two. */}
+
+
+        <OpenTablesBar
+
+
+          restaurantId={restaurant.id}
+
+
+          currency={restaurant.currency}
+
+
+          orders={orders}
+
+
+          onSettled={() => router.refresh()}
+
+
+        />
+
 
         <ServiceRequestsBar
           restaurantId={restaurant.id}
