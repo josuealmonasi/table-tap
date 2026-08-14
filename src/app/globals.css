@@ -845,8 +845,10 @@ h2.tt-serif {
   overflow: hidden;
   background: var(--tt-surface);
   /* Reserved before the photo arrives, so the menu doesn't jump on load.
-     Lives here rather than inline so the desktop breakpoint can override it. */
-  aspect-ratio: 1600 / 600;
+     Lives here rather than inline so the desktop breakpoint can override it.
+     Tall enough to hold the avatar as well as the photo above it: the disc
+     sits inside the picture now, so the ratio carries both. */
+  aspect-ratio: 1600 / 760;
 }
 /* The photo dissolves into the header rather than stopping at a hard line, so
    the two read as one block. The gradient lands on the header's own colour, so
@@ -869,17 +871,17 @@ h2.tt-serif {
    like two designs. */
 @media (min-width: 1025px) {
   .tt-cover {
-    /* Half the height of the phone crop. The column is 1080px wide here, so
-       the phone's 8:3 would run to 405px and push the first dish off the
-       screen — the photo is an introduction, not the page. */
-    aspect-ratio: 1600 / 300;
+    /* Shallower than the phone crop — the column is 1080px wide here, so the
+       phone's proportions would run past 500px and push the first dish off
+       the screen. The photo is an introduction, not the page. */
+    aspect-ratio: 1600 / 440;
   }
 }
 
-/* Wherever there is a photo, the logo becomes an avatar straddling its bottom
-   edge — it is what ties the photo and the name together. Sized down on a
-   phone, where the band is only about 170px tall and an 84px disc would eat
-   half of it. */
+/* Wherever there is a photo, the logo becomes an avatar sitting on it, just
+   above its bottom edge — the photo runs the full height of the mark and stops
+   right above the name, so the picture frames the identity instead of being
+   cut by it. Sized down on a phone, where an 84px disc would eat the band. */
 .tt-cover + .tt-menu-header {
   /* The avatar supplies the gap between photo and name. */
   padding-top: 0;
@@ -892,9 +894,11 @@ h2.tt-serif {
 .tt-cover + .tt-menu-header .tt-brand-logo {
   position: relative;
   z-index: 1;
-  /* Half the disc sits over the photo. */
-  margin-top: -32px;
-  margin-bottom: 10px;
+  /* The whole disc sits over the photo, clearing its bottom edge by 10px.
+     The margin below has to carry that 10px as well, or the name lands hard
+     against the photo instead of a comfortable distance under it. */
+  margin-top: -74px;
+  margin-bottom: 24px;
   width: 64px;
   height: 64px;
   font-size: 30px;
@@ -912,8 +916,8 @@ h2.tt-serif {
    every width. */
 @media (min-width: 1025px) {
   .tt-cover + .tt-menu-header .tt-brand-logo {
-    margin-top: -42px;
-    margin-bottom: 14px;
+    margin-top: -96px;
+    margin-bottom: 28px;
     width: 84px;
     height: 84px;
     font-size: 38px;
