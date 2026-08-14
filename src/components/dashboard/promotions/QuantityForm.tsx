@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
+import { useDirty } from "@/hooks/useDirty";
 import { promoCost } from "@/lib/promo-math";
 import type { Category, MenuItem } from "@/lib/types";
 import type { PromotionInput } from "@/hooks/usePromotions";
@@ -50,6 +51,8 @@ export default function QuantityForm({
   const [picked, setPicked] = useState<{ id: string; qty: number }[]>(
     initial?.items.map(i => ({ id: i.item_id, qty: i.qty })) ?? [],
   );
+
+  const dirty = useDirty([kind, name, description, buyQty, payQty, tiers, picked]);
 
   const firstItem = products.find(p => p.id === picked[0]?.id);
   const unit = firstItem ? Number(firstItem.price) : 0;
@@ -269,7 +272,7 @@ export default function QuantityForm({
         <button
           type="submit"
           className="tt-btn tt-btn-primary tt-btn-sm"
-          disabled={!ready || saving}
+          disabled={!ready || !dirty || saving}
         >
           {saving
             ? t("common.saving")

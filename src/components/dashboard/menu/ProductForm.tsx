@@ -6,6 +6,7 @@ import type { MenuItem, Modifier } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
 import { DIETARY_TAGS } from "@/lib/dietary";
 import { useT } from "@/lib/i18n/context";
+import { useDirty } from "@/hooks/useDirty";
 import IconPicker from "./IconPicker";
 import ModifiersEditor from "./ModifiersEditor";
 import DishPhotoField from "./DishPhotoField";
@@ -47,6 +48,20 @@ export default function ProductForm({
   const [discountPct, setDiscountPct] = useState(String(initial?.discount_pct ?? ""));
   const [picked, setPicked] = useState<string[]>(selectedAddonIds);
   const [saving, setSaving] = useState(false);
+
+  // Nothing to save until something differs from what the form opened with.
+  const dirty = useDirty([
+    name,
+    description,
+    price,
+    imageUrl,
+    emoji,
+    popular,
+    modifiers,
+    dietary,
+    discountPct,
+    picked,
+  ]);
 
   // Clamp to the same 0–99 range the DB constraint enforces.
   const pct = Math.min(99, Math.max(0, Number(discountPct) || 0));
@@ -229,7 +244,7 @@ export default function ProductForm({
         <button
           type="submit"
           className="tt-btn tt-btn-primary tt-btn-sm"
-          disabled={!name || saving}
+          disabled={!name || !dirty || saving}
         >
           {saving ? t("common.saving") : submitLabel}
         </button>

@@ -71,7 +71,11 @@ export default function TableRow({ table, qr, onRename, onDelete }: TableRowProp
               autoFocus
             />
             <div className="tt-prodform-actions">
-              <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">
+              <button
+                className="tt-btn tt-btn-primary tt-btn-sm"
+                type="submit"
+                disabled={!value.trim() || value.trim() === table.label}
+              >
                 {t("dash.saveShort")}
               </button>
               <button
