@@ -284,11 +284,11 @@ export default function OrderingApp({
       if (data.deferred && data.orderId) {
         rememberOrder(restaurant.id, data.orderId);
         cart.clear();
-        // Straight to the bill: paying is the next thing worth making easy, and
-        // it is one dismissal away from carrying on eating.
+        // Back to the menu, nothing in the way. The bill is a tap away on the
+        // receipt button whenever they are ready — pushing it in their face
+        // the moment they order interrupts a meal that has not started.
         setScreen("menu");
         reloadBill();
-        setBillOpen(true);
         setLoading(false);
         return;
       }
@@ -473,10 +473,9 @@ export default function OrderingApp({
           open={billOpen}
           onClose={() => setBillOpen(false)}
           bill={bill}
-          restaurantId={restaurant.id}
+          restaurant={restaurant}
           tableId={table.id}
           tableLabel={table.label}
-          currency={restaurant.currency}
         />
       )}
       {detail}
