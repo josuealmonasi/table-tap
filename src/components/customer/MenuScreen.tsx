@@ -161,9 +161,9 @@ export default function MenuScreen({
   // one control a diner may need before reading anything, so it sits highest.
   const langToggle = <LanguageToggle />;
 
-  // The search is a circle on a phone, where it rides over the photo with the
-  // language toggle, and a field on a wide screen, where the identity line has
-  // room to keep it open. Both write the same query, so a resize keeps it.
+  // The search is a circle on a phone, on the name's line, and a field on a
+  // wide screen, where the identity line has room to keep it open. Both write
+  // the same query, so a resize keeps it.
   const searchBtn = (
     <button
       type="button"
@@ -209,13 +209,7 @@ export default function MenuScreen({
       <div className="tt-cover-stack">
         {showCover && (
           <>
-            {/* Floating over the photo, the way the delivery apps put their
-                round controls there: the photo is the top of the page, so the
-                controls that belong to the whole menu sit on it. */}
-            <div className="tt-cover-controls">
-              {searchBtn}
-              {langToggle}
-            </div>
+            <div className="tt-cover-controls">{langToggle}</div>
             <CoverBanner
               url={restaurant.cover_url}
               enabled={restaurant.cover_enabled}
@@ -251,7 +245,7 @@ export default function MenuScreen({
                   <BillIcon size={17} weight="bold" />
                 </button>
               )}
-              {!showCover && searchBtn}
+              {searchBtn}
               {searchField}
             </div>
           </div>
