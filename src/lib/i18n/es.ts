@@ -41,6 +41,7 @@ export const es: Messages = {
     newProduct: "Nuevo producto",
     newExtra: "Nuevo extra",
     search: "Busca en el menú…",
+    searchIn: "Busca en {name}",
     all: "Todo",
     closed: "⏸️ No estamos tomando pedidos en este momento — vuelve pronto.",
     table: "Mesa {label}",

@@ -796,6 +796,9 @@ h2.tt-serif {
 }
 .tt-cover-controls {
   position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   top: 12px;
   /* Same inset as the header's own padding, so it lines up with the name and
      search below it. */
@@ -806,14 +809,21 @@ h2.tt-serif {
    a known colour and invisible against a photograph. Over the cover it takes
    the app's own surface and ink so it reads whatever the owner uploaded, with
    a soft shadow to lift it off a busy image. */
-.tt-cover-controls .tt-lang-toggle {
+.tt-cover-controls .tt-lang-toggle,
+.tt-cover-controls .tt-icon-round {
   background: var(--tt-white);
   border-color: var(--tt-line);
   color: var(--tt-ink);
   box-shadow: 0 2px 10px color-mix(in srgb, var(--tt-ink) 25%, transparent);
 }
-.tt-cover-controls .tt-lang-toggle:hover {
+.tt-cover-controls .tt-lang-toggle:hover,
+.tt-cover-controls .tt-icon-round:hover {
   background: var(--tt-surface);
+}
+/* Big enough to hit with a thumb while it floats over a photograph. */
+.tt-cover-controls .tt-icon-round {
+  width: 38px;
+  height: 38px;
 }
 /* With the photo carrying the language toggle, the header's copy would be a
    second one. :has keeps this to menus that actually have a photo. */
@@ -873,8 +883,10 @@ h2.tt-serif {
   .tt-cover {
     /* Shallower than the phone crop — the column is 1080px wide here, so the
        phone's proportions would run past 500px and push the first dish off
-       the screen. The photo is an introduction, not the page. */
-    aspect-ratio: 1600 / 440;
+       the screen. Close to 4.4:1, the proportion the delivery apps use for a
+       restaurant banner: wide enough to read as a header, short enough that
+       the food starts above the fold. */
+    aspect-ratio: 1600 / 365;
   }
 }
 
@@ -2961,6 +2973,57 @@ h2.tt-serif {
   padding: 10px 14px;
   font-size: 15px;
   border-radius: 999px;
+}
+
+/* The search's placeholder, shaped like whichever control it stands in for. */
+.tt-sk-search {
+  width: 34px;
+  height: 34px;
+}
+@media (min-width: 1025px) {
+  .tt-sk-search {
+    width: min(340px, 30vw);
+    height: 44px;
+  }
+}
+
+/* On a wide screen the search is a field, always open: the column has room
+   for it, and a diner scanning a long menu shouldn't have to find a button
+   first. On a phone it stays a circle — a permanent field would take the whole
+   line the name sits on. */
+.tt-search-field {
+  display: none;
+}
+@media (min-width: 1025px) {
+  .tt-search-field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: min(340px, 30vw);
+    height: 44px;
+    padding: 0 16px;
+    border-radius: 999px;
+    background: var(--tt-header-ctrl-bg);
+    color: var(--tt-muted);
+  }
+  .tt-search-field input {
+    width: 100%;
+    border: 0;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    font-size: 15px;
+    color: var(--tt-ink);
+  }
+  .tt-search-field input::placeholder {
+    color: var(--tt-muted);
+  }
+  /* One search to a screen: the field replaces both the toggle that opens a
+     search and the panel it used to open. */
+  .tt-search-toggle,
+  .tt-customer-search {
+    display: none;
+  }
 }
 
 /* Customer menu: shown when the restaurant paused orders */

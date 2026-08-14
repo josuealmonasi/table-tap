@@ -161,12 +161,13 @@ export default function MenuScreen({
   // one control a diner may need before reading anything, so it sits highest.
   const langToggle = <LanguageToggle />;
 
-  // Search sits on the name's line, opposite the name — it belongs to the menu
-  // below it rather than to the photo above.
+  // The search is a circle on a phone, where it rides over the photo with the
+  // language toggle, and a field on a wide screen, where the identity line has
+  // room to keep it open. Both write the same query, so a resize keeps it.
   const searchBtn = (
     <button
       type="button"
-      className="tt-icon-round"
+      className="tt-icon-round tt-search-toggle"
       aria-label={t("menu.search")}
       aria-expanded={searchOpen}
       // Closing clears the query. Hiding the input while keeping the term left
@@ -186,6 +187,19 @@ export default function MenuScreen({
     </button>
   );
 
+  const searchField = (
+    <div className="tt-search-field">
+      <SearchIcon size={17} weight="bold" />
+      <input
+        type="search"
+        value={search}
+        placeholder={t("menu.searchIn", { name: restaurant.name })}
+        aria-label={t("menu.searchIn", { name: restaurant.name })}
+        onChange={e => changeSearch(e.target.value)}
+      />
+    </div>
+  );
+
   return (
     <div className="tt-root tt-root-wide">
       {/* Photo, floating controls and identity share one box on purpose: it is
@@ -195,7 +209,13 @@ export default function MenuScreen({
       <div className="tt-cover-stack">
         {showCover && (
           <>
-            <div className="tt-cover-controls">{langToggle}</div>
+            {/* Floating over the photo, the way the delivery apps put their
+                round controls there: the photo is the top of the page, so the
+                controls that belong to the whole menu sit on it. */}
+            <div className="tt-cover-controls">
+              {searchBtn}
+              {langToggle}
+            </div>
             <CoverBanner
               url={restaurant.cover_url}
               enabled={restaurant.cover_enabled}
@@ -231,7 +251,8 @@ export default function MenuScreen({
                   <BillIcon size={17} weight="bold" />
                 </button>
               )}
-              {searchBtn}
+              {!showCover && searchBtn}
+              {searchField}
             </div>
           </div>
           <div className="tt-sage tt-brand-tagline">{restaurant.tagline}</div>
