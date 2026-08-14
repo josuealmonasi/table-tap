@@ -5,6 +5,9 @@ import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import { canPayMineOnly, ordersToPay, type BillSide, type TableBill } from "@/lib/table-bill";
+import { applyCoupon } from "@/lib/pricing";
+import type { AppliedCoupon } from "@/lib/pricing";
+import CouponBox from "./CouponBox";
 import OrderTotals from "./OrderTotals";
 import TipPicker from "./TipPicker";
 import type { Restaurant } from "@/lib/types";
@@ -79,9 +82,10 @@ function Section({ heading, side, currency }: { heading: string; side: BillSide;
  * kitchen has already made them — and that the table's own share is separated
  * from everybody else's.
  *
- * There is no coupon box on purpose. These orders were priced when they were
- * placed, with whatever coupon applied then; taking a second one here would
- * discount the same food twice.
+ * A coupon applies to the share being paid, not to the table — so two people
+ * splitting a bill can each use their own code on their own food. Orders that
+ * were already discounted when they were placed can't take a second one; the
+ * server refuses that, and the box is hidden here so nobody tries.
  */
 export default function BillSheet({
   open,
@@ -98,9 +102,18 @@ export default function BillSheet({
   const [scope, setScope] = useState<"all" | "mine">("all");
   const [tipPct, setTipPct] = useState(0);
   const [tipCustom, setTipCustom] = useState<number | null>(null);
+  const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
+
+  const orders = ordersToPay(bill, scope);
+  // A coupon is offered only when none of the orders being settled already
+  // carries one — that discount is inside their totals, and a second would take
+  // the same money off twice.
+  const alreadyDiscounted = orders.some(o => o.coupon_code);
 
   // What the chosen scope comes to, before any tip.
-  const base = scope === "mine" ? bill.mine.total : bill.total;
+  const food = scope === "mine" ? bill.mine.total : bill.total;
+  const discount = coupon ? applyCoupon(coupon, food) : 0;
+  const base = round2(food - discount);
   const tip = tipCustom !== null ? Math.min(tipCustom, base) : round2(base * (tipPct / 100));
   const total = round2(base + tip);
 
@@ -115,7 +128,8 @@ export default function BillSheet({
           tableId,
           // Which orders, and how much to add on top. The food's price is
           // summed from the stored rows either way.
-          orderIds: ordersToPay(bill, scope).map(o => o.id),
+          orderIds: orders.map(o => o.id),
+          couponCode: coupon?.code,
           tipPct: tipCustom === null ? tipPct : undefined,
           tipAmount: tipCustom ?? undefined,
         }),
@@ -126,6 +140,13 @@ export default function BillSheet({
     } catch {
       setBusy(false);
     }
+  }
+
+  // Switching what you're paying for changes the amount the coupon was checked
+  // against, so the code is re-entered rather than silently re-priced.
+  function changeScope(next: "all" | "mine"): void {
+    setScope(next);
+    setCoupon(null);
   }
 
   async function payAtTable(): Promise<void> {
@@ -162,17 +183,29 @@ export default function BillSheet({
               <button
                 type="button"
                 className={`tt-tip-chip ${scope === "all" ? "tt-tip-chip-active" : ""}`}
-                onClick={() => setScope("all")}
+                onClick={() => changeScope("all")}
               >
                 {t("bill.scopeAll")}
               </button>
               <button
                 type="button"
                 className={`tt-tip-chip ${scope === "mine" ? "tt-tip-chip-active" : ""}`}
-                onClick={() => setScope("mine")}
+                onClick={() => changeScope("mine")}
               >
                 {t("bill.scopeMine")}
               </button>
+            </div>
+          )}
+
+          {!alreadyDiscounted && (
+            <div className="tt-coupon-row">
+              <CouponBox
+                restaurantId={restaurant.id}
+                subtotal={food}
+                applied={coupon}
+                onApply={setCoupon}
+                onRemove={() => setCoupon(null)}
+              />
             </div>
           )}
 
@@ -192,6 +225,8 @@ export default function BillSheet({
 
           <OrderTotals
             subtotal={base}
+            grossSubtotal={food}
+            discount={discount}
             serviceFee={0}
             tip={tip}
             tipPct={tipCustom !== null ? 0 : tipPct}

@@ -11,6 +11,22 @@ export interface CartPromo extends QuantityPromo {
   itemIds: string[];
 }
 
+/**
+ * What a coupon takes off a given amount of goods.
+ *
+ * Split out of priceCart because the same sum is needed where there is no cart
+ * at all — settling a dine-in bill prices stored orders, not cart lines — and
+ * two copies of this would be two answers to "how much is my discount".
+ *
+ * Never more than the goods are worth, so a total can't go negative.
+ */
+export function applyCoupon(coupon: AppliedCoupon, base: number): number {
+  if (base < (coupon.minSubtotal ?? 0)) return 0;
+  const raw =
+    coupon.kind === "percent" ? round2(base * (coupon.value / 100)) : coupon.value;
+  return Math.max(0, Math.min(round2(raw), base));
+}
+
 /** A coupon that has already been looked up and confirmed to exist. */
 export interface AppliedCoupon {
   code: string;
@@ -182,14 +198,7 @@ export function priceCart(input: PriceInput): PricedCart {
   // 3. The coupon stacks on top, against what's left after the promos, and can
   //    never take off more than the goods are worth.
   const couponBase = round2(grossSubtotal - itemDiscount - promoDiscount);
-  let couponDiscount = 0;
-  if (coupon && couponBase >= (coupon.minSubtotal ?? 0)) {
-    const raw =
-      coupon.kind === "percent"
-        ? round2(couponBase * (coupon.value / 100))
-        : coupon.value;
-    couponDiscount = Math.max(0, Math.min(round2(raw), couponBase));
-  }
+  const couponDiscount = coupon ? applyCoupon(coupon, couponBase) : 0;
 
   const discount = round2(itemDiscount + promoDiscount + couponDiscount);
   const subtotal = round2(grossSubtotal - discount);

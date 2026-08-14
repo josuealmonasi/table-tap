@@ -275,6 +275,8 @@ export const en = {
     expired: "That coupon is no longer available.",
     limitReached: "This coupon has reached its limit of claims.",
     minSubtotal: "Your order isn't large enough for this coupon yet.",
+    alreadyUsed: "One of these orders already used a coupon.",
+    onlyYours: "A coupon applies to the part of the bill you're paying.",
     tooMany: "Too many tries — please wait a moment.",
   },
   coupons: {
@@ -512,6 +514,9 @@ export const en = {
     badCover: "That image must be uploaded here, not linked from elsewhere.",
     payLaterNotAllowed: "This restaurant takes payment when you order.",
     billSettled: "That bill has already been paid.",
+    couponNotFound: "We couldn't find that coupon.",
+    couponNotValid: "That coupon can't be used on this bill.",
+    couponAlreadyUsed: "One of these orders already used a coupon when it was placed.",
     schedNoRules: "Add at least one period.",
     schedNoDays: "Pick at least one day.",
     schedBadTime: "Enter a valid start and end time.",

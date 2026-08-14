@@ -62,6 +62,25 @@ export async function POST(req: NextRequest) {
             .eq("id", first.id);
         }
       }
+
+      // The coupon use was reserved when the bill was sent to Stripe; the
+      // payment makes it real, and the code is stamped on the order it paid
+      // for so the same orders can never take a second one.
+      const settleCoupon = session.metadata?.settle_coupon ?? "";
+      if (settleCoupon) {
+        await db
+          .from("orders")
+          .update({
+            coupon_code: settleCoupon,
+            discount: Number(session.metadata?.settle_discount ?? 0),
+          })
+          .eq("id", settleIds[0]);
+        await db
+          .from("coupon_redemptions")
+          .update({ confirmed_at: new Date().toISOString() })
+          .eq("order_id", settleIds[0])
+          .is("confirmed_at", null);
+      }
       return NextResponse.json({ received: true });
     }
 
@@ -94,6 +113,14 @@ export async function POST(req: NextRequest) {
   // burned by an abandoned cart, and clear the order that will never be paid.
   if (event.type === "checkout.session.expired") {
     const session = event.data.object as Stripe.Checkout.Session;
+    // A bill that was never paid: the orders are real food already eaten, so
+    // only the coupon reservation goes back — the rows stay on the table.
+    const settled = (session.metadata?.settle_order_ids ?? "").split(",")[0]?.trim();
+    if (settled) {
+      await releaseReservation(settled);
+      return NextResponse.json({ received: true });
+    }
+
     const orderId = session.metadata?.order_id;
     if (orderId) await releaseAbandonedOrder(orderId);
   }
@@ -106,7 +133,8 @@ export async function POST(req: NextRequest) {
  * reservation record, and removes the pending order. Safe to run twice —
  * it only ever touches a still-unconfirmed reservation.
  */
-async function releaseAbandonedOrder(orderId: string): Promise<void> {
+/** Hands back an unconfirmed coupon use held against an order. */
+async function releaseReservation(orderId: string): Promise<void> {
   const supabase = createAdminClient();
 
   const { data: reservation } = await supabase
@@ -122,6 +150,11 @@ async function releaseAbandonedOrder(orderId: string): Promise<void> {
   if (reservation?.id) {
     await supabase.from("coupon_redemptions").delete().eq("id", reservation.id);
   }
+}
+
+async function releaseAbandonedOrder(orderId: string): Promise<void> {
+  const supabase = createAdminClient();
+  await releaseReservation(orderId);
 
   // Only ever remove an order that was never paid for.
   await supabase

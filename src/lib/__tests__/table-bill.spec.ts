@@ -6,6 +6,7 @@ import {
   tableBill,
   unpaidOrders,
 } from "@/lib/table-bill";
+import { applyCoupon } from "@/lib/pricing";
 import type { Order, OrderStatus } from "@/lib/types";
 
 function order(
@@ -173,5 +174,34 @@ describe("which tables owe money", () => {
       at("b", null, 80, "2026-08-13T12:00:00Z"),
     ];
     expect(openTables(rows)).toEqual([]);
+  });
+});
+
+describe("a coupon on a shared bill", () => {
+  const coupon = { code: "GET-10X", kind: "percent" as const, value: 10 };
+
+  it("discounts only the share being paid, so two diners can each use one", () => {
+    const bill = tableBill([order("a", 200), order("b", 300)], ["a"]);
+    // Mine is 200, so my 10% is 20 — the other diner's 300 is untouched and
+    // their own code works the same way against their own food.
+    expect(applyCoupon(coupon, bill.mine.total)).toBe(20);
+    expect(applyCoupon(coupon, bill.others.total)).toBe(30);
+  });
+
+  it("never takes off more than the food is worth", () => {
+    expect(applyCoupon({ code: "BIG-ONE", kind: "fixed", value: 500 }, 120)).toBe(120);
+  });
+
+  it("does nothing below the coupon's minimum spend", () => {
+    const min = { ...coupon, minSubtotal: 300 };
+    expect(applyCoupon(min, 200)).toBe(0);
+    expect(applyCoupon(min, 300)).toBe(30);
+  });
+
+  it("marks orders that were already discounted when they were placed", () => {
+    // Those totals already carry a discount; a second code would take the same
+    // money off twice, so the bill hides the box and the server refuses.
+    const bill = tableBill([{ ...order("a", 200), coupon_code: "OLD-ONE" }], ["a"]);
+    expect(ordersToPay(bill, "all").some(o => o.coupon_code)).toBe(true);
   });
 });
