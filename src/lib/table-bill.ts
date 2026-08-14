@@ -30,9 +30,15 @@ export interface TableBill {
   settled: boolean;
 }
 
-/** Orders still owed for. Cancelled ones are not debts. */
+/**
+ * Orders still owed for.
+ *
+ * Cancelled ones were never served. Written-off ones were served and never
+ * paid for, but the restaurant has already given up on them — showing either
+ * on a bill would ask somebody to pay for food nobody is charging for.
+ */
 export function unpaidOrders(orders: Order[]): Order[] {
-  return orders.filter(o => !o.paid && o.status !== "cancelled");
+  return orders.filter(o => !o.paid && !o.written_off && o.status !== "cancelled");
 }
 
 function side(orders: Order[]): BillSide {

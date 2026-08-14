@@ -54,6 +54,14 @@ describe("what a table owes", () => {
     expect(tableBill(orders, []).total).toBe(100);
   });
 
+  it("does not charge for an order already written off", () => {
+    // The restaurant gave up on it; putting it back on a bill would ask
+    // somebody to pay for food nobody is charging for.
+    const orders = [order("a", 100), { ...order("b", 80), written_off: true }];
+    expect(tableBill(orders, []).total).toBe(100);
+    expect(unpaidOrders(orders).map(o => o.id)).toEqual(["a"]);
+  });
+
   it("is settled when nothing is outstanding", () => {
     const bill = tableBill([order("a", 100, { paid: true })], ["a"]);
     expect(bill.settled).toBe(true);
