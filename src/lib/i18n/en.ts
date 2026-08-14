@@ -39,6 +39,7 @@ export const en = {
     newProduct: "New product",
     newExtra: "New extra",
     search: "Search the menu…",
+    searchIn: "Search in {name}",
     all: "All",
     closed: "⏸️ We're not taking orders right now — please check back soon.",
     table: "Table {label}",
