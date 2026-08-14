@@ -462,7 +462,15 @@ create policy "public read restaurants"
 -- then re-grant only the public reads the customer menu needs. Re-run on every
 -- `db:create`, so tables added later get stripped too.
 revoke all on all tables in schema public from anon;
-grant select on restaurant_tables, menus, categories, menu_items, item_addons to anon;
+grant select on menus, categories, menu_items, item_addons to anon;
+-- restaurant_tables is deliberately NOT here. A table id is the only thing
+-- between a caller and a table's bill — and, where a restaurant takes payment
+-- at the end, between a caller and an order charged to somebody else's table.
+-- Listable, those ids stop being secrets: the publishable key ships in every
+-- browser, so one query returned every table of every restaurant. The customer
+-- page reads its own table with the secret key instead, scoped to the ids in
+-- the URL, which puts the QR code back in the position of being the thing you
+-- have to hold.
 -- Promotions are public offers — the customer menu renders them. Note what is
 -- NOT here: `coupons` and `coupon_redemptions`. A coupon code is a secret the
 -- customer is supposed to be told out-of-band, so anon must never read that
@@ -487,9 +495,9 @@ grant select on restaurants to authenticated;
 -- table-shaping privileges, and RLS does not guard those, so drop them.
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 
+-- No public select policy on restaurant_tables: the grant above is gone, and
+-- the team's own "team manages tables" policy (FOR ALL) covers the dashboard.
 drop policy if exists "public read tables" on restaurant_tables;
-create policy "public read tables"
-  on restaurant_tables for select using (true);
 
 -- Only ACTIVE menus are public. Owners still see their inactive menus via the
 -- "owner manages menus" policy below (FOR ALL covers SELECT).
