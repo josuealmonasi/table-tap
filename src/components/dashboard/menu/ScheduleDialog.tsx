@@ -52,6 +52,15 @@ export default function ScheduleDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Measured against the schedule the dialog was handed rather than a snapshot
+  // of its own first render, so saving settles the button instead of leaving it
+  // lit over changes that are already stored.
+  const stored = JSON.stringify([
+    schedule?.enabled ?? true,
+    schedule?.rules?.length ? schedule.rules : [EMPTY_RULE],
+  ]);
+  const dirty = stored !== JSON.stringify([enabled, rules]);
+
   const dayNames = [0, 1, 2, 3, 4, 5, 6].map(d => t(`sched.day${d}`));
 
   function patch(index: number, next: Partial<ScheduleRule>) {
@@ -190,7 +199,7 @@ export default function ScheduleDialog({
         <button
           type="button"
           className="tt-btn tt-btn-primary tt-btn-sm"
-          disabled={saving}
+          disabled={saving || !dirty}
           onClick={save}
         >
           {saving ? t("common.saving") : t("promos.saveChanges")}

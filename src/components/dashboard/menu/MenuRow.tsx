@@ -123,7 +123,11 @@ export default function MenuRow({
             autoFocus
           />
           <div className="tt-prodform-actions">
-            <button className="tt-btn tt-btn-primary tt-btn-sm" type="submit">
+            <button
+              className="tt-btn tt-btn-primary tt-btn-sm"
+              type="submit"
+              disabled={!value.trim() || value.trim() === menu.name}
+            >
               {t("menu.save")}
             </button>
             <button

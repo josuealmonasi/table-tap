@@ -18,6 +18,16 @@ import { Modal } from "@/components/ui/Modal";
 import { useRowMemory } from "@/hooks/useRowMemory";
 
 /** Coupon codes an owner or manager hands out, with their usage so far. */
+interface CouponFields {
+  code: string;
+  kind: "percent" | "fixed";
+  value: string;
+  maxUses: string;
+  minSubtotal: string;
+  startsAt: string;
+  endsAt: string;
+}
+
 export default function CouponsPanel({
   restaurantId,
   currency,
@@ -46,19 +56,43 @@ export default function CouponsPanel({
   const normalized = normalizeCoupon(code);
   const codeOk = isValidCouponFormat(normalized);
 
+  /**
+   * A coupon as the form shows it. One place, because the fields are filled
+   * from it when an edit opens and compared against it to decide whether
+   * anything has actually been changed since.
+   */
+  function fieldsOf(c: Coupon): CouponFields {
+    return {
+      code: c.code,
+      kind: c.kind,
+      value: String(c.value),
+      maxUses: c.max_uses === null ? "" : String(c.max_uses),
+      minSubtotal: String(c.min_subtotal ?? 0),
+      // The inputs are datetime-local, which only accepts YYYY-MM-DDTHH:mm —
+      // a date-only value is rejected silently and the field comes up blank,
+      // which would let a save quietly clear the coupon's schedule.
+      startsAt: c.starts_at ? c.starts_at.slice(0, 16) : "",
+      endsAt: c.ends_at ? c.ends_at.slice(0, 16) : "",
+    };
+  }
+
+  // Nothing to save on an edit until a field differs from the stored coupon.
+  // A new coupon has nothing to compare to, so its own required fields decide.
+  const shown: CouponFields = { code, kind, value, maxUses, minSubtotal, startsAt, endsAt };
+  const dirty =
+    !editing || JSON.stringify(fieldsOf(editing)) !== JSON.stringify(shown);
+
   /** Fills the form from a code and opens the dialog on it. */
   function startEdit(c: Coupon) {
+    const f = fieldsOf(c);
     setEditing(c);
-    setCode(c.code);
-    setKind(c.kind);
-    setValue(String(c.value));
-    setMaxUses(c.max_uses === null ? "" : String(c.max_uses));
-    setMinSubtotal(String(c.min_subtotal ?? 0));
-    // The inputs are datetime-local, which only accepts YYYY-MM-DDTHH:mm —
-    // a date-only value is rejected silently and the field comes up blank,
-    // which would let a save quietly clear the coupon's schedule.
-    setStartsAt(c.starts_at ? c.starts_at.slice(0, 16) : "");
-    setEndsAt(c.ends_at ? c.ends_at.slice(0, 16) : "");
+    setCode(f.code);
+    setKind(f.kind);
+    setValue(f.value);
+    setMaxUses(f.maxUses);
+    setMinSubtotal(f.minSubtotal);
+    setStartsAt(f.startsAt);
+    setEndsAt(f.endsAt);
     setAdding(true);
   }
 
@@ -264,7 +298,7 @@ export default function CouponsPanel({
             <button
               type="submit"
               className="tt-btn tt-btn-primary tt-btn-sm"
-              disabled={!codeOk || !value || saving}
+              disabled={!codeOk || !value || !dirty || saving}
             >
               {saving
                 ? t("common.saving")

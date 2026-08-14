@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useAdminActions } from "@/hooks/useAdminActions";
 import { useT } from "@/lib/i18n/context";
+import { useDirty } from "@/hooks/useDirty";
 import type { AdminUserRow } from "./AdminPanel";
 
 interface AdminEditUserProps {
@@ -26,6 +27,7 @@ export default function AdminEditUser({ user, onClose }: AdminEditUserProps) {
   const [email, setEmail] = useState(user?.email ?? "");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState(user?.role ?? "kitchen");
+  const dirty = useDirty([name, email, password, role]);
 
   if (!user) return null;
   const canEditRole = roleEditable(user.role) && !user.founding;
@@ -127,7 +129,7 @@ export default function AdminEditUser({ user, onClose }: AdminEditUserProps) {
           <button
             type="submit"
             className="tt-btn tt-btn-primary tt-btn-sm"
-            disabled={busy}
+            disabled={busy || !dirty}
           >
             {busy ? t("common.saving") : t("common.save")}
           </button>

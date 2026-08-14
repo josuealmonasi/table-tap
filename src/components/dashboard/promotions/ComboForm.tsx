@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
+import { useDirty } from "@/hooks/useDirty";
 import type { Category, MenuItem } from "@/lib/types";
 import type { PromotionInput } from "@/hooks/usePromotions";
 import type { PromotionWithItems } from "@/lib/promotions";
@@ -42,6 +43,8 @@ export default function ComboForm({
   const [picked, setPicked] = useState<{ id: string; qty: number }[]>(
     initial?.items.map(i => ({ id: i.item_id, qty: i.qty })) ?? [],
   );
+
+  const dirty = useDirty([name, emoji, description, price, picked]);
 
   const regular = picked.reduce((sum, p) => {
     const item = products.find(i => i.id === p.id);
@@ -169,7 +172,7 @@ export default function ComboForm({
         <button
           type="submit"
           className="tt-btn tt-btn-primary tt-btn-sm"
-          disabled={!ready || saving}
+          disabled={!ready || !dirty || saving}
         >
           {saving
             ? t("common.saving")

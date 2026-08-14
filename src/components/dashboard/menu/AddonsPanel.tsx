@@ -6,6 +6,7 @@ import type { MenuItem } from "@/lib/types";
 import type { AddonInput } from "@/hooks/useMenuEditor";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useT } from "@/lib/i18n/context";
+import { useDirty } from "@/hooks/useDirty";
 import { Modal } from "@/components/ui/Modal";
 import ReorderButtons from "@/components/ui/ReorderButtons";
 import IconPicker from "./IconPicker";
@@ -245,6 +246,7 @@ function AddonForm({ initial, submitLabel, onSubmit, onCancel }: AddonFormProps)
   const [price, setPrice] = useState(String(initial?.price ?? ""));
   const [emoji, setEmoji] = useState(initial?.emoji ?? "");
   const [saving, setSaving] = useState(false);
+  const dirty = useDirty([name, price, emoji]);
 
   return (
     <form
@@ -290,7 +292,7 @@ function AddonForm({ initial, submitLabel, onSubmit, onCancel }: AddonFormProps)
         <button
           type="submit"
           className="tt-btn tt-btn-primary tt-btn-sm"
-          disabled={!name || saving}
+          disabled={!name || !dirty || saving}
         >
           {saving ? "…" : submitLabel}
         </button>
