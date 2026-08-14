@@ -36,10 +36,32 @@ export async function POST(req: NextRequest) {
       .map(id => id.trim())
       .filter(Boolean);
     if (settleIds.length > 0 && session.payment_status === "paid") {
-      await createAdminClient()
+      const db = createAdminClient();
+      await db
         .from("orders")
         .update({ paid: true, pay_method: "card" })
         .in("id", settleIds);
+
+      // The tip was collected against the table, not a dish, so it is recorded
+      // on the first of the settled orders. The takings then match what Stripe
+      // actually took, which is the number that has to be right.
+      const tip = Number(session.metadata?.settle_tip ?? 0);
+      if (tip > 0) {
+        const { data: first } = await db
+          .from("orders")
+          .select("id, tip, total")
+          .eq("id", settleIds[0])
+          .single();
+        if (first) {
+          await db
+            .from("orders")
+            .update({
+              tip: Number(first.tip ?? 0) + tip,
+              total: Number(first.total ?? 0) + tip,
+            })
+            .eq("id", first.id);
+        }
+      }
       return NextResponse.json({ received: true });
     }
 

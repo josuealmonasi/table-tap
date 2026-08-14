@@ -186,6 +186,9 @@ export const es: Messages = {
     chooseFirst: "Elige {groups} para continuar.",
   },
   bill: {
+    scopeAll: "Toda la mesa",
+    scopeMine: "Solo lo mío",
+    payNow: "Pagar {amount}",
     open: "Tu cuenta",
     title: "Cuenta · Mesa {label}",
     yours: "Tus platillos",

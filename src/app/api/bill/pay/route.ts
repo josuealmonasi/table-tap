@@ -8,6 +8,10 @@ import type { Order } from "@/lib/types";
 
 export const runtime = "nodejs";
 
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 // POST /api/bill/pay
 // Body: { restaurantId, tableId, orderIds: string[] }
 //
@@ -23,10 +27,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
 
-  const { restaurantId, tableId, orderIds } = (await req.json()) as {
+  const { restaurantId, tableId, orderIds, tipPct, tipAmount } = (await req.json()) as {
     restaurantId?: string;
     tableId?: string;
     orderIds?: string[];
+    tipPct?: number;
+    tipAmount?: number;
   };
   if (!restaurantId || !tableId || !Array.isArray(orderIds) || orderIds.length === 0) {
     return await apiError("apiErr.invalidRequest", 400);
@@ -62,7 +68,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const orders = (rows ?? []) as Pick<Order, "id" | "total" | "items">[];
   if (orders.length === 0) return await apiError("apiErr.billSettled", 409);
 
-  const amount = orders.reduce((sum, o) => sum + Number(o.total), 0);
+  const food = orders.reduce((sum, o) => sum + Number(o.total), 0);
+
+  // The tip is the one figure the diner sets, so it is clamped the same way the
+  // cart clamps it: never negative, never more than the food it is thanking
+  // somebody for. A percentage is recomputed here rather than trusted, so a
+  // request cannot claim 15% and send a different number.
+  const pct = Math.min(100, Math.max(0, Number(tipPct) || 0));
+  const asked = tipAmount != null ? Number(tipAmount) : (food * pct) / 100;
+  const tip = Math.min(Math.max(0, round2(asked)), food);
+
+  const amount = round2(food + tip);
   const cents = Math.round(amount * 100);
   if (cents <= 0) return await apiError("apiErr.billSettled", 409);
 
@@ -89,7 +105,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         ],
         // The webhook marks exactly these rows paid. It is the only thing that
         // does: a returning browser proves nothing about whether money moved.
-        metadata: { settle_order_ids: orders.map(o => o.id).join(",") },
+        metadata: {
+          settle_order_ids: orders.map(o => o.id).join(","),
+          // Recorded so the takings show what was actually collected. It lands
+          // on one of the settled orders rather than being split across them:
+          // a tip is for the table's service, not attributable to a dish.
+          settle_tip: String(tip),
+        },
         payment_intent_data: {
           application_fee_amount: platformFeeCents(cents),
         },

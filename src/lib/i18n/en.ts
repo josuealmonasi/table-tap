@@ -191,6 +191,9 @@ export const en = {
     chooseFirst: "Choose {groups} to continue.",
   },
   bill: {
+    scopeAll: "Whole table",
+    scopeMine: "Only mine",
+    payNow: "Pay {amount}",
     open: "Your bill",
     title: "Bill · Table {label}",
     yours: "Your items",
