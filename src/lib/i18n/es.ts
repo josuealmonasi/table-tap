@@ -201,6 +201,10 @@ export const es: Messages = {
     failed: "No se pudo cargar la cuenta. Inténtalo de nuevo.",
   },
   settle: {
+    openTables: "Mesas por cobrar",
+    openTablesHint: "Primero las que llevan más tiempo",
+    tableOwes: "{n} pedido · {amount}",
+    tableOwesPlural: "{n} pedidos · {amount}",
     title: "Mesa {label} · cobrar",
     items: "Lo que ordenaron",
     total: "Total a cobrar",
