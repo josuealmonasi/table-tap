@@ -5,7 +5,7 @@ import Link from "next/link";
 import { orderCode, type OrderStatus } from "@/lib/types";
 import { useOrderPolling } from "@/hooks/useOrderPolling";
 import type { TrackedOrder } from "@/lib/order-tracking";
-import { forgetOrder, rememberOrder } from "@/lib/recent-order";
+import { forgetOrder, rememberRecentOrder } from "@/lib/recent-order";
 import { useT } from "@/lib/i18n/context";
 import OrderStatusTimeline from "./OrderStatusTimeline";
 import TrackedItemsCard from "./TrackedItemsCard";
@@ -51,7 +51,7 @@ export default function OrderTracker({ initialOrder }: OrderTrackerProps) {
   // forget it once it's done, so a stale "track your order" link disappears.
   useEffect(() => {
     if (TERMINAL.includes(order.status)) forgetOrder(order.restaurant_id);
-    else rememberOrder(order.restaurant_id, order.id);
+    else rememberRecentOrder(order.restaurant_id, order.id);
   }, [order.restaurant_id, order.id, order.status]);
 
   return (

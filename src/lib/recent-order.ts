@@ -13,7 +13,7 @@ const listKey = (restaurantId: string) => `tt-orders:${restaurantId}`;
 const MAX_REMEMBERED = 10;
 
 /** Store this order as the restaurant's in-progress one for this device. */
-export function rememberOrder(restaurantId: string, orderId: string): void {
+export function rememberRecentOrder(restaurantId: string, orderId: string): void {
   try {
     localStorage.setItem(key(restaurantId), orderId);
     // Also append to the history. The single key above answers "what should

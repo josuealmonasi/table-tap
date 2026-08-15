@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { Category, MenuItem, Restaurant, RestaurantTable } from "@/lib/types";
 import { DIETARY_TAGS } from "@/lib/dietary";
-import { recallOrder } from "@/lib/recent-order";
 import { readMenuParams, syncMenuUrl } from "@/lib/menu-params";
 import { useT } from "@/lib/i18n/context";
 import MenuClosed from "./MenuClosed";
@@ -46,6 +45,7 @@ export default function MenuScreen({
   onOpenCart,
   billDue = false,
   onOpenBill,
+  trackId,
 }: {
   restaurant: Restaurant;
   table: RestaurantTable | null;
@@ -64,6 +64,8 @@ export default function MenuScreen({
   /** The table has unpaid orders, so the bill is worth offering. */
   billDue?: boolean;
   onOpenBill?: () => void;
+  /** An order this phone placed and can still watch — shows the track link. */
+  trackId?: string | null;
 }) {
   const t = useT();
   // The URL is the starting state, so a shared link and a reload both land on
@@ -75,14 +77,6 @@ export default function MenuScreen({
   const [searchOpen, setSearchOpen] = useState(Boolean(initial.q));
   const [diet, setDiet] = useState<string[]>(initial.diet);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  // An in-progress order for this restaurant on this device — lets the diner
-  // hop back to its live status after returning to the menu to order more.
-  const [trackId, setTrackId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setTrackId(recallOrder(restaurant.id));
-  }, [restaurant.id]);
-
   // Which dietary tags actually appear on this menu (so we only offer useful filters).
   const menuTags = useMemo(() => {
     const present = new Set(items.flatMap(i => i.dietary ?? []));
