@@ -166,7 +166,7 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
   for (const line of plainLines) {
     const db = priceMap.get(line.itemId);
     if (!db || !db.available || !isOnOpenMenu(db.category_id)) {
-      return { ok: false, rejection: gone(line) };
+      return { ok: false, rejection: gone(line, db?.name) };
     }
 
     const verifiedExtras = verifyExtras(line.extras, priceMap, removedExtras);
@@ -220,6 +220,13 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
   return { ok: true, lines };
 }
 
-function gone(line: OrderLineItem): CartRejection {
-  return { kind: "unavailable", name: line.name, itemId: line.itemId };
+/**
+ * The dish is off the menu, or was never on this one.
+ *
+ * The name is the kitchen's if we can still find the dish, the cart's if not,
+ * and empty when neither knows — a request carrying only an id used to produce
+ * "undefined is no longer available." for the diner to read.
+ */
+function gone(line: OrderLineItem, dbName?: string): CartRejection {
+  return { kind: "unavailable", name: dbName ?? line.name ?? "", itemId: line.itemId };
 }

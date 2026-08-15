@@ -2,11 +2,26 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { OrderLineItem } from "@/lib/types";
+import { MAX_LINE_QTY } from "@/lib/pricing";
 
 /** A cart line is an order line item plus a client-side id for list keys/removal. */
 export type CartItem = OrderLineItem & { cartId: number };
 
 const storageKey = (restaurantId: string) => `tt-cart:${restaurantId}`;
+
+/** The same dish ordered the same way — extras, options and note included. */
+function sameChoice(a: OrderLineItem, b: OrderLineItem): boolean {
+  return (
+    a.itemId === b.itemId &&
+    a.comboId === b.comboId &&
+    (a.notes ?? "") === (b.notes ?? "") &&
+    JSON.stringify(a.mods ?? {}) === JSON.stringify(b.mods ?? {}) &&
+    JSON.stringify((a.extras ?? []).map(e => e.id).sort()) ===
+      JSON.stringify((b.extras ?? []).map(e => e.id).sort())
+  );
+}
+
+const capQty = (qty: number) => Math.min(MAX_LINE_QTY, qty);
 
 /**
  * Holds the in-progress cart. Money is deliberately NOT computed here — every
@@ -60,8 +75,20 @@ export function useCart(restaurantId: string) {
     }
   }, [items, restored, restaurantId]);
 
+  /**
+   * Adds a line, folding it into an identical one if the cart already has it.
+   *
+   * Tapping the same drink three times used to give three rows of one, which
+   * reads as a mistake and makes the cart longer than the order. "Identical"
+   * has to mean every choice as well as the dish — a Coke with ice and a Coke
+   * without are two different things to the person drinking them.
+   */
   function addItem(line: OrderLineItem) {
-    setItems(prev => [...prev, { ...line, cartId: nextId.current++ }]);
+    setItems(prev => {
+      const twin = prev.findIndex(l => sameChoice(l, line));
+      if (twin === -1) return [...prev, { ...line, cartId: nextId.current++ }];
+      return prev.map((l, i) => (i === twin ? { ...l, qty: capQty(l.qty + line.qty) } : l));
+    });
   }
 
   function removeItem(cartId: number) {

@@ -515,6 +515,7 @@ export const en = {
     badCover: "That image must be uploaded here, not linked from elsewhere.",
     payLaterNotAllowed: "This restaurant takes payment when you order.",
     billSettled: "That bill has already been paid.",
+    nothingToSettle: "That table has nothing outstanding.",
     couponNotFound: "We couldn't find that coupon.",
     couponNotValid: "That coupon can't be used on this bill.",
     couponAlreadyUsed: "One of these orders already used a coupon when it was placed.",
@@ -579,6 +580,7 @@ export const en = {
     orderCancel: "Could not cancel the order.",
     // Shown to a diner at checkout when the menu moved under them.
     itemGone: "{name} is no longer available.",
+    itemGoneUnnamed: "One of the dishes in your order is no longer available.",
     chooseFirst: "Choose {options} for {name} before ordering.",
     noCardPayments:
       "This restaurant isn't set up to take card payments yet. Please let the staff know.",
