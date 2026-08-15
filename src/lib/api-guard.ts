@@ -34,6 +34,19 @@ export async function actingStaff(): Promise<Actor | null> {
   return await resolve();
 }
 
+/**
+ * Anyone who handles the table's money in person: owner, manager, waiter.
+ *
+ * Not the kitchen. Marking a bill paid in cash, or writing one off, moves
+ * money out of the takings without a payment processor anywhere near it —
+ * that is a floor decision, and a kitchen login (often a shared screen on a
+ * pass) is the last place it should be reachable from.
+ */
+export async function actingFrontOfHouse(): Promise<Actor | null> {
+  const actor = await resolve();
+  return actor && actor.role !== "kitchen" ? actor : null;
+}
+
 /** Owner or manager: menus, promotions, settings, refunds. */
 export async function actingManager(): Promise<Actor | null> {
   const actor = await resolve();
