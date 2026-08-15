@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
-import { actingStaff } from "@/lib/api-guard";
+import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -14,11 +14,12 @@ type Settlement = "cash" | "card" | "written_off";
 // The waiter settles a table in person: cash, a card on their own terminal, or
 // a write-off when nobody paid at all.
 //
-// Staff only, and scoped to the caller's own restaurant — this marks money as
-// received without any money moving through us, so it is exactly the kind of
-// thing that must not be reachable from a customer's phone.
+// Front of house only — owner, manager or waiter — and scoped to the caller's
+// own restaurant. This marks money as received without any money moving
+// through us, so it must not be reachable from a customer's phone, nor from a
+// kitchen screen that everyone in the back has their hands on.
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const actor = await actingStaff();
+  const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
   const { tableId, settlement } = (await req.json()) as {

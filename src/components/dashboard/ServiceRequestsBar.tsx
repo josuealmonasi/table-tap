@@ -11,6 +11,8 @@ interface ServiceRequestsBarProps {
   restaurantId: string;
   initialRequests: ServiceRequest[];
   currency: string;
+  /** Only the floor settles bills — the kitchen sees the chip, not the money. */
+  canSettle: boolean;
   /** Refreshes the board after a table is settled. */
   onSettled?: () => void;
 }
@@ -18,6 +20,7 @@ interface ServiceRequestsBarProps {
 /** Open call-waiter / request-bill taps, pinned above the orders grid. */
 export default function ServiceRequestsBar({
   restaurantId,
+  canSettle,
   initialRequests,
   currency,
   onSettled,
@@ -58,7 +61,7 @@ export default function ServiceRequestsBar({
           {/* A table waiting to pay needs the bill, not a "done" button —
               pressing done would clear the request and leave the money
               uncollected. */}
-          {r.kind === "pay" && r.table_id ? (
+          {r.kind === "pay" && r.table_id && canSettle ? (
             <button
               className="tt-btn tt-btn-primary tt-btn-sm"
               onClick={() => setSettling(r)}

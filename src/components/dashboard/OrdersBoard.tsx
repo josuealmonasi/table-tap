@@ -23,6 +23,8 @@ interface OrdersBoardProps {
   canCancel: boolean;
   /** False for waiters: complete only, no stage moves. */
   canMove: boolean;
+  /** Taking cash and writing debts off is the floor's job, not the kitchen's. */
+  canSettle: boolean;
   /** Kitchen doesn't get the daily takings stat. */
   showRevenue: boolean;
   /** Today's takings from orders NOT in the loaded set (server-computed). */
@@ -42,6 +44,7 @@ export default function OrdersBoard({
   initialRequests,
   canCancel,
   canMove,
+  canSettle,
   showRevenue,
   revenueBase,
   todayStartMs,
@@ -146,6 +149,7 @@ export default function OrdersBoard({
 
         <ServiceRequestsBar
           restaurantId={restaurant.id}
+          canSettle={canSettle}
           initialRequests={initialRequests}
           currency={restaurant.currency}
           onSettled={() => router.refresh()}

@@ -9,6 +9,14 @@ export type Role = "owner" | "manager" | "waiter" | "kitchen";
 export const MANAGES = (role: Role): boolean => role === "owner" || role === "manager";
 
 /**
+ * Who may take a payment at the table or write a debt off: everyone on the
+ * floor, and nobody in the kitchen. It moves money out of the takings without
+ * a processor involved, so it stays with the people who carry the card
+ * machine — the API enforces the same rule.
+ */
+export const SETTLES = (role: Role): boolean => role !== "kitchen";
+
+/**
  * Who may move a ticket between kitchen stages.
  *
  * Waiters run the floor, not the pass: they mark an order completed when they

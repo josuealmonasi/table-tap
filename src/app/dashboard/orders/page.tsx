@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getMembership, MANAGES, MOVES_ORDERS } from "@/lib/membership";
+import { getMembership, MANAGES, MOVES_ORDERS, SETTLES } from "@/lib/membership";
 import OrdersBoard from "@/components/dashboard/OrdersBoard";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import type { Order, ServiceRequest } from "@/lib/types";
@@ -74,6 +74,7 @@ export default async function OrdersPage() {
         initialRequests={(requests as ServiceRequest[]) ?? []}
         canCancel={MANAGES(membership.role)}
         canMove={MOVES_ORDERS(membership.role)}
+        canSettle={SETTLES(membership.role)}
         showRevenue={showRevenue}
         revenueBase={revenueBase}
         todayStartMs={todayStart.getTime()}
