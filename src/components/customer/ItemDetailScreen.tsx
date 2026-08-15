@@ -4,7 +4,7 @@ import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import type { MenuItem, Modifier, OrderLineItem } from "@/lib/types";
 import { dietaryTags } from "@/lib/dietary";
-import { itemSalePrice } from "@/lib/pricing";
+import { itemSalePrice, MAX_LINE_QTY } from "@/lib/pricing";
 import { missingRequired } from "@/lib/modifiers";
 import { addedLineCost, nextPromoStep } from "@/lib/promo-math";
 import NoteField from "./NoteField";
@@ -222,7 +222,12 @@ export default function ItemDetailScreen({
           <div className="tt-stepper">
             <button onClick={() => setQty(q => Math.max(1, q - 1))}>−</button>
             <span>{qty}</span>
-            <button onClick={() => setQty(q => q + 1)}>+</button>
+            <button
+              disabled={qty >= MAX_LINE_QTY}
+              onClick={() => setQty(q => Math.min(MAX_LINE_QTY, q + 1))}
+            >
+              +
+            </button>
           </div>
           <button
             className="tt-btn tt-btn-primary"

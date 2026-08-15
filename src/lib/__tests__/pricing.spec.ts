@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { itemSalePrice, priceCart, type CartPromo, type PriceInput } from "@/lib/pricing";
+import {
+  itemSalePrice,
+  MAX_LINE_QTY,
+  priceCart,
+  type CartPromo,
+  type PriceInput,
+} from "@/lib/pricing";
 import type { OrderLineItem } from "@/lib/types";
 
 function line(over: Partial<OrderLineItem> = {}): OrderLineItem {
@@ -402,5 +408,29 @@ describe("priceCart — quantity deals cover extras", () => {
     expect(r.grossSubtotal).toBe(12);
     expect(r.promoDiscount).toBe(5);
     expect(r.subtotal).toBe(7);
+  });
+});
+
+describe("how much of one dish a line may hold", () => {
+  it("caps a line at 99, however many the request asks for", () => {
+    // A phone can send any number; 100,000 desserts was accepted before this.
+    const priced = priceCart({
+      items: [line({ price: 10, qty: 100_000 })],
+      servicePct: 0,
+      serviceEnabled: false,
+      tipPct: 0,
+    });
+    expect(priced.lines[0].qty).toBe(MAX_LINE_QTY);
+    expect(priced.subtotal).toBe(990);
+  });
+
+  it("leaves ordinary quantities alone", () => {
+    const priced = priceCart({
+      items: [line({ price: 10, qty: 3 })],
+      servicePct: 0,
+      serviceEnabled: false,
+      tipPct: 0,
+    });
+    expect(priced.subtotal).toBe(30);
   });
 });
