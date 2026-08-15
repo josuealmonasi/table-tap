@@ -1415,6 +1415,20 @@ h2.tt-serif {
   align-items: center;
   gap: 10px;
 }
+/* The dish's picture on a cart or bill line. A fixed box, so a line is the
+   same height whether the kitchen has photographed that dish or not — the
+   emoji simply sits in the middle of it, at the size it always was. */
+.tt-line-thumb {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--tt-surface);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+}
 .tt-line-body {
   flex: 1;
   /* Without this a long dish name refuses to wrap and pushes the price off. */

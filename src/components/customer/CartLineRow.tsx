@@ -6,10 +6,13 @@ import type { CartItem } from "@/hooks/useCart";
 import { useT } from "@/lib/i18n/context";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { AddIcon, DeleteIcon, EditIcon, RemoveIcon } from "@/components/ui/icons";
+import DishImage from "./DishImage";
 
 interface CartLineRowProps {
   item: CartItem;
   currency: string;
+  /** The dish's photo. Null shows its emoji instead, in the same box. */
+  imageUrl?: string | null;
   /** Sold out at checkout: greyed, price struck through, not counted. */
   soldOut?: boolean;
   onRemove: (cartId: number) => void;
@@ -29,6 +32,7 @@ interface CartLineRowProps {
 export default function CartLineRow({
   item,
   currency,
+  imageUrl,
   soldOut = false,
   onRemove,
   onChangeQty,
@@ -78,7 +82,9 @@ export default function CartLineRow({
       {/* Centred, so the price and the controls sit on the dish's own line
           instead of stepping down it. */}
       <div className="tt-line">
-        <span style={{ fontSize: 28 }}>{item.emoji || "🍽️"}</span>
+        <div className="tt-line-thumb">
+          <DishImage url={imageUrl} emoji={item.emoji} name={item.name} />
+        </div>
         <div className="tt-line-body">
           <strong>
             {item.qty}× {item.name}
