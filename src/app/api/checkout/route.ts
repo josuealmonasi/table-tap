@@ -195,7 +195,10 @@ export async function POST(req: NextRequest) {
     if (!result.ok) {
       const r = result.rejection;
       if (r.kind === "unavailable") {
-        return await cartError("apiErr.itemGone", { name: r.name }, 400, {
+        // Without a name — an id that was never on this menu — the sentence has
+        // to stand on its own rather than naming a blank.
+        const key = r.name ? "apiErr.itemGone" : "apiErr.itemGoneUnnamed";
+        return await cartError(key, { name: r.name }, 400, {
           unavailableItemId: r.itemId,
         });
       }

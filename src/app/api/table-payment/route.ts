@@ -54,7 +54,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const { data: updated, error } = await base.select("id");
   if (error) return await apiError("apiErr.orderData", 500);
-  if (!updated?.length) return await apiError("apiErr.billSettled", 409);
+  if (!updated?.length) return await apiError("apiErr.nothingToSettle", 409);
 
   // The table is settled, so any open request to settle it is answered.
   await db

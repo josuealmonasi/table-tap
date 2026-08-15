@@ -509,6 +509,7 @@ export const es: Messages = {
     badCover: "Esa imagen debe subirse aquí, no enlazarse desde otro sitio.",
     payLaterNotAllowed: "Este restaurante cobra al momento de ordenar.",
     billSettled: "Esa cuenta ya fue pagada.",
+    nothingToSettle: "Esa mesa no tiene nada pendiente.",
     couponNotFound: "No encontramos ese cupón.",
     couponNotValid: "Ese cupón no se puede usar en esta cuenta.",
     couponAlreadyUsed: "Uno de estos pedidos ya usó un cupón al hacerse.",
@@ -574,6 +575,7 @@ export const es: Messages = {
     orderCancel: "No se pudo cancelar el pedido.",
     // Se le muestra al comensal cuando el menú cambió mientras ordenaba.
     itemGone: "{name} ya no está disponible.",
+    itemGoneUnnamed: "Uno de los platillos de tu pedido ya no está disponible.",
     chooseFirst: "Elige {options} para {name} antes de ordenar.",
     noCardPayments:
       "Este restaurante todavía no puede aceptar pagos con tarjeta. Avísale al personal.",

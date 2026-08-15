@@ -28,6 +28,8 @@ async function log(
 // POST /api/admin/users — a platform admin creates any kind of login:
 // another admin, a founding owner (with a new restaurant), or a team member
 // (owner/manager/kitchen) of an existing restaurant.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function POST(req: NextRequest) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
@@ -214,7 +216,12 @@ export async function DELETE(req: NextRequest) {
   if (!admin) return await apiError("apiErr.forbidden", 403);
 
   const { userId } = await req.json();
-  if (!userId) return await apiError("apiErr.invalidRequest", 400);
+  // Shape-checked before it reaches Postgres: a malformed id threw inside the
+  // uuid comparison and the route answered 500 with an empty body, which tells
+  // the admin screen nothing it can show.
+  if (typeof userId !== "string" || !UUID.test(userId)) {
+    return await apiError("apiErr.invalidRequest", 400);
+  }
   if (userId === admin.userId) {
     return await apiError("apiErr.ownAdminLogin", 409);
   }
