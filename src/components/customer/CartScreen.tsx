@@ -16,6 +16,8 @@ interface CartScreenProps {
   restaurant: Restaurant;
   table: RestaurantTable | null;
   items: CartItem[];
+  /** The dish's photo, looked up from the live menu — null falls back to emoji. */
+  photoOf: (itemId: string) => string | null;
   /** Product ids that sold out — shown greyed and excluded from the total. */
   soldOut: Set<string>;
   subtotal: number;
@@ -54,6 +56,7 @@ export default function CartScreen({
   restaurant,
   table,
   items,
+  photoOf,
   soldOut,
   grossSubtotal,
   discount,
@@ -118,6 +121,7 @@ export default function CartScreen({
               <CartLineRow
                 key={item.cartId}
                 item={item}
+                imageUrl={photoOf(item.itemId)}
                 currency={restaurant.currency}
                 promoSaving={promoSavings[item.itemId]}
                 soldOut={soldOut.has(item.itemId)}

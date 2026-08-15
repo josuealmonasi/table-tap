@@ -8,6 +8,7 @@ import { canPayMineOnly, ordersToPay, type BillSide, type TableBill } from "@/li
 import { applyCoupon } from "@/lib/pricing";
 import type { AppliedCoupon } from "@/lib/pricing";
 import CouponBox from "./CouponBox";
+import DishImage from "./DishImage";
 import OrderTotals from "./OrderTotals";
 import TipPicker from "./TipPicker";
 import type { Restaurant } from "@/lib/types";
@@ -19,18 +20,22 @@ interface BillSheetProps {
   restaurant: Restaurant;
   tableId: string;
   tableLabel: string;
+  /** The dish's photo, looked up from the live menu — null falls back to emoji. */
+  photoOf: (itemId: string) => string | null;
 }
 
 /** One dish on the bill, laid out like a cart line but not editable. */
 function BillLine({
   name,
   emoji,
+  imageUrl,
   qty,
   price,
   currency,
 }: {
   name: string;
   emoji: string;
+  imageUrl: string | null;
   qty: number;
   price: number;
   currency: string;
@@ -38,7 +43,9 @@ function BillLine({
   return (
     <div className="tt-card" style={{ padding: 14 }}>
       <div className="tt-line">
-        <span style={{ fontSize: 28 }}>{emoji || "🍽️"}</span>
+        <div className="tt-line-thumb">
+          <DishImage url={imageUrl} emoji={emoji} name={name} />
+        </div>
         <div className="tt-line-body">
           <strong>
             {qty}× {name}
@@ -52,7 +59,17 @@ function BillLine({
   );
 }
 
-function Section({ heading, side, currency }: { heading: string; side: BillSide; currency: string }) {
+function Section({
+  heading,
+  side,
+  currency,
+  photoOf,
+}: {
+  heading: string;
+  side: BillSide;
+  currency: string;
+  photoOf: (itemId: string) => string | null;
+}) {
   if (side.orders.length === 0) return null;
   return (
     <>
@@ -64,6 +81,7 @@ function Section({ heading, side, currency }: { heading: string; side: BillSide;
           key={i}
           name={item.name}
           emoji={item.emoji}
+          imageUrl={photoOf(item.itemId)}
           qty={item.qty}
           price={item.price}
           currency={currency}
@@ -94,6 +112,7 @@ export default function BillSheet({
   restaurant,
   tableId,
   tableLabel,
+  photoOf,
 }: BillSheetProps) {
   const t = useT();
   const currency = restaurant.currency;
@@ -173,8 +192,13 @@ export default function BillSheet({
         <p className="tt-muted">{t("bill.empty")}</p>
       ) : (
         <>
-          <Section heading={t("bill.yours")} side={bill.mine} currency={currency} />
-          <Section heading={t("bill.othersAtTable")} side={bill.others} currency={currency} />
+          <Section heading={t("bill.yours")} side={bill.mine} currency={currency} photoOf={photoOf} />
+          <Section
+            heading={t("bill.othersAtTable")}
+            side={bill.others}
+            currency={currency}
+            photoOf={photoOf}
+          />
 
           {/* Paying for the table or only for yourself changes what the totals
               below are counting, so it sits above them. */}

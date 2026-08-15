@@ -136,6 +136,14 @@ export default function OrderingApp({
   }, []);
 
   // Totals count only the still-orderable lines (sold-out ones are excluded).
+  // A cart line stores what was ordered, not what it looked like — so the
+  // picture is looked up from the menu that is already loaded. Lines whose dish
+  // has no photo, or is no longer on the menu, fall back to their emoji.
+  const photoOf = useMemo(() => {
+    const byId = new Map(items.map(i => [i.id, i.image_url]));
+    return (itemId: string) => byId.get(itemId) ?? null;
+  }, [items]);
+
   const orderableItems = useMemo(
     () => cart.items.filter(i => !soldOut.has(i.itemId)),
     [cart.items, soldOut],
@@ -408,6 +416,7 @@ export default function OrderingApp({
             restaurant={restaurant}
             table={table}
             items={cart.items}
+            photoOf={photoOf}
             soldOut={soldOut}
             subtotal={pricing.subtotal}
             grossSubtotal={pricing.grossSubtotal}
@@ -473,6 +482,7 @@ export default function OrderingApp({
           open={billOpen}
           onClose={() => setBillOpen(false)}
           bill={bill}
+          photoOf={photoOf}
           restaurant={restaurant}
           tableId={table.id}
           tableLabel={table.label}
