@@ -829,6 +829,8 @@ export const en = {
     done: "Done",
     justNow: "just now",
     minsAgo: "{m}m ago",
+    hoursAgo: "{h}h ago",
+    daysAgo: "{d}d ago",
     wantsWaiter: "wants a waiter",
     wantsBill: "wants the bill",
     requestDone: "Done",
