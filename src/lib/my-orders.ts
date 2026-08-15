@@ -24,8 +24,15 @@ export function myOrderIds(restaurantId: string): string[] {
   }
 }
 
-/** Records an order this phone just placed. */
-export function rememberOrder(restaurantId: string, orderId: string): void {
+/**
+ * Records an order this phone just placed, for splitting the bill.
+ *
+ * Named for the list it writes, not for the act: there is a second
+ * `rememberOrder` in recent-order.ts driving the tracker and the rating
+ * prompt, and a dine-in order reached only this one for months — no tracker
+ * link, no "rate your dishes", for every diner who paid at the end.
+ */
+export function rememberMyOrder(restaurantId: string, orderId: string): void {
   if (typeof window === "undefined") return;
   try {
     const ids = myOrderIds(restaurantId);

@@ -21,7 +21,8 @@ import CartScreen from "./CartScreen";
 import ComboDetailScreen from "./ComboDetailScreen";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { useMenuFreshness } from "@/hooks/useMenuFreshness";
-import { rememberOrder } from "@/lib/my-orders";
+import { rememberMyOrder } from "@/lib/my-orders";
+import { recallOrder, rememberRecentOrder } from "@/lib/recent-order";
 import { useTableBill } from "@/hooks/useTableBill";
 import BillSheet from "./BillSheet";
 
@@ -139,6 +140,14 @@ export default function OrderingApp({
   // A cart line stores what was ordered, not what it looked like — so the
   // picture is looked up from the menu that is already loaded. Lines whose dish
   // has no photo, or is no longer on the menu, fall back to their emoji.
+  // An order this phone placed and can still watch. Held here, where orders
+  // are placed, so it appears the moment one is — read only by the menu, it
+  // was seeded once on mount and a dine-in order never showed up at all.
+  const [trackId, setTrackId] = useState<string | null>(null);
+  useEffect(() => {
+    setTrackId(recallOrder(restaurant.id));
+  }, [restaurant.id]);
+
   const photoOf = useMemo(() => {
     const byId = new Map(items.map(i => [i.id, i.image_url]));
     return (itemId: string) => byId.get(itemId) ?? null;
@@ -290,7 +299,12 @@ export default function OrderingApp({
       // hop. Remember the id — it is the only thing that tells this phone's
       // share apart from the rest of the table's on the bill.
       if (data.deferred && data.orderId) {
-        rememberOrder(restaurant.id, data.orderId);
+        // Both lists: one decides whose share is whose on the bill, the other
+        // drives the "track your order" link and the rating prompt. A dine-in
+        // order used to reach only the first.
+        rememberMyOrder(restaurant.id, data.orderId);
+        rememberRecentOrder(restaurant.id, data.orderId);
+        setTrackId(data.orderId);
         cart.clear();
         // Back to the menu, nothing in the way. The bill is a tap away on the
         // receipt button whenever they are ready — pushing it in their face
@@ -459,6 +473,7 @@ export default function OrderingApp({
       <MenuScreen
         restaurant={restaurant}
         table={table}
+        trackId={trackId}
         categories={categories}
         items={items}
         combos={combos}
