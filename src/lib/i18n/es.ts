@@ -818,6 +818,8 @@ export const es: Messages = {
     done: "Listo",
     justNow: "justo ahora",
     minsAgo: "hace {m} min",
+    hoursAgo: "hace {h} h",
+    daysAgo: "hace {d} d",
     wantsWaiter: "quiere un mesero",
     wantsBill: "quiere la cuenta",
     requestDone: "Listo",

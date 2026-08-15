@@ -30,10 +30,16 @@ export default function ServiceRequestsBar({
   // The table whose bill the waiter is collecting, if any.
   const [settling, setSettling] = useState<ServiceRequest | null>(null);
 
-  // Rough "how long ago" — kitchens think in minutes.
+  // How long the table has been waiting. Minutes for the first hour, because
+  // that is how a floor thinks; hours and days after that, because a request
+  // left open since Tuesday printed as "11495m ago" and read as a glitch.
   const age = (createdAt: string): string => {
     const mins = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60_000);
-    return mins < 1 ? t("orders.justNow") : t("orders.minsAgo", { m: mins });
+    if (mins < 1) return t("orders.justNow");
+    if (mins < 60) return t("orders.minsAgo", { m: mins });
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return t("orders.hoursAgo", { h: hours });
+    return t("orders.daysAgo", { d: Math.floor(hours / 24) });
   };
 
   if (requests.length === 0) return null;

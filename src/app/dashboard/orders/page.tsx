@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { STALE_REQUEST_HOURS } from "@/lib/service-requests";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership, MANAGES, MOVES_ORDERS, SETTLES } from "@/lib/membership";
 import OrdersBoard from "@/components/dashboard/OrdersBoard";
@@ -29,11 +30,17 @@ export default async function OrdersPage() {
     .order("created_at", { ascending: false })
     .limit(100);
 
+  // Only today's shift. A request nobody ever pressed "done" on stays open
+  // forever, so the board was carrying taps from weeks earlier — a chip asking
+  // for a waiter at a table that emptied on Tuesday teaches the floor to
+  // ignore the row. A diner still waiting will tap again.
+  const shiftStart = new Date(Date.now() - STALE_REQUEST_HOURS * 60 * 60 * 1000);
   const { data: requests } = await supabase
     .from("service_requests")
     .select("*")
     .eq("restaurant_id", r.id)
     .eq("status", "open")
+    .gte("created_at", shiftStart.toISOString())
     .order("created_at", { ascending: false });
 
   // Today's takings, computed server-side over ALL of today's orders (the
