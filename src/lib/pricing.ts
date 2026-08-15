@@ -27,6 +27,16 @@ export function applyCoupon(coupon: AppliedCoupon, base: number): number {
   return Math.max(0, Math.min(round2(raw), base));
 }
 
+/**
+ * The most of one dish a single line may order.
+ *
+ * A phone can send any number it likes. Nothing downstream refused one, so a
+ * request for 100,000 desserts was accepted: MX$638,000 owed by a real table
+ * and a ticket the kitchen would have to read. No party orders ninety-nine of
+ * anything, and a table that truly wants more can add a second line.
+ */
+export const MAX_LINE_QTY = 99;
+
 /** A coupon that has already been looked up and confirmed to exist. */
 export interface AppliedCoupon {
   code: string;
@@ -126,7 +136,7 @@ export function priceCart(input: PriceInput): PricedCart {
 
   // 1. Per-line: apply each item's own discount. Extras are always full price.
   for (const line of items) {
-    const qty = Math.max(0, Math.floor(line.qty));
+    const qty = Math.min(MAX_LINE_QTY, Math.max(0, Math.floor(line.qty)));
     const extras = extrasTotal(line);
     const grossUnit = line.price + extras;
     const unit = discountedBase(line) + extras;

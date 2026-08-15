@@ -2,6 +2,7 @@
 
 import { formatMoney } from "@/lib/format";
 import { lineUnitPrice } from "@/lib/types";
+import { MAX_LINE_QTY } from "@/lib/pricing";
 import type { CartItem } from "@/hooks/useCart";
 import { useT } from "@/lib/i18n/context";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -159,6 +160,7 @@ export default function CartLineRow({
                 <span aria-live="polite">{item.qty}</span>
                 <button
                   aria-label={`${t("cart.increase")} — ${item.name}`}
+                  disabled={item.qty >= MAX_LINE_QTY}
                   onClick={() => onChangeQty(item.cartId, item.qty + 1)}
                 >
                   <AddIcon size={15} />

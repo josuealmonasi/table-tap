@@ -1,8 +1,19 @@
 import { buildCombos } from "@/lib/promotions";
+import { MAX_LINE_QTY } from "@/lib/pricing";
 import { capNote } from "@/lib/notes";
 import { missingRequired } from "@/lib/modifiers";
 import type { PromotionWithItems } from "@/lib/promotions";
 import type { MenuItem, Modifier, OrderExtra, OrderLineItem } from "@/lib/types";
+
+/**
+ * How many of this dish the line really orders.
+ *
+ * The stored line and the price have to agree: capping only the money left a
+ * ticket reading "100000×" against a bill for ninety-nine.
+ */
+function clampQty(qty: number): number {
+  return Math.min(MAX_LINE_QTY, Math.max(1, Math.floor(qty)));
+}
 
 /**
  * Rebuilds a submitted cart from database truth.
@@ -138,7 +149,7 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
       // priceCart sums them — the deal fixes what the dishes cost, not what an
       // upgrade costs.
       price: combo.price,
-      qty: Math.max(1, Math.floor(line.qty)),
+      qty: clampQty(line.qty),
       mods: {},
       // The client's per-component choices are kept for the kitchen ticket
       // (they're instructions, not money), but every component and its
@@ -186,7 +197,7 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
       // From the DB, never the client — a forged discount would otherwise let
       // a customer set their own price.
       discountPct: Number(db.discount_pct) || 0,
-      qty: Math.max(1, Math.floor(line.qty)),
+      qty: clampQty(line.qty),
       mods: line.mods ?? {},
       extras: verifiedExtras.length ? verifiedExtras : undefined,
       notes: capNote(line.notes),
