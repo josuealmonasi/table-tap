@@ -5,7 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import { canPayMineOnly, ordersToPay, type BillSide, type TableBill } from "@/lib/table-bill";
-import { applyCoupon } from "@/lib/pricing";
+import { applyCoupon, itemSalePrice } from "@/lib/pricing";
 import type { AppliedCoupon } from "@/lib/pricing";
 import CouponBox from "./CouponBox";
 import DishImage from "./DishImage";
@@ -31,6 +31,8 @@ function BillLine({
   imageUrl,
   qty,
   price,
+  discountPct,
+  extras,
   currency,
 }: {
   name: string;
@@ -38,8 +40,19 @@ function BillLine({
   imageUrl: string | null;
   qty: number;
   price: number;
+  /** What came off this dish when it was ordered; the total already has it. */
+  discountPct?: number;
+  extras?: { name: string; price: number }[];
   currency: string;
 }) {
+  // What this line actually contributed to the bill: the sale price the dish
+  // was ordered at, plus its extras. Showing the list price here made the
+  // lines add up to more than the total a diner was being asked to pay —
+  // 13.50 of dishes under a total of 11.70 — which is the sort of arithmetic
+  // that gets a bill queried in front of everyone.
+  const extrasEach = (extras ?? []).reduce((sum, e) => sum + e.price, 0);
+  const charged = (itemSalePrice(price, discountPct) + extrasEach) * qty;
+  const listed = (price + extrasEach) * qty;
   return (
     <div className="tt-card" style={{ padding: 14 }}>
       <div className="tt-line">
@@ -52,7 +65,12 @@ function BillLine({
           </strong>
         </div>
         <div className="tt-line-actions">
-          <strong className="tt-accent">{formatMoney(price * qty, currency)}</strong>
+          {charged < listed && (
+            <span className="tt-was" style={{ fontSize: 13 }}>
+              {formatMoney(listed, currency)}
+            </span>
+          )}
+          <strong className="tt-accent">{formatMoney(charged, currency)}</strong>
         </div>
       </div>
     </div>
@@ -84,6 +102,8 @@ function Section({
           imageUrl={photoOf(item.itemId)}
           qty={item.qty}
           price={item.price}
+          discountPct={item.discountPct}
+          extras={item.extras}
           currency={currency}
         />
       ))}
