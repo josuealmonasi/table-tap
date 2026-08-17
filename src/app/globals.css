@@ -1169,6 +1169,47 @@ h2.tt-serif {
    the money hard against the right edge so a manager can read down the column
    to find the table they were told about. The row is the tap target, so it is
    comfortably tall on a phone rather than a line of text with a hit box. */
+/* The promotions a bill can take, listed under the field that filters them.
+   In flow rather than floating: .tt-modal is a scroll container, and an
+   absolutely positioned menu inside one is clipped by it — which is what went
+   wrong the last time a dropdown lived in a dialog. */
+.tt-code-list {
+  margin-top: 8px;
+  /* A fixed box, loading or loaded: the number of promotions isn't known until
+     the server answers, so anything that sizes to its contents moves the
+     buttons underneath it right as somebody is reaching for them. */
+  height: 208px;
+  overflow-y: auto;
+  border: 1px solid var(--tt-line);
+  border-radius: 12px;
+}
+.tt-code-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-top: 1px solid var(--tt-line);
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tt-code-option:first-child {
+  border-top: 0;
+}
+.tt-code-option-on {
+  background: var(--tt-surface);
+}
+.tt-code-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
 .tt-bill-search {
   display: flex;
   align-items: center;
