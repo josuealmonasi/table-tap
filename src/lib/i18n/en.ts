@@ -826,6 +826,8 @@ export const en = {
     wholeRestaurant: "Whole restaurant",
     tableQrs: "Table QRs",
     tableQrsHint: "One code per table — orders tagged with the table",
+    tableSearch: "Search tables…",
+    tableSearchEmpty: "No table matches “{query}”.",
     addFirstTable: "Add your first table",
     addFirstTableDesc:
       "Each table gets its own QR. When a customer scans it and orders, the order arrives tagged with the table so you know where to send the food.",

@@ -24,6 +24,7 @@ export default function TablesLoading() {
 
         <div style={{ marginTop: 16 }}>
           <SectionSkeletonCard headWidth={140}>
+            <Skeleton width="100%" height={43} radius={999} style={{ marginBottom: 14 }} />
             <div className="tt-add-above" style={{ display: "flex", gap: 12 }}>
               <Skeleton width="100%" height={44} radius={10} />
               <Skeleton width={130} height={44} radius={10} />
