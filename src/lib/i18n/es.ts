@@ -129,6 +129,7 @@ export const es: Messages = {
     deleteSelected: "Eliminar seleccionados",
     bulkActions: "Acciones en lote",
     moveTo: "Mover “{name}” a…",
+    openDetail: "Abrir pedido {code}",
     noSections:
       "No hay otras secciones para mover. Crea una abajo para mover este producto ahí.",
     createAndMove: "Crear y mover",

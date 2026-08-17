@@ -127,6 +127,7 @@ export const en = {
     deleteSelected: "Delete selected",
     bulkActions: "Bulk actions",
     moveTo: "Move “{name}” to…",
+    openDetail: "Open order {code}",
     noSections:
       "No other sections to move into. Create one below to move this product into it.",
     createAndMove: "Create & move",

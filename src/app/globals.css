@@ -1802,6 +1802,25 @@ h2.tt-serif {
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 16px;
 }
+/* The card opens the full order. It stays a card rather than becoming a
+   button so the controls inside it keep working — they stop the click. */
+.tt-order-card-open {
+  cursor: pointer;
+}
+.tt-order-card-open:hover {
+  border-color: color-mix(in srgb, var(--tt-accent) 35%, var(--tt-line));
+}
+.tt-order-detail-line {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-top: 1px solid var(--tt-line);
+}
+.tt-order-detail-line:first-of-type {
+  border-top: none;
+}
+
 .tt-order-card {
   background: var(--tt-white);
   border-radius: var(--tt-radius);
