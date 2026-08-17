@@ -3,6 +3,7 @@ import { apiError } from "@/lib/api-error";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
+import { logDetail } from "@/lib/log-detail";
 import { actingManager } from "@/lib/api-guard";
 
 export const runtime = "nodejs";
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
     actor: actor.email,
     entity: "order",
     action: refundId ? "refunded" : "cancelled",
-    detail: `#${String(id).slice(0, 8)}`,
+    detail: logDetail({ order: String(id).slice(0, 8) }),
   });
   return NextResponse.json({ ok: true });
 }

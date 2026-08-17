@@ -3,6 +3,7 @@ import { apiError } from "@/lib/api-error";
 import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
+import { logDetail } from "@/lib/log-detail";
 import { couponProblem, findCoupon, toAppliedCoupon } from "@/lib/coupon-service";
 import { applyCoupon } from "@/lib/pricing";
 import { billTotal, discountableOrders } from "@/lib/staff-discount";
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       actor: actor.email,
       entity: "discount",
       action: "requested",
-      detail: `${coupon.code} · ${amount} · ${orders[0].table_label ? `Table ${orders[0].table_label}` : "To go"}`,
+      detail: logDetail({ code: coupon.code, amount: amount.toFixed(2), table: orders[0].table_label }),
     });
     return NextResponse.json({ pending: true, amount, code: coupon.code });
   }
@@ -91,7 +92,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     actor: actor.email,
     entity: "discount",
     action: "discounted",
-    detail: `${coupon.code} · ${amount} · ${orders[0].table_label ? `Table ${orders[0].table_label}` : "To go"}`,
+    detail: logDetail({ code: coupon.code, amount: amount.toFixed(2), table: orders[0].table_label }),
   });
   return NextResponse.json({ ok: true, amount, code: coupon.code });
 }

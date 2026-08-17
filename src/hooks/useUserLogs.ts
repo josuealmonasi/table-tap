@@ -15,8 +15,8 @@ export interface UserLog {
   created_at: string;
 }
 
-/** A page fits on a laptop screen without scrolling the table out of view. */
-export const LOGS_PER_PAGE = 12;
+/** Ten reads as a list; more than that and the page becomes a wall. */
+export const LOGS_PER_PAGE = 10;
 
 /** Which column the list is ordered by. */
 export type LogSort = "created_at" | "action";

@@ -17,7 +17,10 @@ export default async function StaffPage() {
   return (
     <ConfirmProvider>
       <StaffPanel restaurantId={membership.restaurant.id}>
-        <UserLogs restaurantId={membership.restaurant.id} />
+        <UserLogs
+          restaurantId={membership.restaurant.id}
+          currency={membership.restaurant.currency}
+        />
       </StaffPanel>
     </ConfirmProvider>
   );
