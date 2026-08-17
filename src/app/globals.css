@@ -1164,6 +1164,119 @@ h2.tt-serif {
   gap: 8px;
   margin-top: 10px;
 }
+/* ── open bills ──
+   One row per bill, built like the product rows: a glyph, the identity, and
+   the money hard against the right edge so a manager can read down the column
+   to find the table they were told about. The row is the tap target, so it is
+   comfortably tall on a phone rather than a line of text with a hit box. */
+.tt-bill-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  margin-top: 12px;
+  border: 1px solid var(--tt-line);
+  border-radius: 999px;
+  background: var(--tt-white);
+  color: var(--tt-muted);
+}
+.tt-bill-search .tt-input {
+  border: 0;
+  background: transparent;
+  padding: 11px 0;
+  width: 100%;
+}
+.tt-bill-search .tt-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.tt-bill-list {
+  margin-top: 6px;
+}
+.tt-bill-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 14px 4px;
+  /* Reset first: a bare <button> keeps the browser's own outset border on the
+     three sides a `border-top` doesn't name, which drew a box around every row. */
+  border: 0;
+  border-top: 1px solid var(--tt-line);
+  background: none;
+  font: inherit;
+  color: inherit;
+}
+.tt-bill-row:first-child {
+  border-top: none;
+}
+.tt-bill-open {
+  cursor: pointer;
+  border-radius: 10px;
+}
+.tt-bill-open:hover {
+  background: var(--tt-surface);
+}
+/* A fixed disc, so names of different lengths still start on the same line. */
+.tt-bill-glyph {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--tt-surface);
+  color: var(--tt-ink-2);
+}
+.tt-bill-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.tt-bill-name {
+  font-size: 15px;
+}
+.tt-bill-sub {
+  font-size: 13px;
+}
+.tt-bill-flag {
+  flex: none;
+}
+.tt-bill-total-cell {
+  flex: none;
+  font-size: 16px;
+  color: var(--tt-accent);
+  font-variant-numeric: tabular-nums;
+}
+/* The approval row carries two buttons, which need their own line on a phone
+   rather than squeezing the amount they refer to. */
+.tt-bill-actions-row {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+@media (max-width: 560px) {
+  .tt-bill-approval {
+    flex-wrap: wrap;
+  }
+  .tt-bill-approval .tt-bill-actions-row {
+    width: 100%;
+  }
+  .tt-bill-approval .tt-bill-actions-row .tt-btn {
+    flex: 1;
+  }
+  .tt-bill-sub {
+    font-size: 12px;
+  }
+  .tt-bill-total-cell {
+    font-size: 15px;
+  }
+}
+
 .tt-open-table {
   display: flex;
   align-items: center;
