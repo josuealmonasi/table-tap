@@ -816,6 +816,8 @@ export const es: Messages = {
     wholeRestaurant: "Todo el restaurante",
     tableQrs: "QR por mesa",
     tableQrsHint: "Un código por mesa — los pedidos se etiquetan con la mesa",
+    tableSearch: "Busca mesas…",
+    tableSearchEmpty: "Ninguna mesa coincide con “{query}”.",
     addFirstTable: "Agrega tu primera mesa",
     addFirstTableDesc:
       "Cada mesa tiene su propio QR. Cuando un cliente lo escanea y ordena, el pedido llega etiquetado con la mesa para saber a dónde llevar la comida.",

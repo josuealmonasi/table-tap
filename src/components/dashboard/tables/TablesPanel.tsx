@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { RestaurantTable } from "@/lib/types";
 import { useTables } from "@/hooks/useTables";
 import { useT } from "@/lib/i18n/context";
@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import QrCard, { type QrTarget } from "./QrCard";
 import TableRow from "./TableRow";
+import { SearchIcon } from "@/components/ui/icons";
 import { TableIcon } from "@/components/ui/icons";
 import AddInDialog from "@/components/ui/AddInDialog";
 
@@ -77,6 +78,16 @@ export default function TablesPanel({
     </AddInDialog>
   );
 
+  // A dining room can run to fifty tables, and every card carries a QR the
+  // size of a beer mat — finding "table 34" by scrolling means passing thirty
+  // of them. Matches the label the way it is written on the table.
+  const [query, setQuery] = useState("");
+  const shownTables = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return tables;
+    return tables.filter(({ table }) => table.label.toLowerCase().includes(q));
+  }, [tables, query]);
+
   return (
     <div className="tt-dash">
       <div className="container">
@@ -138,8 +149,28 @@ export default function TablesPanel({
               {/* Above the list: with a room full of tables you shouldn't have
                   to scroll past every QR code to add one more. */}
               {addTableDialog}
+
+              {/* Always here, not only past some number of tables: a control
+                  that appears when the data does is a control the skeleton
+                  can't reserve room for, and the list jumps when it arrives. */}
+              <div className="tt-bill-search" style={{ marginBottom: 14 }}>
+                  <SearchIcon size={16} weight="bold" />
+                  <input
+                    className="tt-input"
+                    value={query}
+                    placeholder={t("dash.tableSearch")}
+                    aria-label={t("dash.tableSearch")}
+                  onChange={e => setQuery(e.target.value)}
+                />
+              </div>
+
+              {shownTables.length === 0 ? (
+                <p className="tt-muted" style={{ margin: "4px 0" }}>
+                  {t("dash.tableSearchEmpty", { query: query.trim() })}
+                </p>
+              ) : (
               <div className="tt-table-list">
-                {tables.map(({ table, qr }) => (
+                {shownTables.map(({ table, qr }) => (
                   <TableRow
                     key={table.id}
                     table={table}
@@ -149,6 +180,7 @@ export default function TablesPanel({
                   />
                 ))}
               </div>
+              )}
             </>
           )}
         </div>
