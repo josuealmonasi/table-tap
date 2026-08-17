@@ -86,13 +86,22 @@ export function useMenuEditor(restaurantId: string) {
     return !error;
   }
 
-  /** Runs a write, reports any failure, then refreshes local state. */
+  /**
+   * Runs a write, reports it either way, then refreshes local state.
+   *
+   * `done` is the confirmation. Every create, rename, edit and delete says so
+   * — the rule for the whole dashboard, decided here because this is the one
+   * place all of them pass through. Reordering and availability switches are
+   * the exception: the row moves, or the switch flips, in front of the person
+   * who pressed it, and a toast on top of that is noise.
+   */
   async function run(
     key: string,
     write: PromiseLike<{ error: { message: string } | null }>,
+    done?: string,
   ): Promise<void> {
     const { error } = await write;
-    reportError(key, error);
+    if (reportError(key, error) && done) toast(t(done));
     await reload();
   }
 
@@ -101,9 +110,11 @@ export function useMenuEditor(restaurantId: string) {
     key: string,
     table: ReorderTable,
     row: Record<string, unknown>,
+    done?: string,
   ): Promise<string | undefined> {
     const { data, error } = await supabase.from(table).insert(row).select("id").single();
     if (!reportError(key, error)) return undefined;
+    if (done) toast(t(done));
     await reload();
     return (data as { id: string } | null)?.id;
   }
@@ -132,7 +143,7 @@ export function useMenuEditor(restaurantId: string) {
     run("write.renameMenu", supabase.from("menus").update({ name }).eq("id", id));
   // Cascade deletes the menu's categories, products, extras and their links.
   const deleteMenu = (id: string) =>
-    run("write.deleteMenu", supabase.from("menus").delete().eq("id", id));
+    run("write.deleteMenu", supabase.from("menus").delete().eq("id", id), "done.menuDeleted");
   const moveMenu = (id: string, direction: "up" | "down") =>
     move("write.reorderMenus", "menus", menus, id, direction);
 
@@ -177,7 +188,7 @@ export function useMenuEditor(restaurantId: string) {
     });
     if (!result) return undefined;
     await reload();
-    toast(`Duplicated as “${result.copyName}”`);
+    toast(t("done.menuDuplicatedAs", { name: result.copyName }));
     return result.newMenuId;
   }
 
@@ -190,10 +201,18 @@ export function useMenuEditor(restaurantId: string) {
       sort_order: sections.filter(s => s.menu_id === menuId).length,
     });
   const renameSection = (id: string, name: string) =>
-    run("write.renameSection", supabase.from("categories").update({ name }).eq("id", id));
+    run(
+      "write.renameSection",
+      supabase.from("categories").update({ name }).eq("id", id),
+      "done.sectionRenamed",
+    );
   // Products in a deleted section keep existing (category_id → null via FK).
   const deleteSection = (id: string) =>
-    run("write.deleteSection", supabase.from("categories").delete().eq("id", id));
+    run(
+      "write.deleteSection",
+      supabase.from("categories").delete().eq("id", id),
+      "done.sectionDeleted",
+    );
 
   async function moveSection(id: string, direction: "up" | "down"): Promise<void> {
     const section = sections.find(s => s.id === id);
@@ -211,13 +230,21 @@ export function useMenuEditor(restaurantId: string) {
       is_addon: false,
       sort_order: products.filter(p => p.menu_id === menuId).length,
       ...input,
-    });
+    }, "done.productAdded");
   const updateProduct = (
     id: string,
     input: Partial<ProductInput & { category_id: string | null }>,
-  ) => run("write.updateProduct", supabase.from("menu_items").update(input).eq("id", id));
+  ) => run(
+      "write.updateProduct",
+      supabase.from("menu_items").update(input).eq("id", id),
+      "done.productUpdated",
+    );
   const deleteProduct = (id: string) =>
-    run("write.deleteProduct", supabase.from("menu_items").delete().eq("id", id));
+    run(
+      "write.deleteProduct",
+      supabase.from("menu_items").delete().eq("id", id),
+      "done.productDeleted",
+    );
 
   /** Moves a product up/down among its siblings (same menu + same section, including "uncategorized"). */
   async function moveProduct(id: string, direction: "up" | "down"): Promise<void> {
@@ -250,11 +277,20 @@ export function useMenuEditor(restaurantId: string) {
         sort_order: addons.filter(a => a.menu_id === menuId).length,
         ...input,
       }),
+      "done.extraAdded",
     );
   const updateAddon = (id: string, input: Partial<AddonInput>) =>
-    run("write.updateExtra", supabase.from("menu_items").update(input).eq("id", id));
+    run(
+      "write.updateExtra",
+      supabase.from("menu_items").update(input).eq("id", id),
+      "done.extraUpdated",
+    );
   const deleteAddon = (id: string) =>
-    run("write.deleteExtra", supabase.from("menu_items").delete().eq("id", id));
+    run(
+      "write.deleteExtra",
+      supabase.from("menu_items").delete().eq("id", id),
+      "done.extraDeleted",
+    );
 
   /** Bulk delete: removes any mix of products and extras in one call. */
   const deleteItems = (ids: string[]) =>

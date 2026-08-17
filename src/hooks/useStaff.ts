@@ -90,11 +90,11 @@ export function useStaff(restaurantId: string) {
         toast(data.error ?? t("apiErr.staffAdd"), "error");
         return false;
       }
-      toast(`Invite sent to ${email}`);
+      toast(t("done.inviteSentTo", { email }));
       await refresh();
       return true;
     } catch {
-      toast("Network error — please try again.", "error");
+      toast(t("done.networkError"), "error");
       return false;
     } finally {
       setBusy(false);
@@ -117,7 +117,7 @@ export function useStaff(restaurantId: string) {
       toast("Role updated");
       setMembers(prev => prev.map(m => (m.id === id ? { ...m, role } : m)));
     } catch {
-      toast("Network error — please try again.", "error");
+      toast(t("done.networkError"), "error");
     } finally {
       setBusy(false);
     }
@@ -139,7 +139,7 @@ export function useStaff(restaurantId: string) {
       toast("Staff login removed");
       setMembers(prev => prev.filter(m => m.id !== id));
     } catch {
-      toast("Network error — please try again.", "error");
+      toast(t("done.networkError"), "error");
     } finally {
       setBusy(false);
     }
