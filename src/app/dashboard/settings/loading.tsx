@@ -17,7 +17,7 @@ export default function SettingsLoading() {
       <div className="container">
         <header className="tt-dash-head">
           <Breadcrumb
-            trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Settings" }]}
+            trail={[{ labelKey: "nav.dashboard", href: "/dashboard" }, { labelKey: "nav.settings" }]}
           />
         </header>
 

@@ -503,6 +503,7 @@ export const es: Messages = {
 
   // ── Panel de administración ──
   nav: {
+    breadcrumb: "Ruta de navegación",
     dashboard: "Panel",
     account: "Menú de cuenta",
     profile: "Perfil",

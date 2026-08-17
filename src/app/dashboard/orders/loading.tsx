@@ -8,7 +8,7 @@ export default function OrdersLoading() {
       <div className="container">
         <header className="tt-dash-head">
           <Breadcrumb
-            trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Orders" }]}
+            trail={[{ labelKey: "nav.dashboard", href: "/dashboard" }, { labelKey: "nav.orders" }]}
           />
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <Skeleton width={64} height={44} radius={12} />

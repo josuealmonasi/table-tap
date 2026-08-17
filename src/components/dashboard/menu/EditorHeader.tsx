@@ -36,7 +36,7 @@ export default function EditorHeader({
   const t = useT();
   return (
     <header className="tt-dash-head">
-      <nav className="tt-breadcrumb" aria-label="Breadcrumb">
+      <nav className="tt-breadcrumb" aria-label={t("nav.breadcrumb")}>
         <Link href="/dashboard">{t("nav.dashboard")}</Link>
         <span className="tt-breadcrumb-sep">/</span>
         <MenuSwitcher
