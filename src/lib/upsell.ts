@@ -1,15 +1,17 @@
 "use client";
 
 /**
- * Whether this phone has already taken a suggestion on the bill it is building.
+ * Whether this phone has already been asked "anything else?" on the bill it is
+ * building.
  *
- * A waiter asks "anything else?" once. Asking again after they said yes is how
- * a helpful question turns into pestering, so the answer is remembered until
- * the bill is done with — the same moment the cart is cleared.
+ * A waiter asks once, on the way to putting the order in. Asking again — after
+ * a yes, or after every dish that gets added — is how a helpful question turns
+ * into pestering, so the answer is remembered until the bill is done with: the
+ * same moment the cart is cleared.
  */
 const KEY = (restaurantId: string) => `tt-upsell:${restaurantId}`;
 
-export function upsellTaken(restaurantId: string): boolean {
+export function upsellAsked(restaurantId: string): boolean {
   try {
     return localStorage.getItem(KEY(restaurantId)) === "1";
   } catch {
@@ -18,7 +20,7 @@ export function upsellTaken(restaurantId: string): boolean {
   }
 }
 
-export function markUpsellTaken(restaurantId: string): void {
+export function markUpsellAsked(restaurantId: string): void {
   try {
     localStorage.setItem(KEY(restaurantId), "1");
   } catch {
