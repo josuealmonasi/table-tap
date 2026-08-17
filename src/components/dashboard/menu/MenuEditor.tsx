@@ -159,6 +159,7 @@ export default function MenuEditor({
                   onAddProduct={addProductWithAddons}
                   onUpdateProduct={updateProductWithAddons}
                   onDeleteProduct={editor.deleteProduct}
+                  onDuplicateProduct={editor.duplicateProduct}
                   onToggleAvailable={editor.setAvailability}
                   modalForms={modalForms}
                   categories={menuSections}
@@ -188,6 +189,7 @@ export default function MenuEditor({
                   onAddProduct={addProductWithAddons}
                   onUpdateProduct={updateProductWithAddons}
                   onDeleteProduct={editor.deleteProduct}
+                  onDuplicateProduct={editor.duplicateProduct}
                   onToggleAvailable={editor.setAvailability}
                   modalForms={modalForms}
                   categories={menuSections}

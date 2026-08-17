@@ -27,6 +27,7 @@ interface SectionEditorProps {
   ) => Promise<void>;
   onUpdateProduct: (id: string, input: ProductInput, addonIds: string[]) => Promise<void>;
   onDeleteProduct: (id: string) => Promise<void>;
+  onDuplicateProduct?: (id: string) => Promise<string | undefined>;
   onToggleAvailable: (id: string, available: boolean) => void;
   /** Open add/edit forms in a focused modal instead of expanding inline. Defaults to on. */
   modalForms?: boolean;
@@ -58,6 +59,7 @@ export default function SectionEditor({
   onAddProduct,
   onUpdateProduct,
   onDeleteProduct,
+  onDuplicateProduct,
   onToggleAvailable,
   modalForms = true,
   categories,
@@ -245,6 +247,7 @@ export default function SectionEditor({
             currency={currency}
             onUpdate={onUpdateProduct}
             onDelete={onDeleteProduct}
+            onDuplicate={onDuplicateProduct}
             onToggleAvailable={onToggleAvailable}
             modalForms={modalForms}
             categories={categories}
