@@ -12,7 +12,7 @@ import CouponBox from "./CouponBox";
 import SuggestionStrip from "./SuggestionStrip";
 import OrderTotals from "./OrderTotals";
 import TipPicker from "./TipPicker";
-import { BackIcon, HintIcon, SecureIcon } from "@/components/ui/icons";
+import { BackIcon, BillIcon, HintIcon, SecureIcon } from "@/components/ui/icons";
 
 interface CartScreenProps {
   restaurant: Restaurant;
@@ -227,20 +227,44 @@ export default function CartScreen({
                 disabled={!canCheckout || loading}
                 onClick={() => onCheckout(payLaterAllowed)}
               >
+                {/* The busy label has to match the button that was pressed.
+                    Announcing a redirect to payment when the tap only sends
+                    food to the kitchen tells the diner their card is about to
+                    be charged, which is both untrue and alarming at a table
+                    that settles at the end. */}
                 {t(
-                  loading
-                    ? "cart.redirecting"
-                    : payLaterAllowed
-                      ? "cart.placeOrder"
+                  payLaterAllowed
+                    ? loading
+                      ? "cart.placingOrder"
+                      : "cart.placeOrder"
+                    : loading
+                      ? "cart.redirecting"
                       : "cart.proceed",
                 )}
               </button>
+              {/* And the small print underneath answers the question the
+                  button raises: how am I paying? Stripe's name reassures the
+                  diner who is about to hand over a card, and says nothing to
+                  the one whose bill stays open on the table. */}
               <p
                 className="tt-muted"
                 style={{ textAlign: "center", fontSize: 12, marginTop: 12 }}
               >
-                <SecureIcon size={12} weight="bold" style={{ verticalAlign: "-1px" }} />{" "}
-                {t("cart.securedBy")}
+                {payLaterAllowed ? (
+                  <>
+                    <BillIcon size={12} weight="bold" style={{ verticalAlign: "-1px" }} />{" "}
+                    {t("cart.payAtEnd")}
+                  </>
+                ) : (
+                  <>
+                    <SecureIcon
+                      size={12}
+                      weight="bold"
+                      style={{ verticalAlign: "-1px" }}
+                    />{" "}
+                    {t("cart.securedBy")}
+                  </>
+                )}
               </p>
             </div>
           </>
