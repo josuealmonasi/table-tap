@@ -1298,6 +1298,16 @@ h2.tt-serif {
   }
 }
 
+/* Three across on a wide screen, like the bills list — a row of one card the
+   width of the board wastes it, and the floor reads these in a glance. */
+@media (min-width: 1025px) {
+  .tt-open-tables-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+}
+
 .tt-open-table {
   display: flex;
   align-items: center;
@@ -1802,6 +1812,25 @@ h2.tt-serif {
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 16px;
 }
+/* The card opens the full order. It stays a card rather than becoming a
+   button so the controls inside it keep working — they stop the click. */
+.tt-order-card-open {
+  cursor: pointer;
+}
+.tt-order-card-open:hover {
+  border-color: color-mix(in srgb, var(--tt-accent) 35%, var(--tt-line));
+}
+.tt-order-detail-line {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-top: 1px solid var(--tt-line);
+}
+.tt-order-detail-line:first-of-type {
+  border-top: none;
+}
+
 .tt-order-card {
   background: var(--tt-white);
   border-radius: var(--tt-radius);

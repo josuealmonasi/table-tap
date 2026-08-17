@@ -5,15 +5,10 @@ import { formatMoney } from "@/lib/format";
 import { backwardOptions } from "@/lib/order-flow";
 import { MoveToIcon } from "@/components/ui/icons";
 import { orderCode, type Order, type OrderStatus } from "@/lib/types";
+import OrderDetailDialog from "./OrderDetailDialog";
+import { STATUS_META, statusMeta } from "@/lib/order-status";
 import { useT } from "@/lib/i18n/context";
 
-const STATUS_META: Record<string, { labelKey: string; color: string }> = {
-  received: { labelKey: "orders.statusNew", color: "var(--tt-gold)" },
-  preparing: { labelKey: "orders.statusPreparing", color: "var(--tt-accent)" },
-  ready: { labelKey: "orders.statusReady", color: "var(--tt-success)" },
-  completed: { labelKey: "orders.statusCompleted", color: "var(--tt-muted)" },
-  cancelled: { labelKey: "orders.statusCancelled", color: "var(--tt-muted)" },
-};
 
 /** Map an order's current status to the button that advances it. */
 function nextAction(
@@ -51,13 +46,14 @@ export default function OrderCard({
   canMove = true,
 }: OrderCardProps) {
   const t = useT();
-  const meta = STATUS_META[order.status] ?? STATUS_META.completed;
+  const meta = statusMeta(order.status);
   const action = nextAction(order.status);
   // A waiter closes out a handed-over order and nothing else; the kitchen
   // owns every other stage change.
   const moveBack = canMove ? backwardOptions(order.status) : [];
   const canAdvance = canMove || action?.to === "completed";
   const [moveOpen, setMoveOpen] = useState(false);
+  const [detail, setDetail] = useState(false);
   const moveRef = useRef<HTMLDivElement>(null);
 
   // Close on a click anywhere else, the way every other menu in the app does.
@@ -76,7 +72,33 @@ export default function OrderCard({
   });
 
   return (
-    <div className="tt-order-card" style={{ borderLeft: `4px solid ${meta.color}` }}>
+    <div
+      className="tt-order-card tt-order-card-open"
+      style={{ borderLeft: `4px solid ${meta.color}` }}
+      role="button"
+      tabIndex={0}
+      aria-label={t("orders.openDetail", { code: orderCode(order.id) })}
+      // The card opens the detail; the buttons on it keep doing their own job,
+      // which is why every control below stops the click from reaching here.
+      onClick={() => setDetail(true)}
+      onKeyDown={e => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setDetail(true);
+        }
+      }}
+    >
+      {/* The dialog renders inside this card, so its clicks would bubble
+          back into the card's own handler — closing it reopened it in the
+          same gesture, which is why it looked like it couldn't be closed. */}
+      <div onClick={e => e.stopPropagation()} role="presentation">
+        <OrderDetailDialog
+          order={order}
+          currency={currency}
+          open={detail}
+          onClose={() => setDetail(false)}
+        />
+      </div>
       {/* Two rows, each with an anchor on both sides: what the order is
           (table, code) above how it stands (placed at, status). The code used
           to sit under the table name where it read as a subtitle rather than
@@ -146,7 +168,10 @@ export default function OrderCard({
                 aria-haspopup="menu"
                 aria-expanded={moveOpen}
                 title={t("orders.moveBack")}
-                onClick={() => setMoveOpen(o => !o)}
+                onClick={e => {
+                  e.stopPropagation();
+                  setMoveOpen(o => !o);
+                }}
               >
                 <MoveToIcon size={16} />
               </button>
@@ -157,7 +182,8 @@ export default function OrderCard({
                       key={status}
                       role="menuitem"
                       className="tt-move-item"
-                      onClick={() => {
+                      onClick={e => {
+                        e.stopPropagation();
                         setMoveOpen(false);
                         onAdvance(order.id, status);
                       }}
@@ -172,7 +198,10 @@ export default function OrderCard({
           {cancellable && onCancel && (
             <button
               className="tt-btn tt-btn-ghost tt-btn-sm"
-              onClick={() => onCancel(order)}
+              onClick={e => {
+                e.stopPropagation();
+                onCancel(order);
+              }}
             >
               {t("common.cancel")}
             </button>
@@ -180,7 +209,10 @@ export default function OrderCard({
           {action && canAdvance ? (
             <button
               className={`tt-btn ${action.variant} tt-btn-sm`}
-              onClick={() => onAdvance(order.id, action.to)}
+              onClick={e => {
+                e.stopPropagation();
+                onAdvance(order.id, action.to);
+              }}
             >
               {t(action.labelKey)}
             </button>

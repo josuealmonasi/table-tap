@@ -127,6 +127,7 @@ export const en = {
     deleteSelected: "Delete selected",
     bulkActions: "Bulk actions",
     moveTo: "Move “{name}” to…",
+    openDetail: "Open order {code}",
     noSections:
       "No other sections to move into. Create one below to move this product into it.",
     createAndMove: "Create & move",
@@ -237,6 +238,7 @@ export const en = {
   settle: {
     openTables: "Tables still to pay",
     openTablesHint: "Longest wait first",
+    searchTables: "Search tables…",
     tableOwes: "{n} order · {amount}",
     tableOwesPlural: "{n} orders · {amount}",
     title: "Table {label} · settle up",
