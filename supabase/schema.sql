@@ -291,6 +291,20 @@ create table if not exists user_logs (
 
 create index if not exists user_logs_restaurant_idx on user_logs(restaurant_id, created_at desc);
 
+-- The log started as a record of who touched which login. Everything else
+-- worth answering "who did that?" about — a bill settled in cash, a debt
+-- written off, a promotion applied to a table, an order cancelled, the tax
+-- rate changed — belongs in the same place, or an owner has to ask three
+-- screens. So the row widens: `entity` says what kind of thing was acted on,
+-- `detail` carries the human-readable specifics, and the staff-only columns
+-- become optional.
+alter table user_logs add column if not exists entity text not null default 'staff';
+alter table user_logs add column if not exists detail text;
+alter table user_logs alter column target_role drop not null;
+alter table user_logs alter column target_email drop not null;
+alter table user_logs drop constraint if exists user_logs_action_check;
+create index if not exists user_logs_action_idx on user_logs(restaurant_id, action);
+
 -- ── Profiles (a user's own basic info — name; email/password live in auth) ──
 create table if not exists profiles (
   user_id    uuid primary key references auth.users(id) on delete cascade,

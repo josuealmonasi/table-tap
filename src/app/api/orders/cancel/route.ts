@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logEvent } from "@/lib/activity-log";
 import { actingManager } from "@/lib/api-guard";
 
 export const runtime = "nodejs";
@@ -64,5 +65,12 @@ export async function POST(req: NextRequest) {
     .eq("restaurant_id", actor.restaurantId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  await logEvent({
+    restaurantId: actor.restaurantId,
+    actor: actor.email,
+    entity: "order",
+    action: refundId ? "refunded" : "cancelled",
+    detail: `#${String(id).slice(0, 8)}`,
+  });
   return NextResponse.json({ ok: true });
 }

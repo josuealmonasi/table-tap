@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { isAllowedTimeZone } from "@/lib/timezones";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logEvent } from "@/lib/activity-log";
 import { actingManager } from "@/lib/api-guard";
 import { isOwnStorageUrl } from "@/lib/images";
 
@@ -78,5 +79,22 @@ export async function POST(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // Named fields only: a log line reading "settings updated" answers nothing,
+  // and the values themselves are what an owner comes back to check.
+  await logEvent({
+    restaurantId: actor.restaurantId,
+    actor: actor.email,
+    entity: "settings",
+    action:
+      "accepting_orders" in update
+        ? update.accepting_orders
+          ? "resumed"
+          : "paused"
+        : "updated",
+    detail: Object.entries(update)
+      .map(([k, v]) => `${k}: ${typeof v === "string" && v.length > 30 ? "…" : v}`)
+      .join(", "),
+  });
   return NextResponse.json({ ok: true });
 }
