@@ -26,7 +26,7 @@ export default function BillsLoading() {
           <Skeleton width="100%" height={43} radius={999} />
 
           <div className="tt-bill-list">
-            {Array.from({ length: 4 }).map((_, i) => (
+            {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="tt-bill-row" aria-hidden="true">
                 <Skeleton width={34} height={34} radius={999} />
                 <div className="tt-bill-main" style={{ gap: 6 }}>
