@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logEvent } from "@/lib/activity-log";
 import { actingManager } from "@/lib/api-guard";
 import { isValidCouponFormat, normalizeCoupon } from "@/lib/coupons";
 
@@ -103,6 +104,13 @@ export async function POST(req: NextRequest) {
       { status: duplicate ? 409 : 500 },
     );
   }
+  await logEvent({
+    restaurantId: actor.restaurantId,
+    actor: actor.email,
+    entity: "coupon",
+    action: "created",
+    detail: code,
+  });
   return NextResponse.json({ ok: true });
 }
 
@@ -123,6 +131,13 @@ export async function PATCH(req: NextRequest) {
       .eq("id", id)
       .eq("restaurant_id", actor.restaurantId);
     if (error) return await apiError("apiErr.promoUpdate", 500);
+    await logEvent({
+      restaurantId: actor.restaurantId,
+      actor: actor.email,
+      entity: "coupon",
+      action: body.active ? "resumed" : "paused",
+      detail: String(id).slice(0, 8),
+    });
     return NextResponse.json({ ok: true });
   }
 
@@ -145,6 +160,13 @@ export async function PATCH(req: NextRequest) {
     // Scoped to the caller's restaurant so an id from elsewhere can't be edited.
     .eq("restaurant_id", actor.restaurantId);
   if (error) return await apiError("apiErr.promoUpdate", 500);
+  await logEvent({
+    restaurantId: actor.restaurantId,
+    actor: actor.email,
+    entity: "coupon",
+    action: "updated",
+    detail: String(id).slice(0, 8),
+  });
   return NextResponse.json({ ok: true });
 }
 
@@ -163,5 +185,12 @@ export async function DELETE(req: NextRequest) {
     .eq("id", id)
     .eq("restaurant_id", actor.restaurantId);
   if (error) return await apiError("apiErr.promoDelete", 500);
+  await logEvent({
+    restaurantId: actor.restaurantId,
+    actor: actor.email,
+    entity: "coupon",
+    action: "deleted",
+    detail: String(id).slice(0, 8),
+  });
   return NextResponse.json({ ok: true });
 }

@@ -2,6 +2,49 @@
 // truth for the message keys; es.ts must mirror its shape (enforced by types).
 export const en = {
   lang: { label: "Language" },
+  log: {
+    entity: {
+      staff: "Team",
+      order: "Order",
+      bill: "Bill",
+      discount: "Discount",
+      coupon: "Coupon",
+      promotion: "Promotion",
+      settings: "Settings",
+      menu: "Menu",
+    },
+    staff: {
+      created: "added a login",
+      updated: "changed a role",
+      deleted: "removed a login",
+    },
+    bill: {
+      paid: "took payment for a table",
+      "written_off": "wrote off a table's bill",
+    },
+    discount: {
+      discounted: "applied a promotion to a bill",
+      requested: "asked to apply a promotion",
+      approved: "approved a discount",
+      rejected: "rejected a discount",
+    },
+    order: {
+      cancelled: "cancelled an order",
+      refunded: "refunded an order",
+    },
+    settings: {
+      updated: "changed a setting",
+      paused: "paused new orders",
+      resumed: "resumed orders",
+    },
+    coupon: {
+      created: "created a coupon",
+      updated: "edited a coupon",
+      deleted: "deleted a coupon",
+      paused: "paused a coupon",
+      resumed: "resumed a coupon",
+    },
+  },
   done: {
     menuDuplicatedAs: "Duplicated as “{name}”",
     profileSaved: "Profile saved",
@@ -798,6 +841,11 @@ export const en = {
     roleOwner: "Owner — everything (max 3 owners)",
     recentActivity: "Recent activity",
     activityHint: "Every change to logins and roles, newest first",
+    activityCount: "{n} entries",
+    activitySearch: "Search who, what or when…",
+    sortByAction: "Action",
+    sortByDate: "Date",
+    logsNoMatch: "Nothing matches “{query}”.",
     // Profile
     profileTitle: "Your profile",
     profileHint: "How your name shows to the rest of the team",

@@ -1,45 +1,90 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-/** One "{actor} {action} a {role} user" entry from the activity log. */
+/** One entry from the restaurant's activity log. */
 export interface UserLog {
   id: string;
   actor_email: string;
-  action: "created" | "updated" | "deleted";
-  target_role: string;
-  target_email: string;
+  entity: string;
+  action: string;
+  detail: string | null;
+  target_role: string | null;
+  target_email: string | null;
   created_at: string;
 }
 
-export const LOGS_PER_PAGE = 20;
+/** A page fits on a laptop screen without scrolling the table out of view. */
+export const LOGS_PER_PAGE = 12;
+
+/** Which column the list is ordered by. */
+export type LogSort = "created_at" | "action";
+
+const COLUMNS =
+  "id, actor_email, entity, action, detail, target_role, target_email, created_at";
 
 /**
- * Pages through the restaurant's user-activity log (newest first, 20 per
- * page). Owner-only by RLS — anyone else simply gets zero rows.
+ * Pages, sorts and searches the restaurant's activity log.
+ *
+ * Sorting and paging happen in the database rather than in the browser: the
+ * log grows for as long as the restaurant is open, and a page that fetches
+ * everything to sort four hundred rows is a page that gets slower every week.
+ * Owner-only by RLS — anyone else simply gets zero rows.
  */
 export function useUserLogs(restaurantId: string) {
   const [logs, setLogs] = useState<UserLog[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<LogSort>("created_at");
+  const [ascending, setAscending] = useState(false);
+
+  // A search or a sort restarts the list; page 7 of the old ordering means
+  // nothing in the new one.
+  useEffect(() => setPage(1), [query, sort, ascending]);
+
+  // Typing shouldn't fire a query per keystroke.
+  const [debounced, setDebounced] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(query.trim()), 250);
+    return () => clearTimeout(id);
+  }, [query]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       const from = (page - 1) * LOGS_PER_PAGE;
-      const { data, count } = await createClient()
+      let request = createClient()
         .from("user_logs")
-        .select("id, actor_email, action, target_role, target_email, created_at", {
-          count: "exact",
-        })
-        .eq("restaurant_id", restaurantId)
+        .select(COLUMNS, { count: "exact" })
+        .eq("restaurant_id", restaurantId);
+
+      if (debounced) {
+        // Whatever the owner remembers: who did it, what kind of thing it was,
+        // what happened, or the specifics recorded alongside it.
+        const like = `%${debounced}%`;
+        request = request.or(
+          [
+            `actor_email.ilike.${like}`,
+            `entity.ilike.${like}`,
+            `action.ilike.${like}`,
+            `detail.ilike.${like}`,
+            `target_email.ilike.${like}`,
+          ].join(","),
+        );
+      }
+
+      const { data, count } = await request
+        .order(sort, { ascending })
+        // Within one action type the newest is still the interesting one.
         .order("created_at", { ascending: false })
         .range(from, from + LOGS_PER_PAGE - 1);
+
       if (!cancelled) {
-        setLogs((data as UserLog[]) ?? []);
+        setLogs((data as UserLog[] | null) ?? []);
         setTotal(count ?? 0);
         setLoading(false);
       }
@@ -47,8 +92,31 @@ export function useUserLogs(restaurantId: string) {
     return () => {
       cancelled = true;
     };
-  }, [restaurantId, page]);
+  }, [restaurantId, page, debounced, sort, ascending]);
 
-  const pages = Math.max(1, Math.ceil(total / LOGS_PER_PAGE));
-  return { logs, loading, page, pages, total, setPage };
+  const pages = useMemo(() => Math.max(1, Math.ceil(total / LOGS_PER_PAGE)), [total]);
+
+  /** Clicking a column heading sorts by it, or flips it if it already is. */
+  function sortBy(column: LogSort): void {
+    if (column === sort) {
+      setAscending(a => !a);
+      return;
+    }
+    setSort(column);
+    setAscending(false);
+  }
+
+  return {
+    logs,
+    loading,
+    page,
+    pages,
+    total,
+    setPage,
+    query,
+    setQuery,
+    sort,
+    ascending,
+    sortBy,
+  };
 }

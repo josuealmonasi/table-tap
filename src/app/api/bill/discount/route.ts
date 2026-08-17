@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logEvent } from "@/lib/activity-log";
 import { couponProblem, findCoupon, toAppliedCoupon } from "@/lib/coupon-service";
 import { applyCoupon } from "@/lib/pricing";
 import { billTotal, discountableOrders } from "@/lib/staff-discount";
@@ -72,11 +73,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       requested_by: actor.email,
     });
     if (error) return await apiError("apiErr.generic", 500);
+    await logEvent({
+      restaurantId: actor.restaurantId,
+      actor: actor.email,
+      entity: "discount",
+      action: "requested",
+      detail: `${coupon.code} · ${amount} · ${orders[0].table_label ? `Table ${orders[0].table_label}` : "To go"}`,
+    });
     return NextResponse.json({ pending: true, amount, code: coupon.code });
   }
 
   const applied = await applyToOrders(orders, coupon.id, coupon.code, amount, actor.restaurantId);
   if (!applied) return await apiError("apiErr.couponNotValid", 409);
 
+  await logEvent({
+    restaurantId: actor.restaurantId,
+    actor: actor.email,
+    entity: "discount",
+    action: "discounted",
+    detail: `${coupon.code} · ${amount} · ${orders[0].table_label ? `Table ${orders[0].table_label}` : "To go"}`,
+  });
   return NextResponse.json({ ok: true, amount, code: coupon.code });
 }

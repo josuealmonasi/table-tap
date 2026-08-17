@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { actingManager } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logEvent } from "@/lib/activity-log";
 import { findCoupon } from "@/lib/coupon-service";
 import { billTotal, discountableOrders } from "@/lib/staff-discount";
 import { applyToOrders } from "@/lib/apply-bill-discount";
@@ -49,6 +50,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (!approve) {
     await decide("rejected");
+    await logEvent({
+      restaurantId: actor.restaurantId,
+      actor: actor.email,
+      entity: "discount",
+      action: "rejected",
+      detail: request.code,
+    });
     return NextResponse.json({ ok: true, approved: false });
   }
 
@@ -77,5 +85,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!applied) return await apiError("apiErr.couponNotValid", 409);
 
   await decide("approved", amount);
+  await logEvent({
+    restaurantId: actor.restaurantId,
+    actor: actor.email,
+    entity: "discount",
+    action: "approved",
+    detail: `${coupon.code} · ${amount}`,
+  });
   return NextResponse.json({ ok: true, approved: true, amount });
 }

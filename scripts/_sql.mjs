@@ -1,0 +1,10 @@
+import pg from "pg";
+import fs from "node:fs";
+const rd=f=>fs.existsSync(f)?fs.readFileSync(f,"utf8"):"";
+const pick=t=>Object.fromEntries(t.split("\n").filter(l=>l.includes("=")).map(l=>[l.slice(0,l.indexOf("=")).trim(),l.slice(l.indexOf("=")+1).trim()]));
+const env = process.argv[2]==="prod"?pick(rd(".env.production.local")):pick(rd(".env.development.local"));
+const c=new pg.Client({connectionString:env.DATABASE_URL, ssl:{rejectUnauthorized:false}});
+await c.connect(); await c.query(fs.readFileSync(process.argv[3],"utf8"));
+const r=await c.query("select column_name from information_schema.columns where table_name='user_logs' order by ordinal_position");
+console.log(process.argv[2]||"dev", "user_logs:", r.rows.map(x=>x.column_name).join(", "));
+await c.end();

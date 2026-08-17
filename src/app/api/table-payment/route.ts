@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logEvent } from "@/lib/activity-log";
 
 export const runtime = "nodejs";
 
@@ -52,9 +53,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .neq("status", "pending_payment")
     .neq("status", "cancelled");
 
-  const { data: updated, error } = await base.select("id");
+  const { data: updated, error } = await base.select("id, table_label, total");
   if (error) return await apiError("apiErr.orderData", 500);
   if (!updated?.length) return await apiError("apiErr.nothingToSettle", 409);
+
+  // Money moved without a card, so it is worth being able to ask about later.
+  await logEvent({
+    restaurantId: actor.restaurantId,
+    actor: actor.email,
+    entity: "bill",
+    action: settlement === "written_off" ? "written_off" : "paid",
+    detail:
+      `${updated[0].table_label ? `Table ${updated[0].table_label}` : "To go"} · ` +
+      `${updated.length} order(s) · ${updated.reduce((sum, o) => sum + Number(o.total), 0)}` +
+      (settlement === "written_off" ? "" : ` · ${settlement}`),
+  });
 
   // The table is settled, so any open request to settle it is answered.
   await db
