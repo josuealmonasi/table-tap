@@ -140,7 +140,7 @@ export default function PromotionsPanel({
         </div>
 
         <div className="tt-cols">
-          <div className="tt-section tt-cols-full">
+          <div className="tt-section">
             {loading ? (
               <ListSkeleton rows={rows} />
             ) : promotions.length === 0 ? (
