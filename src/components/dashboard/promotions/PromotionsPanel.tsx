@@ -116,31 +116,34 @@ export default function PromotionsPanel({
           />
         </header>
 
-        <p className="tt-muted" style={{ marginTop: 0, marginBottom: 12 }}>
-          {t("promos.hint")}
-        </p>
-
-        {/* Both create forms used to sit open on the page below the list, which
-            meant the page led with two empty forms instead of the deals that
-            already exist. They're behind these buttons now, in the same dialog
-            editing uses. */}
-        <div className="tt-promo-add" style={{ marginBottom: 16 }}>
-          <button
-            className="tt-btn tt-btn-primary tt-btn-sm"
-            onClick={() => setCreating("combo")}
-          >
-            + {t("promos.newCombo")}
-          </button>
-          <button
-            className="tt-btn tt-btn-primary tt-btn-sm"
-            onClick={() => setCreating("deal")}
-          >
-            + {t("promos.newDeal")}
-          </button>
-        </div>
-
         <div className="tt-cols">
           <div className="tt-section">
+            <div className="tt-section-head">
+              <h3 className="tt-serif" style={{ margin: 0 }}>
+                {t("promos.title")}
+              </h3>
+            </div>
+            <p className="tt-muted" style={{ fontSize: 13, marginTop: 0 }}>
+              {t("promos.hint")}
+            </p>
+
+            {/* The create forms live behind these, in the same dialog editing
+                uses, so the section leads with the deals that already exist. */}
+            <div className="tt-promo-add" style={{ marginBottom: 14 }}>
+              <button
+                className="tt-btn tt-btn-primary tt-btn-sm"
+                onClick={() => setCreating("combo")}
+              >
+                + {t("promos.newCombo")}
+              </button>
+              <button
+                className="tt-btn tt-btn-primary tt-btn-sm"
+                onClick={() => setCreating("deal")}
+              >
+                + {t("promos.newDeal")}
+              </button>
+            </div>
+
             {loading ? (
               <ListSkeleton rows={rows} />
             ) : promotions.length === 0 ? (

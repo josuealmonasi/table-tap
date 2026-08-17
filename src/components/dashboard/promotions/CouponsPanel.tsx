@@ -183,12 +183,12 @@ export default function CouponsPanel({
   }
 
   return (
-    // Full row: this card carries a wide form (code, kind, value, claims,
-    // min spend, two dates) plus the list, and it truncates in a half column.
     <div className="tt-section">
-      <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 2 }}>
-        {t("coupons.title")}
-      </h3>
+      <div className="tt-section-head">
+        <h3 className="tt-serif" style={{ margin: 0 }}>
+          {t("coupons.title")}
+        </h3>
+      </div>
       <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
         {t("coupons.hint")}
       </p>
