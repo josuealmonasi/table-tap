@@ -38,7 +38,7 @@ export default function AnalyticsView({ data, period, currency }: AnalyticsViewP
           />
         </header>
 
-        <div className="tt-board-tabs" role="tablist" style={{ marginBottom: 16 }}>
+        <div className="tt-board-tabs" role="tablist">
           {PERIODS.map(p => (
             <Link
               key={p.key}

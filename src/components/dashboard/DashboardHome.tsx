@@ -78,7 +78,7 @@ export default function DashboardHome({ restaurant, role }: DashboardHomeProps) 
           />
         )}
 
-        <div className="tt-tiles" style={{ marginTop: 16 }}>
+        <div className="tt-tiles">
           {navItemsFor(role).map(tile => {
             const Glyph = NAV_ICONS[tile.icon];
             return tile.soon ? (

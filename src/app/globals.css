@@ -2563,9 +2563,16 @@ h2.tt-serif {
   padding: 18px;
   border: 1px solid var(--tt-line);
 }
-/* Stacked sections space themselves. Every page used to write this margin by
-   hand, so a new page shipped with its cards touching — the rule is here now
-   and there is nothing left to remember. */
+/* The dashboard's vertical rhythm, in one place.
+   Every block stacked inside a dashboard page — a card, a row of tiles, a
+   filter bar, a grid of columns — is separated from the one above it. Pages
+   used to write this margin by hand, which is why each new page shipped with
+   something touching something else: the KPI tiles sat flush against the card
+   below them, and Open bills' two cards had no gap at all. Nothing to
+   remember now. */
+.tt-dash > .container > * + * {
+  margin-top: 16px;
+}
 .tt-section + .tt-section {
   margin-top: 16px;
 }
@@ -2618,7 +2625,6 @@ h2.tt-serif {
 .tt-board-tabs {
   display: flex;
   gap: 8px;
-  margin-bottom: 16px;
 }
 .tt-board-tab {
   border: 1px solid var(--tt-cream);
