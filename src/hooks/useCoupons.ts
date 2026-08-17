@@ -16,6 +16,8 @@ export interface Coupon {
   active: boolean;
   starts_at: string | null;
   ends_at: string | null;
+  /** Applied by the floor to an open bill; hidden from the customer's box. */
+  staff_only: boolean;
   created_at: string;
 }
 
@@ -28,6 +30,7 @@ export interface CouponInput {
   /** ISO dates; null = no bound on that end. */
   startsAt?: string | null;
   endsAt?: string | null;
+  staffOnly?: boolean;
 }
 
 /**
@@ -44,7 +47,7 @@ export function useCoupons(restaurantId: string) {
     const { data } = await createClient()
       .from("coupons")
       .select(
-        "id, code, kind, value, max_uses, uses_count, min_subtotal, active, starts_at, ends_at, created_at",
+        "id, code, kind, value, max_uses, uses_count, min_subtotal, active, starts_at, ends_at, staff_only, created_at",
       )
       .eq("restaurant_id", restaurantId)
       .order("created_at", { ascending: false });

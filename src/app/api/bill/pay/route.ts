@@ -100,7 +100,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return await apiError("apiErr.couponAlreadyUsed", 409);
     }
     coupon = await findCoupon(restaurantId, couponCode);
-    if (!coupon) return await apiError("apiErr.couponNotFound", 400);
+    if (!coupon || coupon.staff_only) return await apiError("apiErr.couponNotFound", 400);
     if (couponProblem(coupon, food)) return await apiError("apiErr.couponNotValid", 400);
 
     // Reserve before charging. If the last use has gone, the diner is told now

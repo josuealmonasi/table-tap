@@ -18,6 +18,8 @@ interface CouponFields {
   minSubtotal: number;
   startsAt: string | null;
   endsAt: string | null;
+  /** Applied by the floor to an open bill; never typed by a diner. */
+  staffOnly: boolean;
 }
 
 /** Validates and normalises the editable fields shared by POST and PATCH. */
@@ -62,6 +64,7 @@ function readFields(body: Record<string, unknown>): CouponFields | { key: string
     minSubtotal,
     startsAt: startsAt as string | null,
     endsAt: endsAt as string | null,
+    staffOnly: Boolean(body.staffOnly),
   };
 }
 
@@ -84,6 +87,7 @@ export async function POST(req: NextRequest) {
     code,
     kind: fields.kind,
     value: fields.value,
+    staff_only: fields.staffOnly,
     max_uses: fields.maxUses,
     min_subtotal: fields.minSubtotal,
     starts_at: fields.startsAt,
@@ -129,6 +133,7 @@ export async function PATCH(req: NextRequest) {
     .from("coupons")
     .update({
       kind: fields.kind,
+      staff_only: fields.staffOnly,
       value: fields.value,
       max_uses: fields.maxUses,
       min_subtotal: fields.minSubtotal,

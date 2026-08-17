@@ -11,6 +11,7 @@ export type NavItem = {
     | "Analytics"
     | "Promotions"
     | "Table"
+    | "Bills"
     | "Staff"
     | "Settings"
     | "PlatformAdmin";
@@ -42,6 +43,12 @@ export const NAV_ITEMS: NavItem[] = [
     icon: "Promotions",
     titleKey: "nav.promos",
     descKey: "nav.promosDesc",
+  },
+  {
+    href: "/dashboard/bills",
+    icon: "Bills",
+    titleKey: "nav.bills",
+    descKey: "nav.billsDesc",
   },
   {
     href: "/dashboard/tables",
@@ -81,9 +88,11 @@ export function navItemsFor(role: DashboardRole): NavItem[] {
       },
     ];
   }
-  // Floor/back staff only get the live orders board.
-  if (role === "kitchen" || role === "waiter") {
-    return NAV_ITEMS.filter(i => i.href === "/dashboard/orders");
+  // The kitchen only gets its board. A waiter also gets open bills: they can
+  // ask for a discount on one, even though only a manager grants it.
+  if (role === "kitchen") return NAV_ITEMS.filter(i => i.href === "/dashboard/orders");
+  if (role === "waiter") {
+    return NAV_ITEMS.filter(i => i.href === "/dashboard/orders" || i.href === "/dashboard/bills");
   }
   if (role === "manager") return NAV_ITEMS.filter(i => !OWNER_ONLY.includes(i.href));
   return NAV_ITEMS;

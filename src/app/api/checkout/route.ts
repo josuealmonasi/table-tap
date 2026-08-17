@@ -244,6 +244,10 @@ export async function POST(req: NextRequest) {
       if (!found) {
         return NextResponse.json({ couponReason: "notFound" }, { status: 409 });
       }
+      // Same rule as the validate endpoint: a floor-only code is not a code a
+      // customer can spend, however they got hold of it.
+      if (found.staff_only) return await apiError("apiErr.couponNotFound", 400);
+
       const problem = couponProblem(found, base.subtotal);
       if (problem) {
         return NextResponse.json({ couponReason: problem }, { status: 409 });

@@ -352,6 +352,11 @@ create table if not exists coupons (
   created_by_email text,
   created_at    timestamptz not null default now()
 );
+-- A code the floor applies, never the diner: the "show your membership card"
+-- kind of promotion, where there is nothing for a customer to type. Hidden
+-- from the customer's validate endpoint, so guessing one gets nowhere.
+alter table coupons add column if not exists staff_only boolean not null default false;
+
 -- One code per restaurant, case-insensitively — codes are compared upper-cased.
 create unique index if not exists coupons_code_idx on coupons(restaurant_id, upper(code));
 
@@ -697,6 +702,35 @@ create policy "owner manages restaurant"
   on restaurants for all
   using (owns_restaurant(id))
   with check (owns_restaurant(id));
+
+-- DISCOUNT REQUESTS: a waiter asking for a discount they may not grant alone.
+-- The row is the ask; approving it is what actually moves money, and only a
+-- manager or owner can do that.
+create table if not exists discount_requests (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  table_id      uuid references restaurant_tables(id) on delete set null,
+  table_label   text,
+  order_ids     uuid[] not null,
+  code          text not null,
+  amount        numeric not null default 0,
+  requested_by  text not null,
+  status        text not null default 'pending'
+                check (status in ('pending', 'approved', 'rejected')),
+  decided_by    text,
+  created_at    timestamptz not null default now(),
+  decided_at    timestamptz
+);
+create index if not exists discount_requests_open_idx
+  on discount_requests(restaurant_id, status, created_at desc);
+alter table discount_requests enable row level security;
+drop policy if exists "team handles discount requests" on discount_requests;
+create policy "team handles discount requests"
+  on discount_requests for all
+  using (has_role(restaurant_id, array['owner', 'manager', 'waiter']))
+  with check (has_role(restaurant_id, array['owner', 'manager', 'waiter']));
+-- Never a customer's business: the ask names staff and carries a code.
+revoke all on discount_requests from anon;
 
 -- USER LOGS: owners read their restaurant's log; writes happen only
 -- server-side from the user-management API routes (secret key).
