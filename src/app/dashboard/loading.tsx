@@ -7,7 +7,7 @@ export default function DashboardLoading() {
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
-          <Breadcrumb trail={[{ label: "Dashboard" }]} />
+          <Breadcrumb trail={[{ labelKey: "nav.dashboard" }]} />
         </header>
 
         <div

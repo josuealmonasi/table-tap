@@ -18,7 +18,7 @@ export default function StaffLoading() {
       <div className="container">
         <header className="tt-dash-head">
           <Breadcrumb
-            trail={[{ label: "Dashboard", href: "/dashboard" }, { label: "Staff" }]}
+            trail={[{ labelKey: "nav.dashboard", href: "/dashboard" }, { labelKey: "nav.staff" }]}
           />
         </header>
 

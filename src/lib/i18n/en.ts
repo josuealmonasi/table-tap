@@ -509,6 +509,7 @@ export const en = {
 
   // ── Dashboard ──
   nav: {
+    breadcrumb: "Breadcrumb",
     dashboard: "Dashboard",
     account: "Account menu",
     profile: "Profile",

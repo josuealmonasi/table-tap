@@ -16,7 +16,7 @@ export default function Breadcrumb({ trail }: { trail: Crumb[] }) {
   const t = useT();
   const text = (c: Crumb) => (c.labelKey ? t(c.labelKey) : (c.label ?? ""));
   return (
-    <nav className="tt-breadcrumb" aria-label="Breadcrumb">
+    <nav className="tt-breadcrumb" aria-label={t("nav.breadcrumb")}>
       {trail.map((c, i) => {
         const last = i === trail.length - 1;
         return (
