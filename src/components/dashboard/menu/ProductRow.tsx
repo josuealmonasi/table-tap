@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import ReorderButtons from "@/components/ui/ReorderButtons";
 import MoveToSection from "./MoveToSection";
 import ProductForm from "./ProductForm";
-import { DeleteIcon, EditIcon, MoveToIcon } from "@/components/ui/icons";
+import { DeleteIcon, DuplicateIcon, EditIcon, MoveToIcon } from "@/components/ui/icons";
 
 interface ProductRowProps {
   restaurantId: string;
@@ -20,6 +20,8 @@ interface ProductRowProps {
   currency: string;
   onUpdate: (id: string, input: ProductInput, addonIds: string[]) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  /** Copies the dish, its options and its extras into the same section. */
+  onDuplicate?: (id: string) => Promise<string | undefined>;
   onToggleAvailable: (id: string, available: boolean) => void;
   /** Open the edit form in a focused modal instead of expanding inline. Defaults to on. */
   modalForms?: boolean;
@@ -45,6 +47,7 @@ export default function ProductRow({
   currency,
   onUpdate,
   onDelete,
+  onDuplicate,
   onToggleAvailable,
   modalForms = true,
   categories,
@@ -182,6 +185,16 @@ export default function ProductRow({
               >
                 <EditIcon size={16} />
               </button>
+              {onDuplicate && (
+                <button
+                  className="tt-iconbtn"
+                  onClick={() => onDuplicate(product.id)}
+                  title={t("menu.duplicateProduct")}
+                  aria-label={t("menu.duplicateProduct")}
+                >
+                  <DuplicateIcon size={16} />
+                </button>
+              )}
               <button
                 className="tt-iconbtn"
                 onClick={async () => {

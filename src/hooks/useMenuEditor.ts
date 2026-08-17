@@ -231,6 +231,63 @@ export function useMenuEditor(restaurantId: string) {
       sort_order: products.filter(p => p.menu_id === menuId).length,
       ...input,
     }, "done.productAdded");
+  /**
+   * Copies a product, its options and its add-on links, into the same section.
+   *
+   * A menu often carries six versions of one dish — the same burger at three
+   * sizes, the same coffee with four milks — and rebuilding the modifier
+   * groups by hand each time is the slow part. The copy lands right after the
+   * original so it is where the eye already is, and carries "copy" in its name
+   * so nobody serves the wrong one while it is being edited.
+   */
+  async function duplicateProduct(id: string): Promise<string | undefined> {
+    const source = products.find(p => p.id === id);
+    if (!source) return undefined;
+
+    const taken = new Set(
+      products.filter(p => p.menu_id === source.menu_id).map(p => p.name.toLowerCase()),
+    );
+    let name = `${source.name} copy`;
+    for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${source.name} copy ${n}`;
+
+    const newId = await insertReturningId(
+      "write.createProduct",
+      "menu_items",
+      {
+        restaurant_id: restaurantId,
+        menu_id: source.menu_id,
+        category_id: source.category_id,
+        is_addon: false,
+        name,
+        description: source.description,
+        price: source.price,
+        emoji: source.emoji,
+        image_url: source.image_url,
+        popular: source.popular,
+        available: source.available,
+        modifiers: source.modifiers,
+        dietary: source.dietary,
+        discount_pct: source.discount_pct,
+        // Straight after the original, not at the end of the section.
+        sort_order: source.sort_order + 1,
+      },
+      "done.productDuplicated",
+    );
+    if (!newId) return undefined;
+
+    // The extras it offers come with it — rebuilding those by hand is the
+    // tedious half of copying a dish.
+    const addonIds = links[id] ?? [];
+    if (addonIds.length > 0) {
+      await supabase.from("item_addons").insert(
+        addonIds.map((addon_id, i) => ({ product_id: newId, addon_id, sort_order: i })),
+      );
+    }
+
+    await reload();
+    return newId;
+  }
+
   const updateProduct = (
     id: string,
     input: Partial<ProductInput & { category_id: string | null }>,
@@ -360,6 +417,7 @@ export function useMenuEditor(restaurantId: string) {
     deleteSection,
     moveSection,
     addProduct,
+    duplicateProduct,
     updateProduct,
     deleteProduct,
     moveProduct,
