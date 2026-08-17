@@ -28,7 +28,7 @@ export default function AdminLoading() {
           {rows(4)}
         </div>
 
-        <div className="tt-section" style={{ marginTop: 16 }}>
+        <div className="tt-section">
           <Skeleton width={100} height={18} style={{ marginBottom: 12 }} />
           {rows(6)}
         </div>

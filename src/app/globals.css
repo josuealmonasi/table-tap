@@ -2542,6 +2542,18 @@ h2.tt-serif {
   padding: 18px;
   border: 1px solid var(--tt-line);
 }
+/* Stacked sections space themselves. Every page used to write this margin by
+   hand, so a new page shipped with its cards touching — the rule is here now
+   and there is nothing left to remember. */
+.tt-section + .tt-section {
+  margin-top: 16px;
+}
+/* …except inside a container that already spaces its children. A grid's gap
+   and this margin both apply, which stacked to 32px on a phone where the two
+   settings columns become one. */
+.tt-cols > .tt-section + .tt-section {
+  margin-top: 0;
+}
 /* The heading and its hint share a line, but the hint is a full sentence and a
    flex item won't shrink past its min-content width — on a narrow phone that
    forces the whole card wider than the screen, which pushes every control in

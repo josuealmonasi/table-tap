@@ -60,7 +60,7 @@ export default function AnalyticsView({ data, period, currency }: AnalyticsViewP
         {/* A one-day "by day" chart is just a single full-width bar — skip it
             for Today; the busiest-hours chart below covers today's shape. */}
         {period !== "today" && (
-          <div className="tt-section" style={{ marginTop: 16 }}>
+          <div className="tt-section">
             <div className="tt-section-head">
               <h3 className="tt-serif" style={{ margin: 0 }}>
                 {t("analytics.revenueByDay")}
@@ -92,7 +92,7 @@ export default function AnalyticsView({ data, period, currency }: AnalyticsViewP
           </div>
         )}
 
-        <div className="tt-section" style={{ marginTop: 16 }}>
+        <div className="tt-section">
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>
               {t("analytics.mostSold")}
@@ -125,7 +125,7 @@ export default function AnalyticsView({ data, period, currency }: AnalyticsViewP
           )}
         </div>
 
-        <div className="tt-section" style={{ marginTop: 16 }}>
+        <div className="tt-section">
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>
               {t("analytics.busiestHours")}

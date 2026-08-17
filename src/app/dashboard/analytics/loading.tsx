@@ -24,12 +24,12 @@ export default function AnalyticsLoading() {
           ))}
         </div>
 
-        <div className="tt-section" style={{ marginTop: 16 }}>
+        <div className="tt-section">
           <Skeleton width={140} height={18} style={{ marginBottom: 14 }} />
           <Skeleton width="100%" height={140} radius={12} />
         </div>
 
-        <div className="tt-section" style={{ marginTop: 16 }}>
+        <div className="tt-section">
           <Skeleton width={160} height={18} style={{ marginBottom: 14 }} />
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "9px 4px" }}>

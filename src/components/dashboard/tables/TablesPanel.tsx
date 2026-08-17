@@ -111,7 +111,7 @@ export default function TablesPanel({
         </div>
 
         {/* Table service: one QR per table. */}
-        <div className="tt-section" style={{ marginTop: 16 }}>
+        <div className="tt-section">
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>
               {t("dash.tableQrs")}
