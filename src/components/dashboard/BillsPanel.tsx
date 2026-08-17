@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Breadcrumb from "@/components/layout/Breadcrumb";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
@@ -18,12 +19,12 @@ export interface DiscountRequest {
 }
 
 /**
- * Open bills, searchable, with the discount a manager may apply to one.
+ * Open bills, searchable, with the promotion a manager may apply to one.
  *
- * The list is what a manager needs when a waiter says "table four is asking
- * about the membership promotion": find four, see what they owe, apply it.
- * Requests waiting on a decision sit at the top, because somebody is standing
- * at a table waiting for the answer.
+ * Built like the rest of the dashboard's lists: a section per group of rows,
+ * each row a line of the same height with its identity on the left and its
+ * money on the right. A manager reads down the right edge to find the table
+ * they were told about, so the amounts have to line up.
  */
 export default function BillsPanel({
   bills,
@@ -44,6 +45,7 @@ export default function BillsPanel({
   const [busy, setBusy] = useState<string | null>(null);
 
   const shown = useMemo(() => bills.filter(b => matchesBill(b, query)), [bills, query]);
+  const owed = shown.reduce((sum, b) => sum + b.total, 0);
 
   async function decide(requestId: string, approve: boolean): Promise<void> {
     setBusy(requestId);
@@ -62,99 +64,130 @@ export default function BillsPanel({
   }
 
   return (
-    <div className="tt-panel">
-      <h2 className="tt-serif">{t("dash.bills")}</h2>
-      <p className="tt-muted tt-subline">{t("dash.billsDesc")}</p>
+    <div className="tt-dash">
+      <div className="container">
+        <header className="tt-dash-head">
+          <Breadcrumb
+            trail={[{ labelKey: "nav.dashboard", href: "/dashboard" }, { labelKey: "nav.bills" }]}
+          />
+        </header>
 
-      {requests.length > 0 && (
-        <div className="tt-card" style={{ padding: 14, marginTop: 14 }}>
-          <div className="tt-mod-label">{t("dash.approvals")}</div>
-          {requests.map(r => (
-            <div key={r.id} className="tt-row" style={{ marginTop: 10, gap: 10 }}>
-              <span style={{ fontSize: 14 }}>
-                {t("dash.approvalAsk", {
-                  who: r.requested_by,
-                  code: r.code,
-                  amount: formatMoney(r.amount, currency),
-                  table: r.table_label
-                    ? t("dash.tableN", { label: r.table_label })
-                    : t("dash.billsToGo"),
-                })}
-              </span>
-              <span style={{ display: "flex", gap: 8, flex: "none" }}>
-                <button
-                  className="tt-btn tt-btn-primary tt-btn-sm"
-                  disabled={busy === r.id}
-                  onClick={() => decide(r.id, true)}
-                >
-                  {t("dash.approve")}
-                </button>
-                <button
-                  className="tt-btn tt-btn-ghost tt-btn-sm"
-                  disabled={busy === r.id}
-                  onClick={() => decide(r.id, false)}
-                >
-                  {t("dash.reject")}
-                </button>
-              </span>
+        {/* Somebody is standing at a table waiting on these, so they lead. */}
+        {requests.length > 0 && (
+          <div className="tt-section">
+            <div className="tt-section-head">
+              <h3 className="tt-serif" style={{ margin: 0 }}>
+                {t("dash.approvals")}
+              </h3>
             </div>
-          ))}
-        </div>
-      )}
-
-      <div className="tt-search-row" style={{ marginTop: 16 }}>
-        <SearchIcon size={16} weight="bold" />
-        <input
-          className="tt-input"
-          style={{ width: "100%" }}
-          value={query}
-          placeholder={t("dash.billsSearch")}
-          aria-label={t("dash.billsSearch")}
-          onChange={e => setQuery(e.target.value)}
-        />
-      </div>
-
-      {shown.length === 0 ? (
-        <p className="tt-muted" style={{ marginTop: 16 }}>
-          {t("dash.billsEmpty")}
-        </p>
-      ) : (
-        <div style={{ marginTop: 12 }}>
-          {shown.map(bill => (
-            <button
-              key={bill.key}
-              type="button"
-              className="tt-card tt-open-table"
-              style={{ width: "100%", marginTop: 10, padding: 14 }}
-              onClick={() => setChosen(bill)}
-            >
-              <span className="tt-row">
-                <span>
-                  <strong>
-                    {bill.tableLabel ? (
-                      <>
-                        <TableIcon size={14} weight="bold" />{" "}
-                        {t("dash.tableN", { label: bill.tableLabel })}
-                      </>
-                    ) : (
-                      <>
-                        <BillIcon size={14} weight="bold" /> {bill.code}
-                      </>
-                    )}
+            {requests.map(r => (
+              <div key={r.id} className="tt-bill-row tt-bill-approval">
+                <div className="tt-bill-main">
+                  <strong className="tt-bill-name">
+                    {r.table_label
+                      ? t("dash.tableN", { label: r.table_label })
+                      : t("dash.billsToGo")}
                   </strong>
-                  <span className="tt-muted tt-subline" style={{ display: "block", fontSize: 13 }}>
-                    {t(bill.orderIds.length === 1 ? "dash.billsOrders" : "dash.billsOrdersPlural", {
-                      n: bill.orderIds.length,
+                  <span className="tt-muted tt-bill-sub">
+                    {t("dash.approvalAsk", {
+                      who: r.requested_by,
+                      code: r.code,
+                      amount: formatMoney(r.amount, currency),
                     })}
-                    {bill.discounted ? ` · ${t("dash.staffOnlyBadge")}` : ""}
                   </span>
-                </span>
-                <strong className="tt-accent">{formatMoney(bill.total, currency)}</strong>
-              </span>
-            </button>
-          ))}
+                </div>
+                <div className="tt-bill-actions-row">
+                  <button
+                    className="tt-btn tt-btn-primary tt-btn-sm"
+                    disabled={busy === r.id}
+                    onClick={() => decide(r.id, true)}
+                  >
+                    {t("dash.approve")}
+                  </button>
+                  <button
+                    className="tt-btn tt-btn-ghost tt-btn-sm"
+                    disabled={busy === r.id}
+                    onClick={() => decide(r.id, false)}
+                  >
+                    {t("dash.reject")}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="tt-section">
+          <div className="tt-section-head">
+            <h3 className="tt-serif" style={{ margin: 0 }}>
+              {t("dash.bills")}
+            </h3>
+            <span className="tt-muted" style={{ fontSize: 12 }}>
+              {formatMoney(owed, currency)}
+            </span>
+          </div>
+          <p className="tt-muted" style={{ fontSize: 13, marginTop: 0 }}>
+            {t("dash.billsDesc")}
+          </p>
+
+          <div className="tt-bill-search">
+            <SearchIcon size={16} weight="bold" />
+            <input
+              className="tt-input"
+              value={query}
+              placeholder={t("dash.billsSearch")}
+              aria-label={t("dash.billsSearch")}
+              onChange={e => setQuery(e.target.value)}
+            />
+          </div>
+
+          {shown.length === 0 ? (
+            <p className="tt-muted" style={{ marginTop: 16, marginBottom: 4 }}>
+              {t("dash.billsEmpty")}
+            </p>
+          ) : (
+            <div className="tt-bill-list">
+              {shown.map(bill => (
+                <button
+                  key={bill.key}
+                  type="button"
+                  className="tt-bill-row tt-bill-open"
+                  onClick={() => setChosen(bill)}
+                >
+                  <span className="tt-bill-glyph" aria-hidden>
+                    {bill.tableLabel ? (
+                      <TableIcon size={16} weight="bold" />
+                    ) : (
+                      <BillIcon size={16} weight="bold" />
+                    )}
+                  </span>
+                  <span className="tt-bill-main">
+                    <strong className="tt-bill-name">
+                      {bill.tableLabel
+                        ? t("dash.tableN", { label: bill.tableLabel })
+                        : bill.code}
+                    </strong>
+                    <span className="tt-muted tt-bill-sub">
+                      {t(
+                        bill.orderIds.length === 1 ? "dash.billsOrders" : "dash.billsOrdersPlural",
+                        { n: bill.orderIds.length },
+                      )}
+                      {" · "}
+                      {t("dash.billsWaiting", { time: waited(bill.since) })}
+                    </span>
+                  </span>
+                  {bill.discounted && (
+                    <span className="tt-badge tt-bill-flag">{t("dash.staffOnlyBadge")}</span>
+                  )}
+                  <strong className="tt-bill-total-cell">
+                    {formatMoney(bill.total, currency)}
+                  </strong>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {chosen && (
         <BillDiscountDialog
@@ -168,4 +201,12 @@ export default function BillsPanel({
       )}
     </div>
   );
+}
+
+/** How long the table has been sitting on this bill, in the floor's own units. */
+function waited(since: string): string {
+  const mins = Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 60_000));
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  return hours < 24 ? `${hours}h ${mins % 60}m` : `${Math.floor(hours / 24)}d`;
 }
