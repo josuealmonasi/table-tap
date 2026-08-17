@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import { useT } from "@/lib/i18n/context";
@@ -43,6 +43,17 @@ export default function BillsPanel({
   const [query, setQuery] = useState("");
   const [chosen, setChosen] = useState<OpenBill | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+
+  // "waiting 1h 40m" is a different sentence a minute later, so the server's
+  // answer and the browser's disagree and React reports a hydration mismatch.
+  // The wait is measured after mount instead — and again every half minute, so
+  // a manager watching the list sees it climb rather than freeze.
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+    const tick = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(tick);
+  }, []);
 
   const shown = useMemo(() => bills.filter(b => matchesBill(b, query)), [bills, query]);
   const owed = shown.reduce((sum, b) => sum + b.total, 0);
@@ -172,8 +183,12 @@ export default function BillsPanel({
                         bill.orderIds.length === 1 ? "dash.billsOrders" : "dash.billsOrdersPlural",
                         { n: bill.orderIds.length },
                       )}
-                      {" · "}
-                      {t("dash.billsWaiting", { time: waited(bill.since) })}
+                      {now !== null && (
+                        <>
+                          {" · "}
+                          {t("dash.billsWaiting", { time: waited(bill.since, now) })}
+                        </>
+                      )}
                     </span>
                   </span>
                   {bill.discounted && (
@@ -204,8 +219,8 @@ export default function BillsPanel({
 }
 
 /** How long the table has been sitting on this bill, in the floor's own units. */
-function waited(since: string): string {
-  const mins = Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 60_000));
+function waited(since: string, now: number): string {
+  const mins = Math.max(0, Math.floor((now - new Date(since).getTime()) / 60_000));
   if (mins < 60) return `${mins}m`;
   const hours = Math.floor(mins / 60);
   return hours < 24 ? `${hours}h ${mins % 60}m` : `${Math.floor(hours / 24)}d`;

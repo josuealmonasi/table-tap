@@ -4,7 +4,7 @@ import { useServiceRequests } from "@/hooks/useServiceRequests";
 import type { ServiceRequest } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
 import { BillIcon, CallWaiterIcon } from "@/components/ui/icons";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import SettleTableDialog from "./SettleTableDialog";
 
 interface ServiceRequestsBarProps {
@@ -30,11 +30,22 @@ export default function ServiceRequestsBar({
   // The table whose bill the waiter is collecting, if any.
   const [settling, setSettling] = useState<ServiceRequest | null>(null);
 
+  // Measured after mount, not during render: the server says "5m ago" and the
+  // browser hydrating a moment later says "6m", which React reports as a
+  // mismatch. Re-read every half minute so the wait climbs on screen.
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+    const tick = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(tick);
+  }, []);
+
   // How long the table has been waiting. Minutes for the first hour, because
   // that is how a floor thinks; hours and days after that, because a request
   // left open since Tuesday printed as "11495m ago" and read as a glitch.
   const age = (createdAt: string): string => {
-    const mins = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60_000);
+    if (now === null) return "";
+    const mins = Math.floor((now - new Date(createdAt).getTime()) / 60_000);
     if (mins < 1) return t("orders.justNow");
     if (mins < 60) return t("orders.minsAgo", { m: mins });
     const hours = Math.floor(mins / 60);
