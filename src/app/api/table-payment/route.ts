@@ -3,6 +3,7 @@ import { apiError } from "@/lib/api-error";
 import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
+import { logDetail } from "@/lib/log-detail";
 
 export const runtime = "nodejs";
 
@@ -63,10 +64,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     actor: actor.email,
     entity: "bill",
     action: settlement === "written_off" ? "written_off" : "paid",
-    detail:
-      `${updated[0].table_label ? `Table ${updated[0].table_label}` : "To go"} · ` +
-      `${updated.length} order(s) · ${updated.reduce((sum, o) => sum + Number(o.total), 0)}` +
-      (settlement === "written_off" ? "" : ` · ${settlement}`),
+    detail: logDetail({
+      table: updated[0].table_label,
+      orders: updated.length,
+      amount: updated.reduce((sum, o) => sum + Number(o.total), 0).toFixed(2),
+      method: settlement === "written_off" ? null : settlement,
+    }),
   });
 
   // The table is settled, so any open request to settle it is answered.

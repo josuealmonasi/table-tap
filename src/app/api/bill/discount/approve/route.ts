@@ -3,6 +3,7 @@ import { apiError } from "@/lib/api-error";
 import { actingManager } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
+import { logDetail } from "@/lib/log-detail";
 import { findCoupon } from "@/lib/coupon-service";
 import { billTotal, discountableOrders } from "@/lib/staff-discount";
 import { applyToOrders } from "@/lib/apply-bill-discount";
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       actor: actor.email,
       entity: "discount",
       action: "rejected",
-      detail: request.code,
+      detail: logDetail({ code: request.code }),
     });
     return NextResponse.json({ ok: true, approved: false });
   }
@@ -90,7 +91,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     actor: actor.email,
     entity: "discount",
     action: "approved",
-    detail: `${coupon.code} · ${amount}`,
+    detail: logDetail({ code: coupon.code, amount: amount.toFixed(2) }),
   });
   return NextResponse.json({ ok: true, approved: true, amount });
 }

@@ -3021,14 +3021,45 @@ h2.tt-serif {
   color: var(--tt-accent);
 }
 
+/* An entry is two lines — what happened, then the specifics — with room
+   around them. Packed into one wrapping paragraph they ran into the timestamp
+   and the page read as a wall of text. */
 .tt-log-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding: 9px 4px;
-  border-top: 1px solid var(--tt-cream);
+  gap: 20px;
+  padding: 16px 4px;
+  border-top: 1px solid var(--tt-line);
   font-size: 13px;
+  line-height: 1.5;
+}
+.tt-log-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.tt-log-detail {
+  display: block;
+  margin-top: 4px;
+  color: var(--tt-muted);
+  font-size: 12.5px;
+}
+/* Never wraps, and never squeezes the sentence: it is the column the eye runs
+   down when looking for "some time on Friday". */
+.tt-log-when {
+  flex: none;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--tt-muted);
+  padding-top: 1px;
+}
+@media (max-width: 560px) {
+  .tt-log-row {
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 2px;
+  }
 }
 .tt-log-row:first-of-type {
   border-top: none;
