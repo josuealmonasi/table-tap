@@ -2,12 +2,14 @@
 
 import type { Restaurant, RestaurantTable } from "@/lib/types";
 import type { CartItem } from "@/hooks/useCart";
+import type { MenuItem } from "@/lib/types";
 import type { AppliedCoupon, ItemPromoSaving, PromoHint } from "@/lib/pricing";
 import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
 import NoteField from "./NoteField";
 import CartLineRow from "./CartLineRow";
 import CouponBox from "./CouponBox";
+import SuggestionStrip from "./SuggestionStrip";
 import OrderTotals from "./OrderTotals";
 import TipPicker from "./TipPicker";
 import { BackIcon, HintIcon, SecureIcon } from "@/components/ui/icons";
@@ -46,6 +48,9 @@ interface CartScreenProps {
   onChangeQty: (cartId: number, qty: number) => void;
   onEditItem: (item: CartItem) => void;
   onAddMore: () => void;
+  /** "Anything else?" — empty once the diner has taken one on this bill. */
+  suggestions?: MenuItem[];
+  onPickSuggestion?: (item: MenuItem) => void;
   onCheckout: (payLater?: boolean) => void;
   /** Dine-in at a table, where the owner allows settling at the end. */
   payLaterAllowed?: boolean;
@@ -81,6 +86,8 @@ export default function CartScreen({
   onChangeQty,
   onEditItem,
   onAddMore,
+  suggestions = [],
+  onPickSuggestion,
   onCheckout,
   payLaterAllowed = false,
 }: CartScreenProps) {
@@ -170,6 +177,14 @@ export default function CartScreen({
                   </p>
                 ))}
               </div>
+            )}
+
+            {onPickSuggestion && suggestions.length > 0 && (
+              <SuggestionStrip
+                items={suggestions}
+                currency={restaurant.currency}
+                onPick={onPickSuggestion}
+              />
             )}
 
             <div className="tt-coupon-row">
