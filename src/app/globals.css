@@ -2936,6 +2936,50 @@ h2.tt-serif {
 }
 
 /* user activity log rows + pager */
+/* Sorting: two plain toggles rather than table headers — the log reads as a
+   list of sentences on a phone, where a header row has nothing to head. */
+.tt-log-sort {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+.tt-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid var(--tt-line);
+  border-radius: 999px;
+  background: var(--tt-white);
+  font: inherit;
+  font-size: 13px;
+  color: var(--tt-ink-2);
+  cursor: pointer;
+}
+.tt-sort-on {
+  border-color: var(--tt-accent);
+  color: var(--tt-accent);
+  font-weight: 600;
+}
+/* What kind of thing the entry is about, so the eye can skip to the money. */
+.tt-log-tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--tt-surface);
+  color: var(--tt-ink-2);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.tt-log-bill,
+.tt-log-discount,
+.tt-log-order {
+  background: color-mix(in srgb, var(--tt-accent) 12%, transparent);
+  color: var(--tt-accent);
+}
+
 .tt-log-row {
   display: flex;
   align-items: center;

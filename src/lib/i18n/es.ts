@@ -4,6 +4,49 @@ import type { Messages } from "./en";
 // compile error.
 export const es: Messages = {
   lang: { label: "Idioma" },
+  log: {
+    entity: {
+      staff: "Equipo",
+      order: "Pedido",
+      bill: "Cuenta",
+      discount: "Descuento",
+      coupon: "Cupón",
+      promotion: "Promoción",
+      settings: "Ajustes",
+      menu: "Menú",
+    },
+    staff: {
+      created: "agregó un acceso",
+      updated: "cambió un rol",
+      deleted: "eliminó un acceso",
+    },
+    bill: {
+      paid: "cobró una mesa",
+      "written_off": "canceló la deuda de una mesa",
+    },
+    discount: {
+      discounted: "aplicó una promoción a una cuenta",
+      requested: "pidió aplicar una promoción",
+      approved: "aprobó un descuento",
+      rejected: "rechazó un descuento",
+    },
+    order: {
+      cancelled: "canceló un pedido",
+      refunded: "reembolsó un pedido",
+    },
+    settings: {
+      updated: "cambió un ajuste",
+      paused: "pausó los pedidos",
+      resumed: "reanudó los pedidos",
+    },
+    coupon: {
+      created: "creó un cupón",
+      updated: "editó un cupón",
+      deleted: "eliminó un cupón",
+      paused: "pausó un cupón",
+      resumed: "reanudó un cupón",
+    },
+  },
   done: {
     menuDuplicatedAs: "Duplicado como “{name}”",
     profileSaved: "Perfil guardado",
@@ -793,6 +836,11 @@ export const es: Messages = {
     roleOwner: "Dueño — todo (máx. 3 dueños)",
     recentActivity: "Actividad reciente",
     activityHint: "Cada cambio de accesos y roles, más reciente primero",
+    activityCount: "{n} registros",
+    activitySearch: "Busca quién, qué o cuándo…",
+    sortByAction: "Acción",
+    sortByDate: "Fecha",
+    logsNoMatch: "Nada coincide con “{query}”.",
     profileTitle: "Tu perfil",
     profileHint: "Cómo aparece tu nombre para el resto del equipo",
     fullName: "Nombre completo",
