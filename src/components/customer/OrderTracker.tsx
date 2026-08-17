@@ -2,34 +2,18 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { orderCode, type OrderStatus } from "@/lib/types";
+import { useRouter } from "next/navigation";
+import type { OrderStatus } from "@/lib/types";
 import { useOrderPolling } from "@/hooks/useOrderPolling";
+import { useIsDesktop } from "@/hooks/useIsDesktop";
 import type { TrackedOrder } from "@/lib/order-tracking";
 import { forgetOrder, rememberRecentOrder } from "@/lib/recent-order";
 import { useT } from "@/lib/i18n/context";
-import OrderStatusTimeline from "./OrderStatusTimeline";
-import TrackedItemsCard from "./TrackedItemsCard";
+import { Modal } from "@/components/ui/Modal";
+import TrackerBody from "./TrackerBody";
 import LanguageToggle from "./LanguageToggle";
-import {
-  StatusPreparingIcon,
-  StatusReadyIcon,
-  StatusReceivedIcon,
-} from "@/components/ui/icons";
 
 const TERMINAL: OrderStatus[] = ["completed", "cancelled"];
-
-/** Collapse the full order status into the three stages the diner sees. */
-function toDisplayStatus(status: OrderStatus): OrderStatus {
-  if (status === "completed") return "ready";
-  if (status === "pending_payment") return "received";
-  return status;
-}
-
-const HERO: Record<string, { headlineKey: string; Glyph: typeof StatusReadyIcon }> = {
-  ready: { headlineKey: "tracker.ready", Glyph: StatusReadyIcon },
-  preparing: { headlineKey: "tracker.preparing", Glyph: StatusPreparingIcon },
-  received: { headlineKey: "tracker.received", Glyph: StatusReceivedIcon },
-};
 
 interface OrderTrackerProps {
   initialOrder: TrackedOrder;
@@ -38,9 +22,9 @@ interface OrderTrackerProps {
 /** Live order tracking screen the diner lands on after paying. */
 export default function OrderTracker({ initialOrder }: OrderTrackerProps) {
   const t = useT();
+  const router = useRouter();
   const order = useOrderPolling(initialOrder);
-  const status = toDisplayStatus(order.status);
-  const hero = HERO[status] ?? HERO.received;
+  const isDesktop = useIsDesktop();
 
   // Back to the same menu the order came from (table route if it had a table).
   const menuHref = `/r/${order.restaurant_id}${
@@ -54,32 +38,36 @@ export default function OrderTracker({ initialOrder }: OrderTrackerProps) {
     else rememberRecentOrder(order.restaurant_id, order.id);
   }, [order.restaurant_id, order.id, order.status]);
 
-  return (
-    <div className="tt-root">
-      <div className="tt-track-hero" style={{ position: "relative" }}>
-        <div style={{ position: "absolute", top: 16, right: 16 }}>
-          <LanguageToggle />
-        </div>
-        <hero.Glyph size={46} weight="duotone" />
-        <h2 className="tt-serif" style={{ margin: 0, fontSize: 22 }}>
-          {t(hero.headlineKey)}
-        </h2>
-        <div className="tt-sage" style={{ fontSize: 13, marginTop: 4 }}>
-          {orderCode(order.id)}
-        </div>
+  const content = (
+    <div className="tt-track-shell">
+      <div className="tt-track-lang">
+        <LanguageToggle className="tt-lang-toggle tt-lang-toggle-onink" />
       </div>
-
-      <div style={{ padding: 20 }}>
-        <OrderStatusTimeline status={status} tableLabel={order.table_label} />
-        <TrackedItemsCard
-          items={order.items}
-          total={order.total}
-          currency={order.currency}
-        />
+      <TrackerBody order={order}>
         <Link href={menuHref} className="tt-btn tt-btn-ghost" style={{ width: "100%" }}>
           {t("tracker.backToMenu")}
         </Link>
-      </div>
+      </TrackerBody>
     </div>
   );
+
+  // On a wide screen this is a dialog, not a screen. As a page it was a
+  // phone-width column stranded in an empty desktop with the black hero band
+  // running off the top edge; in our dialog the same content reads as one
+  // card. Dismissing it — Escape, the backdrop, or the button inside — lands
+  // on the menu, which is the only place the diner was going next anyway.
+  if (isDesktop) {
+    return (
+      <Modal
+        open
+        onClose={() => router.push(menuHref)}
+        maxWidth={520}
+        label={t("tracker.title")}
+      >
+        <div className="tt-track-dialog">{content}</div>
+      </Modal>
+    );
+  }
+
+  return <div className="tt-root">{content}</div>;
 }

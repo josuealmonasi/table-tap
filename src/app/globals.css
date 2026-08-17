@@ -341,6 +341,17 @@ h2.tt-serif {
 .tt-lang-toggle:hover {
   background: color-mix(in srgb, var(--tt-header-ink) 9%, transparent);
 }
+/* On an ink band — the order tracker's hero — the header tokens are dark ink
+   on a dark fill, so the label disappeared and left the flag emoji floating on
+   its own. A solid pill carries its own contrast wherever it is dropped. */
+.tt-lang-toggle-onink {
+  background: var(--tt-white);
+  color: var(--tt-ink);
+  border-color: transparent;
+}
+.tt-lang-toggle-onink:hover {
+  background: color-mix(in srgb, var(--tt-white) 88%, transparent);
+}
 /* Navbar variant — dark text for the light header. */
 .tt-lang-toggle-nav {
   display: inline-flex;
@@ -1806,6 +1817,30 @@ h2.tt-serif {
 }
 
 /* ── order tracker ── */
+/* The tracker, shown two ways: a screen on a phone, a dialog on a wide one.
+   Only the chrome differs, so the shell and its two blocks are shared. */
+.tt-track-shell {
+  position: relative;
+}
+.tt-track-lang {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1;
+}
+.tt-track-body {
+  padding: 20px;
+}
+/* Inside the dialog the hero has to reach the panel's edges — indented by the
+   panel's own 24px it read as a black rectangle pasted onto a white card. The
+   negative margin gives it the full width back, and the panel's rounding
+   clips its top corners. */
+.tt-track-dialog {
+  margin: -24px;
+}
+.tt-track-dialog .tt-track-hero {
+  border-radius: var(--tt-radius) var(--tt-radius) 0 0;
+}
 .tt-track-hero {
   background: var(--tt-ink);
   padding: 28px 20px;
