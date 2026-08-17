@@ -477,6 +477,7 @@ export const en = {
     received: "Order received!",
     preparing: "Chef is preparing it",
     ready: "Your order is ready!",
+    title: "Order status",
     backToMenu: "← Back to menu",
     yourItems: "Your items",
     totalPaid: "Total paid",

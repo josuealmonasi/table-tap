@@ -474,6 +474,7 @@ export const es: Messages = {
     received: "¡Pedido recibido!",
     preparing: "El chef lo está preparando",
     ready: "¡Tu pedido está listo!",
+    title: "Estado de tu pedido",
     backToMenu: "← Volver al menú",
     yourItems: "Tus platillos",
     totalPaid: "Total pagado",
