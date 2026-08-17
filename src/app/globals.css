@@ -298,9 +298,15 @@ h2.tt-serif {
    the two rows of right-hand controls line up as one edge. */
 .tt-head-controls {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  /* One line, always. This used to stack, which looked identical while the
+     cluster held a single control — and broke the moment a second one joined
+     it: a table with a bill to settle got the receipt button floating above
+     the search box. Both places that use this class sit on the name's line,
+     so a row is the only arrangement it ever wants. */
+  flex-direction: row;
+  align-items: center;
   gap: 8px;
+  flex-shrink: 0;
   margin-right: -4px;
 }
 
@@ -828,12 +834,6 @@ h2.tt-serif {
 .tt-brand-row {
   align-items: center;
   gap: 12px;
-}
-.tt-brand-row .tt-head-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
 }
 .tt-table-badge {
   margin-top: 10px;

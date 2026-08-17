@@ -296,9 +296,12 @@ export default function BillSheet({
                 disabled={busy}
                 onClick={payOnline}
               >
-                {busy
-                  ? t("cart.redirecting")
-                  : t("bill.payNow", { amount: formatMoney(total, currency) })}
+                {/* The pair of buttons is a choice between two ways to
+                    settle, so each one names its way: online, or with whoever
+                    is serving. The amount is on the total line directly
+                    above, and repeating it here made the buttons read as
+                    "pay" versus something else. */}
+                {busy ? t("cart.redirecting") : t("bill.payNow")}
               </button>
               <button
                 className="tt-btn tt-btn-ghost tt-btn-lg"
