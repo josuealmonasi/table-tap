@@ -22,6 +22,8 @@ import ComboDetailScreen from "./ComboDetailScreen";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { useMenuFreshness } from "@/hooks/useMenuFreshness";
 import { rememberMyOrder } from "@/lib/my-orders";
+import { suggestItems } from "@/lib/suggestions";
+import { clearUpsell, markUpsellTaken, upsellTaken } from "@/lib/upsell";
 import { recallOrder, rememberRecentOrder } from "@/lib/recent-order";
 import { useTableBill } from "@/hooks/useTableBill";
 import BillSheet from "./BillSheet";
@@ -151,6 +153,23 @@ export default function OrderingApp({
   useEffect(() => {
     setTrackId(recallOrder(restaurant.id));
   }, [restaurant.id]);
+
+  // "Anything else?" — worked out from the cart, and asked at most once per
+  // bill: taking a suggestion is a yes, and a waiter doesn't ask twice.
+  const [upsellDone, setUpsellDone] = useState(true);
+  useEffect(() => setUpsellDone(upsellTaken(restaurant.id)), [restaurant.id]);
+
+  const suggestions = useMemo(
+    () => (upsellDone ? [] : suggestItems({ cart: cart.items, items, ratings })),
+    [upsellDone, cart.items, items, ratings],
+  );
+
+  function pickSuggestion(item: MenuItem): void {
+    // The ordinary dish screen, so options and notes are still asked for.
+    markUpsellTaken(restaurant.id);
+    setUpsellDone(true);
+    openItem(item);
+  }
 
   const photoOf = useMemo(() => {
     const byId = new Map(items.map(i => [i.id, i.image_url]));
@@ -308,6 +327,8 @@ export default function OrderingApp({
         // order used to reach only the first.
         rememberMyOrder(restaurant.id, data.orderId);
         rememberRecentOrder(restaurant.id, data.orderId);
+        clearUpsell(restaurant.id);
+        setUpsellDone(false);
         setTrackId(data.orderId);
         cart.clear();
         // Back to the menu, nothing in the way. The bill is a tap away on the
@@ -435,6 +456,8 @@ export default function OrderingApp({
             table={table}
             items={cart.items}
             photoOf={photoOf}
+            suggestions={suggestions}
+            onPickSuggestion={pickSuggestion}
             soldOut={soldOut}
             subtotal={pricing.subtotal}
             grossSubtotal={pricing.grossSubtotal}

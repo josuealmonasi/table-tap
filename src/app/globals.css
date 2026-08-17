@@ -1693,6 +1693,67 @@ h2.tt-serif {
   font-size: 18px;
 }
 
+/* "Anything else?" above the totals: three cards that scroll sideways on a
+   phone, so the question never pushes the order button off the screen. */
+.tt-suggest {
+  margin-top: 18px;
+}
+.tt-suggest-head {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.tt-suggest-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(112px, 1fr);
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+.tt-suggest-row::-webkit-scrollbar {
+  display: none;
+}
+.tt-suggest-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--tt-line);
+  border-radius: 12px;
+  background: var(--tt-white);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tt-suggest-card:hover {
+  border-color: color-mix(in srgb, var(--tt-accent) 35%, var(--tt-line));
+}
+.tt-suggest-thumb {
+  display: grid;
+  place-items: center;
+  height: 72px;
+  border-radius: 10px;
+  background: var(--tt-surface);
+  overflow: hidden;
+  font-size: 30px;
+}
+.tt-suggest-name {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tt-suggest-price {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tt-accent);
+}
+
 /* ── cart FAB ── */
 /* Fixed, not sticky. `position: sticky` only holds an element that would
    otherwise scroll past its offset — it never pulls one DOWN from a natural

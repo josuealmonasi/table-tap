@@ -309,6 +309,7 @@ export const en = {
     title: "Your Order",
     empty: "Your cart is empty.",
     addMore: "+ Add more items",
+    suggestTitle: "Anything else?",
     browseMenu: "Browse the menu",
     kitchenNote: "Note for the kitchen",
     kitchenNotePlaceholder: "Any notes for the whole order?",
