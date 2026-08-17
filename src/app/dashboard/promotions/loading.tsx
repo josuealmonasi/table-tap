@@ -16,16 +16,15 @@ export default function PromotionsLoading() {
           />
         </header>
 
-        <Skeleton width="70%" height={13} style={{ margin: "0 0 12px" }} />
-        <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-          <Skeleton width={150} height={34} radius={999} />
-          <Skeleton width={190} height={34} radius={999} />
-        </div>
-
         <div className="tt-cols">
           <div className="tt-section" aria-hidden="true">
             <div className="tt-section-head">
               <Skeleton width={120} height={18} />
+            </div>
+            <Skeleton width="85%" height={12} style={{ margin: "6px 0 12px" }} />
+            <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+              <Skeleton width={140} height={32} radius={999} />
+              <Skeleton width={175} height={32} radius={999} />
             </div>
             <ListSkeleton rows={3} />
           </div>
@@ -33,6 +32,8 @@ export default function PromotionsLoading() {
             <div className="tt-section-head">
               <Skeleton width={110} height={18} />
             </div>
+            <Skeleton width="90%" height={12} style={{ margin: "6px 0 12px" }} />
+            <Skeleton width={150} height={32} radius={999} style={{ marginBottom: 14 }} />
             <ListSkeleton rows={3} />
           </div>
         </div>
