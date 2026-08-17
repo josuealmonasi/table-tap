@@ -23,7 +23,7 @@ import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { useMenuFreshness } from "@/hooks/useMenuFreshness";
 import { rememberMyOrder } from "@/lib/my-orders";
 import { suggestItems } from "@/lib/suggestions";
-import { clearUpsell, markUpsellTaken, upsellTaken } from "@/lib/upsell";
+import { clearUpsell, markUpsellAsked, upsellAsked } from "@/lib/upsell";
 import { recallOrder, rememberRecentOrder } from "@/lib/recent-order";
 import { useTableBill } from "@/hooks/useTableBill";
 import BillSheet from "./BillSheet";
@@ -60,6 +60,12 @@ export default function OrderingApp({
 }) {
   const [screen, setScreen] = useState<Screen>("menu");
   const [selected, setSelected] = useState<MenuItem | null>(null);
+  // Where the dish screen was opened from, so backing out or adding returns
+  // there. A suggestion is taken from the cart, and dropping that diner on the
+  // menu afterwards makes them find their way back to the order they were
+  // about to place.
+  const [detailFrom, setDetailFrom] = useState<Screen>("menu");
+
   const [selectedCombo, setSelectedCombo] = useState<Combo | null>(null);
   const [editingLine, setEditingLine] = useState<CartItem | null>(null);
   const [orderNote, setOrderNote] = useState("");
@@ -154,21 +160,30 @@ export default function OrderingApp({
     setTrackId(recallOrder(restaurant.id));
   }, [restaurant.id]);
 
-  // "Anything else?" — worked out from the cart, and asked at most once per
-  // bill: taking a suggestion is a yes, and a waiter doesn't ask twice.
-  const [upsellDone, setUpsellDone] = useState(true);
-  useEffect(() => setUpsellDone(upsellTaken(restaurant.id)), [restaurant.id]);
-
-  const suggestions = useMemo(
-    () => (upsellDone ? [] : suggestItems({ cart: cart.items, items, ratings })),
-    [upsellDone, cart.items, items, ratings],
-  );
+  // "Anything else?" — asked on the way to ordering, and asked once.
+  //
+  // The offer is worked out and frozen the first time the cart is opened, then
+  // put away for the rest of the bill, whatever the diner does with it. Asking
+  // again every time a dish is added is the pestering this is meant to avoid,
+  // and a strip that reshuffled under their thumb between visits would make
+  // the cart feel unsteady at the worst possible moment.
+  const [offered, setOffered] = useState<MenuItem[]>([]);
+  useEffect(() => {
+    if (screen !== "cart") {
+      setOffered([]); // leaving the order step retires the question
+      return;
+    }
+    if (upsellAsked(restaurant.id)) return;
+    const picks = suggestItems({ cart: cart.items, items, ratings });
+    if (picks.length === 0) return; // nothing worth suggesting isn't an ask
+    markUpsellAsked(restaurant.id);
+    setOffered(picks);
+  }, [screen, restaurant.id, cart.items, items, ratings]);
 
   function pickSuggestion(item: MenuItem): void {
-    // The ordinary dish screen, so options and notes are still asked for.
-    markUpsellTaken(restaurant.id);
-    setUpsellDone(true);
-    openItem(item);
+    // The ordinary dish screen, so options and notes are still asked for —
+    // and adding it comes back here, to the order they were in the middle of.
+    openItem(item, "cart");
   }
 
   const photoOf = useMemo(() => {
@@ -224,13 +239,14 @@ export default function OrderingApp({
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
       if (screen === "combo") closeCombo();
-      else closeDetail(screen === "edit" ? "cart" : "menu");
+      else closeDetail(screen === "edit" ? "cart" : detailFrom);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [screen]);
+  }, [screen, detailFrom]);
 
-  function openItem(item: MenuItem) {
+  function openItem(item: MenuItem, from: Screen = "menu") {
+    setDetailFrom(from);
     setSelected(item);
     setScreen("item");
     syncMenuUrl({ item: item.id });
@@ -245,7 +261,7 @@ export default function OrderingApp({
   function addToCart(line: OrderLineItem) {
     cart.addItem(line);
     syncMenuUrl({ item: null });
-    setScreen("menu");
+    setScreen(detailFrom);
   }
 
   /**
@@ -328,7 +344,6 @@ export default function OrderingApp({
         rememberMyOrder(restaurant.id, data.orderId);
         rememberRecentOrder(restaurant.id, data.orderId);
         clearUpsell(restaurant.id);
-        setUpsellDone(false);
         setTrackId(data.orderId);
         cart.clear();
         // Back to the menu, nothing in the way. The bill is a tap away on the
@@ -393,7 +408,7 @@ export default function OrderingApp({
     (screen === "item" || screen === "edit") && selected ? (
       <div
         className="tt-detail-overlay"
-        onClick={() => closeDetail(screen === "edit" ? "cart" : "menu")}
+        onClick={() => closeDetail(screen === "edit" ? "cart" : detailFrom)}
       >
         <div className="tt-detail-panel" onClick={e => e.stopPropagation()}>
           <ItemDetailScreen
@@ -405,7 +420,7 @@ export default function OrderingApp({
             inCartQty={cart.items
               .filter(i => i.itemId === selected.id && !i.comboId)
               .reduce((n, i) => n + i.qty, 0)}
-            onBack={() => closeDetail(screen === "edit" ? "cart" : "menu")}
+            onBack={() => closeDetail(screen === "edit" ? "cart" : detailFrom)}
             onAdd={line => {
               if (screen === "edit" && editingLine) {
                 cart.updateItem(editingLine.cartId, line);
@@ -456,7 +471,7 @@ export default function OrderingApp({
             table={table}
             items={cart.items}
             photoOf={photoOf}
-            suggestions={suggestions}
+            suggestions={offered}
             onPickSuggestion={pickSuggestion}
             soldOut={soldOut}
             subtotal={pricing.subtotal}
@@ -509,7 +524,7 @@ export default function OrderingApp({
         closedNow={closedNow}
         cartCount={cart.count}
         cartTotal={pricing.total}
-        onSelectItem={openItem}
+        onSelectItem={item => openItem(item)}
         onAddCombo={openCombo}
         onOpenCart={() => setScreen("cart")}
         billDue={Boolean(table && bill && !bill.settled)}
