@@ -106,6 +106,9 @@ export default function MenuSwitcher({
           <button
             className="tt-btn tt-btn-primary tt-btn-sm"
             type="submit"
+            // iOS doesn't focus a button on tap, so the form's blur fired with
+            // no relatedTarget and cancelled the edit before the click landed.
+            onPointerDown={e => e.preventDefault()}
             disabled={!renameChanged}
           >
             {t("menu.save")}
@@ -113,6 +116,7 @@ export default function MenuSwitcher({
           <button
             type="button"
             className="tt-btn tt-btn-ghost tt-btn-sm"
+            onPointerDown={e => e.preventDefault()}
             onClick={() => {
               setRenaming(false);
               setOpen(false);

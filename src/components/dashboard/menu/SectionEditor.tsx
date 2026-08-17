@@ -119,6 +119,12 @@ export default function SectionEditor({
               <button
                 className="tt-btn tt-btn-primary tt-btn-sm"
                 type="submit"
+                // A tap on a button does not focus it on iOS, so the form's
+                // blur fires with no relatedTarget and the edit was abandoned
+                // before the click could land — on a phone the only way to
+                // save was the keyboard's enter key. Holding the press stops
+                // the blur, so the click reaches the button it was aimed at.
+                onPointerDown={e => e.preventDefault()}
                 // Nothing to save until the name actually differs; an enabled
                 // Save that does nothing reads as a broken button.
                 disabled={!nameChanged}

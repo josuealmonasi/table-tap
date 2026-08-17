@@ -42,7 +42,7 @@ export function useAdminActions() {
       router.refresh();
       return true;
     } catch {
-      toast("Network error — please try again.", "error");
+      toast(t("done.networkError"), "error");
       return false;
     } finally {
       setBusy(false);

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/lib/i18n/context";
 
 /**
  * Saves the logged-in user's profile. The name lives in our `profiles` table
@@ -12,6 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 export function useProfile(userId: string) {
   const supabase = createClient();
   const toast = useToast();
+  const t = useT();
   const [saving, setSaving] = useState(false);
 
   async function saveName(fullName: string): Promise<boolean> {
@@ -23,10 +25,11 @@ export function useProfile(userId: string) {
     });
     setSaving(false);
     if (error) {
-      toast(`Couldn't save your name: ${error.message}`, "error");
+      console.error("write.saveProfile:", error.message);
+      toast(t("write.saveProfile"), "error");
       return false;
     }
-    toast("Profile saved");
+    toast(t("done.profileSaved"));
     return true;
   }
 
@@ -35,10 +38,11 @@ export function useProfile(userId: string) {
     const { error } = await supabase.auth.updateUser({ email });
     setSaving(false);
     if (error) {
-      toast(`Couldn't update email: ${error.message}`, "error");
+      console.error("write.updateEmail:", error.message);
+      toast(t("write.updateEmail"), "error");
       return false;
     }
-    toast("Check your new inbox to confirm the email change");
+    toast(t("done.emailConfirmSent"));
     return true;
   }
 
@@ -47,10 +51,11 @@ export function useProfile(userId: string) {
     const { error } = await supabase.auth.updateUser({ password });
     setSaving(false);
     if (error) {
-      toast(`Couldn't update password: ${error.message}`, "error");
+      console.error("write.updatePassword:", error.message);
+      toast(t("write.updatePassword"), "error");
       return false;
     }
-    toast("Password updated");
+    toast(t("done.passwordUpdated"));
     return true;
   }
 
