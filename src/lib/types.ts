@@ -174,6 +174,8 @@ export type Order = {
   written_off?: boolean;
   /** The coupon this order was priced with, if any — it can't take another. */
   coupon_code?: string | null;
+  /** What came off this order, whether at checkout or from the floor later. */
+  discount?: number | null;
   stripe_payment_intent: string | null;
   stripe_refund_id: string | null;
   created_at: string;

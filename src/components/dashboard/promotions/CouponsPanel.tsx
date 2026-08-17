@@ -26,6 +26,7 @@ interface CouponFields {
   minSubtotal: string;
   startsAt: string;
   endsAt: string;
+  staffOnly: boolean;
 }
 
 export default function CouponsPanel({
@@ -49,6 +50,7 @@ export default function CouponsPanel({
   const [value, setValue] = useState("");
   const [maxUses, setMaxUses] = useState("");
   const [minSubtotal, setMinSubtotal] = useState("");
+  const [staffOnly, setStaffOnly] = useState(false);
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
   const [saving, setSaving] = useState(false);
@@ -68,6 +70,7 @@ export default function CouponsPanel({
       value: String(c.value),
       maxUses: c.max_uses === null ? "" : String(c.max_uses),
       minSubtotal: String(c.min_subtotal ?? 0),
+      staffOnly: Boolean(c.staff_only),
       // The inputs are datetime-local, which only accepts YYYY-MM-DDTHH:mm —
       // a date-only value is rejected silently and the field comes up blank,
       // which would let a save quietly clear the coupon's schedule.
@@ -78,7 +81,16 @@ export default function CouponsPanel({
 
   // Nothing to save on an edit until a field differs from the stored coupon.
   // A new coupon has nothing to compare to, so its own required fields decide.
-  const shown: CouponFields = { code, kind, value, maxUses, minSubtotal, startsAt, endsAt };
+  const shown: CouponFields = {
+    code,
+    kind,
+    value,
+    maxUses,
+    minSubtotal,
+    startsAt,
+    endsAt,
+    staffOnly,
+  };
   const dirty =
     !editing || JSON.stringify(fieldsOf(editing)) !== JSON.stringify(shown);
 
@@ -91,6 +103,7 @@ export default function CouponsPanel({
     setValue(f.value);
     setMaxUses(f.maxUses);
     setMinSubtotal(f.minSubtotal);
+    setStaffOnly(f.staffOnly);
     setStartsAt(f.startsAt);
     setEndsAt(f.endsAt);
     setAdding(true);
@@ -105,6 +118,7 @@ export default function CouponsPanel({
     setMinSubtotal("");
     setStartsAt("");
     setEndsAt("");
+    setStaffOnly(false);
   }
 
   async function add(e: React.FormEvent) {
@@ -116,6 +130,7 @@ export default function CouponsPanel({
       value: Number(value) || 0,
       maxUses: maxUses.trim() === "" ? null : Number(maxUses),
       minSubtotal: Number(minSubtotal) || 0,
+      staffOnly,
       startsAt: startsAt || null,
       endsAt: endsAt || null,
     };
@@ -287,6 +302,23 @@ export default function CouponsPanel({
               />
             </label>
           </div>
+
+          <label
+            className="tt-check-row"
+            style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "flex-start" }}
+          >
+            <input
+              type="checkbox"
+              checked={staffOnly}
+              onChange={e => setStaffOnly(e.target.checked)}
+            />
+            <span>
+              <strong style={{ fontSize: 14 }}>{t("dash.staffOnly")}</strong>
+              <span className="tt-muted tt-subline" style={{ display: "block", fontSize: 13 }}>
+                {t("dash.staffOnlyHint")}
+              </span>
+            </span>
+          </label>
 
           {code && !codeOk && (
             <p className="tt-field-error" style={{ margin: 0 }}>

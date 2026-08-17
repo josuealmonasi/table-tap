@@ -68,8 +68,12 @@ export default function OrderingApp({
   const [soldOut, setSoldOut] = useState<Set<string>>(new Set());
   // What the table still owes. Only meaningful at a table: a fast-food QR pays
   // as it orders, so there is never an open bill.
-  const { bill, reload: reloadBill } = useTableBill(restaurant.id, table?.id ?? null);
   const [billOpen, setBillOpen] = useState(false);
+  const { bill, reload: reloadBill } = useTableBill(
+    restaurant.id,
+    table?.id ?? null,
+    billOpen,
+  );
 
   const [tipPct, setTipPct] = useState(0);
 

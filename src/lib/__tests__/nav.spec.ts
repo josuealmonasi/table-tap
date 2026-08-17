@@ -15,9 +15,12 @@ describe("navItemsFor", () => {
     expect(hrefs("manager")).toContain("/dashboard/settings");
   });
 
-  it("kitchen and waiter only get the orders board", () => {
+  it("the kitchen only gets the orders board", () => {
     expect(hrefs("kitchen")).toEqual(["/dashboard/orders"]);
-    expect(hrefs("waiter")).toEqual(["/dashboard/orders"]);
+  });
+
+  it("a waiter also gets open bills — they can ask for a discount on one", () => {
+    expect(hrefs("waiter")).toEqual(["/dashboard/orders", "/dashboard/bills"]);
   });
 
   it("admin gets only the admin area", () => {

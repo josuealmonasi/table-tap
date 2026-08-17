@@ -8,6 +8,7 @@ function coupon(over: Partial<CouponRow> = {}): CouponRow {
     kind: "percent",
     value: 50,
     min_subtotal: 0,
+    staff_only: false,
     max_uses: null,
     uses_count: 0,
     active: true,

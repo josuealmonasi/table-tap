@@ -18,6 +18,8 @@ export type CouponProblem =
   | "minSubtotal";
 
 export interface CouponRow {
+  /** Applied by the floor, never typed by a diner. */
+  staff_only: boolean;
   id: string;
   code: string;
   kind: "percent" | "fixed";
@@ -31,7 +33,7 @@ export interface CouponRow {
 }
 
 const COLUMNS =
-  "id, code, kind, value, min_subtotal, max_uses, uses_count, active, starts_at, ends_at";
+  "id, code, kind, value, min_subtotal, max_uses, uses_count, active, starts_at, ends_at, staff_only";
 
 /** Looks up a coupon by code for one restaurant. Null when there's no match. */
 export async function findCoupon(

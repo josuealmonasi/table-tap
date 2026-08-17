@@ -141,6 +141,7 @@ export const NAV_ICONS = {
   Analytics: AnalyticsIcon,
   Promotions: PromotionsIcon,
   Table: TableIcon,
+  Bills: BillIcon,
   Staff: StaffIcon,
   Settings: SettingsIcon,
   PlatformAdmin: PlatformAdminIcon,

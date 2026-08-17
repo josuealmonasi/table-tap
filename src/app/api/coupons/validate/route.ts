@@ -27,7 +27,10 @@ export async function POST(req: NextRequest) {
   }
 
   const coupon = await findCoupon(restaurantId, normalized);
-  if (!coupon) {
+  // A floor-only promotion answers exactly as a code that doesn't exist. It is
+  // applied by staff looking at a membership card, so a diner who guesses it
+  // must learn nothing from having guessed right.
+  if (!coupon || coupon.staff_only) {
     return NextResponse.json({ valid: false, reason: "notFound" });
   }
 
