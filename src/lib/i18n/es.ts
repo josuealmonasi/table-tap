@@ -233,6 +233,7 @@ export const es: Messages = {
   settle: {
     openTables: "Mesas por cobrar",
     openTablesHint: "Primero las que llevan más tiempo",
+    searchTables: "Busca mesas…",
     tableOwes: "{n} pedido · {amount}",
     tableOwesPlural: "{n} pedidos · {amount}",
     title: "Mesa {label} · cobrar",

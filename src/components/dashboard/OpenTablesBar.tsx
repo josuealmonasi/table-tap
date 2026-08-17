@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import { openTables, type OpenTable } from "@/lib/table-bill";
-import { BillIcon } from "@/components/ui/icons";
+import { BillIcon, SearchIcon } from "@/components/ui/icons";
 import SettleTableDialog from "./SettleTableDialog";
 import type { Order } from "@/lib/types";
 
@@ -35,11 +35,18 @@ export default function OpenTablesBar({
 }: OpenTablesBarProps) {
   const t = useT();
   const [settling, setSettling] = useState<OpenTable | null>(null);
+  const [query, setQuery] = useState("");
   const tables = openTables(orders);
 
   if (tables.length === 0) return null;
 
-  const owed = tables.reduce((sum, table) => sum + table.total, 0);
+  // A busy floor can have twenty tables owing at once, and the one being
+  // asked about is rarely the one on top.
+  const q = query.trim().toLowerCase();
+  const shown = q
+    ? tables.filter(table => table.tableLabel.toLowerCase().includes(q))
+    : tables;
+  const owed = shown.reduce((sum, table) => sum + table.total, 0);
 
   return (
     <section className="tt-open-tables">
@@ -53,8 +60,19 @@ export default function OpenTablesBar({
         {t("settle.openTablesHint")}
       </span>
 
+      <div className="tt-bill-search" style={{ marginTop: 10 }}>
+        <SearchIcon size={15} weight="bold" />
+        <input
+          className="tt-input"
+          value={query}
+          placeholder={t("settle.searchTables")}
+          aria-label={t("settle.searchTables")}
+          onChange={e => setQuery(e.target.value)}
+        />
+      </div>
+
       <div className="tt-open-tables-list">
-        {tables.map(table => (
+        {shown.map(table => (
           <button
             key={table.tableId}
             type="button"

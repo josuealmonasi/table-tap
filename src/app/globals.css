@@ -1298,6 +1298,16 @@ h2.tt-serif {
   }
 }
 
+/* Three across on a wide screen, like the bills list — a row of one card the
+   width of the board wastes it, and the floor reads these in a glance. */
+@media (min-width: 1025px) {
+  .tt-open-tables-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+}
+
 .tt-open-table {
   display: flex;
   align-items: center;

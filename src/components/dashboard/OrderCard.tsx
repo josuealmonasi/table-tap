@@ -88,12 +88,17 @@ export default function OrderCard({
         }
       }}
     >
-      <OrderDetailDialog
-        order={order}
-        currency={currency}
-        open={detail}
-        onClose={() => setDetail(false)}
-      />
+      {/* The dialog renders inside this card, so its clicks would bubble
+          back into the card's own handler — closing it reopened it in the
+          same gesture, which is why it looked like it couldn't be closed. */}
+      <div onClick={e => e.stopPropagation()} role="presentation">
+        <OrderDetailDialog
+          order={order}
+          currency={currency}
+          open={detail}
+          onClose={() => setDetail(false)}
+        />
+      </div>
       {/* Two rows, each with an anchor on both sides: what the order is
           (table, code) above how it stands (placed at, status). The code used
           to sit under the table name where it read as a subtitle rather than

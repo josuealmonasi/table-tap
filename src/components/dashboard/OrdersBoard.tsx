@@ -123,30 +123,9 @@ export default function OrdersBoard({
           </div>
         </header>
 
-        {/* Who hasn't paid, above what the kitchen is cooking: a table that has
-
-
-            been sitting on an unpaid bill is the more urgent of the two. */}
-
-
-        <OpenTablesBar
-
-
-          restaurantId={restaurant.id}
-
-
-          currency={restaurant.currency}
-
-
-          orders={orders}
-
-
-          onSettled={() => router.refresh()}
-
-
-        />
-
-
+        {/* A table asking for something is waiting on a person right now, so
+            it sits above the money: the debts aren't going anywhere, and a
+            raised hand is the thing that gets answered first. */}
         <ServiceRequestsBar
           restaurantId={restaurant.id}
           canSettle={canSettle}
@@ -154,6 +133,15 @@ export default function OrdersBoard({
           currency={restaurant.currency}
           onSettled={() => router.refresh()}
         />
+
+        {canSettle && (
+          <OpenTablesBar
+            restaurantId={restaurant.id}
+            currency={restaurant.currency}
+            orders={orders}
+            onSettled={() => router.refresh()}
+          />
+        )}
 
         <div className="tt-board-tabs" role="tablist">
           <button

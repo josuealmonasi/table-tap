@@ -3,8 +3,10 @@
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
-import { lineUnitPrice, orderCode, type Order } from "@/lib/types";
+import { orderCode, type Order } from "@/lib/types";
 import { statusMeta } from "@/lib/order-status";
+import { itemSalePrice } from "@/lib/pricing";
+import { CloseIcon } from "@/components/ui/icons";
 
 /**
  * The whole order, for whoever is cooking it.
@@ -33,13 +35,23 @@ export default function OrderDetailDialog({
 
   return (
     <Modal open={open} onClose={onClose} maxWidth={460} label={orderCode(order.id)}>
-      <div className="tt-row" style={{ alignItems: "baseline" }}>
+      <div className="tt-row" style={{ alignItems: "baseline", gap: 10 }}>
         <h3 className="tt-serif" style={{ margin: 0 }}>
           {order.table_label
             ? t("dash.tableN", { label: order.table_label })
             : t("dash.billsToGo")}
         </h3>
-        <span className="tt-order-code">{orderCode(order.id)}</span>
+        <span className="tt-order-code" style={{ marginLeft: "auto" }}>
+          {orderCode(order.id)}
+        </span>
+        <button
+          type="button"
+          className="tt-icon-round"
+          aria-label={t("menu.close")}
+          onClick={onClose}
+        >
+          <CloseIcon size={16} weight="bold" />
+        </button>
       </div>
       <p className="tt-muted" style={{ fontSize: 13, margin: "4px 0 14px" }}>
         {placed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -70,8 +82,16 @@ export default function OrderDetailDialog({
               </div>
             )}
           </div>
+          {/* What this line put on the bill: the price it was ordered at,
+              extras included. The list price would make the lines add up to
+              more than the total the kitchen can see at the bottom. */}
           <span className="tt-muted" style={{ flex: "none" }}>
-            {formatMoney(lineUnitPrice(item) * item.qty, currency)}
+            {formatMoney(
+              (itemSalePrice(item.price, item.discountPct) +
+                (item.extras?.reduce((sum, e) => sum + e.price, 0) ?? 0)) *
+                item.qty,
+              currency,
+            )}
           </span>
         </div>
       ))}

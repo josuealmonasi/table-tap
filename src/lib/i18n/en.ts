@@ -238,6 +238,7 @@ export const en = {
   settle: {
     openTables: "Tables still to pay",
     openTablesHint: "Longest wait first",
+    searchTables: "Search tables…",
     tableOwes: "{n} order · {amount}",
     tableOwesPlural: "{n} orders · {amount}",
     title: "Table {label} · settle up",
