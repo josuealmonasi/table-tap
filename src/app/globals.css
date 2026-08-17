@@ -1194,6 +1194,27 @@ h2.tt-serif {
 .tt-bill-list {
   margin-top: 6px;
 }
+/* On a wide screen the bills are cards in a three-up grid, not a list running
+   the width of the page: a manager scanning for "table four" reads a short
+   column, and a 1200px-wide row of one bill wastes the screen it is on. Each
+   cell needs its own border once they sit side by side — a hairline between
+   rows says nothing about a neighbour to the left. */
+@media (min-width: 1025px) {
+  .tt-bill-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 12px;
+  }
+  .tt-bill-list .tt-bill-row {
+    border: 1px solid var(--tt-line);
+    border-radius: 12px;
+    padding: 14px;
+  }
+  .tt-bill-list .tt-bill-row:first-child {
+    border-top: 1px solid var(--tt-line);
+  }
+}
 .tt-bill-row {
   display: flex;
   align-items: center;
