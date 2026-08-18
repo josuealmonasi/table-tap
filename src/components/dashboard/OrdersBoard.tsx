@@ -12,6 +12,7 @@ import OrderCard from "./OrderCard";
 import { BOARD_COLUMNS, columnOrders } from "@/lib/order-flow";
 import { useRouter } from "next/navigation";
 import ServiceRequestsBar from "./ServiceRequestsBar";
+import OrderHistory from "./OrderHistory";
 import OpenTablesBar from "./OpenTablesBar";
 import { EmptyIcon } from "@/components/ui/icons";
 
@@ -60,8 +61,6 @@ export default function OrdersBoard({
   const toast = useToast();
 
   const live = orders.filter(o => LIVE_STATUSES.has(o.status));
-  const history = orders.filter(o => !LIVE_STATUSES.has(o.status));
-  const shown = tab === "live" ? live : history;
 
   const activeCount = live.filter(
     o => o.status === "received" || o.status === "preparing",
@@ -165,15 +164,18 @@ export default function OrdersBoard({
           </button>
         </div>
 
-        {shown.length === 0 ? (
+        {tab === "history" ? (
+          /* History is read a page at a time from the database — it only ever
+             grows, and every order the board had loaded was being rendered as
+             a card. */
+          <OrderHistory restaurantId={restaurant.id} currency={restaurant.currency} />
+        ) : live.length === 0 ? (
           <div className="tt-empty">
             <EmptyIcon size={44} className="tt-empty-icon" />
-            <strong>{tab === "live" ? t("orders.noLive") : t("orders.noPast")}</strong>
-            <p className="tt-muted">
-              {tab === "live" ? t("orders.liveHint") : t("orders.historyHint")}
-            </p>
+            <strong>{t("orders.noLive")}</strong>
+            <p className="tt-muted">{t("orders.liveHint")}</p>
           </div>
-        ) : tab === "live" ? (
+        ) : (
           /* Live orders are a queue, not a pile: one column per stage, each
              ticket sitting under the ones that arrived before it. History stays
              a plain grid — it's browsed, not worked. */
@@ -206,18 +208,6 @@ export default function OrdersBoard({
                 </section>
               );
             })}
-          </div>
-        ) : (
-          <div className="tt-orders-grid">
-            {shown.map(order => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                currency={restaurant.currency}
-                onAdvance={updateStatus}
-                onCancel={canCancel ? handleCancel : undefined}
-              />
-            ))}
           </div>
         )}
       </div>

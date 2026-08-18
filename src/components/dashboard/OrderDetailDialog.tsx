@@ -102,6 +102,31 @@ export default function OrderDetailDialog({
         </p>
       )}
 
+      {/* A promotion applied to this order stays with it: the ticket is the
+          record of what was charged and why, and a total that is smaller than
+          the dishes above it with nothing to explain the gap is the question
+          somebody asks weeks later with no way to answer it. */}
+      {Number(order.discount ?? 0) > 0 && (
+        <>
+          <div className="tt-row" style={{ marginTop: 14, fontSize: 14 }}>
+            <span className="tt-muted">{t("totals.subtotal")}</span>
+            <span className="tt-muted">
+              {formatMoney(Number(order.total) + Number(order.discount), currency)}
+            </span>
+          </div>
+          <div className="tt-row" style={{ marginTop: 4, fontSize: 14 }}>
+            <span className="tt-save">
+              {order.coupon_code
+                ? t("totals.discountCode", { code: order.coupon_code })
+                : t("totals.discount")}
+            </span>
+            <span className="tt-save">
+              −{formatMoney(Number(order.discount), currency)}
+            </span>
+          </div>
+        </>
+      )}
+
       <div className="tt-row tt-total" style={{ marginTop: 14 }}>
         <span>{t("totals.total")}</span>
         <span>{formatMoney(order.total, currency)}</span>

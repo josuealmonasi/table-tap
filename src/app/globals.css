@@ -4863,3 +4863,42 @@ a.tt-btn {
   margin: 2px 0 0;
   font-size: 13px;
 }
+
+/* Finished orders: a list, not a wall of cards. Borrows the activity log's
+   row so the two "browse what happened" screens read the same way. */
+.tt-hist-row {
+  width: 100%;
+  background: none;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tt-hist-row:hover {
+  background: color-mix(in srgb, var(--tt-ink) 3%, transparent);
+}
+.tt-hist-tag {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+/* Money, then what came off it, then when — right-aligned so the totals form
+   a column the eye can run down. */
+.tt-hist-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 700px) {
+  .tt-hist-right {
+    align-items: flex-start;
+  }
+}

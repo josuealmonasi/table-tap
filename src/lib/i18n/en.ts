@@ -328,6 +328,7 @@ export const en = {
     viewCart: "View Cart",
   },
   totals: {
+    discountCode: "Discount · {code}",
     subtotal: "Subtotal",
     subtotalExclIva: "Subtotal (excl. IVA)",
     iva: "IVA ({pct}%)",
@@ -983,6 +984,10 @@ export const en = {
     pageOf: "Page {page} of {pages}",
   },
   orders: {
+    historyCountOne: "1 order",
+    historyCount: "{total} orders",
+    historySearch: "Search by code (ORD-1960) or table…",
+    historyNoMatch: "No order matches “{query}”.",
     colNew: "New",
     colPreparing: "In progress",
     colReady: "Ready",

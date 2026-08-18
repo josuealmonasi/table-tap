@@ -323,6 +323,7 @@ export const es: Messages = {
     viewCart: "Ver carrito",
   },
   totals: {
+    discountCode: "Descuento · {code}",
     subtotal: "Subtotal",
     subtotalExclIva: "Subtotal (sin IVA)",
     iva: "IVA ({pct}%)",
@@ -972,6 +973,10 @@ export const es: Messages = {
     pageOf: "Página {page} de {pages}",
   },
   orders: {
+    historyCountOne: "1 pedido",
+    historyCount: "{total} pedidos",
+    historySearch: "Busca por código (ORD-1960) o mesa…",
+    historyNoMatch: "Ningún pedido coincide con «{query}».",
     colNew: "Nuevos",
     colPreparing: "En preparación",
     colReady: "Listos",

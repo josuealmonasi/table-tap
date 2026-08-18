@@ -19,6 +19,8 @@ export interface OpenBill {
   orderIds: string[];
   items: OrderLineItem[];
   total: number;
+  /** What promotions took off this bill; `total` already has it deducted. */
+  discount: number;
   /** A promotion is already on it; a second would discount the same food twice. */
   discounted: boolean;
   since: string;
@@ -35,6 +37,7 @@ export function openBills(orders: Order[]): OpenBill[] {
       found.orderIds.push(order.id);
       found.items.push(...(order.items ?? []));
       found.total = round2(found.total + Number(order.total));
+      found.discount = round2(found.discount + Number(order.discount ?? 0));
       found.discounted = found.discounted || Boolean(order.coupon_code);
       if (order.created_at < found.since) found.since = order.created_at;
       continue;
@@ -47,6 +50,7 @@ export function openBills(orders: Order[]): OpenBill[] {
       orderIds: [order.id],
       items: [...(order.items ?? [])],
       total: round2(Number(order.total)),
+      discount: round2(Number(order.discount ?? 0)),
       discounted: Boolean(order.coupon_code),
       since: order.created_at,
     });
