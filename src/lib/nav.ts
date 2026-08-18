@@ -14,6 +14,7 @@ export type NavItem = {
     | "Bills"
     | "Staff"
     | "Settings"
+    | "Plan"
     | "PlatformAdmin";
   /** i18n keys resolved with t() where the item is rendered. */
   titleKey: string;
@@ -63,6 +64,12 @@ export const NAV_ITEMS: NavItem[] = [
     descKey: "nav.staffDesc",
   },
   {
+    href: "/dashboard/plan",
+    icon: "Plan",
+    titleKey: "nav.plan",
+    descKey: "nav.planDesc",
+  },
+  {
     href: "/dashboard/settings",
     icon: "Settings",
     titleKey: "nav.settings",
@@ -74,7 +81,9 @@ export type DashboardRole = "owner" | "manager" | "waiter" | "kitchen" | "admin"
 
 // Staff management stays with the owner; Settings is owner + manager
 // (managers get the operational controls only — see SettingsForm).
-const OWNER_ONLY = ["/dashboard/staff"];
+// Staff logins and the subscription are both the owner's alone: a manager runs
+// the restaurant, but hiring and the card are not theirs to change.
+const OWNER_ONLY = ["/dashboard/staff", "/dashboard/plan"];
 
 /** The dashboard areas a role may see (drawer links and home tiles). */
 export function navItemsFor(role: DashboardRole): NavItem[] {

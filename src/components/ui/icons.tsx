@@ -19,6 +19,7 @@
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
 import { ArrowsLeftRight } from "@phosphor-icons/react/dist/ssr/ArrowsLeftRight";
 import { Bell } from "@phosphor-icons/react/dist/ssr/Bell";
+import { CreditCard } from "@phosphor-icons/react/dist/ssr/CreditCard";
 import { ChartBar } from "@phosphor-icons/react/dist/ssr/ChartBar";
 import { Check } from "@phosphor-icons/react/dist/ssr/Check";
 import { CheckSquare } from "@phosphor-icons/react/dist/ssr/CheckSquare";
@@ -96,6 +97,7 @@ export const AnalyticsIcon = ChartBar;
 export const PromotionsIcon = Gift;
 export const StaffIcon = Users;
 export const SettingsIcon = Gear;
+export const PlanIcon = CreditCard;
 export const PlatformAdminIcon = ShieldCheck;
 export const RoleOwnerIcon = Crown;
 export const RoleManagerIcon = UserGear;
@@ -144,5 +146,6 @@ export const NAV_ICONS = {
   Bills: BillIcon,
   Staff: StaffIcon,
   Settings: SettingsIcon,
+  Plan: PlanIcon,
   PlatformAdmin: PlatformAdminIcon,
 } as const;
