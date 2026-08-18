@@ -47,6 +47,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 restaurantLogo={membership.restaurant.logo}
                 restaurantLogoUrl={membership.restaurant.logo_url}
                 role={membership.role}
+                plan={membership.restaurant.plan}
               />
             )}
             {/* Only the owner is asked, and only in the dashboard: the diner's

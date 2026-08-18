@@ -5042,3 +5042,71 @@ a.tt-btn {
 .tt-footer-legal:hover {
   opacity: 1;
 }
+
+/* The documents, as rows you can hit rather than links buried in a sentence. */
+.tt-doc-list {
+  display: flex;
+  flex-direction: column;
+}
+.tt-doc-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 4px;
+  border-top: 1px solid var(--tt-line);
+  color: inherit;
+  text-decoration: none;
+  font-size: 14px;
+}
+.tt-doc-row:first-child {
+  border-top: 0;
+}
+.tt-doc-row:hover {
+  color: var(--tt-accent);
+}
+.tt-doc-row svg {
+  color: var(--tt-muted);
+  flex: none;
+}
+.tt-doc-row:hover svg {
+  color: var(--tt-accent);
+}
+/* Pushed to the end of the row: what the file is, not what it is called. */
+.tt-doc-kind {
+  margin-left: auto;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+.tt-doc-accepted {
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+
+/* The plan, at the head of the account menu. A row rather than a floating
+   badge so it lines up with the items under it, and quiet enough that it never
+   competes with them. */
+.tt-user-plan {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  text-decoration: none;
+  color: inherit;
+  border-bottom: 1px solid var(--tt-line);
+  margin-bottom: 4px;
+}
+a.tt-user-plan:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+.tt-plan-chip {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tt-accent) 12%, transparent);
+  color: var(--tt-accent);
+  white-space: nowrap;
+}

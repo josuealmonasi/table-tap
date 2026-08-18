@@ -88,6 +88,8 @@ export type Restaurant = {
   allow_pay_later?: boolean;
   /** Which version of the terms this restaurant's owner accepted. */
   terms_version?: string | null;
+  /** The subscription tier this restaurant is on. */
+  plan?: string | null;
 };
 
 export type RestaurantTable = {

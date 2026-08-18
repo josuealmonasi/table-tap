@@ -473,6 +473,9 @@ export const es: Messages = {
     billSent: "Cuenta solicitada",
   },
   plan: {
+    docsTitle: "Tus documentos",
+    docsHint: "Descárgalos cuando los necesites",
+    docsAccepted: "Aceptaste la versión {version} el {date}.",
     cancelAnytime: "Cancela cuando quieras — sin avisos ni penalizaciones.",
     cancel: "Cancelar suscripción",
     cancelConfirm: "¿Cancelar tu suscripción?",
@@ -634,6 +637,7 @@ export const es: Messages = {
 
   // ── Panel de administración ──
   nav: {
+    yourPlan: "Tu plan",
     plan: "Plan",
     planDesc: "Tu suscripción, qué incluye y cuánto estás usando",
     breadcrumb: "Ruta de navegación",

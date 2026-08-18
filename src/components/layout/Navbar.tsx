@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n/context";
+import { planLabel } from "@/lib/plan";
 import LanguageToggle from "@/components/customer/LanguageToggle";
 import NavDrawer from "./NavDrawer";
 import { AccountIcon } from "@/components/ui/icons";
@@ -18,12 +19,15 @@ export default function Navbar({
   restaurantLogo,
   restaurantLogoUrl,
   role,
+  plan,
 }: {
   restaurantName: string;
   restaurantLogo: string | null;
   restaurantLogoUrl?: string | null;
   /** Managers lose Settings/Staff; waiter/kitchen only get the orders board. */
   role: "owner" | "manager" | "waiter" | "kitchen" | "admin";
+  /** Which tier the restaurant is on, for the badge in the account menu. */
+  plan?: string | null;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -100,6 +104,29 @@ export default function Navbar({
 
             {open && (
               <div className="tt-user-dropdown" role="menu">
+                {/* Which plan they are on, at the top of the menu they open to
+                    find their account. Small on purpose — it answers a question
+                    people ask often ("what am I paying for?") without taking
+                    space from the things they came here to click. The owner can
+                    tap through to change it; a manager only sees where they are,
+                    because the plan is not theirs to change. */}
+                {plan && (role === "owner" || role === "manager") &&
+                  (role === "owner" ? (
+                    <Link
+                      href="/dashboard/plan"
+                      role="menuitem"
+                      className="tt-user-plan"
+                      onClick={() => setOpen(false)}
+                    >
+                      <span className="tt-plan-chip">{planLabel(plan)}</span>
+                      <span className="tt-muted">{t("nav.yourPlan")}</span>
+                    </Link>
+                  ) : (
+                    <div className="tt-user-plan">
+                      <span className="tt-plan-chip">{planLabel(plan)}</span>
+                      <span className="tt-muted">{t("nav.yourPlan")}</span>
+                    </div>
+                  ))}
                 <Link
                   href="/dashboard/profile"
                   role="menuitem"
