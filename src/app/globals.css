@@ -5110,3 +5110,15 @@ a.tt-user-plan:hover {
   color: var(--tt-accent);
   white-space: nowrap;
 }
+
+/* The tier beside the restaurant name. Hidden on a phone, where the navbar is
+   already carrying a drawer button, a mark, the name and two controls — the
+   account menu still has it there. */
+.tt-navbar-plan {
+  flex: none;
+}
+@media (max-width: 640px) {
+  .tt-navbar-plan {
+    display: none;
+  }
+}
