@@ -114,14 +114,23 @@ describe("billing health", () => {
 });
 
 describe("the platform's cut", () => {
-  it("converts the flat fee to cents", () => {
-    expect(orderFeeCents(carta)).toBe(300);
-    expect(orderFeeCents(servicio)).toBe(150);
-    expect(orderFeeCents(casa)).toBe(75);
+  it("is the tier's flat fee on an ordinary order", () => {
+    const table = 30_000; // MX$300
+    expect(orderFeeCents(carta, table)).toBe(300);
+    expect(orderFeeCents(servicio, table)).toBe(150);
+    expect(orderFeeCents(casa, table)).toBe(75);
   });
 
-  it("charges nothing when the tier includes it", () => {
-    expect(orderFeeCents({ ...casa, order_fee: 0 })).toBe(0);
+  it("never takes more than a tenth of a small order", () => {
+    // MX$3 off a MX$20 coffee is a share of the coffee, not a fee.
+    expect(orderFeeCents(carta, 2000)).toBe(200);
+    expect(orderFeeCents(carta, 500)).toBe(50);
+  });
+
+  it("charges nothing when the tier includes it, or when there is nothing to charge", () => {
+    expect(orderFeeCents({ ...casa, order_fee: 0 }, 30_000)).toBe(0);
+    expect(orderFeeCents(casa, 0)).toBe(0);
+    expect(orderFeeCents(casa, -100)).toBe(0);
   });
 });
 

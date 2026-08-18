@@ -3,7 +3,8 @@ import Stripe from "stripe";
 import { apiError } from "@/lib/api-error";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { platformFeeCents } from "@/lib/money";
+import { orderFeeCents } from "@/lib/plan";
+import { getPlan } from "@/lib/plan-server";
 import { applyCoupon } from "@/lib/pricing";
 import {
   claimCoupon,
@@ -124,6 +125,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const amount = round2(payable + tip);
   const cents = Math.round(amount * 100);
+  // Our cut of this settlement, from the restaurant's tier. Settling a table
+  // is one card payment for one bill, so it carries the same single fee an
+  // order does rather than one per order on the bill.
+  const feePlan = await getPlan(restaurantId);
+  const appFee = feePlan ? orderFeeCents(feePlan.limits, cents) : 0;
   if (cents <= 0) {
     if (coupon) await releaseCoupon(coupon.id);
     return await apiError("apiErr.billSettled", 409);
@@ -162,7 +168,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           settle_discount: String(discount),
         },
         payment_intent_data: {
-          application_fee_amount: platformFeeCents(cents),
+          application_fee_amount: appFee,
         },
         success_url: `${origin}/r/${restaurantId}/t/${tableId}?settled=1`,
         cancel_url: `${origin}/r/${restaurantId}/t/${tableId}?cancelled=1`,

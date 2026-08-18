@@ -11,14 +11,3 @@ export function ivaSplit(subtotal: number, taxPct: number): { net: number; iva: 
   const net = subtotal / (1 + taxPct / 100);
   return { net, iva: subtotal - net };
 }
-
-/**
- * The platform's cut of an order, in the smallest currency unit (cents), taken
- * as an application fee on the destination charge. Set PLATFORM_FEE_BPS (basis
- * points, e.g. 250 = 2.5%) to enable it; defaults to 0 (no fee).
- */
-export function platformFeeCents(totalCents: number): number {
-  const bps = Number(process.env.PLATFORM_FEE_BPS) || 0;
-  if (bps <= 0) return 0;
-  return Math.round((totalCents * bps) / 10000);
-}

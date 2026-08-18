@@ -6,7 +6,8 @@ import { getLocale } from "@/lib/i18n/server";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { platformFeeCents } from "@/lib/money";
+import { orderFeeCents } from "@/lib/plan";
+import { getPlan } from "@/lib/plan-server";
 import { itemSalePrice, priceCart, type AppliedCoupon } from "@/lib/pricing";
 import {
   claimCoupon,
@@ -373,10 +374,12 @@ export async function POST(req: NextRequest) {
 
     // Stripe Checkout supports card, Apple Pay and Google Pay automatically
     // via the card payment method (wallets show on supported devices).
-    // Destination charge: the platform creates the charge, then routes the funds
-    // to the restaurant's connected account. An optional platform fee (0 by
-    // default) is skimmed as an application fee.
-    const appFee = platformFeeCents(Math.round(total * 100));
+    // Destination charge: the platform creates the charge, then routes the
+    // funds to the restaurant's connected account, minus our cut. What that
+    // cut is comes from the restaurant's tier — read here, server-side, from
+    // the same catalogue the plan screen showed them.
+    const feePlan = await getPlan(restaurantId);
+    const appFee = feePlan ? orderFeeCents(feePlan.limits, Math.round(total * 100)) : 0;
 
     // Item discounts are already baked into each line's unit_amount. What's
     // left — the coupon and any quantity deal — is money off the order as a
