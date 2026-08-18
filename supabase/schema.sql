@@ -932,6 +932,7 @@ alter table dish_ratings enable row level security;
 -- The team can read its own ratings (for a future reviews view). Nobody writes
 -- through the API: every insert goes through the server route, which re-checks
 -- the order against the database first.
+drop policy if exists "team reads dish ratings" on dish_ratings;
 create policy "team reads dish ratings" on dish_ratings for select
   using (has_role(restaurant_id, array['manager']));
 
@@ -964,3 +965,112 @@ as $$
 $$;
 revoke all on function public.dish_rating_stats(uuid) from public;
 grant execute on function public.dish_rating_stats(uuid) to anon, authenticated;
+
+-- ── Subscription plans ──────────────────────────────────────────────────────
+-- What each tier unlocks, and what it costs. Reference data, not per-tenant:
+-- one row per plan, seeded here so the database is the single answer to "how
+-- many tables may this restaurant have?" — the triggers that enforce the
+-- limits read these same rows, so the app and the enforcement can never drift
+-- apart the way they would with the numbers written into both.
+--
+-- A null limit means unlimited. Prices are MXN and informational: Stripe is
+-- the authority on what was actually charged; these drive the plan screen.
+create table if not exists plan_limits (
+  plan          text primary key check (plan in ('carta', 'servicio', 'casa', 'grupo')),
+  rank          int not null,              -- upgrade order, lowest first
+  monthly_price numeric not null default 0,
+  order_fee     numeric not null default 0, -- flat platform fee per CARD order
+  max_tables    int,
+  max_staff     int,                        -- excludes the founding owner
+  max_menus     int,
+  max_items     int,
+  allows_dine_in         boolean not null default false,
+  allows_promotions      boolean not null default false,
+  allows_coupons         boolean not null default false,
+  allows_staff_discounts boolean not null default false,
+  analytics_days int not null default 1,
+  log_days       int not null default 1
+);
+
+-- Seeded with on-conflict-update so re-running this script revises prices and
+-- limits in place rather than skipping them.
+insert into plan_limits (
+  plan, rank, monthly_price, order_fee,
+  max_tables, max_staff, max_menus, max_items,
+  allows_dine_in, allows_promotions, allows_coupons, allows_staff_discounts,
+  analytics_days, log_days
+) values
+  -- Counter and to-go: one QR for the whole place, no tables. Free, because
+  -- it costs us almost nothing and it is how a restaurant tries us.
+  ('carta',    0,    0, 3.00,    0,    2,    1,   30, false, false, false, false,   1,   1),
+  -- Dine-in: tables, open bills, pay later, call the waiter. The value moment.
+  ('servicio', 1,  699, 1.50,   25,   10,    3, null,  true,  true, false, false,  30,  30),
+  ('casa',     2, 1499, 0.75, null, null, null, null,  true,  true,  true,  true, 365, 365),
+  ('grupo',    3, 3499, 0.00, null, null, null, null,  true,  true,  true,  true, 365, 365)
+on conflict (plan) do update set
+  rank                   = excluded.rank,
+  monthly_price          = excluded.monthly_price,
+  order_fee              = excluded.order_fee,
+  max_tables             = excluded.max_tables,
+  max_staff              = excluded.max_staff,
+  max_menus              = excluded.max_menus,
+  max_items              = excluded.max_items,
+  allows_dine_in         = excluded.allows_dine_in,
+  allows_promotions      = excluded.allows_promotions,
+  allows_coupons         = excluded.allows_coupons,
+  allows_staff_discounts = excluded.allows_staff_discounts,
+  analytics_days         = excluded.analytics_days,
+  log_days               = excluded.log_days;
+
+alter table plan_limits enable row level security;
+
+-- Every signed-in user may read the tiers: the plan screen shows what the next
+-- one costs, and a locked feature has to name its price. There is no write
+-- policy on purpose — plans change by deploying this file, never through the
+-- app.
+drop policy if exists "plans are readable by the team" on plan_limits;
+create policy "plans are readable by the team"
+  on plan_limits for select using (true);
+
+grant select on plan_limits to authenticated;
+-- The customer's menu has no business knowing what the restaurant pays us.
+-- The blanket anon lockdown near the top of this file ran before this table
+-- existed (the same trap rate_limits, coupons and dish_ratings hit).
+revoke all on plan_limits from anon;
+
+-- Which plan a restaurant is on, and whether its billing is healthy.
+--
+-- Added nullable and backfilled so the restaurants that existed before plans
+-- did keep everything they already had — waking an owner up locked out of
+-- tables they were using yesterday is not a migration, it is an outage. New
+-- signups take the default instead. Re-running finds no nulls and does nothing.
+alter table restaurants add column if not exists plan text;
+update restaurants set plan = 'casa' where plan is null;
+alter table restaurants alter column plan set default 'carta';
+alter table restaurants alter column plan set not null;
+
+do $$ begin
+  alter table restaurants
+    add constraint restaurants_plan_fkey foreign key (plan) references plan_limits(plan);
+exception when duplicate_object then null;
+end $$;
+
+-- trialing → active → past_due → locked. `locked` freezes the DASHBOARD only:
+-- the diner's menu keeps serving and keeps taking orders, because a card that
+-- bounced on Friday must not close the restaurant on Saturday.
+alter table restaurants add column if not exists plan_status text;
+update restaurants set plan_status = 'active' where plan_status is null;
+alter table restaurants alter column plan_status set default 'trialing';
+alter table restaurants alter column plan_status set not null;
+
+do $$ begin
+  alter table restaurants add constraint restaurants_plan_status_check
+    check (plan_status in ('trialing', 'active', 'past_due', 'locked'));
+exception when duplicate_object then null;
+end $$;
+
+alter table restaurants add column if not exists trial_ends_at timestamptz;
+-- Stripe Billing's side of the relationship. Server-only, like the Connect
+-- account above it: the anon lockdown covers the whole row.
+alter table restaurants add column if not exists stripe_customer_id text;
+alter table restaurants add column if not exists stripe_subscription_id text;
