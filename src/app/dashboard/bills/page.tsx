@@ -33,7 +33,7 @@ export default async function BillsPage() {
     db
       .from("orders")
       .select(
-        "id, table_id, table_label, items, total, paid, written_off, status, coupon_code, created_at",
+        "id, table_id, table_label, items, total, discount, paid, written_off, status, coupon_code, created_at",
       )
       .eq("restaurant_id", r.id)
       .eq("paid", false)

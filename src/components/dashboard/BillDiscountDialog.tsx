@@ -147,6 +147,24 @@ export default function BillDiscountDialog({
         </div>
       ))}
 
+      {/* When a promotion is already on this bill the lines add up to more
+          than the total, so the difference is named rather than left for the
+          waiter to explain to the table. Same three rows the diner sees. */}
+      {bill.discount > 0 && (
+        <>
+          <div className="tt-row" style={{ marginTop: 12, fontSize: 14 }}>
+            <span className="tt-muted">{t("totals.subtotal")}</span>
+            <span className="tt-muted">
+              {formatMoney(bill.total + bill.discount, currency)}
+            </span>
+          </div>
+          <div className="tt-row" style={{ marginTop: 4, fontSize: 14 }}>
+            <span className="tt-save">{t("totals.discount")}</span>
+            <span className="tt-save">−{formatMoney(bill.discount, currency)}</span>
+          </div>
+        </>
+      )}
+
       <div className="tt-row tt-total" style={{ marginTop: 12 }}>
         <span>{t("totals.total")}</span>
         <span>{formatMoney(bill.total, currency)}</span>

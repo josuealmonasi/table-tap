@@ -12,7 +12,12 @@ import type { Order, OrderStatus } from "@/lib/types";
 function order(
   id: string,
   total: number,
-  opts: { paid?: boolean; status?: OrderStatus; items?: string[] } = {},
+  opts: {
+    paid?: boolean;
+    status?: OrderStatus;
+    items?: string[];
+    discount?: number;
+  } = {},
 ): Order {
   return {
     id,
@@ -21,6 +26,7 @@ function order(
     table_label: "1",
     status: opts.status ?? "received",
     subtotal: total,
+    discount: opts.discount ?? 0,
     service_fee: 0,
     tip: 0,
     tax_pct: 0,
@@ -203,5 +209,39 @@ describe("a coupon on a shared bill", () => {
     // money off twice, so the bill hides the box and the server refuses.
     const bill = tableBill([{ ...order("a", 200), coupon_code: "OLD-ONE" }], ["a"]);
     expect(ordersToPay(bill, "all").some(o => o.coupon_code)).toBe(true);
+  });
+});
+
+describe("a discount already on the bill", () => {
+  it("is carried per side and for the table", () => {
+    // The lines add up to more than the total. Without the amount, the diner
+    // sees the difference and has nothing to explain it.
+    const orders = [
+      order("a", 6, { discount: 5 }),
+      order("b", 20, { discount: 0 }),
+    ];
+    const bill = tableBill(orders, ["a"]);
+    expect(bill.mine.discount).toBe(5);
+    expect(bill.others.discount).toBe(0);
+    expect(bill.discount).toBe(5);
+  });
+
+  it("adds up across several discounted orders without drifting a cent", () => {
+    const orders = [
+      order("a", 6.33, { discount: 1.72 }),
+      order("b", 9.11, { discount: 2.89 }),
+    ];
+    expect(tableBill(orders, []).discount).toBe(4.61);
+  });
+
+  it("reads as zero when nothing was taken off", () => {
+    expect(tableBill([order("a", 100)], []).discount).toBe(0);
+  });
+
+  it("ignores what a settled order was discounted", () => {
+    // Paid and written-off orders are not owed, so their promotions are not
+    // part of what this table is being asked to pay.
+    const orders = [order("a", 6, { discount: 5, paid: true }), order("b", 20)];
+    expect(tableBill(orders, []).discount).toBe(0);
   });
 });

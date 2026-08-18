@@ -17,6 +17,14 @@ export interface BillSide {
   /** Every line across those orders, for listing what is being paid for. */
   items: OrderLineItem[];
   total: number;
+  /**
+   * What promotions already took off — a code the floor applied, or one the
+   * diner used when ordering. `total` is net of it.
+   *
+   * Carried because a bill whose lines add up to more than its total is a bill
+   * nobody trusts: the diner needs to see where the difference went.
+   */
+  discount: number;
 }
 
 export interface TableBill {
@@ -26,6 +34,8 @@ export interface TableBill {
   others: BillSide;
   /** Everything outstanding — what "pay the lot" settles. */
   total: number;
+  /** Everything already taken off the table's bill. */
+  discount: number;
   /** Nothing owed: no bill, and no reason to show a bill button. */
   settled: boolean;
 }
@@ -48,6 +58,7 @@ function side(orders: Order[]): BillSide {
     // Rounded once at the end: summing pre-rounded totals is what makes a bill
     // disagree with the sum of its parts by a cent.
     total: round2(orders.reduce((sum, o) => sum + Number(o.total), 0)),
+    discount: round2(orders.reduce((sum, o) => sum + Number(o.discount ?? 0), 0)),
   };
 }
 
@@ -68,6 +79,7 @@ export function tableBill(orders: Order[], myOrderIds: string[]): TableBill {
     mine,
     others,
     total: round2(mine.total + others.total),
+    discount: round2(mine.discount + others.discount),
     settled: owed.length === 0,
   };
 }

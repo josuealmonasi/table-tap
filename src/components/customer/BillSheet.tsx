@@ -151,8 +151,13 @@ export default function BillSheet({
 
   // What the chosen scope comes to, before any tip.
   const food = scope === "mine" ? bill.mine.total : bill.total;
-  const discount = coupon ? applyCoupon(coupon, food) : 0;
-  const base = round2(food - discount);
+  // Promotions already taken off — a code the floor applied to this table, or
+  // one used when ordering. `food` is net of it, so the lines above add up to
+  // more than the total unless it is shown, and a bill that doesn't add up is
+  // a bill nobody trusts.
+  const applied = scope === "mine" ? bill.mine.discount : bill.discount;
+  const discount = round2(applied + (coupon ? applyCoupon(coupon, food) : 0));
+  const base = round2(food - (coupon ? applyCoupon(coupon, food) : 0));
   const tip = tipCustom !== null ? Math.min(tipCustom, base) : round2(base * (tipPct / 100));
   const total = round2(base + tip);
 
@@ -269,7 +274,7 @@ export default function BillSheet({
 
           <OrderTotals
             subtotal={base}
-            grossSubtotal={food}
+            grossSubtotal={round2(food + applied)}
             discount={discount}
             serviceFee={0}
             tip={tip}
