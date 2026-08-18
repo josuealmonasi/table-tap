@@ -1165,7 +1165,13 @@ alter table plan_limits add column if not exists list_price numeric;
 -- The most we take in per-order fees in one month. Flat and small stops being
 -- either on a busy month: a café doing 900 orders would pay more in fees than
 -- in subscription, and a bill that big is one nobody agreed to. With a ceiling
--- the whole thing fits in a sentence — "MX$699, y nunca más de MX$1,299".
+-- the whole thing fits in a sentence — "MX$699, y nunca más de MX$1,749".
+--
+-- Set so it bites on an exceptional month rather than on a normal one. At 600
+-- it was reached by 400 orders — thirteen a day, which nearly every working
+-- restaurant passes — so the ceiling was the usual state rather than a safety
+-- net, and it gave away most of the fee on every busy account. Servicio now
+-- reaches it at 700 orders and Casa at 1,200.
 alter table plan_limits add column if not exists fee_cap numeric;
 
 -- 25 tables covered nearly every full-service restaurant in Mexico, so nobody
@@ -1175,9 +1181,9 @@ alter table plan_limits add column if not exists fee_cap numeric;
 update plan_limits set
   list_price = 0,    fee_cap = null                   where plan = 'carta';
 update plan_limits set
-  max_tables = 15,   list_price = 899,  fee_cap = 600 where plan = 'servicio';
+  max_tables = 15,   list_price = 899,  fee_cap = 1050 where plan = 'servicio';
 update plan_limits set
-  max_tables = 50,   list_price = 1899, fee_cap = 500 where plan = 'casa';
+  max_tables = 50,   list_price = 1899, fee_cap = 900  where plan = 'casa';
 update plan_limits set
   list_price = null, fee_cap = 0                      where plan = 'grupo';
 
