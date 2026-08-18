@@ -4969,3 +4969,76 @@ a.tt-btn {
 .tt-plan-cancel:hover {
   color: var(--tt-danger);
 }
+
+/* ── Legal documents ────────────────────────────────────────────────────────
+   Read, not skimmed: a narrow measure, real space between clauses, and the
+   version at the foot where somebody checks what they agreed to. */
+.tt-legal {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 48px 22px 80px;
+}
+.tt-legal-title {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.15;
+}
+.tt-legal-intro {
+  margin: 10px 0 0;
+  color: var(--tt-muted);
+  max-width: 62ch;
+}
+.tt-legal-clause {
+  margin-top: 32px;
+}
+.tt-legal-clause h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+.tt-legal-clause p {
+  margin: 0 0 10px;
+  max-width: 66ch;
+  line-height: 1.65;
+}
+.tt-legal-version {
+  margin-top: 40px;
+  padding-top: 16px;
+  border-top: 1px solid var(--tt-line);
+  font-size: 13px;
+  color: var(--tt-muted);
+}
+
+/* Both documents, side by side, above the button that agrees to them. */
+.tt-legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 14px;
+  font-size: 14px;
+}
+/* The app's own link colour. Left alone these came out browser-blue, which is
+   the one shade that says "nobody looked at this screen". */
+.tt-legal-links a,
+.tt-signup-terms a {
+  color: var(--tt-accent);
+  font-weight: 600;
+}
+.tt-signup-terms {
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+/* The privacy link in the footer: present for anyone who wants it, quiet
+   enough that a hungry diner never has to deal with it. */
+.tt-footer-legal {
+  color: inherit;
+  opacity: 0.75;
+  text-decoration: underline;
+}
+.tt-footer-legal:hover {
+  opacity: 1;
+}

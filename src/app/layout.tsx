@@ -4,6 +4,8 @@ import "./globals.css";
 import { getMembership } from "@/lib/membership";
 import { getPlatformAdmin } from "@/lib/admin";
 import Navbar from "@/components/layout/Navbar";
+import TermsGate from "@/components/legal/TermsGate";
+import { needsTerms } from "@/lib/legal";
 import Footer from "@/components/layout/Footer";
 import { ToastProvider } from "@/components/ui/Toast";
 import { LocaleProvider } from "@/lib/i18n/context";
@@ -47,6 +49,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 role={membership.role}
               />
             )}
+            {/* Only the owner is asked, and only in the dashboard: the diner's
+                menu renders through this same layout, and holding up somebody's
+                dinner over a contract with their restaurant would be absurd. */}
+            {membership?.role === "owner" &&
+              needsTerms(membership.restaurant.terms_version) && <TermsGate />}
             <main style={{ flex: 1 }}>{children}</main>
             <Footer />
           </ToastProvider>

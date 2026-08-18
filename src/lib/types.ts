@@ -86,6 +86,8 @@ export type Restaurant = {
   cover_enabled?: boolean;
   /** Dine-in tables may order first and settle at the end. Off by default. */
   allow_pay_later?: boolean;
+  /** Which version of the terms this restaurant's owner accepted. */
+  terms_version?: string | null;
 };
 
 export type RestaurantTable = {

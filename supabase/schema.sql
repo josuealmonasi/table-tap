@@ -1205,3 +1205,16 @@ create index if not exists orders_platform_fee_idx
 -- cancelled: the plan screen reads this to say "termina el 3 de septiembre"
 -- without another round trip to Stripe on every render.
 alter table restaurants add column if not exists plan_ends_at timestamptz;
+
+-- ── Terms of service ───────────────────────────────────────────────────────
+-- Which version of the terms the owner accepted, and when. Versioned rather
+-- than a boolean: terms change, and "they agreed" is only worth anything if we
+-- can say what they agreed to. Recorded against the restaurant because that is
+-- who the contract is with — the owner signs on its behalf.
+alter table restaurants add column if not exists terms_version text;
+alter table restaurants add column if not exists terms_accepted_at timestamptz;
+alter table restaurants add column if not exists terms_accepted_email text;
+
+-- Everything that existed before the terms did has not accepted anything, and
+-- must be asked on the next visit. Left null on purpose: pretending otherwise
+-- would be recording consent nobody gave.

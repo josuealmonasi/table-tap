@@ -1090,6 +1090,15 @@ export const es: Messages = {
     resetPassword: "Restablecer contraseña",
   },
   auth: {
+    termsAccept: "He leído y acepto los",
+    termsLink: "Términos y Condiciones",
+    privacyLink: "Aviso de Privacidad",
+    and: "y el",
+    termsRequired: "Acepta los términos para continuar.",
+    termsChanged: "Actualizamos nuestros términos",
+    termsChangedBody: "Cambiamos los Términos y Condiciones y el Aviso de Privacidad. Léelos y acéptalos para seguir usando el panel — tu menú sigue atendiendo a tus comensales de todos modos.",
+    termsAcceptNow: "Aceptar y continuar",
+    termsRead: "Leer los términos",
     // Login
     welcomeBack: "Bienvenido de nuevo",
     signInSub: "Inicia sesión en tu restaurante",
@@ -1142,6 +1151,7 @@ export const es: Messages = {
       "Esta cuenta ({email}) aún no tiene restaurante. Esto normalmente no puede pasar al registrarse — contacta a soporte o crea una cuenta nueva.",
   },
   footer: {
+    privacy: "Privacidad",
     rights: "Todos los derechos reservados.",
   },
 };
