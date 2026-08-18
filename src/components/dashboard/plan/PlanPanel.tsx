@@ -11,6 +11,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import PlanUsage, { type PlanUsageCounts } from "./PlanUsage";
 import PlanTiers from "./PlanTiers";
+import PlanDocuments from "./PlanDocuments";
 
 /** The tone of the status line: neutral while healthy, loud when money stopped. */
 const TONE: Record<PlanStatus, string> = {
@@ -25,6 +26,8 @@ export default function PlanPanel({
   catalog,
   usage,
   hasBilling,
+  acceptedVersion,
+  acceptedAt,
   currency,
 }: {
   plan: RestaurantPlan;
@@ -32,6 +35,9 @@ export default function PlanPanel({
   usage: PlanUsageCounts;
   /** There is a Stripe customer, so there is something to manage. */
   hasBilling: boolean;
+  /** Which terms this restaurant accepted, and when. */
+  acceptedVersion: string | null;
+  acceptedAt: string | null;
   currency: string;
 }) {
   const t = useT();
@@ -185,6 +191,7 @@ export default function PlanPanel({
 
         <PlanUsage limits={plan.limits} usage={usage} />
         <PlanTiers catalog={catalog} current={plan.limits.plan} currency={currency} />
+        <PlanDocuments acceptedVersion={acceptedVersion} acceptedAt={acceptedAt} />
       </div>
     </div>
   );

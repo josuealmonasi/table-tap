@@ -1,14 +1,41 @@
 import { createClient } from "@supabase/supabase-js";
 import { populateMenu } from "./menu-catalog.mjs";
 
+// Kept in step with src/lib/legal.ts by hand — a seeded demo account that has
+// never accepted the terms greets whoever opens it with a modal.
+const TERMS_VERSION = "2026-08-18";
+
 // Convenience logins created by `pnpm db:seed` / `pnpm db:reset` on BOTH
 // environments (this is a test prod — a reset orphans the surviving auth
 // logins unless seeding re-links them).
 export const TEST_PASSWORD = "test123";
-export const TEST_USERS = [1, 2, 3, 4, 5].map(n => ({
-  email: `test${n}@tabletap.dev`,
-  restaurantName: `Test Restaurant ${n}`,
-}));
+/**
+ * One test restaurant per tier, so every gate can be demonstrated by signing in
+ * rather than by editing the database.
+ *
+ * Test 1 is deliberately the free tier: it is the account that proves a table
+ * QR falls back to the counter menu, that coupons and promotions are refused,
+ * and that the dish ceiling bites. Test 5 sits on Grupo, which nobody can buy
+ * yet — useful for seeing what it unlocks before the tier is finished.
+ *
+ * A tier with a low ceiling gets a smaller seeded menu: the plan triggers
+ * refuse the 31st dish on Carta, and a seed that fails halfway is worse than a
+ * demo restaurant with a short menu.
+ */
+export const TEST_USERS = [
+  { email: "test1@tabletap.dev", restaurantName: "Test Restaurant 1", plan: "carta" },
+  { email: "test2@tabletap.dev", restaurantName: "Test Restaurant 2", plan: "servicio" },
+  { email: "test3@tabletap.dev", restaurantName: "Test Restaurant 3", plan: "casa" },
+  { email: "test4@tabletap.dev", restaurantName: "Test Restaurant 4", plan: "grupo" },
+  {
+    email: "test5@tabletap.dev",
+    restaurantName: "Test Restaurant 5",
+    plan: "servicio",
+    // Its trial ran out yesterday: the account for showing what a lapsed
+    // subscription looks like without waiting thirty days for one.
+    lapsedTrial: true,
+  },
+];
 
 // Team logins, re-linked to their restaurants idempotently on every seed.
 export const TEAM_LOGINS = [
@@ -27,6 +54,29 @@ export const TEAM_LOGINS = [
  *
  * @param {import("pg").Client} pgClient connected Postgres client
  */
+/**
+ * Four tables per test restaurant, so every account can demonstrate dine-in.
+ *
+ * Created before the tier is applied, which is the only order that works: the
+ * ceilings are INSERT triggers, so a Carta restaurant could never be given
+ * one afterwards. That is also what makes the free-tier account worth having —
+ * it owns tables and still falls back to the counter menu, exactly like a
+ * restaurant whose subscription lapsed.
+ */
+async function ensureTables(pgClient, restaurantId) {
+  const { rows } = await pgClient.query(
+    "select count(*)::int as n from restaurant_tables where restaurant_id = $1",
+    [restaurantId],
+  );
+  if (rows[0].n > 0) return;
+  for (const label of ["1", "2", "3", "4"]) {
+    await pgClient.query(
+      "insert into restaurant_tables (restaurant_id, label) values ($1, $2)",
+      [restaurantId, label],
+    );
+  }
+}
+
 /**
  * Ensures the platform admin login exists and is linked, on every seed/reset
  * (dev AND prod — the admin is infrastructure, not demo data). Reads
@@ -120,17 +170,44 @@ export async function seedTestUsers(pgClient) {
     let rid = existing[0]?.id;
     if (!rid) {
       const { rows } = await pgClient.query(
-        // A demo restaurant is on the tier that can hold what the seed creates:
-        // left on the free default, the plan triggers would refuse its first
-        // table and the whole seed would fail.
-        "insert into restaurants (name, owner_id, plan) values ($1, $2, 'casa') returning id",
-        [user.restaurantName, userId],
+        // The tier is part of what each test account is for. A lapsed trial is
+        // recorded as one — trialing, with an end date already in the past —
+        // so the app settles it on the next request exactly as it would in
+        // real life, rather than being handed a pre-cooked result.
+        // Created on the top tier so the seed has room to build a full demo:
+        // the limits are INSERT triggers, and Carta would refuse this
+        // restaurant's tables and its 31st dish halfway through. The tier this
+        // account is actually for is applied below, once everything exists —
+        // which is also what a real downgrade looks like, rows and all.
+        `insert into restaurants (name, owner_id, plan, terms_version,
+                                  terms_accepted_at, terms_accepted_email)
+         values ($1, $2, 'casa', $3, now(), $1) returning id`,
+        [user.restaurantName, userId, TERMS_VERSION],
       );
       rid = rows[0].id;
     }
 
     await ensureMenus(pgClient, rid);
-    ready.push(user.email);
+    await ensureTables(pgClient, rid);
+
+    // Now the tier, with the demo data already in place. Applied on every seed
+    // so an account that somebody clicked around in goes back to being the
+    // thing it is for. A lapsed trial is recorded as a real one whose date has
+    // passed, so the app settles it on the next request the way it would in
+    // life rather than being handed the answer.
+    await pgClient.query(
+      `update restaurants
+          set plan = $1, plan_status = $2, trial_ends_at = $3
+        where id = $4`,
+      [
+        user.plan ?? "casa",
+        user.lapsedTrial ? "trialing" : "active",
+        user.lapsedTrial ? new Date(Date.now() - 86400000).toISOString() : null,
+        rid,
+      ],
+    );
+
+    ready.push(`${user.email} (${user.plan ?? "casa"}${user.lapsedTrial ? ", prueba vencida" : ""})`);
   }
   return ready;
 }

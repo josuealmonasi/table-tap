@@ -46,7 +46,7 @@ export default async function PlanPage() {
     // opens an error is worse than no button.
     createAdminClient()
       .from("restaurants")
-      .select("stripe_customer_id")
+      .select("stripe_customer_id, terms_version, terms_accepted_at")
       .eq("id", membership.restaurant.id)
       .single(),
   ]);
@@ -61,6 +61,8 @@ export default async function PlanPage() {
         catalog={catalog}
         usage={usage}
         hasBilling={Boolean(billing.data?.stripe_customer_id)}
+        acceptedVersion={billing.data?.terms_version ?? null}
+        acceptedAt={billing.data?.terms_accepted_at ?? null}
         currency={membership.restaurant.currency}
       />
     </ConfirmProvider>

@@ -476,6 +476,9 @@ export const en = {
     billSent: "Bill requested",
   },
   plan: {
+    docsTitle: "Your documents",
+    docsHint: "Download them whenever you need them",
+    docsAccepted: "You accepted version {version} on {date}.",
     cancelAnytime: "Cancel whenever you like — no notice, no penalty.",
     cancel: "Cancel subscription",
     cancelConfirm: "Cancel your subscription?",
@@ -640,6 +643,7 @@ export const en = {
 
   // ── Dashboard ──
   nav: {
+    yourPlan: "Your plan",
     plan: "Plan",
     planDesc: "Your subscription, what it includes and what you're using",
     breadcrumb: "Breadcrumb",

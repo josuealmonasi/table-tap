@@ -153,7 +153,13 @@ async function runSqlCommand() {
       "select id, name from restaurants order by created_at",
     );
     const { rows: tables } = await client.query(
-      "select id, label from restaurant_tables order by label::int limit 1",
+      // Labels are whatever the restaurant calls a table — the placeholder in
+      // the app literally suggests "Patio 3" — so casting them to int crashes
+      // the whole seed on the first named one. Sort by the digits when there
+      // are any, and let the rest fall in after, alphabetically.
+      `select id, label from restaurant_tables
+        order by nullif(regexp_replace(label, '\\D', '', 'g'), '')::int nulls last, label
+        limit 1`,
     );
 
     console.log(`\n✓ [${target}] Done. ${restaurants.length} restaurant(s).`);
