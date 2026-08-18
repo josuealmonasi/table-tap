@@ -82,10 +82,22 @@ export function dashboardFrozen(status: PlanStatus): boolean {
   return status === "locked";
 }
 
-/** The platform's cut of one card order, in cents, for the Stripe application fee. */
-export function orderFeeCents(limits: PlanLimits): number {
-  if (limits.order_fee <= 0) return 0;
-  return Math.round(limits.order_fee * 100);
+/**
+ * The platform's cut of one card order, in cents, for the Stripe application
+ * fee. A flat amount, not a percentage: what this costs to run, and what it is
+ * worth, barely change with the price of the wine.
+ *
+ * Capped at a tenth of the order, because flat and small stop being the same
+ * thing on a small ticket — MX$3 off a MX$20 coffee is not a fee, it is a
+ * share of the coffee. Stripe also refuses an application fee larger than the
+ * charge, and a cap is a better answer than a failed payment.
+ */
+export const FEE_CAP_FRACTION = 0.1;
+
+export function orderFeeCents(limits: PlanLimits, totalCents: number): number {
+  if (limits.order_fee <= 0 || totalCents <= 0) return 0;
+  const flat = Math.round(limits.order_fee * 100);
+  return Math.min(flat, Math.floor(totalCents * FEE_CAP_FRACTION));
 }
 
 /**

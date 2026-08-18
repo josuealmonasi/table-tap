@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { ivaSplit, platformFeeCents } from "@/lib/money";
+import { ivaSplit } from "@/lib/money";
 
 describe("ivaSplit", () => {
   it("splits an IVA-inclusive total — the 100 → 86.21 + 13.79 example", () => {
@@ -25,23 +25,3 @@ describe("ivaSplit", () => {
   });
 });
 
-describe("platformFeeCents", () => {
-  afterEach(() => vi.unstubAllEnvs());
-
-  it("is 0 when no fee is configured", () => {
-    expect(platformFeeCents(10000)).toBe(0);
-  });
-
-  it("takes the configured basis points of the total (rounded)", () => {
-    vi.stubEnv("PLATFORM_FEE_BPS", "250"); // 2.5%
-    expect(platformFeeCents(10000)).toBe(250); // 2.5% of $100.00
-    expect(platformFeeCents(1540)).toBe(39); // round(1540 * 250 / 10000) = 39
-  });
-
-  it("ignores a zero or invalid fee", () => {
-    vi.stubEnv("PLATFORM_FEE_BPS", "0");
-    expect(platformFeeCents(10000)).toBe(0);
-    vi.stubEnv("PLATFORM_FEE_BPS", "not-a-number");
-    expect(platformFeeCents(10000)).toBe(0);
-  });
-});
