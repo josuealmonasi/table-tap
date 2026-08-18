@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getMembership } from "@/lib/membership";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { allPlans, getPlan } from "@/lib/plan-server";
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import PlanPanel from "@/components/dashboard/plan/PlanPanel";
 
 export const dynamic = "force-dynamic";
@@ -51,13 +52,17 @@ export default async function PlanPage() {
   ]);
   if (!plan) redirect("/dashboard");
 
+  // ConfirmProvider because cancelling asks before it ends anything — the
+  // same wrapper Settings and Promotions use for their destructive actions.
   return (
-    <PlanPanel
-      plan={plan}
-      catalog={catalog}
-      usage={usage}
-      hasBilling={Boolean(billing.data?.stripe_customer_id)}
-      currency={membership.restaurant.currency}
-    />
+    <ConfirmProvider>
+      <PlanPanel
+        plan={plan}
+        catalog={catalog}
+        usage={usage}
+        hasBilling={Boolean(billing.data?.stripe_customer_id)}
+        currency={membership.restaurant.currency}
+      />
+    </ConfirmProvider>
   );
 }

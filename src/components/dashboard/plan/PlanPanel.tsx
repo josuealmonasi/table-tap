@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { formatMoney } from "@/lib/format";
 import { planLabel, trialDaysLeft, type PlanLimits, type PlanStatus } from "@/lib/plan";
 import type { RestaurantPlan } from "@/lib/plan-server";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import PlanUsage, { type PlanUsageCounts } from "./PlanUsage";
 import PlanTiers from "./PlanTiers";
@@ -34,7 +36,10 @@ export default function PlanPanel({
 }) {
   const t = useT();
   const toast = useToast();
+  const confirm = useConfirm();
   const [opening, setOpening] = useState(false);
+  const [ending, setEnding] = useState(false);
+  const router = useRouter();
   const days = trialDaysLeft(plan.trialEndsAt);
 
   async function openPortal(): Promise<void> {
@@ -50,6 +55,44 @@ export default function PlanPanel({
     } catch {
       toast(t("notice.network"), "error");
       setOpening(false);
+    }
+  }
+
+  /**
+   * Ending the subscription, or changing your mind about it.
+   *
+   * Asked for plainly, and it says what actually happens: the plan runs to the
+   * end of what has already been paid for, and nothing is deleted.
+   */
+  async function endPlan(resume: boolean): Promise<void> {
+    if (
+      !resume &&
+      !(await confirm({
+        title: t("plan.cancelConfirm"),
+        message: t("plan.cancelBody"),
+        confirmLabel: t("plan.cancelYes"),
+        danger: true,
+      }))
+    ) {
+      return;
+    }
+    setEnding(true);
+    try {
+      const res = await fetch("/api/billing/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resume }),
+      });
+      const data = await res.json();
+      if (!res.ok) toast(data.error ?? t("notice.generic"), "error");
+      else {
+        toast(t(resume ? "plan.resumed" : "plan.cancelled"));
+        router.refresh();
+      }
+    } catch {
+      toast(t("notice.network"), "error");
+    } finally {
+      setEnding(false);
     }
   }
 
@@ -94,14 +137,49 @@ export default function PlanPanel({
           {/* Cards, receipts and cancelling all live on Stripe's own page:
               it is where the card details already are, and each of those
               screens is a place to get card handling wrong. */}
+          {/* Cancelling is never hidden. A plan that is hard to leave is a
+              plan people are afraid to start, and the promise is worth more
+              on the screen than in the terms. */}
+          <p className="tt-plan-anytime">{t("plan.cancelAnytime")}</p>
+
+          {plan.planEndsAt && (
+            <p className="tt-plan-state tt-plan-state-warn">
+              {t("plan.endsOn", {
+                date: new Date(plan.planEndsAt).toLocaleDateString([], {
+                  day: "numeric",
+                  month: "long",
+                }),
+              })}
+            </p>
+          )}
+
           {hasBilling && (
-            <button
-              className="tt-btn tt-btn-ghost tt-plan-manage"
-              disabled={opening}
-              onClick={openPortal}
-            >
-              {opening ? t("plan.opening") : t("plan.manage")}
-            </button>
+            <div className="tt-plan-actions">
+              <button
+                className="tt-btn tt-btn-ghost tt-btn-sm"
+                disabled={opening}
+                onClick={openPortal}
+              >
+                {opening ? t("plan.opening") : t("plan.manage")}
+              </button>
+              {plan.planEndsAt ? (
+                <button
+                  className="tt-btn tt-btn-primary tt-btn-sm"
+                  disabled={ending}
+                  onClick={() => endPlan(true)}
+                >
+                  {t("plan.resume")}
+                </button>
+              ) : (
+                <button
+                  className="tt-btn tt-btn-ghost tt-btn-sm tt-plan-cancel"
+                  disabled={ending}
+                  onClick={() => endPlan(false)}
+                >
+                  {t("plan.cancel")}
+                </button>
+              )}
+            </div>
           )}
         </div>
 

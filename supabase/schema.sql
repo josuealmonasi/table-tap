@@ -1194,3 +1194,8 @@ update plan_limits set allows_menu_schedules = (rank >= 2);
 alter table orders add column if not exists platform_fee numeric not null default 0;
 create index if not exists orders_platform_fee_idx
   on orders(restaurant_id, created_at desc) where platform_fee > 0;
+
+-- When a cancelled subscription actually runs out. Null means it is not
+-- cancelled: the plan screen reads this to say "termina el 3 de septiembre"
+-- without another round trip to Stripe on every render.
+alter table restaurants add column if not exists plan_ends_at timestamptz;

@@ -6,6 +6,8 @@ export interface RestaurantPlan {
   limits: PlanLimits;
   status: PlanStatus;
   trialEndsAt: string | null;
+  /** Set once cancelled: the day the plan they paid for runs out. */
+  planEndsAt: string | null;
 }
 
 /**
@@ -19,11 +21,12 @@ export interface RestaurantPlan {
 export const getPlan = cache(async (restaurantId: string): Promise<RestaurantPlan | null> => {
   const { data } = await createAdminClient()
     .from("restaurants")
-    .select("plan_status, trial_ends_at, plan_limits(*)")
+    .select("plan_status, trial_ends_at, plan_ends_at, plan_limits(*)")
     .eq("id", restaurantId)
     .single<{
       plan_status: PlanStatus;
       trial_ends_at: string | null;
+      plan_ends_at: string | null;
       plan_limits: PlanLimits | null;
     }>();
 
@@ -41,6 +44,7 @@ export const getPlan = cache(async (restaurantId: string): Promise<RestaurantPla
     limits: data.plan_limits,
     status: data.plan_status,
     trialEndsAt: data.trial_ends_at,
+    planEndsAt: data.plan_ends_at,
   };
 });
 
@@ -69,7 +73,9 @@ async function endTrial(restaurantId: string): Promise<RestaurantPlan | null> {
     .eq("plan", "carta")
     .single<PlanLimits>();
 
-  return data ? { limits: data, status: "active", trialEndsAt: null } : null;
+  return data
+    ? { limits: data, status: "active", trialEndsAt: null, planEndsAt: null }
+    : null;
 }
 
 /** Every tier, cheapest first — for naming what an upgrade would unlock. */
