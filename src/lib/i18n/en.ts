@@ -473,6 +473,26 @@ export const en = {
     getBill: "Get the bill",
     billSent: "Bill requested",
   },
+  plan: {
+    limit: {
+      tables: "Your {plan} plan includes {max} tables. Upgrade to add more.",
+      menus: "Your {plan} plan includes {max} menus. Upgrade to add more.",
+      items: "Your {plan} plan includes {max} dishes. Upgrade to add more.",
+      staff: "Your {plan} plan includes {max} staff logins. Upgrade to add more.",
+    },
+    none: {
+      tables: "Your {plan} plan doesn't include tables. Upgrade to add them.",
+      menus: "Your {plan} plan doesn't include menus. Upgrade to add them.",
+      items: "Your {plan} plan doesn't include dishes. Upgrade to add them.",
+      staff: "Your {plan} plan doesn't include staff logins. Upgrade to add them.",
+    },
+    needs: {
+      dineIn: "Tables and table service come with {plan}.",
+      promotions: "Promotions come with {plan}.",
+      coupons: "Coupons come with {plan}.",
+      staffDiscounts: "Discounts applied by your team come with {plan}.",
+    },
+  },
   tracker: {
     received: "Order received!",
     preparing: "Chef is preparing it",

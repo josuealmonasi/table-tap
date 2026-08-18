@@ -151,8 +151,8 @@ export async function seedMock(pg) {
   const {
     rows: [rest],
   } = await pg.query(
-    `insert into restaurants (name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, owner_id)
-     values ($1, 'Fresh plates, fast service', '🍽️', 'MXN', 10, true, true, $2) returning id`,
+    `insert into restaurants (name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, owner_id, plan)
+     values ($1, 'Fresh plates, fast service', '🍽️', 'MXN', 10, true, true, $2, 'casa') returning id`,
     [DEMO_RESTAURANT, ownerId],
   );
   const rid = rest.id;

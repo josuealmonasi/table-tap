@@ -120,7 +120,10 @@ export async function seedTestUsers(pgClient) {
     let rid = existing[0]?.id;
     if (!rid) {
       const { rows } = await pgClient.query(
-        "insert into restaurants (name, owner_id) values ($1, $2) returning id",
+        // A demo restaurant is on the tier that can hold what the seed creates:
+        // left on the free default, the plan triggers would refuse its first
+        // table and the whole seed would fail.
+        "insert into restaurants (name, owner_id, plan) values ($1, $2, 'casa') returning id",
         [user.restaurantName, userId],
       );
       rid = rows[0].id;

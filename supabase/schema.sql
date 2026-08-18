@@ -1074,3 +1074,78 @@ alter table restaurants add column if not exists trial_ends_at timestamptz;
 -- account above it: the anon lockdown covers the whole row.
 alter table restaurants add column if not exists stripe_customer_id text;
 alter table restaurants add column if not exists stripe_subscription_id text;
+
+-- ── Plan limits, enforced where the rows are written ────────────────────────
+-- Tables, menus and dishes are inserted by the dashboard's own Supabase client
+-- rather than through an API route, so there is no server handler to check a
+-- ceiling inside. A trigger is the stronger place regardless: it fires on the
+-- browser's write AND on the secret key's, which bypasses RLS entirely.
+
+-- The ceiling for one restaurant, or null for unlimited. security definer so
+-- it can read plan_limits, which the dashboard's role cannot write and the
+-- customer's cannot see at all.
+create or replace function public.plan_ceiling(p_restaurant_id uuid, p_what text)
+returns int language sql stable security definer set search_path = public as $$
+  select case p_what
+           when 'tables' then l.max_tables
+           when 'menus'  then l.max_menus
+           when 'items'  then l.max_items
+           when 'staff'  then l.max_staff
+         end
+    from restaurants r
+    join plan_limits l on l.plan = r.plan
+   where r.id = p_restaurant_id;
+$$;
+revoke all on function public.plan_ceiling(uuid, text) from public, anon;
+grant execute on function public.plan_ceiling(uuid, text) to authenticated, service_role;
+
+-- One guard for all three, told by its trigger argument which thing it is
+-- counting. The message is a parseable sentinel rather than a sentence:
+-- Postgres has no idea what language the owner reads, so the dashboard turns
+-- `tt_plan_limit tables servicio 25` into "Tu plan Servicio incluye 25 mesas".
+create or replace function public.enforce_plan_limit()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_what text := tg_argv[0];
+  v_plan text;
+  v_max  int;
+  v_used bigint;
+begin
+  select r.plan, public.plan_ceiling(r.id, v_what)
+    into v_plan, v_max
+    from restaurants r
+   where r.id = new.restaurant_id;
+
+  if v_max is null then return new; end if;  -- unlimited, or no such restaurant
+
+  if v_what = 'tables' then
+    select count(*) into v_used from restaurant_tables where restaurant_id = new.restaurant_id;
+  elsif v_what = 'menus' then
+    select count(*) into v_used from menus where restaurant_id = new.restaurant_id;
+  else
+    -- "30 dishes" means dishes. An add-on rides along with the product that
+    -- offers it and is not what an owner is counting when they read the limit.
+    if new.is_addon then return new; end if;
+    select count(*) into v_used
+      from menu_items
+     where restaurant_id = new.restaurant_id and not is_addon;
+  end if;
+
+  if v_used >= v_max then
+    raise exception 'tt_plan_limit % % %', v_what, v_plan, v_max
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists tables_plan_limit on restaurant_tables;
+create trigger tables_plan_limit before insert on restaurant_tables
+  for each row execute function public.enforce_plan_limit('tables');
+
+drop trigger if exists menus_plan_limit on menus;
+create trigger menus_plan_limit before insert on menus
+  for each row execute function public.enforce_plan_limit('menus');
+
+drop trigger if exists items_plan_limit on menu_items;
+create trigger items_plan_limit before insert on menu_items
+  for each row execute function public.enforce_plan_limit('items');

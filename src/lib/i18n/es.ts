@@ -470,6 +470,26 @@ export const es: Messages = {
     getBill: "Pedir la cuenta",
     billSent: "Cuenta solicitada",
   },
+  plan: {
+    limit: {
+      tables: "Tu plan {plan} incluye {max} mesas. Mejora tu plan para agregar más.",
+      menus: "Tu plan {plan} incluye {max} menús. Mejora tu plan para agregar más.",
+      items: "Tu plan {plan} incluye {max} platillos. Mejora tu plan para agregar más.",
+      staff: "Tu plan {plan} incluye {max} accesos para tu equipo. Mejora tu plan para agregar más.",
+    },
+    none: {
+      tables: "Tu plan {plan} no incluye mesas. Mejora tu plan para agregarlas.",
+      menus: "Tu plan {plan} no incluye menús. Mejora tu plan para agregarlos.",
+      items: "Tu plan {plan} no incluye platillos. Mejora tu plan para agregarlos.",
+      staff: "Tu plan {plan} no incluye accesos para tu equipo. Mejora tu plan para agregarlos.",
+    },
+    needs: {
+      dineIn: "Las mesas y el servicio en mesa vienen con {plan}.",
+      promotions: "Las promociones vienen con {plan}.",
+      coupons: "Los cupones vienen con {plan}.",
+      staffDiscounts: "Los descuentos aplicados por tu equipo vienen con {plan}.",
+    },
+  },
   tracker: {
     received: "¡Pedido recibido!",
     preparing: "El chef lo está preparando",

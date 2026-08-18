@@ -41,7 +41,10 @@ export default function TablesPanel({
     e.preventDefault();
     const label = newLabel.trim();
     if (!label) return false;
-    await addTable(label);
+    // Only claim it worked if it did. This used to confirm and close on the
+    // way past, so a refused write — a plan ceiling, a dropped connection —
+    // told the owner the table was added and threw away what they had typed.
+    if (!(await addTable(label))) return false;
     setNewLabel("");
     toast(t("done.tableAdded"));
     return true;

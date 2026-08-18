@@ -12,8 +12,9 @@ import { Modal } from "@/components/ui/Modal";
 interface TableRowProps {
   table: RestaurantTable;
   qr: QrTarget;
-  onRename: (id: string, label: string) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
+  /** Both report whether the write landed; the row only cares that it finished. */
+  onRename: (id: string, label: string) => Promise<unknown>;
+  onDelete: (id: string) => Promise<unknown>;
 }
 
 /** One table: its QR plus rename (inline) and delete (confirmed) actions. */

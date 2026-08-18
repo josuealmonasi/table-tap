@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { actingFrontOfHouse } from "@/lib/api-guard";
+import { planBlocks } from "@/lib/plan-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
@@ -31,6 +32,9 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
+
+  const blocked = await planBlocks(actor.restaurantId, "staffDiscounts");
+  if (blocked) return blocked;
 
   const { tableId, orderId, code } = (await req.json()) as {
     tableId?: string;

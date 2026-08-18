@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/lib/i18n/context";
+import { parsePlanLimit, planLimitText } from "@/lib/plan-error";
+import { planLabel } from "@/lib/plan";
 
 /**
  * CRUD for a restaurant's tables via the RLS-protected browser client (writes
@@ -27,38 +29,49 @@ export function useTables(restaurantId: string) {
   function reportError(key: string, error: { message: string } | null): boolean {
     if (error) {
       console.error(`${key}:`, error.message);
-      toast(t(key), "error");
+      // A ceiling is not a failure the owner should read as "something broke":
+      // the write was refused on purpose, and the toast has to say which limit
+      // and on which plan. Anything else keeps the generic message.
+      const hit = parsePlanLimit(error.message);
+      if (hit) {
+        const { key: limitKey, vars } = planLimitText(hit);
+        toast(t(limitKey, { ...vars, plan: planLabel(vars.plan) }), "error");
+      } else {
+        toast(t(key), "error");
+      }
     }
     return !error;
   }
 
+  /** Runs a write and reports it. Returns whether it actually landed. */
   async function run(
     key: string,
     write: PromiseLike<{ error: { message: string } | null }>,
     done?: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     setBusy(true);
-    const { error } = await write;
-    if (reportError(key, error)) {
+    const ok = reportError(key, (await write).error);
+    if (ok) {
       if (done) toast(t(done));
       router.refresh();
     }
     setBusy(false);
+    return ok;
   }
 
-  const addTable = (label: string): Promise<void> =>
+  const addTable = (label: string): Promise<boolean> =>
     run(
       "write.createTable",
       supabase.from("restaurant_tables").insert({ restaurant_id: restaurantId, label }),
     );
 
-  const renameTable = (id: string, label: string): Promise<void> =>
+  const renameTable = (id: string, label: string): Promise<boolean> =>
     run(
       "write.renameTable",
       supabase.from("restaurant_tables").update({ label }).eq("id", id),
     );
 
-  const deleteTable = (id: string): Promise<void> =>
+  const deleteTable = (id: string): Promise<boolean> =>
     run(
       "write.deleteTable",
       supabase.from("restaurant_tables").delete().eq("id", id),

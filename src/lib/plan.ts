@@ -99,6 +99,16 @@ export function trialDaysLeft(trialEndsAt: string | null, now: Date = new Date()
   return Math.ceil(ms / 86_400_000);
 }
 
+/**
+ * The tier's name as it is written to people.
+ *
+ * The four are brand names, not words — Carta, Servicio, Casa, Grupo read the
+ * same in both catalogs, so they are capitalised rather than translated.
+ */
+export function planLabel(plan: string): string {
+  return plan.charAt(0).toUpperCase() + plan.slice(1);
+}
+
 /** The row for a plan, or undefined if the catalog doesn't have it. */
 export function planFor(all: PlanLimits[], plan: PlanName): PlanLimits | undefined {
   return all.find(p => p.plan === plan);
