@@ -86,6 +86,15 @@ export default function Navbar({
             </span>
             <strong>{restaurantName}</strong>
           </Link>
+
+          {/* The tier, beside the restaurant it belongs to and visible without
+              opening anything. It was only in the account menu, which meant the
+              answer to "what plan am I on?" was behind a click nobody thinks to
+              make. Owner and manager only — the floor and the kitchen have no
+              use for it. */}
+          {plan && (role === "owner" || role === "manager") && (
+            <span className="tt-plan-chip tt-navbar-plan">{planLabel(plan)}</span>
+          )}
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
