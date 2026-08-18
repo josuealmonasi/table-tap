@@ -21,7 +21,21 @@ export default function ComboCard({
   const saving = Math.round((combo.regularPrice - combo.price) * 100) / 100;
 
   return (
-    <div className="tt-item tt-combo" onClick={() => onAdd(combo)}>
+    // Same as a dish row: the whole card opens the bundle, so it answers to a
+    // keyboard and announces itself.
+    <div
+      className="tt-item tt-combo"
+      role="button"
+      tabIndex={0}
+      aria-label={t("menu.openDish", { name: combo.name })}
+      onClick={() => onAdd(combo)}
+      onKeyDown={e => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onAdd(combo);
+        }
+      }}
+    >
       <div className="tt-item-body">
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           <strong style={{ fontSize: 15 }}>{combo.name}</strong>

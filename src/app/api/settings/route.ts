@@ -4,6 +4,7 @@ import { isAllowedTimeZone } from "@/lib/timezones";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { actingManager } from "@/lib/api-guard";
+import { frozenBlocks } from "@/lib/plan-guard";
 import { isOwnStorageUrl } from "@/lib/images";
 
 export const runtime = "nodejs";
@@ -34,6 +35,14 @@ const MANAGER_FIELDS = new Set(["tax_pct", "tax_show_breakdown", "accepting_orde
 export async function POST(req: NextRequest) {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
+
+  // Frozen with the rest of the desk work. The line `locked` draws is between
+  // what an owner does at a desk — settings, staff, promotions — and what the
+  // floor does mid-service: taking payment, moving orders, discounting a table
+  // in front of the diners sitting at it. The second kind keeps working, and
+  // so does everything the diner touches.
+  const frozen = await frozenBlocks(actor.restaurantId);
+  if (frozen) return frozen;
 
   const body = (await req.json()) as Record<string, unknown>;
   const allowed = actor.role === "owner" ? OWNER_FIELDS : MANAGER_FIELDS;

@@ -127,6 +127,15 @@ describe("the platform's cut", () => {
     expect(orderFeeCents(carta, 500)).toBe(50);
   });
 
+  it("is capped on the food, so a tip can't raise what we take", () => {
+    // A MX$5 coffee with a MX$20 tip is still a MX$5 order. Passing the
+    // amount charged instead of the food is what let the cap drift.
+    const food = 500;
+    const withTip = 2500;
+    expect(orderFeeCents(carta, food)).toBe(50);
+    expect(orderFeeCents(carta, withTip)).toBe(250);
+  });
+
   it("charges nothing when the tier includes it, or when there is nothing to charge", () => {
     expect(orderFeeCents({ ...casa, order_fee: 0 }, 30_000)).toBe(0);
     expect(orderFeeCents(casa, 0)).toBe(0);

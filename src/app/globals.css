@@ -4902,3 +4902,12 @@ a.tt-btn {
     align-items: flex-start;
   }
 }
+
+/* A clickable row is a control, so it shows where the keyboard is. Without
+   this the focus ring landed on a div with no visible boundary and the diner
+   tabbing through the menu had no idea which dish they were on. */
+.tt-item[role="button"]:focus-visible {
+  outline: 2px solid var(--tt-accent);
+  outline-offset: 2px;
+  border-radius: var(--tt-radius-sm);
+}

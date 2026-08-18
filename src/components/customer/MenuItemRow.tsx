@@ -29,7 +29,24 @@ export default function MenuItemRow({
   const onSale = pct > 0;
   const sale = itemSalePrice(item.price, pct);
   return (
-    <div className="tt-item" onClick={() => onSelect(item)}>
+    // A whole row that opens a dish is a button, and it has to answer to a
+    // keyboard like one. It was a bare div: a diner using a screen reader was
+    // told nothing was here, and one on a keyboard could only reach dishes
+    // through the small "+" — the same treatment the kitchen's order cards
+    // already get.
+    <div
+      className="tt-item"
+      role="button"
+      tabIndex={0}
+      aria-label={t("menu.openDish", { name: item.name })}
+      onClick={() => onSelect(item)}
+      onKeyDown={e => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(item);
+        }
+      }}
+    >
       {/* Name, then price, then description — you scan a menu by dish and
           cost, so those two sit together at the top rather than with the
           price stranded under a paragraph of ingredients. */}

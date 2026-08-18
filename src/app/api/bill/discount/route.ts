@@ -33,6 +33,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
+  // Plan-gated but deliberately not frozen: this is the floor applying a
+  // promotion to a table that is sitting there, not desk work. A lapsed
+  // subscription is between us and the owner — it should not reach into a
+  // conversation a waiter is having with a diner.
   const blocked = await planBlocks(actor.restaurantId, "staffDiscounts");
   if (blocked) return blocked;
 

@@ -379,7 +379,12 @@ export async function POST(req: NextRequest) {
     // cut is comes from the restaurant's tier — read here, server-side, from
     // the same catalogue the plan screen showed them.
     const feePlan = await getPlan(restaurantId);
-    const appFee = feePlan ? orderFeeCents(feePlan.limits, Math.round(total * 100)) : 0;
+    // Capped against the food, not the total. The tip is the diner's money on
+    // its way to the person who served them, and the service charge is the
+    // restaurant's — letting either raise the ceiling means a generous table
+    // pays us more for the same small order, which is the opposite of what the
+    // cap is for.
+    const appFee = feePlan ? orderFeeCents(feePlan.limits, Math.round(subtotal * 100)) : 0;
 
     // Item discounts are already baked into each line's unit_amount. What's
     // left — the coupon and any quantity deal — is money off the order as a
