@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import { isSelfServe } from "@/lib/billing";
-import { planLabel, type PlanLimits, type PlanName } from "@/lib/plan";
+import { launchSaving, planLabel, type PlanLimits, type PlanName } from "@/lib/plan";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { CheckIcon } from "@/components/ui/icons";
@@ -20,6 +20,7 @@ function includes(limits: PlanLimits, t: (k: string, v?: Record<string, string |
         : t(`plan.tier.${key}`, { n });
 
   const lines = [cap(limits.max_tables, "tables"), cap(limits.max_staff, "staff")];
+  if (limits.allows_menu_schedules) lines.push(t("plan.tier.schedules"));
   if (limits.allows_promotions) lines.push(t("plan.tier.promotions"));
   if (limits.allows_coupons) lines.push(t("plan.tier.coupons"));
   if (limits.allows_staff_discounts) lines.push(t("plan.tier.staffDiscounts"));
@@ -90,9 +91,21 @@ export default function PlanTiers({
               <div className="tt-tier-head">
                 <strong className="tt-serif tt-tier-name">{planLabel(tier.plan)}</strong>
                 {isCurrent && <span className="tt-tier-badge">{t("plan.current")}</span>}
+                {/* Nobody can buy this one yet, and one login still belongs to
+                    exactly one restaurant. Saying so is better than letting an
+                    owner ask for it and find out from us. */}
+                {tier.plan === "grupo" && !isCurrent && (
+                  <span className="tt-tier-badge tt-tier-soon">{t("plan.soon")}</span>
+                )}
               </div>
 
               <div className="tt-tier-price">
+                {/* "desde", because a multi-site price depends on how many
+                    sites — quoting one number we cannot honour is worse than
+                    admitting it is a conversation. */}
+                {tier.plan === "grupo" && (
+                  <span className="tt-tier-from">{t("plan.from")} </span>
+                )}
                 {tier.monthly_price === 0
                   ? t("plan.free")
                   : formatMoney(tier.monthly_price, currency)}
@@ -100,11 +113,33 @@ export default function PlanTiers({
                   <span className="tt-tier-per">{t("plan.perMonth")}</span>
                 )}
               </div>
-              <p className="tt-muted tt-tier-fee">
-                {tier.order_fee > 0
-                  ? t("plan.orderFee", { fee: formatMoney(tier.order_fee, currency) })
-                  : t("plan.noOrderFee")}
-              </p>
+
+              {/* What it will cost when the launch offer ends, struck through
+                  beside what they pay today. Nobody should find out later that
+                  the price they signed up at was temporary. */}
+              {launchSaving(tier) > 0 && (
+                <p className="tt-tier-launch">
+                  <s>{formatMoney(tier.list_price ?? 0, currency)}</s>{" "}
+                  <span className="tt-save">{t("plan.launchPrice")}</span>
+                </p>
+              )}
+
+              {/* Every peso a restaurant pays, named. The card fee is not ours
+                  and we do not collect it, but hiding it is what makes an owner
+                  feel they were not told the whole thing. */}
+              <ul className="tt-tier-costs">
+                <li>
+                  {tier.order_fee > 0
+                    ? t("plan.orderFee", { fee: formatMoney(tier.order_fee, currency) })
+                    : t("plan.noOrderFee")}
+                </li>
+                {tier.fee_cap ? (
+                  <li className="tt-save">
+                    {t("plan.feeCap", { cap: formatMoney(tier.fee_cap, currency) })}
+                  </li>
+                ) : null}
+                <li className="tt-muted">{t("plan.stripeFee")}</li>
+              </ul>
 
               <ul className="tt-tier-list">
                 {includes(tier, t).map(line => (

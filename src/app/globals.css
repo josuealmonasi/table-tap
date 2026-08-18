@@ -4911,3 +4911,37 @@ a.tt-btn {
   outline-offset: 2px;
   border-radius: var(--tt-radius-sm);
 }
+
+/* What a tier costs, in full: the launch price against the list price, then
+   every peso the restaurant pays — ours and Stripe's. Small, because it is
+   reference rather than pitch, but present, because leaving it out is what
+   makes an owner feel they were not told everything. */
+.tt-tier-launch {
+  margin: -4px 0 0;
+  font-size: 12px;
+}
+.tt-tier-launch s {
+  color: var(--tt-muted);
+}
+.tt-tier-costs {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.tt-tier-from {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--tt-muted);
+}
+/* Not for sale yet — a quieter badge than the one marking the current plan,
+   because it is a fact about the tier rather than a fact about them. */
+.tt-tier-soon {
+  background: color-mix(in srgb, var(--tt-ink) 8%, transparent);
+  color: var(--tt-muted);
+}

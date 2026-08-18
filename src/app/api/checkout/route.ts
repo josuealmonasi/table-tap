@@ -8,6 +8,7 @@ import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { orderFeeCents } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
+import { feesTakenThisMonth } from "@/lib/fee-month";
 import { itemSalePrice, priceCart, type AppliedCoupon } from "@/lib/pricing";
 import {
   claimCoupon,
@@ -269,6 +270,22 @@ export async function POST(req: NextRequest) {
       if (coupon) await releaseCoupon(coupon.id);
     };
 
+    // What we take from this order, worked out before the row is written so it
+    // can be recorded on it — the ceiling for the month is summed from these.
+    //
+    // Capped against the food rather than the amount charged: the tip is the
+    // diner's money on its way to the person who served them, and letting it
+    // raise the ceiling means a generous table pays us more for the same small
+    // order. A deferred order pays nothing here — it settles later, and the
+    // fee is taken then.
+    const feePlan = await getPlan(restaurantId);
+    const takenThisMonth =
+      feePlan?.limits.fee_cap && !deferred ? await feesTakenThisMonth(restaurantId) : 0;
+    const appFee =
+      feePlan && !deferred
+        ? orderFeeCents(feePlan.limits, Math.round(subtotal * 100), takenThisMonth)
+        : 0;
+
     // Create the pending order first so the webhook can find it.
     const { data: order, error: oErr } = await supabase
       .from("orders")
@@ -287,6 +304,7 @@ export async function POST(req: NextRequest) {
         tip,
         tax_pct: Number(restaurant.tax_pct) || 0,
         discount: pricing.discount,
+        platform_fee: appFee / 100,
         coupon_code: coupon?.code ?? null,
         // Where the discount came from, so the owner can tell a menu sale from
         // a quantity deal from a coupon when reviewing an order later.
@@ -376,15 +394,6 @@ export async function POST(req: NextRequest) {
     // via the card payment method (wallets show on supported devices).
     // Destination charge: the platform creates the charge, then routes the
     // funds to the restaurant's connected account, minus our cut. What that
-    // cut is comes from the restaurant's tier — read here, server-side, from
-    // the same catalogue the plan screen showed them.
-    const feePlan = await getPlan(restaurantId);
-    // Capped against the food, not the total. The tip is the diner's money on
-    // its way to the person who served them, and the service charge is the
-    // restaurant's — letting either raise the ceiling means a generous table
-    // pays us more for the same small order, which is the opposite of what the
-    // cap is for.
-    const appFee = feePlan ? orderFeeCents(feePlan.limits, Math.round(subtotal * 100)) : 0;
 
     // Item discounts are already baked into each line's unit_amount. What's
     // left — the coupon and any quantity deal — is money off the order as a
@@ -401,30 +410,45 @@ export async function POST(req: NextRequest) {
           ? [
               {
                 coupon: (
-                  await stripe.coupons.create({
-                    amount_off: amountOffCents,
-                    currency: cur,
-                    duration: "once",
-                    name: coupon ? `Coupon ${coupon.code}` : "Discount",
-                  })
+                  await stripe.coupons.create(
+                    {
+                      amount_off: amountOffCents,
+                      currency: cur,
+                      duration: "once",
+                      name: coupon ? `Coupon ${coupon.code}` : "Discount",
+                    },
+                    // Same account as the session below, or Stripe cannot
+                    // find the coupon when the checkout page loads.
+                    { stripeAccount: restaurant.stripe_account_id },
+                  )
                 ).id,
               },
             ]
           : undefined;
 
-      session = await stripe.checkout.sessions.create({
-        mode: "payment",
-        line_items,
-        ...(discounts ? { discounts } : {}),
-        success_url: `${origin}/order/${order.id}?paid=1`,
-        cancel_url: `${origin}/r/${restaurantId}${tableId ? `/t/${tableId}` : ""}?cancelled=1`,
-        metadata: { order_id: order.id },
-        payment_intent_data: {
+      // A DIRECT charge: the payment is created on the restaurant's own Stripe
+      // account, so Stripe's processing fee comes out of their balance and our
+      // application fee comes to us clean.
+      //
+      // It used to be a destination charge on the platform, which meant Stripe
+      // billed US for every order a diner paid: MX$13.80 on a MX$300 ticket
+      // against MX$0.75 collected. Every restaurant we signed made that worse.
+      // Settling a table already worked this way — now both paths do.
+      session = await stripe.checkout.sessions.create(
+        {
+          mode: "payment",
+          line_items,
+          ...(discounts ? { discounts } : {}),
+          success_url: `${origin}/order/${order.id}?paid=1`,
+          cancel_url: `${origin}/r/${restaurantId}${tableId ? `/t/${tableId}` : ""}?cancelled=1`,
           metadata: { order_id: order.id },
-          transfer_data: { destination: restaurant.stripe_account_id },
-          ...(appFee > 0 ? { application_fee_amount: appFee } : {}),
+          payment_intent_data: {
+            metadata: { order_id: order.id },
+            ...(appFee > 0 ? { application_fee_amount: appFee } : {}),
+          },
         },
-      });
+        { stripeAccount: restaurant.stripe_account_id },
+      );
     } catch (err) {
       // Stripe refused the session — the pending order will never be paid, so
       // remove it instead of leaving an orphan row, and give back the coupon

@@ -45,12 +45,32 @@ export async function POST(req: NextRequest) {
       // silently without a refund.
       return await apiError("apiErr.settling", 409);
     }
+    // The payment lives on the restaurant's own Stripe account — both ways of
+    // paying are direct charges — so the refund has to be asked for there.
+    // Without the account, Stripe answers "no such payment_intent" and an
+    // owner cannot cancel an order somebody already paid for.
+    const { data: acct } = await admin
+      .from("restaurants")
+      .select("stripe_account_id")
+      .eq("id", actor.restaurantId)
+      .single();
+    if (!acct?.stripe_account_id) return await apiError("apiErr.refundFailed", 500);
+
     try {
       // The idempotency key makes a double-submit return the same refund
       // instead of failing on an already-refunded payment.
       const refund = await stripe.refunds.create(
-        { payment_intent: order.stripe_payment_intent },
-        { idempotencyKey: `cancel-${order.id}` },
+        {
+          payment_intent: order.stripe_payment_intent,
+          // Our cut goes back too. The diner did not get the food, so keeping
+          // a fee for it would be charging the restaurant for a sale that
+          // never happened.
+          refund_application_fee: true,
+        },
+        {
+          idempotencyKey: `cancel-${order.id}`,
+          stripeAccount: acct.stripe_account_id,
+        },
       );
       refundId = refund.id;
     } catch (err) {
