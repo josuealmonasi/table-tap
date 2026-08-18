@@ -35,6 +35,9 @@ export interface PlanLimits {
   allows_staff_discounts: boolean;
   analytics_days: number;
   log_days: number;
+  /** A real Stripe Price, once the tier has one; checkout falls back to
+   *  monthly_price so a tier is buyable with no setup in Stripe. */
+  stripe_price_id?: string | null;
 }
 
 export type PlanFeature = "dineIn" | "promotions" | "coupons" | "staffDiscounts";

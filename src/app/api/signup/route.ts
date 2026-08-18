@@ -5,6 +5,10 @@ import { clientIp, isRateLimited } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
+/** What a new restaurant gets, and for how long, before a card is needed. */
+const TRIAL_PLAN = "casa";
+const TRIAL_DAYS = 30;
+
 // POST /api/signup
 // Body: { restaurantName, email, password }
 // Creates a pre-confirmed auth user and their restaurant, atomically-ish:
@@ -39,7 +43,16 @@ export async function POST(req: NextRequest) {
 
   const { error: restaurantErr } = await admin
     .from("restaurants")
-    .insert({ name: restaurantName.trim(), owner_id: created.user.id });
+    .insert({
+      name: restaurantName.trim(),
+      owner_id: created.user.id,
+      // A month of everything, no card. Sold on the top self-serve tier
+      // because a restaurant deciding whether this is worth paying for should
+      // be deciding about the product, not about a cut-down version of it.
+      plan: TRIAL_PLAN,
+      plan_status: "trialing",
+      trial_ends_at: new Date(Date.now() + TRIAL_DAYS * 86_400_000).toISOString(),
+    });
 
   if (restaurantErr) {
     // Roll back the orphaned user so the email is free to try again.

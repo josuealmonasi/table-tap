@@ -471,6 +471,7 @@ export const es: Messages = {
     billSent: "Cuenta solicitada",
   },
   plan: {
+    frozen: "Tu suscripción está pausada, así que el panel es solo de lectura. Tu menú sigue activo y sigue recibiendo pedidos.",
     limit: {
       tables: "Tu plan {plan} incluye {max} mesas. Mejora tu plan para agregar más.",
       menus: "Tu plan {plan} incluye {max} menús. Mejora tu plan para agregar más.",
@@ -601,6 +602,8 @@ export const es: Messages = {
     soon: "Pronto",
   },
   apiErr: {
+    pickPlan: "Elige un plan para suscribirte.",
+    noBilling: "Este restaurante todavía no tiene suscripción.",
     notYourStage: "Solo la cocina puede mover un pedido entre etapas.",
     closedNow:
       "La cocina no está sirviendo en este momento. Inténtalo durante el horario de servicio.",

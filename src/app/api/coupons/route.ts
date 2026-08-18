@@ -3,7 +3,7 @@ import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { actingManager } from "@/lib/api-guard";
-import { planBlocks } from "@/lib/plan-guard";
+import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
 import { isValidCouponFormat, normalizeCoupon } from "@/lib/coupons";
 
 export const runtime = "nodejs";
@@ -77,6 +77,9 @@ export async function POST(req: NextRequest) {
 
   // Creating is gated, editing is not: a restaurant that drops a tier keeps
   // the codes it already handed out and must still be able to switch them off.
+  const frozen = await frozenBlocks(actor.restaurantId);
+  if (frozen) return frozen;
+
   const blocked = await planBlocks(actor.restaurantId, "coupons");
   if (blocked) return blocked;
 

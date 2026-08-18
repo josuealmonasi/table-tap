@@ -474,6 +474,7 @@ export const en = {
     billSent: "Bill requested",
   },
   plan: {
+    frozen: "Your subscription is paused, so the dashboard is read-only. Your menu is still serving and still taking orders.",
     limit: {
       tables: "Your {plan} plan includes {max} tables. Upgrade to add more.",
       menus: "Your {plan} plan includes {max} menus. Upgrade to add more.",
@@ -607,6 +608,8 @@ export const en = {
     soon: "Soon",
   },
   apiErr: {
+    pickPlan: "Pick a plan to subscribe to.",
+    noBilling: "This restaurant has no subscription yet.",
     notYourStage: "Only the kitchen can move an order between stages.",
     closedNow:
       "The kitchen isn't serving right now. Please try again during opening hours.",

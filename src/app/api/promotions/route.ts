@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { actingManager } from "@/lib/api-guard";
-import { planBlocks } from "@/lib/plan-guard";
+import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
 import {
   promoPricingError,
   type PricedProduct,
@@ -67,6 +67,9 @@ export async function POST(req: NextRequest) {
 
   // Creating is gated, editing is not: a restaurant that drops a tier keeps
   // the promotions it already runs and must still be able to end them.
+  const frozen = await frozenBlocks(restaurantId);
+  if (frozen) return frozen;
+
   const blocked = await planBlocks(restaurantId, "promotions");
   if (blocked) return blocked;
 

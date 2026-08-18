@@ -1149,3 +1149,9 @@ create trigger menus_plan_limit before insert on menus
 drop trigger if exists items_plan_limit on menu_items;
 create trigger items_plan_limit before insert on menu_items
   for each row execute function public.enforce_plan_limit('items');
+
+-- A real Stripe Price for a tier, once one exists. Left null, checkout builds
+-- the line item from monthly_price instead — which means subscriptions work
+-- with no manual setup in the Stripe dashboard, and a proper catalogue can be
+-- adopted later by filling this in without touching any code.
+alter table plan_limits add column if not exists stripe_price_id text;
