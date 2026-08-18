@@ -102,6 +102,7 @@ export const en = {
     deleteSelected: "Couldn't delete the selected items",
   },
   menu: {
+    openDish: "Open {name}",
     closedNowTitle: "We're closed right now",
     closedNowBody:
       "Nothing is being served at this hour. Please check back during opening hours.",
@@ -984,6 +985,7 @@ export const en = {
     pageOf: "Page {page} of {pages}",
   },
   orders: {
+    openDetail: "Open order {code}",
     historyCountOne: "1 order",
     historyCount: "{total} orders",
     historySearch: "Search by code (ORD-1960) or table…",

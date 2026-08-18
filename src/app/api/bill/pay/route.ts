@@ -127,9 +127,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const cents = Math.round(amount * 100);
   // Our cut of this settlement, from the restaurant's tier. Settling a table
   // is one card payment for one bill, so it carries the same single fee an
-  // order does rather than one per order on the bill.
+  // order does rather than one per order on the bill — and it is capped
+  // against the food rather than the amount charged, so a generous tip never
+  // raises what we take.
   const feePlan = await getPlan(restaurantId);
-  const appFee = feePlan ? orderFeeCents(feePlan.limits, cents) : 0;
+  const appFee = feePlan
+    ? orderFeeCents(feePlan.limits, Math.round(payable * 100))
+    : 0;
   if (cents <= 0) {
     if (coupon) await releaseCoupon(coupon.id);
     return await apiError("apiErr.billSettled", 409);

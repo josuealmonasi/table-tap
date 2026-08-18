@@ -104,6 +104,7 @@ export const es: Messages = {
     deleteSelected: "No se pudieron eliminar los elementos seleccionados",
   },
   menu: {
+    openDish: "Abrir {name}",
     closedNowTitle: "Estamos cerrados en este momento",
     closedNowBody:
       "No hay nada en servicio a esta hora. Vuelve durante el horario de atención.",
@@ -973,6 +974,7 @@ export const es: Messages = {
     pageOf: "Página {page} de {pages}",
   },
   orders: {
+    openDetail: "Abrir el pedido {code}",
     historyCountOne: "1 pedido",
     historyCount: "{total} pedidos",
     historySearch: "Busca por código (ORD-1960) o mesa…",
