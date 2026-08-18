@@ -66,6 +66,7 @@ async function Menu({
       promos={data.promos}
       ratings={data.ratings}
       closedNow={data.closedNow}
+      receipts={data.receipts}
     />
   );
 }

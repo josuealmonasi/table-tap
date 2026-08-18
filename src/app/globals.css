@@ -5122,3 +5122,17 @@ a.tt-user-plan:hover {
     display: none;
   }
 }
+
+/* The promise under the field. Small, but it is the reason somebody types
+   their address at all, so it sits where the typing happens. */
+.tt-receipt-promise {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--tt-muted);
+}
+.tt-receipt-error {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--tt-danger);
+}

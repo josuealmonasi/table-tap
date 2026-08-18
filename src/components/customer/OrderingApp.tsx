@@ -26,7 +26,9 @@ import { suggestItems } from "@/lib/suggestions";
 import { clearUpsell, markUpsellAsked, upsellAsked } from "@/lib/upsell";
 import { recallOrder, rememberRecentOrder } from "@/lib/recent-order";
 import { useTableBill } from "@/hooks/useTableBill";
+import { useReceiptOffer } from "@/hooks/useReceiptOffer";
 import BillSheet from "./BillSheet";
+import ReceiptPrompt from "./ReceiptPrompt";
 import TrackerOverlay from "./TrackerOverlay";
 import type { TrackedOrder } from "@/lib/order-tracking";
 
@@ -47,6 +49,7 @@ export default function OrderingApp({
   promos = [],
   ratings = {},
   closedNow = false,
+  receipts = false,
   trackOrder = null,
 }: {
   restaurant: Restaurant;
@@ -60,6 +63,8 @@ export default function OrderingApp({
   ratings?: Record<string, { avg: number; count: number }>;
   /** No menu is serving at this hour. */
   closedNow?: boolean;
+  /** A receipt can be emailed — false when no mail provider is configured. */
+  receipts?: boolean;
   /**
    * An order to open the tracker on: the landing Stripe returns to, and any
    * shared /order/<id> link. The menu is rendered behind it.
@@ -167,6 +172,10 @@ export default function OrderingApp({
   useEffect(() => {
     setTrackId(prev => prev ?? recallOrder(restaurant.id));
   }, [restaurant.id]);
+
+  // "Want that by email?" — asked once, when the money is settled, whether
+  // that happened by card or in cash at the table.
+  const { offering, dismiss: dismissReceipt } = useReceiptOffer(receipts, trackOrder?.id ?? null, bill);
 
   // Which order the tracker is showing, if it is open. Landing on /order/<id>
   // opens it straight away; from the menu the banner opens it, over the menu,
@@ -562,7 +571,10 @@ export default function OrderingApp({
         }}
       />
       {cartScreen}
-      {tracking && (
+      {/* One at a time. Paying is answered first — it is what just happened,
+          and two dialogs stacked would trap focus against each other and take
+          two Escapes to leave. The tracker is underneath it either way. */}
+      {tracking && !offering && (
         <TrackerOverlay
           orderId={tracking}
           initialOrder={trackOrder?.id === tracking ? trackOrder : null}
@@ -579,6 +591,9 @@ export default function OrderingApp({
           tableId={table.id}
           tableLabel={table.label}
         />
+      )}
+      {offering && (
+        <ReceiptPrompt orderIds={offering} open onClose={dismissReceipt} />
       )}
       {detail}
       {comboDetail}

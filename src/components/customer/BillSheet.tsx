@@ -6,6 +6,7 @@ import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import { canPayMineOnly, ordersToPay, type BillSide, type TableBill } from "@/lib/table-bill";
 import { applyCoupon, itemSalePrice } from "@/lib/pricing";
+import { rememberSettling } from "@/hooks/useReceiptOffer";
 import type { AppliedCoupon } from "@/lib/pricing";
 import CouponBox from "./CouponBox";
 import DishImage from "./DishImage";
@@ -179,7 +180,13 @@ export default function BillSheet({
         }),
       });
       const data = await res.json();
-      if (data.url) window.location.href = data.url;
+      if (data.url) {
+        // Stripe sends them back to the menu, where the bill is already gone —
+        // so what they just paid for is noted here, while it is still known,
+        // for the receipt offer waiting on the other side.
+        rememberSettling(orders.map(o => o.id));
+        window.location.href = data.url;
+      }
       else setBusy(false);
     } catch {
       setBusy(false);

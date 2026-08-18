@@ -4,6 +4,7 @@ import { fetchPromotions } from "@/lib/promotions-data";
 import { buildCombos, toCartPromos, type Combo } from "@/lib/promotions";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
 import type { CartPromo } from "@/lib/pricing";
+import { mailConfigured } from "@/lib/mail";
 
 /** Everything the customer ordering screens need for one restaurant. */
 export interface OrderingData {
@@ -21,6 +22,11 @@ export interface OrderingData {
   ratings: Record<string, { avg: number; count: number }>;
   /** The restaurant has menus, but none is serving at this hour. */
   closedNow: boolean;
+  /**
+   * Whether a receipt can actually be emailed. Without a mail provider the
+   * offer is a promise the app can't keep, so it isn't made.
+   */
+  receipts: boolean;
 }
 
 // Sentinel so an `.in("menu_id", [])` never matches (a restaurant with no active menus).
@@ -186,6 +192,7 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
 
   return {
     closedNow,
+    receipts: mailConfigured(),
     restaurant,
     categories,
     items,

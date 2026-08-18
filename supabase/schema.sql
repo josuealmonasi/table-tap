@@ -1218,3 +1218,12 @@ alter table restaurants add column if not exists terms_accepted_email text;
 -- Everything that existed before the terms did has not accepted anything, and
 -- must be asked on the next visit. Left null on purpose: pretending otherwise
 -- would be recording consent nobody gave.
+
+-- ── Emailed receipts ───────────────────────────────────────────────────────
+-- An address a diner typed to get their own receipt, and nothing else. Stored
+-- on the order it belongs to rather than in a list, because a list of diner
+-- emails is a mailing list, and we told them this was not one.
+alter table orders add column if not exists receipt_email text;
+alter table orders add column if not exists receipt_sent_at timestamptz;
+-- Never readable with the publishable key: orders carry no anon grant at all,
+-- so nothing here reaches a browser. Only the server, which sends the mail.
