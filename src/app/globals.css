@@ -4945,3 +4945,27 @@ a.tt-btn {
   background: color-mix(in srgb, var(--tt-ink) 8%, transparent);
   color: var(--tt-muted);
 }
+
+/* The promise sits above the buttons, not in the terms. */
+.tt-plan-anytime {
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: var(--tt-muted);
+}
+.tt-plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  /* Ghost buttons are labels with a tap target around them; pulling the first
+     one's padding back lines it up with everything else in the card. */
+  margin-left: -16px;
+}
+/* Leaving is a real option, not a dare — muted rather than alarming, and the
+   dialog is where the consequences get spelled out. */
+.tt-plan-cancel {
+  color: var(--tt-muted);
+}
+.tt-plan-cancel:hover {
+  color: var(--tt-danger);
+}
