@@ -209,6 +209,12 @@ h2.tt-serif {
     opacity 0.12s;
   font-family: inherit;
 }
+/* Some of these are links — "See plans" goes to a page rather than firing an
+   action — and a button with an underline through its label reads as neither
+   one thing nor the other. */
+a.tt-btn {
+  text-decoration: none;
+}
 .tt-btn:active {
   transform: scale(0.98);
 }
@@ -4668,4 +4674,192 @@ h2.tt-serif {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* ── Plan screen ────────────────────────────────────────────────────────────
+   The tier a restaurant is on, what it is using, and what the others cost. */
+.tt-plan-now {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tt-plan-name {
+  font-size: 22px;
+}
+.tt-plan-state {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--tt-muted);
+}
+/* Money stopped moving. Loud enough to act on, not loud enough to look like
+   the restaurant is broken — because it isn't: the menu is still serving. */
+.tt-plan-state-warn {
+  color: var(--tt-danger);
+  font-weight: 600;
+}
+.tt-plan-cost {
+  text-align: right;
+  white-space: nowrap;
+}
+.tt-plan-cost strong {
+  font-size: 20px;
+}
+.tt-plan-cost span {
+  color: var(--tt-muted);
+  font-size: 13px;
+}
+/* A ghost button is a label with a tap target around it, and that target's
+   24px of padding pushed the label out of the column the rest of the card
+   sits in — the heading, the tier name and the status all start 24px to its
+   left. Pulling the padding back lines the label up and leaves the target
+   the size a thumb needs. */
+.tt-plan-manage {
+  margin-top: 12px;
+  margin-left: -24px;
+}
+
+.tt-usage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.tt-usage-row {
+  font-size: 14px;
+}
+.tt-usage-full {
+  color: var(--tt-danger);
+  font-weight: 600;
+}
+.tt-usage-bar {
+  margin-top: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--tt-cream);
+  overflow: hidden;
+}
+.tt-usage-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--tt-accent);
+}
+.tt-usage-fill-full {
+  background: var(--tt-danger);
+}
+
+/* One tier per row on a phone, two from 700px, all four side by side on a
+   wide screen — a price list is read across, and four columns of one line
+   each is unreadable on a narrow one. */
+.tt-tier-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 700px) {
+  .tt-tier-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1025px) {
+  .tt-tier-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.tt-tier {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--tt-cream);
+  border-radius: 14px;
+  background: var(--tt-white);
+}
+/* The one they are on, marked by the accent rather than by a colour fill:
+   the card is still a price list entry, not a call to action. */
+.tt-tier-current {
+  border-color: var(--tt-accent);
+  box-shadow: 0 0 0 1px var(--tt-accent) inset;
+}
+.tt-tier-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tt-tier-name {
+  font-size: 17px;
+}
+.tt-tier-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tt-accent) 12%, transparent);
+  color: var(--tt-accent);
+  white-space: nowrap;
+}
+.tt-tier-price {
+  font-size: 20px;
+  font-weight: 700;
+}
+.tt-tier-per {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--tt-muted);
+}
+.tt-tier-fee {
+  margin: 0;
+  font-size: 12px;
+}
+.tt-tier-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  /* Pushes the button to the foot of every card, so a tier with fewer lines
+     doesn't leave its button floating halfway up the row. */
+  flex: 1;
+}
+.tt-tier-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tt-tier-list svg {
+  color: var(--tt-accent);
+  flex: none;
+}
+.tt-tier-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+/* A feature the tier doesn't include, standing where the feature would be.
+   Same card as its neighbours so the column keeps its rhythm — a locked
+   panel that looked like an error would read as something broken. */
+.tt-plan-lock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.tt-plan-lock-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+.tt-plan-lock-body svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--tt-muted);
+}
+.tt-plan-lock-body p {
+  margin: 2px 0 0;
+  font-size: 13px;
 }
