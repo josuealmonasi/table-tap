@@ -23,6 +23,10 @@ export interface PlanLimits {
   plan: PlanName;
   rank: number;
   monthly_price: number;
+  /** What the plan costs once the launch offer ends; null when there is none. */
+  list_price?: number | null;
+  /** The most we take in per-order fees in one month; null for no ceiling. */
+  fee_cap?: number | null;
   /** Flat platform fee per CARD order, in the restaurant's currency. */
   order_fee: number;
   max_tables: number | null;
@@ -30,6 +34,7 @@ export interface PlanLimits {
   max_menus: number | null;
   max_items: number | null;
   allows_dine_in: boolean;
+  allows_menu_schedules?: boolean;
   allows_promotions: boolean;
   allows_coupons: boolean;
   allows_staff_discounts: boolean;
@@ -40,13 +45,19 @@ export interface PlanLimits {
   stripe_price_id?: string | null;
 }
 
-export type PlanFeature = "dineIn" | "promotions" | "coupons" | "staffDiscounts";
+export type PlanFeature =
+  | "dineIn"
+  | "promotions"
+  | "coupons"
+  | "staffDiscounts"
+  | "menuSchedules";
 
 const FEATURE_COLUMN: Record<PlanFeature, keyof PlanLimits> = {
   dineIn: "allows_dine_in",
   promotions: "allows_promotions",
   coupons: "allows_coupons",
   staffDiscounts: "allows_staff_discounts",
+  menuSchedules: "allows_menu_schedules",
 };
 
 /** Whether this tier includes a feature at all. */
@@ -94,10 +105,22 @@ export function dashboardFrozen(status: PlanStatus): boolean {
  */
 export const FEE_CAP_FRACTION = 0.1;
 
-export function orderFeeCents(limits: PlanLimits, totalCents: number): number {
+export function orderFeeCents(
+  limits: PlanLimits,
+  totalCents: number,
+  /** What we have already taken in fees this month, in cents. */
+  chargedThisMonthCents = 0,
+): number {
   if (limits.order_fee <= 0 || totalCents <= 0) return 0;
   const flat = Math.round(limits.order_fee * 100);
-  return Math.min(flat, Math.floor(totalCents * FEE_CAP_FRACTION));
+  const perOrder = Math.min(flat, Math.floor(totalCents * FEE_CAP_FRACTION));
+
+  // And a ceiling for the month. Past it we stop charging: a restaurant that
+  // has a good month should not be handed a bill it never agreed to, and
+  // "never more than X" is a promise that fits on the plan card.
+  if (limits.fee_cap === null || limits.fee_cap === undefined) return perOrder;
+  const left = Math.round(limits.fee_cap * 100) - chargedThisMonthCents;
+  return Math.max(0, Math.min(perOrder, left));
 }
 
 /**
@@ -112,6 +135,16 @@ export function trialDaysLeft(trialEndsAt: string | null, now: Date = new Date()
   const ms = new Date(trialEndsAt).getTime() - now.getTime();
   if (!Number.isFinite(ms) || ms <= 0) return 0;
   return Math.ceil(ms / 86_400_000);
+}
+
+/** On a launch price, and by how much — for showing what it will cost later. */
+export function launchSaving(limits: PlanLimits): number {
+  const list = limits.list_price ?? 0;
+  return list > limits.monthly_price ? round2(list - limits.monthly_price) : 0;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
 }
 
 /**

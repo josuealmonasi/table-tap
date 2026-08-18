@@ -473,6 +473,12 @@ export const es: Messages = {
     billSent: "Cuenta solicitada",
   },
   plan: {
+    soon: "Próximamente",
+    from: "desde",
+    launchPrice: "Precio de lanzamiento",
+    feeCap: "Nunca más de {cap} al mes en comisiones por pedido",
+    stripeFee: "Stripe cobra la tarjeta: 3.6% + MX$3 por pago, va a ellos, no a nosotros",
+    monthlyMax: "Lo máximo que pagarías este mes",
     lockHint: "Todo lo demás en esta página sigue funcionando.",
     seePlans: "Ver planes",
     currentTitle: "Tu plan",
@@ -504,6 +510,7 @@ export const es: Messages = {
       unlimited: "{used} · ilimitado",
     },
     tier: {
+      schedules: "Menús por horario",
       tables: "{n} mesas",
       tablesNone: "Mostrador y para llevar — un QR para todo el lugar",
       staffNone: "Solo el acceso del dueño",

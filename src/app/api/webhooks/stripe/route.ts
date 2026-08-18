@@ -43,6 +43,14 @@ export async function POST(req: NextRequest) {
         .update({ paid: true, pay_method: "card" })
         .in("id", settleIds);
 
+      // Our cut of this settlement, recorded on the first of the settled
+      // orders — the same row that carries the tip. It is what the monthly
+      // ceiling is summed from, so it has to land only once a payment is real.
+      const fee = Number(session.metadata?.settle_fee ?? 0);
+      if (fee > 0) {
+        await db.from("orders").update({ platform_fee: fee }).eq("id", settleIds[0]);
+      }
+
       // The tip was collected against the table, not a dish, so it is recorded
       // on the first of the settled orders. The takings then match what Stripe
       // actually took, which is the number that has to be right.

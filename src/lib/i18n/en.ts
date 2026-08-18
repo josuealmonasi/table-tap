@@ -476,6 +476,12 @@ export const en = {
     billSent: "Bill requested",
   },
   plan: {
+    soon: "Coming soon",
+    from: "from",
+    launchPrice: "Launch price",
+    feeCap: "Never more than {cap} a month in order fees",
+    stripeFee: "Stripe charges the card: 3.6% + MX$3 per payment, paid to them, not to us",
+    monthlyMax: "Most you would pay this month",
     lockHint: "Everything else on this page keeps working.",
     seePlans: "See plans",
     currentTitle: "Your plan",
@@ -507,6 +513,7 @@ export const en = {
       unlimited: "{used} · unlimited",
     },
     tier: {
+      schedules: "Menus on a schedule",
       tables: "{n} tables",
       tablesNone: "Counter and to-go — one QR for the whole place",
       staffNone: "Owner login only",

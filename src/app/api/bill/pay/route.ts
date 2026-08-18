@@ -5,6 +5,7 @@ import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { orderFeeCents } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
+import { feesTakenThisMonth } from "@/lib/fee-month";
 import { applyCoupon } from "@/lib/pricing";
 import {
   claimCoupon,
@@ -131,8 +132,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // against the food rather than the amount charged, so a generous tip never
   // raises what we take.
   const feePlan = await getPlan(restaurantId);
+  const takenThisMonth = feePlan?.limits.fee_cap
+    ? await feesTakenThisMonth(restaurantId)
+    : 0;
   const appFee = feePlan
-    ? orderFeeCents(feePlan.limits, Math.round(payable * 100))
+    ? orderFeeCents(feePlan.limits, Math.round(payable * 100), takenThisMonth)
     : 0;
   if (cents <= 0) {
     if (coupon) await releaseCoupon(coupon.id);
@@ -170,6 +174,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           settle_tip: String(tip),
           settle_coupon: coupon?.code ?? "",
           settle_discount: String(discount),
+          // Recorded on the settled order once Stripe confirms, so the monthly
+          // ceiling is summed from what was actually taken.
+          settle_fee: String(appFee / 100),
         },
         payment_intent_data: {
           application_fee_amount: appFee,

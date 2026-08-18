@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   can,
+  launchSaving,
   cheapestWith,
   dashboardFrozen,
   hasRoom,
@@ -176,5 +177,41 @@ describe("what to offer next", () => {
   it("finds a plan by name, and admits when it can't", () => {
     expect(planFor(CATALOG, "casa")).toBe(casa);
     expect(planFor(CATALOG, "grupo")).toBeUndefined();
+  });
+});
+
+describe("the monthly ceiling on our own fee", () => {
+  const capped = { ...servicio, fee_cap: 600 };
+  const table = 30_000; // MX$300
+
+  it("charges the flat fee while there is room under it", () => {
+    expect(orderFeeCents(capped, table, 0)).toBe(150);
+    expect(orderFeeCents(capped, table, 40_000)).toBe(150);
+  });
+
+  it("takes only what is left when the month is nearly done", () => {
+    // MX$599.20 already taken this month: the last 80 centavos, not 1.50.
+    expect(orderFeeCents(capped, table, 59_920)).toBe(80);
+  });
+
+  it("stops at the ceiling instead of going past it", () => {
+    expect(orderFeeCents(capped, table, 60_000)).toBe(0);
+    expect(orderFeeCents(capped, table, 75_000)).toBe(0);
+  });
+
+  it("keeps charging where a tier has no ceiling", () => {
+    expect(orderFeeCents({ ...servicio, fee_cap: null }, table, 999_999)).toBe(150);
+  });
+});
+
+describe("launch pricing", () => {
+  it("reports what a restaurant is saving while the offer lasts", () => {
+    expect(launchSaving({ ...servicio, monthly_price: 699, list_price: 899 })).toBe(200);
+  });
+
+  it("reports nothing when the plan is at its full price", () => {
+    expect(launchSaving({ ...servicio, monthly_price: 899, list_price: 899 })).toBe(0);
+    expect(launchSaving({ ...servicio, list_price: null })).toBe(0);
+    expect(launchSaving({ ...casa, list_price: undefined })).toBe(0);
   });
 });

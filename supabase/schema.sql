@@ -1155,3 +1155,42 @@ create trigger items_plan_limit before insert on menu_items
 -- with no manual setup in the Stripe dashboard, and a proper catalogue can be
 -- adopted later by filling this in without touching any code.
 alter table plan_limits add column if not exists stripe_price_id text;
+
+-- ── Launch pricing, tighter ceilings, and a ceiling on our own fee ──────────
+-- `monthly_price` is what a restaurant pays today; `list_price` is what the
+-- plan will cost when the launch offer ends. Shown struck through beside it,
+-- so nobody discovers later that the price they signed up at was temporary.
+alter table plan_limits add column if not exists list_price numeric;
+
+-- The most we take in per-order fees in one month. Flat and small stops being
+-- either on a busy month: a café doing 900 orders would pay more in fees than
+-- in subscription, and a bill that big is one nobody agreed to. With a ceiling
+-- the whole thing fits in a sentence — "MX$699, y nunca más de MX$1,299".
+alter table plan_limits add column if not exists fee_cap numeric;
+
+-- 25 tables covered nearly every full-service restaurant in Mexico, so nobody
+-- ever outgrew Servicio and the ladder had no rungs. A café is under 15; a
+-- restaurant is 20–40 and lands on Casa; past 50 is more than one dining room,
+-- which is the Grupo conversation.
+update plan_limits set
+  list_price = 0,    fee_cap = null                   where plan = 'carta';
+update plan_limits set
+  max_tables = 15,   list_price = 899,  fee_cap = 600 where plan = 'servicio';
+update plan_limits set
+  max_tables = 50,   list_price = 1899, fee_cap = 500 where plan = 'casa';
+update plan_limits set
+  list_price = null, fee_cap = 0                      where plan = 'grupo';
+
+-- Menu scheduling is the cleanest signal of a bigger operation in the product:
+-- one menu never misses it, and desayunos / comida corrida / cena feels it
+-- every day. It moves to Casa with the rest of the growth tools.
+alter table plan_limits add column if not exists allows_menu_schedules boolean not null default false;
+update plan_limits set allows_menu_schedules = (rank >= 2);
+
+-- What we actually took from an order, recorded on the order itself. Needed to
+-- honour the monthly ceiling — the alternative is asking Stripe to add up its
+-- application fees on every checkout, which is a network call in the middle of
+-- a payment. It is also the row an owner's invoice is reconciled against.
+alter table orders add column if not exists platform_fee numeric not null default 0;
+create index if not exists orders_platform_fee_idx
+  on orders(restaurant_id, created_at desc) where platform_fee > 0;
