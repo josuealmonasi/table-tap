@@ -28,12 +28,49 @@ export const getPlan = cache(async (restaurantId: string): Promise<RestaurantPla
     }>();
 
   if (!data?.plan_limits) return null;
+
+  // A trial that ran out is settled here rather than by a nightly job. The
+  // database triggers read `restaurants.plan` directly, so a plan that expired
+  // only in the app's head would still let a lapsed trial add tables — the row
+  // itself has to change, and this is the moment someone asked.
+  if (data.plan_status === "trialing" && expired(data.trial_ends_at)) {
+    return await endTrial(restaurantId);
+  }
+
   return {
     limits: data.plan_limits,
     status: data.plan_status,
     trialEndsAt: data.trial_ends_at,
   };
 });
+
+function expired(trialEndsAt: string | null): boolean {
+  return Boolean(trialEndsAt) && new Date(trialEndsAt!).getTime() <= Date.now();
+}
+
+/**
+ * Drops a finished trial to the free tier and reports what they now have.
+ *
+ * Nothing is deleted: a restaurant keeps every table and dish it built during
+ * the trial, it simply cannot add more until it subscribes. Taking their work
+ * away would be a strange way to ask for money.
+ */
+async function endTrial(restaurantId: string): Promise<RestaurantPlan | null> {
+  const db = createAdminClient();
+  await db
+    .from("restaurants")
+    .update({ plan: "carta", plan_status: "active", trial_ends_at: null })
+    .eq("id", restaurantId)
+    .eq("plan_status", "trialing"); // no-op if another request got here first
+
+  const { data } = await db
+    .from("plan_limits")
+    .select("*")
+    .eq("plan", "carta")
+    .single<PlanLimits>();
+
+  return data ? { limits: data, status: "active", trialEndsAt: null } : null;
+}
 
 /** Every tier, cheapest first — for naming what an upgrade would unlock. */
 export const allPlans = cache(async (): Promise<PlanLimits[]> => {

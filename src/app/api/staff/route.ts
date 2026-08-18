@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { actingOwner } from "@/lib/api-guard";
-import { seatBlocks } from "@/lib/plan-guard";
+import { frozenBlocks, seatBlocks } from "@/lib/plan-guard";
 
 export const runtime = "nodejs";
 
@@ -67,6 +67,9 @@ export async function POST(req: NextRequest) {
     .from("staff")
     .select("id", { count: "exact", head: true })
     .eq("restaurant_id", actor.restaurantId);
+  const frozen = await frozenBlocks(actor.restaurantId);
+  if (frozen) return frozen;
+
   const noSeat = await seatBlocks(actor.restaurantId, seatsUsed ?? 0);
   if (noSeat) return noSeat;
 

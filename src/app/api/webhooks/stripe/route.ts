@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { readPlanName, subscriptionOutcome } from "@/lib/billing";
 import type Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -125,7 +126,48 @@ export async function POST(req: NextRequest) {
     if (orderId) await releaseAbandonedOrder(orderId);
   }
 
+  // A subscription started, changed tier, lapsed or ended. Every one of those
+  // arrives as the same event, and the subscription itself carries the truth —
+  // so there is one handler rather than one per transition.
+  if (event.type.startsWith("customer.subscription.")) {
+    await applySubscription(event.data.object as Stripe.Subscription);
+  }
+
   return NextResponse.json({ received: true });
+}
+
+/**
+ * Writes a subscription's state onto the restaurant that owns it.
+ *
+ * The metadata set at checkout is the only thing trusted here: a webhook is
+ * unauthenticated apart from its signature, so which restaurant and which tier
+ * must come from what we ourselves stamped on the subscription.
+ *
+ * `deleted` events arrive with status `canceled`, which the mapping already
+ * turns into a free customer rather than a locked one.
+ */
+async function applySubscription(sub: Stripe.Subscription): Promise<void> {
+  const restaurantId = sub.metadata?.restaurant_id;
+  const plan = readPlanName(sub.metadata?.plan);
+  if (!restaurantId || !plan) {
+    console.error("subscription without our metadata", sub.id);
+    return;
+  }
+
+  const outcome = subscriptionOutcome(sub.status, plan);
+  const { error } = await createAdminClient()
+    .from("restaurants")
+    .update({
+      plan: outcome.plan,
+      plan_status: outcome.status,
+      stripe_subscription_id: sub.id,
+      // The trial is Stripe's to run once there is a subscription; ours only
+      // covers the stretch before one exists.
+      trial_ends_at: null,
+    })
+    .eq("id", restaurantId);
+
+  if (error) console.error("subscription update failed", sub.id, error.message);
 }
 
 /**
