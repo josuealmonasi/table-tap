@@ -27,6 +27,8 @@ import { clearUpsell, markUpsellAsked, upsellAsked } from "@/lib/upsell";
 import { recallOrder, rememberRecentOrder } from "@/lib/recent-order";
 import { useTableBill } from "@/hooks/useTableBill";
 import BillSheet from "./BillSheet";
+import TrackerOverlay from "./TrackerOverlay";
+import type { TrackedOrder } from "@/lib/order-tracking";
 
 type Screen = "menu" | "item" | "combo" | "edit" | "cart";
 
@@ -45,6 +47,7 @@ export default function OrderingApp({
   promos = [],
   ratings = {},
   closedNow = false,
+  trackOrder = null,
 }: {
   restaurant: Restaurant;
   table: RestaurantTable | null;
@@ -57,6 +60,11 @@ export default function OrderingApp({
   ratings?: Record<string, { avg: number; count: number }>;
   /** No menu is serving at this hour. */
   closedNow?: boolean;
+  /**
+   * An order to open the tracker on: the landing Stripe returns to, and any
+   * shared /order/<id> link. The menu is rendered behind it.
+   */
+  trackOrder?: TrackedOrder | null;
 }) {
   const [screen, setScreen] = useState<Screen>("menu");
   const [selected, setSelected] = useState<MenuItem | null>(null);
@@ -155,10 +163,29 @@ export default function OrderingApp({
   // An order this phone placed and can still watch. Held here, where orders
   // are placed, so it appears the moment one is — read only by the menu, it
   // was seeded once on mount and a dine-in order never showed up at all.
-  const [trackId, setTrackId] = useState<string | null>(null);
+  const [trackId, setTrackId] = useState<string | null>(trackOrder?.id ?? null);
   useEffect(() => {
-    setTrackId(recallOrder(restaurant.id));
+    setTrackId(prev => prev ?? recallOrder(restaurant.id));
   }, [restaurant.id]);
+
+  // Which order the tracker is showing, if it is open. Landing on /order/<id>
+  // opens it straight away; from the menu the banner opens it, over the menu,
+  // without going anywhere.
+  const [tracking, setTracking] = useState<string | null>(trackOrder?.id ?? null);
+
+  function closeTracker(): void {
+    setTracking(null);
+    // Arriving on /order/<id> leaves that in the address bar with the menu on
+    // screen, so a refresh — or a share — would reopen a tracker the diner has
+    // closed. Swapping it for the menu's own URL, without a navigation, keeps
+    // the bar honest and the page as it is.
+    if (trackOrder) {
+      const menuHref = `/r/${trackOrder.restaurant_id}${
+        trackOrder.table_id ? `/t/${trackOrder.table_id}` : ""
+      }`;
+      window.history.replaceState(null, "", menuHref);
+    }
+  }
 
   // "Anything else?" — asked on the way to ordering, and asked once.
   //
@@ -527,6 +554,7 @@ export default function OrderingApp({
         onSelectItem={item => openItem(item)}
         onAddCombo={openCombo}
         onOpenCart={() => setScreen("cart")}
+        onTrack={() => setTracking(trackId)}
         billDue={Boolean(table && bill && !bill.settled)}
         onOpenBill={() => {
           reloadBill();
@@ -534,6 +562,13 @@ export default function OrderingApp({
         }}
       />
       {cartScreen}
+      {tracking && (
+        <TrackerOverlay
+          orderId={tracking}
+          initialOrder={trackOrder?.id === tracking ? trackOrder : null}
+          onClose={closeTracker}
+        />
+      )}
       {table && bill && !bill.settled && (
         <BillSheet
           open={billOpen}

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import type { Category, MenuItem, Restaurant, RestaurantTable } from "@/lib/types";
 import { DIETARY_TAGS } from "@/lib/dietary";
 import { readMenuParams, syncMenuUrl } from "@/lib/menu-params";
@@ -46,6 +45,7 @@ export default function MenuScreen({
   billDue = false,
   onOpenBill,
   trackId,
+  onTrack,
 }: {
   restaurant: Restaurant;
   table: RestaurantTable | null;
@@ -66,6 +66,8 @@ export default function MenuScreen({
   onOpenBill?: () => void;
   /** An order this phone placed and can still watch — shows the track link. */
   trackId?: string | null;
+  /** Opens the live status of `trackId` over this menu. */
+  onTrack?: () => void;
 }) {
   const t = useT();
   // The URL is the starting state, so a shared link and a reload both land on
@@ -267,10 +269,12 @@ export default function MenuScreen({
               table={table}
               billOnBill={Boolean(restaurant.allow_pay_later)}
             />}
-          {trackId && (
-            <Link href={`/order/${trackId}`} className="tt-track-banner" role="status">
+          {trackId && onTrack && (
+            // A button, not a link: the status opens over this menu rather
+            // than taking the diner to a page of its own.
+            <button type="button" className="tt-track-banner" onClick={onTrack}>
               <BillIcon size={14} weight="bold" /> {t("menu.trackOrder")}
-            </Link>
+            </button>
           )}
           {!restaurant.accepting_orders && (
             <div className="tt-closed-banner" role="status">
