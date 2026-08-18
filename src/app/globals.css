@@ -341,17 +341,6 @@ h2.tt-serif {
 .tt-lang-toggle:hover {
   background: color-mix(in srgb, var(--tt-header-ink) 9%, transparent);
 }
-/* On an ink band — the order tracker's hero — the header tokens are dark ink
-   on a dark fill, so the label disappeared and left the flag emoji floating on
-   its own. A solid pill carries its own contrast wherever it is dropped. */
-.tt-lang-toggle-onink {
-  background: var(--tt-white);
-  color: var(--tt-ink);
-  border-color: transparent;
-}
-.tt-lang-toggle-onink:hover {
-  background: color-mix(in srgb, var(--tt-white) 88%, transparent);
-}
 /* Navbar variant — dark text for the light header. */
 .tt-lang-toggle-nav {
   display: inline-flex;
@@ -1821,12 +1810,6 @@ h2.tt-serif {
    Only the chrome differs, so the shell and its two blocks are shared. */
 .tt-track-shell {
   position: relative;
-}
-.tt-track-lang {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 1;
 }
 .tt-track-body {
   padding: 20px;
@@ -3440,6 +3423,9 @@ h2.tt-serif {
 /* "You have an order in progress" link on the menu — tappable, accent-filled. */
 .tt-track-banner {
   display: block;
+  width: 100%;
+  font-family: inherit;
+  cursor: pointer;
   margin-top: 12px;
   padding: 10px 14px;
   border-radius: 12px;
