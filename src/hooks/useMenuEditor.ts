@@ -13,6 +13,8 @@ import {
 } from "@/lib/menu-data";
 import { duplicateMenuDeep } from "@/lib/menu-duplicate";
 import type { Category, Menu, MenuItem, Modifier } from "@/lib/types";
+import { parsePlanLimit, planLimitText } from "@/lib/plan-error";
+import { planLabel } from "@/lib/plan";
 
 /** Editable fields for a product (a non-add-on menu item). */
 export interface ProductInput {
@@ -81,7 +83,16 @@ export function useMenuEditor(restaurantId: string) {
   function reportError(key: string, error: { message: string } | null): boolean {
     if (error) {
       console.error(`${key}:`, error.message);
-      toast(t(key), "error");
+      // A ceiling is not a failure the owner should read as "something broke":
+      // the write was refused on purpose, and the toast has to say which limit
+      // and on which plan. Anything else keeps the generic message.
+      const hit = parsePlanLimit(error.message);
+      if (hit) {
+        const { key: limitKey, vars } = planLimitText(hit);
+        toast(t(limitKey, { ...vars, plan: planLabel(vars.plan) }), "error");
+      } else {
+        toast(t(key), "error");
+      }
     }
     return !error;
   }

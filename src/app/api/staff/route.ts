@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { actingOwner } from "@/lib/api-guard";
+import { seatBlocks } from "@/lib/plan-guard";
 
 export const runtime = "nodejs";
 
@@ -58,6 +59,16 @@ export async function POST(req: NextRequest) {
 
   const actor = await actingOwner();
   if (!actor) return await apiError("apiErr.forbidden", 403);
+
+  // Every invited login is a seat, whatever its role. One pool rather than a
+  // quota per role: an owner who needs a fourth waiter should not be told they
+  // have two kitchen seats free.
+  const { count: seatsUsed } = await createAdminClient()
+    .from("staff")
+    .select("id", { count: "exact", head: true })
+    .eq("restaurant_id", actor.restaurantId);
+  const noSeat = await seatBlocks(actor.restaurantId, seatsUsed ?? 0);
+  if (noSeat) return noSeat;
 
   if (role === "owner" && !(await ownerSlotFree(actor.restaurantId))) {
     return NextResponse.json(

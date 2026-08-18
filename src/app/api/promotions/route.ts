@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { actingManager } from "@/lib/api-guard";
+import { planBlocks } from "@/lib/plan-guard";
 import {
   promoPricingError,
   type PricedProduct,
@@ -63,6 +64,11 @@ export async function POST(req: NextRequest) {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const restaurantId = actor.restaurantId;
+
+  // Creating is gated, editing is not: a restaurant that drops a tier keeps
+  // the promotions it already runs and must still be able to end them.
+  const blocked = await planBlocks(restaurantId, "promotions");
+  if (blocked) return blocked;
 
   const body = (await req.json()) as Body;
   const bad = validate(body);
