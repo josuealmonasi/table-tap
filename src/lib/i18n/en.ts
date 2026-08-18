@@ -1100,6 +1100,15 @@ export const en = {
     resetPassword: "Reset password",
   },
   auth: {
+    termsAccept: "I have read and accept the",
+    termsLink: "Terms and Conditions",
+    privacyLink: "Privacy Notice",
+    and: "and the",
+    termsRequired: "Please accept the terms to continue.",
+    termsChanged: "Our terms have changed",
+    termsChangedBody: "We have updated the Terms and Conditions and the Privacy Notice. Have a read and accept them to carry on using the dashboard — your menu keeps serving your diners either way.",
+    termsAcceptNow: "Accept and continue",
+    termsRead: "Read the terms",
     // Login
     welcomeBack: "Welcome back",
     signInSub: "Sign in to your restaurant",
@@ -1152,6 +1161,7 @@ export const en = {
       "This account ({email}) has no restaurant yet. This normally can't happen via sign-up — contact support or create a new account.",
   },
   footer: {
+    privacy: "Privacy",
     rights: "All rights reserved.",
   },
 };

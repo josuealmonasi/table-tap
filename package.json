@@ -2,7 +2,7 @@
   "name": "tabletap",
   "version": "0.1.0",
   "private": true,
-  "description": "QR-code table ordering for restaurants \u2014 scan, browse, order, pay, track.",
+  "description": "QR-code table ordering for restaurants — scan, browse, order, pay, track.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -45,11 +45,13 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@types/node": "^22",
+    "@types/pdfkit": "^0.17.6",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "^15.0.0",
+    "pdfkit": "^0.19.1",
     "pg": "^8.13.0",
     "typescript": "^5",
     "vitest": "^2.1.9"

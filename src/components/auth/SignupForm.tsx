@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PRIVACY_PATH, TERMS_PATH } from "@/lib/legal";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n/context";
@@ -12,6 +13,7 @@ export default function SignupForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
@@ -23,7 +25,7 @@ export default function SignupForm() {
     const res = await fetch("/api/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ restaurantName, email, password }),
+      body: JSON.stringify({ restaurantName, email, password, acceptedTerms }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -84,10 +86,38 @@ export default function SignupForm() {
             minLength={6}
             required
           />
+          {/* Consent is given here, deliberately unticked, with both documents
+              one tap away. A box that is already ticked is not consent, and a
+              link nobody can reach before signing is not disclosure. */}
+          <label className="tt-check tt-signup-terms">
+            <input
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={e => setAcceptedTerms(e.target.checked)}
+            />
+            <span>
+              {t("auth.termsAccept")}{" "}
+              <a href={TERMS_PATH} target="_blank" rel="noreferrer">
+                {t("auth.termsLink")}
+              </a>{" "}
+              {t("auth.and")}{" "}
+              <a href={PRIVACY_PATH} target="_blank" rel="noreferrer">
+                {t("auth.privacyLink")}
+              </a>
+              .
+            </span>
+          </label>
+
           <button
             className="tt-btn tt-btn-primary"
             style={{ width: "100%" }}
-            disabled={!restaurantName || !email || password.length < 6 || loading}
+            disabled={
+              !restaurantName ||
+              !email ||
+              password.length < 6 ||
+              !acceptedTerms ||
+              loading
+            }
             type="submit"
           >
             {loading ? t("auth.creatingAccount") : t("auth.createAccount")}

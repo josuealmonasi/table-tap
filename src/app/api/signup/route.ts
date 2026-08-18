@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { TERMS_VERSION } from "@/lib/legal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 
@@ -19,7 +20,11 @@ export async function POST(req: NextRequest) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
 
-  const { restaurantName, email, password } = await req.json();
+  const { restaurantName, email, password, acceptedTerms } = await req.json();
+
+  // Checked on the server too. The box in the browser is the honest place to
+  // ask; this is the place that makes the answer mean something.
+  if (!acceptedTerms) return await apiError("auth.termsRequired", 400);
 
   if (!restaurantName?.trim() || !email || !password || password.length < 6) {
     return await apiError("apiErr.signupFields", 400);
@@ -51,6 +56,11 @@ export async function POST(req: NextRequest) {
       // be deciding about the product, not about a cut-down version of it.
       plan: TRIAL_PLAN,
       plan_status: "trialing",
+      // What they agreed to and when. Versioned, because "they accepted" is
+      // only worth something if we can say which document they accepted.
+      terms_version: TERMS_VERSION,
+      terms_accepted_at: new Date().toISOString(),
+      terms_accepted_email: email,
       trial_ends_at: new Date(Date.now() + TRIAL_DAYS * 86_400_000).toISOString(),
     });
 
