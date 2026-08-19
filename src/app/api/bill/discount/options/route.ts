@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { isValidCouponFormat, normalizeCoupon } from "@/lib/coupons";
 import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { couponProblem, type CouponRow } from "@/lib/coupon-service";
@@ -33,7 +34,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const options = ((data ?? []) as CouponRow[])
     // Same rules the apply endpoint enforces, so nothing offered here can be
-    // refused a second later.
+    // refused a second later — incluido el formato, que findCoupon revisa
+    // antes que nada. Un código guardado con otra forma se ofrecía con su
+    // descuento calculado y luego respondía "no encontramos ese cupón".
+    .filter(coupon => isValidCouponFormat(normalizeCoupon(coupon.code)))
     .filter(coupon => !couponProblem(coupon, total))
     .map(coupon => ({
       code: coupon.code,
