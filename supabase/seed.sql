@@ -18,8 +18,11 @@ begin
   end if;
 
   -- Restaurant
-  insert into restaurants (name, tagline, logo, currency, service_pct)
-  values ('Sakura Dining', 'Modern Japanese Kitchen', '🌸', 'MXN', 0)
+  -- On Casa explicitly. Restaurants default to the free counter plan, which
+  -- allows no tables at all, so the twelve below would be refused by the plan
+  -- ceiling — the demo exists to show the paid product, not to fail on it.
+  insert into restaurants (name, tagline, logo, currency, service_pct, plan, plan_status)
+  values ('Sakura Dining', 'Modern Japanese Kitchen', '🌸', 'MXN', 0, 'casa', 'active')
   returning id into rid;
 
   -- Tables 1..12
