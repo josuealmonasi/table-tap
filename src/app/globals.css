@@ -3880,6 +3880,7 @@ a.tt-btn {
 }
 .tt-table-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -5148,4 +5149,26 @@ a.tt-user-plan:hover {
 /* An approval that costs money looks different from one that discounts it. */
 .tt-bill-writeoff {
   border-left: 3px solid var(--tt-danger);
+}
+
+/* Can this table be seated? The answer reads before the QR code, because it
+   is the question somebody standing in the room is actually asking. */
+/* Its own line above the card, so the pill never wedges itself between the QR
+   and the buttons and shoves the row out of line. */
+.tt-table-state-row {
+  flex: 0 0 100%;
+}
+.tt-table-state {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--tt-success);
+  background: var(--tt-success-wash);
+}
+.tt-table-state-busy {
+  color: var(--tt-warning);
+  background: var(--tt-warning-wash);
 }

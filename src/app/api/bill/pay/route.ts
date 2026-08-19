@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import Stripe from "stripe";
 import { apiError } from "@/lib/api-error";
+import { billWindowStart } from "@/lib/table-bill";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { orderFeeCents } from "@/lib/plan";
@@ -72,6 +73,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .select("id, total, currency, items, paid, status, coupon_code")
     .eq("restaurant_id", restaurantId)
     .eq("table_id", tableId)
+    // Same window the diner's bill uses, so what is charged is what was shown.
+    .gte("created_at", billWindowStart().toISOString())
     .eq("paid", false)
     .eq("written_off", false)
     .neq("status", "pending_payment")

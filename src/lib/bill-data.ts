@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { unpaidOrders } from "@/lib/table-bill";
+import { billWindowStart, unpaidOrders } from "@/lib/table-bill";
 import type { Order } from "@/lib/types";
 
 /**
@@ -9,6 +9,9 @@ import type { Order } from "@/lib/types";
  * as over-permissive — so this goes through the secret key and hands back only
  * the fields a diner needs to recognise their food and settle for it. Same
  * shape as the order tracker, for the same reason.
+ *
+ * Bounded to the current service, so the party sitting down now is never
+ * shown — or asked to pay — what the last party left behind.
  *
  * Anyone holding the table's URL can see what that table owes. The URL is
  * printed on the table, so this is the same trust boundary as the menu itself:
@@ -34,6 +37,9 @@ export async function fetchTableBill(
     .eq("paid", false)
     // Written off: recorded as never paid, but no longer owed by anyone.
     .eq("written_off", false)
+    // This service only. An order nobody settled last night is still owed —
+    // it is on the manager's open bills — but it is not this party's to pay.
+    .gte("created_at", billWindowStart().toISOString())
     .neq("status", "pending_payment")
     .order("created_at", { ascending: true });
 

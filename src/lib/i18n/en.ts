@@ -1031,6 +1031,8 @@ export const en = {
     tableQrs: "Table QRs",
     tableQrsHint: "One code per table — orders tagged with the table",
     tableSearch: "Search tables…",
+    tableFree: "Free",
+    tableOwes: "Owes {amount}",
     tableSearchEmpty: "No table matches “{query}”.",
     addFirstTable: "Add your first table",
     addFirstTableDesc:

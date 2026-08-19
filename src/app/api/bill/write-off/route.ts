@@ -12,6 +12,7 @@ import {
   writableOff,
   writeOffTotal,
 } from "@/lib/write-off";
+import { billWindowStart } from "@/lib/table-bill";
 import type { Order } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -51,7 +52,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .from("orders")
     .select("id, total, paid, written_off, status, table_id, table_label")
     .eq("restaurant_id", actor.restaurantId)
-    .eq("table_id", tableId);
+    .eq("table_id", tableId)
+    // This service only — an older debt is the manager's to resolve on the
+    // open bills page, not something the floor clears by settling a table.
+    .gte("created_at", billWindowStart().toISOString());
 
   const orders = writableOff((rows ?? []) as Order[]);
   if (orders.length === 0) return await apiError("apiErr.nothingToWriteOff", 409);

@@ -8,17 +8,29 @@ import { useToast } from "@/components/ui/Toast";
 import QrCard, { type QrTarget } from "./QrCard";
 import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 import { Modal } from "@/components/ui/Modal";
+import { formatMoney } from "@/lib/format";
+import type { TableStatus } from "@/lib/table-status";
 
 interface TableRowProps {
   table: RestaurantTable;
   qr: QrTarget;
+  /** Free to seat, or what is still owed on it. */
+  status: TableStatus;
+  currency: string;
   /** Both report whether the write landed; the row only cares that it finished. */
   onRename: (id: string, label: string) => Promise<unknown>;
   onDelete: (id: string) => Promise<unknown>;
 }
 
 /** One table: its QR plus rename (inline) and delete (confirmed) actions. */
-export default function TableRow({ table, qr, onRename, onDelete }: TableRowProps) {
+export default function TableRow({
+  table,
+  qr,
+  status,
+  currency,
+  onRename,
+  onDelete,
+}: TableRowProps) {
   const t = useT();
   const toast = useToast();
   const [renaming, setRenaming] = useState(false);
@@ -37,6 +49,15 @@ export default function TableRow({ table, qr, onRename, onDelete }: TableRowProp
 
   return (
     <div className="tt-table-row">
+      {/* Whether it can be seated, before anything else about it. Derived from
+          what is still owed, so it is never stale. */}
+      <div className="tt-table-state-row">
+        <span className={`tt-table-state ${status.free ? "" : "tt-table-state-busy"}`}>
+          {status.free
+            ? t("dash.tableFree")
+            : t("dash.tableOwes", { amount: formatMoney(status.owed, currency) })}
+        </span>
+      </div>
       <QrCard
         title={t("dash.tableN", { label: table.label })}
         subtitle={t("dash.orderTagged")}

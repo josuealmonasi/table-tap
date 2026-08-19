@@ -9,6 +9,7 @@ import { couponProblem, findCoupon, toAppliedCoupon } from "@/lib/coupon-service
 import { applyCoupon } from "@/lib/pricing";
 import { billTotal, discountableOrders } from "@/lib/staff-discount";
 import { applyToOrders } from "@/lib/apply-bill-discount";
+import { billWindowStart } from "@/lib/table-bill";
 import type { Order } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -57,6 +58,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .select("id, total, paid, written_off, status, coupon_code, table_id, table_label")
     .eq("restaurant_id", actor.restaurantId);
   query = orderId ? query.eq("id", orderId) : query.eq("table_id", tableId!);
+  // A promotion applies to the bill in front of them, not to last night's.
+  if (!orderId) query = query.gte("created_at", billWindowStart().toISOString());
 
   const { data: rows } = await query;
   const orders = discountableOrders((rows ?? []) as Order[]);
