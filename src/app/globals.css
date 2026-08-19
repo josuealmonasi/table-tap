@@ -5188,6 +5188,12 @@ a.tt-user-plan:hover {
   display: flex;
   align-items: center;
   gap: 4px;
+  /* The navbar above and the page below both widen .container to this, so the
+     default 1100px left the sections floating 90px in from everything else. */
+  max-width: 1360px;
+  /* Each link carries its own 14px, so the row gives back that much: the first
+     section then starts on the same line as the restaurant name above it. */
+  padding-left: 10px;
   overflow-x: auto;
   scrollbar-width: none;
 }

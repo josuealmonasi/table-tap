@@ -13,6 +13,7 @@ export type NavItem = {
     | "Table"
     | "Bills"
     | "Staff"
+    | "Menu"
     | "Settings"
     | "Plan"
     | "PlatformAdmin";
@@ -33,6 +34,15 @@ export type NavItem = {
  * are listed dynamically on the dashboard, so they're not part of this list.
  */
 export const NAV_ITEMS: NavItem[] = [
+  {
+    // The dashboard home *is* the menus screen — the card at the top of it is
+    // the list, and each menu opens from there. Naming it for what it holds
+    // beats a "Panel" link that says nothing about what you would find.
+    href: "/dashboard",
+    icon: "Menu",
+    titleKey: "nav.menus",
+    descKey: "nav.menusDesc",
+  },
   {
     href: "/dashboard/orders",
     icon: "Orders",
@@ -110,7 +120,9 @@ export function navItemsFor(role: DashboardRole): NavItem[] {
   // ask for a discount on one, even though only a manager grants it.
   if (role === "kitchen") return NAV_ITEMS.filter(i => i.href === "/dashboard/orders");
   if (role === "waiter") {
-    return NAV_ITEMS.filter(i => i.href === "/dashboard/orders" || i.href === "/dashboard/bills");
+    return NAV_ITEMS.filter(
+      i => i.href === "/dashboard/orders" || i.href === "/dashboard/bills",
+    );
   }
   if (role === "manager") return NAV_ITEMS.filter(i => !OWNER_ONLY.includes(i.href));
   return NAV_ITEMS;
