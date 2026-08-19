@@ -5367,3 +5367,23 @@ a.tt-user-plan:hover {
     color: var(--tt-sale-ink);
   }
 }
+
+/* El aviso de fundador: una línea, no una banda publicitaria. Lo que vende no
+   es un descuento sino que el precio no sube, y eso se lee mejor dicho en
+   voz baja. */
+.tt-founding {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--tt-line);
+  border-left: 3px solid var(--tt-accent);
+  border-radius: var(--tt-radius-sm);
+  background: var(--tt-accent-wash);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--tt-ink-2);
+}
+.tt-founding strong { color: var(--tt-ink); }
+.tt-founding-locked {
+  border-left-color: var(--tt-success);
+  background: var(--tt-success-wash);
+}
