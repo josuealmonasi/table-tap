@@ -5136,3 +5136,16 @@ a.tt-user-plan:hover {
   font-size: 13px;
   color: var(--tt-danger);
 }
+
+/* Cancelling a debt: the amount reads like a total, because that is what the
+   restaurant is about to lose. */
+.tt-writeoff-amount {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--tt-radius-sm);
+  background: var(--tt-surface);
+}
+/* An approval that costs money looks different from one that discounts it. */
+.tt-bill-writeoff {
+  border-left: 3px solid var(--tt-danger);
+}

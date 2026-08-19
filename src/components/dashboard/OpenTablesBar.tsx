@@ -14,6 +14,7 @@ interface OpenTablesBarProps {
   /** The board's orders; the unpaid, table-scoped ones become the debts. */
   orders: Order[];
   onSettled: () => void;
+  canApprove: boolean;
 }
 
 /**
@@ -32,6 +33,7 @@ export default function OpenTablesBar({
   currency,
   orders,
   onSettled,
+  canApprove,
 }: OpenTablesBarProps) {
   const t = useT();
   const [settling, setSettling] = useState<OpenTable | null>(null);
@@ -101,6 +103,7 @@ export default function OpenTablesBar({
           tableId={settling.tableId}
           tableLabel={settling.tableLabel}
           currency={currency}
+          canApprove={canApprove}
           onSettled={onSettled}
         />
       )}

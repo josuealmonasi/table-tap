@@ -7,10 +7,9 @@ import { getLocale } from "@/lib/i18n/server";
 import { mailConfigured, sendMail } from "@/lib/mail";
 import { buildReceipt } from "@/lib/receipt";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isValidEmail, normalizeEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
-
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * POST /api/receipt — a diner asks for their own receipt by email.
@@ -43,8 +42,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const ids = (orderIds?.length ? orderIds : [orderId])
     .filter((v): v is string => typeof v === "string" && v.length > 0)
     .slice(0, 40);
-  const address = String(email ?? "").trim().toLowerCase();
-  if (ids.length === 0 || !EMAIL.test(address) || address.length > 200) {
+  const address = normalizeEmail(String(email ?? ""));
+  if (ids.length === 0 || !isValidEmail(address)) {
     return await apiError("receipt.badEmail", 400);
   }
 

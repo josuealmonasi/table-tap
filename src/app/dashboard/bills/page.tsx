@@ -29,7 +29,7 @@ export default async function BillsPage() {
   // Read with the secret key: orders are unreadable to anyone but the team's
   // own policies, and this page needs every table's, not just one's.
   const db = createAdminClient();
-  const [{ data: orders }, { data: requests }] = await Promise.all([
+  const [{ data: orders }, { data: requests }, { data: writeOffs }] = await Promise.all([
     db
       .from("orders")
       .select(
@@ -46,6 +46,12 @@ export default async function BillsPage() {
       .eq("restaurant_id", r.id)
       .eq("status", "pending")
       .order("created_at", { ascending: false }),
+    db
+      .from("write_off_requests")
+      .select("*")
+      .eq("restaurant_id", r.id)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false }),
   ]);
 
   return (
@@ -53,6 +59,7 @@ export default async function BillsPage() {
       <BillsPanel
         bills={openBills((orders ?? []) as Order[])}
         requests={MANAGES(membership.role) ? (requests ?? []) : []}
+        writeOffs={MANAGES(membership.role) ? (writeOffs ?? []) : []}
         currency={r.currency}
         canApprove={MANAGES(membership.role)}
       />

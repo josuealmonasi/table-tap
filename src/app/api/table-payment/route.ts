@@ -7,14 +7,18 @@ import { logDetail } from "@/lib/log-detail";
 
 export const runtime = "nodejs";
 
-/** How the waiter took the money, or that they didn't. */
-type Settlement = "cash" | "card" | "written_off";
+/** How the waiter took the money. */
+type Settlement = "cash" | "card";
 
 // POST /api/table-payment
 // Body: { tableId, settlement }
 //
-// The waiter settles a table in person: cash, a card on their own terminal, or
-// a write-off when nobody paid at all.
+// The waiter settles a table in person: cash, or a card on their own terminal.
+//
+// Cancelling a debt used to live here too, which meant any waiter could erase
+// a bill with one tap and leave no reason behind. That moved to
+// /api/bill/write-off, where it needs a reason and — for a waiter — a
+// manager's approval.
 //
 // Front of house only — owner, manager or waiter — and scoped to the caller's
 // own restaurant. This marks money as received without any money moving
@@ -28,7 +32,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     tableId?: string;
     settlement?: Settlement;
   };
-  if (!tableId || !["cash", "card", "written_off"].includes(settlement ?? "")) {
+  if (!tableId || !["cash", "card"].includes(settlement ?? "")) {
     return await apiError("apiErr.invalidRequest", 400);
   }
 
@@ -39,14 +43,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // paid must not be quietly rewritten.
   const base = db
     .from("orders")
-    .update(
-      settlement === "written_off"
-        ? // Not cancelled: the food went out and the kitchen spent it. Not
-          // paid either, so it stays out of revenue — the debt is recorded as
-          // abandoned rather than pretended away.
-          { written_off: true }
-        : { paid: true, pay_method: settlement },
-    )
+    .update({ paid: true, pay_method: settlement })
     .eq("restaurant_id", actor.restaurantId)
     .eq("table_id", tableId)
     .eq("paid", false)
@@ -63,12 +60,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     restaurantId: actor.restaurantId,
     actor: actor.email,
     entity: "bill",
-    action: settlement === "written_off" ? "written_off" : "paid",
+    action: "paid",
     detail: logDetail({
       table: updated[0].table_label,
       orders: updated.length,
       amount: updated.reduce((sum, o) => sum + Number(o.total), 0).toFixed(2),
-      method: settlement === "written_off" ? null : settlement,
+      method: settlement,
     }),
   });
 

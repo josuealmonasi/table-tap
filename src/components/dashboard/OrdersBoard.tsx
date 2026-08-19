@@ -26,6 +26,8 @@ interface OrdersBoardProps {
   canMove: boolean;
   /** Taking cash and writing debts off is the floor's job, not the kitchen's. */
   canSettle: boolean;
+  /** Owner or manager: may cancel a bill outright rather than ask. */
+  canApprove: boolean;
   /** Kitchen doesn't get the daily takings stat. */
   showRevenue: boolean;
   /** Today's takings from orders NOT in the loaded set (server-computed). */
@@ -46,6 +48,7 @@ export default function OrdersBoard({
   canCancel,
   canMove,
   canSettle,
+  canApprove,
   showRevenue,
   revenueBase,
   todayStartMs,
@@ -128,6 +131,7 @@ export default function OrdersBoard({
         <ServiceRequestsBar
           restaurantId={restaurant.id}
           canSettle={canSettle}
+          canApprove={canApprove}
           initialRequests={initialRequests}
           currency={restaurant.currency}
           onSettled={() => router.refresh()}
@@ -135,6 +139,7 @@ export default function OrdersBoard({
 
         {canSettle && (
           <OpenTablesBar
+            canApprove={canApprove}
             restaurantId={restaurant.id}
             currency={restaurant.currency}
             orders={orders}

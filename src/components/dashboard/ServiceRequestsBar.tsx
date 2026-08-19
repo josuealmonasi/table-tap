@@ -15,6 +15,7 @@ interface ServiceRequestsBarProps {
   canSettle: boolean;
   /** Refreshes the board after a table is settled. */
   onSettled?: () => void;
+  canApprove: boolean;
 }
 
 /** Open call-waiter / request-bill taps, pinned above the orders grid. */
@@ -24,6 +25,7 @@ export default function ServiceRequestsBar({
   initialRequests,
   currency,
   onSettled,
+  canApprove,
 }: ServiceRequestsBarProps) {
   const t = useT();
   const { requests, markDone } = useServiceRequests(restaurantId, initialRequests);
@@ -104,6 +106,7 @@ export default function ServiceRequestsBar({
           tableId={settling.table_id}
           tableLabel={settling.table_label ?? ""}
           currency={currency}
+          canApprove={canApprove}
           onSettled={() => {
             // Drop the chip here as well as relying on the realtime update:
             // the waiter is standing at the table and the request is answered,

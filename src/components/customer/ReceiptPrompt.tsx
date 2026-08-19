@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
+import { EMAIL_MAX, isValidEmail } from "@/lib/email";
 
 /**
  * Offers a receipt by email, once, after paying.
@@ -32,6 +33,11 @@ export default function ReceiptPrompt({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
+  // Only complain once they have stopped typing something plausible: a red
+  // line appearing on the first keystroke reads as being told off for typing.
+  const [touched, setTouched] = useState(false);
+  const valid = isValidEmail(email);
+  const showInvalid = touched && email.trim().length > 0 && !valid;
 
   async function send(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -91,9 +97,18 @@ export default function ReceiptPrompt({
             autoComplete="email"
             placeholder={t("receipt.placeholder")}
             aria-label={t("receipt.placeholder")}
+            maxLength={EMAIL_MAX}
             value={email}
             onChange={e => setEmail(e.target.value)}
+            onBlur={() => setTouched(true)}
+            aria-invalid={showInvalid}
           />
+
+          {showInvalid && (
+            <p className="tt-receipt-error" role="alert">
+              {t("receipt.badEmail")}
+            </p>
+          )}
 
           <p className="tt-receipt-promise">{t("receipt.promise")}</p>
 
@@ -107,7 +122,7 @@ export default function ReceiptPrompt({
             className="tt-btn tt-btn-primary"
             style={{ width: "100%", marginTop: 14 }}
             type="submit"
-            disabled={busy || !email.includes("@")}
+            disabled={busy || !valid}
           >
             {busy ? t("receipt.sending") : t("receipt.send")}
           </button>
