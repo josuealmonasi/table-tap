@@ -18,6 +18,16 @@ export interface DiscountRequest {
   requested_by: string;
 }
 
+/** A waiter asking to cancel what a table owes. */
+export interface WriteOffRequest {
+  id: string;
+  table_label: string | null;
+  amount: number;
+  reason: string;
+  note: string | null;
+  requested_by: string;
+}
+
 /**
  * Open bills, searchable, with the promotion a manager may apply to one.
  *
@@ -29,11 +39,13 @@ export interface DiscountRequest {
 export default function BillsPanel({
   bills,
   requests,
+  writeOffs,
   currency,
   canApprove,
 }: {
   bills: OpenBill[];
   requests: DiscountRequest[];
+  writeOffs: WriteOffRequest[];
   currency: string;
   canApprove: boolean;
 }) {
@@ -57,6 +69,22 @@ export default function BillsPanel({
 
   const shown = useMemo(() => bills.filter(b => matchesBill(b, query)), [bills, query]);
   const owed = shown.reduce((sum, b) => sum + b.total, 0);
+
+  async function decideWriteOff(requestId: string, approve: boolean): Promise<void> {
+    setBusy(requestId);
+    try {
+      const res = await fetch("/api/bill/write-off/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId, approve }),
+      });
+      const data = await res.json().catch(() => ({}));
+      toast(res.ok ? t(approve ? "writeOff.done" : "dash.rejected") : (data.error ?? ""));
+      if (res.ok) router.refresh();
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function decide(requestId: string, approve: boolean): Promise<void> {
     setBusy(requestId);
@@ -84,13 +112,52 @@ export default function BillsPanel({
         </header>
 
         {/* Somebody is standing at a table waiting on these, so they lead. */}
-        {requests.length > 0 && (
+        {(requests.length > 0 || writeOffs.length > 0) && (
           <div className="tt-section">
             <div className="tt-section-head">
               <h3 className="tt-serif" style={{ margin: 0 }}>
                 {t("dash.approvals")}
               </h3>
             </div>
+            {writeOffs.map(r => (
+              <div key={r.id} className="tt-bill-row tt-bill-approval tt-bill-writeoff">
+                <div className="tt-bill-main">
+                  <strong className="tt-bill-name">
+                    {r.table_label
+                      ? t("dash.tableN", { label: r.table_label })
+                      : t("dash.billsToGo")}
+                  </strong>
+                  <span className="tt-muted tt-bill-sub">
+                    {t("writeOff.approvalAsk", {
+                      who: r.requested_by,
+                      reason: t(`writeOff.reasons.${r.reason}`),
+                      amount: formatMoney(r.amount, currency),
+                    })}
+                  </span>
+                  {r.note && (
+                    <span className="tt-muted tt-bill-sub" style={{ fontStyle: "italic" }}>
+                      “{r.note}”
+                    </span>
+                  )}
+                </div>
+                <div className="tt-bill-actions-row">
+                  <button
+                    className="tt-btn tt-btn-danger tt-btn-sm"
+                    disabled={busy === r.id}
+                    onClick={() => decideWriteOff(r.id, true)}
+                  >
+                    {t("writeOff.approve")}
+                  </button>
+                  <button
+                    className="tt-btn tt-btn-ghost tt-btn-sm"
+                    disabled={busy === r.id}
+                    onClick={() => decideWriteOff(r.id, false)}
+                  >
+                    {t("dash.reject")}
+                  </button>
+                </div>
+              </div>
+            ))}
             {requests.map(r => (
               <div key={r.id} className="tt-bill-row tt-bill-approval">
                 <div className="tt-bill-main">

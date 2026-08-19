@@ -1219,6 +1219,48 @@ alter table restaurants add column if not exists terms_accepted_email text;
 -- must be asked on the next visit. Left null on purpose: pretending otherwise
 -- would be recording consent nobody gave.
 
+-- ── Cancelling a debt ──────────────────────────────────────────────────────
+-- A table that leaves without paying still has orders attached to it, and
+-- somebody has to say so on the record. Writing the debt off is the act; the
+-- reason is what makes it auditable a month later, when "why is Tuesday short
+-- MX$840?" is the actual question.
+alter table orders add column if not exists write_off_reason text;
+alter table orders add column if not exists write_off_note text;
+alter table orders add column if not exists written_off_by text;
+alter table orders add column if not exists written_off_at timestamptz;
+
+-- A waiter may ask to cancel a bill but not grant it — erasing a debt is the
+-- one floor action with no upper bound on what it costs the owner. Same shape
+-- as discount_requests, for the same reason: the ask is recorded where it
+-- happened, and the decision stays with whoever answers for it.
+create table if not exists write_off_requests (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  table_id      uuid references restaurant_tables(id) on delete set null,
+  table_label   text,
+  order_ids     uuid[] not null,
+  amount        numeric not null default 0,
+  reason        text not null,
+  note          text,                              -- what the requester said
+  requested_by  text not null,
+  status        text not null default 'pending'
+                check (status in ('pending', 'approved', 'rejected')),
+  decided_by    text,
+  decided_note  text,                              -- why it was refused, if it was
+  created_at    timestamptz not null default now(),
+  decided_at    timestamptz
+);
+create index if not exists write_off_requests_open_idx
+  on write_off_requests(restaurant_id, status, created_at desc);
+alter table write_off_requests enable row level security;
+drop policy if exists "team handles write off requests" on write_off_requests;
+create policy "team handles write off requests"
+  on write_off_requests for all
+  using (has_role(restaurant_id, array['owner', 'manager', 'waiter']))
+  with check (has_role(restaurant_id, array['owner', 'manager', 'waiter']));
+-- Never a customer's business: it names staff and what a table did not pay.
+revoke all on write_off_requests from anon;
+
 -- ── Emailed receipts ───────────────────────────────────────────────────────
 -- Only that one was sent, never to whom. The address a diner types is used for
 -- that single message and then dropped: order rows are kept for years as the

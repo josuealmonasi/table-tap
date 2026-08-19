@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import WriteOffDialog from "./WriteOffDialog";
+import type { WriteOffReason } from "@/lib/write-off";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { formatMoney } from "@/lib/format";
 import { tableBill } from "@/lib/table-bill";
 import type { Order } from "@/lib/types";
@@ -18,6 +19,8 @@ interface SettleTableDialogProps {
   currency: string;
   /** Refreshes the board once the table is settled. */
   onSettled: () => void;
+  /** Owner or manager — a waiter may ask to cancel a bill, not cancel it. */
+  canApprove: boolean;
 }
 
 /**
@@ -36,12 +39,13 @@ export default function SettleTableDialog({
   tableLabel,
   currency,
   onSettled,
+  canApprove,
 }: SettleTableDialogProps) {
   const t = useT();
   const toast = useToast();
-  const confirm = useConfirm();
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -55,17 +59,31 @@ export default function SettleTableDialog({
   // The waiter is settling the whole table, so nothing here is "mine".
   const bill = orders ? tableBill(orders, []) : null;
 
-  async function settle(settlement: "cash" | "card" | "written_off"): Promise<void> {
-    if (settlement === "written_off") {
-      const ok = await confirm({
-        title: t("settle.writeOffConfirm"),
-        message: t("settle.writeOffMsg"),
-        confirmLabel: t("settle.writeOff"),
-        danger: true,
+  async function writeOff(reason: WriteOffReason, note: string): Promise<void> {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/bill/write-off", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableId, reason, note }),
       });
-      if (!ok) return;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast(data.error ?? t("settle.failed"), "error");
+        return;
+      }
+      // A waiter's is an ask: say so plainly rather than let them walk away
+      // believing the table is cleared when it still owes.
+      toast(data.pending ? t("writeOff.sent") : t("writeOff.done"));
+      setAsking(false);
+      onSettled();
+      onClose();
+    } finally {
+      setBusy(false);
     }
+  }
 
+  async function settle(settlement: "cash" | "card"): Promise<void> {
     setBusy(true);
     try {
       const res = await fetch("/api/table-payment", {
@@ -89,7 +107,16 @@ export default function SettleTableDialog({
   }
 
   return (
-    <Modal open={open} onClose={onClose} maxWidth={460} label={t("settle.open")}>
+    <>
+      {/* One dialog at a time. Asking why a bill is being cancelled replaces
+          the settle sheet rather than stacking over it — two open dialogs trap
+          focus against each other and take two Escapes to leave. */}
+      <Modal
+        open={open && !asking}
+        onClose={onClose}
+        maxWidth={460}
+        label={t("settle.open")}
+      >
       <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 12 }}>
         {t("settle.title", { label: tableLabel })}
       </h3>
@@ -136,13 +163,25 @@ export default function SettleTableDialog({
               className="tt-btn tt-btn-ghost tt-btn-sm"
               style={{ width: "100%", marginTop: 12 }}
               disabled={busy}
-              onClick={() => settle("written_off")}
+              onClick={() => setAsking(true)}
             >
-              {t("settle.writeOff")}
+              {canApprove ? t("settle.writeOff") : t("writeOff.request")}
             </button>
           </div>
         </>
       )}
-    </Modal>
+      </Modal>
+      {bill && (
+        <WriteOffDialog
+          open={asking}
+          onClose={() => setAsking(false)}
+          amount={bill.total}
+          currency={currency}
+          canApprove={canApprove}
+          busy={busy}
+          onSubmit={writeOff}
+        />
+      )}
+    </>
   );
 }
