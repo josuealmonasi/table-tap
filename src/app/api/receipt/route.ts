@@ -15,10 +15,14 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /**
  * POST /api/receipt — a diner asks for their own receipt by email.
  *
- * The address is used for this one message and stored on the order it belongs
- * to. It is not a list, we never write again, and nothing about the diner goes
- * anywhere else — that is the whole promise made on the screen where they type
- * it, and it is only worth making if the code keeps it.
+ * The address is used for this one message and then forgotten. It is never
+ * written to the database: an order row is kept for years as the restaurant's
+ * accounting record, so an address stored beside it would outlive its purpose
+ * by about that much. What stays is `receipt_sent_at` — a timestamp, which
+ * answers "did this order get a receipt?" without keeping anybody's address.
+ *
+ * That is the whole promise made on the screen where they type it, and it is
+ * only worth making if the code keeps it.
  *
  * Rate limited by IP: an open endpoint that sends mail to any address is a way
  * to use our sender to bother strangers.
@@ -90,19 +94,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     fromName: restaurant?.name ?? "TableTap",
   });
 
-  // Recorded either way. If mail is not configured yet the diner is told
-  // plainly rather than thanked for nothing, and the address is still on the
-  // order so it can be sent the moment sending works.
-  await db
-    .from("orders")
-    .update(
-      result.sent
-        ? { receipt_email: address, receipt_sent_at: new Date().toISOString() }
-        : // A failed retry must not erase the record of one that worked.
-          { receipt_email: address },
-    )
-    .in("id", orders.map(o => o.id))
-    .eq("restaurant_id", order.restaurant_id);
+  // Only a timestamp, and only when it actually went. If mail is not
+  // configured yet the diner is told plainly rather than thanked for nothing.
+  if (result.sent) {
+    await db
+      .from("orders")
+      .update({ receipt_sent_at: new Date().toISOString() })
+      .in("id", orders.map(o => o.id))
+      .eq("restaurant_id", order.restaurant_id);
+  }
 
   if (!result.sent) {
     return await apiError(

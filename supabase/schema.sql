@@ -1220,10 +1220,12 @@ alter table restaurants add column if not exists terms_accepted_email text;
 -- would be recording consent nobody gave.
 
 -- ── Emailed receipts ───────────────────────────────────────────────────────
--- An address a diner typed to get their own receipt, and nothing else. Stored
--- on the order it belongs to rather than in a list, because a list of diner
--- emails is a mailing list, and we told them this was not one.
-alter table orders add column if not exists receipt_email text;
+-- Only that one was sent, never to whom. The address a diner types is used for
+-- that single message and then dropped: order rows are kept for years as the
+-- restaurant's accounting record, and an address sitting beside one would
+-- outlive its purpose by about that much. Nothing here is personal data.
 alter table orders add column if not exists receipt_sent_at timestamptz;
+-- Held addresses briefly during development; never populated in production.
+alter table orders drop column if exists receipt_email;
 -- Never readable with the publishable key: orders carry no anon grant at all,
 -- so nothing here reaches a browser. Only the server, which sends the mail.

@@ -16,7 +16,7 @@
         "Del restaurante: nombre del negocio, nombre y correo de quien administra la cuenta, datos de contacto y datos fiscales cuando pides factura.",
         "Del equipo del restaurante: correo y rol, para dar acceso al panel.",
         "De los comensales: lo mínimo para que su pedido funcione — qué ordenaron, en qué mesa, si dejaron propina y su calificación del platillo si la dan. No pedimos su nombre, ni su teléfono, ni creamos cuentas de comensal.",
-        "Correo del comensal: solo si él lo escribe para pedir su recibo. Se usa únicamente para enviarle ese recibo. No lo damos de alta en ninguna lista, no le mandamos publicidad y no lo compartimos con nadie más que el proveedor de correo que entrega el mensaje.",
+        "Correo del comensal: solo si él lo escribe para pedir su recibo, y no lo guardamos. Se usa para enviar ese único correo y se descarta; no queda en nuestra base de datos, no lo damos de alta en ninguna lista y no le mandamos publicidad.",
         "No guardamos datos de tarjetas bancarias. Los pagos los procesa Stripe con su propia política de privacidad."
       ]
     },
@@ -42,7 +42,7 @@
       "paragraphs": [
         "Mientras tu cuenta esté activa, y después el tiempo que exijan las obligaciones fiscales y legales aplicables.",
         "Los pedidos y sus importes se conservan porque son registro contable del restaurante.",
-        "El correo que un comensal dio para su recibo se conserva junto a ese pedido, como comprobante de a dónde se envió, y puede pedir su borrado."
+        "El correo que un comensal da para su recibo no se conserva: del envío solo queda la fecha en que se mandó, sin la dirección. No hay nada que borrar después."
       ]
     },
     {
