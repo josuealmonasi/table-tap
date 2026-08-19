@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { getMembership } from "@/lib/membership";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import StaffPanel from "@/components/dashboard/staff/StaffPanel";
-import UserLogs from "@/components/dashboard/staff/UserLogs";
 
 export const dynamic = "force-dynamic";
 
@@ -16,12 +15,10 @@ export default async function StaffPage() {
 
   return (
     <ConfirmProvider>
-      <StaffPanel restaurantId={membership.restaurant.id}>
-        <UserLogs
-          restaurantId={membership.restaurant.id}
-          currency={membership.restaurant.currency}
-        />
-      </StaffPanel>
+      {/* La bitácora se mudó a Cuentas abiertas: registra dinero que se movió
+          —efectivo cobrado, deudas canceladas, promociones aplicadas— y sólo
+          vivía aquí porque empezó siendo "quién tocó qué acceso". */}
+      <StaffPanel restaurantId={membership.restaurant.id} />
     </ConfirmProvider>
   );
 }

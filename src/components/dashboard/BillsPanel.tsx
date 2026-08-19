@@ -47,6 +47,7 @@ export default function BillsPanel({
   restaurantId,
   canSettle,
   askedToPay,
+  children,
 }: {
   bills: OpenBill[];
   requests: DiscountRequest[];
@@ -58,6 +59,8 @@ export default function BillsPanel({
   canSettle: boolean;
   /** Mesas que pidieron la cuenta y están esperando a que alguien vaya. */
   askedToPay: string[];
+  /** La bitácora, para quien puede verla. */
+  children?: React.ReactNode;
 }) {
   const t = useT();
   const toast = useToast();
@@ -323,6 +326,8 @@ export default function BillsPanel({
           )}
         </div>
       </div>
+
+      {children}
 
       {settling?.tableId && (
         <SettleTableDialog

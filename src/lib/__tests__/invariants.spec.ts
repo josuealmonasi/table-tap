@@ -109,3 +109,37 @@ describe("every public endpoint has a ceiling", () => {
     expect(naked, `no guard and no rate limit: ${naked.join(", ")}`).toEqual([]);
   });
 });
+
+describe("each module sits behind the right guard", () => {
+  // A module moved from one screen to another inherits that screen's audience.
+  // The history moved out of the orders board — which the kitchen can open —
+  // and into analytics; the activity log moved out of staff, which only the
+  // owner can open, and into bills, which a waiter can open. Getting the host
+  // right is the whole permission story, and nothing in the types says so.
+  const HOSTED_BY = {
+    OrderHistory: "src/components/dashboard/analytics/AnalyticsView.tsx",
+    // El log entra como children desde la página, no dentro del panel.
+    UserLogs: "src/app/dashboard/bills/page.tsx",
+  };
+
+  it.each(Object.entries(HOSTED_BY))("%s is rendered by its new host", (mod, host) => {
+    expect(read(host), `${host} no longer renders ${mod}`).toMatch(new RegExp(`<${mod}[\\s/>]`));
+  });
+
+  it("does not leave the old host rendering it too", () => {
+    // Two copies is how one of them keeps an audience it lost.
+    const old = {
+      OrderHistory: "src/components/dashboard/OrdersBoard.tsx",
+      UserLogs: "src/components/dashboard/staff/StaffPanel.tsx",
+    };
+    for (const [mod, file] of Object.entries(old)) {
+      expect(read(file), `${file} still renders ${mod}`).not.toMatch(new RegExp(`<${mod}[\\s/>]`));
+    }
+  });
+
+  it("keeps the activity log behind a manager check", () => {
+    // Bills is open to waiters. The log is not.
+    const page = read("src/app/dashboard/bills/page.tsx");
+    expect(page).toMatch(/MANAGES\(membership\.role\)/);
+  });
+});

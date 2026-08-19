@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import { useRestaurantOrders } from "@/hooks/useRestaurantOrders";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -12,7 +11,6 @@ import OrderCard from "./OrderCard";
 import { BOARD_COLUMNS, columnOrders } from "@/lib/order-flow";
 import { useRouter } from "next/navigation";
 import ServiceRequestsBar from "./ServiceRequestsBar";
-import OrderHistory from "./OrderHistory";
 import { EmptyIcon } from "@/components/ui/icons";
 
 interface OrdersBoardProps {
@@ -35,11 +33,18 @@ interface OrdersBoardProps {
   todayStartMs: number;
 }
 
-type Tab = "live" | "history";
 
 const LIVE_STATUSES = new Set(["received", "preparing", "ready"]);
 
-/** Kitchen dashboard: live order grid with stats, plus a history tab. */
+/**
+ * Kitchen dashboard: the live order grid.
+ *
+ * El historial se mudó a Analíticas. Vivían juntos detrás de una pestaña, y
+ * son trabajos distintos: lo de en vivo se mira cada minuto durante el
+ * servicio, el historial se busca por código de pedido cuando alguien
+ * pregunta por uno. Compartir pantalla significaba que la cocina podía caer
+ * en los datos del mes pasado en plena comida.
+ */
 export default function OrdersBoard({
   restaurant,
   initialOrders,
@@ -58,7 +63,6 @@ export default function OrdersBoard({
     restaurant.id,
     initialOrders,
   );
-  const [tab, setTab] = useState<Tab>("live");
   const confirm = useConfirm();
   const toast = useToast();
 
@@ -137,34 +141,7 @@ export default function OrdersBoard({
         />
 
 
-        <div className="tt-board-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "live"}
-            className={`tt-board-tab ${tab === "live" ? "tt-board-tab-active" : ""}`}
-            onClick={() => setTab("live")}
-          >
-            {t("orders.live")}
-            {live.length > 0 ? ` (${live.length})` : ""}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "history"}
-            className={`tt-board-tab ${tab === "history" ? "tt-board-tab-active" : ""}`}
-            onClick={() => setTab("history")}
-          >
-            {t("orders.history")}
-          </button>
-        </div>
-
-        {tab === "history" ? (
-          /* History is read a page at a time from the database — it only ever
-             grows, and every order the board had loaded was being rendered as
-             a card. */
-          <OrderHistory restaurantId={restaurant.id} currency={restaurant.currency} />
-        ) : live.length === 0 ? (
+        {live.length === 0 ? (
           <div className="tt-empty">
             <EmptyIcon size={44} className="tt-empty-icon" />
             <strong>{t("orders.noLive")}</strong>

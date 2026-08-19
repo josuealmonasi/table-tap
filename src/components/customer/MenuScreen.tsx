@@ -20,7 +20,6 @@ import {
   BillIcon,
   CloseIcon,
   FiltersIcon,
-  ScheduleIcon,
   SearchIcon,
   TableIcon,
 } from "@/components/ui/icons";
