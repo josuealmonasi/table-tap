@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { badgesChanged } from "@/hooks/useBadges";
 import WriteOffDialog from "./WriteOffDialog";
 import type { WriteOffReason } from "@/lib/write-off";
 import { useT } from "@/lib/i18n/context";
@@ -76,6 +77,7 @@ export default function BillDiscountDialog({
         setError(data.error ?? null);
         return;
       }
+      badgesChanged();
       toast(data.pending ? t("writeOff.sent") : t("writeOff.done"));
       setClosing(false);
       onApplied();

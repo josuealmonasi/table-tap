@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { badgesChanged } from "@/hooks/useBadges";
 import WriteOffDialog from "./WriteOffDialog";
 import type { WriteOffReason } from "@/lib/write-off";
 import { useT } from "@/lib/i18n/context";
@@ -75,6 +76,8 @@ export default function SettleTableDialog({
       }
       // A waiter's is an ask: say so plainly rather than let them walk away
       // believing the table is cleared when it still owes.
+      // A waiter's ask just joined the manager's queue.
+      badgesChanged();
       toast(data.pending ? t("writeOff.sent") : t("writeOff.done"));
       setAsking(false);
       onSettled();

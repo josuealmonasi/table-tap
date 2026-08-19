@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { badgesChanged } from "@/hooks/useBadges";
 import { useT } from "@/lib/i18n/context";
 import type { Order, OrderStatus } from "@/lib/types";
 
@@ -83,6 +84,8 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, status }),
     });
+    // The board's own count changed, so the tab's should too.
+    badgesChanged();
   }
 
   /**
@@ -98,6 +101,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
       });
       const data = await res.json();
       if (!res.ok) return data.error ?? t("apiErr.orderCancel");
+      badgesChanged();
       setOrders(prev => prev.map(o => (o.id === id ? { ...o, status: "cancelled" } : o)));
       return null;
     } catch {

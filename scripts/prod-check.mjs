@@ -135,9 +135,62 @@ try {
   console.log(`  FAILED   ${err.message}`);
 }
 
+// ── Logins, in both environments ────────────────────────────────────────────
+// Dev is not a scratch pad: a broken dev database costs a morning of chasing
+// a bug that is not in the code. This broke once by resetting dev and only
+// re-seeding the demo data on production, which nothing noticed until someone
+// signed in and found no restaurant.
+const LOGINS = [
+  "demo@tabletap.dev",
+  "demo-manager@tabletap.dev",
+  "demo-waiter@tabletap.dev",
+  "demo-kitchen@tabletap.dev",
+  "test1@tabletap.dev",
+  "test2@tabletap.dev",
+  "test3@tabletap.dev",
+  "test4@tabletap.dev",
+  "test5@tabletap.dev",
+];
+
+async function checkLogins(label, envFile) {
+  const env = await envFrom(envFile);
+  const { createClient } = await import("@supabase/supabase-js");
+  const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY);
+  const { data: users } = await db.auth.admin.listUsers({ perPage: 200 });
+  const ids = Object.fromEntries((users?.users ?? []).map(u => [u.email, u.id]));
+  const { data: restaurants } = await db.from("restaurants").select("id, name, owner_id");
+  const { data: staff } = await db.from("staff").select("email, restaurant_id");
+
+  const broken = LOGINS.filter(email => {
+    const uid = ids[email];
+    if (!uid) return true;
+    // An owner is linked by restaurants.owner_id; everyone else by a staff row.
+    return (
+      !(restaurants ?? []).some(r => r.owner_id === uid) &&
+      !(staff ?? []).some(m => m.email === email)
+    );
+  });
+
+  if (broken.length > 0) {
+    failed = true;
+    console.log(`  FAILED   ${label}: no restaurant for ${broken.join(", ")}`);
+  } else {
+    console.log(`  ok       ${label}: all ${LOGINS.length} logins resolve`);
+  }
+}
+
+console.log("\nLogins\n");
+try {
+  await checkLogins("development", ".env.development.local");
+  await checkLogins("production", ".env.production.local");
+} catch (err) {
+  failed = true;
+  console.log(`  FAILED   ${err.message}`);
+}
+
 console.log(
   failed
-    ? "\nProduction is NOT in step with dev. Apply the migration before merging.\n"
-    : "\nProduction is healthy and in step with dev.\n",
+    ? "\nSomething is off. Fix it before merging.\n"
+    : "\nDev and production are healthy and in step.\n",
 );
 process.exit(failed ? 1 : 0);
