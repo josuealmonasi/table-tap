@@ -12,6 +12,27 @@ import type { Order, OrderLineItem } from "@/lib/types";
  * agree on the arithmetic without any of them re-deriving it.
  */
 
+/**
+ * How far back a table's bill reaches.
+ *
+ * A bill has no natural end: an order nobody settled stays owed forever, so
+ * the next party to sit down would find the last party's food on their bill —
+ * and "pay everything" would charge them for it. Bounding it to the current
+ * service is what makes a table safe for new diners without anyone having to
+ * remember to clear it.
+ *
+ * Eight hours covers the longest sitting anyone has, and rolls rather than
+ * resetting at midnight, so a table that orders at 23:50 still has its bill at
+ * 00:20. Nothing older is lost: it stays on the manager's open bills, to be
+ * settled or cancelled by a person rather than quietly forgotten.
+ */
+export const OPEN_BILL_HOURS = 8;
+
+/** The oldest order a table's own bill still counts. */
+export function billWindowStart(now: Date = new Date()): Date {
+  return new Date(now.getTime() - OPEN_BILL_HOURS * 60 * 60 * 1000);
+}
+
 export interface BillSide {
   orders: Order[];
   /** Every line across those orders, for listing what is being paid for. */

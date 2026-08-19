@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import QrCard, { type QrTarget } from "./QrCard";
 import TableRow from "./TableRow";
+import { statusFor, type TableStatus } from "@/lib/table-status";
 import { SearchIcon } from "@/components/ui/icons";
 import { TableIcon } from "@/components/ui/icons";
 import AddInDialog from "@/components/ui/AddInDialog";
@@ -23,6 +24,9 @@ interface TablesPanelProps {
   restaurantName: string;
   fastFood: QrTarget;
   tables: TableWithQr[];
+  /** Which tables are free, keyed by table id. */
+  statuses: Record<string, TableStatus>;
+  currency: string;
 }
 
 /** Dashboard Tables & QR: one restaurant-wide QR plus a per-table QR manager. */
@@ -31,9 +35,13 @@ export default function TablesPanel({
   restaurantName,
   fastFood,
   tables,
+  statuses,
+  currency,
 }: TablesPanelProps) {
   const t = useT();
   const toast = useToast();
+  // The page hands these over as a plain object, which a Map reads better.
+  const statusMap = useMemo(() => new Map(Object.entries(statuses)), [statuses]);
   const { busy, addTable, renameTable, deleteTable } = useTables(restaurantId);
   const [newLabel, setNewLabel] = useState("");
 
@@ -178,6 +186,8 @@ export default function TablesPanel({
                     key={table.id}
                     table={table}
                     qr={qr}
+                    status={statusFor(statusMap, table.id)}
+                    currency={currency}
                     onRename={renameTable}
                     onDelete={deleteTable}
                   />

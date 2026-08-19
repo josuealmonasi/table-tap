@@ -5,6 +5,8 @@ import { getMembership, MANAGES } from "@/lib/membership";
 import { qrSvg } from "@/lib/qr";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import TablesPanel, { type TableWithQr } from "@/components/dashboard/tables/TablesPanel";
+import { tableStatuses } from "@/lib/table-status";
+import type { Order } from "@/lib/types";
 import type { RestaurantTable } from "@/lib/types";
 import { currentUser } from "@/lib/current-user";
 
@@ -22,11 +24,21 @@ export default async function TablesPage() {
   if (!MANAGES(membership.role)) redirect("/dashboard/orders");
   const r = membership.restaurant;
 
-  const { data: tables } = await supabase
-    .from("restaurant_tables")
-    .select("*")
-    .eq("restaurant_id", r.id)
-    .order("label");
+  const [{ data: tables }, { data: openOrders }] = await Promise.all([
+    supabase
+      .from("restaurant_tables")
+      .select("*")
+      .eq("restaurant_id", r.id)
+      .order("label"),
+    // Whether each table is free is derived from what is still owed on it,
+    // rather than a flag somebody has to remember to clear.
+    supabase
+      .from("orders")
+      .select("id, table_id, total, paid, written_off, status, created_at")
+      .eq("restaurant_id", r.id)
+      .eq("paid", false)
+      .eq("written_off", false),
+  ]);
   const tableList = (tables as RestaurantTable[]) ?? [];
 
   // Absolute base URL so scanned QRs reach the deployed site (dev: localhost).
@@ -53,6 +65,8 @@ export default async function TablesPage() {
         restaurantName={r.name}
         fastFood={fastFood}
         tables={tableQrs}
+        statuses={Object.fromEntries(tableStatuses((openOrders as Order[]) ?? []))}
+        currency={r.currency}
       />
     </ConfirmProvider>
   );

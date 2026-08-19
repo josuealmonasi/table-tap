@@ -1021,6 +1021,8 @@ export const es: Messages = {
     tableQrs: "QR por mesa",
     tableQrsHint: "Un código por mesa — los pedidos se etiquetan con la mesa",
     tableSearch: "Busca mesas…",
+    tableFree: "Libre",
+    tableOwes: "Debe {amount}",
     tableSearchEmpty: "Ninguna mesa coincide con “{query}”.",
     addFirstTable: "Agrega tu primera mesa",
     addFirstTableDesc:
