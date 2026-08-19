@@ -710,6 +710,8 @@ export const en = {
     promosShort: "Promos",
     menus: "Menus",
     menusDesc: "Your menus, categories and dishes",
+    menusEmpty: "No menus yet",
+    menuPaused: "Paused",
     orders: "Orders",
     ordersDesc: "Live incoming orders",
     analytics: "Analytics",

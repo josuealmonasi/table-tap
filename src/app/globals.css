@@ -5226,6 +5226,32 @@ a.tt-user-plan:hover {
 .tt-section-label-short {
   display: none;
 }
+/* The menus tab, and the panel it unfolds. */
+.tt-menus-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.tt-menus-dropdown {
+  right: auto;
+  /* The link carries 14px of padding, so left:0 put the panel that much
+     outside the column everything else lines up on. */
+  left: 14px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.tt-menus-note {
+  display: block;
+  padding: 10px 12px;
+  color: var(--tt-muted);
+  font-size: 13px;
+}
+.tt-menus-paused {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tt-warning);
+}
 .tt-section-link:focus-visible {
   outline: 2px solid var(--tt-accent);
   outline-offset: -2px;
@@ -5266,6 +5292,15 @@ a.tt-user-plan:hover {
   }
   .tt-section-link-active {
     border-bottom: none;
+  }
+  /* No hover on a phone, and a tap has somewhere better to go: the tab opens
+     the page that lists the menus, which is the same list this panel holds.
+     A tap-to-open panel here would take the tab's own destination away. */
+  .tt-menus-dropdown {
+    display: none;
+  }
+  .tt-menus-wrap {
+    flex: 1 1 0;
   }
   /* On a phone the tab bar takes the short noun where there is one. */
   .tt-section-link:has(.tt-section-label-short) .tt-section-label {

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { navItemsFor, type DashboardRole } from "@/lib/nav";
 import { useT } from "@/lib/i18n/context";
 import { NAV_ICONS } from "@/components/ui/icons";
+import MenusMenu from "./MenusMenu";
 
 /** Configuration, not daily work — these stay in the account menu. */
 const SETTINGS_AREAS = ["/dashboard/staff", "/dashboard/plan", "/dashboard/settings"];
@@ -24,7 +25,14 @@ const SETTINGS_AREAS = ["/dashboard/staff", "/dashboard/plan", "/dashboard/setti
  * Roles are honoured by reading the same `navItemsFor` the home tiles use, so
  * a waiter cannot be shown a door they will be turned away from.
  */
-export default function SectionNav({ role }: { role: DashboardRole }) {
+export default function SectionNav({
+  role,
+  restaurantId,
+}: {
+  role: DashboardRole;
+  /** Whose menus the Menús tab unfolds. */
+  restaurantId?: string;
+}) {
   const t = useT();
   const pathname = usePathname();
   // The navbar lives in the root layout, which also wraps the diner's menu —
@@ -50,7 +58,7 @@ export default function SectionNav({ role }: { role: DashboardRole }) {
         {items.map(item => {
           const Icon = NAV_ICONS[item.icon];
           const active = item.href === current;
-          return (
+          const link = (
             <Link
               key={item.href}
               href={item.href}
@@ -65,6 +73,16 @@ export default function SectionNav({ role }: { role: DashboardRole }) {
                 <span className="tt-section-label-short">{t(item.shortKey)}</span>
               )}
             </Link>
+          );
+
+          // Only the menus tab has anything to unfold — the others are one
+          // place each.
+          return item.href === "/dashboard" && restaurantId ? (
+            <MenusMenu key={item.href} restaurantId={restaurantId}>
+              {link}
+            </MenusMenu>
+          ) : (
+            link
           );
         })}
       </div>
