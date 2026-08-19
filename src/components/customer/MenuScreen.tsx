@@ -264,11 +264,14 @@ export default function MenuScreen({
               onChange={e => changeSearch(e.target.value)}
             />
           )}
-          {table && <ServiceButtons
+          {table && (
+            <ServiceButtons
               restaurantId={restaurant.id}
               table={table}
               billOnBill={Boolean(restaurant.allow_pay_later)}
-            />}
+              onOpenBill={billDue ? onOpenBill : undefined}
+            />
+          )}
           {trackId && onTrack && (
             // A button, not a link: the status opens over this menu rather
             // than taking the diner to a page of its own.

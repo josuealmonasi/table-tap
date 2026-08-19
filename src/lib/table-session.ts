@@ -28,15 +28,32 @@ export async function currentSessionId(
   tableId: string,
 ): Promise<string | null> {
   const cutoff = new Date(Date.now() - OPEN_BILL_HOURS * 60 * 60 * 1000).toISOString();
-  const { data } = await createAdminClient()
+  const db = createAdminClient();
+  const { data } = await db
     .from("table_sessions")
-    .select("id")
+    .select("id, opened_at")
     .eq("restaurant_id", restaurantId)
     .eq("table_id", tableId)
     .is("closed_at", null)
-    .gte("opened_at", cutoff)
     .maybeSingle();
-  return (data as { id: string } | null)?.id ?? null;
+
+  const session = data as { id: string; opened_at: string } | null;
+  if (!session) return null;
+
+  // Vencida: se cierra aquí en lugar de ignorarla. Dejarla abierta pero
+  // invisible es lo que hacía que el piso viera una cuenta de MX$91.85 que el
+  // comensal no podía ni ver ni pagar — la misma fila decía dos cosas según
+  // quién preguntara. La deuda sigue en las cuentas abiertas del gerente.
+  if (session.opened_at < cutoff) {
+    await db
+      .from("table_sessions")
+      .update({ closed_at: new Date().toISOString(), close_reason: "expired" })
+      .eq("id", session.id)
+      .is("closed_at", null);
+    return null;
+  }
+
+  return session.id;
 }
 
 /**

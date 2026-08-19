@@ -29,7 +29,8 @@ export default async function BillsPage() {
   // Read with the secret key: orders are unreadable to anyone but the team's
   // own policies, and this page needs every table's, not just one's.
   const db = createAdminClient();
-  const [{ data: orders }, { data: requests }, { data: writeOffs }] = await Promise.all([
+  const [{ data: orders }, { data: requests }, { data: writeOffs }, { data: asking }] =
+    await Promise.all([
     db
       .from("orders")
       .select(
@@ -52,6 +53,14 @@ export default async function BillsPage() {
       .eq("restaurant_id", r.id)
       .eq("status", "pending")
       .order("created_at", { ascending: false }),
+    // Quién pidió la cuenta: son las mesas que están esperando a que alguien
+    // vaya a cobrarles, que no es lo mismo que tener saldo.
+    db
+      .from("service_requests")
+      .select("table_id")
+      .eq("restaurant_id", r.id)
+      .in("kind", ["bill", "pay"])
+      .eq("status", "open"),
   ]);
 
   return (
@@ -62,6 +71,9 @@ export default async function BillsPage() {
         writeOffs={MANAGES(membership.role) ? (writeOffs ?? []) : []}
         currency={r.currency}
         canApprove={MANAGES(membership.role)}
+        restaurantId={r.id}
+        canSettle={SETTLES(membership.role)}
+        askedToPay={(asking ?? []).map(a => a.table_id).filter(Boolean) as string[]}
       />
     </ConfirmProvider>
   );

@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
 import { matchesBill, type OpenBill } from "@/lib/open-bills";
 import BillDiscountDialog from "./BillDiscountDialog";
+import SettleTableDialog from "./SettleTableDialog";
 import { BillIcon, SearchIcon, TableIcon } from "@/components/ui/icons";
 
 export interface DiscountRequest {
@@ -43,18 +44,28 @@ export default function BillsPanel({
   writeOffs,
   currency,
   canApprove,
+  restaurantId,
+  canSettle,
+  askedToPay,
 }: {
   bills: OpenBill[];
   requests: DiscountRequest[];
   writeOffs: WriteOffRequest[];
   currency: string;
   canApprove: boolean;
+  restaurantId: string;
+  /** Front of house can take the money; the kitchen cannot. */
+  canSettle: boolean;
+  /** Mesas que pidieron la cuenta y están esperando a que alguien vaya. */
+  askedToPay: string[];
 }) {
   const t = useT();
   const toast = useToast();
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [chosen, setChosen] = useState<OpenBill | null>(null);
+  // La mesa que se está cobrando, si alguna.
+  const [settling, setSettling] = useState<OpenBill | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   // "waiting 1h 40m" is a different sentence a minute later, so the server's
@@ -70,6 +81,19 @@ export default function BillsPanel({
 
   const shown = useMemo(() => bills.filter(b => matchesBill(b, query)), [bills, query]);
   const owed = shown.reduce((sum, b) => sum + b.total, 0);
+
+  // Tener saldo y pedir la cuenta no son lo mismo: lo primero es casi toda la
+  // sala, lo segundo es alguien con la mano levantada. Las que piden van
+  // arriba y aparte, porque son las que hay que atender ahora.
+  const waiting = useMemo(() => new Set(askedToPay), [askedToPay]);
+  const toCollect = useMemo(
+    () => shown.filter(b => b.tableId && waiting.has(b.tableId)),
+    [shown, waiting],
+  );
+  const rest = useMemo(
+    () => shown.filter(b => !(b.tableId && waiting.has(b.tableId))),
+    [shown, waiting],
+  );
 
   async function decideWriteOff(requestId: string, approve: boolean): Promise<void> {
     setBusy(requestId);
@@ -108,12 +132,65 @@ export default function BillsPanel({
     }
   }
 
+  /** Una cuenta abierta: se toca para la promoción o el cierre, se cobra aparte. */
+  const billRow = (bill: OpenBill) => (
+    <div key={bill.key} className="tt-bill-row tt-bill-open">
+      {/* La fila abre la promoción o el cierre; cobrar es su propia
+                      acción, porque es lo que más se hace y no debería estar
+                      escondida detrás de otro diálogo. */}
+      <button type="button" className="tt-bill-open-main" onClick={() => setChosen(bill)}>
+        <span className="tt-bill-glyph" aria-hidden>
+          {bill.tableLabel ? (
+            <TableIcon size={16} weight="bold" />
+          ) : (
+            <BillIcon size={16} weight="bold" />
+          )}
+        </span>
+        <span className="tt-bill-main">
+          <strong className="tt-bill-name">
+            {bill.tableLabel ? t("dash.tableN", { label: bill.tableLabel }) : bill.code}
+          </strong>
+          <span className="tt-muted tt-bill-sub">
+            {t(
+              bill.orderIds.length === 1 ? "dash.billsOrders" : "dash.billsOrdersPlural",
+              { n: bill.orderIds.length },
+            )}
+            {now !== null && (
+              <>
+                {" · "}
+                {t("dash.billsWaiting", { time: waited(bill.since, now) })}
+              </>
+            )}
+          </span>
+        </span>
+        {bill.discounted && (
+          <span className="tt-badge tt-bill-flag">{t("dash.staffOnlyBadge")}</span>
+        )}
+        <strong className="tt-bill-total-cell">
+          {formatMoney(bill.total, currency)}
+        </strong>
+      </button>
+      {canSettle && bill.tableId && (
+        <button
+          type="button"
+          className="tt-btn tt-btn-primary tt-btn-sm tt-bill-collect"
+          onClick={() => setSettling(bill)}
+        >
+          {t("dash.collect")}
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div className="tt-dash">
       <div className="container">
         <header className="tt-dash-head">
           <Breadcrumb
-            trail={[{ labelKey: "nav.dashboard", href: "/dashboard" }, { labelKey: "nav.bills" }]}
+            trail={[
+              { labelKey: "nav.dashboard", href: "/dashboard" },
+              { labelKey: "nav.bills" },
+            ]}
           />
         </header>
 
@@ -141,7 +218,10 @@ export default function BillsPanel({
                     })}
                   </span>
                   {r.note && (
-                    <span className="tt-muted tt-bill-sub" style={{ fontStyle: "italic" }}>
+                    <span
+                      className="tt-muted tt-bill-sub"
+                      style={{ fontStyle: "italic" }}
+                    >
                       “{r.note}”
                     </span>
                   )}
@@ -231,52 +311,31 @@ export default function BillsPanel({
             </p>
           ) : (
             <div className="tt-bill-list">
-              {shown.map(bill => (
-                <button
-                  key={bill.key}
-                  type="button"
-                  className="tt-bill-row tt-bill-open"
-                  onClick={() => setChosen(bill)}
-                >
-                  <span className="tt-bill-glyph" aria-hidden>
-                    {bill.tableLabel ? (
-                      <TableIcon size={16} weight="bold" />
-                    ) : (
-                      <BillIcon size={16} weight="bold" />
-                    )}
-                  </span>
-                  <span className="tt-bill-main">
-                    <strong className="tt-bill-name">
-                      {bill.tableLabel
-                        ? t("dash.tableN", { label: bill.tableLabel })
-                        : bill.code}
-                    </strong>
-                    <span className="tt-muted tt-bill-sub">
-                      {t(
-                        bill.orderIds.length === 1 ? "dash.billsOrders" : "dash.billsOrdersPlural",
-                        { n: bill.orderIds.length },
-                      )}
-                      {now !== null && (
-                        <>
-                          {" · "}
-                          {t("dash.billsWaiting", { time: waited(bill.since, now) })}
-                        </>
-                      )}
-                    </span>
-                  </span>
-                  {bill.discounted && (
-                    <span className="tt-badge tt-bill-flag">{t("dash.staffOnlyBadge")}</span>
-                  )}
-                  <strong className="tt-bill-total-cell">
-                    {formatMoney(bill.total, currency)}
-                  </strong>
-                </button>
-              ))}
+              {toCollect.length > 0 && (
+                <p className="tt-bill-group">{t("dash.toCollect")}</p>
+              )}
+              {toCollect.map(billRow)}
+              {toCollect.length > 0 && rest.length > 0 && (
+                <p className="tt-bill-group">{t("dash.stillOpen")}</p>
+              )}
+              {rest.map(billRow)}
             </div>
           )}
         </div>
       </div>
 
+      {settling?.tableId && (
+        <SettleTableDialog
+          open
+          restaurantId={restaurantId}
+          tableId={settling.tableId}
+          tableLabel={settling.tableLabel ?? ""}
+          currency={currency}
+          canApprove={canApprove}
+          onClose={() => setSettling(null)}
+          onSettled={() => router.refresh()}
+        />
+      )}
       {chosen && (
         <BillDiscountDialog
           open

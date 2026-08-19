@@ -13,6 +13,14 @@ interface ServiceButtonsProps {
   table: RestaurantTable;
   /** The bill screen handles settling, so asking for a bill is redundant. */
   billOnBill?: boolean;
+  /**
+   * Opens the bill, when the table has one. "Pedir la cuenta" used to fire a
+   * request into the void: the diner never saw what they had ordered, so they
+   * could not check it before asking somebody to come and take their money.
+   * The only way to the list was a small icon in the header that appeared
+   * conditionally, which nobody finds.
+   */
+  onOpenBill?: () => void;
 }
 
 type Kind = "waiter" | "bill";
@@ -30,6 +38,7 @@ const KEYS: Record<Kind, { idle: string; sent: string }> = {
  */
 export default function ServiceButtons({
   billOnBill = false,
+  onOpenBill,
   restaurantId,
   table,
 }: ServiceButtonsProps) {
@@ -107,7 +116,12 @@ export default function ServiceButtons({
               type="button"
               className="tt-service-btn"
               disabled={sent.has(kind)}
-              onClick={() => send(kind)}
+              onClick={() => {
+                // Si hay algo que cobrar, primero se ve; pedir al mesero es
+                // una de las opciones de esa pantalla, no un salto a ciegas.
+                if (kind === "bill" && onOpenBill) onOpenBill();
+                else void send(kind);
+              }}
             >
               {kind === "waiter" ? (
                 <CallWaiterIcon size={16} weight="bold" />
