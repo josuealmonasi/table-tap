@@ -50,7 +50,8 @@ export default function SettleTableDialog({
   useEffect(() => {
     if (!open) return;
     setOrders(null);
-    fetch(`/api/bill?restaurantId=${restaurantId}&tableId=${tableId}`)
+    // The staff view: everything the table owes, not just this service.
+    fetch(`/api/table-bill?tableId=${tableId}`)
       .then(r => (r.ok ? r.json() : { orders: [] }))
       .then(d => setOrders(d.orders ?? []))
       .catch(() => setOrders([]));

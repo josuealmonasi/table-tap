@@ -1,4 +1,4 @@
-import { billWindowStart, unpaidOrders } from "@/lib/table-bill";
+import { unpaidOrders } from "@/lib/table-bill";
 import type { Order } from "@/lib/types";
 
 /**
@@ -12,6 +12,11 @@ import type { Order } from "@/lib/types";
  * Derived rather than stored, because a flag someone forgets to clear is worse
  * than no flag at all: it would show a table as taken all evening after the
  * party had left.
+ *
+ * Counts everything outstanding, however old. A debt nobody resolved is still
+ * a debt, and telling the floor a table is free while it owes MX$105 is the
+ * opposite of useful — it is the bill's own age limit that keeps the next
+ * party from being charged for it, not a number hidden from staff.
  */
 export interface TableStatus {
   /** Nobody owes anything: safe to seat. */
@@ -22,17 +27,11 @@ export interface TableStatus {
   orders: number;
 }
 
-export function tableStatuses(
-  orders: Order[],
-  now: Date = new Date(),
-): Map<string, TableStatus> {
-  const cutoff = billWindowStart(now).toISOString();
+export function tableStatuses(orders: Order[]): Map<string, TableStatus> {
   const byTable = new Map<string, TableStatus>();
 
   for (const order of unpaidOrders(orders)) {
-    // Same window the diner's bill uses: last night's forgotten ticket is the
-    // manager's to resolve, not a reason to hold a table out of service.
-    if (!order.table_id || order.created_at < cutoff) continue;
+    if (!order.table_id) continue;
     const found = byTable.get(order.table_id) ?? { free: false, owed: 0, orders: 0 };
     found.owed = Math.round((found.owed + Number(order.total)) * 100) / 100;
     found.orders += 1;

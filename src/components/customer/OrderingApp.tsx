@@ -170,8 +170,8 @@ export default function OrderingApp({
   // was seeded once on mount and a dine-in order never showed up at all.
   const [trackId, setTrackId] = useState<string | null>(trackOrder?.id ?? null);
   useEffect(() => {
-    setTrackId(prev => prev ?? recallOrder(restaurant.id));
-  }, [restaurant.id]);
+    setTrackId(prev => prev ?? recallOrder(restaurant.id, table?.id));
+  }, [restaurant.id, table?.id]);
 
   // "Want that by email?" — asked once, when the money is settled, whether
   // that happened by card or in cash at the table.
@@ -378,7 +378,7 @@ export default function OrderingApp({
         // drives the "track your order" link and the rating prompt. A dine-in
         // order used to reach only the first.
         rememberMyOrder(restaurant.id, data.orderId);
-        rememberRecentOrder(restaurant.id, data.orderId);
+        rememberRecentOrder(restaurant.id, data.orderId, table?.id);
         clearUpsell(restaurant.id);
         setTrackId(data.orderId);
         cart.clear();

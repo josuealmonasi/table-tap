@@ -10,8 +10,9 @@ import type { Order } from "@/lib/types";
  * the fields a diner needs to recognise their food and settle for it. Same
  * shape as the order tracker, for the same reason.
  *
- * Bounded to the current service, so the party sitting down now is never
- * shown — or asked to pay — what the last party left behind.
+ * For a diner this is bounded to the current service, so the party sitting
+ * down now is never shown — or asked to pay — what the last party left behind.
+ * Staff see the lot.
  *
  * Anyone holding the table's URL can see what that table owes. The URL is
  * printed on the table, so this is the same trust boundary as the menu itself:
@@ -26,8 +27,16 @@ const FIELDS =
 export async function fetchTableBill(
   restaurantId: string,
   tableId: string,
+  /**
+   * Who is asking. A diner is shown this service only, so the party sitting
+   * down now is never asked to pay for the last one. Staff are shown
+   * everything owed, because they are the ones who have to collect it or
+   * write it off — hiding a debt from the till is how the floor ends up
+   * looking at a bill that says MX$105 while the app says nothing is owed.
+   */
+  audience: "diner" | "staff" = "diner",
 ): Promise<Order[]> {
-  const { data, error } = await createAdminClient()
+  let query = createAdminClient()
     .from("orders")
     .select(FIELDS)
     // Both, always: the table id alone would let one restaurant's id be paired
@@ -37,11 +46,16 @@ export async function fetchTableBill(
     .eq("paid", false)
     // Written off: recorded as never paid, but no longer owed by anyone.
     .eq("written_off", false)
-    // This service only. An order nobody settled last night is still owed —
-    // it is on the manager's open bills — but it is not this party's to pay.
-    .gte("created_at", billWindowStart().toISOString())
     .neq("status", "pending_payment")
     .order("created_at", { ascending: true });
+
+  if (audience === "diner") {
+    // An order nobody settled last night is still owed — it is on the
+    // manager's open bills — but it is not this party's to pay.
+    query = query.gte("created_at", billWindowStart().toISOString());
+  }
+
+  const { data, error } = await query;
 
   if (error) throw new Error(`Could not load the table's bill: ${error.message}`);
   // `pending_payment` is already excluded above — those are carts mid-Stripe,

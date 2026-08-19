@@ -69,8 +69,10 @@ export default function TrackerOverlay({
   // forget it once it's done, so a stale "track your order" link disappears.
   useEffect(() => {
     if (!order) return;
-    if (TERMINAL.includes(order.status)) forgetOrder(order.restaurant_id);
-    else rememberRecentOrder(order.restaurant_id, order.id);
+    // Keyed by the table the order was placed at, so it is offered back only
+    // at that table.
+    if (TERMINAL.includes(order.status)) forgetOrder(order.restaurant_id, order.table_id);
+    else rememberRecentOrder(order.restaurant_id, order.id, order.table_id);
   }, [order]);
 
   // No language control of its own: the menu behind carries one, and a second

@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
-import { billWindowStart } from "@/lib/table-bill";
 import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
@@ -48,8 +47,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .eq("restaurant_id", actor.restaurantId)
     .eq("table_id", tableId)
     .eq("paid", false)
-    // Same window the diner's bill uses, so what is charged is what was shown.
-    .gte("created_at", billWindowStart().toISOString())
     .eq("written_off", false)
     .neq("status", "pending_payment")
     .neq("status", "cancelled");
