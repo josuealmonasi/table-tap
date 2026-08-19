@@ -708,6 +708,8 @@ export const en = {
     billsShort: "Bills",
     tablesShort: "Tables",
     promosShort: "Promos",
+    menus: "Menus",
+    menusDesc: "Your menus, categories and dishes",
     orders: "Orders",
     ordersDesc: "Live incoming orders",
     analytics: "Analytics",

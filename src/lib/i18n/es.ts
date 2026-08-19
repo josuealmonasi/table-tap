@@ -702,6 +702,8 @@ export const es: Messages = {
     billsShort: "Cuentas",
     tablesShort: "Mesas",
     promosShort: "Promos",
+    menus: "Menús",
+    menusDesc: "Tus menús, categorías y platillos",
     orders: "Pedidos",
     ordersDesc: "Pedidos entrantes en vivo",
     analytics: "Analíticas",

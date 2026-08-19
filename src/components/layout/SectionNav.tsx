@@ -36,15 +36,20 @@ export default function SectionNav({ role }: { role: DashboardRole }) {
   // One section is not a choice; the kitchen has only its board.
   if (items.length < 2) return null;
 
+  // Longest match wins. "/dashboard" is a prefix of every other section, so a
+  // plain startsWith would light up Menús on the orders board — and a menu's
+  // own page is a slug we cannot list, so it has to fall through to the
+  // shortest match rather than be named.
+  const current = items
+    .filter(i => pathname === i.href || pathname.startsWith(`${i.href}/`))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+
   return (
     <nav className="tt-section-nav" aria-label={t("nav.sections")}>
       <div className="container tt-section-nav-inner">
         {items.map(item => {
           const Icon = NAV_ICONS[item.icon];
-          // Exact match, or a child page of it — /dashboard/menu/123 is still
-          // the menu section.
-          const active =
-            pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const active = item.href === current;
           return (
             <Link
               key={item.href}

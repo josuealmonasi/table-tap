@@ -79,25 +79,29 @@ export default function DashboardHome({ restaurant, role }: DashboardHomeProps) 
         )}
 
         <div className="tt-tiles">
-          {navItemsFor(role).map(tile => {
-            const Glyph = NAV_ICONS[tile.icon];
-            return tile.soon ? (
-              <div key={tile.href} className="tt-tile tt-tile-soon">
-                <Glyph size={26} className="tt-tile-emoji" />
-                <strong>{t(tile.titleKey)}</strong>
-                <span className="tt-muted">{t(tile.descKey)}</span>
-                <span className="tt-badge" style={{ marginTop: 8 }}>
-                  {t("dash.comingSoon")}
-                </span>
-              </div>
-            ) : (
-              <Link key={tile.href} href={tile.href} className="tt-tile">
-                <Glyph size={26} className="tt-tile-emoji" />
-                <strong>{t(tile.titleKey)}</strong>
-                <span className="tt-muted">{t(tile.descKey)}</span>
-              </Link>
-            );
-          })}
+          {/* Not a tile linking to the page you are standing on: the menus
+              live in the card above, and the nav bar names this screen. */}
+          {navItemsFor(role)
+            .filter(tile => tile.href !== "/dashboard")
+            .map(tile => {
+              const Glyph = NAV_ICONS[tile.icon];
+              return tile.soon ? (
+                <div key={tile.href} className="tt-tile tt-tile-soon">
+                  <Glyph size={26} className="tt-tile-emoji" />
+                  <strong>{t(tile.titleKey)}</strong>
+                  <span className="tt-muted">{t(tile.descKey)}</span>
+                  <span className="tt-badge" style={{ marginTop: 8 }}>
+                    {t("dash.comingSoon")}
+                  </span>
+                </div>
+              ) : (
+                <Link key={tile.href} href={tile.href} className="tt-tile">
+                  <Glyph size={26} className="tt-tile-emoji" />
+                  <strong>{t(tile.titleKey)}</strong>
+                  <span className="tt-muted">{t(tile.descKey)}</span>
+                </Link>
+              );
+            })}
         </div>
       </div>
     </div>

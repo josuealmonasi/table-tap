@@ -102,6 +102,8 @@ export const PlatformAdminIcon = ShieldCheck;
 export const RoleOwnerIcon = Crown;
 export const RoleManagerIcon = UserGear;
 export const RoleWaiterIcon = ForkKnife;
+/** The menus screen — the list of what the kitchen serves. */
+export const MenuIcon = ForkKnife;
 export const RoleKitchenIcon = ChefHat;
 export const StatusReceivedIcon = ClipboardText;
 export const StatusPreparingIcon = CookingPot;
@@ -139,6 +141,7 @@ export const ICON_WEIGHT = {
  * dashboard routes touch this.
  */
 export const NAV_ICONS = {
+  Menu: MenuIcon,
   Orders: OrdersIcon,
   Analytics: AnalyticsIcon,
   Promotions: PromotionsIcon,
