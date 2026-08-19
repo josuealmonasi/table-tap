@@ -18,9 +18,11 @@
 import pg from "pg";
 import { readFile } from "node:fs/promises";
 
-const PROD_MENU =
-  process.env.PROD_MENU_URL ??
-  "https://table-tap-star.vercel.app/r/2be8e35b-18c5-4be6-bd07-74c82fb8788c";
+// Which menu to prod. A hardcoded id survives right up until production data
+// is reseeded, and then this check reports a 404 that says nothing about
+// whether production works — it says the id moved. Resolved from the database
+// instead, so it keeps checking a real menu whatever the ids are.
+const PROD_SITE = process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app";
 
 async function envFrom(file) {
   const text = await readFile(new URL(`../${file}`, import.meta.url), "utf8");
@@ -57,6 +59,34 @@ async function snapshot(connectionString) {
   return out;
 }
 
+/**
+ * A restaurant that is actually serving something, straight from production.
+ *
+ * Picks one with an active menu holding at least one available dish, so a
+ * green tick means a diner could really order — not merely that some URL
+ * returned 200.
+ */
+async function liveMenuUrl() {
+  const env = await envFrom(".env.production.local");
+  const client = new pg.Client({
+    connectionString: env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+  });
+  await client.connect();
+  const { rows } = await client.query(`
+    select r.id
+      from restaurants r
+      join menus m on m.restaurant_id = r.id and m.active
+      join categories c on c.menu_id = m.id
+      join menu_items i on i.category_id = c.id and i.available
+     group by r.id
+     order by count(i.id) desc
+     limit 1
+  `);
+  await client.end();
+  return rows[0] ? `${PROD_SITE}/r/${rows[0].id}` : null;
+}
+
 let failed = false;
 
 const [dev, prod] = await Promise.all([
@@ -80,7 +110,12 @@ for (const name of Object.keys(QUERIES)) {
 
 console.log("\nProduction customer menu\n");
 try {
-  const res = await fetch(PROD_MENU, { headers: { "accept-language": "es-MX" } });
+  const menuUrl = await liveMenuUrl();
+  if (!menuUrl) {
+    console.log("  SKIPPED  no restaurant with an active menu to check");
+    process.exit(failed ? 1 : 0);
+  }
+  const res = await fetch(menuUrl, { headers: { "accept-language": "es-MX" } });
   const html = await res.text();
   // The error boundary renders this instead of the menu when a query throws.
   const brokeSpanish = html.includes("No pudimos cargar el men");
