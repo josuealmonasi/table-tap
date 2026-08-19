@@ -32,12 +32,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
-  const { tableId, reason, note } = (await req.json().catch(() => ({}))) as {
+  const { tableId, orderIds, reason, note } = (await req.json().catch(() => ({}))) as {
     tableId?: string;
+    orderIds?: string[];
     reason?: string;
     note?: string;
   };
-  if (!tableId || !isWriteOffReason(reason)) {
+  // A table, or a named set of orders — a counter bill has no table to point
+  // at, and it is just as capable of walking out the door.
+  const ids = (orderIds ?? []).filter(v => typeof v === "string").slice(0, 100);
+  if ((!tableId && ids.length === 0) || !isWriteOffReason(reason)) {
     return await apiError("apiErr.invalidRequest", 400);
   }
   const text = String(note ?? "").trim();
@@ -47,11 +51,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const db = createAdminClient();
   // Scoped to the actor's own restaurant, so a table id from elsewhere finds
   // nothing rather than someone else's bill.
-  const { data: rows } = await db
+  const scoped = db
     .from("orders")
     .select("id, total, paid, written_off, status, table_id, table_label")
-    .eq("restaurant_id", actor.restaurantId)
-    .eq("table_id", tableId);
+    .eq("restaurant_id", actor.restaurantId);
+  const { data: rows } = await (tableId ? scoped.eq("table_id", tableId) : scoped.in("id", ids));
 
   const orders = writableOff((rows ?? []) as Order[]);
   if (orders.length === 0) return await apiError("apiErr.nothingToWriteOff", 409);
@@ -69,7 +73,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!MANAGES(actor.role)) {
     const { error } = await db.from("write_off_requests").insert({
       restaurant_id: actor.restaurantId,
-      table_id: tableId,
+      table_id: tableId ?? orders[0].table_id ?? null,
       table_label: label,
       order_ids: orders.map(o => o.id),
       amount,

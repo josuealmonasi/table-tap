@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import WriteOffDialog from "./WriteOffDialog";
+import type { WriteOffReason } from "@/lib/write-off";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
@@ -47,7 +49,41 @@ export default function BillDiscountDialog({
   const t = useT();
   const toast = useToast();
   const [code, setCode] = useState("");
+  const [closing, setClosing] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  /**
+   * Closes the bill without collecting for it — a walkout, a courtesy, or an
+   * order that should never have been rung up. A waiter's is a request; a
+   * manager's is the decision.
+   */
+  async function writeOff(reason: WriteOffReason, note: string): Promise<void> {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/bill/write-off", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // A counter bill has no table, so it names its orders instead.
+        body: JSON.stringify({
+          tableId: bill.tableId ?? undefined,
+          orderIds: bill.tableId ? undefined : bill.orderIds,
+          reason,
+          note,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? null);
+        return;
+      }
+      toast(data.pending ? t("writeOff.sent") : t("writeOff.done"));
+      setClosing(false);
+      onApplied();
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
   const [error, setError] = useState<string | null>(null);
 
   // The promotions that would actually apply to this bill, from the server —
@@ -133,144 +169,191 @@ export default function BillDiscountDialog({
   }
 
   return (
-    <Modal open={open} onClose={onClose} maxWidth={460} label={t("dash.billApply")}>
-      <h3 className="tt-serif" style={{ marginTop: 0 }}>
-        {bill.tableLabel ? t("dash.tableN", { label: bill.tableLabel }) : t("dash.billsToGo")}
-      </h3>
+    <>
+      {/* One dialog at a time. Asking why a bill is being cancelled replaces
+          this one rather than stacking over it — two open dialogs trap focus
+          against each other and take two Escapes to leave. */}
+      <Modal
+        open={open && !closing}
+        onClose={onClose}
+        maxWidth={460}
+        label={t("dash.billApply")}
+      >
+        <h3 className="tt-serif" style={{ marginTop: 0 }}>
+          {bill.tableLabel
+            ? t("dash.tableN", { label: bill.tableLabel })
+            : t("dash.billsToGo")}
+        </h3>
 
-      {bill.items.map((item, i) => (
-        <div key={i} className="tt-row tt-muted" style={{ fontSize: 14, marginTop: 6 }}>
-          <span>
-            {item.qty}× {item.name}
-          </span>
-          <span>{formatMoney(item.price * item.qty, currency)}</span>
-        </div>
-      ))}
+        {bill.items.map((item, i) => (
+          <div key={i} className="tt-row tt-muted" style={{ fontSize: 14, marginTop: 6 }}>
+            <span>
+              {item.qty}× {item.name}
+            </span>
+            <span>{formatMoney(item.price * item.qty, currency)}</span>
+          </div>
+        ))}
 
-      {/* When a promotion is already on this bill the lines add up to more
+        {/* When a promotion is already on this bill the lines add up to more
           than the total, so the difference is named rather than left for the
           waiter to explain to the table. Same three rows the diner sees. */}
-      {bill.discount > 0 && (
-        <>
-          <div className="tt-row" style={{ marginTop: 12, fontSize: 14 }}>
-            <span className="tt-muted">{t("totals.subtotal")}</span>
-            <span className="tt-muted">
-              {formatMoney(bill.total + bill.discount, currency)}
-            </span>
-          </div>
-          <div className="tt-row" style={{ marginTop: 4, fontSize: 14 }}>
-            <span className="tt-save">{t("totals.discount")}</span>
-            <span className="tt-save">−{formatMoney(bill.discount, currency)}</span>
-          </div>
-        </>
-      )}
+        {bill.discount > 0 && (
+          <>
+            <div className="tt-row" style={{ marginTop: 12, fontSize: 14 }}>
+              <span className="tt-muted">{t("totals.subtotal")}</span>
+              <span className="tt-muted">
+                {formatMoney(bill.total + bill.discount, currency)}
+              </span>
+            </div>
+            <div className="tt-row" style={{ marginTop: 4, fontSize: 14 }}>
+              <span className="tt-save">{t("totals.discount")}</span>
+              <span className="tt-save">−{formatMoney(bill.discount, currency)}</span>
+            </div>
+          </>
+        )}
 
-      <div className="tt-row tt-total" style={{ marginTop: 12 }}>
-        <span>{t("totals.total")}</span>
-        <span>{formatMoney(bill.total, currency)}</span>
-      </div>
+        <div className="tt-row tt-total" style={{ marginTop: 12 }}>
+          <span>{t("totals.total")}</span>
+          <span>{formatMoney(bill.total, currency)}</span>
+        </div>
 
-      {bill.discounted ? (
-        <p className="tt-muted" style={{ marginTop: 14 }}>
-          {t("dash.billAlreadyDiscounted")}
-        </p>
-      ) : (
-        <form onSubmit={submit} style={{ marginTop: 16 }}>
-          <label className="tt-mod-label" htmlFor="tt-bill-code">
-            {t("dash.billCodeLabel")}
-          </label>
-          <input
-            id="tt-bill-code"
-            className="tt-input"
-            style={{ width: "100%", marginTop: 6 }}
-            value={code}
-            placeholder={t("dash.billCodePick")}
-            role="combobox"
-            aria-expanded={shown.length > 0}
-            aria-controls="tt-bill-code-list"
-            autoComplete="off"
-            onChange={e => {
-              setCode(e.target.value.toUpperCase());
-              setError(null);
-            }}
-            onKeyDown={onKeyDown}
-            autoFocus
-          />
+        {bill.discounted ? (
+          <p className="tt-muted" style={{ marginTop: 14 }}>
+            {t("dash.billAlreadyDiscounted")}
+          </p>
+        ) : (
+          <form onSubmit={submit} style={{ marginTop: 16 }}>
+            <label className="tt-mod-label" htmlFor="tt-bill-code">
+              {t("dash.billCodeLabel")}
+            </label>
+            <input
+              id="tt-bill-code"
+              className="tt-input"
+              style={{ width: "100%", marginTop: 6 }}
+              value={code}
+              placeholder={t("dash.billCodePick")}
+              role="combobox"
+              aria-expanded={shown.length > 0}
+              aria-controls="tt-bill-code-list"
+              autoComplete="off"
+              onChange={e => {
+                setCode(e.target.value.toUpperCase());
+                setError(null);
+              }}
+              onKeyDown={onKeyDown}
+              autoFocus
+            />
 
-          {/* In flow, not floating: the modal is a scroll container, and an
+            {/* In flow, not floating: the modal is a scroll container, and an
               absolutely positioned menu inside one gets clipped by it — the
               bug we hit the last time a dropdown lived in a dialog. A list
               that pushes the content simply scrolls with it. */}
-          {loadingOptions && (
-            <div className="tt-code-list" aria-hidden="true">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="tt-code-option">
-                  <span className="tt-code-name">
-                    <Skeleton width={92} height={14} />
-                    <Skeleton width={130} height={11} />
-                  </span>
-                  <Skeleton width={62} height={14} />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {!loadingOptions && (
-            <div className="tt-code-list" id="tt-bill-code-list" role="listbox" ref={listRef}>
-              {shown.length === 0 && (
-                <p className="tt-muted" style={{ margin: 0, padding: "14px 12px", fontSize: 13 }}>
-                  {t("dash.billCodeNone")}
-                </p>
-              )}
-              {shown.map((option, i) => (
-                <button
-                  key={option.code}
-                  type="button"
-                  role="option"
-                  aria-selected={option.code === code}
-                  className={`tt-code-option ${i === highlight ? "tt-code-option-on" : ""}`}
-                  onMouseEnter={() => setHighlight(i)}
-                  onClick={() => choose(option)}
-                >
-                  <span className="tt-code-name">
-                    <strong>{option.code}</strong>
-                    <span className="tt-muted tt-subline" style={{ fontSize: 12 }}>
-                      {option.kind === "percent"
-                        ? t("dash.billCodePct", { pct: String(option.value) })
-                        : t("dash.billCodeFixed", {
-                            amount: formatMoney(option.value, currency),
-                          })}
-                      {option.remaining !== null
-                        ? ` · ${t("dash.billCodeLeft", { n: String(option.remaining) })}`
-                        : ""}
+            {loadingOptions && (
+              <div className="tt-code-list" aria-hidden="true">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="tt-code-option">
+                    <span className="tt-code-name">
+                      <Skeleton width={92} height={14} />
+                      <Skeleton width={130} height={11} />
                     </span>
-                  </span>
-                  <strong className="tt-accent" style={{ flex: "none" }}>
-                    −{formatMoney(option.amount, currency)}
-                  </strong>
-                </button>
-              ))}
+                    <Skeleton width={62} height={14} />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!loadingOptions && (
+              <div
+                className="tt-code-list"
+                id="tt-bill-code-list"
+                role="listbox"
+                ref={listRef}
+              >
+                {shown.length === 0 && (
+                  <p
+                    className="tt-muted"
+                    style={{ margin: 0, padding: "14px 12px", fontSize: 13 }}
+                  >
+                    {t("dash.billCodeNone")}
+                  </p>
+                )}
+                {shown.map((option, i) => (
+                  <button
+                    key={option.code}
+                    type="button"
+                    role="option"
+                    aria-selected={option.code === code}
+                    className={`tt-code-option ${i === highlight ? "tt-code-option-on" : ""}`}
+                    onMouseEnter={() => setHighlight(i)}
+                    onClick={() => choose(option)}
+                  >
+                    <span className="tt-code-name">
+                      <strong>{option.code}</strong>
+                      <span className="tt-muted tt-subline" style={{ fontSize: 12 }}>
+                        {option.kind === "percent"
+                          ? t("dash.billCodePct", { pct: String(option.value) })
+                          : t("dash.billCodeFixed", {
+                              amount: formatMoney(option.value, currency),
+                            })}
+                        {option.remaining !== null
+                          ? ` · ${t("dash.billCodeLeft", { n: String(option.remaining) })}`
+                          : ""}
+                      </span>
+                    </span>
+                    <strong className="tt-accent" style={{ flex: "none" }}>
+                      −{formatMoney(option.amount, currency)}
+                    </strong>
+                  </button>
+                ))}
+              </div>
+            )}
+            {error && (
+              <p className="tt-field-error" style={{ margin: "8px 0 0" }}>
+                {error}
+              </p>
+            )}
+            <div className="tt-prodform-actions" style={{ marginTop: 14 }}>
+              <button
+                type="submit"
+                className="tt-btn tt-btn-primary tt-btn-sm"
+                disabled={busy || !code.trim()}
+              >
+                {canApprove ? t("dash.billApplyCta") : t("dash.billRequestCta")}
+              </button>
+              <button
+                type="button"
+                className="tt-btn tt-btn-ghost tt-btn-sm"
+                onClick={onClose}
+              >
+                {t("menu.cancel")}
+              </button>
             </div>
-          )}
-          {error && (
-            <p className="tt-field-error" style={{ margin: "8px 0 0" }}>
-              {error}
-            </p>
-          )}
-          <div className="tt-prodform-actions" style={{ marginTop: 14 }}>
-            <button
-              type="submit"
-              className="tt-btn tt-btn-primary tt-btn-sm"
-              disabled={busy || !code.trim()}
-            >
-              {canApprove ? t("dash.billApplyCta") : t("dash.billRequestCta")}
-            </button>
-            <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={onClose}>
-              {t("menu.cancel")}
-            </button>
-          </div>
-        </form>
-      )}
-    </Modal>
+
+            {/* Closing a bill without collecting for it belongs on the screen
+              where the unpaid bills are, not only in the settle sheet the
+              floor opens from the board. Separated by a rule and worded
+              plainly: it is the opposite of what the form above does. */}
+            <div className="tt-bill-close-row">
+              <button
+                type="button"
+                className="tt-btn tt-btn-ghost tt-btn-sm tt-bill-close"
+                onClick={() => setClosing(true)}
+              >
+                {canApprove ? t("writeOff.title") : t("writeOff.request")}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+      <WriteOffDialog
+        open={closing}
+        onClose={() => setClosing(false)}
+        amount={bill.total}
+        currency={currency}
+        canApprove={canApprove}
+        busy={busy}
+        onSubmit={writeOff}
+      />
+    </>
   );
 }
