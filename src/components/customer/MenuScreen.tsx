@@ -231,16 +231,6 @@ export default function MenuScreen({
               {/* Only while something is owed — with nothing outstanding there
                   is no bill to look at, which is what made the old "get the
                   bill" button meaningless. */}
-              {billDue && onOpenBill && (
-                <button
-                  type="button"
-                  className="tt-icon-round"
-                  aria-label={t("bill.open")}
-                  onClick={onOpenBill}
-                >
-                  <BillIcon size={17} weight="bold" />
-                </button>
-              )}
               {searchBtn}
               {searchField}
             </div>
@@ -265,12 +255,20 @@ export default function MenuScreen({
             />
           )}
           {table && (
-            <ServiceButtons
-              restaurantId={restaurant.id}
-              table={table}
-              billOnBill={Boolean(restaurant.allow_pay_later)}
-              onOpenBill={billDue ? onOpenBill : undefined}
-            />
+            <div className="tt-service-row">
+              <ServiceButtons restaurantId={restaurant.id} table={table} />
+              {/* Una sola puerta a la cuenta, y dice lo que hace. "Pedir la
+                  cuenta" describe pedirle a alguien que traiga un papel; aquí
+                  la cuenta se mira, y las dos formas de pagarla están dentro.
+                  Sin nada que deber no aparece: una cuenta vacía no es una
+                  pantalla que valga la pena abrir. */}
+              {billDue && onOpenBill && (
+                <button type="button" className="tt-service-btn" onClick={onOpenBill}>
+                  <BillIcon size={16} weight="bold" />
+                  {t("menu.myBill")}
+                </button>
+              )}
+            </div>
           )}
           {trackId && onTrack && (
             // A button, not a link: the status opens over this menu rather
