@@ -30,6 +30,16 @@ const NOT_DEMO_DATA = new Set([
 ]);
 
 describe("the demo shows the whole app", () => {
+  it("only seeds coupon codes the app will accept", () => {
+    // El seeder escribe cupones con SQL directo, saltándose la validación de
+    // /api/coupons. Sembró VIP-15, BIEN-10 y HOLA-50: la lista los ofrecía con
+    // su descuento calculado y aplicarlos respondía "no encontramos ese cupón".
+    const codes = [...seeder.matchAll(/\$1,'([A-Z0-9-]{5,})','(?:percent|fixed)'/g)].map(m => m[1]);
+    expect(codes.length).toBeGreaterThan(0);
+    const bad = codes.filter(c => !/^[A-Z0-9]{3}-[A-Z0-9]{3}$/.test(c));
+    expect(bad, `códigos que la app rechaza: ${bad.join(", ")}`).toEqual([]);
+  });
+
   it("writes to every table a restaurant's data lives in", () => {
     const tables = [...new Set(
       [...schema.matchAll(/create table if not exists ([a-z_]+)/g)].map(m => m[1]),

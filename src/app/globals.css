@@ -3223,14 +3223,22 @@ a.tt-btn {
 /* Cart: tip percent chips */
 .tt-tip-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .tt-tip-chip {
-  flex: 1;
+  /* `flex: 1` repartía el ancho a partes iguales y el padding lateral era
+     cero, así que la etiqueta más larga — "Sin propina" — quedaba pegada al
+     borde de su píldora. Ahora crecen desde su contenido y se reparten lo que
+     sobra; la fila envuelve, porque cinco píldoras con aire no caben en un
+     teléfono y salirse de la hoja es peor que bajar a un segundo renglón. */
+  flex: 1 1 auto;
+  min-width: max-content;
+  white-space: nowrap;
   border: 1px solid var(--tt-cream);
   background: var(--tt-white);
   border-radius: 999px;
-  padding: 10px 0;
+  padding: 10px 14px;
   font-size: 14px;
   cursor: pointer;
   font-family: inherit;

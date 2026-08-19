@@ -315,7 +315,7 @@ export async function seedMock(pg) {
       when.toISOString(),
       cancelled ? null : byCard ? "card" : "cash",
       discount,
-      coupon ? "BIEN-10" : null,
+      coupon ? "BIE-N10" : null,
       // Nuestra comisión sólo existe cuando pagaron con tarjeta.
       cancelled || !byCard ? 0 : 0.75,
       !cancelled && byCard && Math.random() < 0.2
@@ -485,21 +485,21 @@ export async function seedMock(pg) {
   // ── Cupones, con canjes reales detrás ──────────────────────────────────
   const { rows: coupons } = await pg.query(
     `insert into coupons (restaurant_id, code, kind, value, max_uses, uses_count, min_subtotal, created_by_email)
-     values ($1,'BIEN-10','percent',10,null,0,150,$2),
-            ($1,'HOLA-50','fixed',50,100,0,200,$2),
-            ($1,'VIP-15','percent',15,20,0,0,$2)
+     values ($1,'BIE-N10','percent',10,null,0,150,$2),
+            ($1,'HOL-A50','fixed',50,100,0,200,$2),
+            ($1,'VIP-U15','percent',15,20,0,0,$2)
      returning id, code`,
     [rid, DEMO_OWNER.email],
   );
-  const bienvenida = coupons.find(c => c.code === "BIEN-10");
+  const bienvenida = coupons.find(c => c.code === "BIE-N10");
   const { rows: redeemed } = await pg.query(
-    "select id, total, discount, created_at from orders where restaurant_id = $1 and coupon_code = 'BIEN-10'",
+    "select id, total, discount, created_at from orders where restaurant_id = $1 and coupon_code = 'BIE-N10'",
     [rid],
   );
   if (redeemed.length > 0) {
     await bulkInsert(pg, "coupon_redemptions",
       ["restaurant_id", "coupon_id", "order_id", "code", "amount", "created_at"],
-      redeemed.map(o => [rid, bienvenida.id, o.id, "BIEN-10", o.discount, o.created_at]));
+      redeemed.map(o => [rid, bienvenida.id, o.id, "BIE-N10", o.discount, o.created_at]));
     await pg.query("update coupons set uses_count = $2 where id = $1", [bienvenida.id, redeemed.length]);
   }
 
@@ -556,7 +556,7 @@ export async function seedMock(pg) {
       [rid, DEMO_TEAM[0].email, "bill", "written_off", `table=${walkoutTable.label} amount=${walkoutSub.toFixed(2)} reason=walkout`, new Date(Date.now() - 3 * 864e5).toISOString()],
       [rid, DEMO_TEAM[1].email, "bill", "requested", `table=${asking.table.label} reason=comp`, new Date(Date.now() - 36e5).toISOString()],
       [rid, DEMO_TEAM[1].email, "discount", "requested", `code=VIP-15 amount=48.50 table=${waiting.table.label}`, new Date(Date.now() - 18e5).toISOString()],
-      [rid, DEMO_OWNER.email, "discount", "discounted", "code=BIEN-10 amount=32.00 table=4", new Date(Date.now() - 2 * 864e5).toISOString()],
+      [rid, DEMO_OWNER.email, "discount", "discounted", "code=BIE-N10 amount=32.00 table=4", new Date(Date.now() - 2 * 864e5).toISOString()],
       [rid, DEMO_OWNER.email, "settings", "updated", "service_pct=10", new Date(Date.now() - 20 * 864e5).toISOString()],
       [rid, DEMO_OWNER.email, "coupon", "created", "code=VIP-15", new Date(Date.now() - 12 * 864e5).toISOString()],
       [rid, DEMO_OWNER.email, "promotion", "created", "name=Comida_del_día", new Date(Date.now() - 25 * 864e5).toISOString()],
