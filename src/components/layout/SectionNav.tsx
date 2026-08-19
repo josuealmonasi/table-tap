@@ -6,6 +6,8 @@ import { navItemsFor, type DashboardRole } from "@/lib/nav";
 import { useT } from "@/lib/i18n/context";
 import { NAV_ICONS } from "@/components/ui/icons";
 import MenusMenu from "./MenusMenu";
+import { useBadges } from "@/hooks/useBadges";
+import { badgeLabel } from "@/lib/badges";
 
 /** Configuration, not daily work — these stay in the account menu. */
 const SETTINGS_AREAS = ["/dashboard/staff", "/dashboard/plan", "/dashboard/settings"];
@@ -35,6 +37,7 @@ export default function SectionNav({
 }) {
   const t = useT();
   const pathname = usePathname();
+  const badges = useBadges();
   // The navbar lives in the root layout, which also wraps the diner's menu —
   // the same trap TermsGate fell into. Dashboard only.
   if (!pathname.startsWith("/dashboard")) return null;
@@ -71,6 +74,14 @@ export default function SectionNav({
               <span className="tt-section-label">{t(item.titleKey)}</span>
               {item.shortKey && (
                 <span className="tt-section-label-short">{t(item.shortKey)}</span>
+              )}
+              {badges[item.href] > 0 && (
+                <span
+                  className="tt-nav-badge"
+                  aria-label={t("nav.waiting", { n: badges[item.href] })}
+                >
+                  {badgeLabel(badges[item.href])}
+                </span>
               )}
             </Link>
           );

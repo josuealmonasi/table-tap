@@ -5,6 +5,7 @@ import { ZONE_GROUPS, offsetLabel } from "@/lib/timezones";
 import type { Restaurant } from "@/lib/types";
 import type { Role } from "@/lib/membership";
 import { useSettings } from "@/hooks/useSettings";
+import { BADGES_CHANGED } from "@/hooks/useBadges";
 import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import PaymentsCard from "./PaymentsCard";
@@ -42,6 +43,7 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
   // Ordering (owner + manager) — instant-save.
   const [acceptingOrders, setAcceptingOrders] = useState(restaurant.accepting_orders);
   const [payLater, setPayLater] = useState(Boolean(restaurant.allow_pay_later));
+  const [badges, setBadges] = useState(restaurant.badges_enabled !== false);
 
   async function saveRestaurant(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -80,6 +82,18 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
   // Off by default and saved immediately, like the kill switch: turning it on
   // lets food leave the kitchen before it is paid for, so it should be a
   // deliberate act with an obvious result.
+  // On by default, and turned off for the whole restaurant rather than per
+  // person: a count nobody wants is noise for everybody, and the floor does
+  // not get to decide it would rather not be told an approval is waiting.
+  async function toggleBadges(next: boolean): Promise<void> {
+    setBadges(next);
+    if (!(await save({ badges_enabled: next }))) {
+      setBadges(!next);
+      return;
+    }
+    window.dispatchEvent(new Event(BADGES_CHANGED));
+  }
+
   async function togglePayLater(next: boolean): Promise<void> {
     setPayLater(next);
     if (!(await save({ allow_pay_later: next }))) setPayLater(!next);
@@ -310,6 +324,24 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
                   checked={acceptingOrders}
                   disabled={saving}
                   onChange={e => toggleAcceptingOrders(e.target.checked)}
+                />
+                <span className="tt-switch-track" />
+              </span>
+            </label>
+
+            <label className="tt-settings-toggle" style={{ marginTop: 10 }}>
+              <span>
+                <strong>{t("dash.badgesTitle")}</strong>
+                <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
+                  {t("dash.badgesHint")}
+                </span>
+              </span>
+              <span className="tt-switch">
+                <input
+                  type="checkbox"
+                  checked={badges}
+                  disabled={saving}
+                  onChange={e => toggleBadges(e.target.checked)}
                 />
                 <span className="tt-switch-track" />
               </span>
