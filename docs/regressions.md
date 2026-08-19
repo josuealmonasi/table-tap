@@ -77,6 +77,32 @@ hundred lines before it was created, and it only ever worked because a reset
 left the old function behind. `pnpm db:reset` on dev is the only thing that
 proves it.
 
+**A guard that redirects still answers 200.**
+Next's `redirect()` from a server component replies to a document request with
+the *target's* HTML and no `Location` header. A checker written on
+`status === 200` reported 17 permission holes that did not exist. Probe a page
+by a marker string only that page prints — never a nav label, which every page
+carries. That is what `pnpm roles` does.
+
+**Reaching a page is not seeing all of it.**
+A manager opens Ajustes but must not see Zona horaria or Pagos; a waiter opens
+Cuentas abiertas but must not see the activity log. When a module moves between
+screens it inherits the audience of the new screen, and nothing in the types
+says so. Assert the sections, not just the routes.
+
+**A grid turns every child into a cell, headings included.**
+"Mesas por cobrar" and "Otras cuentas abiertas" were `<p>`s inside a
+three-column grid, so each took one cell and the cards flowed around them —
+tables appeared under the wrong title, and a table that had not asked to pay
+read as waiting. A heading inside a grid needs `grid-column: 1 / -1`.
+
+**`min-width: 0` on the only elastic column is how text ends up under a badge.**
+The bill row's name collapsed to zero width the moment a table carried a badge:
+the text overflowed and the amount owed sat behind the Cobrar button — on a
+phone, which is the waiter's screen. Give the elastic child a real minimum and
+let the row wrap instead. Then grow the skeleton by the same line
+(`bills/loading.tsx`), or the list jumps when it loads.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`
