@@ -18,6 +18,12 @@ export type NavItem = {
     | "PlatformAdmin";
   /** i18n keys resolved with t() where the item is rendered. */
   titleKey: string;
+  /**
+   * A shorter name, for the phone's tab bar. "Cuentas abiertas" across five
+   * tabs on a 360px screen leaves the labels touching; a tab bar wants one
+   * noun. Absent means the full name already is one.
+   */
+  shortKey?: string;
   descKey: string;
   soon?: boolean;
 };
@@ -43,18 +49,21 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/dashboard/promotions",
     icon: "Promotions",
     titleKey: "nav.promos",
+    shortKey: "nav.promosShort",
     descKey: "nav.promosDesc",
   },
   {
     href: "/dashboard/bills",
     icon: "Bills",
     titleKey: "nav.bills",
+    shortKey: "nav.billsShort",
     descKey: "nav.billsDesc",
   },
   {
     href: "/dashboard/tables",
     icon: "Table",
     titleKey: "nav.tables",
+    shortKey: "nav.tablesShort",
     descKey: "nav.tablesDesc",
   },
   {

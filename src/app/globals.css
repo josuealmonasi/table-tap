@@ -5172,3 +5172,106 @@ a.tt-user-plan:hover {
   color: var(--tt-warning);
   background: var(--tt-warning-wash);
 }
+
+/* ── Section navigation ─────────────────────────────────────────────────────
+   A row under the navbar on a desktop; a tab bar under the thumb on a phone.
+   Same markup either way — what changes is where the strip sits, because on a
+   phone the bottom edge is the only part of the screen always in reach. */
+.tt-section-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--tt-paper);
+  border-bottom: 1px solid var(--tt-line);
+}
+.tt-section-nav-inner {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tt-section-nav-inner::-webkit-scrollbar {
+  display: none;
+}
+.tt-section-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 12px 14px;
+  color: var(--tt-muted);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  /* The marker sits on the same edge as the border below, so the active
+     section joins the page it opens instead of floating above it. */
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tt-section-link:hover {
+  color: var(--tt-ink);
+}
+.tt-section-link-active {
+  color: var(--tt-accent);
+  border-bottom-color: var(--tt-accent);
+}
+.tt-section-label-short {
+  display: none;
+}
+.tt-section-link:focus-visible {
+  outline: 2px solid var(--tt-accent);
+  outline-offset: -2px;
+  border-radius: var(--tt-radius-sm);
+}
+
+@media (max-width: 720px) {
+  .tt-section-nav {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    border-top: 1px solid var(--tt-line);
+    border-bottom: none;
+    /* Clear of the home indicator on a phone with no bezel. */
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .tt-section-nav-inner {
+    gap: 0;
+    justify-content: space-around;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  .tt-section-link {
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px 2px;
+    font-size: 11px;
+    letter-spacing: -0.01em;
+    border-bottom: none;
+    margin-bottom: 0;
+    /* The label can be two words; keep every tab the same height. */
+    min-height: 52px;
+    justify-content: center;
+    text-align: center;
+  }
+  .tt-section-link-active {
+    border-bottom: none;
+  }
+  /* On a phone the tab bar takes the short noun where there is one. */
+  .tt-section-link:has(.tt-section-label-short) .tt-section-label {
+    display: none;
+  }
+  .tt-section-label-short {
+    display: inline;
+  }
+  /* Room for the bar, so the last row of a page is never trapped under it —
+     and only where the bar exists. The diner's menu renders through the same
+     layout and was getting 64px of dead space under its cart. */
+  body:has(.tt-section-nav) {
+    padding-bottom: 64px;
+  }
+}

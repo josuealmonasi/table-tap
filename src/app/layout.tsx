@@ -4,6 +4,7 @@ import "./globals.css";
 import { getMembership } from "@/lib/membership";
 import { getPlatformAdmin } from "@/lib/admin";
 import Navbar from "@/components/layout/Navbar";
+import SectionNav from "@/components/layout/SectionNav";
 import TermsGate from "@/components/legal/TermsGate";
 import { needsTerms } from "@/lib/legal";
 import Footer from "@/components/layout/Footer";
@@ -50,6 +51,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 plan={membership.restaurant.plan}
               />
             )}
+            {membership && <SectionNav role={membership.role} />}
+            {admin && <SectionNav role="admin" />}
             {/* Only the owner is asked, and only in the dashboard: the diner's
                 menu renders through this same layout, and holding up somebody's
                 dinner over a contract with their restaurant would be absurd. */}
