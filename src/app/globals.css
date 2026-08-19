@@ -1261,6 +1261,13 @@ a.tt-btn {
   .tt-bill-list .tt-bill-row:first-child {
     border-top: 1px solid var(--tt-line);
   }
+  /* Un rótulo de grupo es un encabezado, no una tarjeta. Como celda de la
+     rejilla se quedaba a un tercio de ancho y las mesas caían bajo el título
+     equivocado: "Mesa 5" aparecía en "mesas por cobrar" sin haber pedido la
+     cuenta. Ocupa la fila entera y el grupo vuelve a leerse. */
+  .tt-bill-list > .tt-bill-group {
+    grid-column: 1 / -1;
+  }
 }
 .tt-bill-row {
   display: flex;
@@ -1303,7 +1310,12 @@ a.tt-btn {
   flex-direction: column;
   gap: 2px;
   flex: 1;
-  min-width: 0;
+  /* El nombre de la mesa es lo único elástico de la fila: con min-width 0 se
+     aplastaba a cero cuando la etiqueta, el importe y el botón ya no cabían,
+     y su texto salía por encima de ellos — en un teléfono el mesero veía
+     "SOLO PERSONAL" encima de "3 pedidos" y el importe tapado por "Cobrar".
+     Con un mínimo, la fila se parte en dos renglones en vez de encimarse. */
+  min-width: 150px;
 }
 .tt-bill-name {
   font-size: 15px;
@@ -5427,7 +5439,8 @@ a.tt-user-plan:hover {
 .tt-bill-open-main {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 6px 12px;
   flex: 1;
   min-width: 0;
   background: none;

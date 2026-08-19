@@ -4,6 +4,7 @@ import { getMembership, MANAGES, SETTLES } from "@/lib/membership";
 import { currentUser } from "@/lib/current-user";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import BillsPanel from "@/components/dashboard/BillsPanel";
+import UserLogs from "@/components/dashboard/staff/UserLogs";
 import { openBills } from "@/lib/open-bills";
 import type { Order } from "@/lib/types";
 
@@ -74,7 +75,13 @@ export default async function BillsPage() {
         restaurantId={r.id}
         canSettle={SETTLES(membership.role)}
         askedToPay={(asking ?? []).map(a => a.table_id).filter(Boolean) as string[]}
-      />
+      >
+        {/* Sólo dueño y gerente: la bitácora dice cuánto se cobró en efectivo
+            y qué deudas se cancelaron, que no es lectura para el piso. */}
+        {MANAGES(membership.role) && (
+          <UserLogs restaurantId={r.id} currency={r.currency} />
+        )}
+      </BillsPanel>
     </ConfirmProvider>
   );
 }

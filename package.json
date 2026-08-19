@@ -34,7 +34,9 @@
     "smoke:prod": "node scripts/smoke.mjs --prod",
     "demo:reset": "node scripts/demo-reset.mjs",
     "rls": "node scripts/rls-check.mjs",
-    "rls:prod": "node scripts/rls-check.mjs --prod"
+    "rls:prod": "node scripts/rls-check.mjs --prod",
+    "roles": "node scripts/roles-check.mjs",
+    "roles:prod": "node scripts/roles-check.mjs --prod"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

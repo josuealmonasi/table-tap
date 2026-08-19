@@ -6,7 +6,7 @@ import type { RateableDish } from "@/lib/ratings";
 import RateDishesSheet from "./RateDishesSheet";
 import type { RestaurantTable } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
-import { BillIcon, CallWaiterIcon } from "@/components/ui/icons";
+import { CallWaiterIcon } from "@/components/ui/icons";
 
 interface ServiceButtonsProps {
   restaurantId: string;

@@ -5,11 +5,23 @@ import { formatMoney } from "@/lib/format";
 import { PERIODS, type Analytics, type Period } from "@/lib/analytics";
 import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
+import OrderHistory from "@/components/dashboard/OrderHistory";
+
+/** Un platillo con su promedio de estrellas y cuántas personas lo calificaron. */
+export interface RatedDish {
+  itemId: string;
+  name: string;
+  emoji: string | null;
+  avg: number;
+  count: number;
+}
 
 interface AnalyticsViewProps {
   data: Analytics;
   period: Period;
   currency: string;
+  restaurantId: string;
+  rated: RatedDish[];
 }
 
 /** Read-only analytics dashboard: stat tiles, revenue-by-day, top items, hours. */
@@ -20,7 +32,13 @@ const PERIOD_KEY: Record<string, string> = {
   month: "analytics.periodMonth",
 };
 
-export default function AnalyticsView({ data, period, currency }: AnalyticsViewProps) {
+export default function AnalyticsView({
+  data,
+  period,
+  currency,
+  restaurantId,
+  rated,
+}: AnalyticsViewProps) {
   const t = useT();
   const maxDay = Math.max(1, ...data.byDay.map(d => d.revenue));
   const maxHour = Math.max(1, ...data.byHour.map(h => h.count));
@@ -158,6 +176,50 @@ export default function AnalyticsView({ data, period, currency }: AnalyticsViewP
             </div>
           )}
         </div>
+
+        {/* Qué gustó, junto a qué se vendió. Son la misma pregunta hecha dos
+            veces, y las calificaciones no tenían pantalla en ninguna parte:
+            157 estrellas en la base y nadie que las viera. */}
+        <div className="tt-section">
+          <div className="tt-section-head">
+            <h3 className="tt-serif" style={{ margin: 0 }}>
+              {t("analytics.rated")}
+            </h3>
+            <span className="tt-muted" style={{ fontSize: 12 }}>
+              {t("analytics.ratedHint")}
+            </span>
+          </div>
+          {rated.length === 0 ? (
+            <p className="tt-muted" style={{ fontSize: 13 }}>
+              {t("analytics.noRatings")}
+            </p>
+          ) : (
+            <div className="tt-analytics-table">
+              <div className="tt-analytics-tr tt-analytics-th">
+                <span>{t("analytics.product")}</span>
+                <span style={{ textAlign: "right" }}>{t("analytics.rating")}</span>
+                <span style={{ textAlign: "right" }}>{t("analytics.votes")}</span>
+              </div>
+              {rated.map(r => (
+                <div key={r.itemId} className="tt-analytics-tr">
+                  <span className="tt-staff-cell">
+                    {r.emoji ? `${r.emoji} ` : ""}
+                    <strong>{r.name}</strong>
+                  </span>
+                  <span style={{ textAlign: "right" }} className="tt-accent">
+                    ★ {r.avg.toFixed(1)}
+                  </span>
+                  <span style={{ textAlign: "right" }}>{r.count}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* El historial vivía detrás de una pestaña en el tablero de pedidos.
+            Se busca por código cuando alguien pregunta por un pedido: eso es
+            consulta, no servicio. */}
+        <OrderHistory restaurantId={restaurantId} currency={currency} />
       </div>
     </div>
   );
