@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { tableOf } from "@/lib/table-guard";
 import { openSession } from "@/lib/table-session";
 import { capNote } from "@/lib/notes";
 import { messagesFor, translate } from "@/lib/i18n";
@@ -286,6 +287,13 @@ export async function POST(req: NextRequest) {
       feePlan && !deferred
         ? orderFeeCents(feePlan.limits, Math.round(subtotal * 100), takenThisMonth)
         : 0;
+
+    // La mesa tiene que ser de este restaurante. Sin esto se puede crear un
+    // pedido aquí con la mesa de otro local, y la sentada que abre bloquea la
+    // de sus comensales reales.
+    if (tableId && !(await tableOf(restaurantId, tableId))) {
+      return await apiError("apiErr.tableNotFound", 404);
+    }
 
     // Which sitting this order belongs to. A dine-in order joins whoever is
     // already at the table; a counter order has no table and no sitting.
