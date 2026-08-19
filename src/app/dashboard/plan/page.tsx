@@ -37,7 +37,7 @@ export default async function PlanPage() {
   if (!membership) redirect("/login");
   if (membership.role !== "owner") redirect("/dashboard");
 
-  const [plan, catalog, usage, billing] = await Promise.all([
+  const [plan, catalog, usage, billing, founders] = await Promise.all([
     getPlan(membership.restaurant.id),
     allPlans(),
     usageFor(membership.restaurant.id),
@@ -46,9 +46,14 @@ export default async function PlanPage() {
     // opens an error is worse than no button.
     createAdminClient()
       .from("restaurants")
-      .select("stripe_customer_id, terms_version, terms_accepted_at")
+      .select("stripe_customer_id, terms_version, terms_accepted_at, founding_number")
       .eq("id", membership.restaurant.id)
       .single(),
+    // Cuántos lugares de fundador se han tomado ya.
+    createAdminClient()
+      .from("restaurants")
+      .select("id", { count: "exact", head: true })
+      .not("founding_number", "is", null),
   ]);
   if (!plan) redirect("/dashboard");
 
@@ -64,6 +69,8 @@ export default async function PlanPage() {
         acceptedVersion={billing.data?.terms_version ?? null}
         acceptedAt={billing.data?.terms_accepted_at ?? null}
         currency={membership.restaurant.currency}
+        foundingNumber={billing.data?.founding_number ?? null}
+        foundersTaken={founders.count ?? 0}
       />
     </ConfirmProvider>
   );

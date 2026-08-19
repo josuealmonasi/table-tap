@@ -29,6 +29,8 @@ export default function PlanPanel({
   acceptedVersion,
   acceptedAt,
   currency,
+  foundingNumber,
+  foundersTaken,
 }: {
   plan: RestaurantPlan;
   catalog: PlanLimits[];
@@ -39,6 +41,10 @@ export default function PlanPanel({
   acceptedVersion: string | null;
   acceptedAt: string | null;
   currency: string;
+  /** Su número de fundador, si lo es. */
+  foundingNumber: number | null;
+  /** Cuántos lugares se han tomado ya, para decir cuántos quedan. */
+  foundersTaken: number;
 }) {
   const t = useT();
   const toast = useToast();
@@ -190,7 +196,13 @@ export default function PlanPanel({
         </div>
 
         <PlanUsage limits={plan.limits} usage={usage} />
-        <PlanTiers catalog={catalog} current={plan.limits.plan} currency={currency} />
+        <PlanTiers
+          catalog={catalog}
+          current={plan.limits.plan}
+          currency={currency}
+          foundingNumber={foundingNumber}
+          foundersTaken={foundersTaken}
+        />
         <PlanDocuments acceptedVersion={acceptedVersion} acceptedAt={acceptedAt} />
       </div>
     </div>

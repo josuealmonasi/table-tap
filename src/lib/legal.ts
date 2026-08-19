@@ -7,7 +7,7 @@
  * bump asks every restaurant again, and asking for consent to a typo fix
  * teaches people to click through without reading.
  */
-export const TERMS_VERSION = "2026-08-19";
+export const TERMS_VERSION = "2026-08-19b";
 
 /**
  * Where the documents live.

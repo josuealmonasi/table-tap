@@ -6,6 +6,7 @@ import { isSelfServe } from "@/lib/billing";
 import { launchSaving, planLabel, type PlanLimits, type PlanName } from "@/lib/plan";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
+import { foundingOpen, slotsLeft } from "@/lib/founding";
 import { CheckIcon } from "@/components/ui/icons";
 
 /** The line under a tier's price: what it holds, in the order an owner asks. */
@@ -38,14 +39,22 @@ export default function PlanTiers({
   catalog,
   current,
   currency,
+  foundingNumber,
+  foundersTaken,
 }: {
   catalog: PlanLimits[];
   current: PlanName;
   currency: string;
+  foundingNumber: number | null;
+  foundersTaken: number;
 }) {
   const t = useT();
   const toast = useToast();
   const [busy, setBusy] = useState<PlanName | null>(null);
+
+  const isFounder = foundingNumber !== null;
+  const left = slotsLeft(foundersTaken);
+  const stillOpen = foundingOpen(foundersTaken);
 
   async function subscribe(plan: PlanName): Promise<void> {
     setBusy(plan);
@@ -78,6 +87,20 @@ export default function PlanTiers({
           {t("plan.tiersHint")}
         </span>
       </div>
+
+      {/* Fundador: la promesa es que el precio no sube, no que hoy esté
+          barato. A quien ya lo es se le dice su número — es el recibo. */}
+      {isFounder ? (
+        <p className="tt-founding tt-founding-locked">
+          <strong>{t("plan.foundingYou", { n: foundingNumber })}</strong>{" "}
+          {t("plan.foundingYouBody")}
+        </p>
+      ) : stillOpen ? (
+        <p className="tt-founding">
+          <strong>{t("plan.foundingLeft", { n: left })}</strong>{" "}
+          {t("plan.foundingLeftBody")}
+        </p>
+      ) : null}
 
       <div className="tt-tier-grid">
         {catalog.map(tier => {
@@ -114,13 +137,16 @@ export default function PlanTiers({
                 )}
               </div>
 
-              {/* What it will cost when the launch offer ends, struck through
-                  beside what they pay today. Nobody should find out later that
-                  the price they signed up at was temporary. */}
+              {/* Lo que costará cuando se acaben los lugares de fundador,
+                  tachado junto a lo que se paga hoy. El tachado dice algo
+                  verdadero: es el precio de quien llegue después, no un número
+                  inventado para que el de arriba se vea barato. */}
               {launchSaving(tier) > 0 && (
                 <p className="tt-tier-launch">
                   <s>{formatMoney(tier.list_price ?? 0, currency)}</s>{" "}
-                  <span className="tt-save">{t("plan.launchPrice")}</span>
+                  <span className="tt-save">
+                    {isFounder ? t("plan.foundingLocked") : t("plan.foundingPrice")}
+                  </span>
                 </p>
               )}
 

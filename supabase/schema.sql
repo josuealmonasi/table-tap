@@ -1231,6 +1231,46 @@ alter table restaurants add column if not exists terms_accepted_email text;
 -- it would rather not be told.
 alter table restaurants add column if not exists badges_enabled boolean not null default true;
 
+-- ── Precio de fundador ─────────────────────────────────────────────────────
+-- Los primeros restaurantes que contratan un plan de paga se quedan con el
+-- precio con el que entraron, para siempre, mientras no cambien de plan.
+--
+-- Es la alternativa honesta a un precio tachado que nadie paga nunca: cuando
+-- se acaben los lugares, el precio de lista es de verdad el que pagan los que
+-- llegan después, y el tachado deja de ser un adorno.
+--
+-- El número también es el recibo de la promesa: queda escrito quién es
+-- fundador y en qué orden llegó.
+alter table restaurants add column if not exists founding_number int;
+create unique index if not exists restaurants_founding_number_idx
+  on restaurants(founding_number) where founding_number is not null;
+
+-- Toma el siguiente lugar de fundador, si queda alguno.
+--
+-- El advisory lock serializa la asignación: dos restaurantes que contratan en
+-- el mismo segundo calcularían el mismo número y uno se quedaría fuera con un
+-- lugar todavía libre. Se libera al terminar la transacción.
+create or replace function public.claim_founding_price(p_restaurant uuid, p_limit int)
+returns int language plpgsql security definer set search_path = public as $$
+declare v_next int;
+begin
+  -- Ya es fundador: conserva su número, pase lo que pase.
+  select founding_number into v_next from restaurants where id = p_restaurant;
+  if v_next is not null then return v_next; end if;
+
+  perform pg_advisory_xact_lock(hashtext('tabletap:founding'));
+
+  select coalesce(max(founding_number), 0) + 1 into v_next from restaurants;
+  if v_next > p_limit then return null; end if;
+
+  update restaurants set founding_number = v_next
+   where id = p_restaurant and founding_number is null;
+  return v_next;
+end; $$;
+revoke all on function public.claim_founding_price(uuid, int)
+  from public, anon, authenticated;
+grant execute on function public.claim_founding_price(uuid, int) to service_role;
+
 -- ── Table sessions ─────────────────────────────────────────────────────────
 -- A sitting: one party at one table, from their first order until the table
 -- is clear again.

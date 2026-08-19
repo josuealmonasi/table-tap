@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
+import { FOUNDING_SLOTS } from "@/lib/founding";
 import { closeSessionsFor } from "@/lib/table-session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readPlanName, subscriptionOutcome } from "@/lib/billing";
@@ -176,7 +177,21 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
   }
 
   const outcome = subscriptionOutcome(sub.status, plan);
-  const { error } = await createAdminClient()
+  const db = createAdminClient();
+
+  // El lugar de fundador se toma al contratar, no al registrarse: si contara
+  // el registro, las altas gratuitas se comerían los lugares sin que nadie
+  // haya pagado nunca. Si ya es fundador conserva su número.
+  if (outcome.status === "active" || outcome.status === "trialing") {
+    const { error: claimError } = await db.rpc("claim_founding_price", {
+      p_restaurant: restaurantId,
+      p_limit: FOUNDING_SLOTS,
+    });
+    // No ser fundador no es un fallo — se acabaron los lugares y ya.
+    if (claimError) console.error("founding claim failed", restaurantId, claimError.message);
+  }
+
+  const { error } = await db
     .from("restaurants")
     .update({
       plan: outcome.plan,
