@@ -300,6 +300,8 @@ myBill: "Ver mi cuenta",
     nothing: "Esta mesa no debe nada.",
   },
   cart: {
+    orderPayLater: "Ordenar y pagar al final",
+    payNowHint: "Paga ahora con tarjeta, o deja la cuenta abierta y paga al final.",
     payNow: "Pagar ahora",
     payLater: "Ordenar y pagar al final",
     placeOrder: "Ordenar",

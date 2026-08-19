@@ -225,23 +225,30 @@ export default function CartScreen({
                 className="tt-btn tt-btn-primary tt-btn-lg"
                 style={{ width: "100%" }}
                 disabled={!canCheckout || loading}
-                onClick={() => onCheckout(payLaterAllowed)}
+                onClick={() => onCheckout(false)}
               >
-                {/* The busy label has to match the button that was pressed.
-                    Announcing a redirect to payment when the tap only sends
-                    food to the kitchen tells the diner their card is about to
-                    be charged, which is both untrue and alarming at a table
-                    that settles at the end. */}
-                {t(
-                  payLaterAllowed
-                    ? loading
-                      ? "cart.placingOrder"
-                      : "cart.placeOrder"
-                    : loading
-                      ? "cart.redirecting"
-                      : "cart.proceed",
-                )}
+                {t(loading ? "cart.redirecting" : "cart.proceed")}
               </button>
+              {/* Where the table settles at the end, that is the diner's
+                  choice to make and not something they should have to find:
+                  paying now stays the offer on top, and leaving the bill open
+                  is the plain second option under it. Before this the setting
+                  decided for them, so a table that allowed settling later gave
+                  the diner no way to pay at all. */}
+              {payLaterAllowed && (
+                <button
+                  className="tt-btn tt-btn-outline tt-btn-lg"
+                  style={{ width: "100%", marginTop: 10 }}
+                  disabled={!canCheckout || loading}
+                  onClick={() => onCheckout(true)}
+                >
+                  {/* The busy label has to match the button that was pressed:
+                      announcing a redirect to payment when the tap only sends
+                      food to the kitchen says a card is about to be charged,
+                      which is untrue and alarming at a table paying later. */}
+                  {t(loading ? "cart.placingOrder" : "cart.orderPayLater")}
+                </button>
+              )}
               {/* And the small print underneath answers the question the
                   button raises: how am I paying? Stripe's name reassures the
                   diner who is about to hand over a card, and says nothing to
@@ -253,7 +260,7 @@ export default function CartScreen({
                 {payLaterAllowed ? (
                   <>
                     <BillIcon size={12} weight="bold" style={{ verticalAlign: "-1px" }} />{" "}
-                    {t("cart.payAtEnd")}
+                    {t("cart.payNowHint")}
                   </>
                 ) : (
                   <>

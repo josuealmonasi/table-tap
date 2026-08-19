@@ -103,10 +103,26 @@ phone, which is the waiter's screen. Give the elastic child a real minimum and
 let the row wrap instead. Then grow the skeleton by the same line
 (`bills/loading.tsx`), or the list jumps when it loads.
 
+**A checker that filters out the broken case will always pass.**
+The first version of the layout audit skipped every element with
+`width === 0` as "not visible" — which is precisely the shape of the bug it
+was written to catch, so it went green on a cart whose dish name was squashed
+to nothing. It also measured `scrollWidth`, which is always 0 on an inline
+element like the `<strong>` holding every dish name. **Prove a new guard by
+breaking the thing on purpose and watching it fail.**
+
+**Text can be unreadable while every test passes.**
+The cart line that a customer sees before paying spent a release with the dish
+name at 38px on a phone — one word per line, the promo badge painted over the
+struck price, the amount hidden behind the button. Nothing failed. `pnpm layout`
+is what now catches this: every screen, phone and desktop, checked for text
+squashed to nothing, text over text, and the page running off the side.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`
 2. `pnpm smoke` — every page still renders for a signed-in user
+2b. `pnpm layout` — every page can still be *read*, at 390px and 1280px
 3. `pnpm db:reset` on dev — proves the schema still builds from nothing
 4. Open the thing you changed in a browser, at 1280px and at 390px, in Spanish
 5. If it is money, name every route that touches it and check each one

@@ -238,6 +238,17 @@ a.tt-btn {
   background: var(--tt-danger);
   color: var(--tt-white);
 }
+/* La segunda opción de una pantalla, no un enlace: se ve tocable sin competir
+   con la principal. `tt-btn-ghost` es texto suelto — sirve para "Cancelar" al
+   lado de un botón, pero solo, a lo ancho, no parece un botón siquiera. */
+.tt-btn-outline {
+  background: var(--tt-white);
+  color: var(--tt-ink);
+  border: 1px solid var(--tt-line);
+}
+.tt-btn-outline:hover:not(:disabled) {
+  background: var(--tt-surface);
+}
 .tt-btn-sm {
   font-size: 13px;
   padding: 8px 16px;
@@ -1613,10 +1624,14 @@ a.tt-btn {
 /* One cart line: emoji, the dish and its details, then price + controls.
    Centred as a group so the price and the icons land on the dish's line
    rather than stepping down below it. */
+/* La fila de un platillo: foto, nombre, y a la derecha precio y controles.
+   Se parte en dos renglones cuando el nombre ya no cabe — ver .tt-line-body,
+   que es lo único elástico de la fila. */
 .tt-line {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px 10px;
 }
 /* The dish's picture on a cart or bill line. A fixed box, so a line is the
    same height whether the kitchen has photographed that dish or not — the
@@ -1634,8 +1649,12 @@ a.tt-btn {
 }
 .tt-line-body {
   flex: 1;
-  /* Without this a long dish name refuses to wrap and pushes the price off. */
-  min-width: 0;
+  /* El nombre es lo único elástico de la fila. Con min-width 0 se aplastaba a
+     cero en cuanto el precio tachado, la etiqueta de oferta, el lápiz y el
+     contador ya no cabían: "Comida del día" salía una palabra por renglón y
+     la etiqueta roja se encimaba sobre el precio. Con un mínimo, la fila se
+     parte en dos renglones en vez de encimarse. */
+  min-width: 150px;
 }
 /* The customer column is capped at 460px on every screen, so the price and
    both controls share a line with the dish name in about 400px. Everything
@@ -1645,6 +1664,9 @@ a.tt-btn {
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+  /* Cuando bajan al segundo renglón siguen a la derecha, donde el precio
+     siempre estuvo. */
+  margin-left: auto;
 }
 /* Edit gets the stepper's pill so the two read as one group of controls
    rather than a loose icon parked beside a button. */
@@ -3244,7 +3266,10 @@ a.tt-btn {
      borde de su píldora. Ahora crecen desde su contenido y se reparten lo que
      sobra; la fila envuelve, porque cinco píldoras con aire no caben en un
      teléfono y salirse de la hoja es peor que bajar a un segundo renglón. */
-  flex: 1 1 auto;
+  /* Y no crecen: repartir el sobrante dejaba a "Otro", solo en el segundo
+     renglón, estirado de lado a lado como si fuera un botón de acción y no
+     una opción más. Cada píldora mide lo que dice. */
+  flex: 0 1 auto;
   min-width: max-content;
   white-space: nowrap;
   border: 1px solid var(--tt-cream);
