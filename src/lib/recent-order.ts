@@ -6,16 +6,31 @@
 // so keeping them on their device carries no extra risk. They are never proof
 // on their own: the server re-reads every order before it acts on one.
 
-const key = (restaurantId: string) => `tt-order:${restaurantId}`;
+/**
+ * The in-progress order is remembered per table, not per restaurant.
+ *
+ * Keyed by restaurant alone, a phone that ordered at Mesa 2 and later scanned
+ * Mesa 10 was offered its Mesa 2 order — and the tracker cheerfully said the
+ * food was going to Mesa 2 while the menu behind it said MESA 10. One diner
+ * moving tables, or a shared house phone, was enough to produce it.
+ *
+ * A counter order has no table, so it keeps the plain key it always had.
+ */
+const key = (restaurantId: string, tableId?: string | null) =>
+  tableId ? `tt-order:${restaurantId}:${tableId}` : `tt-order:${restaurantId}`;
 const listKey = (restaurantId: string) => `tt-orders:${restaurantId}`;
 
 /** How many orders back we remember. A table session, not a lifetime. */
 const MAX_REMEMBERED = 10;
 
 /** Store this order as the restaurant's in-progress one for this device. */
-export function rememberRecentOrder(restaurantId: string, orderId: string): void {
+export function rememberRecentOrder(
+  restaurantId: string,
+  orderId: string,
+  tableId?: string | null,
+): void {
   try {
-    localStorage.setItem(key(restaurantId), orderId);
+    localStorage.setItem(key(restaurantId, tableId), orderId);
     // Also append to the history. The single key above answers "what should
     // the track-order link point at"; this list answers "what has this device
     // bought", which is what the rating prompt is entitled to ask about.
@@ -31,9 +46,9 @@ export function rememberRecentOrder(restaurantId: string, orderId: string): void
 }
 
 /** Clear the in-progress order (e.g. once it's completed or cancelled). */
-export function forgetOrder(restaurantId: string): void {
+export function forgetOrder(restaurantId: string, tableId?: string | null): void {
   try {
-    localStorage.removeItem(key(restaurantId));
+    localStorage.removeItem(key(restaurantId, tableId));
     // The history stays: the order is finished, which is exactly when it
     // becomes rateable.
   } catch {
@@ -42,9 +57,12 @@ export function forgetOrder(restaurantId: string): void {
 }
 
 /** The stored in-progress order id for this restaurant, if any. */
-export function recallOrder(restaurantId: string): string | null {
+export function recallOrder(
+  restaurantId: string,
+  tableId?: string | null,
+): string | null {
   try {
-    return localStorage.getItem(key(restaurantId));
+    return localStorage.getItem(key(restaurantId, tableId));
   } catch {
     return null;
   }
