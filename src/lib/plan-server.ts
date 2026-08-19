@@ -79,6 +79,20 @@ async function endTrial(restaurantId: string): Promise<RestaurantPlan | null> {
 }
 
 /** Every tier, cheapest first — for naming what an upgrade would unlock. */
+/**
+ * Cuántos lugares de fundador se han tomado.
+ *
+ * Lo leen la pantalla de Plan y el checkout, para que el precio que se muestra
+ * y el que se cobra salgan del mismo número.
+ */
+export const foundersTaken = cache(async (): Promise<number> => {
+  const { count } = await createAdminClient()
+    .from("restaurants")
+    .select("id", { count: "exact", head: true })
+    .not("founding_number", "is", null);
+  return count ?? 0;
+});
+
 export const allPlans = cache(async (): Promise<PlanLimits[]> => {
   const { data } = await createAdminClient()
     .from("plan_limits")

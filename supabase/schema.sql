@@ -1242,6 +1242,11 @@ alter table restaurants add column if not exists badges_enabled boolean not null
 -- El número también es el recibo de la promesa: queda escrito quién es
 -- fundador y en qué orden llegó.
 alter table restaurants add column if not exists founding_number int;
+-- Lo que este restaurante paga de verdad al mes, tal como quedó en Stripe.
+-- Sin esto, la pantalla de Plan mostraría el precio base del catálogo, y a
+-- quien contrató después de subir los precios le diría que paga menos de lo
+-- que le cobramos.
+alter table restaurants add column if not exists subscribed_price numeric;
 create unique index if not exists restaurants_founding_number_idx
   on restaurants(founding_number) where founding_number is not null;
 

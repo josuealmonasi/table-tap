@@ -46,7 +46,7 @@ export default async function PlanPage() {
     // opens an error is worse than no button.
     createAdminClient()
       .from("restaurants")
-      .select("stripe_customer_id, terms_version, terms_accepted_at, founding_number")
+      .select("stripe_customer_id, terms_version, terms_accepted_at, founding_number, subscribed_price")
       .eq("id", membership.restaurant.id)
       .single(),
     // Cuántos lugares de fundador se han tomado ya.
@@ -71,6 +71,7 @@ export default async function PlanPage() {
         currency={membership.restaurant.currency}
         foundingNumber={billing.data?.founding_number ?? null}
         foundersTaken={founders.count ?? 0}
+        subscribedPrice={billing.data?.subscribed_price ?? null}
       />
     </ConfirmProvider>
   );

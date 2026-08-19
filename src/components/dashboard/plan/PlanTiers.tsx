@@ -6,7 +6,7 @@ import { isSelfServe } from "@/lib/billing";
 import { launchSaving, planLabel, type PlanLimits, type PlanName } from "@/lib/plan";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
-import { foundingOpen, slotsLeft } from "@/lib/founding";
+import { currentPrice, foundingOpen, slotsLeft } from "@/lib/founding";
 import { CheckIcon } from "@/components/ui/icons";
 
 /** The line under a tier's price: what it holds, in the order an owner asks. */
@@ -131,7 +131,7 @@ export default function PlanTiers({
                 )}
                 {tier.monthly_price === 0
                   ? t("plan.free")
-                  : formatMoney(tier.monthly_price, currency)}
+                  : formatMoney(currentPrice(tier, foundersTaken), currency)}
                 {tier.monthly_price > 0 && (
                   <span className="tt-tier-per">{t("plan.perMonth")}</span>
                 )}
@@ -141,7 +141,7 @@ export default function PlanTiers({
                   tachado junto a lo que se paga hoy. El tachado dice algo
                   verdadero: es el precio de quien llegue después, no un número
                   inventado para que el de arriba se vea barato. */}
-              {launchSaving(tier) > 0 && (
+              {stillOpen && launchSaving(tier) > 0 && (
                 <p className="tt-tier-launch">
                   <s>{formatMoney(tier.list_price ?? 0, currency)}</s>{" "}
                   <span className="tt-save">
