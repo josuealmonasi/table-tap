@@ -605,6 +605,11 @@ export const es: Messages = {
       tooLong: "La nota es demasiado larga.",
     },
   },
+  sitting: {
+    title: "Tienes una cuenta abierta",
+    body: "En la {table} quedan {amount} por pagar. Págala antes de pedir en otra mesa.",
+    hint: "Si ya pagaste, pídele a tu mesero que cierre la cuenta y vuelve a escanear.",
+  },
   tracker: {
     received: "¡Pedido recibido!",
     preparing: "El chef lo está preparando",

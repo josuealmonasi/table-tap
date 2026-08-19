@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { billWindowStart, unpaidOrders } from "@/lib/table-bill";
+import { currentSessionId as openTableSession, sessionAtTable } from "@/lib/table-session";
+import { unpaidOrders } from "@/lib/table-bill";
 import type { Order } from "@/lib/types";
 
 /**
@@ -10,8 +11,8 @@ import type { Order } from "@/lib/types";
  * the fields a diner needs to recognise their food and settle for it. Same
  * shape as the order tracker, for the same reason.
  *
- * For a diner this is bounded to the current service, so the party sitting
- * down now is never shown — or asked to pay — what the last party left behind.
+ * For a diner this is the sitting they are part of, so the party sitting down
+ * now is never shown — or asked to pay — what the last party left behind.
  * Staff see the lot.
  *
  * Anyone holding the table's URL can see what that table owes. The URL is
@@ -35,6 +36,12 @@ export async function fetchTableBill(
    * looking at a bill that says MX$105 while the app says nothing is owed.
    */
   audience: "diner" | "staff" = "diner",
+  /**
+   * The sitting this phone is part of, if it has one. Its own bill stays
+   * payable however long it has been open — the diner who ordered it is the
+   * one person who should never be told the table owes nothing.
+   */
+  sessionId?: string | null,
 ): Promise<Order[]> {
   let query = createAdminClient()
     .from("orders")
@@ -50,9 +57,15 @@ export async function fetchTableBill(
     .order("created_at", { ascending: true });
 
   if (audience === "diner") {
-    // An order nobody settled last night is still owed — it is on the
-    // manager's open bills — but it is not this party's to pay.
-    query = query.gte("created_at", billWindowStart().toISOString());
+    // Their own sitting first: a phone that ordered here is owed a way to pay,
+    // however long the table has been sitting. Otherwise the table's current
+    // sitting, which is empty for a diner who has just scanned a table the
+    // last party left a debt on — that debt is the manager's to resolve, and
+    // showing it here would ask a stranger to pay it.
+    const mine = sessionId ? await sessionAtTable(sessionId, tableId) : null;
+    const session = mine ?? (await openTableSession(restaurantId, tableId));
+    if (!session) return [];
+    query = query.eq("session_id", session);
   }
 
   const { data, error } = await query;

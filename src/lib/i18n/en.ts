@@ -608,6 +608,11 @@ export const en = {
       tooLong: "That note is too long.",
     },
   },
+  sitting: {
+    title: "You have an open bill",
+    body: "Table {table} still owes {amount}. Settle it before ordering at another table.",
+    hint: "If you have already paid, ask your waiter to close the bill and scan again.",
+  },
   tracker: {
     received: "Order received!",
     preparing: "Chef is preparing it",

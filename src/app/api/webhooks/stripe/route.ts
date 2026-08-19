@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
+import { closeSessionsFor } from "@/lib/table-session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readPlanName, subscriptionOutcome } from "@/lib/billing";
 import type Stripe from "stripe";
@@ -38,10 +39,14 @@ export async function POST(req: NextRequest) {
       .filter(Boolean);
     if (settleIds.length > 0 && session.payment_status === "paid") {
       const db = createAdminClient();
-      await db
+      const { data: settled } = await db
         .from("orders")
         .update({ paid: true, pay_method: "card" })
-        .in("id", settleIds);
+        .in("id", settleIds)
+        .select("session_id");
+
+      // Paid in full is the ordinary way a table empties.
+      await closeSessionsFor(settled ?? [], "paid");
 
       // Our cut of this settlement, recorded on the first of the settled
       // orders — the same row that carries the tip. It is what the monthly
@@ -107,6 +112,14 @@ export async function POST(req: NextRequest) {
             typeof session.payment_intent === "string" ? session.payment_intent : null,
         })
         .eq("id", orderId);
+
+      // A pay-now order can be the only thing the table owed.
+      const { data: justPaid } = await supabase
+        .from("orders")
+        .select("session_id")
+        .eq("id", orderId)
+        .maybeSingle();
+      await closeSessionsFor(justPaid ? [justPaid] : [], "paid");
 
       // The coupon use was reserved at checkout; the payment makes it real.
       await supabase
