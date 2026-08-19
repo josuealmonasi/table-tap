@@ -5316,3 +5316,17 @@ a.tt-user-plan:hover {
     padding-bottom: 64px;
   }
 }
+
+/* Closing a bill without collecting sits below the discount form, behind a
+   rule: it is the opposite of what the form does, and it should not be the
+   thing a thumb lands on by accident. */
+.tt-bill-close-row {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--tt-line);
+  display: flex;
+  justify-content: flex-start;
+}
+.tt-bill-close {
+  color: var(--tt-danger);
+}
