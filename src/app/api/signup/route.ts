@@ -6,8 +6,16 @@ import { clientIp, isRateLimited } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
-/** What a new restaurant gets, and for how long, before a card is needed. */
-const TRIAL_PLAN = "casa";
+/**
+ * What a new restaurant gets, and for how long, before a card is needed.
+ *
+ * Servicio, not Casa. The trial exists to show that ordering from the table
+ * works, which is what a restaurant is deciding about — not to hand out the
+ * top tier for a month and then take it away, which teaches them the product
+ * as the version they will not be paying for and makes every upgrade feel
+ * like a downgrade.
+ */
+const TRIAL_PLAN = "servicio";
 const TRIAL_DAYS = 30;
 
 // POST /api/signup
