@@ -13,7 +13,6 @@ import { BOARD_COLUMNS, columnOrders } from "@/lib/order-flow";
 import { useRouter } from "next/navigation";
 import ServiceRequestsBar from "./ServiceRequestsBar";
 import OrderHistory from "./OrderHistory";
-import OpenTablesBar from "./OpenTablesBar";
 import { EmptyIcon } from "@/components/ui/icons";
 
 interface OrdersBoardProps {
@@ -137,15 +136,6 @@ export default function OrdersBoard({
           onSettled={() => router.refresh()}
         />
 
-        {canSettle && (
-          <OpenTablesBar
-            canApprove={canApprove}
-            restaurantId={restaurant.id}
-            currency={restaurant.currency}
-            orders={orders}
-            onSettled={() => router.refresh()}
-          />
-        )}
 
         <div className="tt-board-tabs" role="tablist">
           <button
