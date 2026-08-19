@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { currentPrice } from "@/lib/founding";
+import { foundersTaken } from "@/lib/plan-server";
 import { actingOwner } from "@/lib/api-guard";
 import { isSelfServe, readPlanName } from "@/lib/billing";
 import { planLabel } from "@/lib/plan";
@@ -23,6 +25,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!plan || !isSelfServe(plan)) return await apiError("apiErr.pickPlan", 400);
 
   const limits = (await allPlans()).find(p => p.plan === plan);
+  // El precio sube solo al llenarse el lugar 50: se calcula aquí, con el mismo
+  // conteo que vio la pantalla de Plan, para que lo que se cobra y lo que se
+  // mostró no puedan discrepar.
+  const taken = await foundersTaken();
   if (!limits) return await apiError("apiErr.pickPlan", 400);
 
   const db = createAdminClient();
@@ -63,7 +69,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             quantity: 1,
             price_data: {
               currency: (restaurant.currency ?? "MXN").toLowerCase(),
-              unit_amount: Math.round(limits.monthly_price * 100),
+              unit_amount: Math.round(currentPrice(limits, taken) * 100),
               recurring: { interval: "month" },
               product_data: { name: `TableTap ${planLabel(plan)}` },
             },

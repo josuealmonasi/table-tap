@@ -183,13 +183,27 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
   // el registro, las altas gratuitas se comerían los lugares sin que nadie
   // haya pagado nunca. Si ya es fundador conserva su número.
   if (outcome.status === "active" || outcome.status === "trialing") {
-    const { error: claimError } = await db.rpc("claim_founding_price", {
+    const { data: number, error: claimError } = await db.rpc("claim_founding_price", {
       p_restaurant: restaurantId,
       p_limit: FOUNDING_SLOTS,
     });
-    // No ser fundador no es un fallo — se acabaron los lugares y ya.
     if (claimError) console.error("founding claim failed", restaurantId, claimError.message);
+
+    // Dos restaurantes que contratan en el mismo segundo pueden ver los dos el
+    // precio de fundador y sólo caber uno. A quien ya se le cobró ese precio se
+    // le honra: cobrar de fundador y no serlo sería quedarnos con su dinero
+    // bajo una promesa que no pensábamos cumplir.
+    if (number === null && (await paidFoundingPrice(db, sub, plan))) {
+      await db.rpc("claim_founding_price", {
+        p_restaurant: restaurantId,
+        p_limit: FOUNDING_SLOTS + 25,
+      });
+    }
   }
+
+  // Lo que Stripe le cobra realmente, para que la pantalla de Plan no muestre
+  // el precio del catálogo a quien contrató con otro.
+  const charged = sub.items?.data?.[0]?.price?.unit_amount;
 
   const { error } = await db
     .from("restaurants")
@@ -197,6 +211,7 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
       plan: outcome.plan,
       plan_status: outcome.status,
       stripe_subscription_id: sub.id,
+      ...(typeof charged === "number" ? { subscribed_price: charged / 100 } : {}),
       // The trial is Stripe's to run once there is a subscription; ours only
       // covers the stretch before one exists.
       trial_ends_at: null,
@@ -204,6 +219,28 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
     .eq("id", restaurantId);
 
   if (error) console.error("subscription update failed", sub.id, error.message);
+}
+
+/**
+ * ¿Se le cobró el precio de fundador a esta suscripción?
+ *
+ * Se compara contra el precio base del plan, que es justo el que sólo pagan
+ * los fundadores una vez que los lugares se acabaron.
+ */
+async function paidFoundingPrice(
+  db: ReturnType<typeof createAdminClient>,
+  sub: Stripe.Subscription,
+  plan: string,
+): Promise<boolean> {
+  const charged = sub.items?.data?.[0]?.price?.unit_amount;
+  if (typeof charged !== "number") return false;
+  const { data } = await db
+    .from("plan_limits")
+    .select("monthly_price")
+    .eq("plan", plan)
+    .maybeSingle();
+  const founding = (data as { monthly_price: number } | null)?.monthly_price;
+  return typeof founding === "number" && Math.round(founding * 100) === charged;
 }
 
 /**

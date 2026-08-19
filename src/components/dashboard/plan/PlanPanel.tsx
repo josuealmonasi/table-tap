@@ -31,6 +31,7 @@ export default function PlanPanel({
   currency,
   foundingNumber,
   foundersTaken,
+  subscribedPrice,
 }: {
   plan: RestaurantPlan;
   catalog: PlanLimits[];
@@ -45,7 +46,12 @@ export default function PlanPanel({
   foundingNumber: number | null;
   /** Cuántos lugares se han tomado ya, para decir cuántos quedan. */
   foundersTaken: number;
+  /** Lo que Stripe le cobra, cuando ya hay suscripción. */
+  subscribedPrice: number | null;
 }) {
+  // Lo que paga este restaurante. Cae al precio del catálogo sólo mientras no
+  // haya suscripción — en la prueba gratis, por ejemplo.
+  const paidPrice = subscribedPrice ?? plan.limits.monthly_price;
   const t = useT();
   const toast = useToast();
   const confirm = useConfirm();
@@ -133,11 +139,11 @@ export default function PlanPanel({
             <strong className="tt-serif tt-plan-name">{planLabel(plan.limits.plan)}</strong>
             <div className="tt-plan-cost">
               <strong>
-                {plan.limits.monthly_price === 0
+                {paidPrice === 0
                   ? t("plan.free")
-                  : formatMoney(plan.limits.monthly_price, currency)}
+                  : formatMoney(paidPrice, currency)}
               </strong>
-              {plan.limits.monthly_price > 0 && <span>{t("plan.perMonth")}</span>}
+              {paidPrice > 0 && <span>{t("plan.perMonth")}</span>}
             </div>
           </div>
           <p className={TONE[plan.status]}>
