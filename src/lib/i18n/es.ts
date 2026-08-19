@@ -557,7 +557,7 @@ export const es: Messages = {
     askTitle: "¿Quieres tu recibo?",
     askBody: "Te lo mandamos por correo. Nada más — sin cuenta, sin listas.",
     placeholder: "tu@correo.com",
-    promise: "Se usa una vez, para este recibo. No te volvemos a escribir.",
+    promise: "Se usa una vez, para este recibo, y no lo guardamos. No te volvemos a escribir.",
     send: "Enviar mi recibo",
     sending: "Enviando…",
     noThanks: "No, gracias",
@@ -571,7 +571,7 @@ export const es: Messages = {
     heading: "Recibo {code}",
     table: "Mesa {label}",
     service: "Servicio",
-    footer: "Gracias por tu visita. Este recibo se envió porque lo pediste — no guardamos tu correo para nada más.",
+    footer: "Gracias por tu visita. Este recibo se envió porque lo pediste — no guardamos tu correo.",
     notFiscal: "Este recibo no es un comprobante fiscal (CFDI). Si necesitas factura, pídesela al restaurante.",
   },
   tracker: {

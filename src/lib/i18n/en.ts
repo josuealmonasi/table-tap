@@ -560,7 +560,7 @@ export const en = {
     askTitle: "Want your receipt?",
     askBody: "We can email it to you. Nothing else — no account, no list.",
     placeholder: "you@email.com",
-    promise: "Used once, for this receipt. We will not write to you again.",
+    promise: "Used once, for this receipt, and never stored. We will not write to you again.",
     send: "Send my receipt",
     sending: "Sending…",
     noThanks: "No thanks",
@@ -574,7 +574,7 @@ export const en = {
     heading: "Receipt {code}",
     table: "Table {label}",
     service: "Service",
-    footer: "Thanks for coming. This receipt was sent because you asked for it — we keep no other record of your email.",
+    footer: "Thanks for coming. This receipt was sent because you asked for it — we do not keep your email.",
     notFiscal: "This receipt is not a tax invoice (CFDI). If you need one, ask the restaurant.",
   },
   tracker: {
