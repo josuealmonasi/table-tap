@@ -314,7 +314,19 @@ export default function BillDiscountDialog({
                 {error}
               </p>
             )}
+            {/* Los tres en la misma fila: cerrar la cuenta a la izquierda, lo
+                que hace este formulario a la derecha. Antes colgaba en su
+                propio renglón, pegado al borde contrario al de los otros dos.
+                Quedan tan separados como cabe en la fila, que es lo que evita
+                que el pulgar caiga en el equivocado. */}
             <div className="tt-prodform-actions" style={{ marginTop: 14 }}>
+              <button
+                type="button"
+                className="tt-btn tt-btn-ghost tt-btn-sm tt-bill-close"
+                onClick={() => setClosing(true)}
+              >
+                {canApprove ? t("writeOff.title") : t("writeOff.request")}
+              </button>
               <button
                 type="submit"
                 className="tt-btn tt-btn-primary tt-btn-sm"
@@ -328,20 +340,6 @@ export default function BillDiscountDialog({
                 onClick={onClose}
               >
                 {t("menu.cancel")}
-              </button>
-            </div>
-
-            {/* Closing a bill without collecting for it belongs on the screen
-              where the unpaid bills are, not only in the settle sheet the
-              floor opens from the board. Separated by a rule and worded
-              plainly: it is the opposite of what the form above does. */}
-            <div className="tt-bill-close-row">
-              <button
-                type="button"
-                className="tt-btn tt-btn-ghost tt-btn-sm tt-bill-close"
-                onClick={() => setClosing(true)}
-              >
-                {canApprove ? t("writeOff.title") : t("writeOff.request")}
               </button>
             </div>
           </form>

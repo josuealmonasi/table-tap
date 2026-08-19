@@ -5325,15 +5325,30 @@ a.tt-user-plan:hover {
 /* Closing a bill without collecting sits below the discount form, behind a
    rule: it is the opposite of what the form does, and it should not be the
    thing a thumb lands on by accident. */
-.tt-bill-close-row {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--tt-line);
-  display: flex;
-  justify-content: flex-start;
-}
+/* Cerrar la cuenta vive en la misma fila que los otros dos, pero empujado al
+   extremo contrario: `.tt-prodform-actions` alinea a la derecha, y el margen
+   automático manda éste a la izquierda sin tocar la clase que comparten diez
+   formularios más. */
 .tt-bill-close {
+  margin-right: auto;
   color: var(--tt-danger);
+}
+
+/* En un teléfono los tres en fila parten las etiquetas en dos renglones y
+   dejan el botón que borra una deuda a ocho píxeles del principal. Apilados:
+   primero lo que hace este formulario, y cancelar la cuenta hasta abajo, lejos
+   del pulgar. Acotado con :has() para no tocar los otros diez formularios que
+   comparten .tt-prodform-actions. */
+@media (max-width: 560px) {
+  .tt-prodform-actions:has(.tt-bill-close) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .tt-prodform-actions .tt-bill-close {
+    order: 3;
+    margin-right: 0;
+    margin-top: 10px;
+  }
 }
 
 /* How many things a section is waiting on. Borrowed from the POPULAR chip:
