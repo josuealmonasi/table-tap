@@ -31,7 +31,8 @@
     "db:ratings:prod": "node scripts/seed-ratings.mjs --prod",
     "prod:check": "node scripts/prod-check.mjs",
     "smoke": "node scripts/smoke.mjs",
-    "smoke:prod": "node scripts/smoke.mjs --prod"
+    "smoke:prod": "node scripts/smoke.mjs --prod",
+    "demo:reset": "node scripts/demo-reset.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
