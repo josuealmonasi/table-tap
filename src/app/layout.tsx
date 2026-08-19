@@ -51,7 +51,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 plan={membership.restaurant.plan}
               />
             )}
-            {membership && <SectionNav role={membership.role} />}
+            {membership && (
+              <SectionNav
+                role={membership.role}
+                restaurantId={membership.restaurant.id}
+              />
+            )}
             {admin && <SectionNav role="admin" />}
             {/* Only the owner is asked, and only in the dashboard: the diner's
                 menu renders through this same layout, and holding up somebody's

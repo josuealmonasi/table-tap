@@ -704,6 +704,8 @@ export const es: Messages = {
     promosShort: "Promos",
     menus: "Menús",
     menusDesc: "Tus menús, categorías y platillos",
+    menusEmpty: "Aún no tienes menús",
+    menuPaused: "En pausa",
     orders: "Pedidos",
     ordersDesc: "Pedidos entrantes en vivo",
     analytics: "Analíticas",
