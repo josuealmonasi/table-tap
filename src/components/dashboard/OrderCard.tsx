@@ -128,11 +128,11 @@ export default function OrderCard({
           <div key={i} style={{ fontSize: 13, marginBottom: 4 }}>
             <span className="tt-muted">{item.qty}× </span>
             {item.emoji} {item.name}
-            {Object.keys(item.mods).length > 0 && (
+            {Object.keys(item.mods ?? {}).length > 0 && (
               <span className="tt-muted" style={{ fontSize: 11 }}>
                 {" "}
                 (
-                {Object.values(item.mods)
+                {Object.values(item.mods ?? {})
                   .map(v => (Array.isArray(v) ? v.join(", ") : v))
                   .join(" · ")}
                 )

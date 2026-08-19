@@ -348,7 +348,7 @@ export async function POST(req: NextRequest) {
     // Line items for Stripe (amounts in the smallest currency unit).
     const line_items: import("stripe").Stripe.Checkout.SessionCreateParams.LineItem[] =
       verified.map(v => {
-        const modText = Object.entries(v.mods)
+        const modText = Object.entries(v.mods ?? {})
           .map(([k, val]) => `${k}: ${Array.isArray(val) ? val.join(", ") : val}`)
           .join(" · ");
         const extrasText = v.extras?.length

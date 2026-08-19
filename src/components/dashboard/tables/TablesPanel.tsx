@@ -41,7 +41,10 @@ export default function TablesPanel({
   const t = useT();
   const toast = useToast();
   // The page hands these over as a plain object, which a Map reads better.
-  const statusMap = useMemo(() => new Map(Object.entries(statuses)), [statuses]);
+  // `?? {}` rather than trusting the prop: a page served from a stale compile
+  // sends the older set of props, and Object.entries(undefined) throws — which
+  // takes the whole screen down instead of losing one badge.
+  const statusMap = useMemo(() => new Map(Object.entries(statuses ?? {})), [statuses]);
   const { busy, addTable, renameTable, deleteTable } = useTables(restaurantId);
   const [newLabel, setNewLabel] = useState("");
 

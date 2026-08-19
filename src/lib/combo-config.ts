@@ -47,7 +47,7 @@ export function applyChoices(
     const extras = comboExtras([choice], extrasById);
     return {
       ...component,
-      ...(Object.keys(choice.mods).length > 0 ? { mods: choice.mods } : {}),
+      ...(Object.keys(choice.mods ?? {}).length > 0 ? { mods: choice.mods } : {}),
       ...(extras.length > 0 ? { extras } : {}),
     };
   });
