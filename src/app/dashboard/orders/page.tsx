@@ -6,6 +6,8 @@ import OrdersBoard from "@/components/dashboard/OrdersBoard";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import type { Order, ServiceRequest } from "@/lib/types";
 import { currentUser } from "@/lib/current-user";
+import { startOfLocalDay } from "@/lib/day-window";
+import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 
 export const dynamic = "force-dynamic";
 
@@ -48,8 +50,11 @@ export default async function OrdersPage() {
   // We pass a "base" — today's total minus what's in the loaded set — so the
   // board can add its live, realtime-updating slice on top without double
   // counting. Both sides use the same day boundary (todayStartMs).
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  // The restaurant's midnight, not the host's. On a UTC server this line used
+  // to start "today" at six the previous evening for a Mexico City kitchen —
+  // so the takings on the board carried half of last night and dropped
+  // tonight's dinner service into tomorrow.
+  const todayStart = startOfLocalDay(new Date(), r.timezone ?? DEFAULT_TIME_ZONE);
   const showRevenue = MANAGES(membership.role);
 
   let revenueBase = 0;

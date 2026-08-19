@@ -8,6 +8,7 @@ import {
   type AnalyticsOrder,
 } from "@/lib/analytics";
 import AnalyticsView from "@/components/dashboard/analytics/AnalyticsView";
+import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,9 @@ export default async function AnalyticsPage({
   if (!MANAGES(membership.role)) redirect("/dashboard/orders");
 
   const period = normalisePeriod((await searchParams).period);
-  const { start, end } = periodRange(period);
+  // The restaurant's own calendar, not the host's — see lib/day-window.
+  const timeZone = membership.restaurant.timezone ?? DEFAULT_TIME_ZONE;
+  const { start, end } = periodRange(period, new Date(), timeZone);
 
   const { data: rows } = await supabase
     .from("orders")
@@ -35,7 +38,7 @@ export default async function AnalyticsPage({
     .gte("created_at", start.toISOString())
     .lt("created_at", end.toISOString());
 
-  const data = computeAnalytics((rows as AnalyticsOrder[]) ?? [], period);
+  const data = computeAnalytics((rows as AnalyticsOrder[]) ?? [], period, timeZone);
 
   return (
     <AnalyticsView data={data} period={period} currency={membership.restaurant.currency} />

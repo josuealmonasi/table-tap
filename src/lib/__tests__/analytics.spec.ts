@@ -6,6 +6,10 @@ import {
   type AnalyticsOrder,
 } from "@/lib/analytics";
 import type { OrderLineItem } from "@/lib/types";
+import { localDayKey, localHour } from "@/lib/day-window";
+
+// Every boundary here is the restaurant's, so these hold whatever zone CI runs in.
+const MX = "America/Mexico_City";
 
 function line(over: Partial<OrderLineItem> = {}): OrderLineItem {
   return {
@@ -45,38 +49,44 @@ describe("normalisePeriod", () => {
 });
 
 describe("periodRange", () => {
-  const now = new Date("2026-07-18T15:30:00"); // a Saturday, local time
+  const now = new Date("2026-07-18T21:30:00Z"); // 15:30 Saturday in Mexico City
 
-  it("'today' spans the current local day into tomorrow", () => {
-    const { start, end } = periodRange("today", now);
-    expect(start.getHours()).toBe(0);
-    expect(start.getDate()).toBe(18);
-    expect(end.getDate()).toBe(19);
-    expect(end.getHours()).toBe(0);
+  it("'today' spans the restaurant's day into tomorrow", () => {
+    const { start, end } = periodRange("today", now, MX);
+    expect(localDayKey(start, MX)).toBe("2026-07-18");
+    expect(localHour(start, MX)).toBe(0);
+    expect(localDayKey(end, MX)).toBe("2026-07-19");
+    expect(localHour(end, MX)).toBe(0);
   });
 
   it("'7d' starts six days back (7 days inclusive)", () => {
-    const { start } = periodRange("7d", now);
-    expect(start.getDate()).toBe(12);
+    const { start } = periodRange("7d", now, MX);
+    expect(localDayKey(start, MX)).toBe("2026-07-12");
   });
 
   it("'30d' starts 29 days back", () => {
-    const { start } = periodRange("30d", now);
-    // 29 days before Jul 18 is Jun 19.
-    expect(start.getMonth()).toBe(5); // June (0-indexed)
-    expect(start.getDate()).toBe(19);
+    const { start } = periodRange("30d", now, MX);
+    expect(localDayKey(start, MX)).toBe("2026-06-19");
   });
 
   it("'month' starts on the first of the current month", () => {
-    const { start } = periodRange("month", now);
-    expect(start.getDate()).toBe(1);
-    expect(start.getMonth()).toBe(6); // July
+    const { start } = periodRange("month", now, MX);
+    expect(localDayKey(start, MX)).toBe("2026-07-01");
+  });
+
+  it("keeps a late dinner inside today, not tomorrow", () => {
+    // 20:30 on the 18th in Mexico City is already the 19th in UTC. Left to the
+    // server, tonight's service would land in tomorrow's takings.
+    const dinner = new Date("2026-07-19T02:30:00Z");
+    const { start, end } = periodRange("today", dinner, MX);
+    expect(localDayKey(start, MX)).toBe("2026-07-18");
+    expect(dinner >= start && dinner < end).toBe(true);
   });
 });
 
 describe("computeAnalytics", () => {
   it("returns zeroed totals with no orders", () => {
-    const a = computeAnalytics([], "today");
+    const a = computeAnalytics([], "today", MX);
     expect(a.revenue).toBe(0);
     expect(a.orderCount).toBe(0);
     expect(a.avgTicket).toBe(0);
@@ -92,6 +102,7 @@ describe("computeAnalytics", () => {
         order({ total: 50, tip: 5 }),
       ],
       "today",
+      MX,
     );
     expect(a.revenue).toBe(150);
     expect(a.tips).toBe(15);
@@ -103,6 +114,7 @@ describe("computeAnalytics", () => {
     const a = computeAnalytics(
       [order({ total: "20.50" as unknown as number, tip: "1.50" as unknown as number })],
       "today",
+      MX,
     );
     expect(a.revenue).toBe(20.5);
     expect(a.tips).toBe(1.5);
@@ -116,7 +128,7 @@ describe("computeAnalytics", () => {
       qty: 2,
       extras: [{ id: "e1", name: "Extra sauce", emoji: "🥫", price: 20 }],
     });
-    const a = computeAnalytics([order({ items: [withExtra] })], "today");
+    const a = computeAnalytics([order({ items: [withExtra] })], "today", MX);
     const gyoza = a.topProducts.find(p => p.name === "Gyoza");
     expect(gyoza).toBeTruthy();
     expect(gyoza!.qty).toBe(2);
@@ -130,19 +142,28 @@ describe("computeAnalytics", () => {
         items: [line({ itemId: `p${i}`, name: `Item ${i}`, qty: i + 1 })],
       }),
     );
-    const a = computeAnalytics(orders, "today");
+    const a = computeAnalytics(orders, "today", MX);
     expect(a.topProducts).toHaveLength(10);
     // Highest qty (12) should lead.
     expect(a.topProducts[0].qty).toBe(12);
     expect(a.topProducts[0].qty).toBeGreaterThanOrEqual(a.topProducts[1].qty);
   });
 
-  it("buckets an order into its created-at hour", () => {
-    const at9 = new Date();
-    at9.setHours(9, 15, 0, 0);
-    const a = computeAnalytics([order({ created_at: at9.toISOString() })], "today");
+  it("buckets an order into the hour the restaurant served it", () => {
+    // 09:15 in Mexico City, which is 15:15 UTC — the busy-hours chart pointed
+    // six hours off when the server's clock decided this.
+    const at9 = new Date("2026-07-18T15:15:00Z");
+    const a = computeAnalytics([order({ created_at: at9.toISOString() })], "today", MX, at9);
     expect(a.byHour[9].count).toBe(1);
     const total = a.byHour.reduce((s, h) => s + h.count, 0);
     expect(total).toBe(1);
+  });
+
+  it("counts an evening order on the day it was served", () => {
+    const dinner = new Date("2026-07-19T02:30:00Z"); // 20:30 on the 18th
+    const a = computeAnalytics([order({ created_at: dinner.toISOString() })], "today", MX, dinner);
+    expect(a.byDay).toHaveLength(1);
+    expect(a.byDay[0].revenue).toBe(100);
+    expect(a.byHour[20].count).toBe(1);
   });
 });
