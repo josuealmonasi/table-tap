@@ -2,8 +2,21 @@
 
 import { useEffect, useState } from "react";
 
-/** Fired when the setting changes, so the nav re-reads without waiting. */
+/** Fired when something that a badge counts has been dealt with. */
 export const BADGES_CHANGED = "tt:badges-changed";
+
+/**
+ * Tell the nav its counts are stale.
+ *
+ * Call it after anything that changes what is waiting: an order moved along,
+ * a request approved or refused, a new request raised. Without it a manager
+ * approves the last thing in the queue and the badge sits there claiming
+ * there is still work, for up to half a minute — which teaches people the
+ * number is decorative.
+ */
+export function badgesChanged(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(BADGES_CHANGED));
+}
 
 /**
  * What each section is waiting on, kept roughly current.

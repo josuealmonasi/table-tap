@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Breadcrumb from "@/components/layout/Breadcrumb";
+import { badgesChanged } from "@/hooks/useBadges";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
@@ -80,7 +81,11 @@ export default function BillsPanel({
       });
       const data = await res.json().catch(() => ({}));
       toast(res.ok ? t(approve ? "writeOff.done" : "dash.rejected") : (data.error ?? ""));
-      if (res.ok) router.refresh();
+      if (res.ok) {
+        // One fewer thing waiting on a decision.
+        badgesChanged();
+        router.refresh();
+      }
     } finally {
       setBusy(null);
     }
@@ -96,6 +101,7 @@ export default function BillsPanel({
       });
       const data = await res.json();
       toast(res.ok ? t(approve ? "dash.approved" : "dash.rejected") : (data.error ?? ""));
+      if (res.ok) badgesChanged();
       router.refresh();
     } finally {
       setBusy(null);

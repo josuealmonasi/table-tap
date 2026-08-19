@@ -76,6 +76,13 @@ the simpler one.
 - Use **generics** for reusable, flexible code, and **utility types** (`Partial`, `Pick`, `Omit`) — plus **mapped types** for variations — instead of repeating yourself.
 - In React, type your **props**, **event handlers**, **hooks** (`useState`, `useReducer`), and **context** properly. Give functions explicit return types. Use `as` assertions only as a last resort.
 
+## Before shipping something large
+
+Read `docs/regressions.md`. It is the list of bugs that have actually shipped
+here, what now catches each one automatically, and the handful that still need
+a person to look. Every one of them was two places that had to agree with
+nothing checking that they did.
+
 ## When something breaks
 
 - **Think before you fix:** list a few possible causes; don't grab the first one.
