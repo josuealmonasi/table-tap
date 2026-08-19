@@ -1,11 +1,19 @@
 // ============================================================================
 // TableTap — presentation/demo data ("Demo Bistro")
 //
-// seedMock() builds ONE self-contained demo restaurant with a rich menu,
-// a named team, ~30 days of realistic orders (for Analytics + History), a few
-// live orders on the board, and open service requests. Everything lives under
-// the "Demo Bistro" restaurant and the demo-* logins, so dropMock() removes
-// exactly this and nothing else — the base seed (test1..5, Sakura) is safe.
+// seedMock() builds ONE self-contained demo restaurant that looks like it has
+// been open for two months: a rich menu, a named team, ~60 days of orders for
+// Analytics and History, live orders on the board, open bills, sittings that
+// opened and closed, cancelled debts with their reasons, promotions and
+// coupons that were actually redeemed, dish ratings, requests waiting on a
+// manager, and the activity log all of it would have produced.
+//
+// Everything lives under the "Demo Bistro" restaurant and the demo-* logins,
+// so dropMock() removes exactly this and nothing else — the base seed
+// (test1..5, Sakura) is safe.
+//
+// When the app grows a new table, add it here. `pnpm test demo-coverage`
+// fails when a restaurant-scoped table has no demo data, which is the reminder.
 //
 // Reused by scripts/db.mjs for `pnpm db:mock` and `pnpm db:dropmock`.
 // ============================================================================
@@ -262,9 +270,17 @@ export async function seedMock(pg) {
     "paid",
     "stripe_refund_id",
     "created_at",
+    // Cómo se pagó, qué se descontó y qué nos tocó: sin esto Analíticas y el
+    // historial se ven planos y el reporte de comisiones sale en cero.
+    "pay_method",
+    "discount",
+    "coupon_code",
+    "platform_fee",
+    "receipt_sent_at",
   ];
   const orderRows = [];
-  const HISTORY_COUNT = 240;
+  const HISTORY_DAYS = 60;
+  const HISTORY_COUNT = 520;
   for (let i = 0; i < HISTORY_COUNT; i++) {
     const lines = buildLines(products);
     const subtotal = round2(
@@ -277,6 +293,12 @@ export async function seedMock(pg) {
     const tip = pickTip(subtotal);
     const cancelled = Math.random() < 0.07;
     const t = tables[randInt(0, tables.length - 1)];
+    const when = randomOrderDate(HISTORY_DAYS);
+    // Dos de cada tres pagan con tarjeta; de ésos, uno de cada cinco pide su
+    // recibo por correo.
+    const byCard = Math.random() < 0.66;
+    const coupon = !cancelled && Math.random() < 0.12;
+    const discount = coupon ? round2(subtotal * 0.1) : 0;
     orderRows.push([
       rid,
       t.id,
@@ -290,7 +312,15 @@ export async function seedMock(pg) {
       JSON.stringify(lines),
       true,
       cancelled ? `re_demo_${i}` : null,
-      randomOrderDate(30).toISOString(),
+      when.toISOString(),
+      cancelled ? null : byCard ? "card" : "cash",
+      discount,
+      coupon ? "BIEN-10" : null,
+      // Nuestra comisión sólo existe cuando pagaron con tarjeta.
+      cancelled || !byCard ? 0 : 0.75,
+      !cancelled && byCard && Math.random() < 0.2
+        ? new Date(when.getTime() + randInt(1, 9) * 60000).toISOString()
+        : null,
     ]);
   }
 
@@ -322,9 +352,221 @@ export async function seedMock(pg) {
       true,
       null,
       when.toISOString(),
+      "card",
+      0,
+      null,
+      0.75,
+      null,
     ]);
   }
   await bulkInsert(pg, "orders", orderCols, orderRows);
+
+
+  // ── Sittings: la mesa como la vive el piso ─────────────────────────────
+  // Cada pedido histórico pertenece a una sentada que ya cerró; hoy quedan un
+  // par abiertas, que es lo que llena "Cuentas abiertas" y las mesas ocupadas.
+  const { rows: seeded } = await pg.query(
+    "select id, table_id, created_at, paid from orders where restaurant_id = $1 and table_id is not null order by created_at",
+    [rid],
+  );
+  // Una sentada por mesa y por día: es como se agrupan en la realidad.
+  const byDay = new Map();
+  for (const o of seeded) {
+    const key = `${o.table_id}:${new Date(o.created_at).toISOString().slice(0, 10)}`;
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key).push(o);
+  }
+  for (const [key, group] of byDay) {
+    const [tableId] = key.split(":");
+    const opened = new Date(group[0].created_at);
+    const closed = new Date(new Date(group[group.length - 1].created_at).getTime() + 45 * 60000);
+    const {
+      rows: [session],
+    } = await pg.query(
+      `insert into table_sessions (restaurant_id, table_id, opened_at, closed_at, close_reason)
+       values ($1, $2, $3, $4, 'paid') returning id`,
+      [rid, tableId, opened.toISOString(), closed.toISOString()],
+    );
+    await pg.query("update orders set session_id = $2 where id = any($1)", [
+      group.map(o => o.id),
+      session.id,
+    ]);
+  }
+
+  // ── Cuentas abiertas: tres mesas sentadas ahora mismo ──────────────────
+  const openTables = sample(tables, 3);
+  const openBills = [];
+  for (const t of openTables) {
+    const {
+      rows: [session],
+    } = await pg.query(
+      "insert into table_sessions (restaurant_id, table_id) values ($1, $2) returning id",
+      [rid, t.id],
+    );
+    for (let k = 0; k < randInt(1, 3); k++) {
+      const lines = buildLines(products);
+      const subtotal = round2(
+        lines.reduce((sum, l) => sum + (l.price + l.extras.reduce((x, e) => x + e.price, 0)) * l.qty, 0),
+      );
+      const serviceFee = round2(subtotal * 0.1);
+      const {
+        rows: [o],
+      } = await pg.query(
+        `insert into orders (restaurant_id, table_id, table_label, session_id, status, subtotal,
+           service_fee, tip, total, currency, items, paid, created_at)
+         values ($1,$2,$3,$4,'ready',$5,$6,0,$7,'MXN',$8,false,$9) returning id`,
+        [
+          rid, t.id, t.label, session.id, subtotal, serviceFee,
+          round2(subtotal + serviceFee), JSON.stringify(lines),
+          new Date(Date.now() - randInt(15, 120) * 60000).toISOString(),
+        ],
+      );
+      openBills.push({ orderId: o.id, table: t, sessionId: session.id });
+    }
+  }
+
+  // ── Una cuenta cancelada: el cliente se fue sin pagar ──────────────────
+  const walkoutTable = tables.find(t => !openTables.includes(t)) ?? tables[0];
+  const walkoutLines = buildLines(products);
+  const walkoutSub = round2(
+    walkoutLines.reduce((sum, l) => sum + (l.price + l.extras.reduce((x, e) => x + e.price, 0)) * l.qty, 0),
+  );
+  const {
+    rows: [walkoutSession],
+  } = await pg.query(
+    `insert into table_sessions (restaurant_id, table_id, opened_at, closed_at, close_reason)
+     values ($1, $2, now() - interval '3 days', now() - interval '3 days' + interval '2 hours', 'written_off')
+     returning id`,
+    [rid, walkoutTable.id],
+  );
+  await pg.query(
+    `insert into orders (restaurant_id, table_id, table_label, session_id, status, subtotal,
+       service_fee, tip, total, currency, items, paid, written_off, write_off_reason,
+       write_off_note, written_off_by, written_off_at, created_at)
+     values ($1,$2,$3,$4,'completed',$5,0,0,$5,'MXN',$6,false,true,'walkout',
+       'La mesa salió mientras el mesero estaba en la cocina.',$7, now() - interval '3 days',
+       now() - interval '3 days')`,
+    [rid, walkoutTable.id, walkoutTable.label, walkoutSession.id, walkoutSub,
+     JSON.stringify(walkoutLines), DEMO_TEAM[0].email],
+  );
+
+  // ── Promociones: un combo, un 2x1 y precios por cantidad ───────────────
+  const forPromo = sample(products, 5);
+  const {
+    rows: [combo],
+  } = await pg.query(
+    `insert into promotions (restaurant_id, kind, name, emoji, description, combo_price, sort_order)
+     values ($1,'combo','Comida del día','🍱','Plato fuerte, guarnición y bebida',$2,0) returning id`,
+    [rid, round2(forPromo.slice(0, 3).reduce((sum, p) => sum + Number(p.price), 0) * 0.8)],
+  );
+  await bulkInsert(pg, "promotion_items", ["promotion_id", "item_id", "qty"],
+    forPromo.slice(0, 3).map(p => [combo.id, p.id, 1]));
+
+  const {
+    rows: [bogo],
+  } = await pg.query(
+    `insert into promotions (restaurant_id, kind, name, emoji, description, buy_qty, pay_qty, sort_order)
+     values ($1,'bogo','2x1 en bebidas','🍹','Martes y miércoles',2,1,1) returning id`,
+    [rid],
+  );
+  await bulkInsert(pg, "promotion_items", ["promotion_id", "item_id", "qty"],
+    [[bogo.id, forPromo[3].id, 1]]);
+
+  const {
+    rows: [tiered],
+  } = await pg.query(
+    `insert into promotions (restaurant_id, kind, name, emoji, description, tiers, sort_order)
+     values ($1,'tiered','Más postres, mejor precio','🍰','Para compartir',$2,2) returning id`,
+    [rid, JSON.stringify([{ qty: 2, price: 95 }, { qty: 3, price: 130 }])],
+  );
+  await bulkInsert(pg, "promotion_items", ["promotion_id", "item_id", "qty"],
+    [[tiered.id, forPromo[4].id, 1]]);
+
+  // ── Cupones, con canjes reales detrás ──────────────────────────────────
+  const { rows: coupons } = await pg.query(
+    `insert into coupons (restaurant_id, code, kind, value, max_uses, uses_count, min_subtotal, created_by_email)
+     values ($1,'BIEN-10','percent',10,null,0,150,$2),
+            ($1,'HOLA-50','fixed',50,100,0,200,$2),
+            ($1,'VIP-15','percent',15,20,0,0,$2)
+     returning id, code`,
+    [rid, DEMO_OWNER.email],
+  );
+  const bienvenida = coupons.find(c => c.code === "BIEN-10");
+  const { rows: redeemed } = await pg.query(
+    "select id, total, discount, created_at from orders where restaurant_id = $1 and coupon_code = 'BIEN-10'",
+    [rid],
+  );
+  if (redeemed.length > 0) {
+    await bulkInsert(pg, "coupon_redemptions",
+      ["restaurant_id", "coupon_id", "order_id", "code", "amount", "created_at"],
+      redeemed.map(o => [rid, bienvenida.id, o.id, "BIEN-10", o.discount, o.created_at]));
+    await pg.query("update coupons set uses_count = $2 where id = $1", [bienvenida.id, redeemed.length]);
+  }
+
+  // ── Calificaciones de platillos ───────────────────────────────────────
+  const { rows: rateable } = await pg.query(
+    `select o.id as order_id, o.items from orders o
+      where o.restaurant_id = $1 and o.paid and o.status = 'completed'
+      order by o.created_at desc limit 90`,
+    [rid],
+  );
+  const { rows: menuIds } = await pg.query(
+    "select id, name from menu_items where restaurant_id = $1 and not is_addon", [rid]);
+  const byName = new Map(menuIds.map(m => [m.name, m.id]));
+  const ratings = [];
+  for (const o of rateable) {
+    for (const line of (o.items ?? []).slice(0, 2)) {
+      const itemId = byName.get(line.name);
+      if (!itemId) continue;
+      // Buenas en general, con alguna baja: un 5.0 perfecto no se cree.
+      const stars = Math.random() < 0.75 ? randInt(4, 5) : randInt(2, 3);
+      ratings.push([rid, itemId, o.order_id, stars]);
+    }
+  }
+  // La restricción es (order_id, item_id): quitamos repetidos del mismo pedido.
+  const seen = new Set();
+  const uniqueRatings = ratings.filter(r => {
+    const k = `${r[2]}:${r[1]}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  await bulkInsert(pg, "dish_ratings", ["restaurant_id", "item_id", "order_id", "rating"], uniqueRatings);
+
+  // ── Cosas esperando a que un gerente decida ───────────────────────────
+  // Es lo que enciende los badges de la barra: el dueño entra y ve trabajo.
+  const waiting = openBills[0];
+  await pg.query(
+    `insert into discount_requests (restaurant_id, table_id, table_label, order_ids, code, amount, requested_by)
+     values ($1,$2,$3,$4,'VIP-15',48.50,$5)`,
+    [rid, waiting.table.id, waiting.table.label, [waiting.orderId], DEMO_TEAM[1].email],
+  );
+  const asking = openBills[openBills.length - 1];
+  await pg.query(
+    `insert into write_off_requests (restaurant_id, table_id, table_label, order_ids, amount, reason, note, requested_by)
+     values ($1,$2,$3,$4,$5,'comp','Se les cayó el plato, va por la casa.',$6)`,
+    [rid, asking.table.id, asking.table.label, [asking.orderId], 120, DEMO_TEAM[1].email],
+  );
+
+  // ── El rastro que todo esto habría dejado ─────────────────────────────
+  await bulkInsert(pg, "user_logs",
+    ["restaurant_id", "actor_email", "entity", "action", "detail", "created_at"],
+    [
+      [rid, DEMO_TEAM[0].email, "bill", "paid", `table=${openTables[0].label} orders=2 amount=412.00 method=cash`, new Date(Date.now() - 864e5).toISOString()],
+      [rid, DEMO_TEAM[0].email, "bill", "written_off", `table=${walkoutTable.label} amount=${walkoutSub.toFixed(2)} reason=walkout`, new Date(Date.now() - 3 * 864e5).toISOString()],
+      [rid, DEMO_TEAM[1].email, "bill", "requested", `table=${asking.table.label} reason=comp`, new Date(Date.now() - 36e5).toISOString()],
+      [rid, DEMO_TEAM[1].email, "discount", "requested", `code=VIP-15 amount=48.50 table=${waiting.table.label}`, new Date(Date.now() - 18e5).toISOString()],
+      [rid, DEMO_OWNER.email, "discount", "discounted", "code=BIEN-10 amount=32.00 table=4", new Date(Date.now() - 2 * 864e5).toISOString()],
+      [rid, DEMO_OWNER.email, "settings", "updated", "service_pct=10", new Date(Date.now() - 20 * 864e5).toISOString()],
+      [rid, DEMO_OWNER.email, "coupon", "created", "code=VIP-15", new Date(Date.now() - 12 * 864e5).toISOString()],
+      [rid, DEMO_OWNER.email, "promotion", "created", "name=Comida_del_día", new Date(Date.now() - 25 * 864e5).toISOString()],
+    ]);
+
+  // ── Fundador, y lo que Stripe le cobra ────────────────────────────────
+  await pg.query(
+    "update restaurants set founding_number = coalesce(founding_number, 1), subscribed_price = 1499 where id = $1",
+    [rid],
+  );
 
   // ── Open service requests (call waiter / bill) on a few tables ──
   const reqTables = sample(tables, 3);
