@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { myOrderIds } from "@/lib/my-orders";
+import { recallSitting } from "@/lib/table-binding";
 import { tableBill, type TableBill } from "@/lib/table-bill";
 import type { Order } from "@/lib/types";
 
@@ -25,7 +26,10 @@ export function useTableBill(
   const reload = useCallback(() => {
     if (!tableId) return;
     setLoading(true);
-    fetch(`/api/bill?restaurantId=${restaurantId}&tableId=${tableId}`)
+    // Our own sitting, so a bill we opened stays ours to settle.
+    const sitting = recallSitting(restaurantId);
+    const mine = sitting?.tableId === tableId ? `&sessionId=${sitting.sessionId}` : "";
+    fetch(`/api/bill?restaurantId=${restaurantId}&tableId=${tableId}${mine}`)
       .then(r => (r.ok ? r.json() : { orders: [] }))
       .then(d => setOrders(d.orders ?? []))
       .catch(() => setOrders([]))

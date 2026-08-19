@@ -13,6 +13,8 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const restaurantId = req.nextUrl.searchParams.get("restaurantId");
   const tableId = req.nextUrl.searchParams.get("tableId");
+  // Optional: the sitting this phone belongs to, so its own bill stays payable.
+  const sessionId = req.nextUrl.searchParams.get("sessionId");
   if (!restaurantId || !tableId) return await apiError("apiErr.missingId", 400);
 
   if (await isRateLimited(`bill:${clientIp(req)}`, 60, 60)) {
@@ -20,7 +22,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const orders = await fetchTableBill(restaurantId, tableId);
+    const orders = await fetchTableBill(restaurantId, tableId, "diner", sessionId);
     return NextResponse.json({ orders });
   } catch {
     return await apiError("apiErr.ordersLoad", 500);

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { closeSessionsFor } from "@/lib/table-session";
 import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .neq("status", "pending_payment")
     .neq("status", "cancelled");
 
-  const { data: updated, error } = await base.select("id, table_label, total");
+  const { data: updated, error } = await base.select("id, table_label, total, session_id");
   if (error) return await apiError("apiErr.orderData", 500);
   if (!updated?.length) return await apiError("apiErr.nothingToSettle", 409);
 
@@ -68,6 +69,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       method: settlement,
     }),
   });
+
+  // Nothing owed on the sitting means the table is clear, and whoever was
+  // bound to it is free to sit somewhere else.
+  await closeSessionsFor(updated ?? [], "settled");
 
   // The table is settled, so any open request to settle it is answered.
   await db

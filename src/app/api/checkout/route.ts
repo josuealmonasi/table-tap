@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { openSession } from "@/lib/table-session";
 import { capNote } from "@/lib/notes";
 import { messagesFor, translate } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n/server";
@@ -286,6 +287,10 @@ export async function POST(req: NextRequest) {
         ? orderFeeCents(feePlan.limits, Math.round(subtotal * 100), takenThisMonth)
         : 0;
 
+    // Which sitting this order belongs to. A dine-in order joins whoever is
+    // already at the table; a counter order has no table and no sitting.
+    const sessionId = tableId ? await openSession(restaurantId, tableId) : null;
+
     // Create the pending order first so the webhook can find it.
     const { data: order, error: oErr } = await supabase
       .from("orders")
@@ -293,6 +298,7 @@ export async function POST(req: NextRequest) {
         restaurant_id: restaurantId,
         table_id: tableId,
         table_label: tableLabel,
+        session_id: sessionId,
         // A deferred order skips the payment gate and goes straight to the
         // pass: the kitchen starts cooking, `paid` stays false, and the table
         // settles at the end. `pending_payment` is what hides an order from the
@@ -333,7 +339,7 @@ export async function POST(req: NextRequest) {
     // Nothing to charge now: the order is with the kitchen and the table owes
     // for it. The bill screen picks it up from here.
     if (deferred) {
-      return NextResponse.json({ orderId: order.id, deferred: true });
+      return NextResponse.json({ orderId: order.id, deferred: true, sessionId });
     }
 
     const origin = req.headers.get("origin") ?? new URL(req.url).origin;
@@ -484,7 +490,7 @@ export async function POST(req: NextRequest) {
       .update({ stripe_session_id: session.id })
       .eq("id", order.id);
 
-    return NextResponse.json({ url: session.url, orderId: order.id });
+    return NextResponse.json({ url: session.url, orderId: order.id, sessionId });
   } catch (err) {
     console.error("checkout error", err);
     return await apiError("apiErr.checkoutFailed", 500);

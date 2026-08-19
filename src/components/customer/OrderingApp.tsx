@@ -27,6 +27,9 @@ import { clearUpsell, markUpsellAsked, upsellAsked } from "@/lib/upsell";
 import { recallOrder, rememberRecentOrder } from "@/lib/recent-order";
 import { useTableBill } from "@/hooks/useTableBill";
 import { useReceiptOffer } from "@/hooks/useReceiptOffer";
+import { useSitting } from "@/hooks/useSitting";
+import { formatMoney } from "@/lib/format";
+import { rememberSitting } from "@/lib/table-binding";
 import BillSheet from "./BillSheet";
 import ReceiptPrompt from "./ReceiptPrompt";
 import TrackerOverlay from "./TrackerOverlay";
@@ -172,6 +175,10 @@ export default function OrderingApp({
   useEffect(() => {
     setTrackId(prev => prev ?? recallOrder(restaurant.id, table?.id));
   }, [restaurant.id, table?.id]);
+
+  // Already owing at another table? Ordering here would open a second bill
+  // beside one nobody has settled.
+  const owingElsewhere = useSitting(restaurant.id, table?.id ?? null);
 
   // "Want that by email?" — asked once, when the money is settled, whether
   // that happened by card or in cash at the table.
@@ -379,6 +386,11 @@ export default function OrderingApp({
         // order used to reach only the first.
         rememberMyOrder(restaurant.id, data.orderId);
         rememberRecentOrder(restaurant.id, data.orderId, table?.id);
+        // This phone is now sitting at this table, and stays bound to it until
+        // the bill is cleared.
+        if (data.sessionId && table?.id) {
+          rememberSitting(restaurant.id, data.sessionId, table.id);
+        }
         clearUpsell(restaurant.id);
         setTrackId(data.orderId);
         cart.clear();
@@ -592,6 +604,29 @@ export default function OrderingApp({
           tableLabel={table.label}
         />
       )}
+      {/* Not dismissible into ordering: the point is that a second bill does
+          not get opened while the first is outstanding. They can still read
+          the menu behind it, and settling the other table clears this by
+          itself. */}
+      <Modal
+        open={Boolean(owingElsewhere)}
+        onClose={() => {}}
+        maxWidth={400}
+        label={t("sitting.title")}
+      >
+        <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 8 }}>
+          {t("sitting.title")}
+        </h3>
+        <p className="tt-muted" style={{ marginTop: 0 }}>
+          {t("sitting.body", {
+            table: owingElsewhere?.tableLabel ?? "",
+            amount: formatMoney(owingElsewhere?.owed ?? 0, restaurant.currency),
+          })}
+        </p>
+        <p className="tt-muted tt-subline" style={{ fontSize: 13 }}>
+          {t("sitting.hint")}
+        </p>
+      </Modal>
       {offering && (
         <ReceiptPrompt orderIds={offering} open onClose={dismissReceipt} />
       )}

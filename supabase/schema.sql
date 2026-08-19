@@ -1219,6 +1219,152 @@ alter table restaurants add column if not exists terms_accepted_email text;
 -- must be asked on the next visit. Left null on purpose: pretending otherwise
 -- would be recording consent nobody gave.
 
+-- ── Table sessions ─────────────────────────────────────────────────────────
+-- A sitting: one party at one table, from their first order until the table
+-- is clear again.
+--
+-- Before this, "what does this table owe" was answered with a time window, and
+-- a window is a guess. It let the floor see a debt the diner could not pay,
+-- and it had no way to tell one party from the next beyond how long ago they
+-- ordered. A session is the actual thing everyone means: it opens when
+-- somebody orders at an empty table, and closes when nothing is owed on it.
+--
+-- It is also what binds a diner to a table. A phone that has ordered carries
+-- its session, so walking to another table and starting again is refused
+-- while the first one is still owed for.
+create table if not exists table_sessions (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  table_id      uuid not null references restaurant_tables(id) on delete cascade,
+  opened_at     timestamptz not null default now(),
+  closed_at     timestamptz,
+  -- Paid by the diners, settled by the floor, cancelled as a loss, or simply
+  -- outlived the longest sitting anybody has.
+  close_reason  text check (close_reason in ('paid', 'settled', 'written_off', 'expired'))
+);
+-- One open sitting per table, enforced by the database rather than by whoever
+-- got there first: two diners ordering at the same moment must land in the
+-- same session or they cannot see each other's food on the bill.
+create unique index if not exists table_sessions_one_open
+  on table_sessions(table_id) where closed_at is null;
+create index if not exists table_sessions_table_idx
+  on table_sessions(restaurant_id, table_id, opened_at desc);
+alter table table_sessions enable row level security;
+drop policy if exists "team reads table sessions" on table_sessions;
+create policy "team reads table sessions"
+  on table_sessions for select
+  using (works_at(restaurant_id));
+-- Customers never read this table; the server answers for them through
+-- /api/session, which tells a phone only about its own sitting.
+revoke all on table_sessions from anon;
+
+alter table orders add column if not exists session_id uuid
+  references table_sessions(id) on delete set null;
+create index if not exists orders_session_idx on orders(session_id);
+
+-- Opens the table's sitting, or joins the one already open.
+--
+-- Security definer for the same reason redeem_coupon is: the customer's key
+-- cannot touch this table, and the decision has to be atomic. The unique index
+-- above is what makes the race safe — the loser of an insert re-reads the
+-- winner's row instead of failing.
+create or replace function public.open_table_session(
+  p_restaurant uuid,
+  p_table uuid,
+  p_max_hours int
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  -- A sitting nobody closed is not a sitting any more. Expiring it here means
+  -- the next party gets a clean table without anybody remembering to do it.
+  update table_sessions
+     set closed_at = now(), close_reason = 'expired'
+   where table_id = p_table
+     and closed_at is null
+     and opened_at < now() - make_interval(hours => p_max_hours);
+
+  select id into v_id
+    from table_sessions
+   where table_id = p_table and closed_at is null
+   limit 1;
+
+  if v_id is null then
+    insert into table_sessions (restaurant_id, table_id)
+    values (p_restaurant, p_table)
+    on conflict do nothing
+    returning id into v_id;
+
+    if v_id is null then
+      select id into v_id
+        from table_sessions
+       where table_id = p_table and closed_at is null
+       limit 1;
+    end if;
+  end if;
+
+  return v_id;
+end; $$;
+revoke all on function public.open_table_session(uuid, uuid, int)
+  from public, anon, authenticated;
+grant execute on function public.open_table_session(uuid, uuid, int) to service_role;
+
+-- Closes a sitting once nothing on it is owed. Called after every way money
+-- stops being outstanding: a card, cash at the table, or a debt written off.
+create or replace function public.close_session_if_clear(
+  p_session uuid,
+  p_reason text
+) returns boolean language plpgsql security definer set search_path = public as $$
+declare v_owing int;
+begin
+  select count(*) into v_owing
+    from orders
+   where session_id = p_session
+     and paid = false
+     and written_off = false
+     and status <> 'cancelled'
+     and status <> 'pending_payment';
+
+  if v_owing > 0 then
+    return false;
+  end if;
+
+  update table_sessions
+     set closed_at = now(), close_reason = p_reason
+   where id = p_session and closed_at is null;
+  return true;
+end; $$;
+revoke all on function public.close_session_if_clear(uuid, text)
+  from public, anon, authenticated;
+grant execute on function public.close_session_if_clear(uuid, text) to service_role;
+
+-- Orders that predate sittings still have to belong to one, or a debt already
+-- on the floor becomes invisible to the diner who owes it. Idempotent: it only
+-- touches orders with no session, and only tables with no open sitting.
+insert into table_sessions (restaurant_id, table_id, opened_at)
+select o.restaurant_id, o.table_id, min(o.created_at)
+  from orders o
+ where o.session_id is null
+   and o.table_id is not null
+   and o.paid = false
+   and o.written_off = false
+   and o.status not in ('cancelled', 'pending_payment')
+   and not exists (
+     select 1 from table_sessions s
+      where s.table_id = o.table_id and s.closed_at is null
+   )
+ group by o.restaurant_id, o.table_id
+on conflict do nothing;
+
+update orders o
+   set session_id = s.id
+  from table_sessions s
+ where o.session_id is null
+   and o.table_id = s.table_id
+   and s.closed_at is null
+   and o.paid = false
+   and o.written_off = false
+   and o.status not in ('cancelled', 'pending_payment');
+
 -- ── Cancelling a debt ──────────────────────────────────────────────────────
 -- A table that leaves without paying still has orders attached to it, and
 -- somebody has to say so on the record. Writing the debt off is the act; the
