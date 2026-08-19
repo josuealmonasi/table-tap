@@ -103,7 +103,7 @@ export default function CartLineRow({
               </span>
             </div>
           )}
-          {Object.entries(item.mods).map(([k, v]) => (
+          {Object.entries(item.mods ?? {}).map(([k, v]) => (
             <div key={k} className="tt-muted tt-subline" style={{ fontSize: 12 }}>
               {k}: {Array.isArray(v) ? v.join(", ") : v}
             </div>

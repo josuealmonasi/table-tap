@@ -29,7 +29,9 @@
     "db:dropmock:prod": "node scripts/db.mjs dropmock --prod",
     "db:promos:prod": "node scripts/seed-promos.mjs --prod",
     "db:ratings:prod": "node scripts/seed-ratings.mjs --prod",
-    "prod:check": "node scripts/prod-check.mjs"
+    "prod:check": "node scripts/prod-check.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:prod": "node scripts/smoke.mjs --prod"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

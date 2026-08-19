@@ -25,6 +25,12 @@ had drifted, which is why `db:reset` failed on production.
 
 `src/lib/__tests__/i18n-parity.spec.ts` keeps both catalogues complete.
 
+`pnpm smoke` signs in for real and loads **every** dashboard page plus a
+customer menu, failing on an error boundary, a bounce to login, or a page with
+no content. `pnpm smoke:prod` does the same against the deployed site. Written
+after three separate "it works" claims that were each checked one page at a
+time while a neighbouring page was blank.
+
 `pnpm prod:check` compares dev and production schemas, loads a real customer
 menu, and confirms every documented login resolves to a restaurant **in both
 environments**. Run it after every merge.
@@ -32,6 +38,14 @@ environments**. Run it after every merge.
 ## What still needs a person
 
 These have all cost us a round trip. None are automatable yet.
+
+**A long-lived dev server lies.** After dozens of merges it will serve a stale
+compile of one page beside a fresh build of another — a page that sends the old
+set of props to a component that now requires new ones, which throws at
+hydration and white-screens. It looks exactly like a code bug and is not one.
+If a page breaks and the source looks right, `rm -rf .next` and restart before
+debugging anything. `pnpm smoke` against a freshly started server is the only
+verification that means anything.
 
 **Look at it. In a browser. Actually rendered.**
 Measuring is not looking. The menus dropdown reported a sensible rectangle from
@@ -66,12 +80,13 @@ proves it.
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`
-2. `pnpm db:reset` on dev — proves the schema still builds from nothing
-3. Open the thing you changed in a browser, at 1280px and at 390px, in Spanish
-4. If it is money, name every route that touches it and check each one
-5. If it changes what we collect, charge, or promise — update the legal text and
+2. `pnpm smoke` — every page still renders for a signed-in user
+3. `pnpm db:reset` on dev — proves the schema still builds from nothing
+4. Open the thing you changed in a browser, at 1280px and at 390px, in Spanish
+5. If it is money, name every route that touches it and check each one
+6. If it changes what we collect, charge, or promise — update the legal text and
    regenerate the PDFs (`node scripts/legal-pdf.mjs`)
-6. `pnpm prod:check` after the merge
+7. `pnpm prod:check` and `pnpm smoke:prod` after the merge
 
 ## When you find the next one
 
