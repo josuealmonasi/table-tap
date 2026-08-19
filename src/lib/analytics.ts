@@ -1,4 +1,12 @@
 import { lineUnitPrice, type OrderLineItem } from "@/lib/types";
+import {
+  localDayKey,
+  localHour,
+  startOfLocalDay,
+  startOfLocalMonth,
+  startOfNextLocalDay,
+  subtractLocalDays,
+} from "@/lib/day-window";
 
 export type Period = "today" | "7d" | "30d" | "month";
 
@@ -42,19 +50,23 @@ export interface Analytics {
   topProducts: ProductStat[];
 }
 
-/** [start, end) for a period, in the server's local day. */
-export function periodRange(period: Period, now = new Date()): { start: Date; end: Date } {
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(now);
-  end.setHours(24, 0, 0, 0); // start of tomorrow
-
-  if (period === "7d") start.setDate(start.getDate() - 6);
-  else if (period === "30d") start.setDate(start.getDate() - 29);
-  else if (period === "month") {
-    start.setDate(1);
-  }
-  return { start, end };
+/**
+ * [start, end) for a period, on the restaurant's calendar.
+ *
+ * Not the server's: hosted in UTC, a Mexico City restaurant's "today" would
+ * start at six the previous evening, so every evening service would be split
+ * across two days and the owner would never see a night's takings whole.
+ */
+export function periodRange(
+  period: Period,
+  now = new Date(),
+  timeZone: string,
+): { start: Date; end: Date } {
+  const end = startOfNextLocalDay(now, timeZone);
+  if (period === "7d") return { start: subtractLocalDays(now, 6, timeZone), end };
+  if (period === "30d") return { start: subtractLocalDays(now, 29, timeZone), end };
+  if (period === "month") return { start: startOfLocalMonth(now, timeZone), end };
+  return { start: startOfLocalDay(now, timeZone), end };
 }
 
 function normalisePeriod(value: string | undefined): Period {
@@ -63,23 +75,31 @@ function normalisePeriod(value: string | undefined): Period {
 export { normalisePeriod };
 
 /** Aggregates a period's orders into the numbers the analytics page shows. */
-export function computeAnalytics(orders: AnalyticsOrder[], period: Period): Analytics {
+export function computeAnalytics(
+  orders: AnalyticsOrder[],
+  period: Period,
+  timeZone: string,
+  now = new Date(),
+): Analytics {
   const revenue = orders.reduce((s, o) => s + Number(o.total), 0);
   const tips = orders.reduce((s, o) => s + Number(o.tip), 0);
   const orderCount = orders.length;
   const avgTicket = orderCount ? revenue / orderCount : 0;
 
-  // Revenue per calendar day across the period's span (zero-filled).
-  const { start, end } = periodRange(period);
+  // Revenue per calendar day across the period's span (zero-filled). Walked a
+  // restaurant-day at a time rather than in 24-hour steps, so the day a zone
+  // changes its clocks stays one day instead of drifting an hour into the next.
+  const { start, end } = periodRange(period, now, timeZone);
   const days: DayBar[] = [];
   const dayIndex = new Map<string, number>();
-  for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
-    const key = d.toDateString();
-    dayIndex.set(key, days.length);
-    days.push({
-      label: d.toLocaleDateString([], { weekday: "short", day: "2-digit" }),
-      revenue: 0,
-    });
+  const label = new Intl.DateTimeFormat([], {
+    timeZone,
+    weekday: "short",
+    day: "2-digit",
+  });
+  for (let d = start; d < end; d = startOfNextLocalDay(d, timeZone)) {
+    dayIndex.set(localDayKey(d, timeZone), days.length);
+    days.push({ label: label.format(d), revenue: 0 });
   }
 
   const byHour: HourBar[] = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 }));
@@ -87,9 +107,9 @@ export function computeAnalytics(orders: AnalyticsOrder[], period: Period): Anal
 
   for (const o of orders) {
     const when = new Date(o.created_at);
-    const di = dayIndex.get(when.toDateString());
+    const di = dayIndex.get(localDayKey(when, timeZone));
     if (di !== undefined) days[di].revenue += Number(o.total);
-    byHour[when.getHours()].count += 1;
+    byHour[localHour(when, timeZone)].count += 1;
 
     for (const line of o.items ?? []) {
       const key = line.itemId || line.name;
