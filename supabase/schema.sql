@@ -1337,12 +1337,15 @@ begin
   update table_sessions
      set closed_at = now(), close_reason = 'expired'
    where table_id = p_table
+     and restaurant_id = p_restaurant
      and closed_at is null
      and opened_at < now() - make_interval(hours => p_max_hours);
 
+  -- Acotado al restaurante: una mesa sólo tiene sentada dentro del local al
+  -- que pertenece, y así un id de mesa ajeno no se cuela en la de nadie.
   select id into v_id
     from table_sessions
-   where table_id = p_table and closed_at is null
+   where table_id = p_table and restaurant_id = p_restaurant and closed_at is null
    limit 1;
 
   if v_id is null then
@@ -1354,7 +1357,7 @@ begin
     if v_id is null then
       select id into v_id
         from table_sessions
-       where table_id = p_table and closed_at is null
+       where table_id = p_table and restaurant_id = p_restaurant and closed_at is null
        limit 1;
     end if;
   end if;
