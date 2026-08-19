@@ -117,6 +117,7 @@ export const es: Messages = {
     all: "Todo",
     closed: "⏸️ No estamos tomando pedidos en este momento — vuelve pronto.",
     table: "Mesa {label}",
+myBill: "Ver mi cuenta",
     trackOrder: "Tienes un pedido en curso — síguelo",
     noSearchMatch: "Nada coincide con “{q}” — prueba otro antojo.",
     noDietMatch: "Ningún platillo coincide con esos filtros.",
@@ -471,8 +472,6 @@ export const es: Messages = {
   service: {
     callWaiter: "Llamar al mesero",
     waiterSent: "¡En camino!",
-    getBill: "Pedir la cuenta",
-    billSent: "Cuenta solicitada",
   },
   plan: {
     docsTitle: "Tus documentos",

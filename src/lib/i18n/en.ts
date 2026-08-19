@@ -115,6 +115,7 @@ export const en = {
     all: "All",
     closed: "⏸️ We're not taking orders right now — please check back soon.",
     table: "Table {label}",
+myBill: "View my bill",
     trackOrder: "You have an order in progress — track it",
     noSearchMatch: "Nothing matches “{q}” — try another craving.",
     noDietMatch: "No items match those dietary filters.",
@@ -474,8 +475,6 @@ export const en = {
   service: {
     callWaiter: "Call waiter",
     waiterSent: "On the way!",
-    getBill: "Get the bill",
-    billSent: "Bill requested",
   },
   plan: {
     docsTitle: "Your documents",

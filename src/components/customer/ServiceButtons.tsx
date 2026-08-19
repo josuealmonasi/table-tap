@@ -11,24 +11,22 @@ import { BillIcon, CallWaiterIcon } from "@/components/ui/icons";
 interface ServiceButtonsProps {
   restaurantId: string;
   table: RestaurantTable;
-  /** The bill screen handles settling, so asking for a bill is redundant. */
-  billOnBill?: boolean;
-  /**
-   * Opens the bill, when the table has one. "Pedir la cuenta" used to fire a
-   * request into the void: the diner never saw what they had ordered, so they
-   * could not check it before asking somebody to come and take their money.
-   * The only way to the list was a small icon in the header that appeared
-   * conditionally, which nobody finds.
-   */
-  onOpenBill?: () => void;
+
 }
 
-type Kind = "waiter" | "bill";
+/**
+ * Sólo llamar al mesero.
+ *
+ * "Pedir la cuenta" se fue: cuando la cuenta se puede ver, pedirla no es una
+ * acción — es mirarla. El menú abre esa pantalla, y dentro están las dos
+ * maneras de pagarla. Dejar además un botón que sólo avisa "tráeme la cuenta"
+ * era una tercera puerta al mismo cuarto.
+ */
+type Kind = "waiter";
 
 // Message keys per button state (resolved through t() at render).
 const KEYS: Record<Kind, { idle: string; sent: string }> = {
   waiter: { idle: "service.callWaiter", sent: "service.waiterSent" },
-  bill: { idle: "service.getBill", sent: "service.billSent" },
 };
 
 /**
@@ -37,8 +35,6 @@ const KEYS: Record<Kind, { idle: string; sent: string }> = {
  * the kitchen.
  */
 export default function ServiceButtons({
-  billOnBill = false,
-  onOpenBill,
   restaurantId,
   table,
 }: ServiceButtonsProps) {
@@ -75,9 +71,9 @@ export default function ServiceButtons({
       // Non-critical — the button re-enables after the cooldown anyway.
     }
 
-    // Only after the bill request has gone out, so the prompt can never delay
+    // Only after the request has gone out, so the prompt can never delay
     // the thing they actually pressed.
-    if (kind === "bill") void offerRatings();
+    void offerRatings();
   }
 
   /**
@@ -104,34 +100,19 @@ export default function ServiceButtons({
 
   return (
     <>
-      <div className="tt-service-row">
         {(Object.keys(KEYS) as Kind[])
-          // Where the diner can see and settle the bill themselves, "get the
-          // bill" is the button that had nothing behind it — the complaint
-          // that started this. Calling a waiter still means something.
-          .filter(kind => !(billOnBill && kind === "bill"))
           .map(kind => (
             <button
               key={kind}
               type="button"
               className="tt-service-btn"
               disabled={sent.has(kind)}
-              onClick={() => {
-                // Si hay algo que cobrar, primero se ve; pedir al mesero es
-                // una de las opciones de esa pantalla, no un salto a ciegas.
-                if (kind === "bill" && onOpenBill) onOpenBill();
-                else void send(kind);
-              }}
+              onClick={() => void send(kind)}
             >
-              {kind === "waiter" ? (
-                <CallWaiterIcon size={16} weight="bold" />
-              ) : (
-                <BillIcon size={16} weight="bold" />
-              )}
+              <CallWaiterIcon size={16} weight="bold" />
               {t(sent.has(kind) ? KEYS[kind].sent : KEYS[kind].idle)}
             </button>
           ))}
-      </div>
       <RateDishesSheet
         open={rateable.length > 0}
         dishes={rateable}
