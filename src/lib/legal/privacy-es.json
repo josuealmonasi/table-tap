@@ -16,6 +16,7 @@
         "Del restaurante: nombre del negocio, nombre y correo de quien administra la cuenta, datos de contacto y datos fiscales cuando pides factura.",
         "Del equipo del restaurante: correo y rol, para dar acceso al panel.",
         "De los comensales: lo mínimo para que su pedido funcione — qué ordenaron, en qué mesa, si dejaron propina y su calificación del platillo si la dan. No pedimos su nombre, ni su teléfono, ni creamos cuentas de comensal.",
+        "Correo del comensal: solo si él lo escribe para pedir su recibo. Se usa únicamente para enviarle ese recibo. No lo damos de alta en ninguna lista, no le mandamos publicidad y no lo compartimos con nadie más que el proveedor de correo que entrega el mensaje.",
         "No guardamos datos de tarjetas bancarias. Los pagos los procesa Stripe con su propia política de privacidad."
       ]
     },
@@ -25,13 +26,14 @@
         "Para prestar el servicio: mostrar el menú, tomar pedidos, mandarlos a la cocina, cobrar y generar los reportes del restaurante.",
         "Para facturarte, darte soporte y avisarte de cambios importantes en el servicio o en los precios.",
         "Para cuidar la seguridad de la plataforma y prevenir abusos.",
+        "Para enviar el recibo de un pedido al correo que el comensal escribió con ese fin, y para nada más.",
         "No vendemos datos personales, ni los usamos para publicidad de terceros."
       ]
     },
     {
       "title": "4. Con quién los compartimos",
       "paragraphs": [
-        "Con proveedores que hacen funcionar el servicio: alojamiento y base de datos, y Stripe para procesar pagos. Cada uno trata los datos únicamente para esa función.",
+        "Con proveedores que hacen funcionar el servicio: alojamiento y base de datos, Stripe para procesar pagos y un proveedor de envío de correo para entregar los recibos que el comensal pida. Cada uno trata los datos únicamente para esa función.",
         "Con autoridades, cuando exista una obligación legal."
       ]
     },
@@ -39,7 +41,8 @@
       "title": "5. Cuánto tiempo los conservamos",
       "paragraphs": [
         "Mientras tu cuenta esté activa, y después el tiempo que exijan las obligaciones fiscales y legales aplicables.",
-        "Los pedidos y sus importes se conservan porque son registro contable del restaurante."
+        "Los pedidos y sus importes se conservan porque son registro contable del restaurante.",
+        "El correo que un comensal dio para su recibo se conserva junto a ese pedido, como comprobante de a dónde se envió, y puede pedir su borrado."
       ]
     },
     {

@@ -54,6 +54,7 @@ export default async function OrderPage({
       promos={data.promos}
       ratings={data.ratings}
       closedNow={data.closedNow}
+      receipts={data.receipts}
       trackOrder={order}
     />
   );
