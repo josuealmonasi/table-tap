@@ -26,8 +26,16 @@ const OWNER_FIELDS = new Set([
   "cover_enabled",
   "logo_url",
   "allow_pay_later",
+  "badges_enabled",
 ]);
-const MANAGER_FIELDS = new Set(["tax_pct", "tax_show_breakdown", "accepting_orders"]);
+// A manager runs the floor, so they decide whether the floor is being told
+// about work waiting — the same reasoning that gives them the kill switch.
+const MANAGER_FIELDS = new Set([
+  "tax_pct",
+  "tax_show_breakdown",
+  "accepting_orders",
+  "badges_enabled",
+]);
 
 // POST /api/settings — owner or manager updates restaurant settings, with the
 // allowed field set enforced by role. Writes with the secret key after the

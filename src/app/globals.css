@@ -5330,3 +5330,35 @@ a.tt-user-plan:hover {
 .tt-bill-close {
   color: var(--tt-danger);
 }
+
+/* How many things a section is waiting on. Borrowed from the POPULAR chip:
+   pink ground, red text — not the accent, which is the "you can press this"
+   colour and already on every tab, so it could not make one stand out. */
+.tt-nav-badge {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tt-sale) 13%, transparent);
+  color: var(--tt-sale);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  /* On the tab bar it rides the icon's shoulder rather than taking a third
+     line: three lines of tab would push the bar over the content. */
+  .tt-section-link {
+    position: relative;
+  }
+  .tt-nav-badge {
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    margin-left: 4px;
+    background: var(--tt-sale);
+    color: var(--tt-sale-ink);
+  }
+}

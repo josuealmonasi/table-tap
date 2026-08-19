@@ -86,6 +86,7 @@ export type Restaurant = {
   cover_enabled?: boolean;
   /** Dine-in tables may order first and settle at the end. Off by default. */
   allow_pay_later?: boolean;
+  badges_enabled?: boolean;
   /** Which version of the terms this restaurant's owner accepted. */
   terms_version?: string | null;
   /** The subscription tier this restaurant is on. */

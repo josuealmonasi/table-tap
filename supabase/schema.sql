@@ -1225,6 +1225,12 @@ alter table restaurants add column if not exists terms_accepted_email text;
 -- must be asked on the next visit. Left null on purpose: pretending otherwise
 -- would be recording consent nobody gave.
 
+-- Counts on the dashboard tabs. On by default: a restaurant that has never
+-- thought about it should still be told an approval is waiting. Owner and
+-- manager can turn them off for everybody — the floor does not get to decide
+-- it would rather not be told.
+alter table restaurants add column if not exists badges_enabled boolean not null default true;
+
 -- ── Table sessions ─────────────────────────────────────────────────────────
 -- A sitting: one party at one table, from their first order until the table
 -- is clear again.

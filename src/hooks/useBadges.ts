@@ -1,0 +1,53 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+/** Fired when the setting changes, so the nav re-reads without waiting. */
+export const BADGES_CHANGED = "tt:badges-changed";
+
+/**
+ * What each section is waiting on, kept roughly current.
+ *
+ * Refreshed on a slow timer and whenever the tab comes back to the front —
+ * the moment somebody returns from the floor is exactly when an approval may
+ * have arrived. Deliberately not realtime: a count that is thirty seconds
+ * stale costs nothing, and a socket per dashboard screen to move one integer
+ * would be paying rather a lot for that.
+ */
+export function useBadges(): Record<string, number> {
+  const [badges, setBadges] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let active = true;
+
+    const read = () => {
+      fetch("/api/badges")
+        .then(r => (r.ok ? r.json() : { badges: {} }))
+        .then((d: { badges?: Record<string, number> }) => {
+          if (active) setBadges(d.badges ?? {});
+        })
+        .catch(() => {
+          // A count we could not fetch is simply not shown.
+        });
+    };
+
+    read();
+    const timer = setInterval(read, 30_000);
+    // Turning the setting off should clear them now, not in half a minute:
+    // a switch that appears to do nothing gets flipped again.
+    window.addEventListener(BADGES_CHANGED, read);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") read();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      active = false;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener(BADGES_CHANGED, read);
+    };
+  }, []);
+
+  return badges;
+}
