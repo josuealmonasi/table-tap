@@ -409,6 +409,65 @@ on conflict (id) do nothing;
 -- Reads the restaurant id out of an object path, or null when the path is not
 -- shaped like one. Kept as a function because a bare `::uuid` cast raises on
 -- anything else, and a policy that can raise is a policy that can be tripped
+-- ── Policy helpers ─────────────────────────────────────────────────────────
+-- Defined before anything that calls them. They used to sit further down, and
+-- the storage policies above referenced them from a hundred lines earlier —
+-- which only ever worked because a reset left the old functions behind. On a
+-- genuinely empty database the schema could not build itself.
+-- Ownership check used by the policies below. SECURITY DEFINER so it can read
+-- `restaurants` on the caller's behalf — the anon role no longer has direct
+-- SELECT on that table (see the column-level guard above), so a plain
+-- `select 1 from restaurants …` inside a policy would fail with "permission
+-- denied for table restaurants" when a customer reads menus/items. auth.uid()
+-- is still the caller's (it reads the request JWT, not the function owner).
+create or replace function public.owns_restaurant(rid uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  -- The founding owner (restaurants.owner_id) or a co-owner (staff role
+  -- 'owner') — both hold full owner powers everywhere this is used.
+  select exists (select 1 from restaurants r where r.id = rid and r.owner_id = auth.uid())
+      or exists (select 1 from staff s
+                 where s.restaurant_id = rid and s.user_id = auth.uid() and s.role = 'owner');
+$$;
+revoke all on function public.owns_restaurant(uuid) from public;
+grant execute on function public.owns_restaurant(uuid) to anon, authenticated;
+
+-- Membership check: the owner OR one of their staff. Same SECURITY DEFINER
+-- reasoning as owns_restaurant — policies on other tables call this.
+create or replace function public.works_at(rid uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select owns_restaurant(rid)
+      or exists (select 1 from staff s where s.restaurant_id = rid and s.user_id = auth.uid());
+$$;
+revoke all on function public.works_at(uuid) from public;
+grant execute on function public.works_at(uuid) to anon, authenticated;
+
+-- Role check: the owner always qualifies; staff qualify when their role is in
+-- the list. Used to give managers owner-grade powers over menus/tables.
+create or replace function public.has_role(rid uuid, roles text[])
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select owns_restaurant(rid)
+      or exists (select 1 from staff s
+                 where s.restaurant_id = rid and s.user_id = auth.uid() and s.role = any(roles));
+$$;
+revoke all on function public.has_role(uuid, text[]) from public;
+grant execute on function public.has_role(uuid, text[]) to anon, authenticated;
+
+
 -- over by a junk key. has_role(null, ...) is false, so null denies.
 create or replace function public.storage_restaurant(object_name text)
 returns uuid
@@ -540,59 +599,6 @@ create policy "public read available menu"
 drop policy if exists "public read item addons" on item_addons;
 create policy "public read item addons"
   on item_addons for select using (true);
-
--- Ownership check used by the policies below. SECURITY DEFINER so it can read
--- `restaurants` on the caller's behalf — the anon role no longer has direct
--- SELECT on that table (see the column-level guard above), so a plain
--- `select 1 from restaurants …` inside a policy would fail with "permission
--- denied for table restaurants" when a customer reads menus/items. auth.uid()
--- is still the caller's (it reads the request JWT, not the function owner).
-create or replace function public.owns_restaurant(rid uuid)
-returns boolean
-language sql
-security definer
-stable
-set search_path = public
-as $$
-  -- The founding owner (restaurants.owner_id) or a co-owner (staff role
-  -- 'owner') — both hold full owner powers everywhere this is used.
-  select exists (select 1 from restaurants r where r.id = rid and r.owner_id = auth.uid())
-      or exists (select 1 from staff s
-                 where s.restaurant_id = rid and s.user_id = auth.uid() and s.role = 'owner');
-$$;
-revoke all on function public.owns_restaurant(uuid) from public;
-grant execute on function public.owns_restaurant(uuid) to anon, authenticated;
-
--- Membership check: the owner OR one of their staff. Same SECURITY DEFINER
--- reasoning as owns_restaurant — policies on other tables call this.
-create or replace function public.works_at(rid uuid)
-returns boolean
-language sql
-security definer
-stable
-set search_path = public
-as $$
-  select owns_restaurant(rid)
-      or exists (select 1 from staff s where s.restaurant_id = rid and s.user_id = auth.uid());
-$$;
-revoke all on function public.works_at(uuid) from public;
-grant execute on function public.works_at(uuid) to anon, authenticated;
-
--- Role check: the owner always qualifies; staff qualify when their role is in
--- the list. Used to give managers owner-grade powers over menus/tables.
-create or replace function public.has_role(rid uuid, roles text[])
-returns boolean
-language sql
-security definer
-stable
-set search_path = public
-as $$
-  select owns_restaurant(rid)
-      or exists (select 1 from staff s
-                 where s.restaurant_id = rid and s.user_id = auth.uid() and s.role = any(roles));
-$$;
-revoke all on function public.has_role(uuid, text[]) from public;
-grant execute on function public.has_role(uuid, text[]) to anon, authenticated;
 
 -- ── Rate limiting ───────────────────────────────────────────────────────────
 -- A tiny shared counter so the public API routes (checkout, service requests,
