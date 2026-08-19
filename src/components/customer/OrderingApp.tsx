@@ -23,7 +23,7 @@ import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { useMenuFreshness } from "@/hooks/useMenuFreshness";
 import { rememberMyOrder } from "@/lib/my-orders";
 import { suggestItems } from "@/lib/suggestions";
-import { clearUpsell, markUpsellAsked, upsellAsked } from "@/lib/upsell";
+import { clearUpsell, offeredUpsell, rememberUpsell } from "@/lib/upsell";
 import { recallOrder, rememberRecentOrder } from "@/lib/recent-order";
 import { useTableBill } from "@/hooks/useTableBill";
 import { useReceiptOffer } from "@/hooks/useReceiptOffer";
@@ -205,21 +205,37 @@ export default function OrderingApp({
 
   // "Anything else?" — asked on the way to ordering, and asked once.
   //
-  // The offer is worked out and frozen the first time the cart is opened, then
-  // put away for the rest of the bill, whatever the diner does with it. Asking
-  // again every time a dish is added is the pestering this is meant to avoid,
-  // and a strip that reshuffled under their thumb between visits would make
-  // the cart feel unsteady at the worst possible moment.
+  // The offer is worked out the first time the cart is opened and then stands
+  // for the rest of the bill: same three dishes, still there when the diner
+  // comes back from adding something else. Re-running the picks on every visit
+  // would reshuffle the strip under their thumb at the worst possible moment,
+  // and clearing it on the way out — which is what this used to do — retired
+  // the question after a single glance.
+  //
+  // It retires for real when the diner takes one of them, because a waiter who
+  // has been told "yes, and some fries" does not ask again.
   const [offered, setOffered] = useState<MenuItem[]>([]);
   useEffect(() => {
-    if (screen !== "cart") {
-      setOffered([]); // leaving the order step retires the question
+    if (screen !== "cart") return;
+
+    const inCart = new Set(cart.items.map(line => line.itemId));
+    const remembered = offeredUpsell(restaurant.id);
+    if (remembered) {
+      // One of them made it into the order: the question has been answered.
+      if (remembered.some(id => inCart.has(id))) {
+        setOffered([]);
+        return;
+      }
+      const still = remembered
+        .map(id => items.find(i => i.id === id))
+        .filter((i): i is MenuItem => Boolean(i) && i!.available);
+      setOffered(still);
       return;
     }
-    if (upsellAsked(restaurant.id)) return;
+
     const picks = suggestItems({ cart: cart.items, items, ratings });
     if (picks.length === 0) return; // nothing worth suggesting isn't an ask
-    markUpsellAsked(restaurant.id);
+    rememberUpsell(restaurant.id, picks.map(p => p.id));
     setOffered(picks);
   }, [screen, restaurant.id, cart.items, items, ratings]);
 

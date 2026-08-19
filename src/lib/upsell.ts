@@ -1,30 +1,36 @@
 "use client";
 
 /**
- * Whether this phone has already been asked "anything else?" on the bill it is
- * building.
+ * What this phone was offered as "anything else?" on the bill it is building.
  *
- * A waiter asks once, on the way to putting the order in. Asking again — after
- * a yes, or after every dish that gets added — is how a helpful question turns
- * into pestering, so the answer is remembered until the bill is done with: the
- * same moment the cart is cleared.
+ * A waiter asks once and the answer stands: the suggestion stays on the order
+ * screen until the diner takes one or the bill is done with. Storing only
+ * *that* we had asked was the bug — the strip was cleared on leaving the cart
+ * and the flag then refused to let it come back, so tapping "agregar más
+ * platillos" and returning made the question vanish for the rest of the meal.
+ * Remembering *what* was offered keeps the same three dishes on show without
+ * reshuffling under the diner's thumb.
  */
 const KEY = (restaurantId: string) => `tt-upsell:${restaurantId}`;
 
-export function upsellAsked(restaurantId: string): boolean {
+/** The dish ids offered on this bill, or null if nothing has been offered. */
+export function offeredUpsell(restaurantId: string): string[] | null {
   try {
-    return localStorage.getItem(KEY(restaurantId)) === "1";
+    const raw = localStorage.getItem(KEY(restaurantId));
+    if (!raw) return null;
+    const ids: unknown = JSON.parse(raw);
+    return Array.isArray(ids) && ids.every(i => typeof i === "string") ? ids : null;
   } catch {
-    // Private mode: the diner sees the question again, which is a small cost.
-    return false;
+    // Private mode, or something else wrote the key: offer afresh.
+    return null;
   }
 }
 
-export function markUpsellAsked(restaurantId: string): void {
+export function rememberUpsell(restaurantId: string, ids: string[]): void {
   try {
-    localStorage.setItem(KEY(restaurantId), "1");
+    localStorage.setItem(KEY(restaurantId), JSON.stringify(ids));
   } catch {
-    // Nothing to do — the suggestion simply shows again.
+    // Nothing to do — the suggestion is simply worked out again next time.
   }
 }
 
@@ -33,6 +39,6 @@ export function clearUpsell(restaurantId: string): void {
   try {
     localStorage.removeItem(KEY(restaurantId));
   } catch {
-    // Ignored: a stale flag only means one unasked question.
+    // Ignored: a stale offer only means one repeated question.
   }
 }

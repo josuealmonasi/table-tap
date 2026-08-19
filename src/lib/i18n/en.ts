@@ -305,6 +305,8 @@ myBill: "View my bill",
     nothing: "Nothing outstanding on this table.",
   },
   cart: {
+    orderPayLater: "Order and pay at the end",
+    payNowHint: "Pay now by card, or leave the bill open and settle at the end.",
     payNow: "Pay now",
     payLater: "Order now, pay at the end",
     placeOrder: "Place order",

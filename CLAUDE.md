@@ -78,6 +78,12 @@ the simpler one.
 
 ## Before shipping something large
 
+**Run `pnpm layout`.** It opens every screen in a real browser at 390px and
+1280px and fails if text is squashed to nothing, painted on top of other text,
+or running off the side of the page. Tests prove a component exists; this is
+the only thing that proves a person can read it. A CSS change is not done until
+this passes and you have looked at a screenshot of what you changed.
+
 Read `docs/regressions.md`. It is the list of bugs that have actually shipped
 here, what now catches each one automatically, and the handful that still need
 a person to look. Every one of them was two places that had to agree with
