@@ -75,3 +75,30 @@ export async function fetchTableBill(
   // not debts. unpaidOrders drops cancelled ones.
   return unpaidOrders((data ?? []) as Order[]);
 }
+
+/**
+ * What a single counter order owes.
+ *
+ * The QR that isn't a table produces orders with nobody sitting anywhere, so
+ * there is no sitting to group them by: the order *is* the bill. Scoped to the
+ * restaurant asking, so an id from another business finds nothing — the same
+ * boundary a table id gets, and the only thing standing between one tenant's
+ * cashier and another tenant's money.
+ */
+export async function fetchCounterBill(
+  restaurantId: string,
+  orderId: string,
+): Promise<Order[]> {
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from("orders")
+    .select(FIELDS)
+    .eq("restaurant_id", restaurantId)
+    .eq("id", orderId)
+    // Sin mesa: por aquí no se cobra media cuenta de una mesa.
+    .is("table_id", null)
+    .neq("status", "pending_payment");
+
+  if (error) throw new Error(`Could not load the counter bill: ${error.message}`);
+  return unpaidOrders((data ?? []) as Order[]);
+}

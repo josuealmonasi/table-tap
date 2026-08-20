@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { actingFrontOfHouse } from "@/lib/api-guard";
-import { fetchTableBill } from "@/lib/bill-data";
+import { fetchCounterBill, fetchTableBill } from "@/lib/bill-data";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/table-bill?tableId=<id> — what a table owes, for the floor.
+ * GET /api/table-bill?orderId=<id> — what a counter order owes, same thing.
  *
  * The same bill the diner sees, minus the window: staff are the ones who
  * collect the money or write it off, so an older debt has to be visible to
@@ -22,10 +23,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
   const tableId = req.nextUrl.searchParams.get("tableId");
-  if (!tableId) return await apiError("apiErr.missingId", 400);
+  const orderId = req.nextUrl.searchParams.get("orderId");
+  if (!tableId && !orderId) return await apiError("apiErr.missingId", 400);
 
   try {
-    const orders = await fetchTableBill(actor.restaurantId, tableId, "staff");
+    // Un pedido del QR general no cuelga de ninguna mesa, así que se pide por
+    // sí mismo. Va acotado al restaurante del que pregunta igual que la mesa:
+    // un id de otro negocio no encuentra nada.
+    const orders = tableId
+      ? await fetchTableBill(actor.restaurantId, tableId, "staff")
+      : await fetchCounterBill(actor.restaurantId, orderId!);
     return NextResponse.json({ orders });
   } catch {
     return await apiError("apiErr.ordersLoad", 500);

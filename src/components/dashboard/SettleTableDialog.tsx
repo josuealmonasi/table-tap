@@ -15,7 +15,10 @@ interface SettleTableDialogProps {
   open: boolean;
   onClose: () => void;
   restaurantId: string;
-  tableId: string;
+  /** La mesa que se cobra, o null si es un pedido del QR general. */
+  tableId: string | null;
+  /** El pedido de mostrador que se cobra, cuando no hay mesa. */
+  orderId?: string | null;
   tableLabel: string;
   currency: string;
   /** Refreshes the board once the table is settled. */
@@ -37,6 +40,7 @@ export default function SettleTableDialog({
   onClose,
   restaurantId,
   tableId,
+  orderId = null,
   tableLabel,
   currency,
   onSettled,
@@ -52,11 +56,11 @@ export default function SettleTableDialog({
     if (!open) return;
     setOrders(null);
     // The staff view: everything the table owes, not just this service.
-    fetch(`/api/table-bill?tableId=${tableId}`)
+    fetch(tableId ? `/api/table-bill?tableId=${tableId}` : `/api/table-bill?orderId=${orderId}`)
       .then(r => (r.ok ? r.json() : { orders: [] }))
       .then(d => setOrders(d.orders ?? []))
       .catch(() => setOrders([]));
-  }, [open, restaurantId, tableId]);
+  }, [open, restaurantId, tableId, orderId]);
 
   // The waiter is settling the whole table, so nothing here is "mine".
   const bill = orders ? tableBill(orders, []) : null;
@@ -93,7 +97,7 @@ export default function SettleTableDialog({
       const res = await fetch("/api/table-payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tableId, settlement }),
+        body: JSON.stringify(tableId ? { tableId, settlement } : { orderId, settlement }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -122,7 +126,9 @@ export default function SettleTableDialog({
         label={t("settle.open")}
       >
       <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 12 }}>
-        {t("settle.title", { label: tableLabel })}
+        {/* Un pedido de mostrador no es una mesa: llamarlo "Mesa ORD-E2EC"
+            le pone delante lo único que no tiene. */}
+        {t(tableId ? "settle.title" : "settle.titleToGo", { label: tableLabel })}
       </h3>
 
       {!bill ? (
@@ -162,15 +168,19 @@ export default function SettleTableDialog({
             </button>
             {/* Last, and quiet: a table that walks out is the exception, and
                 the board filling with debts nobody can clear is worse than
-                admitting one was never paid. */}
-            <button
+                admitting one was never paid.
+
+                Sólo para mesas: un pedido de mostrador que nadie recogió se
+                cancela en el tablero, que ya pregunta el motivo, en vez de
+                cancelarse aquí por una vía que asume una mesa. */}
+            {tableId && <button
               className="tt-btn tt-btn-ghost tt-btn-sm"
               style={{ width: "100%", marginTop: 12 }}
               disabled={busy}
               onClick={() => setAsking(true)}
             >
               {canApprove ? t("settle.writeOff") : t("writeOff.request")}
-            </button>
+            </button>}
           </div>
         </>
       )}

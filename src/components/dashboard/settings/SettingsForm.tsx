@@ -43,6 +43,7 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
   // Ordering (owner + manager) — instant-save.
   const [acceptingOrders, setAcceptingOrders] = useState(restaurant.accepting_orders);
   const [payLater, setPayLater] = useState(Boolean(restaurant.allow_pay_later));
+  const [counterPay, setCounterPay] = useState(Boolean(restaurant.allow_counter_payment));
   const [badges, setBadges] = useState(restaurant.badges_enabled !== false);
 
   async function saveRestaurant(e: React.FormEvent): Promise<void> {
@@ -97,6 +98,11 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
   async function togglePayLater(next: boolean): Promise<void> {
     setPayLater(next);
     if (!(await save({ allow_pay_later: next }))) setPayLater(!next);
+  }
+
+  async function toggleCounterPay(next: boolean): Promise<void> {
+    setCounterPay(next);
+    if (!(await save({ allow_counter_payment: next }))) setCounterPay(!next);
   }
 
   return (
@@ -361,6 +367,29 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
                     checked={payLater}
                     disabled={saving}
                     onChange={e => togglePayLater(e.target.checked)}
+                  />
+                  <span className="tt-switch-track" />
+                </span>
+              </label>
+            )}
+
+            {/* El de arriba es de mesa; éste es del QR general. Van juntos
+                porque son la misma pregunta — quién retiene el pedido — con
+                dos respuestas distintas según por dónde entró el cliente. */}
+            {isOwner && (
+              <label className="tt-settings-toggle" style={{ marginTop: 10 }}>
+                <span>
+                  <strong>{t("dash.counterPayTitle")}</strong>
+                  <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
+                    {t("dash.counterPayHint")}
+                  </span>
+                </span>
+                <span className="tt-switch">
+                  <input
+                    type="checkbox"
+                    checked={counterPay}
+                    disabled={saving}
+                    onChange={e => toggleCounterPay(e.target.checked)}
                   />
                   <span className="tt-switch-track" />
                 </span>

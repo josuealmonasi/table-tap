@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     const { data: restaurant, error: rErr } = await supabase
       .from("restaurants")
       .select(
-        "id, currency, service_pct, service_enabled, accepting_orders, tax_pct, stripe_account_id, stripe_charges_enabled, allow_pay_later",
+        "id, currency, service_pct, service_enabled, accepting_orders, tax_pct, stripe_account_id, stripe_charges_enabled, allow_pay_later, allow_counter_payment",
       )
       .eq("id", restaurantId)
       .single();
@@ -144,11 +144,19 @@ export async function POST(req: NextRequest) {
       return !menuId || openIds.includes(menuId);
     };
 
-    // Settling at the end is a dine-in arrangement, and only where the owner
-    // has asked for it. Decided from the database, never from the request: a
-    // client claiming payLater on a fast-food QR would otherwise walk off with
-    // food nobody can chase, since there is no table to go back to.
-    const deferred = Boolean(payLater) && Boolean(tableId) && Boolean(restaurant.allow_pay_later);
+    // Un pedido sin pagar sólo sale de aquí si algo lo retiene, y siempre se
+    // decide con la base de datos, nunca con lo que diga el cliente:
+    //
+    //   - en una mesa, la retiene la mesa: la cuenta queda abierta y el mesero
+    //     la cobra al final, si el dueño lo permite;
+    //   - en el QR general no hay mesa a la que volver, así que lo que la
+    //     retiene es el mostrador: el cliente pasa a la caja, paga y recoge.
+    //
+    // Sin una de las dos cosas, quien reclamara `payLater` se llevaría comida
+    // que nadie puede cobrar.
+    const atTable = Boolean(tableId) && Boolean(restaurant.allow_pay_later);
+    const atCounter = !tableId && Boolean(restaurant.allow_counter_payment);
+    const deferred = Boolean(payLater) && (atTable || atCounter);
     if (payLater && !deferred) {
       return await apiError("apiErr.payLaterNotAllowed", 403);
     }

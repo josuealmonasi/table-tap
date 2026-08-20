@@ -280,6 +280,7 @@ myBill: "Ver mi cuenta",
     failed: "No se pudo cargar la cuenta. Inténtalo de nuevo.",
   },
   settle: {
+    titleToGo: "{label} · cobrar",
     openTables: "Mesas por cobrar",
     openTablesHint: "Primero las que llevan más tiempo",
     searchTables: "Busca mesas…",
@@ -300,6 +301,8 @@ myBill: "Ver mi cuenta",
     nothing: "Esta mesa no debe nada.",
   },
   cart: {
+    orderCounter: "Pagar en la caja",
+    counterHint: "Paga ahora y sáltate la fila, o pasa a la caja con tu código.",
     orderPayLater: "Ordenar y pagar al final",
     payNowHint: "Paga ahora con tarjeta, o deja la cuenta abierta y paga al final.",
     payNow: "Pagar ahora",
@@ -895,6 +898,8 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     optional: "(opcional)",
   },
   dash: {
+    counterPayTitle: "Pagar en la caja",
+    counterPayHint: "Sólo para el QR general, el que no es de mesa. El cliente puede pasar a la caja con su código en lugar de pagar con tarjeta. Su pedido llega al tablero marcado como no pagado: no lo entregues sin cobrar.",
     bills: "Cuentas abiertas",
     billsDesc: "Busca una cuenta y aplica una promoción",
     billsSearch: "Busca por mesa o código de pedido…",
@@ -1074,6 +1079,7 @@ badgesHint: "Muestra cuántas cosas esperan acción en cada sección. Aplica a t
     pageOf: "Página {page} de {pages}",
   },
   orders: {
+    notPaid: "No pagado",
     openDetail: "Abrir el pedido {code}",
     historyCountOne: "1 pedido",
     historyCount: "{total} pedidos",

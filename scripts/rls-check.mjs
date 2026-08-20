@@ -180,6 +180,29 @@ if (!signIn.error && theirs) {
     if (r5.status >= 400) ok(`checkout refuses another restaurant's table (${r5.status})`);
     else bad(`checkout accepted another restaurant's table (${r5.status})`);
   }
+
+  // Pagar en la caja lo decide el restaurante, no el teléfono del cliente. Si
+  // se pudiera reclamar `payLater` con el interruptor apagado, cualquiera se
+  // llevaría comida sin pagar por el QR general — y nadie a quien cobrarle.
+  const { data: off } = await admin
+    .from("restaurants").select("id, name")
+    .eq("allow_counter_payment", false).eq("allow_pay_later", false).limit(1).maybeSingle();
+  // Con un platillo de verdad: un carrito vacío se rechaza por vacío, y esa
+  // prueba pasaría igual aunque el permiso no existiera.
+  const { data: dish } = await admin
+    .from("menu_items").select("id, name, price")
+    .eq("restaurant_id", off?.id ?? "").eq("available", true).limit(1).maybeSingle();
+  if (off && dish) {
+    const r6 = await fetch(BASE + "/api/checkout", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        restaurantId: off.id, tableId: null, payLater: true,
+        items: [{ itemId: dish.id, name: dish.name, price: dish.price, qty: 1, emoji: "🍽️", mods: {} }],
+      }),
+    });
+    if (r6.status >= 400) ok(`checkout refuses pay-at-counter where it is off (${r6.status})`);
+    else bad(`checkout allowed pay-at-counter where it is off (${r6.status})`);
+  }
 }
 
 console.log(failed === 0 ? "\nNothing is exposed.\n" : `\n${failed} PROBLEM(S) — fix before shipping.\n`);

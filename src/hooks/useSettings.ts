@@ -23,6 +23,7 @@ export type SettingsInput = Pick<
   | "cover_enabled"
   | "logo_url"
   | "allow_pay_later"
+  | "allow_counter_payment"
   | "badges_enabled"
 >;
 

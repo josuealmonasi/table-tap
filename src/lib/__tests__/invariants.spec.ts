@@ -143,3 +143,40 @@ describe("each module sits behind the right guard", () => {
     expect(page).toMatch(/MANAGES\(membership\.role\)/);
   });
 });
+
+describe("what the customer page reads, the customer may read", () => {
+  it("grants anon every restaurant column the ordering page selects", () => {
+    // Three places have to agree on one list: the select in ordering-data, the
+    // column grant in schema.sql, and the checkout route's own select. Adding
+    // a setting to the first and forgetting the second gives a column that is
+    // simply null in the browser — no error anywhere, the feature just never
+    // turns on. That is how this file's rule reads: two places that must agree
+    // with nothing checking.
+    const select = read("src/lib/ordering-data.ts").match(
+      /"(id, name, tagline[^"]*)"/,
+    );
+    expect(select, "the ordering select moved or changed shape").toBeTruthy();
+    const wanted = select![1].split(",").map(c => c.trim());
+
+    const schema = read("supabase/schema.sql");
+    const grant = schema.match(/grant select \(([^)]*)\) on restaurants to anon;/);
+    expect(grant, "the anon column grant on restaurants is gone").toBeTruthy();
+    const granted = new Set(grant![1].split(",").map(c => c.trim()));
+
+    const missing = wanted.filter(c => !granted.has(c));
+    expect(missing, `read by the menu but not granted to anon: ${missing.join(", ")}`).toEqual(
+      [],
+    );
+  });
+});
+
+describe("a price reads the same everywhere", () => {
+  it("does not depend on the machine's locale", async () => {
+    // The bug this pins: `Intl.NumberFormat(undefined, …)` gave the server one
+    // string and the browser another, so every price on the menu was a
+    // hydration mismatch and React re-rendered the entire customer page.
+    const { formatMoney } = await import("@/lib/format");
+    expect(formatMoney(23, "MXN")).toBe("MX$23.00");
+    expect(formatMoney(14.9, "USD")).toBe("$14.90");
+  });
+});
