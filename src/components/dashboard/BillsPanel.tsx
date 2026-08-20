@@ -325,9 +325,12 @@ export default function BillsPanel({
             </div>
           )}
         </div>
-      </div>
 
-      {children}
+        {/* Dentro del contenedor: fuera de él la bitácora se pegaba al borde
+            de la ventana mientras la tarjeta de arriba respetaba el margen de
+            la página, y las dos secciones no coincidían en ninguna orilla. */}
+        {children}
+      </div>
 
       {settling?.tableId && (
         <SettleTableDialog

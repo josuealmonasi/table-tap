@@ -95,7 +95,37 @@ export const AUDIT = `(() => {
     }
   }
 
-  // 3. The page itself running off the side.
+  // 3. Blocks that don't line up.
+  //
+  // Legible is not the same as aligned: the activity log went out sitting flush
+  // against the window while the card above it kept the page margin, because it
+  // was rendered outside the container. Every fault above passed it. Two cards
+  // stacked one above the other must share both edges — side by side is a
+  // different layout and is left alone.
+  const cards = all.filter(el => el.classList.contains("tt-section"));
+  for (let i = 0; i < cards.length; i++) {
+    for (let j = i + 1; j < cards.length; j++) {
+      const a = cards[i].getBoundingClientRect(), b = cards[j].getBoundingClientRect();
+      const stacked = a.bottom <= b.top + 1 || b.bottom <= a.top + 1;
+      if (!stacked) continue;
+      // Y en la misma columna. Ajustes es de dos columnas: una tarjeta de la
+      // izquierda y otra de la derecha tampoco se solapan en vertical, y
+      // compararlas era pedir que dos columnas fueran una.
+      const shared = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      if (shared < Math.min(a.width, b.width) * 0.5) continue;
+      const dl = Math.abs(a.left - b.left), dr = Math.abs(a.right - b.right);
+      if (dl > 2 || dr > 2) {
+        const name = el => (el.querySelector("h2,h3")?.textContent ?? el.className).trim().slice(0, 26);
+        faults.push({
+          kind: "desalineado",
+          text: name(cards[i]) + " ⇄ " + name(cards[j]),
+          w: Math.round(Math.max(dl, dr)),
+        });
+      }
+    }
+  }
+
+  // 4. The page itself running off the side.
   const doc = document.documentElement;
   if (doc.scrollWidth > window.innerWidth + 1) {
     const wide = all.find(el => el.getBoundingClientRect().right > window.innerWidth + 1);
