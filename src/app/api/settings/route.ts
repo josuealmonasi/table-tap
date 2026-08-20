@@ -4,7 +4,7 @@ import { isAllowedTimeZone } from "@/lib/timezones";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { actingManager } from "@/lib/api-guard";
-import { frozenBlocks } from "@/lib/plan-guard";
+import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
 import { isOwnStorageUrl } from "@/lib/images";
 
 export const runtime = "nodejs";
@@ -65,6 +65,13 @@ export async function POST(req: NextRequest) {
   }
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ ok: true });
+  }
+
+  // Cobrar en la caja viene con el plan. Se comprueba al encenderlo y no al
+  // apagarlo: quien se baje de plan tiene que poder dejarlo como estaba.
+  if (update.allow_counter_payment === true) {
+    const blocked = await planBlocks(actor.restaurantId, "counterPayment");
+    if (blocked) return blocked;
   }
 
   // Only a zone the selector actually offers. An arbitrary string would make

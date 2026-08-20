@@ -24,6 +24,7 @@ const ROLES = [
   { email: "demo@tabletap.dev", password: "demo123", role: "owner" },
   { email: "demo-manager@tabletap.dev", password: "demo123", role: "manager" },
   { email: "demo-waiter@tabletap.dev", password: "demo123", role: "waiter" },
+  { email: "demo-cashier@tabletap.dev", password: "demo123", role: "cashier" },
   { email: "demo-kitchen@tabletap.dev", password: "demo123", role: "kitchen" },
 ];
 
@@ -36,8 +37,8 @@ const ROLES = [
 // que sale en todas.
 const OWNER = ["owner"];
 const MANAGES = ["owner", "manager"];
-const SERVES = ["owner", "manager", "waiter"];
-const ALL = ["owner", "manager", "waiter", "kitchen"];
+const SERVES = ["owner", "manager", "waiter", "cashier"];
+const ALL = ["owner", "manager", "waiter", "cashier", "kitchen"];
 
 const PAGES = {
   "/dashboard": { allow: MANAGES, marker: "Pedidos entrantes en vivo" },

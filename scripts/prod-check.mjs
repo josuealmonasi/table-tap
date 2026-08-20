@@ -144,6 +144,7 @@ const LOGINS = [
   "demo@tabletap.dev",
   "demo-manager@tabletap.dev",
   "demo-waiter@tabletap.dev",
+  "demo-cashier@tabletap.dev",
   "demo-kitchen@tabletap.dev",
   "test1@tabletap.dev",
   "test2@tabletap.dev",

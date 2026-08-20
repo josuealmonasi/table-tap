@@ -19,6 +19,7 @@
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
 import { ArrowsLeftRight } from "@phosphor-icons/react/dist/ssr/ArrowsLeftRight";
 import { Bell } from "@phosphor-icons/react/dist/ssr/Bell";
+import { CashRegister } from "@phosphor-icons/react/dist/ssr/CashRegister";
 import { CreditCard } from "@phosphor-icons/react/dist/ssr/CreditCard";
 import { ChartBar } from "@phosphor-icons/react/dist/ssr/ChartBar";
 import { Check } from "@phosphor-icons/react/dist/ssr/Check";
@@ -102,6 +103,8 @@ export const PlatformAdminIcon = ShieldCheck;
 export const RoleOwnerIcon = Crown;
 export const RoleManagerIcon = UserGear;
 export const RoleWaiterIcon = ForkKnife;
+/** La caja: quien cobra, que no es lo mismo que quien lleva el plato. */
+export const RoleCashierIcon = CashRegister;
 /** The menus screen — the list of what the kitchen serves. */
 export const MenuIcon = ForkKnife;
 export const RoleKitchenIcon = ChefHat;

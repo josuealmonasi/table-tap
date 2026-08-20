@@ -8,7 +8,7 @@ import { getLocale } from "@/lib/i18n/server";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { orderFeeCents } from "@/lib/plan";
+import { can, orderFeeCents, type PlanLimits } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
 import { feesTakenThisMonth } from "@/lib/fee-month";
 import { itemSalePrice, priceCart, type AppliedCoupon } from "@/lib/pricing";
@@ -49,6 +49,9 @@ async function cartError(
 // POST /api/checkout
 // Body: { restaurantId, tableId, tableLabel, items: OrderLineItem[], note }
 // Creates a pending order, then a Stripe Checkout Session, and returns its URL.
+/** Un restaurante sin plan legible no tiene permisos de plan. */
+const NO_PLAN = { allows_counter_payment: false } as PlanLimits;
+
 export async function POST(req: NextRequest) {
   try {
     // Throttle abusive callers before we create any orders or Stripe sessions.
@@ -154,8 +157,15 @@ export async function POST(req: NextRequest) {
     //
     // Sin una de las dos cosas, quien reclamara `payLater` se llevaría comida
     // que nadie puede cobrar.
+    // Cobrar en la caja además viene con el plan, y se pregunta aquí y no sólo
+    // al encender el interruptor: quien se baja a Carta se queda con el
+    // interruptor encendido en la base de datos, y sin esto seguiría regalando
+    // pedidos sin comisión con el plan gratuito.
     const atTable = Boolean(tableId) && Boolean(restaurant.allow_pay_later);
-    const atCounter = !tableId && Boolean(restaurant.allow_counter_payment);
+    const atCounter =
+      !tableId &&
+      Boolean(restaurant.allow_counter_payment) &&
+      can((await getPlan(restaurantId))?.limits ?? NO_PLAN, "counterPayment");
     const deferred = Boolean(payLater) && (atTable || atCounter);
     if (payLater && !deferred) {
       return await apiError("apiErr.payLaterNotAllowed", 403);

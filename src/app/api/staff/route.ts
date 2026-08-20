@@ -6,7 +6,7 @@ import { frozenBlocks, seatBlocks } from "@/lib/plan-guard";
 
 export const runtime = "nodejs";
 
-const ROLES: readonly string[] = ["owner", "manager", "waiter", "kitchen"];
+const ROLES: readonly string[] = ["owner", "manager", "waiter", "cashier", "kitchen"];
 
 /** Owners a restaurant may have, counting the founding owner. */
 const MAX_OWNERS = 3;

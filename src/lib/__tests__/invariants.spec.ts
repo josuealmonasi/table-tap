@@ -180,3 +180,32 @@ describe("a price reads the same everywhere", () => {
     expect(formatMoney(14.9, "USD")).toBe("$14.90");
   });
 });
+
+describe("a role is known everywhere or nowhere", () => {
+  it("offers every role in the staff picker and accepts it at the API", async () => {
+    // A role can exist in the type, pass the database's check constraint, and
+    // still be unusable: `getMembership` fell back to `kitchen` for `cashier`
+    // because its own list hadn't heard of it, so the new role silently lost
+    // the bills screen. The list is derived from one constant now — this keeps
+    // the places that repeat it by hand in step.
+    const { ROLES } = await import("@/lib/membership");
+    const hired = ROLES.filter(r => r !== "owner");
+
+    const api = read("src/app/api/staff/route.ts");
+    for (const role of ROLES) {
+      expect(api, `POST /api/staff refuses "${role}"`).toContain(`"${role}"`);
+    }
+
+    const picker = read("src/components/dashboard/staff/StaffPanel.tsx");
+    for (const role of hired) {
+      expect(picker, `no way to hire a "${role}"`).toContain(`value="${role}"`);
+    }
+
+    const schema = read("supabase/schema.sql");
+    const check = schema.match(/staff_role_check\s*\n?\s*check \(role in \(([^)]*)\)\)/);
+    expect(check, "the staff role constraint moved").toBeTruthy();
+    for (const role of ROLES) {
+      expect(check![1], `the database rejects "${role}"`).toContain(`'${role}'`);
+    }
+  });
+});

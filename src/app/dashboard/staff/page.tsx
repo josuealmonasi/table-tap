@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getMembership } from "@/lib/membership";
+import { getMembership, MANAGES } from "@/lib/membership";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import StaffPanel from "@/components/dashboard/staff/StaffPanel";
 
@@ -9,8 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function StaffPage() {
   const membership = await getMembership();
   if (!membership) redirect("/login");
-  if (membership.role === "kitchen" || membership.role === "waiter")
-    redirect("/dashboard/orders");
+  if (!MANAGES(membership.role)) redirect("/dashboard/orders");
   if (membership.role === "manager") redirect("/dashboard");
 
   return (

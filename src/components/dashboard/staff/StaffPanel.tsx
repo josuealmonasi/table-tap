@@ -13,6 +13,7 @@ import {
   RoleManagerIcon,
   RoleOwnerIcon,
   RoleWaiterIcon,
+  RoleCashierIcon,
 } from "@/components/ui/icons";
 import { StaffTableSkeleton } from "@/components/ui/DashSkeletons";
 import { useRowMemory } from "@/hooks/useRowMemory";
@@ -28,6 +29,7 @@ const ROLE_ICON = {
   owner: RoleOwnerIcon,
   manager: RoleManagerIcon,
   waiter: RoleWaiterIcon,
+  cashier: RoleCashierIcon,
   kitchen: RoleKitchenIcon,
 } satisfies Record<StaffRole, typeof RoleOwnerIcon>;
 
@@ -115,6 +117,7 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
                     >
                       <option value="kitchen">{t("dash.kitchen")}</option>
                       <option value="waiter">{t("dash.waiter")}</option>
+                      <option value="cashier">{t("dash.cashier")}</option>
                       <option value="manager">{t("dash.manager")}</option>
                       <option value="owner">{t("dash.owner")}</option>
                     </select>
@@ -175,6 +178,7 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
                     >
                       <option value="kitchen">{t("dash.roleKitchen")}</option>
                       <option value="waiter">{t("dash.roleWaiter")}</option>
+                      <option value="cashier">{t("dash.roleCashier")}</option>
                       <option value="manager">{t("dash.roleManager")}</option>
                       <option value="owner">{t("dash.roleOwner")}</option>
                     </select>

@@ -15,7 +15,11 @@ interface AdminEditUserProps {
 /** True when the role lives in a staff row and can be switched here. */
 function roleEditable(role: AdminUserRow["role"]): boolean {
   return (
-    role === "owner" || role === "manager" || role === "waiter" || role === "kitchen"
+    role === "owner" ||
+    role === "manager" ||
+    role === "waiter" ||
+    role === "cashier" ||
+    role === "kitchen"
   );
 }
 
@@ -104,6 +108,7 @@ export default function AdminEditUser({ user, onClose }: AdminEditUserProps) {
               >
                 <option value="kitchen">{t("dash.kitchen")}</option>
                 <option value="waiter">{t("dash.waiter")}</option>
+                  <option value="cashier">{t("dash.cashier")}</option>
                 <option value="manager">{t("dash.manager")}</option>
                 <option value="owner">{t("dash.owner")}</option>
               </select>

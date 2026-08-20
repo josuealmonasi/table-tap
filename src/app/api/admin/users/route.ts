@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
-const ROLES: readonly string[] = ["admin", "owner", "manager", "waiter", "kitchen"];
+const ROLES: readonly string[] = ["admin", "owner", "manager", "waiter", "cashier", "kitchen"];
 const MAX_OWNERS = 3;
 
 /** Restaurant-scoped actions also land in that restaurant's activity log. */
@@ -130,7 +130,7 @@ export async function PATCH(req: NextRequest) {
   if (password !== undefined && (typeof password !== "string" || password.length < 8)) {
     return await apiError("apiErr.newPassword8", 400);
   }
-  if (role !== undefined && !["owner", "manager", "waiter", "kitchen"].includes(role)) {
+  if (role !== undefined && !["owner", "manager", "waiter", "cashier", "kitchen"].includes(role)) {
     return await apiError("apiErr.pickValidRole", 400);
   }
 

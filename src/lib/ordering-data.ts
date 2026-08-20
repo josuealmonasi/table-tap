@@ -5,6 +5,8 @@ import { buildCombos, toCartPromos, type Combo } from "@/lib/promotions";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
 import type { CartPromo } from "@/lib/pricing";
 import { mailConfigured } from "@/lib/mail";
+import { can } from "@/lib/plan";
+import { getPlan } from "@/lib/plan-server";
 
 /** Everything the customer ordering screens need for one restaurant. */
 export interface OrderingData {
@@ -189,6 +191,15 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
   // With the service charge switched off, customers see a plain 0% everywhere
   // (cart math and checkout both key off service_pct).
   if (restaurant && !restaurant.service_enabled) restaurant.service_pct = 0;
+
+  // Cobrar en la caja viene con el plan, así que el interruptor del
+  // restaurante no basta: quien se bajó a Carta lo conserva encendido en la
+  // base de datos. Se resuelve aquí para que el carrito no ofrezca un botón
+  // que el checkout va a rechazar — la misma regla, en los dos lados.
+  if (restaurant?.allow_counter_payment) {
+    const plan = await getPlan(restaurantId);
+    restaurant.allow_counter_payment = plan ? can(plan.limits, "counterPayment") : false;
+  }
 
   return {
     closedNow,

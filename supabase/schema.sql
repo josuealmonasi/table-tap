@@ -254,14 +254,14 @@ create table if not exists staff (
   restaurant_id uuid not null references restaurants(id) on delete cascade,
   user_id       uuid not null unique references auth.users(id) on delete cascade,
   email         text not null,
-  role          text not null default 'kitchen',  -- 'owner' (co-owner) | 'manager' | 'waiter' | 'kitchen'
+  role          text not null default 'kitchen',  -- 'owner' (co-owner) | 'manager' | 'waiter' | 'cashier' | 'kitchen'
   created_at    timestamptz not null default now()
 );
 
 alter table staff add column if not exists role text not null default 'kitchen';
 alter table staff drop constraint if exists staff_role_check;
 alter table staff add constraint staff_role_check
-  check (role in ('owner', 'manager', 'waiter', 'kitchen'));
+  check (role in ('owner', 'manager', 'waiter', 'cashier', 'kitchen'));
 
 create index if not exists staff_restaurant_idx on staff(restaurant_id);
 
@@ -753,8 +753,8 @@ alter table discount_requests enable row level security;
 drop policy if exists "team handles discount requests" on discount_requests;
 create policy "team handles discount requests"
   on discount_requests for all
-  using (has_role(restaurant_id, array['owner', 'manager', 'waiter']))
-  with check (has_role(restaurant_id, array['owner', 'manager', 'waiter']));
+  using (has_role(restaurant_id, array['owner', 'manager', 'waiter', 'cashier']))
+  with check (has_role(restaurant_id, array['owner', 'manager', 'waiter', 'cashier']));
 -- Never a customer's business: the ask names staff and carries a code.
 revoke all on discount_requests from anon;
 
@@ -1205,6 +1205,13 @@ update plan_limits set
 alter table plan_limits add column if not exists allows_menu_schedules boolean not null default false;
 update plan_limits set allows_menu_schedules = (rank >= 2);
 
+-- Cobrar en la caja es de plan de paga, y no por avaricia: el QR general de
+-- Carta es gratis porque nos pagamos con la comisión de cada pedido con
+-- tarjeta, y un pedido que se paga en efectivo en el mostrador no deja
+-- ninguna. Regalar las dos cosas a la vez sería regalar el producto entero.
+alter table plan_limits add column if not exists allows_counter_payment boolean not null default false;
+update plan_limits set allows_counter_payment = (rank >= 1);
+
 -- What we actually took from an order, recorded on the order itself. Needed to
 -- honour the monthly ceiling — the alternative is asking Stripe to add up its
 -- application fees on every checkout, which is a network call in the middle of
@@ -1468,8 +1475,8 @@ alter table write_off_requests enable row level security;
 drop policy if exists "team handles write off requests" on write_off_requests;
 create policy "team handles write off requests"
   on write_off_requests for all
-  using (has_role(restaurant_id, array['owner', 'manager', 'waiter']))
-  with check (has_role(restaurant_id, array['owner', 'manager', 'waiter']));
+  using (has_role(restaurant_id, array['owner', 'manager', 'waiter', 'cashier']))
+  with check (has_role(restaurant_id, array['owner', 'manager', 'waiter', 'cashier']));
 -- Never a customer's business: it names staff and what a table did not pay.
 revoke all on write_off_requests from anon;
 

@@ -4,8 +4,8 @@ import type { DashboardRole } from "@/lib/nav";
  * What each section is waiting on, for the person looking at it.
  *
  * A badge is a claim that somebody has to do something. That makes what it
- * counts a question about the reader, not the restaurant: a waiter cannot
- * approve anything, so an approvals count on their screen is a number they
+ * counts a question about the reader, not the restaurant: a waiter or a
+ * cashier cannot approve anything, so an approvals count on their screen is a number they
  * can only ignore — and a badge people learn to ignore has taught them to
  * ignore all of them.
  *

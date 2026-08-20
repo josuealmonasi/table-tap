@@ -25,7 +25,7 @@ export default function Navbar({
   restaurantLogo: string | null;
   restaurantLogoUrl?: string | null;
   /** Managers lose Settings/Staff; waiter/kitchen only get the orders board. */
-  role: "owner" | "manager" | "waiter" | "kitchen" | "admin";
+  role: "owner" | "manager" | "waiter" | "cashier" | "kitchen" | "admin";
   /** Which tier the restaurant is on, for the badge in the account menu. */
   plan?: string | null;
 }) {
