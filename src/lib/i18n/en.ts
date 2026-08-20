@@ -562,6 +562,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
       staff: "Your {plan} plan doesn't include staff logins. Upgrade to add them.",
     },
     needs: {
+      counterPayment: "Paying at the counter comes with {plan}. On the free plan, the general QR takes cards.",
       dineIn: "Tables and table service come with {plan}.",
       promotions: "Promotions come with {plan}.",
       coupons: "Coupons come with {plan}.",
@@ -901,6 +902,9 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     optional: "(optional)",
   },
   dash: {
+    cashier: "Cashier",
+    roleCashier: "Cashier — takes payment at the till and hands orders over",
+    counterPayLocked: "Comes with the paid plans. On the free plan the general QR takes cards — which is where our commission comes from.",
     counterPayTitle: "Pay at the counter",
     counterPayHint: "For the general QR only, the one that isn't a table. The customer can come to the counter with their code instead of paying by card. Their order reaches the board marked unpaid — don't hand it over before collecting.",
     bills: "Open bills",
@@ -1000,7 +1004,7 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
     // Staff
     teamLogins: "Team logins",
     teamHint:
-      "Kitchen & waiter: orders board only · Manager: + menus, tables, settings, refunds · Owner: everything (max 3)",
+      "Kitchen: the board only · Waiter & cashier: + open bills and collecting · Manager: + menus, tables, settings, refunds · Owner: everything (max 3)",
     noStaff:
       "No staff yet. Invite your kitchen team below — they'll get an email to set their own password.",
     name: "Name",

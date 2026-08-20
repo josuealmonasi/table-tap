@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/lib/i18n/context";
 
-export type StaffRole = "owner" | "manager" | "waiter" | "kitchen";
+export type StaffRole = "owner" | "manager" | "waiter" | "cashier" | "kitchen";
 
 /** A staff login row as the owner sees it. */
 export interface StaffMember {

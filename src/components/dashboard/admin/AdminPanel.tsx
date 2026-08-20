@@ -21,7 +21,7 @@ export interface AdminUserRow {
   user_id: string;
   email: string;
   full_name?: string;
-  role: "admin" | "owner" | "manager" | "waiter" | "kitchen" | "none";
+  role: "admin" | "owner" | "manager" | "waiter" | "cashier" | "kitchen" | "none";
   /** Founding owners' role is fixed (it comes from restaurants.owner_id). */
   founding?: boolean;
   restaurant_name?: string;
@@ -39,6 +39,7 @@ const ROLE_META: Record<AdminUserRow["role"], { key: string }> = {
   owner: { key: "dash.owner" },
   manager: { key: "dash.manager" },
   waiter: { key: "dash.waiter" },
+  cashier: { key: "dash.cashier" },
   kitchen: { key: "dash.kitchen" },
   none: { key: "" },
 };

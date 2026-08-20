@@ -119,8 +119,8 @@ pnpm dev
   prints a ready-to-open demo URL.
 - **Presentation data:** `pnpm db:mock` builds "Demo Bistro" — a fully populated
   restaurant to demo every feature (orders board, analytics, service requests,
-  staff). Logins: `demo@tabletap.dev` (owner), `demo-manager@`, `demo-kitchen@`,
-  password `demo123`. Run `pnpm db:dropmock` to remove it again.
+  staff). Logins: `demo@tabletap.dev` (owner), `demo-manager@`, `demo-waiter@`,
+  `demo-cashier@`, `demo-kitchen@`, password `demo123`. Run `pnpm db:dropmock` to remove it again.
 
 ### 4. Stripe test payments locally
 

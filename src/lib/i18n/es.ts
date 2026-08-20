@@ -559,6 +559,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
       staff: "Tu plan {plan} no incluye accesos para tu equipo. Mejora tu plan para agregarlos.",
     },
     needs: {
+      counterPayment: "Cobrar en la caja viene con {plan}. Con el plan gratuito, el QR general cobra con tarjeta.",
       dineIn: "Las mesas y el servicio en mesa vienen con {plan}.",
       promotions: "Las promociones vienen con {plan}.",
       coupons: "Los cupones vienen con {plan}.",
@@ -898,6 +899,9 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     optional: "(opcional)",
   },
   dash: {
+    cashier: "Cajero",
+    roleCashier: "Cajero — cobra en la caja y entrega pedidos",
+    counterPayLocked: "Viene con los planes de paga. En el plan gratuito, el QR general cobra con tarjeta — que es de donde sale nuestra comisión.",
     counterPayTitle: "Pagar en la caja",
     counterPayHint: "Sólo para el QR general, el que no es de mesa. El cliente puede pasar a la caja con su código en lugar de pagar con tarjeta. Su pedido llega al tablero marcado como no pagado: no lo entregues sin cobrar.",
     bills: "Cuentas abiertas",
@@ -995,7 +999,7 @@ badgesHint: "Muestra cuántas cosas esperan acción en cada sección. Aplica a t
     connectError: "No se pudo iniciar la configuración de Stripe.",
     teamLogins: "Accesos del equipo",
     teamHint:
-      "Cocina y mesero: solo el tablero de pedidos · Gerente: + menús, mesas, ajustes, reembolsos · Dueño: todo (máx. 3)",
+      "Cocina: solo el tablero · Mesero y cajero: + cuentas abiertas y cobrar · Gerente: + menús, mesas, ajustes, reembolsos · Dueño: todo (máx. 3)",
     noStaff:
       "Aún no hay personal. Invita a tu equipo de cocina abajo — recibirán un correo para crear su contraseña.",
     name: "Nombre",

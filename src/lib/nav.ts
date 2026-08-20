@@ -96,7 +96,13 @@ export const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-export type DashboardRole = "owner" | "manager" | "waiter" | "kitchen" | "admin";
+export type DashboardRole =
+  | "owner"
+  | "manager"
+  | "waiter"
+  | "cashier"
+  | "kitchen"
+  | "admin";
 
 // Staff management stays with the owner; Settings is owner + manager
 // (managers get the operational controls only — see SettingsForm).
@@ -116,10 +122,11 @@ export function navItemsFor(role: DashboardRole): NavItem[] {
       },
     ];
   }
-  // The kitchen only gets its board. A waiter also gets open bills: they can
-  // ask for a discount on one, even though only a manager grants it.
+  // The kitchen only gets its board. Waiter and cashier also get open bills:
+  // one asks for a discount on a table, the other collects at the till, and
+  // both need the same screen to do it.
   if (role === "kitchen") return NAV_ITEMS.filter(i => i.href === "/dashboard/orders");
-  if (role === "waiter") {
+  if (role === "waiter" || role === "cashier") {
     return NAV_ITEMS.filter(
       i => i.href === "/dashboard/orders" || i.href === "/dashboard/bills",
     );

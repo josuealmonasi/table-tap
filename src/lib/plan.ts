@@ -35,6 +35,8 @@ export interface PlanLimits {
   max_items: number | null;
   allows_dine_in: boolean;
   allows_menu_schedules?: boolean;
+  /** Cobrar en la caja en el QR general. Sólo planes de paga. */
+  allows_counter_payment?: boolean;
   allows_promotions: boolean;
   allows_coupons: boolean;
   allows_staff_discounts: boolean;
@@ -50,7 +52,8 @@ export type PlanFeature =
   | "promotions"
   | "coupons"
   | "staffDiscounts"
-  | "menuSchedules";
+  | "menuSchedules"
+  | "counterPayment";
 
 const FEATURE_COLUMN: Record<PlanFeature, keyof PlanLimits> = {
   dineIn: "allows_dine_in",
@@ -58,6 +61,7 @@ const FEATURE_COLUMN: Record<PlanFeature, keyof PlanLimits> = {
   coupons: "allows_coupons",
   staffDiscounts: "allows_staff_discounts",
   menuSchedules: "allows_menu_schedules",
+  counterPayment: "allows_counter_payment",
 };
 
 /** Whether this tier includes a feature at all. */

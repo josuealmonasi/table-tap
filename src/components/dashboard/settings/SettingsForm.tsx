@@ -15,6 +15,8 @@ import LogoCard from "./LogoCard";
 interface SettingsFormProps {
   restaurant: Restaurant;
   role: Role;
+  /** Si el plan incluye cobrar en la caja. Falso lo deja visible y apagado. */
+  counterPayAllowed?: boolean;
 }
 
 // Two-decimal currencies only, so checkout's Math.round(amount * 100) stays
@@ -22,7 +24,11 @@ interface SettingsFormProps {
 const CURRENCIES = ["USD", "MXN"] as const;
 
 /** Dashboard Settings: identity + service charge (owner), tax + pausing (owner + manager). */
-export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
+export default function SettingsForm({
+  restaurant,
+  role,
+  counterPayAllowed = false,
+}: SettingsFormProps) {
   const t = useT();
   const { saving, save } = useSettings();
   const isOwner = role === "owner";
@@ -381,14 +387,16 @@ export default function SettingsForm({ restaurant, role }: SettingsFormProps) {
                 <span>
                   <strong>{t("dash.counterPayTitle")}</strong>
                   <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
-                    {t("dash.counterPayHint")}
+                    {counterPayAllowed
+                      ? t("dash.counterPayHint")
+                      : t("dash.counterPayLocked")}
                   </span>
                 </span>
                 <span className="tt-switch">
                   <input
                     type="checkbox"
                     checked={counterPay}
-                    disabled={saving}
+                    disabled={saving || !counterPayAllowed}
                     onChange={e => toggleCounterPay(e.target.checked)}
                   />
                   <span className="tt-switch-track" />

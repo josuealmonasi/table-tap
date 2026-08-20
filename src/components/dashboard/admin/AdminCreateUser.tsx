@@ -99,6 +99,7 @@ export default function AdminCreateUser({ restaurantOptions }: AdminCreateUserPr
                 >
                   <option value="kitchen">{t("dash.kitchen")}</option>
                   <option value="waiter">{t("dash.waiter")}</option>
+                  <option value="cashier">{t("dash.cashier")}</option>
                   <option value="manager">{t("dash.manager")}</option>
                   <option value="owner">{t("dash.owner")}</option>
                   <option value="admin">{t("admin.platformAdmin")}</option>
