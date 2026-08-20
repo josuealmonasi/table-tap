@@ -173,7 +173,10 @@ export default function BillsPanel({
           {formatMoney(bill.total, currency)}
         </strong>
       </button>
-      {canSettle && bill.tableId && (
+      {/* También para el pedido de mostrador: es exactamente donde alguien
+          está esperando a que le cobren. Sin esto el cajero veía la cuenta y
+          no tenía con qué cerrarla. */}
+      {canSettle && (
         <button
           type="button"
           className="tt-btn tt-btn-primary tt-btn-sm tt-bill-collect"
@@ -332,12 +335,15 @@ export default function BillsPanel({
         {children}
       </div>
 
-      {settling?.tableId && (
+      {settling && (
         <SettleTableDialog
           open
           restaurantId={restaurantId}
           tableId={settling.tableId}
-          tableLabel={settling.tableLabel ?? ""}
+          // Sin mesa, la cuenta es el pedido mismo; `openBills` agrupa cada
+          // pedido de mostrador en su propia fila, así que hay exactamente uno.
+          orderId={settling.tableId ? null : settling.orderIds[0]}
+          tableLabel={settling.tableLabel ?? settling.code ?? ""}
           currency={currency}
           canApprove={canApprove}
           onClose={() => setSettling(null)}

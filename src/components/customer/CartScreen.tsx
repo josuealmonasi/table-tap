@@ -54,6 +54,8 @@ interface CartScreenProps {
   onCheckout: (payLater?: boolean) => void;
   /** Dine-in at a table, where the owner allows settling at the end. */
   payLaterAllowed?: boolean;
+  /** QR general, donde el dueño permite pasar a la caja a pagar. */
+  counterAllowed?: boolean;
 }
 
 /** The review-and-pay screen: line items, kitchen note, totals, checkout button. */
@@ -90,6 +92,7 @@ export default function CartScreen({
   onPickSuggestion,
   onCheckout,
   payLaterAllowed = false,
+  counterAllowed = false,
 }: CartScreenProps) {
   const t = useT();
   // 0 when the fee is switched off, so the totals card doesn't render an empty
@@ -235,7 +238,7 @@ export default function CartScreen({
                   is the plain second option under it. Before this the setting
                   decided for them, so a table that allowed settling later gave
                   the diner no way to pay at all. */}
-              {payLaterAllowed && (
+              {(payLaterAllowed || counterAllowed) && (
                 <button
                   className="tt-btn tt-btn-outline tt-btn-lg"
                   style={{ width: "100%", marginTop: 10 }}
@@ -246,7 +249,13 @@ export default function CartScreen({
                       announcing a redirect to payment when the tap only sends
                       food to the kitchen says a card is about to be charged,
                       which is untrue and alarming at a table paying later. */}
-                  {t(loading ? "cart.placingOrder" : "cart.orderPayLater")}
+                  {t(
+                    loading
+                      ? "cart.placingOrder"
+                      : payLaterAllowed
+                        ? "cart.orderPayLater"
+                        : "cart.orderCounter",
+                  )}
                 </button>
               )}
               {/* And the small print underneath answers the question the
@@ -257,10 +266,10 @@ export default function CartScreen({
                 className="tt-muted"
                 style={{ textAlign: "center", fontSize: 12, marginTop: 12 }}
               >
-                {payLaterAllowed ? (
+                {payLaterAllowed || counterAllowed ? (
                   <>
                     <BillIcon size={12} weight="bold" style={{ verticalAlign: "-1px" }} />{" "}
-                    {t("cart.payNowHint")}
+                    {t(payLaterAllowed ? "cart.payNowHint" : "cart.counterHint")}
                   </>
                 ) : (
                   <>

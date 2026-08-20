@@ -26,6 +26,7 @@ const OWNER_FIELDS = new Set([
   "cover_enabled",
   "logo_url",
   "allow_pay_later",
+  "allow_counter_payment",
   "badges_enabled",
 ]);
 // A manager runs the floor, so they decide whether the floor is being told

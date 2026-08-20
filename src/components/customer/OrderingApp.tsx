@@ -566,6 +566,8 @@ export default function OrderingApp({
             onAddMore={() => setScreen("menu")}
             onCheckout={checkout}
             payLaterAllowed={Boolean(table) && Boolean(restaurant.allow_pay_later)}
+            // Sin mesa es el QR general: lo que retiene el pedido es la caja.
+            counterAllowed={!table && Boolean(restaurant.allow_counter_payment)}
           />
         </div>
       </div>

@@ -2005,6 +2005,20 @@ a.tt-btn {
   padding: 4px 10px;
   border-radius: 20px;
 }
+/* El estado del pedido y si está pagado son dos cosas distintas y van juntas
+   en la esquina; envueltas para que en un teléfono bajen en vez de encimarse. */
+.tt-order-flags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+/* Rojo, porque quien entrega la comida tiene que verlo sin buscarlo. */
+.tt-unpaid-badge {
+  color: var(--tt-sale-ink);
+  background: var(--tt-sale);
+}
 .tt-order-items {
   border-top: 1px solid var(--tt-cream);
   padding-top: 10px;

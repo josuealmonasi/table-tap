@@ -285,6 +285,7 @@ myBill: "View my bill",
     failed: "Couldn't load the bill. Please try again.",
   },
   settle: {
+    titleToGo: "{label} · collect",
     openTables: "Tables still to pay",
     openTablesHint: "Longest wait first",
     searchTables: "Search tables…",
@@ -305,6 +306,8 @@ myBill: "View my bill",
     nothing: "Nothing outstanding on this table.",
   },
   cart: {
+    orderCounter: "Pay at the counter",
+    counterHint: "Pay now and skip the queue, or come to the counter with your code.",
     orderPayLater: "Order and pay at the end",
     payNowHint: "Pay now by card, or leave the bill open and settle at the end.",
     payNow: "Pay now",
@@ -898,6 +901,8 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     optional: "(optional)",
   },
   dash: {
+    counterPayTitle: "Pay at the counter",
+    counterPayHint: "For the general QR only, the one that isn't a table. The customer can come to the counter with their code instead of paying by card. Their order reaches the board marked unpaid — don't hand it over before collecting.",
     bills: "Open bills",
     billsDesc: "Find a bill and apply a promotion",
     billsSearch: "Search by table or order code…",
@@ -1085,6 +1090,7 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
     pageOf: "Page {page} of {pages}",
   },
   orders: {
+    notPaid: "Unpaid",
     openDetail: "Open order {code}",
     historyCountOne: "1 order",
     historyCount: "{total} orders",

@@ -106,7 +106,12 @@ export default function OrderCard({
       <div className="tt-order-head">
         <div className="tt-row">
           <strong style={{ fontSize: 16 }}>
-            {t("dash.tableN", { label: order.table_label ?? "" })}
+            {/* Un pedido del QR general no tiene mesa: decía "Mesa" a secas,
+                con el hueco donde iría el número. Lo que hay que saber de él
+                es justamente que no hay mesa a donde llevarlo. */}
+            {order.table_label
+              ? t("dash.tableN", { label: order.table_label })
+              : t("dash.billsToGo")}
           </strong>
           <span className="tt-order-code">{orderCode(order.id)}</span>
         </div>
@@ -114,11 +119,22 @@ export default function OrderCard({
           <span className="tt-muted" style={{ fontSize: 12 }}>
             {placedAt}
           </span>
-          <span
-            className="tt-status-badge"
-            style={{ color: meta.color, background: `${meta.color}1a` }}
-          >
-            {t(meta.labelKey)}
+          <span className="tt-order-flags">
+            {/* Quien entrega el pedido tiene que ver que no está pagado antes
+                de soltarlo. Un pedido del QR general que eligió pagar en caja
+                llega aquí igual que cualquier otro, y sin esto la comida sale
+                por la puerta sin que nadie haya cobrado. */}
+            {!order.paid && (
+              <span className="tt-status-badge tt-unpaid-badge">
+                {t("orders.notPaid")}
+              </span>
+            )}
+            <span
+              className="tt-status-badge"
+              style={{ color: meta.color, background: `${meta.color}1a` }}
+            >
+              {t(meta.labelKey)}
+            </span>
           </span>
         </div>
       </div>

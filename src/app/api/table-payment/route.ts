@@ -29,11 +29,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
-  const { tableId, settlement } = (await req.json()) as {
+  const { tableId, orderId, settlement } = (await req.json()) as {
     tableId?: string;
+    orderId?: string;
     settlement?: Settlement;
   };
-  if (!tableId || !["cash", "card"].includes(settlement ?? "")) {
+  // Una mesa o un pedido de mostrador, nunca las dos ni ninguna: si llegaran
+  // juntas habría que decidir cuál manda, y adivinar cuál cobrar es lo último
+  // que debe hacer un endpoint que marca dinero como recibido.
+  if (!["cash", "card"].includes(settlement ?? "") || Boolean(tableId) === Boolean(orderId)) {
     return await apiError("apiErr.invalidRequest", 400);
   }
 
@@ -42,11 +46,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Scoped by the actor's restaurant, so a table id from elsewhere matches
   // nothing. Only what is genuinely outstanding is touched: an order already
   // paid must not be quietly rewritten.
-  const base = db
+  const scoped = db
     .from("orders")
     .update({ paid: true, pay_method: settlement })
-    .eq("restaurant_id", actor.restaurantId)
-    .eq("table_id", tableId)
+    .eq("restaurant_id", actor.restaurantId);
+
+  // El pedido del QR general se cobra por sí mismo, y sólo si no tiene mesa:
+  // sin eso, este id serviría para saldar un pedido suelto de una mesa y dejar
+  // la cuenta a medias sin que nadie lo viera.
+  const base = (tableId ? scoped.eq("table_id", tableId) : scoped.eq("id", orderId!).is("table_id", null))
     .eq("paid", false)
     .eq("written_off", false)
     .neq("status", "pending_payment")
