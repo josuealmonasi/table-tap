@@ -84,8 +84,15 @@ for (const size of SIZES) {
       // "networkidle" nunca llega en las pantallas con tiempo real: la
       // suscripción deja la conexión abierta a propósito. Se espera a que
       // cargue y luego a que se asiente.
-      await tab.goto(BASE + page.path, { waitUntil: "load", timeout: 30000 });
-      await tab.waitForTimeout(1500);
+      // El margen es amplio a propósito: en desarrollo la primera visita a una
+      // ruta la compila en ese momento, y una prueba que falla sola por eso es
+      // una prueba que se acaba ignorando.
+      await tab.goto(BASE + page.path, { waitUntil: "load", timeout: 60000 });
+      // Cargar no es tener contenido: se espera a que haya texto que medir.
+      await tab.waitForFunction("document.body.innerText.trim().length > 200", null, {
+        timeout: 30000,
+      });
+      await tab.waitForTimeout(1200);
       // El carrito es donde el cliente decide pagar, así que se revisa lleno:
       // una fila vacía nunca se aplasta, y aplastada fue como se fue a prod.
       if (page.cart) {
