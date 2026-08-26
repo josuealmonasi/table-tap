@@ -89,6 +89,12 @@ and checks each one does its job — the other checks only ever proved that a
 route was *guarded*, not that it *worked*, and that gap is where the bugs came
 through. Any of them takes `:prod` to run against the deployed site.
 
+If a page misbehaves and the source looks right, run `pnpm dev:fresh` before
+debugging: it stops the old server — including the `pnpm dev` parent that
+otherwise revives it — clears `.next`, and starts clean. A long-lived dev server
+serves stale compiles and drops mid-run, and both look exactly like bugs in the
+code.
+
 Anything a script creates, it deletes. Test litter comes back disguised as a
 product bug: a leftover service request once looked like a layout fault, and an
 order seeded with a fake item id looked like a broken ratings system.
