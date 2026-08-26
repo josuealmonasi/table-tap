@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
-import { acceptableRatings, rateableDishes, type SubmittedRating } from "@/lib/ratings";
+import {
+  acceptableRatings,
+  isStorableId,
+  rateableDishes,
+  type SubmittedRating,
+} from "@/lib/ratings";
 import type { OrderLineItem } from "@/lib/types";
 
 /**
@@ -58,7 +63,12 @@ export async function POST(req: NextRequest) {
   const entitled = rateableDishes(
     (orders ?? []).map(o => ({ id: o.id, items: (o.items ?? []) as OrderLineItem[] })),
   );
-  const accepted = acceptableRatings(ratings, entitled);
+  // Y que los ids quepan en sus columnas. Una línea con un id que no es uuid
+  // pasaba la comprobación de compra y reventaba en el insert, y el 503 se
+  // llevaba por delante las calificaciones honestas del mismo envío.
+  const accepted = acceptableRatings(ratings, entitled).filter(
+    r => isStorableId(r.itemId) && isStorableId(r.orderId),
+  );
   if (accepted.length === 0) {
     return NextResponse.json({ saved: 0 });
   }

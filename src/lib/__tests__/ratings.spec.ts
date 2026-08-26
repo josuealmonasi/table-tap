@@ -129,3 +129,17 @@ describe("acceptableRatings", () => {
     expect(acceptableRatings([{ itemId: "i1", orderId: "o1", rating: 5 }], [])).toEqual([]);
   });
 });
+
+describe("a malformed id costs its own line, not the batch", () => {
+  it("only calls a uuid storable", async () => {
+    // A dev order once carried `itemId: "x"`. It really was in the order, so
+    // the purchase check passed, and the insert then failed on the uuid column
+    // — turning one bad line into a 503 for everything sent with it. The route
+    // filters with this before writing.
+    const { isStorableId } = await import("@/lib/ratings");
+    expect(isStorableId("11111111-2222-3333-4444-555555555555")).toBe(true);
+    expect(isStorableId("x")).toBe(false);
+    expect(isStorableId("")).toBe(false);
+    expect(isStorableId("11111111-2222-3333-4444-5555555555")).toBe(false);
+  });
+});

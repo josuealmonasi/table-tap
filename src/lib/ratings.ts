@@ -28,6 +28,27 @@ export function isValidRating(value: unknown): value is number {
 }
 
 /**
+ * A dish id has to be a uuid, because the column is one.
+ *
+ * Deliberately not part of `acceptableRatings`: that function answers "did they
+ * buy this dish", and its tests say so in readable ids like `dish-1`. Whether a
+ * value fits the column is the writer's question, so the route asks it.
+ *
+ * The pair check below already proves the dish was in the order, so this only
+ * catches an order whose stored lines carry something that isn't an id at all.
+ * That should never happen — checkout builds every line from a database row —
+ * but when it did, the malformed value sailed through validation and blew up
+ * at the insert, and the 503 took the honest ratings in the same batch down
+ * with it. Dropping the line instead is what the rest of this file already
+ * does with anything it cannot vouch for.
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isStorableId(value: string): boolean {
+  return UUID.test(value);
+}
+
+/**
  * The distinct dishes a set of orders entitles someone to rate.
  *
  * Deduped by dish rather than by line: two lines of the same dish in one order
