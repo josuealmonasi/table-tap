@@ -227,3 +227,22 @@ describe("the ratings threshold is one number", () => {
     );
   });
 });
+
+describe("a zero platform fee is never sent to Stripe", () => {
+  it("omits application_fee_amount on every card path", () => {
+    // Stripe refuses an application fee of 0. Grupo charges no per-order fee,
+    // and a pilot restaurant we don't bill is the same case — so a route that
+    // passes the fee unconditionally works for everyone except the restaurants
+    // we most want to keep happy. /api/checkout guarded it; /api/bill/pay did
+    // not, and card orders would go through while paying the table's bill died.
+    for (const file of ["src/app/api/checkout/route.ts", "src/app/api/bill/pay/route.ts"]) {
+      const body = read(file);
+      const uses = body.includes("application_fee_amount");
+      expect(uses, `${file} no longer sets an application fee`).toBe(true);
+      expect(
+        /appFee > 0 \? \{ application_fee_amount/.test(body),
+        `${file} sends application_fee_amount even when it is zero`,
+      ).toBe(true);
+    }
+  });
+});
