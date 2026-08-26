@@ -105,12 +105,24 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
   // Which menus a customer may order from now. The decision is shared with
   // /api/checkout so the page and the charge can't disagree about what's on
   // offer — a menu that closes while the page sits open must stop both.
-  const [menusRes, zoneRes] = await Promise.all([
+  // Todo lo que sólo necesita el id del restaurante sale en la misma ola.
+  //
+  // Antes eran siete viajes en fila —portada, menús, horario, restaurante,
+  // categorías, platillos, extras, promociones, calificaciones y plan— y en
+  // producción el menú tardaba 1.9 s con consultas que la base resuelve en
+  // menos de un milisegundo cada una. El tiempo no estaba en la base: estaba
+  // en esperar diez veces de ida y vuelta. Las promociones, las calificaciones
+  // y el plan no dependen de ninguna otra, así que no tienen por qué esperar
+  // su turno.
+  const [menusRes, zoneRes, promotions, statsRes, plan] = await Promise.all([
     supabase
       .from("menus")
       .select("id, active, schedule")
       .eq("restaurant_id", restaurantId),
     supabase.from("restaurants").select("timezone").eq("id", restaurantId).single(),
+    fetchPromotions(supabase, restaurantId, { activeOnly: true }),
+    supabase.rpc("dish_rating_stats", { p_restaurant_id: restaurantId }),
+    getPlan(restaurantId),
   ]);
   const menuRows = (menusRes.data as MenuOpenState[] | null) ?? [];
   const timeZone =
@@ -164,9 +176,8 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
     }
   }
 
-  // Promotions. Combos are built against live prices and silently dropped when
-  // a component sells out, so a card can never be tapped into a failed checkout.
-  const promotions = await fetchPromotions(supabase, restaurantId, { activeOnly: true });
+  // Combos are built against live prices and silently dropped when a component
+  // sells out, so a card can never be tapped into a failed checkout.
   const itemsById = new Map(items.map(i => [i.id, i]));
   const combos = buildCombos(promotions, itemsById);
   const promos = toCartPromos(promotions);
@@ -177,9 +188,7 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
   // decoration, so it degrades to "no ratings" rather than taking the menu
   // down with it.
   const ratings: OrderingData["ratings"] = {};
-  const { data: stats } = await supabase.rpc("dish_rating_stats", {
-    p_restaurant_id: restaurantId,
-  });
+  const stats = statsRes.data;
   for (const row of (stats as
     { item_id: string; avg_rating: number; rating_count: number }[] | null) ?? []) {
     ratings[row.item_id] = {
@@ -197,7 +206,6 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
   // base de datos. Se resuelve aquí para que el carrito no ofrezca un botón
   // que el checkout va a rechazar — la misma regla, en los dos lados.
   if (restaurant?.allow_counter_payment) {
-    const plan = await getPlan(restaurantId);
     restaurant.allow_counter_payment = plan ? can(plan.limits, "counterPayment") : false;
   }
 
