@@ -27,3 +27,32 @@ export async function requireServer(base, prod) {
   );
   process.exit(1);
 }
+
+/**
+ * Un fetch que no confunde un servidor caído con una prueba fallida.
+ *
+ * El de desarrollo se cae a media revisión —se infla con las horas, y a veces
+ * lo revive un `pnpm dev` que sigue vivo detrás— y el ECONNRESET salía por
+ * pantalla como si el permiso o la ruta estuvieran mal. Un rojo que no es
+ * verdad cuesta más que uno que sí: enseña a desconfiar de todos.
+ *
+ * Reintenta una vez, y si a la segunda tampoco hay servidor lo dice con esas
+ * palabras en vez de dejar el error de red crudo.
+ */
+export async function retryFetch(url, init, base) {
+  try {
+    return await fetch(url, init);
+  } catch (first) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      return await fetch(url, init);
+    } catch {
+      const up = base ? await reachable(base) : false;
+      throw new Error(
+        up
+          ? `la petición falló dos veces (${first.message})`
+          : "el servidor se cayó a media revisión — levántalo y vuelve a correr",
+      );
+    }
+  }
+}

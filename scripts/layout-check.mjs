@@ -51,6 +51,21 @@ const bad = (where, faults) => {
   for (const f of faults) console.log(`             ${f.kind}: «${f.text}» (${f.w}px)`);
 };
 
+/**
+ * Una navegación que reintenta una vez.
+ *
+ * El servidor de desarrollo se cae a media revisión y el fallo de red salía
+ * como si la pantalla estuviera rota. Un rojo falso enseña a ignorar los rojos.
+ */
+async function gotoOnce(tab, url, opts) {
+  try {
+    return await tab.goto(url, opts);
+  } catch {
+    await tab.waitForTimeout(2000);
+    return await tab.goto(url, opts);
+  }
+}
+
 /** Espera a que haya contenido de verdad: cargar no es tener qué medir. */
 async function settle(tab) {
   await tab.waitForFunction("document.body.innerText.trim().length > 200", null, {
@@ -104,7 +119,7 @@ for (const size of SIZES) {
   for (const flow of DINER) {
     const tab = await diner.newPage();
     try {
-      await tab.goto(`${BASE}/r/${r.id}/t/${table.id}`, { waitUntil: "load", timeout: 60000 });
+      await gotoOnce(tab, `${BASE}/r/${r.id}/t/${table.id}`, { waitUntil: "load", timeout: 60000 });
       await settle(tab);
       for (const step of flow.steps) {
         if (step.addToCart) {
@@ -159,7 +174,7 @@ for (const size of SIZES) {
     for (const path of who.pages) {
       const tab = await ctx.newPage();
       try {
-        await tab.goto(BASE + path, { waitUntil: "load", timeout: 60000 });
+        await gotoOnce(tab, BASE + path, { waitUntil: "load", timeout: 60000 });
         await settle(tab);
         await look(tab, `${who.role} · ${path}`);
 
