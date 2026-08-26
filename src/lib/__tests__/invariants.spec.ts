@@ -261,3 +261,41 @@ describe("a combo survives the trip to the server", () => {
     expect(payload.slice(0, 600)).toContain("components");
   });
 });
+
+describe("a column exists before the grant that names it", () => {
+  it("creates every granted column earlier in schema.sql than its grant", () => {
+    // schema.sql runs top to bottom, and the column grants sit a few hundred
+    // lines above where new columns naturally get appended. Adding one the
+    // obvious way and listing it in a grant fails the whole migration with
+    // `column "…" does not exist` — which is loud, but only after you have run
+    // it. The file already warns about this ordering twice; this checks it.
+    const sql = read("supabase/schema.sql");
+
+    const created = (table: string, column: string): number => {
+      const alter = sql.indexOf(
+        `alter table ${table} add column if not exists ${column} `,
+      );
+      if (alter !== -1) return alter;
+      // Otherwise it has to be in the table's own CREATE block.
+      const start = sql.indexOf(`create table if not exists ${table} (`);
+      if (start === -1) return -1;
+      const end = sql.indexOf("\n);", start);
+      const block = sql.slice(start, end);
+      return new RegExp(`^\\s+${column}\\s`, "m").test(block) ? start : -1;
+    };
+
+    const grants = [...sql.matchAll(/grant select \(([^)]*)\) on (\w+) to/g)];
+    expect(grants.length, "the column grants moved or vanished").toBeGreaterThan(0);
+
+    const late: string[] = [];
+    for (const grant of grants) {
+      const [, columns, table] = grant;
+      for (const raw of columns.split(",")) {
+        const column = raw.trim();
+        const at = created(table, column);
+        if (at === -1 || at > grant.index!) late.push(`${table}.${column}`);
+      }
+    }
+    expect(late, `granted before they are created: ${late.join(", ")}`).toEqual([]);
+  });
+});

@@ -10,7 +10,7 @@
 //   pnpm smoke --prod   (against the deployed site)
 // ============================================================================
 import { join } from "node:path";
-import { requireServer } from "./preflight.mjs";
+import { requireServer, retryFetch } from "./preflight.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -79,10 +79,14 @@ let failed = false;
 
 for (const page of PAGES) {
   try {
-    const res = await fetch(BASE + page, {
-      headers: { cookie, "accept-language": "es-MX", accept: "text/html" },
-      redirect: "manual",
-    });
+    const res = await retryFetch(
+      BASE + page,
+      {
+        headers: { cookie, "accept-language": "es-MX", accept: "text/html" },
+        redirect: "manual",
+      },
+      BASE,
+    );
     const html = res.status < 300 ? await res.text() : "";
     const problems = [];
 

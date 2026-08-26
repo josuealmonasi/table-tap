@@ -15,7 +15,7 @@
 import { join } from "node:path";
 import { setup, teardown } from "./api-fixtures.mjs";
 import { cases } from "./api-cases.mjs";
-import { requireServer } from "./preflight.mjs";
+import { requireServer, retryFetch } from "./preflight.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -42,14 +42,18 @@ try {
 
     let res, text;
     try {
-      res = await fetch(BASE + c.path, {
-        method: c.method,
-        headers,
-        body:
-          c.body === undefined
-            ? undefined
-            : JSON.stringify(typeof c.body === "function" ? await c.body(fx, saved) : c.body),
-      });
+      res = await retryFetch(
+        BASE + c.path,
+        {
+          method: c.method,
+          headers,
+          body:
+            c.body === undefined
+              ? undefined
+              : JSON.stringify(typeof c.body === "function" ? await c.body(fx, saved) : c.body),
+        },
+        BASE,
+      );
       text = await res.text();
     } catch (e) {
       bad(`${c.name} — no respondió: ${e.message}`);

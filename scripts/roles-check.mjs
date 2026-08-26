@@ -9,7 +9,7 @@
 //   pnpm roles --prod
 // ============================================================================
 import { join } from "node:path";
-import { requireServer } from "./preflight.mjs";
+import { requireServer, retryFetch } from "./preflight.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -99,7 +99,11 @@ for (const who of ROLES) {
   console.log(`  ${who.role} (${who.email})`);
 
   for (const [path, { allow, marker }] of Object.entries(PAGES)) {
-    const res = await fetch(BASE + path, { headers: { cookie, "accept-language": "es-MX" } });
+    const res = await retryFetch(
+      BASE + path,
+      { headers: { cookie, "accept-language": "es-MX" } },
+      BASE,
+    );
     const html = res.status === 200 ? await res.text() : "";
     const reached = html.includes(marker);
     const may = allow.includes(who.role);
@@ -118,11 +122,15 @@ for (const who of ROLES) {
 
   for (const r of ROUTES) {
     const path = r.needsTable ? r.p + table.id : r.p;
-    const res = await fetch(BASE + path, {
-      method: r.m,
-      headers: { "Content-Type": "application/json", cookie },
-      body: r.body ? JSON.stringify(r.body) : undefined,
-    });
+    const res = await retryFetch(
+      BASE + path,
+      {
+        method: r.m,
+        headers: { "Content-Type": "application/json", cookie },
+        body: r.body ? JSON.stringify(r.body) : undefined,
+      },
+      BASE,
+    );
     const may = r.allow.includes(who.role);
     const refused = res.status === 401 || res.status === 403;
     if (may && refused) bad(`${r.m} ${r.p.split("?")[0]} lo rechazó (${res.status}) y debía dejarlo`);
