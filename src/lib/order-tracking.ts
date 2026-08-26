@@ -16,10 +16,12 @@ export type TrackedOrder = Pick<
   | "items"
   | "total"
   | "currency"
+  // Para no llamarle "Total pagado" a una cuenta que se paga al final.
+  | "paid"
 >;
 
 const TRACKER_COLUMNS =
-  "id, restaurant_id, table_id, table_label, status, items, total, currency";
+  "id, restaurant_id, table_id, table_label, status, items, total, currency, paid";
 
 // UUIDs only — avoids sending malformed ids to Postgres' uuid column.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

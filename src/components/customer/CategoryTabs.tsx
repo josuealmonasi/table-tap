@@ -8,10 +8,13 @@ export default function CategoryTabs({
   categories,
   activeCat,
   onSelect,
+  hasDeals = false,
 }: {
   categories: Category[];
   activeCat: string;
   onSelect: (categoryId: string) => void;
+  /** Si hay combos, rebajas o promociones que enseñar. */
+  hasDeals?: boolean;
 }) {
   const t = useT();
   return (
@@ -22,6 +25,17 @@ export default function CategoryTabs({
       >
         {t("menu.all")}
       </button>
+      {/* Justo después de Todo, y con el color de las ofertas: un combo no es
+          una categoría del menú y el restaurante no debería tener que
+          inventarse una para que se vea. Sólo aparece si hay algo dentro. */}
+      {hasDeals && (
+        <button
+          className={`tt-cat tt-cat-deal ${activeCat === "deals" ? "tt-cat-deal-on" : ""}`}
+          onClick={() => onSelect("deals")}
+        >
+          {t("menu.deals")}
+        </button>
+      )}
       {categories.map(c => (
         <button
           key={c.id}

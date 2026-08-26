@@ -104,6 +104,7 @@ export const en = {
     deleteSelected: "Couldn't delete the selected items",
   },
   menu: {
+    deals: "Deals & combos",
     openDish: "Open {name}",
     closedNowTitle: "We're closed right now",
     closedNowBody:
@@ -626,6 +627,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     hint: "If you have already paid, ask your waiter to close the bill and scan again.",
   },
   tracker: {
+    totalDue: "Total to pay",
     received: "Order received!",
     preparing: "Chef is preparing it",
     ready: "Your order is ready!",

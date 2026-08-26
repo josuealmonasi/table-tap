@@ -106,6 +106,7 @@ export const es: Messages = {
     deleteSelected: "No se pudieron eliminar los elementos seleccionados",
   },
   menu: {
+    deals: "Combos y ofertas",
     openDish: "Abrir {name}",
     closedNowTitle: "Estamos cerrados en este momento",
     closedNowBody:
@@ -623,6 +624,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     hint: "Si ya pagaste, pídele a tu mesero que cierre la cuenta y vuelve a escanear.",
   },
   tracker: {
+    totalDue: "Total a pagar",
     received: "¡Pedido recibido!",
     preparing: "El chef lo está preparando",
     ready: "¡Tu pedido está listo!",

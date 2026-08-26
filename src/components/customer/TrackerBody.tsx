@@ -60,6 +60,7 @@ export default function TrackerBody({
           items={order.items}
           total={order.total}
           currency={order.currency}
+          paid={order.paid !== false}
         />
         {children}
       </div>
