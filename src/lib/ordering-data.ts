@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { Category, MenuItem, Restaurant } from "@/lib/types";
 import { fetchPromotions } from "@/lib/promotions-data";
 import { buildCombos, toCartPromos, type Combo } from "@/lib/promotions";
@@ -205,6 +206,18 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
   // restaurante no basta: quien se bajó a Carta lo conserva encendido en la
   // base de datos. Se resuelve aquí para que el carrito no ofrezca un botón
   // que el checkout va a rechazar — la misma regla, en los dos lados.
+  // ¿Puede cobrar con tarjeta? Se resuelve aquí porque las columnas de Stripe
+  // no son del comensal — su permiso de lectura no las incluye, y así debe
+  // seguir. Lo que baja al navegador es un sí o un no.
+  if (restaurant) {
+    const { data: pay } = await createAdminClient()
+      .from("restaurants")
+      .select("stripe_account_id, stripe_charges_enabled")
+      .eq("id", restaurantId)
+      .maybeSingle();
+    restaurant.cards_enabled = Boolean(pay?.stripe_account_id && pay?.stripe_charges_enabled);
+  }
+
   if (restaurant?.allow_counter_payment) {
     restaurant.allow_counter_payment = plan ? can(plan.limits, "counterPayment") : false;
   }

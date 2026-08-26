@@ -306,6 +306,7 @@ myBill: "View my bill",
     nothing: "Nothing outstanding on this table.",
   },
   cart: {
+    noCardYet: "This restaurant can't take cards here yet.",
     orderCounter: "Pay at the counter",
     counterHint: "Pay now and skip the queue, or come to the counter with your code.",
     orderPayLater: "Order and pay at the end",

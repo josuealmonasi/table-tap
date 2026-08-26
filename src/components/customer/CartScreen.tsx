@@ -56,6 +56,8 @@ interface CartScreenProps {
   payLaterAllowed?: boolean;
   /** QR general, donde el dueño permite pasar a la caja a pagar. */
   counterAllowed?: boolean;
+  /** Si el restaurante puede cobrar con tarjeta ahora mismo. */
+  cardsEnabled?: boolean;
 }
 
 /** The review-and-pay screen: line items, kitchen note, totals, checkout button. */
@@ -93,6 +95,7 @@ export default function CartScreen({
   onCheckout,
   payLaterAllowed = false,
   counterAllowed = false,
+  cardsEnabled = true,
 }: CartScreenProps) {
   const t = useT();
   // 0 when the fee is switched off, so the totals card doesn't render an empty
@@ -224,14 +227,19 @@ export default function CartScreen({
                   bill whether they pay now or after dessert. Everywhere else
                   the card is taken here, because there is no table to settle
                   against. */}
-              <button
-                className="tt-btn tt-btn-primary tt-btn-lg"
-                style={{ width: "100%" }}
-                disabled={!canCheckout || loading}
-                onClick={() => onCheckout(false)}
-              >
-                {t(loading ? "cart.redirecting" : "cart.proceed")}
-              </button>
+              {/* Sin cuenta de Stripe conectada no hay pago con tarjeta, y
+                  ofrecerlo como acción principal sólo lleva a un 409 después
+                  de tocarlo. Cuando hay otra forma de pagar, ésa manda. */}
+              {cardsEnabled && (
+                <button
+                  className="tt-btn tt-btn-primary tt-btn-lg"
+                  style={{ width: "100%" }}
+                  disabled={!canCheckout || loading}
+                  onClick={() => onCheckout(false)}
+                >
+                  {t(loading ? "cart.redirecting" : "cart.proceed")}
+                </button>
+              )}
               {/* Where the table settles at the end, that is the diner's
                   choice to make and not something they should have to find:
                   paying now stays the offer on top, and leaving the bill open
@@ -240,8 +248,8 @@ export default function CartScreen({
                   the diner no way to pay at all. */}
               {(payLaterAllowed || counterAllowed) && (
                 <button
-                  className="tt-btn tt-btn-outline tt-btn-lg"
-                  style={{ width: "100%", marginTop: 10 }}
+                  className={`tt-btn tt-btn-lg ${cardsEnabled ? "tt-btn-outline" : "tt-btn-primary"}`}
+                  style={{ width: "100%", marginTop: cardsEnabled ? 10 : 0 }}
                   disabled={!canCheckout || loading}
                   onClick={() => onCheckout(true)}
                 >
@@ -266,7 +274,9 @@ export default function CartScreen({
                 className="tt-muted"
                 style={{ textAlign: "center", fontSize: 12, marginTop: 12 }}
               >
-                {payLaterAllowed || counterAllowed ? (
+                {!cardsEnabled && !payLaterAllowed && !counterAllowed ? (
+                  t("cart.noCardYet")
+                ) : payLaterAllowed || counterAllowed ? (
                   <>
                     <BillIcon size={12} weight="bold" style={{ verticalAlign: "-1px" }} />{" "}
                     {t(payLaterAllowed ? "cart.payNowHint" : "cart.counterHint")}

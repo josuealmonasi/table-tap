@@ -88,6 +88,15 @@ export type Restaurant = {
   allow_pay_later?: boolean;
   /** El QR general permite pagar en la caja en lugar de con tarjeta. */
   allow_counter_payment?: boolean;
+  /**
+   * Si el restaurante puede cobrar con tarjeta ahora mismo.
+   *
+   * Derivado en el servidor de su cuenta de Stripe: el comensal no lee esas
+   * columnas y no debe. Sin esto el carrito ofrecía "Ir a pagar" como acción
+   * principal a restaurantes que no tienen cuenta conectada, y la única forma
+   * de enterarse era tocarlo y recibir un 409.
+   */
+  cards_enabled?: boolean;
   badges_enabled?: boolean;
   /** Which version of the terms this restaurant's owner accepted. */
   terms_version?: string | null;
