@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { OrderStatus } from "@/lib/types";
 import type { TrackedOrder } from "@/lib/order-tracking";
 import { useIsDesktop } from "@/hooks/useIsDesktop";
-import { forgetOrder, rememberRecentOrder } from "@/lib/recent-order";
+import { forgetOrder, recallOrders, rememberRecentOrder } from "@/lib/recent-order";
+import type { RateableDish } from "@/lib/ratings";
+import RateDishesSheet from "./RateDishesSheet";
 import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
 import TrackerBody from "./TrackerBody";
@@ -65,6 +67,36 @@ export default function TrackerOverlay({
     };
   }, [orderId, order]);
 
+  // Cuando el pedido termina, es el momento de preguntar qué tal estuvo.
+  //
+  // Hasta ahora lo único que lo preguntaba eran los botones de servicio, que
+  // sólo existen en una mesa: quien pidió en el QR general —el mostrador, para
+  // llevar, todo el plan Carta— no tenía forma de calificar nunca. Aquí sí,
+  // porque el seguimiento lo ve cualquiera que haya pedido.
+  const [rateable, setRateable] = useState<RateableDish[]>([]);
+  const asked = useRef(false);
+  useEffect(() => {
+    if (!order || asked.current) return;
+    if (!TERMINAL.includes(order.status) || order.status === "cancelled") return;
+    asked.current = true; // una vez por pedido, no en cada latido del sondeo
+    void (async () => {
+      try {
+        const res = await fetch("/api/ratings/pending", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            restaurantId: order.restaurant_id,
+            orderIds: recallOrders(order.restaurant_id),
+          }),
+        });
+        const data = await res.json();
+        if (Array.isArray(data.dishes) && data.dishes.length > 0) setRateable(data.dishes);
+      } catch {
+        // Nadie pidió calificar nada: el silencio es la respuesta correcta.
+      }
+    })();
+  }, [order]);
+
   // Remember this order so the menu keeps offering a way back to it — and
   // forget it once it's done, so a stale "track your order" link disappears.
   useEffect(() => {
@@ -96,19 +128,46 @@ export default function TrackerOverlay({
     </div>
   );
 
+  // Una hoja a la vez. Calificar reemplaza el seguimiento en lugar de abrirse
+  // encima: dos diálogos abiertos se pelean el foco y cuestan dos Escapes.
+  const rating = (
+    <RateDishesSheet
+      open={rateable.length > 0}
+      dishes={rateable}
+      restaurantId={order?.restaurant_id ?? ""}
+      onClose={() => {
+        setRateable([]);
+        onClose();
+      }}
+    />
+  );
+
   if (isDesktop) {
     return (
-      <Modal open onClose={onClose} maxWidth={520} label={t("tracker.title")}>
-        <div className="tt-track-dialog">{content}</div>
-      </Modal>
+      <>
+        <Modal
+          open={rateable.length === 0}
+          onClose={onClose}
+          maxWidth={520}
+          label={t("tracker.title")}
+        >
+          <div className="tt-track-dialog">{content}</div>
+        </Modal>
+        {rating}
+      </>
     );
   }
 
   return (
-    <div className="tt-detail-overlay" onClick={onClose}>
-      <div className="tt-detail-panel" onClick={e => e.stopPropagation()}>
-        {content}
-      </div>
-    </div>
+    <>
+      {rateable.length === 0 && (
+        <div className="tt-detail-overlay" onClick={onClose}>
+          <div className="tt-detail-panel" onClick={e => e.stopPropagation()}>
+            {content}
+          </div>
+        </div>
+      )}
+      {rating}
+    </>
   );
 }
