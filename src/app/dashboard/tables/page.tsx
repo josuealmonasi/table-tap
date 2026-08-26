@@ -1,27 +1,20 @@
-import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { getMembership, MANAGES } from "@/lib/membership";
+import { requireManager } from "@/lib/page-guard";
 import { qrSvg } from "@/lib/qr";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import TablesPanel, { type TableWithQr } from "@/components/dashboard/tables/TablesPanel";
 import { tableStatuses } from "@/lib/table-status";
 import type { Order } from "@/lib/types";
 import type { RestaurantTable } from "@/lib/types";
-import { currentUser } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 
 // /dashboard/tables — manage tables and their QR codes. Requires login.
 export default async function TablesPage() {
   const supabase = await createClient();
-  const user = await currentUser();
-  if (!user) redirect("/login");
-
   // Owners and managers may manage tables; kitchen goes back to its board.
-  const membership = await getMembership();
-  if (!membership) redirect("/dashboard");
-  if (!MANAGES(membership.role)) redirect("/dashboard/orders");
+  const membership = await requireManager();
   const r = membership.restaurant;
 
   const [{ data: tables }, { data: openOrders }] = await Promise.all([
