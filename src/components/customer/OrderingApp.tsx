@@ -24,7 +24,8 @@ import { useMenuFreshness } from "@/hooks/useMenuFreshness";
 import { rememberMyOrder } from "@/lib/my-orders";
 import { suggestItems } from "@/lib/suggestions";
 import { clearUpsell, offeredUpsell, rememberUpsell } from "@/lib/upsell";
-import { recallOrder, rememberRecentOrder } from "@/lib/recent-order";
+import { forgetOrder, recallOrder, rememberRecentOrder } from "@/lib/recent-order";
+import { useOrderFinished } from "@/hooks/useOrderFinished";
 import { useTableBill } from "@/hooks/useTableBill";
 import { useReceiptOffer } from "@/hooks/useReceiptOffer";
 import { useSitting } from "@/hooks/useSitting";
@@ -175,6 +176,18 @@ export default function OrderingApp({
   useEffect(() => {
     setTrackId(prev => prev ?? recallOrder(restaurant.id, table?.id));
   }, [restaurant.id, table?.id]);
+
+  // Y se retira solo cuando el pedido se entrega. Antes esto se leía una vez al
+  // montar y nada más: la cocina lo marcaba entregado y el botón seguía en
+  // pantalla hasta que alguien recargara, ofreciendo seguir un plato que ya se
+  // habían comido. Si el seguimiento está abierto no se cierra — el comensal
+  // merece ver "listo" — pero el botón de abajo ya desaparece.
+  const finished = useOrderFinished(trackId);
+  useEffect(() => {
+    if (!finished || !trackId) return;
+    forgetOrder(restaurant.id, table?.id ?? null);
+    setTrackId(null);
+  }, [finished, trackId, restaurant.id, table?.id]);
 
   // Already owing at another table? Ordering here would open a second bill
   // beside one nobody has settled.

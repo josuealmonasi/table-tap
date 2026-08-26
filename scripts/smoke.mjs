@@ -10,6 +10,7 @@
 //   pnpm smoke --prod   (against the deployed site)
 // ============================================================================
 import { join } from "node:path";
+import { requireServer } from "./preflight.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -17,6 +18,8 @@ process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.d
 const BASE = prod
   ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
   : "http://localhost:3000";
+
+await requireServer(BASE, prod);
 
 const { createClient } = await import("@supabase/supabase-js");
 

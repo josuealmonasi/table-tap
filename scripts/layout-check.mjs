@@ -13,12 +13,15 @@ import { join } from "node:path";
 import { chromium } from "playwright";
 import { AUDIT } from "./layout-audit.mjs";
 import { CREW, DIALOGS, DINER } from "./layout-paths.mjs";
+import { requireServer } from "./preflight.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
 const BASE = prod
   ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
   : "http://localhost:3000";
+
+await requireServer(BASE, prod);
 
 const { createClient } = await import("@supabase/supabase-js");
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
