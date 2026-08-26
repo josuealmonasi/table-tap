@@ -11,6 +11,7 @@ import { matchesBill, type OpenBill } from "@/lib/open-bills";
 import BillDiscountDialog from "./BillDiscountDialog";
 import SettleTableDialog from "./SettleTableDialog";
 import { BillIcon, SearchIcon, TableIcon } from "@/components/ui/icons";
+import { useLiveOrders } from "@/hooks/useLiveOrders";
 
 export interface DiscountRequest {
   id: string;
@@ -65,6 +66,9 @@ export default function BillsPanel({
   const t = useT();
   const toast = useToast();
   const router = useRouter();
+
+  // Otro mesero cobra una mesa y esta lista se entera sola.
+  useLiveOrders(restaurantId);
   const [query, setQuery] = useState("");
   const [chosen, setChosen] = useState<OpenBill | null>(null);
   // La mesa que se está cobrando, si alguna.
