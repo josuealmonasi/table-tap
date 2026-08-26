@@ -209,3 +209,21 @@ describe("a role is known everywhere or nowhere", () => {
     }
   });
 });
+
+describe("the ratings threshold is one number", () => {
+  it("keeps MIN_RATINGS_TO_SHOW and the SQL having clause in step", async () => {
+    // The constant says "Mirrored in the dish_rating_stats SQL function —
+    // change both", and nothing was checking. Worse, nothing imports the
+    // constant: the real threshold lives only in SQL, so raising the TS value
+    // would look like a change and do nothing at all.
+    const { MIN_RATINGS_TO_SHOW } = await import("@/lib/ratings");
+    const sql = read("supabase/schema.sql");
+    const fn = sql.slice(sql.indexOf("function public.dish_rating_stats"));
+    const having = /having count\(\*\) >= (\d+)/.exec(fn.slice(0, 800));
+
+    expect(having, "dish_rating_stats no longer withholds thin averages").toBeTruthy();
+    expect(Number(having![1]), "the SQL threshold and the constant disagree").toBe(
+      MIN_RATINGS_TO_SHOW,
+    );
+  });
+});

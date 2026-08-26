@@ -10,8 +10,13 @@ import type { OrderLineItem } from "@/lib/types";
  *
  * The browser sends the order ids it remembers placing; this returns only the
  * dishes from those orders that are paid, belong to this restaurant, and
- * haven't been rated yet. An id for someone else's order yields nothing, so
- * the response can't be used to discover what another table ordered.
+ * haven't been rated yet.
+ *
+ * What guards it is that an order id is an unguessable uuid — the same trust
+ * boundary as the tracker link, which shows the order to anyone holding it.
+ * Whoever has the id already knows what was ordered. It does NOT check that
+ * this device is the one that placed the order, and the comment here used to
+ * claim it did.
  */
 export async function POST(req: NextRequest) {
   if (await isRateLimited(`rating-pending:${clientIp(req)}`, 30, 60)) {
