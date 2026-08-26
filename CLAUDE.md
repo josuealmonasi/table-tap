@@ -76,7 +76,22 @@ the simpler one.
 - Use **generics** for reusable, flexible code, and **utility types** (`Partial`, `Pick`, `Omit`) — plus **mapped types** for variations — instead of repeating yourself.
 - In React, type your **props**, **event handlers**, **hooks** (`useState`, `useReducer`), and **context** properly. Give functions explicit return types. Use `as` assertions only as a last resort.
 
-## Before shipping something large
+## Before shipping anything
+
+**Run the whole gate, every time:**
+
+```bash
+pnpm test && pnpm api && pnpm rls && pnpm roles && pnpm smoke && pnpm layout
+```
+
+`pnpm api` calls all 34 API routes with a legitimate request as the right actor
+and checks each one does its job — the other checks only ever proved that a
+route was *guarded*, not that it *worked*, and that gap is where the bugs came
+through. Any of them takes `:prod` to run against the deployed site.
+
+Anything a script creates, it deletes. Test litter comes back disguised as a
+product bug: a leftover service request once looked like a layout fault, and an
+order seeded with a fake item id looked like a broken ratings system.
 
 **Run `pnpm layout`.** It opens every screen in a real browser at 390px and
 1280px and fails if text is squashed to nothing, painted on top of other text,
