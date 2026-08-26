@@ -81,9 +81,22 @@ export const AUDIT = `(() => {
     for (let j = i + 1; j < leaves.length; j++) {
       const a = leaves[i], b = leaves[j];
       if (a.contains(b) || b.contains(a)) continue;
-      const x = a.getBoundingClientRect(), y = b.getBoundingClientRect();
-      const w = Math.min(x.right, y.right) - Math.max(x.left, y.left);
-      const h = Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top);
+      // Renglón contra renglón, no caja contra caja.
+      //
+      // getBoundingClientRect de un elemento en línea que envuelve devuelve la
+      // UNIÓN de sus renglones: "· hace 39 min" partido en dos daba una caja de
+      // borde a borde que se cruzaba con todo lo de al lado, y el chequeo
+      // acusaba de encimado un texto que en pantalla se lee perfecto. Los
+      // rectángulos por renglón sí son lo que se pinta.
+      let w = 0, h = 0;
+      for (const x of a.getClientRects()) {
+        for (const y of b.getClientRects()) {
+          const dw = Math.min(x.right, y.right) - Math.max(x.left, y.left);
+          const dh = Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top);
+          if (dw > w && dh > 0) { w = dw; h = dh; }
+          else if (dh > h && dw > 0) h = dh;
+        }
+      }
       // 4px of overlap is a hairline; 8 is two words sharing the same pixels.
       if (w > 8 && h > 8) {
         faults.push({

@@ -90,12 +90,20 @@ export async function POST(req: NextRequest) {
     { redirectTo: `${origin}/auth/callback?next=/reset-password` },
   );
   if (inviteErr || !invited.user) {
-    const already = inviteErr?.message?.toLowerCase().includes("already");
+    const raw = inviteErr?.message?.toLowerCase() ?? "";
+    const already = raw.includes("already");
+    // Supabase dice "invalid" o "rate limit" cuando el que no puede mandar el
+    // correo es él, no cuando la dirección está mal. Decirle al dueño que el
+    // correo de su mesero es inválido lo manda a revisar lo único que sí
+    // estaba bien.
+    const mailer = raw.includes("rate limit") || raw.includes("invalid");
     return NextResponse.json(
       {
         error: already
           ? "That email already has an account."
-          : (inviteErr?.message ?? "Could not send the invite."),
+          : mailer
+            ? "No pudimos enviar la invitación — el correo del panel no está configurado. Avísanos y lo dejamos listo."
+            : (inviteErr?.message ?? "Could not send the invite."),
       },
       { status: 400 },
     );
