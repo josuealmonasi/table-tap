@@ -42,7 +42,8 @@
     "rls:audit": "node scripts/rls-audit.mjs",
     "rls:audit:prod": "node scripts/rls-audit.mjs --prod",
     "api": "node scripts/api-check.mjs",
-    "api:prod": "node scripts/api-check.mjs --prod"
+    "api:prod": "node scripts/api-check.mjs --prod",
+    "dev:fresh": "node scripts/dev-fresh.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
