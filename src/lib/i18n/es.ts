@@ -1101,7 +1101,7 @@ badgesHint: "Muestra cuántas cosas esperan acción en cada sección. Aplica a t
     moveBack: "Mover a una etapa anterior",
     moveTo: "Mover a {status}",
     active: "Activos",
-    today: "Hoy",
+    today: "Cobrado hoy",
     live: "En vivo",
     history: "Historial",
     noLive: "No hay pedidos en vivo",

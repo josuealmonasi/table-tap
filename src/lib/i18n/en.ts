@@ -1112,7 +1112,7 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
     moveBack: "Move to an earlier stage",
     moveTo: "Move to {status}",
     active: "Active",
-    today: "Today",
+    today: "Taken today",
     live: "Live",
     history: "History",
     noLive: "No live orders",
