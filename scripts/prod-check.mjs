@@ -37,9 +37,16 @@ async function envFrom(file) {
 const QUERIES = {
   columns: `select table_name || '.' || column_name as k from information_schema.columns
             where table_schema = 'public' order by 1`,
+  // Acotado a nuestro esquema. Sin el filtro comparaba también el esquema
+  // `storage` de Supabase, que se actualiza en cada proyecto por su cuenta:
+  // producción estrenaba columnas antes que desarrollo y el chequeo gritaba
+  // una deriva que nadie podía arreglar. Y una alarma falsa aquí es cara,
+  // porque tapa la de verdad — los permisos de columna son justo lo que separa
+  // a un restaurante de otro.
   anonGrants: `select table_name || '.' || column_name as k
                from information_schema.column_privileges
-               where grantee = 'anon' and privilege_type = 'SELECT' order by 1`,
+               where grantee = 'anon' and privilege_type = 'SELECT'
+                 and table_schema = 'public' order by 1`,
   tables: `select tablename as k from pg_tables where schemaname = 'public' order by 1`,
   functions: `select proname as k from pg_proc p
               join pg_namespace n on n.oid = p.pronamespace

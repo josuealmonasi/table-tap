@@ -23,27 +23,11 @@ export default async function OrdersPage() {
   if (!membership) redirect("/dashboard");
   const r = membership.restaurant;
 
-  // Seed the board with recent paid orders (unpaid/pending ones never show).
-  const { data: orders } = await supabase
-    .from("orders")
-    .select("*")
-    .eq("restaurant_id", r.id)
-    .neq("status", "pending_payment")
-    .order("created_at", { ascending: false })
-    .limit(100);
-
   // Only today's shift. A request nobody ever pressed "done" on stays open
   // forever, so the board was carrying taps from weeks earlier — a chip asking
   // for a waiter at a table that emptied on Tuesday teaches the floor to
   // ignore the row. A diner still waiting will tap again.
   const shiftStart = new Date(Date.now() - STALE_REQUEST_HOURS * 60 * 60 * 1000);
-  const { data: requests } = await supabase
-    .from("service_requests")
-    .select("*")
-    .eq("restaurant_id", r.id)
-    .eq("status", "open")
-    .gte("created_at", shiftStart.toISOString())
-    .order("created_at", { ascending: false });
 
   // Today's takings, computed server-side over ALL of today's orders (the
   // board only loads the latest 100, so summing those undercounts a busy day).
@@ -57,15 +41,44 @@ export default async function OrdersPage() {
   const todayStart = startOfLocalDay(new Date(), r.timezone ?? DEFAULT_TIME_ZONE);
   const showRevenue = MANAGES(membership.role);
 
+  // Las tres en la misma ola: ninguna necesita el resultado de otra, sólo el id
+  // del restaurante y su medianoche, que ya tenemos. En fila eran tres viajes
+  // de ida y vuelta con la cocina esperando delante de la pantalla.
+  // La de la caja del día sigue sin hacerse cuando quien mira no la ve.
+  const [ordersRes, requestsRes, todayRes] = await Promise.all([
+    // Seed the board with recent paid orders (unpaid/pending ones never show).
+    supabase
+      .from("orders")
+      .select("*")
+      .eq("restaurant_id", r.id)
+      .neq("status", "pending_payment")
+      .order("created_at", { ascending: false })
+      .limit(100),
+    supabase
+      .from("service_requests")
+      .select("*")
+      .eq("restaurant_id", r.id)
+      .eq("status", "open")
+      .gte("created_at", shiftStart.toISOString())
+      .order("created_at", { ascending: false }),
+    // Today's takings, computed server-side over ALL of today's orders (the
+    // board only loads the latest 100, so summing those undercounts a busy day).
+    showRevenue
+      ? supabase
+          .from("orders")
+          .select("total")
+          .eq("restaurant_id", r.id)
+          .eq("paid", true)
+          .neq("status", "cancelled")
+          .gte("created_at", todayStart.toISOString())
+      : Promise.resolve({ data: null }),
+  ]);
+  const orders = ordersRes.data;
+  const requests = requestsRes.data;
+
   let revenueBase = 0;
   if (showRevenue) {
-    const { data: todayRows } = await supabase
-      .from("orders")
-      .select("total")
-      .eq("restaurant_id", r.id)
-      .eq("paid", true)
-      .neq("status", "cancelled")
-      .gte("created_at", todayStart.toISOString());
+    const todayRows = todayRes.data as { total: number }[] | null;
     const todayTotal = (todayRows ?? []).reduce((s, o) => s + Number(o.total), 0);
     const loadedToday = ((orders as Order[]) ?? [])
       .filter(
