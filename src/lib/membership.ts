@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { currentUser } from "@/lib/current-user";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { Restaurant } from "@/lib/types";
 
 /**
@@ -80,10 +80,17 @@ export const getMembership = cache(async (): Promise<Membership | null> => {
   const user = await currentUser();
   if (!user) return null;
 
-  const supabase = await createClient();
+  // Con la llave de servicio, y acotado siempre al id que sale de la sesión.
+  //
+  // `restaurants` ya no le enseña sus columnas privadas a `authenticated`,
+  // porque un permiso de columna vale para todas las filas y la política de
+  // este tabla deja ver todas a propósito — el menú cuelga de un QR. El
+  // restaurante propio se lee entonces por aquí, donde el único filtro posible
+  // es `user.id`, que viene de la cookie de sesión y nunca del cliente.
+  const db = createAdminClient();
   const [ownedRes, staffRes] = await Promise.all([
-    supabase.from("restaurants").select("*").eq("owner_id", user.id).maybeSingle(),
-    supabase
+    db.from("restaurants").select("*").eq("owner_id", user.id).maybeSingle(),
+    db
       .from("staff")
       .select("role, restaurant:restaurants(*)")
       .eq("user_id", user.id)

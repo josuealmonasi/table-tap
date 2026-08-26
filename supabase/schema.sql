@@ -281,6 +281,11 @@ create table if not exists platform_admins (
   created_at timestamptz not null default now()
 );
 alter table platform_admins enable row level security;
+-- Sin política: RLS sin política niega todo, que es justo lo que queremos —
+-- quién manda en la plataforma entera sólo se lee con la llave de servicio.
+-- Los permisos igual se quitan: un permiso que nada usa es un permiso que
+-- alguien hereda el día que se agregue una política "para desbloquear algo".
+revoke all on platform_admins from anon, authenticated;
 
 -- ── User activity log (who created/updated/deleted which login) ─────────────
 -- Written ONLY server-side by the user-management API routes; the restaurant's
@@ -571,8 +576,30 @@ revoke all on coupons, coupon_redemptions from anon;
 -- Column-scoped on purpose: owner_id, Stripe ids and timestamps stay unreadable.
 -- A new column is invisible to customers until it is listed here, and it fails
 -- silently — the value simply reads as null.
-grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, allow_counter_payment) on restaurants to anon;
-grant select on restaurants to authenticated;
+-- `timezone` va en la lista porque el menú lo lee para decidir qué carta está
+-- abierta a esta hora. Sin el permiso la lectura fallaba y caía en
+-- America/Mexico_City sin decir nada: hoy no se nota porque todos los
+-- restaurantes están ahí, y el día que entre uno en Cancún o Tijuana sus
+-- horarios de menú abrirían a la hora equivocada.
+grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, allow_counter_payment, timezone) on restaurants to anon;
+
+-- Y `authenticated` ve exactamente lo mismo, no la tabla entera. El revoke va
+-- primero a propósito: conceder columnas NO quita un permiso que ya se dio
+-- sobre la tabla completa, así que sin esta línea la lista de abajo no cambia
+-- nada. Lo aprendimos ejecutándolo y viendo que la fuga seguía ahí.
+revoke select on restaurants from authenticated;
+-- Y `authenticated` ve exactamente lo mismo, no la tabla entera.
+--
+-- La política de fila de `restaurants` es `using (true)` a propósito: el menú
+-- cuelga de un QR y cualquiera puede leerlo, incluido alguien con sesión
+-- iniciada. Pero un permiso de columna no distingue filas — con SELECT sobre
+-- toda la tabla, cualquier cuenta con sesión podía leer el owner_id, el plan,
+-- el estado de cobro y las cuentas de Stripe de TODOS los restaurantes. Lo
+-- comprobamos con la cuenta de cocina, que es la de menos permisos.
+--
+-- Las columnas privadas se leen ahora con la llave de servicio y siempre
+-- acotadas al restaurante de quien pregunta (ver getMembership).
+grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, allow_counter_payment, timezone) on restaurants to authenticated;
 
 -- authenticated (logged-in staff) keeps the DML its dashboard needs — those
 -- writes are gated by the RLS policies below. But it never needs the
