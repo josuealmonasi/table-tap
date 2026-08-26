@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { getMembership, MANAGES } from "@/lib/membership";
+import { requireManager } from "@/lib/page-guard";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { can, cheapestWith } from "@/lib/plan";
 import { allPlans, getPlan } from "@/lib/plan-server";
@@ -10,9 +9,7 @@ export const dynamic = "force-dynamic";
 // /dashboard/promotions — combo bundles and quantity deals. Owner + manager,
 // same audience as menus and settings; kitchen/waiter don't reach it.
 export default async function PromotionsPage() {
-  const membership = await getMembership();
-  if (!membership) redirect("/login");
-  if (!MANAGES(membership.role)) redirect("/dashboard/orders");
+  const membership = await requireManager();
 
   // What this tier includes is decided here, on the server, so a locked panel
   // can never be talked into rendering by the browser.

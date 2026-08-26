@@ -1,7 +1,6 @@
-import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getMembership, MANAGES, SETTLES } from "@/lib/membership";
-import { currentUser } from "@/lib/current-user";
+import { MANAGES, SETTLES } from "@/lib/membership";
+import { requireSettles } from "@/lib/page-guard";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import BillsPanel from "@/components/dashboard/BillsPanel";
 import UserLogs from "@/components/dashboard/staff/UserLogs";
@@ -19,12 +18,7 @@ export const dynamic = "force-dynamic";
  * because a waiter can ask for a discount even though only a manager grants it.
  */
 export default async function BillsPage() {
-  const user = await currentUser();
-  if (!user) redirect("/login");
-
-  const membership = await getMembership();
-  if (!membership) redirect("/dashboard");
-  if (!SETTLES(membership.role)) redirect("/dashboard/orders");
+  const membership = await requireSettles();
   const r = membership.restaurant;
 
   // Read with the secret key: orders are unreadable to anyone but the team's

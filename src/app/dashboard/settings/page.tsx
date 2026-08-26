@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { getMembership, MANAGES } from "@/lib/membership";
+import { requireManager } from "@/lib/page-guard";
 import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
@@ -10,9 +9,7 @@ export const dynamic = "force-dynamic";
 // /dashboard/settings — owners edit everything; managers edit the operational
 // bits (tax and order pausing). Kitchen/waiter don't reach it.
 export default async function SettingsPage() {
-  const membership = await getMembership();
-  if (!membership) redirect("/login");
-  if (!MANAGES(membership.role)) redirect("/dashboard/orders");
+  const membership = await requireManager();
 
   // Cobrar en la caja viene con el plan. El interruptor se enseña de todos
   // modos, apagado y diciendo qué lo abre: esconderlo deja al dueño buscando

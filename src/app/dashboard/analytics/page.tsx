@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getMembership, MANAGES } from "@/lib/membership";
+import { requireManager } from "@/lib/page-guard";
 import {
   computeAnalytics,
   normalisePeriod,
@@ -21,9 +20,7 @@ export default async function AnalyticsPage({
   searchParams: Promise<{ period?: string }>;
 }) {
   const supabase = await createClient();
-  const membership = await getMembership();
-  if (!membership) redirect("/login");
-  if (!MANAGES(membership.role)) redirect("/dashboard/orders");
+  const membership = await requireManager();
 
   const period = normalisePeriod((await searchParams).period);
   // The restaurant's own calendar, not the host's — see lib/day-window.
