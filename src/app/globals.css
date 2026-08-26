@@ -1102,6 +1102,18 @@ a.tt-btn {
   font-weight: 700;
 }
 
+/* La pestaña de ofertas lleva el color de las rebajas, el mismo que la etiqueta
+   "Ahorra": el comensal ya lo asocia con que algo cuesta menos. */
+.tt-cat-deal {
+  color: var(--tt-sale);
+  border-color: var(--tt-sale);
+}
+.tt-cat-deal-on {
+  background: var(--tt-sale);
+  color: var(--tt-sale-ink);
+  border-color: var(--tt-sale);
+}
+
 /* ── menu item rows ── */
 /* ── customer menu list ──────────────────────────────────────────────────
    Rows separated by hairlines, not one card per dish. A card per dish spends

@@ -27,6 +27,9 @@ import CoverBanner from "./CoverBanner";
 import RestaurantMark, { hasMark } from "@/components/ui/RestaurantMark";
 
 /** The menu browsing screen: restaurant header, category filter, item list, cart bar. */
+/** La pestaña de ofertas no es una categoría del restaurante: es nuestra. */
+const DEALS = "deals";
+
 export default function MenuScreen({
   restaurant,
   table,
@@ -112,6 +115,24 @@ export default function MenuScreen({
     [],
   );
 
+  // Qué producto lleva alguna oferta encima. Se calcula antes del filtro
+  // porque la pestaña de ofertas lo necesita para decidir qué enseñar.
+  const promoIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const promo of promos) for (const id of promo.itemIds) ids.add(id);
+    return ids;
+  }, [promos]);
+
+  // Hay algo que enseñar en Ofertas: un combo, un platillo rebajado, o uno
+  // dentro de una promoción. Sin nada de eso la pestaña no aparece — una
+  // sección vacía es peor que no tenerla.
+  const hasDeals = useMemo(
+    () =>
+      combos.length > 0 ||
+      items.some(i => Number(i.discount_pct) > 0 || promoIds.has(i.id)),
+    [combos, items, promoIds],
+  );
+
   // Search spans the whole menu; the category tabs + dietary filter narrow it.
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -123,12 +144,14 @@ export default function MenuScreen({
         )
       : activeCat === "all"
         ? items
-        : items.filter(i => i.category_id === activeCat);
+        : activeCat === DEALS
+          ? items.filter(i => Number(i.discount_pct) > 0 || promoIds.has(i.id))
+          : items.filter(i => i.category_id === activeCat);
     // An item must carry EVERY selected dietary tag (e.g. vegan AND gluten-free).
     if (diet.length)
       list = list.filter(i => diet.every(k => (i.dietary ?? []).includes(k)));
     return list;
-  }, [activeCat, items, search, diet]);
+  }, [activeCat, items, search, diet, promoIds]);
 
   // item id → the deal covering it, so the row can advertise it. First deal
   // wins, matching how the pricing engine picks one deal per product.
@@ -147,7 +170,7 @@ export default function MenuScreen({
     if (diet.length) return [];
     const q = search.trim().toLowerCase();
     if (q) return combos.filter(c => c.name.toLowerCase().includes(q));
-    return activeCat === "all" ? combos : [];
+    return activeCat === "all" || activeCat === DEALS ? combos : [];
   }, [combos, diet, search, activeCat]);
 
   const showCover = Boolean(restaurant.cover_enabled && restaurant.cover_url);
@@ -301,6 +324,7 @@ export default function MenuScreen({
               <CategoryTabs
                 categories={categories}
                 activeCat={activeCat}
+                hasDeals={hasDeals}
                 onSelect={chooseCat}
               />
             )}
