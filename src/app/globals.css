@@ -1102,16 +1102,16 @@ a.tt-btn {
   font-weight: 700;
 }
 
-/* La pestaña de ofertas lleva el color de las rebajas, el mismo que la etiqueta
-   "Ahorra": el comensal ya lo asocia con que algo cuesta menos. */
-.tt-cat-deal {
-  color: var(--tt-sale);
-  border-color: var(--tt-sale);
-}
-.tt-cat-deal-on {
-  background: var(--tt-sale);
-  color: var(--tt-sale-ink);
-  border-color: var(--tt-sale);
+/* La pestaña de ofertas se ve como las demás.
+   En esta app lo activo es agave y el rojo es lo que cuesta menos —la etiqueta
+   "Ahorra"—, así que pintar de rojo un control enseña justo lo contrario: una
+   pastilla roja entre pastillas agave dice "cuidado", no "aquí hay descuentos".
+   Lo único que añade es un punto, y se retira al entrar porque ya cumplió. */
+.tt-cat-deal,
+.tt-side-link-deal {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* ── menu item rows ── */

@@ -905,6 +905,8 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     optional: "(optional)",
   },
   dash: {
+    dealsTabTitle: "Deals & combos tab",
+    dealsTabHint: "Groups combos, discounts and promotions into their own tab on the menu so diners find them. It only appears when there is something to show.",
     cashier: "Cashier",
     roleCashier: "Cashier — takes payment at the till and hands orders over",
     counterPayLocked: "Comes with the paid plans. On the free plan the general QR takes cards — which is where our commission comes from.",

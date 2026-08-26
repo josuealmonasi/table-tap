@@ -28,6 +28,7 @@ const OWNER_FIELDS = new Set([
   "allow_pay_later",
   "allow_counter_payment",
   "badges_enabled",
+  "deals_tab_enabled",
 ]);
 // A manager runs the floor, so they decide whether the floor is being told
 // about work waiting — the same reasoning that gives them the kill switch.
@@ -36,6 +37,7 @@ const MANAGER_FIELDS = new Set([
   "tax_show_breakdown",
   "accepting_orders",
   "badges_enabled",
+  "deals_tab_enabled",
 ]);
 
 // POST /api/settings — owner or manager updates restaurant settings, with the

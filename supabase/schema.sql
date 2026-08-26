@@ -48,6 +48,12 @@ alter table restaurants add column if not exists allow_pay_later boolean not nul
 -- paga y recoge. Por eso es del dueño decidir si su negocio funciona así.
 alter table restaurants add column if not exists allow_counter_payment boolean not null default false;
 
+-- La pestaña "Combos y ofertas" del menú del cliente. Encendida de fábrica —
+-- un restaurante con promociones quiere que se vean— y apagable por si a
+-- alguien le estorba en su carta.
+alter table restaurants add column if not exists deals_tab_enabled boolean not null default true;
+
+
 -- The hottest lookup in the app: getMembership asks "which restaurant does this
 -- user own?" on every request, and has_role() asks it again inside every RLS
 -- policy check. Without this it is a sequential scan — free at seven rows,
@@ -581,7 +587,7 @@ revoke all on coupons, coupon_redemptions from anon;
 -- America/Mexico_City sin decir nada: hoy no se nota porque todos los
 -- restaurantes están ahí, y el día que entre uno en Cancún o Tijuana sus
 -- horarios de menú abrirían a la hora equivocada.
-grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, allow_counter_payment, timezone) on restaurants to anon;
+grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, allow_counter_payment, timezone, deals_tab_enabled) on restaurants to anon;
 
 -- Y `authenticated` ve exactamente lo mismo, no la tabla entera. El revoke va
 -- primero a propósito: conceder columnas NO quita un permiso que ya se dio
@@ -599,7 +605,7 @@ revoke select on restaurants from authenticated;
 --
 -- Las columnas privadas se leen ahora con la llave de servicio y siempre
 -- acotadas al restaurante de quien pregunta (ver getMembership).
-grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, allow_counter_payment, timezone) on restaurants to authenticated;
+grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, allow_counter_payment, timezone, deals_tab_enabled) on restaurants to authenticated;
 
 -- authenticated (logged-in staff) keeps the DML its dashboard needs — those
 -- writes are gated by the RLS policies below. But it never needs the

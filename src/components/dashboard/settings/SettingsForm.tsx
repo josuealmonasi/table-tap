@@ -50,6 +50,7 @@ export default function SettingsForm({
   const [acceptingOrders, setAcceptingOrders] = useState(restaurant.accepting_orders);
   const [payLater, setPayLater] = useState(Boolean(restaurant.allow_pay_later));
   const [counterPay, setCounterPay] = useState(Boolean(restaurant.allow_counter_payment));
+  const [dealsTab, setDealsTab] = useState(restaurant.deals_tab_enabled !== false);
   const [badges, setBadges] = useState(restaurant.badges_enabled !== false);
 
   async function saveRestaurant(e: React.FormEvent): Promise<void> {
@@ -99,6 +100,11 @@ export default function SettingsForm({
       return;
     }
     window.dispatchEvent(new Event(BADGES_CHANGED));
+  }
+
+  async function toggleDealsTab(next: boolean): Promise<void> {
+    setDealsTab(next);
+    if (!(await save({ deals_tab_enabled: next }))) setDealsTab(!next);
   }
 
   async function togglePayLater(next: boolean): Promise<void> {
@@ -354,6 +360,26 @@ export default function SettingsForm({
                   checked={badges}
                   disabled={saving}
                   onChange={e => toggleBadges(e.target.checked)}
+                />
+                <span className="tt-switch-track" />
+              </span>
+            </label>
+
+            {/* Del gerente también: es cómo se ve la carta, no una decisión de
+                dinero ni de accesos. */}
+            <label className="tt-settings-toggle" style={{ marginTop: 10 }}>
+              <span>
+                <strong>{t("dash.dealsTabTitle")}</strong>
+                <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
+                  {t("dash.dealsTabHint")}
+                </span>
+              </span>
+              <span className="tt-switch">
+                <input
+                  type="checkbox"
+                  checked={dealsTab}
+                  disabled={saving}
+                  onChange={e => toggleDealsTab(e.target.checked)}
                 />
                 <span className="tt-switch-track" />
               </span>
