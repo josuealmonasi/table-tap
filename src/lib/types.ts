@@ -98,6 +98,8 @@ export type Restaurant = {
    */
   cards_enabled?: boolean;
   badges_enabled?: boolean;
+  /** La pestaña de combos y ofertas del menú. Encendida por defecto. */
+  deals_tab_enabled?: boolean;
   /** Which version of the terms this restaurant's owner accepted. */
   terms_version?: string | null;
   /** The subscription tier this restaurant is on. */

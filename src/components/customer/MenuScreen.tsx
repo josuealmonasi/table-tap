@@ -17,6 +17,7 @@ import CartBar from "./CartBar";
 import ServiceButtons from "./ServiceButtons";
 import LanguageToggle from "./LanguageToggle";
 import {
+  CouponIcon,
   BillIcon,
   CloseIcon,
   FiltersIcon,
@@ -128,9 +129,10 @@ export default function MenuScreen({
   // sección vacía es peor que no tenerla.
   const hasDeals = useMemo(
     () =>
-      combos.length > 0 ||
-      items.some(i => Number(i.discount_pct) > 0 || promoIds.has(i.id)),
-    [combos, items, promoIds],
+      restaurant.deals_tab_enabled !== false &&
+      (combos.length > 0 ||
+        items.some(i => Number(i.discount_pct) > 0 || promoIds.has(i.id))),
+    [combos, items, promoIds, restaurant.deals_tab_enabled],
   );
 
   // Search spans the whole menu; the category tabs + dietary filter narrow it.
@@ -416,6 +418,21 @@ export default function MenuScreen({
                   >
                     {t("menu.all")}
                   </button>
+                  {/* En escritorio las categorías son esta lista, no la fila
+                      de pastillas: agregar la pestaña de ofertas allá y no
+                      aquí la dejaba invisible en pantalla grande. */}
+                  {hasDeals && (
+                    <button
+                      type="button"
+                      className={`tt-side-link tt-side-link-deal ${
+                        activeCat === DEALS ? "tt-side-link-on" : ""
+                      }`}
+                      onClick={() => chooseCat(DEALS)}
+                    >
+                      <CouponIcon size={14} weight="bold" />
+                      {t("menu.deals")}
+                    </button>
+                  )}
                   {categories.map(c => (
                     <button
                       key={c.id}

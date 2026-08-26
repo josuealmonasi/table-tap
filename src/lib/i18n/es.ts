@@ -902,6 +902,8 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     optional: "(opcional)",
   },
   dash: {
+    dealsTabTitle: "Pestaña de combos y ofertas",
+    dealsTabHint: "Agrupa combos, rebajas y promociones en su propia pestaña del menú, para que el cliente las encuentre. Aparece sola cuando hay algo que mostrar.",
     cashier: "Cajero",
     roleCashier: "Cajero — cobra en la caja y entrega pedidos",
     counterPayLocked: "Viene con los planes de paga. En el plan gratuito, el QR general cobra con tarjeta — que es de donde sale nuestra comisión.",

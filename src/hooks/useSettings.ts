@@ -25,6 +25,7 @@ export type SettingsInput = Pick<
   | "allow_pay_later"
   | "allow_counter_payment"
   | "badges_enabled"
+  | "deals_tab_enabled"
 >;
 
 /**

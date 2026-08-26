@@ -1,6 +1,7 @@
 "use client";
 
 import type { Category } from "@/lib/types";
+import { CouponIcon } from "@/components/ui/icons";
 import { useT } from "@/lib/i18n/context";
 
 /** The horizontal scrollable category filter at the top of the menu. */
@@ -30,9 +31,10 @@ export default function CategoryTabs({
           inventarse una para que se vea. Sólo aparece si hay algo dentro. */}
       {hasDeals && (
         <button
-          className={`tt-cat tt-cat-deal ${activeCat === "deals" ? "tt-cat-deal-on" : ""}`}
+          className={`tt-cat tt-cat-deal ${activeCat === "deals" ? "tt-cat-on" : ""}`}
           onClick={() => onSelect("deals")}
         >
+          <CouponIcon size={13} weight="bold" />
           {t("menu.deals")}
         </button>
       )}
