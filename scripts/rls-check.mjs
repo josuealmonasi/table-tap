@@ -205,5 +205,32 @@ if (!signIn.error && theirs) {
   }
 }
 
+// ── Un inquilino no lee al de al lado ────────────────────────────────────────
+// La política de fila de `restaurants` deja ver todas las filas —el menú cuelga
+// de un QR— así que lo único que separa a un restaurante de otro es la lista de
+// columnas. Con SELECT sobre la tabla entera, la cuenta de cocina leía el plan,
+// el estado de cobro y las cuentas de Stripe de todos.
+{
+  const staff = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  );
+  await staff.auth.signInWithPassword({ email: "demo-kitchen@tabletap.dev", password: "demo123" });
+
+  for (const col of ["owner_id", "stripe_account_id", "stripe_customer_id", "plan_status"]) {
+    const { data, error } = await staff.from("restaurants").select(col).limit(1);
+    if (error || !data?.length) ok(`staff cannot read restaurants.${col}`);
+    else bad(`staff read restaurants.${col} across every tenant`);
+  }
+
+  // Y lo que sí es público sigue siéndolo, incluida la zona horaria: sin ella
+  // el menú caía en America/Mexico_City calladamente y abría a deshora.
+  const guest = anon;
+  const { data: tz, error: tzErr } = await guest
+    .from("restaurants").select("id, name, timezone").limit(1).maybeSingle();
+  if (!tzErr && tz?.timezone) ok("anon reads the public menu columns, timezone included");
+  else bad(`anon cannot read the menu's own columns (${tzErr?.message ?? "sin timezone"})`);
+}
+
 console.log(failed === 0 ? "\nNothing is exposed.\n" : `\n${failed} PROBLEM(S) — fix before shipping.\n`);
 process.exit(failed === 0 ? 0 : 1);
