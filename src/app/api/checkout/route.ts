@@ -9,6 +9,7 @@ import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-m
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { can, orderFeeCents, type PlanLimits } from "@/lib/plan";
+import { queueSlips } from "@/lib/print-queue";
 import { getPlan } from "@/lib/plan-server";
 import { feesTakenThisMonth } from "@/lib/fee-month";
 import { itemSalePrice, priceCart, type AppliedCoupon } from "@/lib/pricing";
@@ -25,7 +26,7 @@ import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { fetchPromotions } from "@/lib/promotions-data";
 import { toCartPromos } from "@/lib/promotions";
 import { verifyCart, type VerifiableItem } from "@/lib/verify-cart";
-import type { OrderLineItem } from "@/lib/types";
+import type { Order, OrderLineItem } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -365,6 +366,11 @@ export async function POST(req: NextRequest) {
     // Nothing to charge now: the order is with the kitchen and the table owes
     // for it. The bill screen picks it up from here.
     if (deferred) {
+      // Ya es de la cocina, así que la comanda sale ahora. No se espera a
+      // ningún pago: en una mesa que salda al final, o en el mostrador, ese
+      // pago llega después de comer.
+      const { data: full } = await supabase.from("orders").select("*").eq("id", order.id).maybeSingle();
+      if (full) await queueSlips(full as Order);
       return NextResponse.json({ orderId: order.id, deferred: true, sessionId });
     }
 

@@ -43,7 +43,10 @@
     "rls:audit:prod": "node scripts/rls-audit.mjs --prod",
     "api": "node scripts/api-check.mjs",
     "api:prod": "node scripts/api-check.mjs --prod",
-    "dev:fresh": "node scripts/dev-fresh.mjs"
+    "dev:fresh": "node scripts/dev-fresh.mjs",
+    "db:printing": "node scripts/db-printing.mjs",
+    "db:printing:prod": "node scripts/db-printing.mjs --prod",
+    "print:sim": "node scripts/print-sim.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

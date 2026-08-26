@@ -5,6 +5,8 @@ import { closeSessionsFor } from "@/lib/table-session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readPlanName, subscriptionOutcome } from "@/lib/billing";
 import type Stripe from "stripe";
+import { queueSlips } from "@/lib/print-queue";
+import type { Order } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -113,6 +115,15 @@ export async function POST(req: NextRequest) {
             typeof session.payment_intent === "string" ? session.payment_intent : null,
         })
         .eq("id", orderId);
+
+      // Ahora sí es de la cocina: el dinero está confirmado. Antes de esto la
+      // hoja sería de un pedido que todavía puede no pagarse.
+      const { data: full } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("id", orderId)
+        .maybeSingle();
+      if (full) await queueSlips(full as Order);
 
       // A pay-now order can be the only thing the table owed.
       const { data: justPaid } = await supabase
