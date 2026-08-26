@@ -301,6 +301,7 @@ myBill: "Ver mi cuenta",
     nothing: "Esta mesa no debe nada.",
   },
   cart: {
+    noCardYet: "Este restaurante todavía no cobra con tarjeta aquí.",
     orderCounter: "Pagar en la caja",
     counterHint: "Paga ahora y sáltate la fila, o pasa a la caja con tu código.",
     orderPayLater: "Ordenar y pagar al final",

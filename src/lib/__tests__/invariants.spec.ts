@@ -246,3 +246,18 @@ describe("a zero platform fee is never sent to Stripe", () => {
     }
   });
 });
+
+describe("a combo survives the trip to the server", () => {
+  it("sends comboId and components with the cart", () => {
+    // The checkout payload is an explicit whitelist, which is right — the
+    // server has no business seeing `cartId`. But it was missing the two
+    // fields that make a combo a combo, so every bundle arrived as a loose
+    // line whose itemId is a promotion id. The server looked it up among the
+    // dishes, found nothing, and told the diner it was no longer available.
+    // Combos could not be ordered at all, and they are a paid-tier feature.
+    const app = read("src/components/customer/OrderingApp.tsx");
+    const payload = app.slice(app.indexOf("items: orderableItems.map"));
+    expect(payload.slice(0, 600)).toContain("comboId");
+    expect(payload.slice(0, 600)).toContain("components");
+  });
+});

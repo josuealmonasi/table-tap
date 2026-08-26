@@ -388,6 +388,13 @@ export default function OrderingApp({
           restaurantId: restaurant.id,
           tableId: table?.id ?? null,
           tableLabel: table?.label ?? null,
+          // La lista es explícita a propósito —el servidor no debe recibir
+          // `cartId` ni nada de la vista— pero le faltaban las dos cosas que
+          // hacen que un combo sea un combo. Sin `comboId`, el servidor veía
+          // una línea suelta cuyo `itemId` es el id de una promoción, lo
+          // buscaba entre los platillos, no lo encontraba y respondía "ya no
+          // está disponible": los combos no se podían pedir, y son de plan de
+          // paga.
           items: orderableItems.map(c => ({
             itemId: c.itemId,
             name: c.name,
@@ -397,6 +404,7 @@ export default function OrderingApp({
             mods: c.mods,
             extras: c.extras,
             notes: c.notes,
+            ...(c.comboId ? { comboId: c.comboId, components: c.components } : {}),
           })),
           note: orderNote || undefined,
           tipPct,
@@ -581,6 +589,7 @@ export default function OrderingApp({
             payLaterAllowed={Boolean(table) && Boolean(restaurant.allow_pay_later)}
             // Sin mesa es el QR general: lo que retiene el pedido es la caja.
             counterAllowed={!table && Boolean(restaurant.allow_counter_payment)}
+            cardsEnabled={Boolean(restaurant.cards_enabled)}
           />
         </div>
       </div>
