@@ -17,8 +17,8 @@ const ctx = (over: Partial<PaymentContext> = {}): PaymentContext => ({
 
 describe("lo que el comensal puede hacer", () => {
   it("con Stripe y pagar-al-final encendidos, ofrece las dos", () => {
-    // Es lo que el restaurante pidió: pagar lo suyo al sentarse, o dejarlo
-    // abierto con el resto de la mesa.
+    // This is what the restaurant asked for: pay for your own on sitting down, or
+    // leave it open with the rest of the table.
     const o = paymentOptions(ctx({ cardsEnabled: true, allowPayLater: true }));
     expect(o.payNow).toBe(true);
     expect(o.payLater).toBe(true);
@@ -32,8 +32,8 @@ describe("lo que el comensal puede hacer", () => {
   });
 
   it("sin Stripe no promete tarjeta por debajo del botón", () => {
-    // El defecto de la captura: el renglón decía "Paga ahora con tarjeta, o
-    // deja la cuenta abierta" en una pantalla sin ningún botón de tarjeta.
+    // The bug from the screenshot: the line said "pay now by card, or leave the
+    // bill open" on a screen with no card button at all.
     const o = paymentOptions(ctx({ allowPayLater: true }));
     expect(o.payNow).toBe(false);
     expect(paymentHintKey(o)).not.toBe("cart.payNowHint");
@@ -51,7 +51,7 @@ describe("lo que el comensal puede hacer", () => {
   });
 
   it("sin nada encendido y sin Stripe, no hay forma de ordenar", () => {
-    // La segunda captura: el QR general con el carrito en un callejón.
+    // The second screenshot: the general QR with the cart in a dead end.
     const o = paymentOptions(ctx({ atTable: false }));
     expect(canOrder(o)).toBe(false);
     expect(paymentHintKey(o)).toBe("cart.noCardYet");
@@ -68,7 +68,7 @@ describe("lo que hay que advertirle al dueño", () => {
   });
 
   it("sube el tono cuando además apagó los dos interruptores", () => {
-    // Ahí ya no es una opción de menos: es que nadie puede ordenar.
+    // At that point it is not one option fewer: it is that nobody can order.
     expect(ownerWarningKey(ctx())).toBe("dash.noPaymentAtAll");
   });
 });

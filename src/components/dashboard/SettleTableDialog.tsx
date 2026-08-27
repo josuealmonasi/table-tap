@@ -16,9 +16,9 @@ interface SettleTableDialogProps {
   open: boolean;
   onClose: () => void;
   restaurantId: string;
-  /** La mesa que se cobra, o null si es un pedido del QR general. */
+  /** The table being collected on, or null for a general-QR order. */
   tableId: string | null;
-  /** El pedido de mostrador que se cobra, cuando no hay mesa. */
+  /** The counter order being collected, when there is no table. */
   orderId?: string | null;
   tableLabel: string;
   currency: string;
@@ -49,7 +49,7 @@ export default function SettleTableDialog({
 }: SettleTableDialogProps) {
   const t = useT();
   const toast = useToast();
-  // Plegado de entrada: lo pagado es referencia, el total es a lo que vino.
+  // Folded by default: what was paid is reference, the total is what they came for.
   const [showPaid, setShowPaid] = useState(false);
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [busy, setBusy] = useState(false);

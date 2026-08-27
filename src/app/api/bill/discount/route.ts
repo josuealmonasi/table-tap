@@ -71,7 +71,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const amount = applyCoupon(toAppliedCoupon(coupon), food);
   if (amount <= 0) return await apiError("apiErr.couponNotValid", 400);
 
-  // Un mesero o un cajero piden; sólo gerencia concede.
+  // A waiter or a cashier asks; only management grants.
   if (SERVES(actor.role)) {
     const { error } = await db.from("discount_requests").insert({
       restaurant_id: actor.restaurantId,

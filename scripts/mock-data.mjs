@@ -271,8 +271,8 @@ export async function seedMock(pg) {
     "paid",
     "stripe_refund_id",
     "created_at",
-    // Cómo se pagó, qué se descontó y qué nos tocó: sin esto Analíticas y el
-    // historial se ven planos y el reporte de comisiones sale en cero.
+    // How it was paid, what was discounted and what we took: without this
+    // Analytics and the history look flat and the fee report comes out at zero.
     "pay_method",
     "discount",
     "coupon_code",
@@ -295,8 +295,8 @@ export async function seedMock(pg) {
     const cancelled = Math.random() < 0.07;
     const t = tables[randInt(0, tables.length - 1)];
     const when = randomOrderDate(HISTORY_DAYS);
-    // Dos de cada tres pagan con tarjeta; de ésos, uno de cada cinco pide su
-    // recibo por correo.
+    // Two in three pay by card; of those, one in five asks for the receipt by
+    // email.
     const byCard = Math.random() < 0.66;
     const coupon = !cancelled && Math.random() < 0.12;
     const discount = coupon ? round2(subtotal * 0.1) : 0;
@@ -317,7 +317,7 @@ export async function seedMock(pg) {
       cancelled ? null : byCard ? "card" : "cash",
       discount,
       coupon ? "BIE-N10" : null,
-      // Nuestra comisión sólo existe cuando pagaron con tarjeta.
+      // Our fee only exists when they paid by card.
       cancelled || !byCard ? 0 : 0.75,
       !cancelled && byCard && Math.random() < 0.2
         ? new Date(when.getTime() + randInt(1, 9) * 60000).toISOString()
@@ -363,14 +363,14 @@ export async function seedMock(pg) {
   await bulkInsert(pg, "orders", orderCols, orderRows);
 
 
-  // ── Sittings: la mesa como la vive el piso ─────────────────────────────
-  // Cada pedido histórico pertenece a una sentada que ya cerró; hoy quedan un
-  // par abiertas, que es lo que llena "Cuentas abiertas" y las mesas ocupadas.
+  // ── Sittings: the table as the floor lives it ──────────────────────────
+  // Every historical order belongs to a sitting that has closed; a couple are
+  // still open today, which is what fills "Open bills" and the busy tables.
   const { rows: seeded } = await pg.query(
     "select id, table_id, created_at, paid from orders where restaurant_id = $1 and table_id is not null order by created_at",
     [rid],
   );
-  // Una sentada por mesa y por día: es como se agrupan en la realidad.
+  // One sitting per table per day: it is how they group in reality.
   const byDay = new Map();
   for (const o of seeded) {
     const key = `${o.table_id}:${new Date(o.created_at).toISOString().slice(0, 10)}`;
@@ -394,7 +394,7 @@ export async function seedMock(pg) {
     ]);
   }
 
-  // ── Cuentas abiertas: tres mesas sentadas ahora mismo ──────────────────
+  // ── Open bills: three tables seated right now ──────────────────────────
   const openTables = sample(tables, 3);
   const openBills = [];
   for (const t of openTables) {
@@ -426,7 +426,7 @@ export async function seedMock(pg) {
     }
   }
 
-  // ── Una cuenta cancelada: el cliente se fue sin pagar ──────────────────
+  // ── A written-off bill: the customer left without paying ───────────────
   const walkoutTable = tables.find(t => !openTables.includes(t)) ?? tables[0];
   const walkoutLines = buildLines(products);
   const walkoutSub = round2(
@@ -451,9 +451,9 @@ export async function seedMock(pg) {
      JSON.stringify(walkoutLines), DEMO_TEAM[0].email],
   );
 
-  // ── Promociones: un combo, un 2x1 y precios por cantidad ───────────────
-  // Grupos de iconos: un restaurante que ya armó los suyos, para que el demo
-  // enseñe la función y no una paleta vacía.
+  // ── Promotions: a combo, a 2-for-1 and quantity pricing ────────────────
+  // Icon groups: a restaurant that has already built its own, so the demo
+  // shows the feature rather than an empty palette.
   for (const [variant, name, order, icons] of [
     ["addon", "Salsas de la casa", 0, [["🌶️", "Picante"], ["🥫", "BBQ"], ["🧄", "Ajo"]]],
     ["addon", "Lácteos", 1, [["🥛", "Leche"], ["🧈", "Mantequilla"], ["🍦", "Crema"]]],
@@ -470,8 +470,8 @@ export async function seedMock(pg) {
       icons.map(([emoji, label], i) => [group.id, emoji, label, i]));
   }
 
-  // Las ocho de casa las siembra la base al crear el restaurante. Estas dos
-  // son suyas: es lo que enseña que la lista se puede ampliar.
+  // The eight built-ins are seeded by the database when the restaurant is
+  // created. These two are theirs: they show the list can be extended.
   await bulkInsert(
     pg,
     "dietary_tags",
@@ -513,7 +513,7 @@ export async function seedMock(pg) {
   await bulkInsert(pg, "promotion_items", ["promotion_id", "item_id", "qty"],
     [[tiered.id, forPromo[4].id, 1]]);
 
-  // ── Cupones, con canjes reales detrás ──────────────────────────────────
+  // ── Coupons, with real redemptions behind them ─────────────────────────
   const { rows: coupons } = await pg.query(
     `insert into coupons (restaurant_id, code, kind, value, max_uses, uses_count, min_subtotal, created_by_email)
      values ($1,'BIE-N10','percent',10,null,0,150,$2),
@@ -534,7 +534,7 @@ export async function seedMock(pg) {
     await pg.query("update coupons set uses_count = $2 where id = $1", [bienvenida.id, redeemed.length]);
   }
 
-  // ── Calificaciones de platillos ───────────────────────────────────────
+  // ── Dish ratings ──────────────────────────────────────────────────────
   const { rows: rateable } = await pg.query(
     `select o.id as order_id, o.items from orders o
       where o.restaurant_id = $1 and o.paid and o.status = 'completed'
@@ -549,12 +549,12 @@ export async function seedMock(pg) {
     for (const line of (o.items ?? []).slice(0, 2)) {
       const itemId = byName.get(line.name);
       if (!itemId) continue;
-      // Buenas en general, con alguna baja: un 5.0 perfecto no se cree.
+      // Good overall, with the odd low one: a perfect 5.0 is not believable.
       const stars = Math.random() < 0.75 ? randInt(4, 5) : randInt(2, 3);
       ratings.push([rid, itemId, o.order_id, stars]);
     }
   }
-  // La restricción es (order_id, item_id): quitamos repetidos del mismo pedido.
+  // The constraint is (order_id, item_id): drop repeats from the same order.
   const seen = new Set();
   const uniqueRatings = ratings.filter(r => {
     const k = `${r[2]}:${r[1]}`;
@@ -564,8 +564,8 @@ export async function seedMock(pg) {
   });
   await bulkInsert(pg, "dish_ratings", ["restaurant_id", "item_id", "order_id", "rating"], uniqueRatings);
 
-  // ── Cosas esperando a que un gerente decida ───────────────────────────
-  // Es lo que enciende los badges de la barra: el dueño entra y ve trabajo.
+  // ── Things waiting on a manager's decision ────────────────────────────
+  // This is what lights the bar's badges: the owner walks in and sees work.
   const waiting = openBills[0];
   await pg.query(
     `insert into discount_requests (restaurant_id, table_id, table_label, order_ids, code, amount, requested_by)
@@ -579,7 +579,7 @@ export async function seedMock(pg) {
     [rid, asking.table.id, asking.table.label, [asking.orderId], 120, DEMO_TEAM[1].email],
   );
 
-  // ── El rastro que todo esto habría dejado ─────────────────────────────
+  // ── The trail all of this would have left ─────────────────────────────
   await bulkInsert(pg, "user_logs",
     ["restaurant_id", "actor_email", "entity", "action", "detail", "created_at"],
     [
@@ -593,7 +593,7 @@ export async function seedMock(pg) {
       [rid, DEMO_OWNER.email, "promotion", "created", "name=Comida_del_día", new Date(Date.now() - 25 * 864e5).toISOString()],
     ]);
 
-  // ── Fundador, y lo que Stripe le cobra ────────────────────────────────
+  // ── Founder, and what Stripe charges them ─────────────────────────────
   await pg.query(
     "update restaurants set founding_number = coalesce(founding_number, 1), subscribed_price = 1499 where id = $1",
     [rid],

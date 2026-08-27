@@ -64,13 +64,13 @@ for (const col of ["founding_number", "subscribed_price", "stripe_account_id", "
   else bad(`can read restaurants.${col}`);
 }
 
-// Las etiquetas de dieta sí son públicas: salen en el platillo y filtran el
-// menú. Lo que se prueba aquí es que se puedan leer — si el permiso se cayera,
-// la carta perdería los alérgenos sin que nada se quejara.
+// Dietary tags ARE public: they show on the dish and filter the menu. What is
+// tested here is that they can be read — if the grant ever fell away, the menu
+// would lose its allergens with nothing complaining.
 {
   const { data, error } = await anon.from("dietary_tags").select("key, label, emoji").limit(1);
   if (!error && data?.length) ok("reads the dietary tags the menu shows");
-  else bad(`cannot read dietary_tags (${error?.message ?? "sin filas"})`);
+  else bad(`cannot read dietary_tags (${error?.message ?? "no rows"})`);
 }
 
 // ── 2. Privileged functions ────────────────────────────────────────────────
@@ -81,8 +81,8 @@ for (const [fn, args] of [
   ["claim_founding_price", { p_restaurant: crypto.randomUUID(), p_limit: 50 }],
   ["redeem_coupon", { p_coupon_id: crypto.randomUUID() }],
   ["rate_limit_hit", { p_bucket: "probe", p_window_seconds: 60 }],
-  // Sembrar etiquetas de dieta es del disparador, de nadie más. La RLS ya lo
-  // detendría; el permiso lo detiene antes de llegar a la tabla.
+  // Seeding dietary tags belongs to the trigger and nobody else. RLS would stop
+  // it anyway; the grant stops it before it reaches the table.
   ["seed_dietary_tags", { p_restaurant: crypto.randomUUID() }],
 ]) {
   const { error } = await anon.rpc(fn, args);
@@ -152,8 +152,8 @@ for (const [method, path, body] of [
 }
 
 // ── 5. Signed in, but pointing at the restaurant next door ────────────────
-// Es el caso realista: no un extraño, sino un cliente nuestro con sesión
-// válida que manda el id de otro local.
+// The realistic case: not a stranger, but one of our own customers with a
+// valid session sending another restaurant's id.
 if (!signIn.error && theirs) {
   console.log("\nSigned in, aiming at another restaurant");
   const cookie = `sb-${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0]}-auth-token=base64-${Buffer.from(JSON.stringify(signIn.data.session)).toString("base64")}`;
@@ -173,7 +173,7 @@ if (!signIn.error && theirs) {
 
   if (theirTable) {
     const r1 = await call("GET", `/api/table-bill?tableId=${theirTable}`);
-    // El endpoint acota por el restaurante del actor, así que debe venir vacío.
+    // The endpoint scopes by the actor's restaurant, so it must come back empty.
     if (r1.status !== 200 || /"orders":\s*\[\]/.test(r1.text)) ok("table-bill of another restaurant's table is empty");
     else bad(`table-bill returned another restaurant's bill: ${r1.text.slice(0, 90)}`);
 
@@ -190,7 +190,7 @@ if (!signIn.error && theirs) {
     if (r4.status >= 400) ok(`cannot move another restaurant's order (${r4.status})`);
     else bad(`moved another restaurant's order (${r4.status})`);
   }
-  // Y el checkout: pedido en MI restaurante con la mesa de OTRO.
+  // And checkout: an order in MY restaurant with SOMEBODY ELSE'S table.
   if (theirTable && mine) {
     const r5 = await fetch(BASE + "/api/checkout", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -200,14 +200,14 @@ if (!signIn.error && theirs) {
     else bad(`checkout accepted another restaurant's table (${r5.status})`);
   }
 
-  // Pagar en la caja lo decide el restaurante, no el teléfono del cliente. Si
-  // se pudiera reclamar `payLater` con el interruptor apagado, cualquiera se
-  // llevaría comida sin pagar por el QR general — y nadie a quien cobrarle.
+  // Paying at the till is the restaurant's call, not the customer's phone. If
+  // `payLater` could be claimed with the switch off, anyone could take food
+  // without paying via the general QR — and nobody to bill for it.
   const { data: off } = await admin
     .from("restaurants").select("id, name")
     .eq("allow_counter_payment", false).eq("allow_pay_later", false).limit(1).maybeSingle();
-  // Con un platillo de verdad: un carrito vacío se rechaza por vacío, y esa
-  // prueba pasaría igual aunque el permiso no existiera.
+  // With a real dish: an empty cart is refused for being empty, and that test
+  // would pass even if the permission did not exist.
   const { data: dish } = await admin
     .from("menu_items").select("id, name, price")
     .eq("restaurant_id", off?.id ?? "").eq("available", true).limit(1).maybeSingle();
@@ -225,11 +225,11 @@ if (!signIn.error && theirs) {
 }
 
 
-// ── Los grupos de iconos, del restaurante que los hizo ───────────────────────
-// Los escribe la llave de servicio, que salta la RLS: lo único que separa un
-// grupo de otro dueño es el `.eq("restaurant_id")` de la ruta. Y PostgREST no
-// se queja cuando un filtro no encuentra nada, así que aquí no basta con leer
-// el status — hay que volver a mirar la fila y ver que sigue como estaba.
+// ── Icon groups, belonging to the restaurant that made them ─────────────────
+// The service key writes them, and it bypasses RLS: the only thing separating
+// one owner's group from another is the route's `.eq("restaurant_id")`. And
+// PostgREST does not complain when a filter matches nothing, so reading the
+// status is not enough — look at the row again and see it is as it was.
 if (!signIn.error && theirs) {
   console.log("\nIcon groups belonging to the restaurant next door");
   const cookie = `sb-${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0]}-auth-token=base64-${Buffer.from(JSON.stringify(signIn.data.session)).toString("base64")}`;
@@ -261,7 +261,7 @@ if (!signIn.error && theirs) {
   if (afterDelete) ok(`cannot delete another restaurant's icon group (${removed})`);
   else bad(`deleted another restaurant's icon group (${removed})`);
 
-  // La cocina no toca la carta: la ruta pide gerencia, no sólo sesión.
+  // The kitchen does not touch the menu: the route asks for management, not just a session.
   const kitchen = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
@@ -279,23 +279,23 @@ if (!signIn.error && theirs) {
     if (res.status === 403) ok("kitchen cannot create icon groups (403)");
     else {
       bad(`kitchen created an icon group (${res.status})`);
-      // Si de verdad entró, se borra por id — nunca por nombre: un `delete`
-      // por nombre en producción se llevaría por delante el grupo de alguien.
+      // If it really got in, delete by id — never by name: a `delete` by name in
+      // production would take out somebody else's group.
       const { id } = await res.json().catch(() => ({}));
       if (id) await admin.from("icon_groups").delete().eq("id", id);
     }
   }
 
-  // Y su vecino tampoco puede leerlos con su propia sesión.
+  // And their neighbour cannot read them with their own session either.
   verdict(
     `${mine.name} cannot read ${theirs.name}'s icon group items`,
     await asUser.from("icon_group_items").select("emoji").eq("group_id", victim.id).limit(1),
   );
 
-  // ── Las etiquetas de dieta del vecino ──────────────────────────────────
-  // Son públicas de leer, pero de nadie más para escribir. Y una baja se lleva
-  // por delante la etiqueta de los platillos, así que un id ajeno que pasara
-  // el filtro despegaría etiquetas de una carta que no es suya.
+  // ── The neighbour's dietary tags ────────────────────────────────────────
+  // Public to read, nobody else's to write. And a deletion strips the tag off
+  // the dishes, so another restaurant's id slipping past the filter would
+  // detach tags from a menu that is not theirs.
   const { data: theirTag } = await admin
     .from("dietary_tags").select("id, key, label")
     .eq("restaurant_id", theirs.id).limit(1).maybeSingle();
@@ -320,15 +320,15 @@ if (!signIn.error && theirs) {
     else bad(`deleted another restaurant's dietary tag (${dropTag.status})`);
   }
 
-  // Se recoge la sonda: nada de lo que crea esta revisión se queda.
+  // Collect the probe: nothing this check creates is left behind.
   await admin.from("icon_groups").delete().eq("id", victim.id);
 }
 
-// ── Un inquilino no lee al de al lado ────────────────────────────────────────
-// La política de fila de `restaurants` deja ver todas las filas —el menú cuelga
-// de un QR— así que lo único que separa a un restaurante de otro es la lista de
-// columnas. Con SELECT sobre la tabla entera, la cuenta de cocina leía el plan,
-// el estado de cobro y las cuentas de Stripe de todos.
+// ── One tenant does not read the one next door ──────────────────────────────
+// The row policy on `restaurants` shows every row — the menu hangs off a QR —
+// so the only thing separating one restaurant from another is the column list.
+// With SELECT on the whole table, the kitchen account could read the plan, the
+// billing status and everyone's Stripe accounts.
 {
   const staff = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -342,13 +342,13 @@ if (!signIn.error && theirs) {
     else bad(`staff read restaurants.${col} across every tenant`);
   }
 
-  // Y lo que sí es público sigue siéndolo, incluida la zona horaria: sin ella
-  // el menú caía en America/Mexico_City calladamente y abría a deshora.
+  // And what is genuinely public stays public, timezone included: without it the
+  // menu fell back to America/Mexico_City silently and opened at the wrong hour.
   const guest = anon;
   const { data: tz, error: tzErr } = await guest
     .from("restaurants").select("id, name, timezone").limit(1).maybeSingle();
   if (!tzErr && tz?.timezone) ok("anon reads the public menu columns, timezone included");
-  else bad(`anon cannot read the menu's own columns (${tzErr?.message ?? "sin timezone"})`);
+  else bad(`anon cannot read the menu's own columns (${tzErr?.message ?? "no timezone"})`);
 }
 
 console.log(failed === 0 ? "\nNothing is exposed.\n" : `\n${failed} PROBLEM(S) — fix before shipping.\n`);

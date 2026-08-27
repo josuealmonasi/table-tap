@@ -103,7 +103,7 @@ export const PlatformAdminIcon = ShieldCheck;
 export const RoleOwnerIcon = Crown;
 export const RoleManagerIcon = UserGear;
 export const RoleWaiterIcon = ForkKnife;
-/** La caja: quien cobra, que no es lo mismo que quien lleva el plato. */
+/** The till: whoever collects, which is not whoever carries the plate. */
 export const RoleCashierIcon = CashRegister;
 /** The menus screen — the list of what the kitchen serves. */
 export const MenuIcon = ForkKnife;

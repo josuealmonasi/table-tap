@@ -13,10 +13,10 @@ export interface IconGroupInput {
 }
 
 /**
- * Alta, cambio y baja de los grupos del selector de iconos.
+ * Adding, changing and removing icon-picker groups.
  *
- * Refresca del servidor en vez de llevar su propia copia: los grupos salen de
- * la misma consulta que pinta el editor, y una segunda lista aquí sería otro
+ * Refreshes from the server rather than keeping its own copy: the groups come
+ * from the same query that paints the editor, and a second list here would be
  * sitio donde la verdad puede separarse.
  */
 export function useIconGroups() {

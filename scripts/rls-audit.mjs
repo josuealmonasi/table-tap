@@ -1,12 +1,12 @@
 // ============================================================================
-// TableTap — el panorama de permisos, para revisarlo con los ojos.
+// TableTap — the permission landscape, to be reviewed by eye.
 //
-// `pnpm rls` afirma cosas concretas y falla si dejan de ser ciertas. Esto no
-// afirma nada: imprime cómo está la base ahora mismo —qué tabla tiene RLS, qué
-// puede leer cada rol, qué política deja pasar qué— para que una revisión mire
-// el estado real y no el archivo de esquema, que es lo que uno *cree* que
-// aplicó. Así apareció que `authenticated` tenía SELECT sobre toda la tabla
-// `restaurants` mientras su política decía `using (true)`.
+// `pnpm rls` asserts specific things and fails when they stop being true. This
+// asserts nothing: it prints how the database stands right now — which table
+// has RLS, what each role can read, which policy lets what through — so a
+// review looks at the real state and not at the schema file, which is what one
+// *believes* was applied. That is how it surfaced that `authenticated` had
+// SELECT on the whole `restaurants` table while its policy said `using (true)`.
 //
 //   pnpm rls:audit
 //   pnpm rls:audit --prod
@@ -43,31 +43,31 @@ await show("Tablas sin RLS", `
    where n.nspname='public' and c.relkind='r' and not c.relrowsecurity order by 1`,
   "— cualquiera con la llave pública las lee enteras");
 
-await show("Tablas con RLS y sin política", `
+await show("Tables with RLS and no policy", `
   select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
    where n.nspname='public' and c.relkind='r' and c.relrowsecurity
      and not exists (select 1 from pg_policies p where p.schemaname='public' and p.tablename=c.relname)
    order by 1`, "— niegan todo, que suele ser lo correcto");
 
-await show("Lo que ve anon", `
+await show("What anon can see", `
   select table_name, string_agg(distinct column_name, ', ' order by column_name)
     from information_schema.role_column_grants
    where grantee='anon' and table_schema='public' and privilege_type='SELECT'
    group by table_name order by 1`);
 
-await show("Lo que ve authenticated", `
+await show("What authenticated can see", `
   select table_name, string_agg(distinct coalesce(column_name,'TABLA ENTERA'), ', ')
     from information_schema.role_column_grants
    where grantee='authenticated' and table_schema='public' and privilege_type='SELECT'
    group by table_name order by 1`,
   "— ojo con las tablas enteras cuya política sea using (true)");
 
-await show("Políticas que dejan pasar cualquier fila", `
+await show("Policies that let any row through", `
   select tablename, cmd, policyname from pg_policies
    where schemaname='public' and (qual='true' or with_check='true') order by 1,2`,
   "— sólo son seguras si el permiso de columnas las acota");
 
-await show("Funciones security definer", `
+await show("Security definer functions", `
   select p.proname,
          coalesce(array_to_string(p.proconfig,','),'SIN search_path ⚠') ,
          coalesce((select string_agg(r.rolname, ',') from pg_roles r

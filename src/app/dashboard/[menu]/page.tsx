@@ -28,8 +28,8 @@ export default async function MenuEditorPage({
   if (!MANAGES(membership.role)) redirect("/dashboard/orders");
   const restaurant = membership.restaurant;
 
-  // Los grupos propios del selector de iconos viajan con el editor: son suyos,
-  // y la RLS ya sólo deja ver los del restaurante de quien pide.
+  // The restaurant's own icon-picker groups travel with the editor: they are
+  // theirs, and RLS already shows only the caller's restaurant's.
   const [{ data: menus }, { data: iconGroups }, { data: dietary }] = await Promise.all([
     supabase
       .from("menus")

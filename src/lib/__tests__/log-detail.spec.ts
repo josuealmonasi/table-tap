@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { entitiesNamedBy } from "@/lib/log-detail";
 
 describe("buscar por el nombre que se ve en la fila", () => {
-  // La columna guarda "settings"; la fila enseña "Ajustes". Sin esto, escribir
-  // lo que está en pantalla no encontraba nada.
+  // The column stores "settings"; the row shows "Ajustes". Without this, typing
+  // what is on screen found nothing.
   const es = (entity: string) =>
     ({
       staff: "Equipo",
@@ -31,8 +31,8 @@ describe("buscar por el nombre que se ve en la fila", () => {
   });
 
   it("devuelve todos los que el texto nombra, no adivina uno", () => {
-    // "cu" está dentro de Cuenta, Cupón y desCUento: los tres se buscan, y el
-    // buscador enseña las filas de los tres en vez de elegir por su cuenta.
+    // "cu" is inside Cuenta, Cupón and desCUento: all three are searched, and the
+    // search shows rows from all three instead of choosing on its own.
     expect(entitiesNamedBy("cu", es).sort()).toEqual(["bill", "coupon", "discount"]);
   });
 

@@ -34,7 +34,7 @@ export function logDetail(fields: Record<string, string | number | null | undefi
     .join(" ");
 }
 
-/** Los tipos de cosa que la bitácora registra, en el orden en que se nombran. */
+/** The kinds of thing the activity log records, in the order they are named. */
 export const LOG_ENTITIES = [
   "staff",
   "order",
@@ -47,11 +47,11 @@ export const LOG_ENTITIES = [
 ] as const;
 
 /**
- * Qué tipos nombra lo que alguien escribió en el buscador.
+ * Which kinds the text somebody typed into the search box names.
  *
- * La columna guarda "settings" y la fila enseña "Ajustes": quien busca lo que
- * está viendo tiene que encontrarlo. Se compara sin acentos y sin mayúsculas
- * porque nadie escribe "Cupón" con su tilde en un buscador.
+ * The column stores "settings" and the row shows "Ajustes": whoever searches
+ * for what they are looking at has to find it. Compared without accents or
+ * case, because nobody types "Cupón" with its accent into a search box.
  */
 export function entitiesNamedBy(
   query: string,

@@ -49,7 +49,7 @@ async function cartError(
 // POST /api/checkout
 // Body: { restaurantId, tableId, tableLabel, items: OrderLineItem[], note }
 // Creates a pending order, then a Stripe Checkout Session, and returns its URL.
-/** Un restaurante sin plan legible no tiene permisos de plan. */
+/** A restaurant with no readable plan has no plan permissions. */
 const NO_PLAN = { allows_counter_payment: false } as PlanLimits;
 
 export async function POST(req: NextRequest) {
@@ -147,20 +147,20 @@ export async function POST(req: NextRequest) {
       return !menuId || openIds.includes(menuId);
     };
 
-    // Un pedido sin pagar sólo sale de aquí si algo lo retiene, y siempre se
-    // decide con la base de datos, nunca con lo que diga el cliente:
+    // An unpaid order only leaves here if something holds it, and that is always
+    // decided from the database, never from what the client says:
     //
-    //   - en una mesa, la retiene la mesa: la cuenta queda abierta y el mesero
-    //     la cobra al final, si el dueño lo permite;
-    //   - en el QR general no hay mesa a la que volver, así que lo que la
-    //     retiene es el mostrador: el cliente pasa a la caja, paga y recoge.
+    //   - at a table, the table holds it: the bill stays open and the waiter
+    //     collects at the end, if the owner allows it;
+    //   - on the general QR there is no table to come back to, so what holds it
+    //     is the counter: the customer goes to the till, pays and collects.
     //
-    // Sin una de las dos cosas, quien reclamara `payLater` se llevaría comida
-    // que nadie puede cobrar.
-    // Cobrar en la caja además viene con el plan, y se pregunta aquí y no sólo
-    // al encender el interruptor: quien se baja a Carta se queda con el
-    // interruptor encendido en la base de datos, y sin esto seguiría regalando
-    // pedidos sin comisión con el plan gratuito.
+    // Without one of those two, anyone claiming `payLater` would walk off with
+    // food nobody can charge for.
+    // Paying at the till also comes with the plan, and is asked here rather than
+    // only when the switch is flipped: someone downgrading to Carta keeps the
+    // switch on in the database, and without this would go on giving away orders
+    // with no fee on the free plan.
     const atTable = Boolean(tableId) && Boolean(restaurant.allow_pay_later);
     const atCounter =
       !tableId &&
@@ -306,9 +306,9 @@ export async function POST(req: NextRequest) {
         ? orderFeeCents(feePlan.limits, Math.round(subtotal * 100), takenThisMonth)
         : 0;
 
-    // La mesa tiene que ser de este restaurante. Sin esto se puede crear un
-    // pedido aquí con la mesa de otro local, y la sentada que abre bloquea la
-    // de sus comensales reales.
+    // The table has to belong to this restaurant. Without this you can create an
+    // order here with another venue's table, and the sitting it opens blocks the
+    // one for their real diners.
     if (tableId && !(await tableOf(restaurantId, tableId))) {
       return await apiError("apiErr.tableNotFound", 404);
     }

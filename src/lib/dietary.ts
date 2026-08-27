@@ -1,18 +1,18 @@
 /**
- * Etiquetas de dieta y alérgenos.
+ * Dietary and allergen tags.
  *
- * La lista es del restaurante: se guarda en `dietary_tags` y él la arma. Estas
- * ocho son sólo el punto de partida —las mismas que la base siembra— y siguen
- * aquí por dos razones: para traducir las de casa por su `key`, y para que una
- * pantalla que todavía no cargó las suyas enseñe algo sensato en vez de nada.
+ * The list belongs to the restaurant: it lives in `dietary_tags` and they build
+ * it. These eight are only the starting point — the same ones the database
+ * seeds — and stay here for two reasons: to translate the built-ins by `key`,
+ * and so a screen that has not loaded its own yet shows something sensible.
  *
- * Lo que se guarda dentro del platillo es la `key`, nunca el rótulo. Renombrar
- * una etiqueta no la despega de los platillos que ya la traen.
+ * What a dish stores is the `key`, never the label. Renaming a tag does not
+ * detach it from the dishes already carrying it.
  */
 export interface DietaryTag {
   key: string;
   label: string;
-  /** Sólo las propias del restaurante; las de casa se traducen por su `key`. */
+  /** Restaurant-authored only; the built-ins are translated by `key`. */
   labelEn?: string | null;
   emoji: string;
 }
@@ -28,12 +28,12 @@ export const DIETARY_TAGS: DietaryTag[] = [
   { key: "seafood", label: "Contains seafood", emoji: "🦐" },
 ];
 
-/** Las que tienen traducción propia en `i18n.dietary`. */
+/** The ones with a translation of their own in `i18n.dietary`. */
 const BUILT_IN = new Set(DIETARY_TAGS.map(t => t.key));
 
 export const isBuiltIn = (key: string): boolean => BUILT_IN.has(key);
 
-/** Lo que devuelve la base, tal cual. */
+/** What the database hands back, as-is. */
 export interface StoredDietaryTag {
   id: string;
   key: string;
@@ -47,18 +47,18 @@ export function toTag(row: StoredDietaryTag): DietaryTag {
   return { key: row.key, label: row.label, labelEn: row.label_en, emoji: row.emoji };
 }
 
-/** Las del restaurante; las de casa mientras no haya cargado las suyas. */
+/** The restaurant's own; the built-ins until theirs have loaded. */
 export function tagsFor(stored?: StoredDietaryTag[] | null): DietaryTag[] {
   if (!stored?.length) return DIETARY_TAGS;
   return [...stored].sort((a, b) => a.sort_order - b.sort_order).map(toTag);
 }
 
 /**
- * Cómo se lee una etiqueta.
+ * How a tag reads.
  *
- * Las de casa por su traducción; las que inventó el restaurante en sus propias
- * palabras, con el inglés si se molestó en ponerlo. Nunca la `key` a secas: un
- * comensal no tiene por qué leer `gluten_free`.
+ * Built-ins by their translation; the ones the restaurant invented in its own
+ * words, with the English if they bothered to add it. Never the bare `key`: a
+ * diner has no business reading `gluten_free`.
  */
 export function tagLabel(
   tag: DietaryTag,
@@ -70,7 +70,7 @@ export function tagLabel(
   return tag.label;
 }
 
-/** Resuelve las claves guardadas contra la lista que rige (las desconocidas se caen). */
+/** Resolve stored keys against the governing list (unknown ones are dropped). */
 export function dietaryTags(
   keys: string[] | null | undefined,
   all: DietaryTag[] = DIETARY_TAGS,
@@ -82,11 +82,11 @@ export function dietaryTags(
 }
 
 /**
- * La `key` que le toca a una etiqueta nueva, a partir de su rótulo.
+ * The `key` a new tag gets, derived from its label.
  *
- * Sin acentos ni espacios porque viaja dentro de un arreglo de texto y se
- * compara en crudo en tres pantallas. Si el rótulo no deja nada utilizable
- * —sólo emoji, por ejemplo— devuelve vacío y el que llama decide.
+ * No accents or spaces, because it travels inside a text array and is compared
+ * raw on three screens. If the label leaves nothing usable — only an emoji,
+ * say — it returns empty and the caller decides.
  */
 export function tagKey(label: string): string {
   return label

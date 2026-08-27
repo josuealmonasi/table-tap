@@ -16,9 +16,9 @@ import LogoCard from "./LogoCard";
 interface SettingsFormProps {
   restaurant: Restaurant;
   role: Role;
-  /** Si el plan incluye cobrar en la caja. Falso lo deja visible y apagado. */
+  /** Whether the plan includes paying at the till. False leaves it visible and off. */
   counterPayAllowed?: boolean;
-  /** Si hay cuenta de Stripe conectada y cobrando. Decide qué ve el comensal. */
+  /** Whether a Stripe account is connected and charging. Decides what the diner sees. */
   cardsEnabled?: boolean;
 }
 
@@ -56,8 +56,8 @@ export default function SettingsForm({
   const [counterPay, setCounterPay] = useState(Boolean(restaurant.allow_counter_payment));
   const [dealsTab, setDealsTab] = useState(restaurant.deals_tab_enabled !== false);
 
-  // Se recalcula al vuelo: si apaga los dos interruptores sin Stripe, el aviso
-  // pasa de "no pueden pagar en línea" a "nadie puede ordenar" ahí mismo.
+  // Recomputed on the fly: if they switch both off with no Stripe, the warning
+  // goes from "they cannot pay online" to "nobody can order" right there.
   const paymentWarning = ownerWarningKey({
     cardsEnabled,
     allowPayLater: payLater,

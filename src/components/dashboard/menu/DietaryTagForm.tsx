@@ -6,7 +6,7 @@ import { useDirty } from "@/hooks/useDirty";
 import { isEmoji } from "@/lib/icon-groups";
 import { isBuiltIn, tagKey, type StoredDietaryTag } from "@/lib/dietary";
 
-/** Rótulo, su emoji, y el inglés si el restaurante quiere ponerlo. */
+/** Label, its emoji, and the English if the restaurant wants to add it. */
 export default function DietaryTagForm({
   initial,
   busy,
@@ -27,8 +27,8 @@ export default function DietaryTagForm({
   const [emoji, setEmoji] = useState(initial?.emoji ?? "🏷️");
   const dirty = useDirty([label, labelEn, emoji]);
 
-  // Una etiqueta que no deja `key` utilizable —sólo emoji, o sólo signos— no
-  // tiene dónde guardarse dentro del platillo.
+  // A tag that leaves no usable `key` — only emoji, or only punctuation — has
+  // nowhere to be stored on the dish.
   const usable = Boolean(tagKey(label));
 
   return (

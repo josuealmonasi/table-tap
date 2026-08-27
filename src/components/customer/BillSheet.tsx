@@ -96,9 +96,9 @@ function Section({
   side: BillSide;
   currency: string;
   photoOf: (itemId: string) => string | null;
-  /** Ya pagado: se enseña apagado y no entra en ninguna suma. */
+  /** Already paid: shown dimmed and counted in no total. */
   settled?: boolean;
-  /** Se resume cuando son muchos renglones, para no empujar el total fuera. */
+  /** Summarised when there are many rows, so the total is not pushed off screen. */
   collapsible?: boolean;
 }) {
   const t = useT();

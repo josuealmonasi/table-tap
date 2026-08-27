@@ -58,20 +58,20 @@ export default function BillsPanel({
   restaurantId: string;
   /** Front of house can take the money; the kitchen cannot. */
   canSettle: boolean;
-  /** Mesas que pidieron la cuenta y están esperando a que alguien vaya. */
+  /** Tables that asked for the bill and are waiting for somebody to come. */
   askedToPay: string[];
-  /** La bitácora, para quien puede verla. */
+  /** The activity log, for whoever may see it. */
   children?: React.ReactNode;
 }) {
   const t = useT();
   const toast = useToast();
   const router = useRouter();
 
-  // Otro mesero cobra una mesa y esta lista se entera sola.
+  // Another waiter collects on a table and this list finds out by itself.
   useLiveOrders(restaurantId);
   const [query, setQuery] = useState("");
   const [chosen, setChosen] = useState<OpenBill | null>(null);
-  // La mesa que se está cobrando, si alguna.
+  // The table being collected on, if any.
   const [settling, setSettling] = useState<OpenBill | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -89,9 +89,9 @@ export default function BillsPanel({
   const shown = useMemo(() => bills.filter(b => matchesBill(b, query)), [bills, query]);
   const owed = shown.reduce((sum, b) => sum + b.total, 0);
 
-  // Tener saldo y pedir la cuenta no son lo mismo: lo primero es casi toda la
-  // sala, lo segundo es alguien con la mano levantada. Las que piden van
-  // arriba y aparte, porque son las que hay que atender ahora.
+  // Having a balance and asking for the bill are not the same: the first is
+  // nearly the whole room, the second is somebody with a hand up. The ones
+  // asking go on top and apart, because they are the ones to serve now.
   const waiting = useMemo(() => new Set(askedToPay), [askedToPay]);
   const toCollect = useMemo(
     () => shown.filter(b => b.tableId && waiting.has(b.tableId)),
@@ -139,7 +139,7 @@ export default function BillsPanel({
     }
   }
 
-  /** Una cuenta abierta: se toca para la promoción o el cierre, se cobra aparte. */
+  /** An open bill: tapped for the promotion or the close, collected separately. */
   const billRow = (bill: OpenBill) => (
     <div key={bill.key} className="tt-bill-row tt-bill-open">
       {/* La fila abre la promoción o el cierre; cobrar es su propia
@@ -344,8 +344,8 @@ export default function BillsPanel({
           open
           restaurantId={restaurantId}
           tableId={settling.tableId}
-          // Sin mesa, la cuenta es el pedido mismo; `openBills` agrupa cada
-          // pedido de mostrador en su propia fila, así que hay exactamente uno.
+          // With no table, the bill is the order itself; `openBills` groups each
+          // counter order into its own row, so there is exactly one.
           orderId={settling.tableId ? null : settling.orderIds[0]}
           tableLabel={settling.tableLabel ?? settling.code ?? ""}
           currency={currency}

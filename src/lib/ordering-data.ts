@@ -31,7 +31,7 @@ export interface OrderingData {
    * offer is a promise the app can't keep, so it isn't made.
    */
   receipts: boolean;
-  /** Las etiquetas de dieta del restaurante — la lista es suya, no del código. */
+  /** The restaurant's dietary tags — the list is theirs, not the code's. */
   dietaryTags: StoredDietaryTag[];
 }
 
@@ -109,15 +109,14 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
   // Which menus a customer may order from now. The decision is shared with
   // /api/checkout so the page and the charge can't disagree about what's on
   // offer — a menu that closes while the page sits open must stop both.
-  // Todo lo que sólo necesita el id del restaurante sale en la misma ola.
+  // Everything that only needs the restaurant id goes out in the same wave.
   //
-  // Antes eran siete viajes en fila —portada, menús, horario, restaurante,
-  // categorías, platillos, extras, promociones, calificaciones y plan— y en
-  // producción el menú tardaba 1.9 s con consultas que la base resuelve en
-  // menos de un milisegundo cada una. El tiempo no estaba en la base: estaba
-  // en esperar diez veces de ida y vuelta. Las promociones, las calificaciones
-  // y el plan no dependen de ninguna otra, así que no tienen por qué esperar
-  // su turno.
+  // It used to be seven round trips in a row — cover, menus, schedule,
+  // restaurant, categories, dishes, extras, promotions, ratings and plan — and
+  // in production the menu took 1.9 s on queries the database answers in under
+  // a millisecond each. The time was not in the database: it was in waiting ten
+  // times for the round trip. Promotions, ratings and the plan depend on nothing
+  // else, so they have no reason to wait their turn.
   const [menusRes, zoneRes, promotions, statsRes, plan, dietaryRes] = await Promise.all([
     supabase
       .from("menus")
@@ -127,8 +126,8 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
     fetchPromotions(supabase, restaurantId, { activeOnly: true }),
     supabase.rpc("dish_rating_stats", { p_restaurant_id: restaurantId }),
     getPlan(restaurantId),
-    // Las etiquetas de dieta no dependen de nada más, así que viajan con este
-    // primer grupo en vez de costar otra ida y vuelta.
+    // The dietary tags depend on nothing else, so they travel with this first
+    // group instead of costing another round trip.
     supabase
       .from("dietary_tags")
       .select("id, key, label, label_en, emoji, sort_order")
@@ -212,13 +211,13 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
   // (cart math and checkout both key off service_pct).
   if (restaurant && !restaurant.service_enabled) restaurant.service_pct = 0;
 
-  // Cobrar en la caja viene con el plan, así que el interruptor del
-  // restaurante no basta: quien se bajó a Carta lo conserva encendido en la
-  // base de datos. Se resuelve aquí para que el carrito no ofrezca un botón
-  // que el checkout va a rechazar — la misma regla, en los dos lados.
-  // ¿Puede cobrar con tarjeta? Se resuelve aquí porque las columnas de Stripe
-  // no son del comensal — su permiso de lectura no las incluye, y así debe
-  // seguir. Lo que baja al navegador es un sí o un no.
+  // Paying at the till comes with the plan, so the restaurant's switch is not
+  // enough on its own: someone who downgraded to Carta still has it on in the
+  // database. Resolved here so the cart never offers a button checkout would
+  // reject — the same rule, on both sides.
+  // Can they take cards? Resolved here because the Stripe columns are not the
+  // diner's — their read grant does not include them, and it should stay that
+  // way. What reaches the browser is a yes or a no.
   if (restaurant) {
     const { data: pay } = await createAdminClient()
       .from("restaurants")

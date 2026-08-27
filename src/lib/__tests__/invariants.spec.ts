@@ -118,7 +118,7 @@ describe("each module sits behind the right guard", () => {
   // right is the whole permission story, and nothing in the types says so.
   const HOSTED_BY = {
     OrderHistory: "src/components/dashboard/analytics/AnalyticsView.tsx",
-    // El log entra como children desde la página, no dentro del panel.
+    // The log comes in as children from the page, not from inside the panel.
     UserLogs: "src/app/dashboard/bills/page.tsx",
   };
 
@@ -138,25 +138,25 @@ describe("each module sits behind the right guard", () => {
   });
 
   it("gates the activity log with exactly what its RLS policy allows", () => {
-    // La reja de la página y la política de la tabla son dos sitios que tienen
-    // que decir lo mismo, y nada los comparaba: la página enseñaba la bitácora
-    // al gerente y `user_logs` sólo la deja leer al dueño, así que el gerente
-    // veía el módulo entero con cero renglones. Una reja más ancha que su
-    // política no protege de más — enseña una pantalla rota.
+    // The page's gate and the table's policy are two places that have to say the
+    // same thing, and nothing compared them: the page showed the activity log to
+    // the manager and `user_logs` only lets the owner read it, so the manager saw
+    // the whole module with zero rows. A gate wider than its policy protects
+    // nothing extra — it shows a broken screen.
     const page = read("src/app/dashboard/bills/page.tsx");
     const schema = read("supabase/schema.sql");
-    // La sentencia va en varias líneas: se toma desde `create policy` hasta su
-    // punto y coma, que es donde de verdad termina.
+    // The statement spans several lines: take it from `create policy` to its
+    // semicolon, which is where it actually ends.
     const policy = schema
       .split(";")
       .find(stmt => /create policy/.test(stmt) && /\bon user_logs\b/.test(stmt));
 
     expect(policy, "no encuentro la política de user_logs en schema.sql").toBeTruthy();
-    // `owns_restaurant` es dueño; `has_role(..., 'manager')` sería dueño y
-    // gerente. Lo que diga la política decide el predicado de la página.
+    // `owns_restaurant` is owner; `has_role(..., 'manager')` would be owner and
+    // manager. What the policy says decides the page's predicate.
     const ownerOnly = /owns_restaurant/.test(policy!);
     expect(page).toMatch(ownerOnly ? /OWNS\(membership\.role\)/ : /MANAGES\(membership\.role\)/);
-    // Y nunca el otro, que es como se llegó aquí.
+    // And never the other, which is how we got here.
     expect(page).not.toMatch(ownerOnly ? /MANAGES\(membership\.role\) && \(\s*<UserLogs/ : /OWNS\(membership\.role\) && \(\s*<UserLogs/);
   });
 });

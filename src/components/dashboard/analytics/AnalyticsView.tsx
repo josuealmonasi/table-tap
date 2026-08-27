@@ -7,7 +7,7 @@ import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import OrderHistory from "@/components/dashboard/OrderHistory";
 
-/** Un platillo con su promedio de estrellas y cuántas personas lo calificaron. */
+/** A dish with its star average and how many people rated it. */
 export interface RatedDish {
   itemId: string;
   name: string;

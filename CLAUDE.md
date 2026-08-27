@@ -13,6 +13,10 @@ the simpler one.
 - **Check as you go.** Test after every meaningful change — don't pile up untested edits.
 - **Let the types help.** Lean on TypeScript and the linter to catch mistakes before they run.
 - **Think in components.** Build small, reusable pieces and compose them.
+- **The code is written in English.** Comments, commit messages, variable names,
+  script output — all English. The only Spanish in this repo is text a customer
+  or a restaurant actually reads: `src/lib/i18n/es.ts` and `src/lib/legal/*`.
+  Those stay Spanish, and every new UI string needs both languages.
 
 ## File & folder naming
 

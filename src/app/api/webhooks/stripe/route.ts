@@ -179,9 +179,9 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
   const outcome = subscriptionOutcome(sub.status, plan);
   const db = createAdminClient();
 
-  // El lugar de fundador se toma al contratar, no al registrarse: si contara
-  // el registro, las altas gratuitas se comerían los lugares sin que nadie
-  // haya pagado nunca. Si ya es fundador conserva su número.
+  // The founding place is taken on subscribing, not on signing up: if signup
+  // counted, free registrations would eat the places without anyone ever
+  // having paid. If they are already a founder they keep their number.
   if (outcome.status === "active" || outcome.status === "trialing") {
     const { data: number, error: claimError } = await db.rpc("claim_founding_price", {
       p_restaurant: restaurantId,
@@ -189,10 +189,10 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
     });
     if (claimError) console.error("founding claim failed", restaurantId, claimError.message);
 
-    // Dos restaurantes que contratan en el mismo segundo pueden ver los dos el
-    // precio de fundador y sólo caber uno. A quien ya se le cobró ese precio se
-    // le honra: cobrar de fundador y no serlo sería quedarnos con su dinero
-    // bajo una promesa que no pensábamos cumplir.
+    // Two restaurants subscribing in the same second can both see the founding
+    // price with room for only one. Whoever was already charged that price is
+    // honoured: charging a founder's price and not making them one would be
+    // keeping their money under a promise we never meant to keep.
     if (number === null && (await paidFoundingPrice(db, sub, plan))) {
       await db.rpc("claim_founding_price", {
         p_restaurant: restaurantId,
@@ -201,8 +201,8 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
     }
   }
 
-  // Lo que Stripe le cobra realmente, para que la pantalla de Plan no muestre
-  // el precio del catálogo a quien contrató con otro.
+  // What Stripe actually charges them, so the Plan screen does not show the
+  // catalogue price to somebody who subscribed at another.
   const charged = sub.items?.data?.[0]?.price?.unit_amount;
 
   const { error } = await db
@@ -222,10 +222,10 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
 }
 
 /**
- * ¿Se le cobró el precio de fundador a esta suscripción?
+ * Was this subscription charged the founding price?
  *
- * Se compara contra el precio base del plan, que es justo el que sólo pagan
- * los fundadores una vez que los lugares se acabaron.
+ * Compared against the plan's base price, which is exactly the one only
+ * founders pay once the places have run out.
  */
 async function paidFoundingPrice(
   db: ReturnType<typeof createAdminClient>,

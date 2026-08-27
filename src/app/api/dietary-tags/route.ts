@@ -9,11 +9,11 @@ import { tagKey } from "@/lib/dietary";
 export const runtime = "nodejs";
 
 /**
- * Las etiquetas de dieta y alérgenos del restaurante.
+ * The restaurant's dietary and allergen tags.
  *
- * Gerencia: es lo que el comensal lee en el platillo. Se escribe con la llave
- * de servicio, así que TODA consulta va acotada al restaurante de quien pide —
- * un id de otro no encuentra nada.
+ * Management: it is what the diner reads on the dish. Written with the service
+ * key, so EVERY query is scoped to the caller's restaurant — somebody else's
+ * id finds nothing.
  */
 
 interface Body {
@@ -35,8 +35,8 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as Body;
   const label = clean(body.label, 40);
   const key = tagKey(label);
-  // Sin `key` no hay dónde guardarla dentro del platillo. Pasa cuando alguien
-  // escribe sólo emoji, y es mejor decirlo que crear una etiqueta fantasma.
+  // With no `key` there is nowhere to store it on the dish. It happens when
+  // somebody types only an emoji, and saying so beats creating a phantom tag.
   if (!label || !key) return await apiError("apiErr.dietaryTagName", 400);
 
   const db = createAdminClient();
@@ -58,8 +58,8 @@ export async function POST(req: NextRequest) {
     .select("id")
     .single();
 
-  // El índice único es por restaurante: dos etiquetas con el mismo nombre en
-  // la misma carta serían dos filtros idénticos en el menú del comensal.
+  // The unique index is per restaurant: two tags with the same name on one menu
+  // would be two identical filters in the diner's menu.
   if (error?.code === "23505") return await apiError("apiErr.dietaryTagTaken", 409);
   if (error || !data) return await apiError("apiErr.invalidRequest", 500);
   return NextResponse.json({ id: data.id });
@@ -81,8 +81,8 @@ export async function PATCH(req: NextRequest) {
   if (isEmoji(body.emoji ?? "")) patch.emoji = clean(body.emoji, 8);
   if (Object.keys(patch).length === 0) return await apiError("apiErr.invalidRequest", 400);
 
-  // La `key` NO se toca al renombrar: es lo que guarda cada platillo, y
-  // moverla los despegaría a todos de su etiqueta en silencio.
+  // The `key` is NOT touched on rename: it is what every dish stores, and moving
+  // it would detach them all from their tag in silence.
   const { data, error } = await createAdminClient()
     .from("dietary_tags")
     .update(patch)
@@ -111,10 +111,10 @@ export async function DELETE(req: NextRequest) {
     .maybeSingle();
   if (!tag) return await apiError("apiErr.notFound", 404);
 
-  // Y se despega de los platillos que la traían. Dejar la clave suelta dentro
-  // del arreglo no rompe nada hoy —al pintar se ignora lo que no reconoce—
-  // pero reaparecería sola el día que alguien cree otra etiqueta con el mismo
-  // nombre, y nadie entendería por qué.
+  // And it comes off the dishes that carried it. Leaving the key loose inside
+  // the array breaks nothing today — rendering ignores what it does not know —
+  // but it would come back on its own the day somebody creates another tag with
+  // the same name, and nobody would understand why.
   const { data: tagged } = await db
     .from("menu_items")
     .select("id, dietary")

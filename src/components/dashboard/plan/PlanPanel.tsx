@@ -42,15 +42,15 @@ export default function PlanPanel({
   acceptedVersion: string | null;
   acceptedAt: string | null;
   currency: string;
-  /** Su número de fundador, si lo es. */
+  /** Their founder number, if they are one. */
   foundingNumber: number | null;
-  /** Cuántos lugares se han tomado ya, para decir cuántos quedan. */
+  /** How many places are taken, to say how many are left. */
   foundersTaken: number;
-  /** Lo que Stripe le cobra, cuando ya hay suscripción. */
+  /** What Stripe charges them, once there is a subscription. */
   subscribedPrice: number | null;
 }) {
-  // Lo que paga este restaurante. Cae al precio del catálogo sólo mientras no
-  // haya suscripción — en la prueba gratis, por ejemplo.
+  // What this restaurant pays. It falls back to the catalogue price only while
+  // there is no subscription — during the free trial, for instance.
   const paidPrice = subscribedPrice ?? plan.limits.monthly_price;
   const t = useT();
   const toast = useToast();

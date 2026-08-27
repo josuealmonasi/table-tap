@@ -1,78 +1,78 @@
 /**
- * Qué formas de pagar tiene delante un comensal, y por qué faltan las que faltan.
+ * Which ways of paying a diner is actually offered, and why the rest are missing.
  *
- * Vive aparte y sin IO porque lo consultan dos lados que tienen que decir lo
- * mismo: el carrito, que pinta los botones y el renglón de abajo, y Ajustes,
- * que le explica al dueño qué está viendo su cliente. Cuando cada uno lo
- * decidía por su cuenta, el carrito acabó prometiendo "Paga ahora con tarjeta"
- * debajo de una pantalla que no tenía ningún botón para pagar con tarjeta.
+ * Pure and separate because two sides consult it and have to agree: the cart,
+ * which paints the buttons and the line beneath them, and Settings, which tells
+ * the owner what their customer is seeing. When each decided for itself, the
+ * cart ended up promising "pay now by card" underneath a screen that had no
+ * card button on it at all.
  */
 
 export interface PaymentContext {
-  /** Hay cuenta de Stripe conectada y habilitada para cobrar. */
+  /** A Stripe account is connected and cleared to take charges. */
   cardsEnabled: boolean;
-  /** El interruptor de "que las mesas paguen al final". */
+  /** The "let tables pay at the end" switch. */
   allowPayLater: boolean;
-  /** El interruptor de "que paguen en la caja", que es del QR general. */
+  /** The "pay at the counter" switch, which belongs to the general QR. */
   allowCounterPayment: boolean;
-  /** Escaneó el QR de una mesa, o el general del restaurante. */
+  /** They scanned a table's QR, or the restaurant's general one. */
   atTable: boolean;
 }
 
 export interface PaymentOptions {
-  /** Pagar con tarjeta ahora mismo. */
+  /** Pay by card right now. */
   payNow: boolean;
-  /** Ordenar y dejar la cuenta abierta. Sólo en mesa: sin mesa no hay a quién cobrarle. */
+  /** Order and leave the bill open. Table only: with no table there is nobody to bill. */
   payLater: boolean;
-  /** Ordenar y pagar en la caja. Sólo sin mesa: en mesa lo retiene la cuenta. */
+  /** Order and pay at the till. No-table only: at a table the bill holds it. */
   payCounter: boolean;
 }
 
 export function paymentOptions(ctx: PaymentContext): PaymentOptions {
   return {
     payNow: ctx.cardsEnabled,
-    // Dejar la cuenta abierta necesita una mesa contra la cual dejarla.
+    // Leaving a bill open needs a table to leave it against.
     payLater: ctx.atTable && ctx.allowPayLater,
-    // Y la caja sólo tiene sentido donde no hay mesa que retenga el pedido.
+    // And the till only makes sense where no table is holding the order.
     payCounter: !ctx.atTable && ctx.allowCounterPayment,
   };
 }
 
-/** ¿Le queda alguna forma de ordenar? Si no, el carrito es un callejón sin salida. */
+/** Any way left to order? If not, the cart is a dead end. */
 export function canOrder(options: PaymentOptions): boolean {
   return options.payNow || options.payLater || options.payCounter;
 }
 
 /**
- * Qué decir bajo los botones — nombrando sólo lo que de verdad está ahí.
+ * What to say under the buttons — naming only what is really there.
  *
- * Es una clave de traducción y no una frase: quien pinta la tiene traducida, y
- * lo que aquí se decide es cuál corresponde, que es lo que se estaba fallando.
+ * A translation key rather than a sentence: the caller has it translated, and
+ * what is decided here is which one applies, which is the part that was wrong.
  */
 export function paymentHintKey(options: PaymentOptions): string {
   const { payNow, payLater, payCounter } = options;
   if (!canOrder(options)) return "cart.noCardYet";
-  // Las dos juntas: es el caso que el restaurante quiere, y el único en el que
-  // se puede prometer tarjeta y cuenta abierta en la misma línea.
+  // Both together: the case the restaurant wants, and the only one where card
+  // and open bill can be promised on the same line.
   if (payNow && payLater) return "cart.payNowHint";
   if (payNow && payCounter) return "cart.counterHint";
-  // Sólo tarjeta: se cobra aquí y no hay nada que dejar abierto.
+  // Card only: it is charged here and there is nothing to leave open.
   if (payNow) return "cart.securedBy";
-  // Sin tarjeta conectada, prometerla sería mentir. Se dice lo que sí pasa.
+  // With no card connected, promising one would be a lie. Say what happens.
   if (payLater) return "cart.payLaterOnlyHint";
   return "cart.counterOnlyHint";
 }
 
 /**
- * Lo que el dueño necesita saber de su propia configuración.
+ * What the owner needs to know about their own configuration.
  *
- * `null` cuando no hay nada que advertir. Cuando lo hay, es porque un
- * interruptor que él encendió no está haciendo lo que promete su rótulo.
+ * `null` when there is nothing to warn about. When there is, it is because a
+ * switch they turned on is not doing what its label promises.
  */
 export function ownerWarningKey(ctx: PaymentContext): string | null {
   if (ctx.cardsEnabled) return null;
-  // Sin Stripe no hay pago en línea en ninguna pantalla. Lo que cambia es qué
-  // tan grave es, y eso depende de lo que quede encendido.
+  // Without Stripe there is no online payment on any screen. What changes is how
+  // bad that is, and that depends on what is left switched on.
   if (!ctx.allowPayLater && !ctx.allowCounterPayment) return "dash.noPaymentAtAll";
   return "dash.noCardsConnected";
 }

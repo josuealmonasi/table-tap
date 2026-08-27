@@ -14,7 +14,7 @@ export default function CategoryTabs({
   categories: Category[];
   activeCat: string;
   onSelect: (categoryId: string) => void;
-  /** Si hay combos, rebajas o promociones que enseñar. */
+  /** Whether there are combos, discounts or promotions to show. */
   hasDeals?: boolean;
 }) {
   const t = useT();

@@ -15,12 +15,12 @@ interface ServiceButtonsProps {
 }
 
 /**
- * Sólo llamar al mesero.
+ * Calling the waiter, and nothing else.
  *
- * "Pedir la cuenta" se fue: cuando la cuenta se puede ver, pedirla no es una
- * acción — es mirarla. El menú abre esa pantalla, y dentro están las dos
- * maneras de pagarla. Dejar además un botón que sólo avisa "tráeme la cuenta"
- * era una tercera puerta al mismo cuarto.
+ * "Ask for the bill" is gone: when the bill can be seen, asking for it is not
+ * an action — it is looking at it. The menu opens that screen, and inside are
+ * both ways of paying it. Leaving a button that only says "bring me the bill"
+ * was a third door into the same room.
  */
 type Kind = "waiter";
 
