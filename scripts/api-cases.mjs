@@ -34,6 +34,13 @@ async function staffId(fx) {
   return data?.id ?? "";
 }
 
+async function iconGroupId(fx) {
+  const { data } = await fx.admin
+    .from("icon_groups").select("id").eq("restaurant_id", fx.restaurant.id)
+    .eq("name", `${MARK} iconos`).maybeSingle();
+  return data?.id ?? "";
+}
+
 async function couponId(fx) {
   const { data } = await fx.admin
     .from("coupons").select("id").eq("restaurant_id", fx.restaurant.id)
@@ -94,6 +101,14 @@ export function cases(fx) {
       body: async f => ({ id: await couponId(f), active: false }), expect: [200] },
     { name: "DELETE /api/coupons", as: "manager", method: "DELETE", path: "/api/coupons",
       body: async f => ({ id: await couponId(f) }), expect: [200] },
+    { name: "POST /api/icon-groups (crear)", as: "manager", method: "POST", path: "/api/icon-groups",
+      body: { name: `${MARK} iconos`, variant: "addon", icons: [{ emoji: "🌮" }, { emoji: "🌶️" }] },
+      expect: [200], check: d => Boolean(d.id) || "no devolvió el id del grupo" },
+    { name: "PATCH /api/icon-groups (renombrar)", as: "manager", method: "PATCH", path: "/api/icon-groups",
+      body: async f => ({ id: await iconGroupId(f), name: `${MARK} iconos`, icons: [{ emoji: "🧄" }] }),
+      expect: [200] },
+    { name: "DELETE /api/icon-groups", as: "manager", method: "DELETE", path: "/api/icon-groups",
+      body: async f => ({ id: await iconGroupId(f) }), expect: [200] },
     { name: "POST /api/promotions (crear)", as: "manager", method: "POST", path: "/api/promotions",
       body: { kind: "bogo", name: `${MARK} 2x1`, emoji: "🎁", buyQty: 2, payQty: 1,
               items: [{ itemId: dish.id, qty: 1 }] }, expect: [200] },

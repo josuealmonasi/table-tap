@@ -3,84 +3,23 @@
 import { useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { ExpandIcon } from "@/components/ui/icons";
+import { groupsFor, type IconGroup, type IconVariant } from "@/lib/icon-groups";
+import { useStoredIconGroups } from "./IconGroupsContext";
 
-type IconGroup = { group: string; items: { emoji: string; label: string }[] };
-
-// Group header → translation key.
-const GROUP_KEY: Record<string, string> = {
-  Meals: "menu.groupMeals",
-  Drinks: "menu.groupDrinks",
-  Condiments: "menu.groupCondiments",
-  "Beverage add-ons": "menu.groupBeverageAddons",
-};
-
-// Sections already group by type (e.g. "Coffee Drinks"), so this just
-// distinguishes meals vs. drinks at a glance. 🍽️ is the generic default.
-const PRODUCT_ICON_GROUPS: IconGroup[] = [
-  {
-    group: "Meals",
-    items: [
-      { emoji: "🍽️", label: "Dish" },
-      { emoji: "🍔", label: "Burger" },
-      { emoji: "🍕", label: "Pizza" },
-      { emoji: "🌭", label: "Hot dog" },
-      { emoji: "🌮", label: "Taco" },
-      { emoji: "🍝", label: "Pasta" },
-      { emoji: "🍜", label: "Noodles" },
-      { emoji: "🍣", label: "Sushi" },
-      { emoji: "🍳", label: "Breakfast" },
-      { emoji: "🥗", label: "Salad" },
-      { emoji: "🍗", label: "Chicken" },
-      { emoji: "🥩", label: "Meat" },
-      { emoji: "🥪", label: "Sandwich" },
-    ],
-  },
-  {
-    group: "Drinks",
-    items: [
-      { emoji: "☕", label: "Coffee" },
-      { emoji: "🍵", label: "Tea" },
-      { emoji: "🥤", label: "Soft drink" },
-      { emoji: "🧃", label: "Juice" },
-      { emoji: "🍺", label: "Beer" },
-      { emoji: "🍷", label: "Wine" },
-    ],
-  },
-];
-
-// Extras are condiments and a couple of complimentary beverage add-ons —
-// never a full dish.
-const ADDON_ICON_GROUPS: IconGroup[] = [
-  {
-    group: "Condiments",
-    items: [
-      { emoji: "🧂", label: "Salt" },
-      { emoji: "🌶️", label: "Chili" },
-      { emoji: "🧄", label: "Garlic" },
-      { emoji: "🍯", label: "Honey" },
-      { emoji: "🥫", label: "Sauce" },
-      { emoji: "🧈", label: "Butter" },
-    ],
-  },
-  {
-    group: "Beverage add-ons",
-    items: [
-      { emoji: "🥛", label: "Milk" },
-      { emoji: "☕", label: "Coffee" },
-    ],
-  },
-];
+// Dos grupos pueden llamarse igual — el suyo y el nuestro. El id manda.
+const keyOf = (g: IconGroup) => g.id ?? g.name;
 
 /** Which group contains the currently chosen emoji (so we can open it by default). */
 function findGroupWith(groups: IconGroup[], value: string) {
   if (!value) return null;
-  return groups.find(g => g.items.some(i => i.emoji === value))?.group ?? null;
+  const found = groups.find(g => g.items.some(i => i.emoji === value));
+  return found ? keyOf(found) : null;
 }
 
 /**
  * Icon picker, single-open accordion. value is the chosen emoji ("" = none).
  * variant picks the icon set: "product" (meals/drinks) or "addon" (condiments/
- * beverage add-ons).
+ * beverage add-ons). The restaurant's own groups come first, then ours.
  */
 export default function IconPicker({
   value,
@@ -91,10 +30,10 @@ export default function IconPicker({
   value: string;
   onChange: (emoji: string) => void;
   label?: string;
-  variant?: "product" | "addon";
+  variant?: IconVariant;
 }) {
   const t = useT();
-  const groups = variant === "addon" ? ADDON_ICON_GROUPS : PRODUCT_ICON_GROUPS;
+  const groups = groupsFor(variant, useStoredIconGroups());
   const [openGroup, setOpenGroup] = useState<string | null>(() =>
     findGroupWith(groups, value),
   );
@@ -105,17 +44,20 @@ export default function IconPicker({
 
       <div className="tt-accordion">
         {groups.map(g => {
-          const isOpen = openGroup === g.group;
+          const key = keyOf(g);
+          const isOpen = openGroup === key;
           const selected = g.items.find(i => i.emoji === value);
           return (
-            <div key={g.group} className="tt-acc-item">
+            <div key={key} className="tt-acc-item">
               <button
                 type="button"
                 className="tt-acc-head"
                 aria-expanded={isOpen}
-                onClick={() => setOpenGroup(isOpen ? null : g.group)}
+                onClick={() => setOpenGroup(isOpen ? null : key)}
               >
-                <span>{t(GROUP_KEY[g.group] ?? g.group)}</span>
+                {/* Los de fábrica se traducen; el nombre que puso el restaurante
+                    se respeta tal cual lo escribió. */}
+                <span>{g.labelKey ? t(g.labelKey) : g.name}</span>
                 <span className="tt-acc-right">
                   {selected && <span style={{ fontSize: 15 }}>{selected.emoji}</span>}
                   <span className="tt-acc-chevron">

@@ -1011,6 +1011,50 @@ $$;
 revoke all on function public.dish_rating_stats(uuid) from public;
 grant execute on function public.dish_rating_stats(uuid) to anon, authenticated;
 
+-- ── Grupos de iconos ───────────────────────────────────────────────────────
+-- Las pestañas del selector de emoji ("Condimentos", "Complementos de bebida").
+-- Venían fijas en el código; esto deja que cada restaurante arme las suyas.
+--
+-- Nada de esto lo ve un comensal: el platillo guarda su emoji como texto, así
+-- que estos grupos sólo existen mientras alguien elige uno. Por eso `anon` no
+-- tiene nada aquí.
+create table if not exists icon_groups (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  -- Dos paletas distintas: los platillos no comparten iconos con los extras.
+  variant       text not null check (variant in ('product', 'addon')),
+  name          text not null,
+  sort_order    int not null default 0,
+  created_at    timestamptz not null default now()
+);
+create index if not exists icon_groups_restaurant_idx
+  on icon_groups(restaurant_id, variant, sort_order);
+
+create table if not exists icon_group_items (
+  group_id   uuid not null references icon_groups(id) on delete cascade,
+  emoji      text not null,
+  label      text,
+  sort_order int not null default 0,
+  primary key (group_id, emoji)
+);
+
+alter table icon_groups enable row level security;
+alter table icon_group_items enable row level security;
+
+drop policy if exists "team manages icon groups" on icon_groups;
+create policy "team manages icon groups" on icon_groups for all
+  using (has_role(restaurant_id, array['manager']))
+  with check (has_role(restaurant_id, array['manager']));
+
+drop policy if exists "team manages icon group items" on icon_group_items;
+create policy "team manages icon group items" on icon_group_items for all
+  using (has_role((select g.restaurant_id from icon_groups g where g.id = group_id), array['manager']))
+  with check (has_role((select g.restaurant_id from icon_groups g where g.id = group_id), array['manager']));
+
+-- El comensal nunca los necesita: su platillo ya trae el emoji dentro.
+revoke all on icon_groups from anon;
+revoke all on icon_group_items from anon;
+
 -- ── Subscription plans ──────────────────────────────────────────────────────
 -- What each tier unlocks, and what it costs. Reference data, not per-tenant:
 -- one row per plan, seeded here so the database is the single answer to "how

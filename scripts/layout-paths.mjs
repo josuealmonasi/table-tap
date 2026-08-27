@@ -12,6 +12,7 @@ export const CREW = [
     email: "demo@tabletap.dev",
     pages: [
       "/dashboard",
+      "/dashboard/main-menu",
       "/dashboard/orders",
       "/dashboard/bills",
       "/dashboard/tables",
@@ -30,6 +31,7 @@ export const CREW = [
     // página, que ya se revisa con su dueño.
     pages: [
       "/dashboard",
+      "/dashboard/main-menu",
       "/dashboard/orders",
       "/dashboard/bills",
       "/dashboard/tables",
@@ -68,6 +70,11 @@ export const DIALOGS = {
   ],
   "/dashboard/promotions": [
     { name: "nuevo combo", text: "Nuevo combo" },
+  ],
+  "/dashboard/main-menu": [
+    { name: "nuevo producto", text: "Agregar producto" },
+    { name: "nuevo extra", text: "Agregar extra" },
+    { name: "nuevo grupo de iconos", text: "Agregar grupo" },
   ],
   "/dashboard/staff": [
     // El botón dice lo que hace —"Enviar invitación"— no "Agregar".

@@ -452,6 +452,24 @@ export async function seedMock(pg) {
   );
 
   // ── Promociones: un combo, un 2x1 y precios por cantidad ───────────────
+  // Grupos de iconos: un restaurante que ya armó los suyos, para que el demo
+  // enseñe la función y no una paleta vacía.
+  for (const [variant, name, order, icons] of [
+    ["addon", "Salsas de la casa", 0, [["🌶️", "Picante"], ["🥫", "BBQ"], ["🧄", "Ajo"]]],
+    ["addon", "Lácteos", 1, [["🥛", "Leche"], ["🧈", "Mantequilla"], ["🍦", "Crema"]]],
+    ["product", "Antojitos", 0, [["🌮", "Taco"], ["🫓", "Quesadilla"], ["🌯", "Burrito"]]],
+  ]) {
+    const {
+      rows: [group],
+    } = await pg.query(
+      `insert into icon_groups (restaurant_id, variant, name, sort_order)
+       values ($1,$2,$3,$4) returning id`,
+      [rid, variant, name, order],
+    );
+    await bulkInsert(pg, "icon_group_items", ["group_id", "emoji", "label", "sort_order"],
+      icons.map(([emoji, label], i) => [group.id, emoji, label, i]));
+  }
+
   const forPromo = sample(products, 5);
   const {
     rows: [combo],
