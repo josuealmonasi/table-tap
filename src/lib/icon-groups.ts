@@ -1,13 +1,13 @@
-/** Un emoji del selector, con su nombre para el lector de pantalla. */
+/** One emoji from the picker, with its name for the screen reader. */
 export interface IconChoice {
   emoji: string;
   label: string;
 }
 
 export interface IconGroup {
-  /** Vacío en los de fábrica: los suyos se borran, los nuestros no. */
+  /** Empty on the built-ins: theirs can be deleted, ours cannot. */
   id?: string;
-  /** La clave de traducción de los de fábrica; los propios traen nombre puesto. */
+  /** The built-ins' translation key; their own carry a name already. */
   labelKey?: string;
   name: string;
   items: IconChoice[];
@@ -16,11 +16,11 @@ export interface IconGroup {
 export type IconVariant = "product" | "addon";
 
 /**
- * Los grupos de fábrica.
+ * The built-in groups.
  *
- * Un restaurante que no ha armado los suyos ve estos, así que el selector
- * nunca aparece vacío — y el que sí los armó ve los suyos primero, porque los
- * puso para encontrar antes lo que usa todos los días.
+ * A restaurant that has not built its own sees these, so the picker is never
+ * empty — and one that has sees its own first, because they added them to
+ * reach what they use every day sooner.
  */
 export const DEFAULT_ICON_GROUPS: Record<IconVariant, IconGroup[]> = {
   product: [
@@ -80,7 +80,7 @@ export const DEFAULT_ICON_GROUPS: Record<IconVariant, IconGroup[]> = {
   ],
 };
 
-/** Lo que devuelve la base: un grupo con sus iconos ya pegados. */
+/** What the database returns: a group with its icons already attached. */
 export interface StoredIconGroup {
   id: string;
   variant: IconVariant;
@@ -90,10 +90,10 @@ export interface StoredIconGroup {
 }
 
 /**
- * Los grupos que se enseñan: primero los del restaurante, luego los de fábrica.
+ * Which groups are shown: the restaurant's first, then ours.
  *
- * Los de fábrica no se esconden nunca. Un grupo propio vacío tampoco se enseña
- * — una pestaña sin nada dentro es una pestaña que decepciona a quien la abre.
+ * The built-ins are never hidden. An empty group of their own is not shown
+ * either — a tab with nothing in it only disappoints whoever opens it.
  */
 export function groupsFor(
   variant: IconVariant,
@@ -113,7 +113,7 @@ export function groupsFor(
   return [...mine, ...DEFAULT_ICON_GROUPS[variant]];
 }
 
-/** Un emoji de verdad, y uno solo. */
+/** A real emoji, and only one. */
 export function isEmoji(value: string): boolean {
   const trimmed = value.trim();
   if (!trimmed || trimmed.length > 8) return false;

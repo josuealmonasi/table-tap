@@ -29,7 +29,7 @@ import CoverBanner from "./CoverBanner";
 import RestaurantMark, { hasMark } from "@/components/ui/RestaurantMark";
 
 /** The menu browsing screen: restaurant header, category filter, item list, cart bar. */
-/** La pestaña de ofertas no es una categoría del restaurante: es nuestra. */
+/** The offers tab is not one of the restaurant's categories: it is ours. */
 const DEALS = "deals";
 
 export default function MenuScreen({
@@ -119,17 +119,17 @@ export default function MenuScreen({
     [],
   );
 
-  // Qué producto lleva alguna oferta encima. Se calcula antes del filtro
-  // porque la pestaña de ofertas lo necesita para decidir qué enseñar.
+  // Which product carries an offer. Computed before the filter because the
+  // offers tab needs it to decide what to show.
   const promoIds = useMemo(() => {
     const ids = new Set<string>();
     for (const promo of promos) for (const id of promo.itemIds) ids.add(id);
     return ids;
   }, [promos]);
 
-  // Hay algo que enseñar en Ofertas: un combo, un platillo rebajado, o uno
-  // dentro de una promoción. Sin nada de eso la pestaña no aparece — una
-  // sección vacía es peor que no tenerla.
+  // There is something to show in Offers: a combo, a discounted dish, or one
+  // inside a promotion. With none of that the tab does not appear — an empty
+  // section is worse than no section.
   const hasDeals = useMemo(
     () =>
       restaurant.deals_tab_enabled !== false &&
@@ -320,8 +320,12 @@ export default function MenuScreen({
       {/* Nothing is serving: say so instead of rendering an empty menu,
           which reads as a failed load. The filter strip goes too — there
           is nothing left to filter. */}
-      {closedNow ? (
-        <MenuClosed />
+      {/* Nothing orderable, for either reason. `closedNow` means the menus
+          exist and none is serving; an empty item list with no closure means
+          the restaurant has not built one yet. Both used to be told apart only
+          by luck — the second painted a blank page. */}
+      {closedNow || (items.length === 0 && combos.length === 0) ? (
+        <MenuClosed reason={closedNow ? "closed" : "empty"} />
       ) : (
         <>
           <div className="tt-menu-sticky">

@@ -247,8 +247,8 @@ describe("a discount already on the bill", () => {
 });
 
 describe("what somebody already paid at the table", () => {
-  // Donde la mesa liquida al final, uno puede pagar su plato con tarjeta y el
-  // resto dejar la cuenta abierta. Antes ese plato desaparecía por completo.
+  // Where the table settles at the end, one diner can pay for their dish by
+  // card and the rest leave the bill open. That dish used to vanish entirely.
   it("lists the paid orders without adding them to what is owed", () => {
     const bill = tableBill(
       [order("a", 100), order("b", 60, { paid: true, items: ["Ramen"] })],
@@ -267,15 +267,15 @@ describe("what somebody already paid at the table", () => {
   });
 
   it("never lets the paid side be settled a second time", () => {
-    // Es la garantía que evita el cobro doble: lo pagado no viaja al cobro.
+    // This is the guarantee against double charging: what was paid never travels to collection.
     const bill = tableBill([order("a", 100), order("b", 60, { paid: true })], ["a"]);
     const ids = ordersToPay(bill, "all").map(o => o.id);
     expect(ids).not.toContain("b");
   });
 
   it("counts a written-off order as neither owed nor paid", () => {
-    // Se sirvió y nadie lo cobró: ponerlo junto a lo pagado diría que entró
-    // dinero que no entró.
+    // It was served and nobody charged for it: putting it beside what was paid
+    // would say money came in that did not.
     const writtenOff = { ...order("c", 40), written_off: true };
     const bill = tableBill([order("a", 100), writtenOff], ["a"]);
     expect(bill.total).toBe(100);

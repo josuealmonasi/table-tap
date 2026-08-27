@@ -67,12 +67,12 @@ export default function TrackerOverlay({
     };
   }, [orderId, order]);
 
-  // Cuando el pedido termina, es el momento de preguntar qué tal estuvo.
+  // When the order finishes, that is the moment to ask how it was.
   //
-  // Hasta ahora lo único que lo preguntaba eran los botones de servicio, que
-  // sólo existen en una mesa: quien pidió en el QR general —el mostrador, para
-  // llevar, todo el plan Carta— no tenía forma de calificar nunca. Aquí sí,
-  // porque el seguimiento lo ve cualquiera que haya pedido.
+  // Until now the only thing that asked were the service buttons, which only
+  // exist at a table: anyone who ordered from the general QR — the counter,
+  // takeaway, the whole Carta plan — never had a way to rate. Here they do,
+  // because the tracker is seen by anyone who ordered.
   const [rateable, setRateable] = useState<RateableDish[]>([]);
   const asked = useRef(false);
   useEffect(() => {
@@ -92,7 +92,7 @@ export default function TrackerOverlay({
         const data = await res.json();
         if (Array.isArray(data.dishes) && data.dishes.length > 0) setRateable(data.dishes);
       } catch {
-        // Nadie pidió calificar nada: el silencio es la respuesta correcta.
+        // Nobody was asked to rate anything: silence is the right answer.
       }
     })();
   }, [order]);
@@ -128,8 +128,8 @@ export default function TrackerOverlay({
     </div>
   );
 
-  // Una hoja a la vez. Calificar reemplaza el seguimiento en lugar de abrirse
-  // encima: dos diálogos abiertos se pelean el foco y cuestan dos Escapes.
+  // One sheet at a time. Rating replaces the tracker instead of opening on top
+  // of it: two open dialogs fight over focus and cost two Escapes.
   const rating = (
     <RateDishesSheet
       open={rateable.length > 0}

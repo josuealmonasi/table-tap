@@ -23,8 +23,8 @@ export const AUDIT = `(() => {
     // threw away the one element that was broken.
     return el.getBoundingClientRect().height > 0;
   };
-  // Texto que existe sólo para el lector de pantalla: 1px y recortado a nada,
-  // a propósito. Medirlo como si fuera visible es acusar al helper de a11y.
+  // Text that exists only for the screen reader: 1px and clipped to nothing, on
+  // purpose. Measuring it as visible is accusing the a11y helper.
   const forScreenReader = el => {
     const s = getComputedStyle(el);
     const clipped = s.clip !== "auto" || s.clipPath !== "none";
@@ -81,13 +81,13 @@ export const AUDIT = `(() => {
     for (let j = i + 1; j < leaves.length; j++) {
       const a = leaves[i], b = leaves[j];
       if (a.contains(b) || b.contains(a)) continue;
-      // Renglón contra renglón, no caja contra caja.
+      // Line against line, not box against box.
       //
-      // getBoundingClientRect de un elemento en línea que envuelve devuelve la
-      // UNIÓN de sus renglones: "· hace 39 min" partido en dos daba una caja de
-      // borde a borde que se cruzaba con todo lo de al lado, y el chequeo
-      // acusaba de encimado un texto que en pantalla se lee perfecto. Los
-      // rectángulos por renglón sí son lo que se pinta.
+      // getBoundingClientRect on a wrapped inline element returns the UNION of its
+      // lines: "· 39 min ago" split across two gave a box spanning edge to edge
+      // that crossed everything beside it, and the check accused text of
+      // overlapping that reads perfectly on screen. Per-line rectangles are what
+      // actually gets painted.
       let w = 0, h = 0;
       for (const x of a.getClientRects()) {
         for (const y of b.getClientRects()) {
@@ -121,9 +121,9 @@ export const AUDIT = `(() => {
       const a = cards[i].getBoundingClientRect(), b = cards[j].getBoundingClientRect();
       const stacked = a.bottom <= b.top + 1 || b.bottom <= a.top + 1;
       if (!stacked) continue;
-      // Y en la misma columna. Ajustes es de dos columnas: una tarjeta de la
-      // izquierda y otra de la derecha tampoco se solapan en vertical, y
-      // compararlas era pedir que dos columnas fueran una.
+      // And in the same column. Settings is two columns: a card on the left and one
+      // on the right do not overlap vertically either, and comparing them was
+      // asking two columns to be one.
       const shared = Math.min(a.right, b.right) - Math.max(a.left, b.left);
       if (shared < Math.min(a.width, b.width) * 0.5) continue;
       const dl = Math.abs(a.left - b.left), dr = Math.abs(a.right - b.right);

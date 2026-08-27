@@ -2,44 +2,44 @@ import { redirect } from "next/navigation";
 import { getMembership, MANAGES, SETTLES, type Membership } from "@/lib/membership";
 
 /**
- * Quién puede estar en cada pantalla del panel, dicho una sola vez.
+ * Who may be on each dashboard screen, said once.
  *
- * Estaba escrito a mano en nueve páginas y en dos versiones distintas: unas
- * pedían `currentUser()` y luego la membresía, otras sólo la membresía; unas
+ * It was written by hand across nine pages in two different shapes: some asked
+ * for `currentUser()` and then the membership, others only the membership; some
  * mandaban a `/login` y otras a `/dashboard`. Ninguna estaba mal —todas
- * negaban— pero nueve copias de una regla de permisos son nueve sitios donde
- * la próxima se escribe distinta, y esa es la forma exacta de todos los bugs
- * de este repo: dos lugares que debían coincidir sin nadie comprobándolo.
+ * refused — but nine copies of a permission rule are nine places where the next
+ * one gets written differently, and that is the exact shape of every bug in
+ * this repo: two places that had to agree with nobody checking that they did.
  *
- * `currentUser()` sobraba: `getMembership()` ya devuelve null sin sesión.
+ * `currentUser()` was redundant: `getMembership()` already returns null with no session.
  *
- * Cada una devuelve la membresía ya comprobada, así que la página sigue con
- * `membership.restaurant` sin volver a preguntar — `getMembership` va en caché
- * por petición y no cuesta otro viaje.
+ * Each returns the membership already checked, so the page carries on with
+ * `membership.restaurant` without asking again — `getMembership` is cached per
+ * request and costs no extra round trip.
  */
 
-/** Sesión y restaurante. Sin eso no hay panel que enseñar. */
+/** Session and restaurant. Without those there is no dashboard to show. */
 export async function requireMembership(): Promise<Membership> {
   const membership = await getMembership();
   if (!membership) redirect("/login");
   return membership;
 }
 
-/** Menús, mesas, promociones, ajustes, analíticas: dueño y gerente. */
+/** Menus, tables, promotions, settings, analytics: owner and manager. */
 export async function requireManager(): Promise<Membership> {
   const membership = await requireMembership();
   if (!MANAGES(membership.role)) redirect("/dashboard/orders");
   return membership;
 }
 
-/** Cobrar y ver cuentas: todo el piso, nadie de la cocina. */
+/** Collecting and seeing bills: the whole floor, nobody from the kitchen. */
 export async function requireSettles(): Promise<Membership> {
   const membership = await requireMembership();
   if (!SETTLES(membership.role)) redirect("/dashboard/orders");
   return membership;
 }
 
-/** Accesos del equipo y la suscripción: del dueño y de nadie más. */
+/** Team logins and the subscription: the owner's and nobody else's. */
 export async function requireOwner(): Promise<Membership> {
   const membership = await requireMembership();
   if (membership.role !== "owner") redirect("/dashboard");

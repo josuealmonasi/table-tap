@@ -182,11 +182,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           settle_fee: String(appFee / 100),
         },
         payment_intent_data: {
-          // Igual que en /api/checkout: cero no se manda. Stripe rechaza una
-          // comisión de aplicación de 0, así que un restaurante sin comisión
-          // por pedido —el plan Grupo, o un piloto al que no le cobramos—
-          // podía ordenar con tarjeta y luego no poder pagar la cuenta en la
-          // mesa. La misma regla estaba puesta en una ruta y no en la otra.
+          // Same as in /api/checkout: zero is not sent. Stripe refuses an application
+          // fee of 0, so a restaurant with no per-order fee — the Grupo plan, or a
+          // pilot we do not charge — could order by card and then be unable to pay the
+          // bill at the table. The same rule was in one route and not the other.
           ...(appFee > 0 ? { application_fee_amount: appFee } : {}),
         },
         success_url: `${origin}/r/${restaurantId}/t/${tableId}?settled=1`,

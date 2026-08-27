@@ -33,3 +33,39 @@ export function logDetail(fields: Record<string, string | number | null | undefi
     .map(([k, v]) => `${k}=${String(v).replaceAll(" ", "_")}`)
     .join(" ");
 }
+
+/** The kinds of thing the activity log records, in the order they are named. */
+export const LOG_ENTITIES = [
+  "staff",
+  "order",
+  "bill",
+  "discount",
+  "coupon",
+  "promotion",
+  "settings",
+  "menu",
+] as const;
+
+/**
+ * Which kinds the text somebody typed into the search box names.
+ *
+ * The column stores "settings" and the row shows "Ajustes": whoever searches
+ * for what they are looking at has to find it. Compared without accents or
+ * case, because nobody types "Cupón" with its accent into a search box.
+ */
+export function entitiesNamedBy(
+  query: string,
+  label: (entity: string) => string,
+): string[] {
+  const needle = fold(query);
+  if (!needle) return [];
+  return LOG_ENTITIES.filter(entity => fold(label(entity)).includes(needle));
+}
+
+function fold(value: string): string {
+  return value
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}

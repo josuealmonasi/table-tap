@@ -12,6 +12,7 @@ import { statusFor, type TableStatus } from "@/lib/table-status";
 import { SearchIcon } from "@/components/ui/icons";
 import { TableIcon } from "@/components/ui/icons";
 import AddInDialog from "@/components/ui/AddInDialog";
+import PlanLock from "@/components/dashboard/plan/PlanLock";
 import { useLiveOrders } from "@/hooks/useLiveOrders";
 
 /** A table paired with its pre-rendered QR (generated on the server). */
@@ -28,6 +29,10 @@ interface TablesPanelProps {
   /** Which tables are free, keyed by table id. */
   statuses: Record<string, TableStatus>;
   currency: string;
+  /** Whether this tier includes table service at all. */
+  tablesAllowed?: boolean;
+  /** The cheapest tier that includes it. */
+  tablesUnlockWith?: string;
 }
 
 /** Dashboard Tables & QR: one restaurant-wide QR plus a per-table QR manager. */
@@ -38,6 +43,8 @@ export default function TablesPanel({
   tables,
   statuses,
   currency,
+  tablesAllowed = true,
+  tablesUnlockWith = "servicio",
 }: TablesPanelProps) {
   const t = useT();
   const toast = useToast();
@@ -46,7 +53,7 @@ export default function TablesPanel({
   // sends the older set of props, and Object.entries(undefined) throws — which
   // takes the whole screen down instead of losing one badge.
   const statusMap = useMemo(() => new Map(Object.entries(statuses ?? {})), [statuses]);
-  // Cobrar una mesa cambia su etiqueta aquí, sin recargar.
+  // Collecting on a table changes its label here, without a reload.
   useLiveOrders(restaurantId);
   const { busy, addTable, renameTable, deleteTable } = useTables(restaurantId);
   const [newLabel, setNewLabel] = useState("");
@@ -89,10 +96,15 @@ export default function TablesPanel({
     </form>
   );
 
-  const addTableDialog = (
+  // On a tier without table service the lock stands where the button would be.
+  // The QR codes above it still work — the fast-food code is the whole point of
+  // the free plan — so only the "add a table" half is replaced.
+  const addTableDialog = tablesAllowed ? (
     <AddInDialog label={t("dash.addTable")} title={t("dash.addTable")} maxWidth={520}>
       {addForm}
     </AddInDialog>
+  ) : (
+    <PlanLock feature="dineIn" unlocksWith={tablesUnlockWith} />
   );
 
   // A dining room can run to fifty tables, and every card carries a QR the

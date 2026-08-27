@@ -27,9 +27,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!tableId && !orderId) return await apiError("apiErr.missingId", 400);
 
   try {
-    // Un pedido del QR general no cuelga de ninguna mesa, así que se pide por
-    // sí mismo. Va acotado al restaurante del que pregunta igual que la mesa:
-    // un id de otro negocio no encuentra nada.
+    // A general-QR order hangs off no table, so it is asked for by itself. It is
+    // scoped to the caller's restaurant just like the table: another business's
+    // id finds nothing.
     const orders = tableId
       ? await fetchTableBill(actor.restaurantId, tableId, "staff")
       : await fetchCounterBill(actor.restaurantId, orderId!);

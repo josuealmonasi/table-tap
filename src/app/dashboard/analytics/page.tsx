@@ -38,8 +38,8 @@ export default async function AnalyticsPage({
 
   const data = computeAnalytics((rows as AnalyticsOrder[]) ?? [], period, timeZone);
 
-  // Lo que la gente opinó de los platillos. La función agrega por platillo;
-  // los nombres salen del menú, para no repetir la misma consulta dos veces.
+  // What people thought of the dishes. The function aggregates per dish; the
+  // names come from the menu, to avoid running the same query twice.
   const admin = createAdminClient();
   const [{ data: stats }, { data: dishes }] = await Promise.all([
     admin.rpc("dish_rating_stats", { p_restaurant_id: membership.restaurant.id }),

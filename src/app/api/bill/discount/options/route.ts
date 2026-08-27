@@ -35,8 +35,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const options = ((data ?? []) as CouponRow[])
     // Same rules the apply endpoint enforces, so nothing offered here can be
     // refused a second later — incluido el formato, que findCoupon revisa
-    // antes que nada. Un código guardado con otra forma se ofrecía con su
-    // descuento calculado y luego respondía "no encontramos ese cupón".
+    // before anything else. A code stored in another shape was offered with a
+    // computed discount and then answered "coupon not found".
     .filter(coupon => isValidCouponFormat(normalizeCoupon(coupon.code)))
     .filter(coupon => !couponProblem(coupon, total))
     .map(coupon => ({

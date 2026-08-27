@@ -513,6 +513,44 @@ a.tt-btn {
   margin: 12px 0 4px;
 }
 
+/* El aviso con su enlace al lado. Se parte en pantalla angosta en vez de
+   empujar el enlace fuera de la caja. */
+/* The read-only notice, across the top of every dashboard screen. Warning
+   tint rather than danger: nothing is broken and the menu is still taking
+   orders — what stopped is saving. */
+.tt-frozen-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--tt-warning-wash);
+  border-bottom: 1px solid color-mix(in srgb, var(--tt-warning) 30%, transparent);
+  color: var(--tt-warning);
+}
+.tt-frozen-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Wraps instead of pushing the button off a phone. */
+  min-width: 0;
+}
+
+.tt-hint-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.tt-hint-row a {
+  color: inherit;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .tt-hint {
   margin: 0;
   padding: 8px 12px;

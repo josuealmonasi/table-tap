@@ -43,7 +43,7 @@ describe("tagsFor", () => {
   });
 
   it("lets a restaurant drop a built-in entirely", () => {
-    // Una marisquería no necesita "contiene mariscos" en toda la carta.
+    // A seafood restaurant does not need "contains seafood" across the whole menu.
     const kept = tagsFor([row({ key: "vegan", label: "Vegano", label_en: null })]);
     expect(kept.map(t => t.key)).toEqual(["vegan"]);
     expect(kept.map(t => t.key)).not.toContain("seafood");
@@ -74,7 +74,7 @@ describe("tagKey", () => {
   });
 
   it("returns nothing usable when there are no letters to work with", () => {
-    // Sólo emoji no deja dónde guardarla dentro del platillo.
+    // Only an emoji leaves nowhere to store it on the dish.
     expect(tagKey("🌶️")).toBe("");
     expect(tagKey("   ")).toBe("");
   });
@@ -93,7 +93,7 @@ describe("dietaryTags against a restaurant's own list", () => {
   });
 
   it("drops a key whose tag the restaurant deleted", () => {
-    // Es lo que protege al menú mientras la baja despega la clave del platillo.
+    // This is what protects the menu while the deletion detaches the key from the dish.
     expect(dietaryTags(["vegan"], tagsFor([row()]))).toEqual([]);
   });
 });

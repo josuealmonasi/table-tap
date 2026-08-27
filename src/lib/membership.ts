@@ -20,6 +20,15 @@ export type Role = (typeof ROLES)[number];
 export const MANAGES = (role: Role): boolean => role === "owner" || role === "manager";
 
 /**
+ * Owner only.
+ *
+ * It exists so a screen can say who it shows something to without comparing a
+ * string by hand, and so the invariant test has something to hold on to when
+ * it compares a page's gate with the table's policy.
+ */
+export const OWNS = (role: Role): boolean => role === "owner";
+
+/**
  * The till and the floor: who deals with a diner and their money.
  *
  * Cashier and waiter carry the same permissions today, and that is on purpose —
@@ -80,13 +89,13 @@ export const getMembership = cache(async (): Promise<Membership | null> => {
   const user = await currentUser();
   if (!user) return null;
 
-  // Con la llave de servicio, y acotado siempre al id que sale de la sesión.
+  // With the service key, and always scoped to the id that comes from the session.
   //
-  // `restaurants` ya no le enseña sus columnas privadas a `authenticated`,
-  // porque un permiso de columna vale para todas las filas y la política de
-  // este tabla deja ver todas a propósito — el menú cuelga de un QR. El
-  // restaurante propio se lee entonces por aquí, donde el único filtro posible
-  // es `user.id`, que viene de la cookie de sesión y nunca del cliente.
+  // `restaurants` no longer shows its private columns to `authenticated`,
+  // because a column grant applies to every row and this table's policy shows
+  // them all on purpose — the menu hangs off a QR. The restaurant's own row is
+  // read here instead, where the only possible filter is `user.id`, which comes
+  // from the session cookie and never from the client.
   const db = createAdminClient();
   const [ownedRes, staffRes] = await Promise.all([
     db.from("restaurants").select("*").eq("owner_id", user.id).maybeSingle(),

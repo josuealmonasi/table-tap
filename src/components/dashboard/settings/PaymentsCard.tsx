@@ -59,7 +59,9 @@ export default function PaymentsCard() {
   }
 
   return (
-    <div className="tt-section">
+    // `id` so the switches' warning can point here: whoever reads "you cannot
+    // take card payments" needs to reach the button that fixes it.
+    <div className="tt-section" id="pagos">
       <div className="tt-section-head">
         <h3 className="tt-serif" style={{ margin: 0 }}>
           {t("dash.payments")}

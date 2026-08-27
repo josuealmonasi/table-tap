@@ -10,12 +10,12 @@ import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 import DietaryTagForm from "./DietaryTagForm";
 
 /**
- * Las etiquetas de dieta y alérgenos, del restaurante.
+ * The restaurant's dietary and allergen tags.
  *
- * Ocho venían fijas en el código; ahora se agregan, se renombran y se quitan.
- * Las de casa se pueden quitar como cualquier otra —una marisquería no
- * necesita "contiene mariscos" en toda la carta— pero se enseñan traducidas,
- * porque su nombre lo pone la app y no el restaurante.
+ * Eight came fixed in the code; now they can be added, renamed and removed.
+ * The built-ins can be removed like any other — a seafood restaurant does not
+ * need "contains seafood" across the whole menu — but they are shown
+ * translated, because the app names them and not the restaurant.
  */
 export default function DietaryPanel({ tags }: { tags: StoredDietaryTag[] }) {
   const t = useT();

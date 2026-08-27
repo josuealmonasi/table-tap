@@ -5,6 +5,8 @@ import { qrSvg } from "@/lib/qr";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import TablesPanel, { type TableWithQr } from "@/components/dashboard/tables/TablesPanel";
 import { tableStatuses } from "@/lib/table-status";
+import { can, cheapestWith } from "@/lib/plan";
+import { allPlans, getPlan } from "@/lib/plan-server";
 import type { Order } from "@/lib/types";
 import type { RestaurantTable } from "@/lib/types";
 
@@ -16,6 +18,13 @@ export default async function TablesPage() {
   // Owners and managers may manage tables; kitchen goes back to its board.
   const membership = await requireManager();
   const r = membership.restaurant;
+
+  // Tables come with the tier. Without this the panel offered "+ Agregar mesa"
+  // on the free plan, and the database refused the insert with a plan-limit
+  // trigger the owner never saw coming.
+  const [plan, catalog] = await Promise.all([getPlan(r.id), allPlans()]);
+  const tablesAllowed = plan ? can(plan.limits, "dineIn") : false;
+  const tablesUnlockWith = cheapestWith(catalog, "dineIn")?.plan ?? "servicio";
 
   const [{ data: tables }, { data: openOrders }] = await Promise.all([
     supabase
@@ -60,6 +69,8 @@ export default async function TablesPage() {
         tables={tableQrs}
         statuses={Object.fromEntries(tableStatuses((openOrders as Order[]) ?? []))}
         currency={r.currency}
+        tablesAllowed={tablesAllowed}
+        tablesUnlockWith={tablesUnlockWith}
       />
     </ConfirmProvider>
   );

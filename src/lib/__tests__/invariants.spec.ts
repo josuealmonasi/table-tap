@@ -118,7 +118,7 @@ describe("each module sits behind the right guard", () => {
   // right is the whole permission story, and nothing in the types says so.
   const HOSTED_BY = {
     OrderHistory: "src/components/dashboard/analytics/AnalyticsView.tsx",
-    // El log entra como children desde la página, no dentro del panel.
+    // The log comes in as children from the page, not from inside the panel.
     UserLogs: "src/app/dashboard/bills/page.tsx",
   };
 
@@ -137,10 +137,27 @@ describe("each module sits behind the right guard", () => {
     }
   });
 
-  it("keeps the activity log behind a manager check", () => {
-    // Bills is open to waiters. The log is not.
+  it("gates the activity log with exactly what its RLS policy allows", () => {
+    // The page's gate and the table's policy are two places that have to say the
+    // same thing, and nothing compared them: the page showed the activity log to
+    // the manager and `user_logs` only lets the owner read it, so the manager saw
+    // the whole module with zero rows. A gate wider than its policy protects
+    // nothing extra — it shows a broken screen.
     const page = read("src/app/dashboard/bills/page.tsx");
-    expect(page).toMatch(/MANAGES\(membership\.role\)/);
+    const schema = read("supabase/schema.sql");
+    // The statement spans several lines: take it from `create policy` to its
+    // semicolon, which is where it actually ends.
+    const policy = schema
+      .split(";")
+      .find(stmt => /create policy/.test(stmt) && /\bon user_logs\b/.test(stmt));
+
+    expect(policy, "no encuentro la política de user_logs en schema.sql").toBeTruthy();
+    // `owns_restaurant` is owner; `has_role(..., 'manager')` would be owner and
+    // manager. What the policy says decides the page's predicate.
+    const ownerOnly = /owns_restaurant/.test(policy!);
+    expect(page).toMatch(ownerOnly ? /OWNS\(membership\.role\)/ : /MANAGES\(membership\.role\)/);
+    // And never the other, which is how we got here.
+    expect(page).not.toMatch(ownerOnly ? /MANAGES\(membership\.role\) && \(\s*<UserLogs/ : /OWNS\(membership\.role\) && \(\s*<UserLogs/);
   });
 });
 

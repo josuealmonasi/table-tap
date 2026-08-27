@@ -86,24 +86,29 @@ export type Restaurant = {
   cover_enabled?: boolean;
   /** Dine-in tables may order first and settle at the end. Off by default. */
   allow_pay_later?: boolean;
-  /** El QR general permite pagar en la caja en lugar de con tarjeta. */
+  /** The general QR allows paying at the till instead of by card. */
   allow_counter_payment?: boolean;
   /**
-   * Si el restaurante puede cobrar con tarjeta ahora mismo.
+   * Whether the restaurant can take cards right now.
    *
-   * Derivado en el servidor de su cuenta de Stripe: el comensal no lee esas
-   * columnas y no debe. Sin esto el carrito ofrecía "Ir a pagar" como acción
-   * principal a restaurantes que no tienen cuenta conectada, y la única forma
-   * de enterarse era tocarlo y recibir un 409.
+   * Derived on the server from their Stripe account: the diner does not read
+   * those columns and should not. Without this the cart offered "Ir a pagar" as
+   * the main action to restaurants with no connected account, and the only way
+   * to find out was to tap it and get a 409.
    */
   cards_enabled?: boolean;
+  /** The restaurant's connected account. Reaches the dashboard only, never the diner. */
+  stripe_account_id?: string | null;
+  stripe_charges_enabled?: boolean | null;
   badges_enabled?: boolean;
-  /** La pestaña de combos y ofertas del menú. Encendida por defecto. */
+  /** The menu's combos and offers tab. On by default. */
   deals_tab_enabled?: boolean;
   /** Which version of the terms this restaurant's owner accepted. */
   terms_version?: string | null;
   /** The subscription tier this restaurant is on. */
   plan?: string | null;
+  /** Where the subscription stands. `locked` makes the dashboard read-only. */
+  plan_status?: string | null;
 };
 
 export type RestaurantTable = {

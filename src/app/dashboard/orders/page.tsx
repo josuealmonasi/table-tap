@@ -41,10 +41,10 @@ export default async function OrdersPage() {
   const todayStart = startOfLocalDay(new Date(), r.timezone ?? DEFAULT_TIME_ZONE);
   const showRevenue = MANAGES(membership.role);
 
-  // Las tres en la misma ola: ninguna necesita el resultado de otra, sólo el id
-  // del restaurante y su medianoche, que ya tenemos. En fila eran tres viajes
-  // de ida y vuelta con la cocina esperando delante de la pantalla.
-  // La de la caja del día sigue sin hacerse cuando quien mira no la ve.
+  // All three in the same wave: none needs another's result, only the
+  // restaurant id and its midnight, which we already have. In a row they were
+  // three round trips with the kitchen waiting in front of the screen.
+  // The day's till figure is still skipped when the viewer cannot see it.
   const [ordersRes, requestsRes, todayRes] = await Promise.all([
     // Seed the board with recent paid orders (unpaid/pending ones never show).
     supabase

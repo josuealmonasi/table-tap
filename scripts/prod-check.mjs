@@ -37,12 +37,12 @@ async function envFrom(file) {
 const QUERIES = {
   columns: `select table_name || '.' || column_name as k from information_schema.columns
             where table_schema = 'public' order by 1`,
-  // Acotado a nuestro esquema. Sin el filtro comparaba también el esquema
-  // `storage` de Supabase, que se actualiza en cada proyecto por su cuenta:
-  // producción estrenaba columnas antes que desarrollo y el chequeo gritaba
-  // una deriva que nadie podía arreglar. Y una alarma falsa aquí es cara,
-  // porque tapa la de verdad — los permisos de columna son justo lo que separa
-  // a un restaurante de otro.
+  // Scoped to our own schema. Without the filter it also compared Supabase's
+  // `storage` schema, which updates itself per project: production got new
+  // columns before development and the check screamed about a drift nobody
+  // could fix. And a false alarm here is expensive, because it hides the real
+  // one — column grants are exactly what separates one restaurant from
+  // another.
   anonGrants: `select table_name || '.' || column_name as k
                from information_schema.column_privileges
                where grantee = 'anon' and privilege_type = 'SELECT'

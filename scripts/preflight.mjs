@@ -1,11 +1,11 @@
 /**
- * ¿Está en pie lo que vamos a revisar?
+ * Is the thing we are about to check actually up?
  *
- * Sin esto, un servidor caído produce una pared de errores por pantalla —
- * ERR_CONNECTION_REFUSED cien veces— que se lee como si la app estuviera rota.
- * Pasó varias veces en una tarde: el servidor de desarrollo se infla con las
- * horas (lo vimos en 1.4 GB) y se cae a media revisión. Un rojo confuso enseña
- * a ignorar los rojos, y entonces el de verdad pasa desapercibido.
+ * Without this, a downed server produces a wall of one error per screen —
+ * ERR_CONNECTION_REFUSED a hundred times — that reads as though the app were
+ * broken. It happened several times in one afternoon: the dev server bloats
+ * over the hours (we saw 1.4 GB) and drops mid-run. A confusing red teaches
+ * people to ignore reds, and then the real one goes unnoticed.
  */
 export async function reachable(base) {
   try {
@@ -21,23 +21,23 @@ export async function requireServer(base, prod) {
   console.error(
     `\n  El servidor no responde en ${base}.\n` +
       (prod
-        ? "  Revisa el despliegue antes de leer nada de lo de abajo.\n"
-        : "  Levántalo con `pnpm dev`. Si lleva horas encendido, mátalo y vuelve\n" +
-          "  a empezar: en desarrollo se infla y se cae a media revisión.\n"),
+        ? "  Check the deployment before reading anything below.\n"
+        : "  Start it with `pnpm dev`. If it has been up for hours, kill it and\n" +
+          "  start over: in development it bloats and drops mid-run.\n"),
   );
   process.exit(1);
 }
 
 /**
- * Un fetch que no confunde un servidor caído con una prueba fallida.
+ * A fetch that does not mistake a downed server for a failed test.
  *
- * El de desarrollo se cae a media revisión —se infla con las horas, y a veces
- * lo revive un `pnpm dev` que sigue vivo detrás— y el ECONNRESET salía por
- * pantalla como si el permiso o la ruta estuvieran mal. Un rojo que no es
- * verdad cuesta más que uno que sí: enseña a desconfiar de todos.
+ * The dev one drops mid-run — it bloats over the hours, and sometimes a
+ * `pnpm dev` still alive behind it revives it — and the ECONNRESET came out
+ * on screen as though the permission or the route were wrong. A red that is
+ * not true costs more than one that is: it teaches distrust of all of them.
  *
- * Reintenta una vez, y si a la segunda tampoco hay servidor lo dice con esas
- * palabras en vez de dejar el error de red crudo.
+ * Retries once, and if there is still no server on the second try it says so
+ * in those words instead of leaving the raw network error.
  */
 export async function retryFetch(url, init, base) {
   try {

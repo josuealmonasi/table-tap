@@ -2,25 +2,25 @@
 
 import { useEffect, useState } from "react";
 
-/** Cada cuánto se pregunta. El seguimiento abierto va más rápido; esto es el
- *  latido de fondo, para el botón que está en el menú. */
+/** How often it asks. The open tracker goes faster; this is the background
+ *  heartbeat, for the button sitting on the menu. */
 const EVERY_MS = 15_000;
 
-/** Para el comensal el pedido se acaba cuando se lo entregan, o se cancela. */
+/** For the diner an order ends when it is handed over, or cancelled. */
 const DONE = ["completed", "cancelled"];
 
 /**
- * Si el pedido que este teléfono venía siguiendo ya terminó.
+ * Whether the order this phone was following has finished.
  *
- * El botón de "seguir mi pedido" se leía de localStorage una sola vez, al
- * montar, y nada volvía a mirarlo: la cocina marcaba el pedido entregado y el
- * botón seguía ahí, abriendo el seguimiento de algo que el comensal ya se
- * comió. Sólo desaparecía al recargar, y recargar no es algo que uno le pida a
- * quien está sentado en una mesa.
+ * The "track my order" button was read from localStorage once, on mount, and
+ * nothing looked again: the kitchen marked the order delivered and the button
+ * stayed there, opening the tracker for something the diner had already
+ * eaten. It only went away on reload, and reloading is not something you ask
+ * of someone sitting at a table.
  *
- * Se pregunta al endpoint público del seguimiento, el mismo que usa la hoja: el
- * comensal no puede leer `orders` directamente —su RLS se lo impide y así debe
- * seguir— así que no hay realtime que valga por este lado.
+ * It asks the public tracking endpoint, the same one the sheet uses: the diner
+ * cannot read `orders` directly — their RLS forbids it and it should stay that
+ * way — so there is no realtime to be had on this side.
  */
 export function useOrderFinished(orderId: string | null): boolean {
   const [done, setDone] = useState(false);
@@ -37,13 +37,13 @@ export function useOrderFinished(orderId: string | null): boolean {
         const order = (await res.json()) as { status?: string };
         if (alive && order.status && DONE.includes(order.status)) setDone(true);
       } catch {
-        // Sin red: se vuelve a intentar en la siguiente vuelta.
+        // No network: try again on the next pass.
       }
     };
 
-    // Sólo con la pestaña a la vista, como el refresco del menú: un teléfono
-    // en el bolsillo no tiene por qué estar preguntando, y el momento en que
-    // el comensal vuelve a mirar es justo cuando importa que esté al día.
+    // Only with the tab in view, like the menu refresh: a phone in a pocket has no
+    // business asking, and the moment the diner looks again is exactly when being
+    // up to date matters.
     const tick = () => {
       if (document.visibilityState === "visible") void read();
     };

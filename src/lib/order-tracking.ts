@@ -16,7 +16,7 @@ export type TrackedOrder = Pick<
   | "items"
   | "total"
   | "currency"
-  // Para no llamarle "Total pagado" a una cuenta que se paga al final.
+  // So a bill paid at the end is not called "Total paid".
   | "paid"
 >;
 

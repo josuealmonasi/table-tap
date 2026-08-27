@@ -12,11 +12,11 @@ export interface DietaryTagInput {
 }
 
 /**
- * Alta, cambio y baja de las etiquetas de dieta.
+ * Adding, changing and removing dietary tags.
  *
- * Refresca del servidor en vez de llevar su propia copia: las etiquetas salen
- * de la misma consulta que pinta el editor y el menú del comensal, y una
- * segunda lista aquí sería otro sitio donde la verdad puede separarse.
+ * Refreshes from the server rather than keeping its own copy: the tags come
+ * from the same query that paints the editor and the diner's menu, and a
+ * second list here would be another place the truth can drift apart.
  */
 export function useDietaryTags() {
   const router = useRouter();

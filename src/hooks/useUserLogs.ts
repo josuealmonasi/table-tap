@@ -32,7 +32,18 @@ const COLUMNS =
  * everything to sort four hundred rows is a page that gets slower every week.
  * Owner-only by RLS — anyone else simply gets zero rows.
  */
-export function useUserLogs(restaurantId: string) {
+export function useUserLogs(
+  restaurantId: string,
+  /**
+   * The kinds the searched text names, already resolved by the caller.
+   *
+   * `entity` is stored in English — "settings" — and reads translated on screen
+   * — "AJUSTES" — so anyone typing what they were looking at found nothing.
+   * The component has the translation, not the hook, so it arrives already
+   * resolved from outside.
+   */
+  matchedEntities: string[] = [],
+) {
   const [logs, setLogs] = useState<UserLog[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -44,6 +55,8 @@ export function useUserLogs(restaurantId: string) {
   // A search or a sort restarts the list; page 7 of the old ordering means
   // nothing in the new one.
   useEffect(() => setPage(1), [query, sort, ascending]);
+
+  const entityKey = matchedEntities.join(",");
 
   // Typing shouldn't fire a query per keystroke.
   const [debounced, setDebounced] = useState("");
@@ -66,15 +79,17 @@ export function useUserLogs(restaurantId: string) {
         // Whatever the owner remembers: who did it, what kind of thing it was,
         // what happened, or the specifics recorded alongside it.
         const like = `%${debounced}%`;
-        request = request.or(
-          [
-            `actor_email.ilike.${like}`,
-            `entity.ilike.${like}`,
-            `action.ilike.${like}`,
-            `detail.ilike.${like}`,
-            `target_email.ilike.${like}`,
-          ].join(","),
-        );
+        const clauses = [
+          `actor_email.ilike.${like}`,
+          `entity.ilike.${like}`,
+          `action.ilike.${like}`,
+          `detail.ilike.${like}`,
+          `target_email.ilike.${like}`,
+        ];
+        // "ajustes" is what the row reads; "settings" is what is in the column.
+        // Without this, searching for what is on screen returned nothing.
+        if (matchedEntities.length) clauses.push(`entity.in.(${matchedEntities.join(",")})`);
+        request = request.or(clauses.join(","));
       }
 
       const { data, count } = await request
@@ -92,7 +107,11 @@ export function useUserLogs(restaurantId: string) {
     return () => {
       cancelled = true;
     };
-  }, [restaurantId, page, debounced, sort, ascending]);
+    // The entities are compared by content: the array is rebuilt on every render
+    // and as a dependency would fire a query per render. `entityKey` is that same
+    // array as a string, which is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restaurantId, page, debounced, sort, ascending, entityKey]);
 
   const pages = useMemo(() => Math.max(1, Math.ceil(total / LOGS_PER_PAGE)), [total]);
 

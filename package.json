@@ -44,6 +44,8 @@
     "api": "node scripts/api-check.mjs",
     "api:prod": "node scripts/api-check.mjs --prod",
     "dev:fresh": "node scripts/dev-fresh.mjs",
+    "promises": "node scripts/promise-audit.mjs",
+    "promises:prod": "node scripts/promise-audit.mjs --prod",
     "db:printing": "node scripts/db-printing.mjs",
     "db:printing:prod": "node scripts/db-printing.mjs --prod",
     "print:sim": "node scripts/print-sim.mjs"

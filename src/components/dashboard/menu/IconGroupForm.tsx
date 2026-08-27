@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n/context";
 import { useDirty } from "@/hooks/useDirty";
 import { isEmoji, type IconVariant, type StoredIconGroup } from "@/lib/icon-groups";
 
-/** Nombre, para qué paleta es, y los emojis — separados por espacios. */
+/** Name, which palette it is for, and the emoji — separated by spaces. */
 export default function IconGroupForm({
   initial,
   busy,
@@ -29,8 +29,8 @@ export default function IconGroupForm({
   const [icons, setIcons] = useState((initial?.items ?? []).map(i => i.emoji).join(" "));
   const dirty = useDirty([name, variant, icons]);
 
-  // Se escriben separados por espacios y se quedan sólo los que son emoji: es
-  // más rápido que una cuadrícula y no obliga a mantener un catálogo nuestro.
+  // They are typed space-separated and only the real emoji are kept: it is
+  // faster than a grid and does not force us to maintain a catalogue.
   const chosen = icons.split(/\s+/).filter(isEmoji);
 
   return (

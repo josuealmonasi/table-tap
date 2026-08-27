@@ -6,7 +6,7 @@ import { ExpandIcon } from "@/components/ui/icons";
 import { groupsFor, type IconGroup, type IconVariant } from "@/lib/icon-groups";
 import { useStoredIconGroups } from "./IconGroupsContext";
 
-// Dos grupos pueden llamarse igual — el suyo y el nuestro. El id manda.
+// Two groups can share a name — theirs and ours. The id decides.
 const keyOf = (g: IconGroup) => g.id ?? g.name;
 
 /** Which group contains the currently chosen emoji (so we can open it by default). */
