@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Category, MenuItem, Restaurant, RestaurantTable } from "@/lib/types";
-import { DIETARY_TAGS } from "@/lib/dietary";
+import { tagLabel } from "@/lib/dietary";
+import { useDietaryTags } from "@/components/DietaryTagsContext";
 import { readMenuParams, syncMenuUrl } from "@/lib/menu-params";
-import { useT } from "@/lib/i18n/context";
+import { useT, useLocale } from "@/lib/i18n/context";
 import MenuClosed from "./MenuClosed";
 import type { Combo } from "@/lib/promotions";
 import type { CartPromo } from "@/lib/pricing";
@@ -73,6 +74,8 @@ export default function MenuScreen({
   onTrack?: () => void;
 }) {
   const t = useT();
+  const { locale: lang } = useLocale();
+  const allTags = useDietaryTags();
   // The URL is the starting state, so a shared link and a reload both land on
   // the same view. Read once — after mount the address bar is an output, not
   // an input, or every keystroke would fight the field for control of it.
@@ -85,8 +88,8 @@ export default function MenuScreen({
   // Which dietary tags actually appear on this menu (so we only offer useful filters).
   const menuTags = useMemo(() => {
     const present = new Set(items.flatMap(i => i.dietary ?? []));
-    return DIETARY_TAGS.filter(tag => present.has(tag.key));
-  }, [items]);
+    return allTags.filter(tag => present.has(tag.key));
+  }, [items, allTags]);
 
   function toggleDiet(key: string): void {
     setDiet(prev => {
@@ -365,7 +368,7 @@ export default function MenuScreen({
                   aria-pressed={diet.includes(tag.key)}
                   onClick={() => toggleDiet(tag.key)}
                 >
-                  {tag.emoji} {t(`dietary.${tag.key}`)}
+                  {tag.emoji} {tagLabel(tag, t, lang)}
                 </button>
               ))}
             </div>
@@ -456,7 +459,7 @@ export default function MenuScreen({
                         onChange={() => toggleDiet(tag.key)}
                       />
                       <span>
-                        {tag.emoji} {t(`dietary.${tag.key}`)}
+                        {tag.emoji} {tagLabel(tag, t, lang)}
                       </span>
                     </label>
                   ))}

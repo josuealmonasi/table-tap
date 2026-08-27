@@ -457,6 +457,26 @@ a.tt-btn {
   text-decoration: underline;
 }
 
+/* El encabezado de "ya pagado" es un botón porque abre la lista, pero no debe
+   parecerlo: es un rótulo, no la acción de la pantalla. Sin esto se pintaba
+   con la caja gris que el navegador le pone a cualquier <button>. */
+.tt-paid-toggle {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  font-size: 14px;
+  color: inherit;
+  text-align: left;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+.tt-paid-toggle .tt-muted {
+  font-weight: 500;
+  text-decoration: underline;
+}
+
 .tt-coupon-applied {
   display: flex;
   align-items: center;
@@ -5503,3 +5523,31 @@ a.tt-user-plan:hover {
   cursor: pointer;
 }
 .tt-bill-collect { flex: none; margin-left: 12px; }
+
+/* Lo ya pagado, en una cuenta que sigue abierta.
+   ---------------------------------------------
+   Donde la mesa liquida al final, uno puede pagar su plato con tarjeta y el
+   resto dejar la cuenta abierta. Antes ese plato desaparecía de la cuenta: el
+   que pagó se quedaba sin comprobante a la vista y el mesero sin señal de que
+   ya estaba cobrado — que es exactamente como se cobra dos veces.
+
+   Se queda listado, apagado y con el precio tachado, para que se lea como
+   referencia y no como algo por cobrar. Apagado con `color`, no con `opacity`:
+   bajarle la opacidad al bloque entero se lleva por delante el contraste del
+   nombre del platillo, y un alérgeno ilegible no es un detalle de estilo. */
+.tt-bill-settled .tt-line-body strong,
+.tt-bill-settled .tt-subline {
+  color: var(--tt-muted);
+  font-weight: 500;
+}
+.tt-bill-settled .tt-line-actions strong {
+  color: var(--tt-muted);
+  text-decoration: line-through;
+}
+.tt-bill-settled .tt-mod-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* El renglón se parte en pantalla angosta en vez de empujar el sello fuera. */
+  flex-wrap: wrap;
+}

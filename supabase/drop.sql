@@ -13,6 +13,9 @@
 -- Generated from the `create table if not exists` lines in schema.sql; when
 -- you add a table there, add it here.
 -- ============================================================================
+drop table if exists dietary_tags        cascade;
+drop table if exists icon_group_items    cascade;
+drop table if exists icon_groups         cascade;
 drop table if exists table_sessions      cascade;
 drop table if exists write_off_requests  cascade;
 drop table if exists discount_requests   cascade;
@@ -54,6 +57,8 @@ drop function if exists public.rate_limit_hit(text, int);
 drop function if exists public.dish_rating_stats(uuid);
 drop function if exists public.plan_ceiling(uuid, text);
 drop function if exists public.enforce_plan_limit();
+drop function if exists public.seed_dietary_tags_on_new_restaurant();
+drop function if exists public.seed_dietary_tags(uuid);
 drop function if exists public.storage_restaurant(text);
 drop function if exists public.has_role(uuid, text[]);
 drop function if exists public.works_at(uuid);

@@ -20,6 +20,8 @@ import ItemDetailScreen from "./ItemDetailScreen";
 import CartScreen from "./CartScreen";
 import ComboDetailScreen from "./ComboDetailScreen";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
+import { DietaryTagsProvider } from "@/components/DietaryTagsContext";
+import type { StoredDietaryTag } from "@/lib/dietary";
 import { useMenuFreshness } from "@/hooks/useMenuFreshness";
 import { rememberMyOrder } from "@/lib/my-orders";
 import { suggestItems } from "@/lib/suggestions";
@@ -55,6 +57,7 @@ export default function OrderingApp({
   closedNow = false,
   receipts = false,
   trackOrder = null,
+  dietaryTags = null,
 }: {
   restaurant: Restaurant;
   table: RestaurantTable | null;
@@ -69,6 +72,8 @@ export default function OrderingApp({
   closedNow?: boolean;
   /** A receipt can be emailed — false when no mail provider is configured. */
   receipts?: boolean;
+  /** Las etiquetas de dieta del restaurante. Sin ellas se enseñan las de casa. */
+  dietaryTags?: StoredDietaryTag[] | null;
   /**
    * An order to open the tracker on: the landing Stripe returns to, and any
    * shared /order/<id> link. The menu is rendered behind it.
@@ -195,7 +200,11 @@ export default function OrderingApp({
 
   // "Want that by email?" — asked once, when the money is settled, whether
   // that happened by card or in cash at the table.
-  const { offering, dismiss: dismissReceipt } = useReceiptOffer(receipts, trackOrder?.id ?? null, bill);
+  const { offering, dismiss: dismissReceipt } = useReceiptOffer(
+    receipts,
+    trackOrder?.id ?? null,
+    bill,
+  );
 
   // Which order the tracker is showing, if it is open. Landing on /order/<id>
   // opens it straight away; from the menu the banner opens it, over the menu,
@@ -248,7 +257,10 @@ export default function OrderingApp({
 
     const picks = suggestItems({ cart: cart.items, items, ratings });
     if (picks.length === 0) return; // nothing worth suggesting isn't an ask
-    rememberUpsell(restaurant.id, picks.map(p => p.id));
+    rememberUpsell(
+      restaurant.id,
+      picks.map(p => p.id),
+    );
     setOffered(picks);
   }, [screen, restaurant.id, cart.items, items, ratings]);
 
@@ -599,100 +611,100 @@ export default function OrderingApp({
     // The cart's remove asks before it deletes, and useConfirm needs its
     // provider above it — the dashboard has one per page, the customer app
     // is a single screen so it wraps the lot.
-    <ConfirmProvider>
-      <MenuScreen
-        restaurant={restaurant}
-        table={table}
-        trackId={trackId}
-        categories={categories}
-        items={items}
-        combos={combos}
-        promos={promos}
-        ratings={ratings}
-        closedNow={closedNow}
-        cartCount={cart.count}
-        cartTotal={pricing.total}
-        onSelectItem={item => openItem(item)}
-        onAddCombo={openCombo}
-        onOpenCart={() => setScreen("cart")}
-        onTrack={() => setTracking(trackId)}
-        billDue={Boolean(table && bill && !bill.settled)}
-        onOpenBill={() => {
-          reloadBill();
-          setBillOpen(true);
-        }}
-      />
-      {cartScreen}
-      {/* One at a time. Paying is answered first — it is what just happened,
+    <DietaryTagsProvider tags={dietaryTags}>
+      <ConfirmProvider>
+        <MenuScreen
+          restaurant={restaurant}
+          table={table}
+          trackId={trackId}
+          categories={categories}
+          items={items}
+          combos={combos}
+          promos={promos}
+          ratings={ratings}
+          closedNow={closedNow}
+          cartCount={cart.count}
+          cartTotal={pricing.total}
+          onSelectItem={item => openItem(item)}
+          onAddCombo={openCombo}
+          onOpenCart={() => setScreen("cart")}
+          onTrack={() => setTracking(trackId)}
+          billDue={Boolean(table && bill && !bill.settled)}
+          onOpenBill={() => {
+            reloadBill();
+            setBillOpen(true);
+          }}
+        />
+        {cartScreen}
+        {/* One at a time. Paying is answered first — it is what just happened,
           and two dialogs stacked would trap focus against each other and take
           two Escapes to leave. The tracker is underneath it either way. */}
-      {tracking && !offering && (
-        <TrackerOverlay
-          orderId={tracking}
-          initialOrder={trackOrder?.id === tracking ? trackOrder : null}
-          onClose={closeTracker}
-        />
-      )}
-      {table && bill && !bill.settled && (
-        <BillSheet
-          open={billOpen}
-          onClose={() => setBillOpen(false)}
-          bill={bill}
-          photoOf={photoOf}
-          restaurant={restaurant}
-          tableId={table.id}
-          tableLabel={table.label}
-        />
-      )}
-      {/* Not dismissible into ordering: the point is that a second bill does
+        {tracking && !offering && (
+          <TrackerOverlay
+            orderId={tracking}
+            initialOrder={trackOrder?.id === tracking ? trackOrder : null}
+            onClose={closeTracker}
+          />
+        )}
+        {table && bill && !bill.settled && (
+          <BillSheet
+            open={billOpen}
+            onClose={() => setBillOpen(false)}
+            bill={bill}
+            photoOf={photoOf}
+            restaurant={restaurant}
+            tableId={table.id}
+            tableLabel={table.label}
+          />
+        )}
+        {/* Not dismissible into ordering: the point is that a second bill does
           not get opened while the first is outstanding. They can still read
           the menu behind it, and settling the other table clears this by
           itself. */}
-      <Modal
-        open={Boolean(owingElsewhere)}
-        onClose={() => {}}
-        maxWidth={400}
-        label={t("sitting.title")}
-      >
-        <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 8 }}>
-          {t("sitting.title")}
-        </h3>
-        <p className="tt-muted" style={{ marginTop: 0 }}>
-          {t("sitting.body", {
-            table: owingElsewhere?.tableLabel ?? "",
-            amount: formatMoney(owingElsewhere?.owed ?? 0, restaurant.currency),
-          })}
-        </p>
-        <p className="tt-muted tt-subline" style={{ fontSize: 13 }}>
-          {t("sitting.hint")}
-        </p>
-      </Modal>
-      {offering && (
-        <ReceiptPrompt orderIds={offering} open onClose={dismissReceipt} />
-      )}
-      {detail}
-      {comboDetail}
-      <Modal
-        open={!!notice}
-        onClose={() => setNotice(null)}
-        maxWidth={400}
-        label={t("notice.heads")}
-      >
-        <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 8 }}>
-          {t("notice.heads")}
-        </h3>
-        <p className="tt-muted" style={{ marginTop: 0 }}>
-          {notice}
-        </p>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-          <button
-            className="tt-btn tt-btn-primary tt-btn-sm"
-            onClick={() => setNotice(null)}
-          >
-            {t("notice.ok")}
-          </button>
-        </div>
-      </Modal>
-    </ConfirmProvider>
+        <Modal
+          open={Boolean(owingElsewhere)}
+          onClose={() => {}}
+          maxWidth={400}
+          label={t("sitting.title")}
+        >
+          <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 8 }}>
+            {t("sitting.title")}
+          </h3>
+          <p className="tt-muted" style={{ marginTop: 0 }}>
+            {t("sitting.body", {
+              table: owingElsewhere?.tableLabel ?? "",
+              amount: formatMoney(owingElsewhere?.owed ?? 0, restaurant.currency),
+            })}
+          </p>
+          <p className="tt-muted tt-subline" style={{ fontSize: 13 }}>
+            {t("sitting.hint")}
+          </p>
+        </Modal>
+        {offering && <ReceiptPrompt orderIds={offering} open onClose={dismissReceipt} />}
+        {detail}
+        {comboDetail}
+        <Modal
+          open={!!notice}
+          onClose={() => setNotice(null)}
+          maxWidth={400}
+          label={t("notice.heads")}
+        >
+          <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 8 }}>
+            {t("notice.heads")}
+          </h3>
+          <p className="tt-muted" style={{ marginTop: 0 }}>
+            {notice}
+          </p>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+            <button
+              className="tt-btn tt-btn-primary tt-btn-sm"
+              onClick={() => setNotice(null)}
+            >
+              {t("notice.ok")}
+            </button>
+          </div>
+        </Modal>
+      </ConfirmProvider>
+    </DietaryTagsProvider>
   );
 }

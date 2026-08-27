@@ -2,9 +2,10 @@
 
 import { formatMoney } from "@/lib/format";
 import type { MenuItem } from "@/lib/types";
-import { dietaryTags } from "@/lib/dietary";
+import { dietaryTags, tagLabel } from "@/lib/dietary";
+import { useDietaryTags } from "@/components/DietaryTagsContext";
 import { itemSalePrice } from "@/lib/pricing";
-import { useT } from "@/lib/i18n/context";
+import { useT, useLocale } from "@/lib/i18n/context";
 import { RatingIcon } from "@/components/ui/icons";
 import DishImage from "./DishImage";
 
@@ -25,6 +26,8 @@ export default function MenuItemRow({
   onSelect: (item: MenuItem) => void;
 }) {
   const t = useT();
+  const { locale: lang } = useLocale();
+  const allTags = useDietaryTags();
   const pct = item.discount_pct ?? 0;
   const onSale = pct > 0;
   const sale = itemSalePrice(item.price, pct);
@@ -73,15 +76,15 @@ export default function MenuItemRow({
           </div>
         )}
         <div className="tt-desc tt-muted">{item.description}</div>
-        {dietaryTags(item.dietary).length > 0 && (
+        {dietaryTags(item.dietary, allTags).length > 0 && (
           <div className="tt-diet-row">
-            {dietaryTags(item.dietary).map(tag => (
+            {dietaryTags(item.dietary, allTags).map(tag => (
               <span
                 key={tag.key}
                 className="tt-diet-badge"
-                title={t(`dietary.${tag.key}`)}
+                title={tagLabel(tag, t, lang)}
               >
-                {tag.emoji} {t(`dietary.${tag.key}`)}
+                {tag.emoji} {tagLabel(tag, t, lang)}
               </span>
             ))}
           </div>

@@ -94,6 +94,8 @@ export async function teardown(fx) {
     if (extra.length) await admin.from("service_requests").delete().in("id", extra.map(x => x.id));
   }
   await admin.from("promotions").delete().eq("restaurant_id", restaurant.id).like("name", `${MARK}%`);
+  await admin.from("icon_groups").delete().eq("restaurant_id", restaurant.id).like("name", `${MARK}%`);
+  await admin.from("dietary_tags").delete().eq("restaurant_id", restaurant.id).like("key", `${MARK}%`);
   await admin.from("restaurant_tables").delete().eq("restaurant_id", restaurant.id).like("label", `${MARK}%`);
   await admin.from("write_off_requests").delete().eq("restaurant_id", restaurant.id).eq("note", MARK);
   // El acceso de prueba: la fila y el usuario que la sostiene.

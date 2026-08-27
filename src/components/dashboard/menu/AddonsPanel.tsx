@@ -164,7 +164,19 @@ export default function AddonsPanel({
                   <span>{addon.emoji || addon.name.charAt(0).toUpperCase()}</span>
                 </div>
                 <div style={{ flex: 1 }}>
-                  <strong>{addon.name}</strong>
+                  {/* El nombre abre el editor, igual que en un producto: el
+                      lápiz sigue ahí, pero nadie lo busca cuando lo que quiere
+                      cambiar es justo lo que está leyendo. Misma clase, para
+                      que se comporte igual y no haya un segundo estilo que
+                      mantener. */}
+                  <button
+                    type="button"
+                    className="tt-prod-name"
+                    onClick={() => setEditingId(addon.id)}
+                    title={t("menu.edit")}
+                  >
+                    {addon.name}
+                  </button>
                   {!addon.available && (
                     <span className="tt-badge" style={{ marginLeft: 6 }}>
                       {t("menu.unavailable")}

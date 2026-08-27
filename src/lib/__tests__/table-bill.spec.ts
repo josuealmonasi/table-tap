@@ -245,3 +245,54 @@ describe("a discount already on the bill", () => {
     expect(tableBill(orders, []).discount).toBe(0);
   });
 });
+
+describe("what somebody already paid at the table", () => {
+  // Donde la mesa liquida al final, uno puede pagar su plato con tarjeta y el
+  // resto dejar la cuenta abierta. Antes ese plato desaparecía por completo.
+  it("lists the paid orders without adding them to what is owed", () => {
+    const bill = tableBill(
+      [order("a", 100), order("b", 60, { paid: true, items: ["Ramen"] })],
+      ["a"],
+    );
+    expect(bill.total).toBe(100);
+    expect(bill.paid.total).toBe(60);
+    expect(bill.paid.items.map(i => i.name)).toEqual(["Ramen"]);
+  });
+
+  it("keeps a paid order off both sides of the bill", () => {
+    const bill = tableBill([order("a", 100), order("b", 60, { paid: true })], ["b"]);
+    expect(bill.mine.orders).toHaveLength(0);
+    expect(bill.others.orders.map(o => o.id)).toEqual(["a"]);
+    expect(ordersToPay(bill, "all").map(o => o.id)).toEqual(["a"]);
+  });
+
+  it("never lets the paid side be settled a second time", () => {
+    // Es la garantía que evita el cobro doble: lo pagado no viaja al cobro.
+    const bill = tableBill([order("a", 100), order("b", 60, { paid: true })], ["a"]);
+    const ids = ordersToPay(bill, "all").map(o => o.id);
+    expect(ids).not.toContain("b");
+  });
+
+  it("counts a written-off order as neither owed nor paid", () => {
+    // Se sirvió y nadie lo cobró: ponerlo junto a lo pagado diría que entró
+    // dinero que no entró.
+    const writtenOff = { ...order("c", 40), written_off: true };
+    const bill = tableBill([order("a", 100), writtenOff], ["a"]);
+    expect(bill.total).toBe(100);
+    expect(bill.paid.total).toBe(0);
+  });
+
+  it("counts a cancelled order as neither, even when marked paid", () => {
+    const bill = tableBill(
+      [order("a", 100), order("d", 30, { paid: true, status: "cancelled" })],
+      ["a"],
+    );
+    expect(bill.paid.orders).toHaveLength(0);
+  });
+
+  it("still reports the table settled once nothing is owed", () => {
+    const bill = tableBill([order("b", 60, { paid: true })], []);
+    expect(bill.settled).toBe(true);
+    expect(bill.paid.total).toBe(60);
+  });
+});

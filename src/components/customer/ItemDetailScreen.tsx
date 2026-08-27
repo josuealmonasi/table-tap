@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import type { MenuItem, Modifier, OrderLineItem } from "@/lib/types";
-import { dietaryTags } from "@/lib/dietary";
+import { dietaryTags, tagLabel } from "@/lib/dietary";
+import { useDietaryTags } from "@/components/DietaryTagsContext";
 import { itemSalePrice, MAX_LINE_QTY } from "@/lib/pricing";
 import { missingRequired } from "@/lib/modifiers";
 import { addedLineCost, nextPromoStep } from "@/lib/promo-math";
 import NoteField from "./NoteField";
 import type { CartPromo } from "@/lib/pricing";
-import { useT } from "@/lib/i18n/context";
+import { useT, useLocale } from "@/lib/i18n/context";
 import ModifierGroup from "./ModifierGroup";
 import { BackIcon } from "@/components/ui/icons";
 import DishImage from "./DishImage";
@@ -38,6 +39,8 @@ export default function ItemDetailScreen({
   inCartQty?: number;
 }) {
   const t = useT();
+  const { locale: lang } = useLocale();
+  const allTags = useDietaryTags();
   const [mods, setMods] = useState<Record<string, string | string[]>>(
     initialLine?.mods ?? {},
   );
@@ -152,15 +155,15 @@ export default function ItemDetailScreen({
           </div>
         )}
 
-        {dietaryTags(item.dietary).length > 0 && (
+        {dietaryTags(item.dietary, allTags).length > 0 && (
           <div className="tt-diet-row" style={{ marginBottom: 16 }}>
-            {dietaryTags(item.dietary).map(tag => (
+            {dietaryTags(item.dietary, allTags).map(tag => (
               <span
                 key={tag.key}
                 className="tt-diet-badge"
-                title={t(`dietary.${tag.key}`)}
+                title={tagLabel(tag, t, lang)}
               >
-                {tag.emoji} {t(`dietary.${tag.key}`)}
+                {tag.emoji} {tagLabel(tag, t, lang)}
               </span>
             ))}
           </div>

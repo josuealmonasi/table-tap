@@ -1,62 +1,63 @@
 {
   "title": "Aviso de Privacidad",
-  "intro": "Qué datos tratamos, para qué, y qué puedes pedirnos sobre ellos.",
+  "intro": "Qué datos tratamos, con qué finalidad, y qué puede solicitarnos respecto de ellos.",
   "version": "__VERSION__",
   "clauses": [
     {
-      "title": "1. Quién es responsable",
+      "title": "1. Responsable del tratamiento",
       "paragraphs": [
-        "TableTap es responsable del tratamiento de los datos personales que recabamos de los restaurantes que contratan el servicio.",
-        "Respecto de los datos de los comensales, el responsable es el restaurante: nosotros los tratamos como encargados, por su cuenta y siguiendo sus instrucciones."
+        "TableTap es responsable del tratamiento de los datos personales que recaba de los restaurantes que contratan el servicio.",
+        "Respecto de los datos de los comensales, el responsable es el restaurante. TableTap los trata en calidad de encargado, por cuenta de aquel y siguiendo sus instrucciones."
       ]
     },
     {
-      "title": "2. Qué datos tratamos",
+      "title": "2. Datos que tratamos",
       "paragraphs": [
-        "Del restaurante: nombre del negocio, nombre y correo de quien administra la cuenta, datos de contacto y datos fiscales cuando pides factura.",
-        "Del equipo del restaurante: correo y rol, para dar acceso al panel.",
-        "De los comensales: lo mínimo para que su pedido funcione — qué ordenaron, en qué mesa, si dejaron propina y su calificación del platillo si la dan. No pedimos su nombre, ni su teléfono, ni creamos cuentas de comensal.",
-        "Correo del comensal: solo si él lo escribe para pedir su recibo, y no lo guardamos. Se usa para enviar ese único correo y se descarta; no queda en nuestra base de datos, no lo damos de alta en ninguna lista y no le mandamos publicidad.",
-        "No guardamos datos de tarjetas bancarias. Los pagos los procesa Stripe con su propia política de privacidad."
+        "Del restaurante: nombre del negocio, nombre y correo electrónico de quien administra la cuenta, datos de contacto y datos fiscales cuando solicita factura.",
+        "Del personal del restaurante: correo electrónico y rol, con el fin de otorgar acceso al panel.",
+        "Del comensal: lo estrictamente necesario para que su pedido opere — qué ordenó, en qué mesa, la nota que escriba para la cocina, el código de promoción que utilice, si dejó propina y la calificación del platillo si la otorga. No se solicita su nombre ni su teléfono, y no se crean cuentas de comensal.",
+        "Correo electrónico del comensal: únicamente si lo proporciona para solicitar su recibo, y no se conserva. Se utiliza para enviar ese único correo y se descarta; no se incorpora a nuestra base de datos, no se da de alta en lista alguna y no se le remite publicidad.",
+        "En el propio dispositivo del comensal, la aplicación conserva un registro local — los pedidos que hizo desde ese teléfono, la mesa en la que está sentado y el contenido de su carrito — con el fin de que pueda seguir su pedido y pagar su cuenta. Esa información permanece en su navegador, no se transmite a terceros y se elimina al borrar los datos del sitio.",
+        "No se almacenan datos de tarjetas bancarias. Los pagos son procesados por Stripe conforme a su propia política de privacidad."
       ]
     },
     {
-      "title": "3. Para qué los usamos",
+      "title": "3. Finalidades del tratamiento",
       "paragraphs": [
-        "Para prestar el servicio: mostrar el menú, tomar pedidos, mandarlos a la cocina, cobrar y generar los reportes del restaurante.",
-        "Para facturarte, darte soporte y avisarte de cambios importantes en el servicio o en los precios.",
-        "Para cuidar la seguridad de la plataforma y prevenir abusos.",
-        "Para enviar el recibo de un pedido al correo que el comensal escribió con ese fin, y para nada más.",
-        "No vendemos datos personales, ni los usamos para publicidad de terceros."
+        "Prestar el servicio: mostrar el menú, tomar pedidos, transmitirlos a la cocina, procesar cobros y generar los reportes del restaurante.",
+        "Facturar al restaurante, brindarle soporte y notificarle cambios relevantes en el servicio o en los precios.",
+        "Preservar la seguridad de la plataforma y prevenir usos indebidos.",
+        "Enviar el recibo de un pedido al correo electrónico que el comensal proporcionó con esa finalidad, y para ningún otro fin.",
+        "No se comercializan datos personales ni se utilizan para publicidad de terceros."
       ]
     },
     {
-      "title": "4. Con quién los compartimos",
+      "title": "4. Transferencias y remisiones",
       "paragraphs": [
-        "Con proveedores que hacen funcionar el servicio: alojamiento y base de datos, Stripe para procesar pagos y un proveedor de envío de correo para entregar los recibos que el comensal pida. Cada uno trata los datos únicamente para esa función.",
-        "Con autoridades, cuando exista una obligación legal."
+        "A proveedores que hacen posible la operación del servicio: alojamiento y base de datos, Stripe para el procesamiento de pagos, y un proveedor de envío de correo electrónico para entregar los recibos que el comensal solicite. Cada uno trata los datos únicamente para esa función.",
+        "A las autoridades competentes, cuando exista una obligación legal."
       ]
     },
     {
-      "title": "5. Cuánto tiempo los conservamos",
+      "title": "5. Plazo de conservación",
       "paragraphs": [
-        "Mientras tu cuenta esté activa, y después el tiempo que exijan las obligaciones fiscales y legales aplicables.",
-        "Los pedidos y sus importes se conservan porque son registro contable del restaurante.",
-        "El correo que un comensal da para su recibo no se conserva: del envío solo queda la fecha en que se mandó, sin la dirección. No hay nada que borrar después."
+        "Mientras la cuenta esté activa y, posteriormente, durante el plazo que exijan las obligaciones fiscales y legales aplicables.",
+        "Los pedidos y sus importes se conservan por constituir registro contable del restaurante.",
+        "El correo electrónico que un comensal proporciona para su recibo no se conserva: del envío únicamente queda la fecha en que se realizó, sin la dirección. No existe información posterior que suprimir."
       ]
     },
     {
-      "title": "6. Tus derechos ARCO",
+      "title": "6. Derechos ARCO",
       "paragraphs": [
-        "Puedes solicitar el acceso, rectificación, cancelación u oposición al tratamiento de tus datos personales, así como revocar tu consentimiento.",
-        "Para ejercerlos, escríbenos al correo de contacto publicado en el sitio. Te respondemos en los plazos que marca la ley.",
-        "Si eres comensal de un restaurante que usa TableTap, dirige tu solicitud a ese restaurante; nosotros lo apoyamos para atenderla."
+        "Puede solicitar el acceso, rectificación, cancelación u oposición al tratamiento de sus datos personales, así como revocar su consentimiento.",
+        "Para ejercerlos, le pedimos escribir al correo de contacto publicado en el sitio. Se dará respuesta dentro de los plazos que señala la ley.",
+        "Si usted es comensal de un restaurante que utiliza TableTap, le solicitamos dirigir su petición a ese restaurante; TableTap le brindará el apoyo necesario para atenderla."
       ]
     },
     {
-      "title": "7. Cambios a este aviso",
+      "title": "7. Modificaciones a este aviso",
       "paragraphs": [
-        "Si cambia, publicamos la nueva versión en esta página y, cuando el cambio sea relevante, te lo mostramos al entrar al panel."
+        "En caso de modificación, se publicará la nueva versión en esta página y, cuando el cambio sea relevante, se mostrará al ingresar al panel."
       ]
     }
   ]

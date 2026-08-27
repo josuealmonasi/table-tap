@@ -47,6 +47,7 @@ for (const table of [
   "orders", "table_sessions", "write_off_requests", "discount_requests",
   "coupons", "coupon_redemptions", "staff", "user_logs", "profiles",
   "platform_admins", "rate_limits", "restaurant_tables",
+  "icon_groups", "icon_group_items",
 ]) {
   verdict(`cannot read ${table}`, await anon.from(table).select("*").limit(1));
 }
@@ -63,6 +64,15 @@ for (const col of ["founding_number", "subscribed_price", "stripe_account_id", "
   else bad(`can read restaurants.${col}`);
 }
 
+// Las etiquetas de dieta sí son públicas: salen en el platillo y filtran el
+// menú. Lo que se prueba aquí es que se puedan leer — si el permiso se cayera,
+// la carta perdería los alérgenos sin que nada se quejara.
+{
+  const { data, error } = await anon.from("dietary_tags").select("key, label, emoji").limit(1);
+  if (!error && data?.length) ok("reads the dietary tags the menu shows");
+  else bad(`cannot read dietary_tags (${error?.message ?? "sin filas"})`);
+}
+
 // ── 2. Privileged functions ────────────────────────────────────────────────
 console.log("\nFunctions only the server may call");
 for (const [fn, args] of [
@@ -71,6 +81,9 @@ for (const [fn, args] of [
   ["claim_founding_price", { p_restaurant: crypto.randomUUID(), p_limit: 50 }],
   ["redeem_coupon", { p_coupon_id: crypto.randomUUID() }],
   ["rate_limit_hit", { p_bucket: "probe", p_window_seconds: 60 }],
+  // Sembrar etiquetas de dieta es del disparador, de nadie más. La RLS ya lo
+  // detendría; el permiso lo detiene antes de llegar a la tabla.
+  ["seed_dietary_tags", { p_restaurant: crypto.randomUUID() }],
 ]) {
   const { error } = await anon.rpc(fn, args);
   if (error) ok(`anon cannot call ${fn}()`);
@@ -95,7 +108,7 @@ const signIn = owner
 if (signIn.error) {
   console.log(`  SKIPPED  could not sign in as ${owner?.email ?? "an owner"} (${signIn.error.message})`);
 } else {
-  for (const table of ["orders", "table_sessions", "write_off_requests", "discount_requests", "coupons", "user_logs", "staff"]) {
+  for (const table of ["orders", "table_sessions", "write_off_requests", "discount_requests", "coupons", "user_logs", "staff", "icon_groups"]) {
     verdict(
       `${mine.name} cannot read ${theirs.name}'s ${table}`,
       await asUser.from(table).select("id").eq("restaurant_id", theirs.id).limit(1),
@@ -122,6 +135,12 @@ for (const [method, path, body] of [
   ["POST", "/api/coupons", { code: "AAA-BBB", kind: "percent", value: 10 }],
   ["POST", "/api/staff", { email: "x@y.z", role: "owner" }],
   ["PATCH", "/api/orders", { id: crypto.randomUUID(), status: "ready" }],
+  ["POST", "/api/dietary-tags", { label: "colado" }],
+  ["PATCH", "/api/dietary-tags", { id: crypto.randomUUID(), label: "colado" }],
+  ["DELETE", "/api/dietary-tags", { id: crypto.randomUUID() }],
+  ["POST", "/api/icon-groups", { name: "colado", variant: "addon", icons: [{ emoji: "🌮" }] }],
+  ["PATCH", "/api/icon-groups", { id: crypto.randomUUID(), name: "colado" }],
+  ["DELETE", "/api/icon-groups", { id: crypto.randomUUID() }],
 ]) {
   const res = await fetch(BASE + path, {
     method,
@@ -203,6 +222,106 @@ if (!signIn.error && theirs) {
     if (r6.status >= 400) ok(`checkout refuses pay-at-counter where it is off (${r6.status})`);
     else bad(`checkout allowed pay-at-counter where it is off (${r6.status})`);
   }
+}
+
+
+// ── Los grupos de iconos, del restaurante que los hizo ───────────────────────
+// Los escribe la llave de servicio, que salta la RLS: lo único que separa un
+// grupo de otro dueño es el `.eq("restaurant_id")` de la ruta. Y PostgREST no
+// se queja cuando un filtro no encuentra nada, así que aquí no basta con leer
+// el status — hay que volver a mirar la fila y ver que sigue como estaba.
+if (!signIn.error && theirs) {
+  console.log("\nIcon groups belonging to the restaurant next door");
+  const cookie = `sb-${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0]}-auth-token=base64-${Buffer.from(JSON.stringify(signIn.data.session)).toString("base64")}`;
+
+  const { data: victim } = await admin
+    .from("icon_groups")
+    .insert({ restaurant_id: theirs.id, variant: "addon", name: "sonda-rls", sort_order: 99 })
+    .select("id, name")
+    .single();
+  await admin.from("icon_group_items").insert({ group_id: victim.id, emoji: "🌮", sort_order: 0 });
+
+  const call = async (method, body) => {
+    const res = await fetch(BASE + "/api/icon-groups", {
+      method, headers: { "Content-Type": "application/json", cookie },
+      body: JSON.stringify(body),
+    });
+    return res.status;
+  };
+
+  const renamed = await call("PATCH", { id: victim.id, name: "secuestrado" });
+  const { data: afterPatch } = await admin
+    .from("icon_groups").select("name").eq("id", victim.id).maybeSingle();
+  if (afterPatch?.name === "sonda-rls") ok(`cannot rename another restaurant's icon group (${renamed})`);
+  else bad(`renamed another restaurant's icon group (${renamed})`);
+
+  const removed = await call("DELETE", { id: victim.id });
+  const { data: afterDelete } = await admin
+    .from("icon_groups").select("id").eq("id", victim.id).maybeSingle();
+  if (afterDelete) ok(`cannot delete another restaurant's icon group (${removed})`);
+  else bad(`deleted another restaurant's icon group (${removed})`);
+
+  // La cocina no toca la carta: la ruta pide gerencia, no sólo sesión.
+  const kitchen = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  );
+  const kSignIn = await kitchen.auth.signInWithPassword({
+    email: "demo-kitchen@tabletap.dev", password: "demo123",
+  });
+  if (!kSignIn.error) {
+    const kCookie = `sb-${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0]}-auth-token=base64-${Buffer.from(JSON.stringify(kSignIn.data.session)).toString("base64")}`;
+    const res = await fetch(BASE + "/api/icon-groups", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: kCookie },
+      body: JSON.stringify({ name: "cocina", variant: "addon", icons: [{ emoji: "🌮" }] }),
+    });
+    if (res.status === 403) ok("kitchen cannot create icon groups (403)");
+    else {
+      bad(`kitchen created an icon group (${res.status})`);
+      // Si de verdad entró, se borra por id — nunca por nombre: un `delete`
+      // por nombre en producción se llevaría por delante el grupo de alguien.
+      const { id } = await res.json().catch(() => ({}));
+      if (id) await admin.from("icon_groups").delete().eq("id", id);
+    }
+  }
+
+  // Y su vecino tampoco puede leerlos con su propia sesión.
+  verdict(
+    `${mine.name} cannot read ${theirs.name}'s icon group items`,
+    await asUser.from("icon_group_items").select("emoji").eq("group_id", victim.id).limit(1),
+  );
+
+  // ── Las etiquetas de dieta del vecino ──────────────────────────────────
+  // Son públicas de leer, pero de nadie más para escribir. Y una baja se lleva
+  // por delante la etiqueta de los platillos, así que un id ajeno que pasara
+  // el filtro despegaría etiquetas de una carta que no es suya.
+  const { data: theirTag } = await admin
+    .from("dietary_tags").select("id, key, label")
+    .eq("restaurant_id", theirs.id).limit(1).maybeSingle();
+
+  if (theirTag) {
+    const renameTag = await fetch(BASE + "/api/dietary-tags", {
+      method: "PATCH", headers: { "Content-Type": "application/json", cookie },
+      body: JSON.stringify({ id: theirTag.id, label: "secuestrada" }),
+    });
+    const { data: tagAfter } = await admin
+      .from("dietary_tags").select("label").eq("id", theirTag.id).maybeSingle();
+    if (tagAfter?.label === theirTag.label) ok(`cannot rename another restaurant's dietary tag (${renameTag.status})`);
+    else bad(`renamed another restaurant's dietary tag (${renameTag.status})`);
+
+    const dropTag = await fetch(BASE + "/api/dietary-tags", {
+      method: "DELETE", headers: { "Content-Type": "application/json", cookie },
+      body: JSON.stringify({ id: theirTag.id }),
+    });
+    const { data: tagStill } = await admin
+      .from("dietary_tags").select("id").eq("id", theirTag.id).maybeSingle();
+    if (tagStill) ok(`cannot delete another restaurant's dietary tag (${dropTag.status})`);
+    else bad(`deleted another restaurant's dietary tag (${dropTag.status})`);
+  }
+
+  // Se recoge la sonda: nada de lo que crea esta revisión se queda.
+  await admin.from("icon_groups").delete().eq("id", victim.id);
 }
 
 // ── Un inquilino no lee al de al lado ────────────────────────────────────────

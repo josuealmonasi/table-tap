@@ -9,9 +9,10 @@ export interface Clause {
 /**
  * Los términos, en español, que es la versión que rige.
  *
- * Escritos para que un dueño de restaurante los entienda sin abogado: frases
- * cortas, sin "el Usuario reconoce y acepta". Un contrato que nadie lee no
- * protege a nadie.
+ * En trato de usted y registro formal, que es el que corresponde a un contrato
+ * entre dos negocios. Formal no quiere decir ilegible: siguen siendo frases
+ * cortas y sin "el Usuario reconoce y acepta por medio del presente
+ * instrumento". Un contrato que nadie lee no protege a nadie.
  *
  * El texto vive en `terms-es.json` porque de ahí se arma también el PDF que la
  * gente descarga. Dos copias del mismo contrato es un contrato que tarde o
