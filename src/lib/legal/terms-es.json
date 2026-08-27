@@ -1,115 +1,116 @@
 {
   "title": "Términos y Condiciones",
-  "intro": "Estos son los términos del servicio TableTap. Están escritos para que se entiendan; si algo no queda claro, escríbenos antes de aceptar.",
+  "intro": "Estos son los términos del servicio TableTap. Están redactados para ser comprensibles; si algún punto no resulta claro, le pedimos escribirnos antes de aceptarlos.",
   "version": "__VERSION__",
   "clauses": [
     {
       "title": "1. Qué es TableTap y qué no es",
       "paragraphs": [
-        "TableTap es una herramienta de software: menús con código QR, toma de pedidos, cuentas y reportes para tu restaurante.",
-        "No vendemos comida. Cuando un comensal ordena, el contrato de venta es entre tu restaurante y esa persona. Tú eres responsable de la comida, de sus precios, de su descripción, de los alérgenos y de la factura fiscal que esa persona te pida."
+        "TableTap es una herramienta de software: menús con código QR, toma de pedidos, cuentas y reportes para su restaurante.",
+        "TableTap no vende alimentos. Cuando un comensal ordena, el contrato de compraventa se celebra entre su restaurante y esa persona. El restaurante es responsable de los alimentos, de sus precios, de su descripción, de la información sobre alérgenos y de la factura fiscal que esa persona solicite."
       ]
     },
     {
-      "title": "2. Tu cuenta",
+      "title": "2. Su cuenta",
       "paragraphs": [
-        "Necesitas una cuenta para usar el panel. Eres responsable de lo que pase con ella y con los accesos que crees para tu equipo, incluidos los pedidos, descuentos y cobros que hagan.",
-        "Los datos que registres deben ser reales. Si abres la cuenta a nombre de un negocio, declaras que puedes obligarlo."
+        "Se requiere una cuenta para utilizar el panel. El titular es responsable del uso de dicha cuenta y de los accesos que cree para su equipo, incluidos los pedidos, descuentos y cobros que realicen.",
+        "Los datos que registre deben ser veraces. Si abre la cuenta a nombre de una persona moral, declara contar con facultades suficientes para obligarla."
       ]
     },
     {
       "title": "3. Planes, precios y comisiones",
       "paragraphs": [
-        "Los planes, sus límites y sus precios están publicados en tu panel, en la sección Plan. Ahí aparece siempre el precio vigente, la comisión por pedido con tarjeta y el tope mensual de esa comisión.",
-        "Los precios pueden cambiar. Si cambia el precio de tu plan, te avisamos por correo con al menos 30 días naturales de anticipación, y el cambio aplica hasta tu siguiente periodo de facturación. Si no estás de acuerdo, puedes cancelar antes de esa fecha sin penalización. Esto no aplica a los precios de fundador, que no suben.",
-        "Precio de fundador: los primeros restaurantes que contratan un plan de paga conservan el precio con el que entraron mientras mantengan ese plan, aunque después subamos los precios de lista. Si cambias de plan o cancelas y vuelves a contratar, aplica el precio vigente en ese momento. Tu panel te dice si eres fundador y con qué número.",
-        "Los precios están en pesos mexicanos y no incluyen impuestos, salvo que se indique lo contrario."
+        "Los planes, sus límites y sus precios están publicados en el panel, en la sección Plan. Ahí aparece en todo momento el precio vigente, la comisión por pedido pagado con tarjeta y el tope mensual de esa comisión.",
+        "Los precios pueden modificarse. Si cambia el precio de su plan, se le notificará por correo electrónico con al menos 30 días naturales de anticipación, y el cambio surtirá efecto hasta su siguiente periodo de facturación. Si no está de acuerdo, podrá cancelar antes de esa fecha sin penalización alguna. Lo anterior no aplica a los precios de fundador, que no se incrementan.",
+        "Precio de fundador: los primeros restaurantes que contratan un plan de paga conservan el precio con el que ingresaron mientras mantengan ese plan, aun cuando posteriormente se incrementen los precios de lista. Si cambia de plan, o si cancela y contrata nuevamente, aplicará el precio vigente en ese momento. El panel indica si su restaurante cuenta con este beneficio.",
+        "Los precios están expresados en pesos mexicanos y no incluyen impuestos, salvo que se indique lo contrario."
       ]
     },
     {
-      "title": "4. Prueba gratis",
+      "title": "4. Periodo de prueba",
       "paragraphs": [
-        "Ofrecemos 30 días de prueba sin tarjeta, sobre el plan Servicio. La prueba es una sola por restaurante.",
-        "Al terminar, si no contratas un plan de paga, tu restaurante pasa al plan gratuito.",
-        "No borramos nada al terminar la prueba: tu menú, tus mesas y tus pedidos siguen ahí. Lo que dejas de tener son las funciones del plan de paga, incluido el servicio en mesa."
+        "Se ofrecen 30 días de prueba sin necesidad de tarjeta, sobre el plan Servicio. La prueba se otorga por una sola ocasión por restaurante.",
+        "Al concluir, si no se contrata un plan de paga, el restaurante pasa al plan gratuito.",
+        "No se elimina información alguna al terminar la prueba: el menú, las mesas y los pedidos permanecen disponibles. Lo que deja de estar disponible son las funciones propias del plan de paga, incluido el servicio en mesa."
       ]
     },
     {
-      "title": "5. Cobros, cancelación y reembolsos",
+      "title": "5. Cobros, cancelación y devoluciones",
       "paragraphs": [
-        "La suscripción se cobra por adelantado cada mes. La comisión por pedido se cobra sobre los pedidos pagados con tarjeta a través de la plataforma, con el tope mensual publicado en tu plan.",
-        "Puedes cancelar cuando quieras desde la sección Plan. La cancelación aplica al terminar el periodo que ya pagaste: conservas el servicio hasta esa fecha y después pasas al plan gratuito.",
-        "Los periodos ya pagados no son reembolsables, salvo que la ley aplicable lo exija o que el cobro haya sido nuestro error, en cuyo caso lo corregimos.",
-        "Si un cobro falla, te avisamos y lo reintentamos. Si no se resuelve, el panel puede quedar en solo lectura. El menú de tus comensales sigue funcionando: no interrumpimos el servicio a la gente que está en tu restaurante por un tema de cobranza contigo."
+        "La suscripción se cobra por adelantado cada mes. La comisión por pedido se genera sobre los pedidos pagados con tarjeta a través de la plataforma, con el tope mensual publicado en su plan.",
+        "Puede cancelar en cualquier momento desde la sección Plan. La cancelación surte efecto al concluir el periodo ya pagado: el servicio se conserva hasta esa fecha y posteriormente el restaurante pasa al plan gratuito.",
+        "Los periodos ya pagados no son reembolsables, salvo que la legislación aplicable lo exija o que el cobro se haya originado en un error nuestro, supuesto en el cual será corregido.",
+        "Si un cobro no se completa, se le notificará y se reintentará. De no resolverse, el panel podrá quedar en modo de solo lectura. El menú de sus comensales continuará operando: no se interrumpe el servicio a las personas que se encuentran en su restaurante por una controversia de cobranza con usted."
       ]
     },
     {
       "title": "6. Pagos con tarjeta",
       "paragraphs": [
-        "Los pagos con tarjeta se procesan con Stripe. Para recibirlos necesitas tu propia cuenta conectada de Stripe y aceptar sus términos.",
-        "El cobro se hace en tu cuenta de Stripe: el dinero de tus ventas es tuyo y llega a ti, menos la comisión de Stripe y la nuestra. Nosotros no retenemos el dinero de tus ventas.",
-        "No guardamos datos de tarjetas. Esa información la maneja Stripe directamente."
+        "Los pagos con tarjeta se procesan a través de Stripe. Para recibirlos se requiere una cuenta conectada de Stripe a nombre del restaurante y la aceptación de los términos de dicho proveedor.",
+        "El cobro se realiza en su cuenta de Stripe: el importe de sus ventas le corresponde y se le entrega directamente, descontadas la comisión de Stripe y la nuestra. TableTap no retiene el importe de sus ventas.",
+        "Cuando el restaurante permite que la cuenta se liquide al final, un comensal puede pagar en línea una parte del consumo y dejar el resto en la cuenta abierta. Lo pagado en línea se registra como cubierto, se muestra en la cuenta a título informativo y queda excluido del importe por cobrar, de modo que no se cobre dos veces.",
+        "TableTap no almacena datos de tarjetas bancarias. Esa información es tratada directamente por Stripe."
       ]
     },
     {
-      "title": "7. Lo que esperamos de ti",
+      "title": "7. Obligaciones del restaurante",
       "paragraphs": [
-        "Usar el servicio conforme a la ley y para el negocio que registraste.",
-        "No intentar vulnerar la plataforma, extraer datos de otros restaurantes, ni revender el servicio como si fuera tuyo.",
-        "Mantener tu menú veraz: precios, contenidos y alérgenos son tu responsabilidad, no la nuestra.",
-        "Cumplir con tus obligaciones fiscales, incluida la facturación a tus comensales cuando la pidan."
+        "Utilizar el servicio conforme a la legislación aplicable y para el negocio que registró.",
+        "Abstenerse de vulnerar la plataforma, de extraer información de otros restaurantes y de revender el servicio como propio.",
+        "Mantener su menú veraz. Los precios, las descripciones y las etiquetas de dieta y alérgenos son responsabilidad del restaurante, incluidas las que cree, modifique o elimine desde el panel. TableTap proporciona un conjunto inicial de etiquetas como sugerencia; su exactitud frente a cada platillo corresponde al restaurante.",
+        "Cumplir con sus obligaciones fiscales, incluida la expedición de comprobantes a sus comensales cuando los soliciten."
       ]
     },
     {
       "title": "8. Disponibilidad del servicio",
       "paragraphs": [
-        "Trabajamos para que el servicio esté disponible siempre, pero no garantizamos que funcione sin interrupciones. Puede haber mantenimiento, fallas de proveedores o causas fuera de nuestro control.",
-        "Cuando dependa de nosotros, lo resolvemos lo antes posible y te informamos si el problema es prolongado."
+        "TableTap procura la disponibilidad continua del servicio, sin garantizar que opere libre de interrupciones. Pueden presentarse labores de mantenimiento, fallas de proveedores o causas ajenas a nuestro control.",
+        "Cuando la causa dependa de nosotros, se resolverá a la brevedad y se informará al restaurante si la incidencia se prolonga."
       ]
     },
     {
-      "title": "9. Nuestra responsabilidad",
+      "title": "9. Limitación de responsabilidad",
       "paragraphs": [
-        "Ofrecemos el servicio tal como está. No respondemos por pérdidas indirectas, lucro cesante, ni por decisiones de negocio que tomes a partir de la información del panel.",
-        "En cualquier caso, nuestra responsabilidad total frente a ti se limita a lo que nos hayas pagado en los tres meses anteriores al hecho que la origine.",
-        "Nada de esto limita responsabilidades que la ley no permite limitar."
+        "El servicio se proporciona en el estado en que se encuentra. TableTap no responde por daños indirectos, lucro cesante, ni por las decisiones de negocio que se adopten a partir de la información del panel.",
+        "En todo caso, la responsabilidad total de TableTap frente al restaurante se limita al importe que este haya pagado en los tres meses anteriores al hecho que la origine.",
+        "Ninguna disposición de esta cláusula limita responsabilidades que la ley no permita limitar."
       ]
     },
     {
       "title": "10. Datos personales",
       "paragraphs": [
-        "Tratamos datos personales conforme a nuestro Aviso de Privacidad, que forma parte de estos términos.",
-        "Respecto de los datos de tus comensales, tú decides para qué se usan y nosotros los tratamos por tu cuenta, como encargados, únicamente para prestarte el servicio."
+        "Los datos personales se tratan conforme al Aviso de Privacidad, que forma parte integrante de estos términos.",
+        "Respecto de los datos de sus comensales, el restaurante determina las finalidades de su tratamiento y TableTap los trata por su cuenta, en calidad de encargado, únicamente para prestar el servicio."
       ]
     },
     {
       "title": "11. Propiedad intelectual",
       "paragraphs": [
-        "El software, la marca y el diseño de TableTap son nuestros. Tu menú, tus fotos, tu marca y tus datos son tuyos.",
-        "Nos autorizas a usar tu contenido únicamente para operar el servicio: mostrar tu menú a tus comensales, generar tus códigos QR y hacer respaldos."
+        "El software, la marca y el diseño de TableTap son de nuestra titularidad. El menú, las fotografías, la marca y los datos del restaurante son de su titularidad.",
+        "El restaurante otorga autorización para utilizar su contenido con el fin exclusivo de operar el servicio: mostrar el menú a sus comensales, generar sus códigos QR y realizar respaldos."
       ]
     },
     {
       "title": "12. Suspensión y terminación",
       "paragraphs": [
-        "Podemos suspender o terminar una cuenta que incumpla estos términos, que use el servicio para algo ilegal, o que ponga en riesgo la plataforma o a otros restaurantes. Cuando sea razonable, avisamos antes.",
-        "Si terminamos tu cuenta sin que hayas incumplido, te devolvemos la parte proporcional de lo que hayas pagado por adelantado.",
-        "Puedes pedir la exportación de tus datos mientras tu cuenta esté activa y hasta 30 días después de cerrarla."
+        "TableTap podrá suspender o dar por terminada una cuenta que incumpla estos términos, que utilice el servicio con fines ilícitos, o que ponga en riesgo la plataforma o a otros restaurantes. Cuando resulte razonable, se notificará previamente.",
+        "Si TableTap da por terminada la cuenta sin que exista incumplimiento del restaurante, se devolverá la parte proporcional de lo pagado por adelantado.",
+        "El restaurante puede solicitar la exportación de sus datos mientras su cuenta esté activa y hasta 30 días naturales después de su cierre."
       ]
     },
     {
-      "title": "13. Cambios a estos términos",
+      "title": "13. Modificaciones a estos términos",
       "paragraphs": [
-        "Podemos actualizar estos términos. Cuando el cambio sea relevante, te lo mostramos al entrar al panel y te pedimos aceptarlo de nuevo.",
-        "La versión vigente y su fecha están siempre al final de esta página."
+        "Estos términos pueden actualizarse. Cuando la modificación sea relevante, se mostrará al ingresar al panel y se solicitará su aceptación nuevamente.",
+        "La versión vigente y su fecha aparecen siempre al final de este documento."
       ]
     },
     {
-      "title": "14. Ley aplicable",
+      "title": "14. Legislación aplicable",
       "paragraphs": [
         "Estos términos se rigen por las leyes de los Estados Unidos Mexicanos.",
-        "Para cualquier controversia nos sometemos a los tribunales competentes de México, sin perjuicio de los derechos que la ley te reconozca como consumidor si aplica.",
-        "La versión en español es la que rige. Cualquier traducción es solo por comodidad."
+        "Para la interpretación y cumplimiento de estos términos, las partes se someten a los tribunales competentes en México, sin perjuicio de los derechos que la ley reconozca al restaurante en su carácter de consumidor, cuando resulte aplicable.",
+        "La versión en español es la que rige. Cualquier traducción se proporciona únicamente por comodidad."
       ]
     }
   ]
