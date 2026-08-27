@@ -1057,7 +1057,7 @@ badgesHint: "Muestra cuántas cosas esperan acción en cada sección. Aplica a t
     roleManager: "Gerente — menús, mesas, ajustes, reembolsos",
     roleOwner: "Dueño — todo (máx. 3 dueños)",
     recentActivity: "Actividad reciente",
-    activityHint: "Cada cambio de accesos y roles, más reciente primero",
+    activityHint: "Cobros, cancelaciones, descuentos, ajustes y accesos — lo más reciente primero",
     activityCount: "{n} registros",
     logOrders: "{n} pedido(s)",
     paycash: "efectivo",

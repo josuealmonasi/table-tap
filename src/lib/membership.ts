@@ -20,6 +20,15 @@ export type Role = (typeof ROLES)[number];
 export const MANAGES = (role: Role): boolean => role === "owner" || role === "manager";
 
 /**
+ * Sólo el dueño.
+ *
+ * Existe para que una pantalla pueda decir a quién le enseña algo sin comparar
+ * una cadena a mano, y para que la prueba de invariantes tenga a qué agarrarse
+ * cuando compara la reja de una página con la política de la tabla.
+ */
+export const OWNS = (role: Role): boolean => role === "owner";
+
+/**
  * The till and the floor: who deals with a diner and their money.
  *
  * Cashier and waiter carry the same permissions today, and that is on purpose —

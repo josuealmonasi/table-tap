@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { MANAGES, SETTLES } from "@/lib/membership";
+import { MANAGES, OWNS, SETTLES } from "@/lib/membership";
 import { requireSettles } from "@/lib/page-guard";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import BillsPanel from "@/components/dashboard/BillsPanel";
@@ -70,9 +70,16 @@ export default async function BillsPage() {
         canSettle={SETTLES(membership.role)}
         askedToPay={(asking ?? []).map(a => a.table_id).filter(Boolean) as string[]}
       >
-        {/* Sólo dueño y gerente: la bitácora dice cuánto se cobró en efectivo
-            y qué deudas se cancelaron, que no es lectura para el piso. */}
-        {MANAGES(membership.role) && (
+        {/* Sólo el dueño, porque es lo único que la base deja leer: la política
+            de `user_logs` es `owns_restaurant`. Enseñándosela al gerente, la
+            reja decía que sí y la base devolvía cero — el gerente abría
+            "Actividad reciente" con su buscador, sus botones de orden y la
+            lista vacía, y se iba pensando que la bitácora no sirve.
+
+            No se abre la política en vez de cerrar la reja: la bitácora también
+            trae altas, bajas y cambios de rol del equipo, y el gerente no entra
+            a /dashboard/staff. */}
+        {OWNS(membership.role) && (
           <UserLogs restaurantId={r.id} currency={r.currency} />
         )}
       </BillsPanel>
