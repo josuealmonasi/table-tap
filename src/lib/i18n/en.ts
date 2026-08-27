@@ -661,6 +661,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     hint: "If you have already paid, ask your waiter to close the bill and scan again.",
   },
   tracker: {
+    readyCounter: "🎉 It's ready! Collect it with your code.",
     totalDue: "Total to pay",
     received: "Order received!",
     preparing: "Chef is preparing it",

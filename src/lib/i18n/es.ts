@@ -658,6 +658,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     hint: "Si ya pagaste, pídele a tu mesero que cierre la cuenta y vuelve a escanear.",
   },
   tracker: {
+    readyCounter: "🎉 ¡Ya está listo! Pásalo a recoger con tu código.",
     totalDue: "Total a pagar",
     received: "¡Pedido recibido!",
     preparing: "El chef lo está preparando",
