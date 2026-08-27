@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { currentSessionId as openTableSession, sessionAtTable } from "@/lib/table-session";
-import { unpaidOrders } from "@/lib/table-bill";
+import { billWindowStart, paidOrders, unpaidOrders } from "@/lib/table-bill";
 import type { Order } from "@/lib/types";
 
 /**
@@ -43,18 +43,27 @@ export async function fetchTableBill(
    */
   sessionId?: string | null,
 ): Promise<Order[]> {
-  let query = createAdminClient()
-    .from("orders")
-    .select(FIELDS)
-    // Both, always: the table id alone would let one restaurant's id be paired
-    // with another's table.
-    .eq("restaurant_id", restaurantId)
-    .eq("table_id", tableId)
-    .eq("paid", false)
-    // Written off: recorded as never paid, but no longer owed by anyone.
-    .eq("written_off", false)
-    .neq("status", "pending_payment")
-    .order("created_at", { ascending: true });
+  const base = () =>
+    createAdminClient()
+      .from("orders")
+      .select(FIELDS)
+      // Both, always: the table id alone would let one restaurant's id be paired
+      // with another's table.
+      .eq("restaurant_id", restaurantId)
+      .eq("table_id", tableId)
+      // Written off: recorded as never paid, but no longer owed by anyone.
+      .eq("written_off", false)
+      .neq("status", "pending_payment")
+      .order("created_at", { ascending: true });
+
+  let owed = base().eq("paid", false);
+  // Lo ya pagado se enseña pero SIEMPRE acotado a esta comida, y ahí está la
+  // diferencia con lo que se debe: una deuda vieja es del mesero, se cobra o
+  // se condona, y por eso no lleva ventana. Lo pagado no se cobra — es
+  // contexto de la cuenta de ahora. Sin la ventana, la mesa 6 del demo abría
+  // el cobro con 25 renglones de meses pasados y un "ya pagado" de MX$1,797,
+  // que no dice nada de lo que hay en la mesa esta noche.
+  let settled = base().eq("paid", true).gte("created_at", billWindowStart().toISOString());
 
   if (audience === "diner") {
     // Their own sitting first: a phone that ordered here is owed a way to pay,
@@ -65,15 +74,21 @@ export async function fetchTableBill(
     const mine = sessionId ? await sessionAtTable(sessionId, tableId) : null;
     const session = mine ?? (await openTableSession(restaurantId, tableId));
     if (!session) return [];
-    query = query.eq("session_id", session);
+    owed = owed.eq("session_id", session);
+    settled = settled.eq("session_id", session);
   }
 
-  const { data, error } = await query;
-
+  const [owedRes, settledRes] = await Promise.all([owed, settled]);
+  const error = owedRes.error ?? settledRes.error;
   if (error) throw new Error(`Could not load the table's bill: ${error.message}`);
+
   // `pending_payment` is already excluded above — those are carts mid-Stripe,
-  // not debts. unpaidOrders drops cancelled ones.
-  return unpaidOrders((data ?? []) as Order[]);
+  // not debts. unpaidOrders drops cancelled ones; paidOrders drops those and
+  // the written-off, así que un pedido sólo cae de un lado o del otro.
+  return [
+    ...unpaidOrders((owedRes.data ?? []) as Order[]),
+    ...paidOrders((settledRes.data ?? []) as Order[]),
+  ];
 }
 
 /**
