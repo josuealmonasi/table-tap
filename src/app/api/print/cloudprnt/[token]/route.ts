@@ -9,21 +9,21 @@ export const dynamic = "force-dynamic";
 /**
  * CloudPRNT — la impresora nos habla a nosotros.
  *
- * Un navegador no puede abrir un socket ni hablar Bluetooth clásico, así que la
- * página nunca podrá mandarle nada a una impresora térmica. Estas la invierten:
- * el aparato se queda en el wifi del restaurante y nos sondea por HTTPS. No
- * corre nada en el local, no hay puente, no necesitamos su IP.
+ * A browser cannot open a socket or speak classic Bluetooth, so the page can
+ * never send anything to a thermal printer. These invert that: the device sits
+ * on the restaurant's wifi and polls us over HTTPS. Nothing runs on site, there
+ * is no bridge, and we never need its IP.
  *
- *   POST   ¿hay algo para mí?      → { jobReady }
- *   GET    dame el trabajo          → el texto de la comanda
- *   DELETE ya lo imprimí            → se cierra
+ *   POST   anything for me?      → { jobReady }
+ *   GET    give me the job       → the ticket text
+ *   DELETE printed it            → closed
  *
- * El token de la URL es toda la credencial, porque una impresora no puede
- * iniciar sesión. Por eso no compra nada más: sólo ve los trabajos de SU
- * impresora y sólo puede cerrarlos. Ver docs/printing.md.
+ * The token in the URL is the whole credential, because a printer cannot sign
+ * in. That is why it buys nothing else: it only sees ITS printer's jobs and can
+ * only close them. See docs/printing.md.
  */
 
-/** Cuánto puede tener una comanda reclamada antes de volver a la cola. */
+/** How long a claimed ticket may sit before it goes back on the queue. */
 const CLAIM_MINUTES = 2;
 
 async function printerFor(token: string) {
@@ -37,10 +37,10 @@ async function printerFor(token: string) {
   return data?.active ? data : null;
 }
 
-/** ¿Hay trabajo? Y de paso, cómo dice la impresora que se encuentra. */
+/** Any work? And, while we are here, how the printer says it is doing. */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
-  // Por token, no por IP: todas las impresoras de un local salen por la misma.
+  // By token, not by IP: every printer in one venue shares an address.
   if (await isRateLimited(`print:${token}`, 120, 60)) {
     return NextResponse.json({ jobReady: false }, { status: 429 });
   }
@@ -54,15 +54,15 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
   };
   const db = createAdminClient();
 
-  // Lo que reporta de sí misma: sin papel, tapa abierta, atascada. Se guarda
-  // para que el dueño lo vea en Ajustes en vez de adivinar por qué no sale.
+  // What it reports about itself: out of paper, lid open, jammed. Kept so the
+  // owner can see it in Settings instead of guessing why nothing comes out.
   const trouble = body.statusCode && body.statusCode !== "200 OK" ? body.statusCode : null;
   await db
     .from("printers")
     .update({ last_seen_at: new Date().toISOString(), mac: body.printerMAC ?? null, last_error: trouble })
     .eq("id", printer.id);
 
-  // Lo que alguien reclamó y no imprimió vuelve a la cola antes de mirar.
+  // Anything claimed and not printed goes back on the queue before we look.
   await db.rpc("requeue_stale_print_jobs", { p_minutes: CLAIM_MINUTES });
 
   const { data: job } = await db
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
   });
 }
 
-/** Dame la comanda. Se marca reclamada al entregarla, no antes. */
+/** Give me the ticket. Marked claimed on handing it over, not before. */
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
   const printer = await printerFor(token);
@@ -111,11 +111,11 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
 }
 
 /**
- * Ya salió.
+ * It came out.
  *
- * Si este aviso se pierde —el wifi se cae entre la hoja y el acuse— la comanda
- * vuelve a la cola y se imprime otra vez. Una hoja de más es barata; una que
- * falta le cuesta la comida a una mesa.
+ * If this acknowledgement is lost — the wifi drops between the paper and the
+ * receipt — the ticket returns to the queue and prints again. A spare sheet is
+ * cheap; a missing one costs a table its food.
  */
 export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;

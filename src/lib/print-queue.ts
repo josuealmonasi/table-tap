@@ -3,16 +3,16 @@ import { orderCode, type Order } from "@/lib/types";
 import { slipFor } from "@/lib/printing";
 
 /**
- * Pone una comanda en la cola de cada impresora activa del restaurante.
+ * Queues a ticket for every active printer at the restaurant.
  *
- * Se llama cuando el pedido llega a la cocina de verdad — al confirmarse el
- * pago, o al hacerlo si se paga al final— y nunca antes: una hoja de un pedido
- * que todavía puede no pagarse es comida que alguien empieza a preparar por
+ * Called when the order genuinely reaches the kitchen — on payment confirming,
+ * or on placing it where the table pays at the end — and never before: a sheet
+ * for an order that might still go unpaid is food somebody starts cooking for
  * nada.
  *
- * Falla en silencio a propósito. Si la impresión revienta, el pedido ya está
- * hecho y la pantalla lo muestra igual; tumbar el checkout porque una impresora
- * no responde sería cambiar una molestia por una venta perdida.
+ * Fails silently on purpose. If printing blows up the order already exists and
+ * the screen shows it anyway; taking checkout down because a printer will not
+ * answer would trade an annoyance for a lost sale.
  */
 export async function queueSlips(order: Order): Promise<number> {
   try {
@@ -33,8 +33,8 @@ export async function queueSlips(order: Order): Promise<number> {
         order_id: order.id,
         body,
       })),
-      // El mismo pedido no se encola dos veces para la misma impresora: el
-      // webhook de Stripe puede llegar repetido y eso es normal.
+      // The same order is not queued twice for the same printer: Stripe's webhook
+      // can arrive more than once, and that is normal.
       { onConflict: "order_id,printer_id", ignoreDuplicates: true },
     );
     return error ? 0 : printers.length;

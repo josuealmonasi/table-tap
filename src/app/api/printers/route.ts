@@ -8,12 +8,12 @@ import { newPrinterToken } from "@/lib/printing";
 export const runtime = "nodejs";
 
 /**
- * Alta y baja de impresoras. Del dueño: el token que devuelve es una
- * credencial de larga vida que imprime los pedidos de sus clientes.
+ * Adding and removing printers. Owner only: the token it returns is a
+ * long-lived credential that prints their customers' orders.
  *
- * Se enseña UNA vez, al crearla. Guardarlo para volver a mostrarlo sería tener
- * un secreto recuperable donde no hace falta: si se pierde, se borra la
- * impresora y se agrega otra vez. Ver docs/printing.md.
+ * Shown ONCE, on creation. Storing it to show again would be keeping a
+ * recoverable secret where none is needed: if it is lost, delete the printer
+ * and add it again. See docs/printing.md.
  */
 export async function POST(req: NextRequest) {
   const actor = await actingOwner();
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   const origin = req.headers.get("origin") ?? new URL(req.url).origin;
   return NextResponse.json({
     printer: data,
-    // Lo que se teclea en el aparato, entero, para no armarlo a mano.
+    // The whole string typed into the device, so nobody assembles it by hand.
     url: `${origin}/api/print/cloudprnt/${token}`,
   });
 }
@@ -48,7 +48,7 @@ export async function DELETE(req: NextRequest) {
   const { id } = (await req.json().catch(() => ({}))) as { id?: string };
   if (!id) return await apiError("apiErr.invalidRequest", 400);
 
-  // Acotado al restaurante de quien pide: un id de otro no encuentra nada.
+  // Scoped to the caller's restaurant: another's id finds nothing.
   const { error } = await createAdminClient()
     .from("printers")
     .delete()

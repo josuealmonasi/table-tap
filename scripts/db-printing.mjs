@@ -1,5 +1,5 @@
-// Aplica supabase/printing.sql. Separado de `pnpm db:create` porque esta rama
-// vive sin fusionar y no debe tocar el esquema principal.
+// Applies supabase/printing.sql. Kept out of `pnpm db:create` because this
+// branch lives unmerged and must not touch the main schema.
 import { readFile } from "node:fs/promises";
 import pg from "pg";
 

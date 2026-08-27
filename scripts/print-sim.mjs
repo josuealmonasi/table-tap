@@ -1,10 +1,10 @@
 // ============================================================================
-// Una impresora CloudPRNT de mentira.
+// A pretend CloudPRNT printer.
 //
-// No tenemos el aparato, así que esto se comporta como él: sondea, pide el
-// trabajo, dice que lo imprimió. Prueba NUESTRO lado del contrato entero —la
-// cola, el token, el reintento— y no prueba absolutamente nada sobre el
-// firmware de Star. Ver docs/printing.md.
+// We do not have the device, so this behaves like one: it polls, asks for the
+// job, says it printed it. It tests OUR whole side of the contract — the queue,
+// the token, the retry — and tests absolutely nothing about Star's firmware.
+// See docs/printing.md.
 //
 //   pnpm print:sim <token>
 // ============================================================================

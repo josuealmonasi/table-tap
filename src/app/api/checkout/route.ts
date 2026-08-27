@@ -366,9 +366,9 @@ export async function POST(req: NextRequest) {
     // Nothing to charge now: the order is with the kitchen and the table owes
     // for it. The bill screen picks it up from here.
     if (deferred) {
-      // Ya es de la cocina, así que la comanda sale ahora. No se espera a
-      // ningún pago: en una mesa que salda al final, o en el mostrador, ese
-      // pago llega después de comer.
+      // It belongs to the kitchen now, so the ticket goes out. It waits for no
+      // payment: at a table that settles at the end, or at the counter, that
+      // payment arrives after the meal.
       const { data: full } = await supabase.from("orders").select("*").eq("id", order.id).maybeSingle();
       if (full) await queueSlips(full as Order);
       return NextResponse.json({ orderId: order.id, deferred: true, sessionId });

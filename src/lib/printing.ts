@@ -2,17 +2,17 @@ import { randomBytes } from "node:crypto";
 import type { Order, OrderLineItem } from "@/lib/types";
 
 /**
- * La credencial de una impresora.
+ * A printer's credential.
  *
- * No puede iniciar sesión: lleva este secreto en la URL que alguien teclea una
- * vez en el aparato, así que el token ES la autenticación. 32 bytes, no un
- * uuid — un uuid son 122 bits y medio mundo los trata como adivinables.
+ * It cannot sign in: it carries this secret in the URL somebody types into the
+ * device once, so the token IS the authentication. 32 bytes rather than a uuid
+ * — a uuid is 122 bits and half the world treats them as guessable.
  */
 export function newPrinterToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
-/** Lo que ve el endpoint público. Nada que no sea un token nuestro pasa. */
+/** What the public endpoint sees. Nothing that is not one of our tokens passes. */
 export const TOKEN_SHAPE = /^[A-Za-z0-9_-]{40,64}$/;
 
 const LINE = 42; // caracteres de una hoja de 80 mm
@@ -33,10 +33,10 @@ function wrap(text: string, indent = 0): string[] {
   return out;
 }
 
-/** Un renglón del pedido, con sus opciones, extras y nota debajo. */
+/** One line of the order, with its options, extras and note underneath. */
 function itemLines(item: OrderLineItem): string[] {
-  // Envuelto, no recortado: "Ensalada de la casa con aderezo de la…" deja al
-  // cocinero adivinando cuál de las dos ensaladas es.
+  // Wrapped, not truncated: "House salad with dressing of the…" leaves the cook
+  // guessing which of the two salads it is.
   const lines = wrap(`${item.qty}x ${item.name}`);
   for (const [label, value] of Object.entries(item.mods ?? {})) {
     const shown = Array.isArray(value) ? value.join(", ") : value;
@@ -45,19 +45,19 @@ function itemLines(item: OrderLineItem): string[] {
   if (item.extras?.length) {
     lines.push(...wrap(`+ ${item.extras.map(e => e.name).join(", ")}`, 3));
   }
-  // La nota va en mayúsculas: es lo único de la hoja que alguien tiene que
-  // leer entero antes de cocinar, y una alergia perdida entre minúsculas es
-  // como se manda un plato que no se puede comer.
+  // The note goes in capitals: it is the one thing on the sheet somebody has to
+  // read in full before cooking, and an allergy lost among lowercase is how a
+  // dish nobody can eat gets sent out.
   if (item.notes) lines.push(...wrap(`** ${item.notes.toUpperCase()}`, 3));
   return lines;
 }
 
 /**
- * La comanda, en texto plano.
+ * The ticket, in plain text.
  *
- * Sin precios: la cocina no cobra, y un total en la hoja sólo invita a
- * confundirla con la cuenta. Mesa y código grandes arriba, porque es lo que se
- * grita cuando el plato sale.
+ * No prices: the kitchen does not take money, and a total on the sheet only
+ * invites confusing it with the bill. Table and code large at the top, because
+ * that is what gets shouted when the plate is up.
  */
 export function slipFor(order: Order, code: string, now = new Date()): string {
   const hour = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
@@ -74,8 +74,8 @@ export function slipFor(order: Order, code: string, now = new Date()): string {
   if (order.note) {
     lines.push("-".repeat(LINE), ...wrap(`NOTA: ${order.note.toUpperCase()}`));
   }
-  // Un pedido sin pagar no debe entregarse sin cobrar, y quien está en el pase
-  // no tiene la pantalla de cuentas delante.
+  // An unpaid order must not be handed over uncollected, and whoever is on the
+  // pass does not have the bills screen in front of them.
   if (order.paid === false) {
     lines.push("-".repeat(LINE), "** NO PAGADO — COBRAR AL ENTREGAR");
   }

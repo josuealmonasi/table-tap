@@ -116,8 +116,8 @@ export async function POST(req: NextRequest) {
         })
         .eq("id", orderId);
 
-      // Ahora sí es de la cocina: el dinero está confirmado. Antes de esto la
-      // hoja sería de un pedido que todavía puede no pagarse.
+      // Now it really is the kitchen's: the money is confirmed. Before this the
+      // sheet would be for an order that might still go unpaid.
       const { data: full } = await supabase
         .from("orders")
         .select("*")
