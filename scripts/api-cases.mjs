@@ -34,6 +34,13 @@ async function staffId(fx) {
   return data?.id ?? "";
 }
 
+async function dietaryTagId(fx) {
+  const { data } = await fx.admin
+    .from("dietary_tags").select("id").eq("restaurant_id", fx.restaurant.id)
+    .eq("key", `${MARK}_dieta`).maybeSingle();
+  return data?.id ?? "";
+}
+
 async function iconGroupId(fx) {
   const { data } = await fx.admin
     .from("icon_groups").select("id").eq("restaurant_id", fx.restaurant.id)
@@ -101,6 +108,14 @@ export function cases(fx) {
       body: async f => ({ id: await couponId(f), active: false }), expect: [200] },
     { name: "DELETE /api/coupons", as: "manager", method: "DELETE", path: "/api/coupons",
       body: async f => ({ id: await couponId(f) }), expect: [200] },
+    { name: "POST /api/dietary-tags (crear)", as: "manager", method: "POST", path: "/api/dietary-tags",
+      body: { label: `${MARK} dieta`, labelEn: "apicheck diet", emoji: "🍬" },
+      expect: [200], check: d => Boolean(d.id) || "no devolvió el id de la etiqueta" },
+    { name: "PATCH /api/dietary-tags (renombrar)", as: "manager", method: "PATCH", path: "/api/dietary-tags",
+      body: async f => ({ id: await dietaryTagId(f), label: `${MARK} dieta`, emoji: "🍭" }),
+      expect: [200] },
+    { name: "DELETE /api/dietary-tags", as: "manager", method: "DELETE", path: "/api/dietary-tags",
+      body: async f => ({ id: await dietaryTagId(f) }), expect: [200] },
     { name: "POST /api/icon-groups (crear)", as: "manager", method: "POST", path: "/api/icon-groups",
       body: { name: `${MARK} iconos`, variant: "addon", icons: [{ emoji: "🌮" }, { emoji: "🌶️" }] },
       expect: [200], check: d => Boolean(d.id) || "no devolvió el id del grupo" },

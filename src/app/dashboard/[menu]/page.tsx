@@ -6,6 +6,7 @@ import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { menuSlug } from "@/lib/slug";
 import type { Menu } from "@/lib/types";
 import type { StoredIconGroup } from "@/lib/icon-groups";
+import type { StoredDietaryTag } from "@/lib/dietary";
 import { currentUser } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,7 @@ export default async function MenuEditorPage({
 
   // Los grupos propios del selector de iconos viajan con el editor: son suyos,
   // y la RLS ya sólo deja ver los del restaurante de quien pide.
-  const [{ data: menus }, { data: iconGroups }] = await Promise.all([
+  const [{ data: menus }, { data: iconGroups }, { data: dietary }] = await Promise.all([
     supabase
       .from("menus")
       .select("*")
@@ -40,6 +41,11 @@ export default async function MenuEditorPage({
       .select(
         "id, variant, name, sort_order, items:icon_group_items(emoji, label, sort_order)",
       )
+      .eq("restaurant_id", restaurant.id)
+      .order("sort_order"),
+    supabase
+      .from("dietary_tags")
+      .select("id, key, label, label_en, emoji, sort_order")
       .eq("restaurant_id", restaurant.id)
       .order("sort_order"),
   ]);
@@ -54,6 +60,7 @@ export default async function MenuEditorPage({
         menuId={menu.id}
         menuName={menu.name}
         iconGroups={(iconGroups as StoredIconGroup[]) ?? []}
+        dietaryTags={(dietary as StoredDietaryTag[]) ?? []}
       />
     </ConfirmProvider>
   );

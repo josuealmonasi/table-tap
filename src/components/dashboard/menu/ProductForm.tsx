@@ -4,8 +4,9 @@ import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import type { MenuItem, Modifier } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
-import { DIETARY_TAGS } from "@/lib/dietary";
-import { useT } from "@/lib/i18n/context";
+import { tagLabel } from "@/lib/dietary";
+import { useDietaryTags } from "@/components/DietaryTagsContext";
+import { useT, useLocale } from "@/lib/i18n/context";
 import { useDirty } from "@/hooks/useDirty";
 import IconPicker from "./IconPicker";
 import ModifiersEditor from "./ModifiersEditor";
@@ -37,6 +38,8 @@ export default function ProductForm({
   onCancel,
 }: ProductFormProps) {
   const t = useT();
+  const { locale: lang } = useLocale();
+  const dietaryOptions = useDietaryTags();
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [price, setPrice] = useState(String(initial?.price ?? ""));
@@ -199,14 +202,14 @@ export default function ProductForm({
           </span>
         </div>
         <div className="tt-chips">
-          {DIETARY_TAGS.map(tag => (
+          {dietaryOptions.map(tag => (
             <button
               type="button"
               key={tag.key}
               className={`tt-chip ${dietary.includes(tag.key) ? "tt-chip-on" : ""}`}
               onClick={() => toggleDietary(tag.key)}
             >
-              {tag.emoji} {t(`dietary.${tag.key}`)}
+              {tag.emoji} {tagLabel(tag, t, lang)}
             </button>
           ))}
         </div>
