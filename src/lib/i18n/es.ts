@@ -330,6 +330,8 @@ myBill: "Ver mi cuenta",
     nothing: "Esta mesa no debe nada.",
   },
   cart: {
+    payLaterOnlyHint: "Ordena ahora y paga tu cuenta al final, en la mesa.",
+    counterOnlyHint: "Ordena ahora y pasa a la caja con tu código.",
     noCardYet: "Este restaurante todavía no cobra con tarjeta aquí.",
     orderCounter: "Pagar en la caja",
     counterHint: "Paga ahora y sáltate la fila, o pasa a la caja con tu código.",
@@ -933,6 +935,9 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     optional: "(opcional)",
   },
   dash: {
+    noCardsConnected: "Tus clientes no pueden pagar en línea: aún no conectas tu cuenta de Stripe. Mientras tanto sólo verán las opciones de pagar en la mesa o en la caja.",
+    noPaymentAtAll: "Ahora mismo nadie puede ordenar: no hay cuenta de Stripe conectada y los dos interruptores de pago están apagados. Conecta Stripe o enciende uno de los dos.",
+    fixInPayments: "Ir a Pagos",
     dealsTabTitle: "Pestaña de combos y ofertas",
     dealsTabHint: "Agrupa combos, rebajas y promociones en su propia pestaña del menú, para que el cliente las encuentre. Aparece sola cuando hay algo que mostrar.",
     cashier: "Cajero",

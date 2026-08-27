@@ -5,6 +5,7 @@ import type { CartItem } from "@/hooks/useCart";
 import type { MenuItem } from "@/lib/types";
 import type { AppliedCoupon, ItemPromoSaving, PromoHint } from "@/lib/pricing";
 import { formatMoney } from "@/lib/format";
+import { canOrder, paymentHintKey, paymentOptions } from "@/lib/payment-options";
 import { useT } from "@/lib/i18n/context";
 import NoteField from "./NoteField";
 import CartLineRow from "./CartLineRow";
@@ -101,6 +102,16 @@ export default function CartScreen({
   // 0 when the fee is switched off, so the totals card doesn't render an empty
   // "Service (10%) — $0.00" row for a fee nobody is being charged.
   const effectiveServicePct = restaurant.service_enabled ? restaurant.service_pct : 0;
+
+  // Las tres banderas ya vienen resueltas para esta pantalla —de mesa o del QR
+  // general— así que aquí sólo se juntan. `atTable` va en true porque quien
+  // decide si "pagar al final" aplica es OrderingApp, que sí sabe si hay mesa.
+  const pay = paymentOptions({
+    cardsEnabled,
+    allowPayLater: payLaterAllowed,
+    allowCounterPayment: counterAllowed,
+    atTable: true,
+  });
   return (
     <div className="tt-root">
       <div className="tt-header">
@@ -230,7 +241,7 @@ export default function CartScreen({
               {/* Sin cuenta de Stripe conectada no hay pago con tarjeta, y
                   ofrecerlo como acción principal sólo lleva a un 409 después
                   de tocarlo. Cuando hay otra forma de pagar, ésa manda. */}
-              {cardsEnabled && (
+              {pay.payNow && (
                 <button
                   className="tt-btn tt-btn-primary tt-btn-lg"
                   style={{ width: "100%" }}
@@ -246,10 +257,10 @@ export default function CartScreen({
                   is the plain second option under it. Before this the setting
                   decided for them, so a table that allowed settling later gave
                   the diner no way to pay at all. */}
-              {(payLaterAllowed || counterAllowed) && (
+              {(pay.payLater || pay.payCounter) && (
                 <button
-                  className={`tt-btn tt-btn-lg ${cardsEnabled ? "tt-btn-outline" : "tt-btn-primary"}`}
-                  style={{ width: "100%", marginTop: cardsEnabled ? 10 : 0 }}
+                  className={`tt-btn tt-btn-lg ${pay.payNow ? "tt-btn-outline" : "tt-btn-primary"}`}
+                  style={{ width: "100%", marginTop: pay.payNow ? 10 : 0 }}
                   disabled={!canCheckout || loading}
                   onClick={() => onCheckout(true)}
                 >
@@ -260,7 +271,7 @@ export default function CartScreen({
                   {t(
                     loading
                       ? "cart.placingOrder"
-                      : payLaterAllowed
+                      : pay.payLater
                         ? "cart.orderPayLater"
                         : "cart.orderCounter",
                   )}
@@ -274,23 +285,22 @@ export default function CartScreen({
                 className="tt-muted"
                 style={{ textAlign: "center", fontSize: 12, marginTop: 12 }}
               >
-                {!cardsEnabled && !payLaterAllowed && !counterAllowed ? (
-                  t("cart.noCardYet")
-                ) : payLaterAllowed || counterAllowed ? (
-                  <>
-                    <BillIcon size={12} weight="bold" style={{ verticalAlign: "-1px" }} />{" "}
-                    {t(payLaterAllowed ? "cart.payNowHint" : "cart.counterHint")}
-                  </>
-                ) : (
-                  <>
-                    <SecureIcon
-                      size={12}
-                      weight="bold"
-                      style={{ verticalAlign: "-1px" }}
-                    />{" "}
-                    {t("cart.securedBy")}
-                  </>
-                )}
+                {/* Lo que dice aquí abajo nombra SÓLO los botones que están
+                    arriba. Antes se decidía por `payLaterAllowed` a secas, así
+                    que una mesa sin Stripe conectado leía "Paga ahora con
+                    tarjeta, o deja la cuenta abierta" debajo de una pantalla
+                    donde lo de la tarjeta no existía. */}
+                {(() => {
+                  const key = paymentHintKey(pay);
+                  if (!canOrder(pay)) return t(key);
+                  const Icon = pay.payNow && !pay.payLater && !pay.payCounter ? SecureIcon : BillIcon;
+                  return (
+                    <>
+                      <Icon size={12} weight="bold" style={{ verticalAlign: "-1px" }} />{" "}
+                      {t(key)}
+                    </>
+                  );
+                })()}
               </p>
             </div>
           </>

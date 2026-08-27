@@ -59,7 +59,9 @@ export default function PaymentsCard() {
   }
 
   return (
-    <div className="tt-section">
+    // `id` para que el aviso de los interruptores pueda mandar aquí: quien lee
+    // "no puedes cobrar en línea" necesita llegar al botón que lo arregla.
+    <div className="tt-section" id="pagos">
       <div className="tt-section-head">
         <h3 className="tt-serif" style={{ margin: 0 }}>
           {t("dash.payments")}

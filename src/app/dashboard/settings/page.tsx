@@ -17,6 +17,13 @@ export default async function SettingsPage() {
   const plan = await getPlan(membership.restaurant.id);
   const counterPay = plan ? can(plan.limits, "counterPayment") : false;
 
+  // Lo mismo que calcula el menú del comensal, para que Ajustes pueda decirle
+  // al dueño exactamente lo que su cliente está viendo. Sin esto, encendía
+  // "pagar al final" y nadie le avisaba de que el pago en línea no existía.
+  const cardsEnabled = Boolean(
+    membership.restaurant.stripe_account_id && membership.restaurant.stripe_charges_enabled,
+  );
+
   // ConfirmProvider so the coupons panel can ask before deleting a code.
   return (
     <ConfirmProvider>
@@ -24,6 +31,7 @@ export default async function SettingsPage() {
         restaurant={membership.restaurant}
         role={membership.role}
         counterPayAllowed={counterPay}
+        cardsEnabled={cardsEnabled}
       />
     </ConfirmProvider>
   );
