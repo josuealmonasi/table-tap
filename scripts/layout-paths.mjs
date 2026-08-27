@@ -75,6 +75,7 @@ export const DIALOGS = {
     { name: "nuevo producto", text: "Agregar producto" },
     { name: "nuevo extra", text: "Agregar extra" },
     { name: "nuevo grupo de iconos", text: "Agregar grupo" },
+    { name: "nueva etiqueta de dieta", text: "Agregar etiqueta" },
   ],
   "/dashboard/staff": [
     // El botón dice lo que hace —"Enviar invitación"— no "Agregar".

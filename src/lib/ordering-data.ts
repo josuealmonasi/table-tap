@@ -6,6 +6,7 @@ import { buildCombos, toCartPromos, type Combo } from "@/lib/promotions";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
 import type { CartPromo } from "@/lib/pricing";
 import { mailConfigured } from "@/lib/mail";
+import type { StoredDietaryTag } from "@/lib/dietary";
 import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
 
@@ -30,6 +31,8 @@ export interface OrderingData {
    * offer is a promise the app can't keep, so it isn't made.
    */
   receipts: boolean;
+  /** Las etiquetas de dieta del restaurante — la lista es suya, no del código. */
+  dietaryTags: StoredDietaryTag[];
 }
 
 // Sentinel so an `.in("menu_id", [])` never matches (a restaurant with no active menus).
@@ -115,7 +118,7 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
   // en esperar diez veces de ida y vuelta. Las promociones, las calificaciones
   // y el plan no dependen de ninguna otra, así que no tienen por qué esperar
   // su turno.
-  const [menusRes, zoneRes, promotions, statsRes, plan] = await Promise.all([
+  const [menusRes, zoneRes, promotions, statsRes, plan, dietaryRes] = await Promise.all([
     supabase
       .from("menus")
       .select("id, active, schedule")
@@ -124,6 +127,13 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
     fetchPromotions(supabase, restaurantId, { activeOnly: true }),
     supabase.rpc("dish_rating_stats", { p_restaurant_id: restaurantId }),
     getPlan(restaurantId),
+    // Las etiquetas de dieta no dependen de nada más, así que viajan con este
+    // primer grupo en vez de costar otra ida y vuelta.
+    supabase
+      .from("dietary_tags")
+      .select("id, key, label, label_en, emoji, sort_order")
+      .eq("restaurant_id", restaurantId)
+      .order("sort_order"),
   ]);
   const menuRows = (menusRes.data as MenuOpenState[] | null) ?? [];
   const timeZone =
@@ -225,6 +235,7 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
   return {
     closedNow,
     receipts: mailConfigured(),
+    dietaryTags: (dietaryRes.data as StoredDietaryTag[] | null) ?? [],
     restaurant,
     categories,
     items,

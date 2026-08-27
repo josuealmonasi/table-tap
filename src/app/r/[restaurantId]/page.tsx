@@ -24,6 +24,7 @@ async function Menu({ restaurantId }: { restaurantId: string }) {
       ratings={data.ratings}
       closedNow={data.closedNow}
       receipts={data.receipts}
+      dietaryTags={data.dietaryTags}
     />
   );
 }

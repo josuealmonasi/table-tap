@@ -64,6 +64,15 @@ for (const col of ["founding_number", "subscribed_price", "stripe_account_id", "
   else bad(`can read restaurants.${col}`);
 }
 
+// Las etiquetas de dieta sí son públicas: salen en el platillo y filtran el
+// menú. Lo que se prueba aquí es que se puedan leer — si el permiso se cayera,
+// la carta perdería los alérgenos sin que nada se quejara.
+{
+  const { data, error } = await anon.from("dietary_tags").select("key, label, emoji").limit(1);
+  if (!error && data?.length) ok("reads the dietary tags the menu shows");
+  else bad(`cannot read dietary_tags (${error?.message ?? "sin filas"})`);
+}
+
 // ── 2. Privileged functions ────────────────────────────────────────────────
 console.log("\nFunctions only the server may call");
 for (const [fn, args] of [
@@ -123,6 +132,9 @@ for (const [method, path, body] of [
   ["POST", "/api/coupons", { code: "AAA-BBB", kind: "percent", value: 10 }],
   ["POST", "/api/staff", { email: "x@y.z", role: "owner" }],
   ["PATCH", "/api/orders", { id: crypto.randomUUID(), status: "ready" }],
+  ["POST", "/api/dietary-tags", { label: "colado" }],
+  ["PATCH", "/api/dietary-tags", { id: crypto.randomUUID(), label: "colado" }],
+  ["DELETE", "/api/dietary-tags", { id: crypto.randomUUID() }],
   ["POST", "/api/icon-groups", { name: "colado", variant: "addon", icons: [{ emoji: "🌮" }] }],
   ["PATCH", "/api/icon-groups", { id: crypto.randomUUID(), name: "colado" }],
   ["DELETE", "/api/icon-groups", { id: crypto.randomUUID() }],
@@ -276,6 +288,34 @@ if (!signIn.error && theirs) {
     `${mine.name} cannot read ${theirs.name}'s icon group items`,
     await asUser.from("icon_group_items").select("emoji").eq("group_id", victim.id).limit(1),
   );
+
+  // ── Las etiquetas de dieta del vecino ──────────────────────────────────
+  // Son públicas de leer, pero de nadie más para escribir. Y una baja se lleva
+  // por delante la etiqueta de los platillos, así que un id ajeno que pasara
+  // el filtro despegaría etiquetas de una carta que no es suya.
+  const { data: theirTag } = await admin
+    .from("dietary_tags").select("id, key, label")
+    .eq("restaurant_id", theirs.id).limit(1).maybeSingle();
+
+  if (theirTag) {
+    const renameTag = await fetch(BASE + "/api/dietary-tags", {
+      method: "PATCH", headers: { "Content-Type": "application/json", cookie },
+      body: JSON.stringify({ id: theirTag.id, label: "secuestrada" }),
+    });
+    const { data: tagAfter } = await admin
+      .from("dietary_tags").select("label").eq("id", theirTag.id).maybeSingle();
+    if (tagAfter?.label === theirTag.label) ok(`cannot rename another restaurant's dietary tag (${renameTag.status})`);
+    else bad(`renamed another restaurant's dietary tag (${renameTag.status})`);
+
+    const dropTag = await fetch(BASE + "/api/dietary-tags", {
+      method: "DELETE", headers: { "Content-Type": "application/json", cookie },
+      body: JSON.stringify({ id: theirTag.id }),
+    });
+    const { data: tagStill } = await admin
+      .from("dietary_tags").select("id").eq("id", theirTag.id).maybeSingle();
+    if (tagStill) ok(`cannot delete another restaurant's dietary tag (${dropTag.status})`);
+    else bad(`deleted another restaurant's dietary tag (${dropTag.status})`);
+  }
 
   // Se recoge la sonda: nada de lo que crea esta revisión se queda.
   await admin.from("icon_groups").delete().eq("id", victim.id);

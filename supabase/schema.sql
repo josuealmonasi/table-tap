@@ -1055,6 +1055,84 @@ create policy "team manages icon group items" on icon_group_items for all
 revoke all on icon_groups from anon;
 revoke all on icon_group_items from anon;
 
+-- ── Etiquetas de dieta y alérgenos ──────────────────────────────────────────
+-- Ocho venían fijas en el código. Un restaurante vegano quiere "crudivegano" y
+-- una marisquería no necesita "contiene mariscos" en todo el menú, así que
+-- ahora la lista es suya: agrega, renombra y quita.
+--
+-- Sí las lee el comensal —las etiquetas salen en el platillo y filtran el
+-- menú—, así que a diferencia de los grupos de iconos, `anon` sí las lee.
+create table if not exists dietary_tags (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  -- El identificador que se guarda dentro del platillo. Estable: renombrar la
+  -- etiqueta no debe despegarla de los platillos que ya la traen.
+  key           text not null,
+  label         text not null,
+  -- Opcional. Las ocho de casa se traducen por su `key`; una etiqueta que el
+  -- restaurante inventó sólo existe en sus palabras, y sin esto un comensal en
+  -- inglés leería español a media carta.
+  label_en      text,
+  emoji         text not null default '🏷️',
+  sort_order    int not null default 0,
+  created_at    timestamptz not null default now()
+);
+create unique index if not exists dietary_tags_key_idx
+  on dietary_tags(restaurant_id, key);
+create index if not exists dietary_tags_restaurant_idx
+  on dietary_tags(restaurant_id, sort_order);
+
+alter table dietary_tags enable row level security;
+
+drop policy if exists "public read dietary tags" on dietary_tags;
+create policy "public read dietary tags" on dietary_tags for select using (true);
+
+drop policy if exists "team manages dietary tags" on dietary_tags;
+create policy "team manages dietary tags" on dietary_tags for all
+  using (has_role(restaurant_id, array['manager']))
+  with check (has_role(restaurant_id, array['manager']));
+
+-- El bloqueo general de `anon` corre mucho antes que esta tabla, así que el
+-- permiso se vuelve a dar aquí.
+grant select on dietary_tags to anon;
+
+-- Las ocho de siempre, para que nadie empiece con la lista vacía. `key` es la
+-- misma que traía el código, así que los platillos existentes no se despegan
+-- de la suya y las traducciones siguen sirviendo.
+create or replace function public.seed_dietary_tags(p_restaurant uuid)
+returns void language sql as $$
+  insert into dietary_tags (restaurant_id, key, label, label_en, emoji, sort_order)
+  select p_restaurant, d.key, d.label, d.label_en, d.emoji, d.ord
+    from (values
+      ('vegetarian',  'Vegetariano',        'Vegetarian',        '🥗', 0),
+      ('vegan',       'Vegano',             'Vegan',             '🌱', 1),
+      ('gluten_free', 'Sin gluten',         'Gluten-free',       '🌾', 2),
+      ('dairy_free',  'Sin lácteos',        'Dairy-free',        '🥛', 3),
+      ('nut_free',    'Sin frutos secos',   'Nut-free',          '🥜', 4),
+      ('halal',       'Halal',              'Halal',             '☪️', 5),
+      ('spicy',       'Picante',            'Spicy',             '🌶️', 6),
+      ('seafood',     'Contiene mariscos',  'Contains seafood',  '🦐', 7)
+    ) as d(key, label, label_en, emoji, ord)
+   on conflict (restaurant_id, key) do nothing;
+$$;
+
+-- Por disparador y no desde la ruta de alta: así las siembran todos los
+-- caminos que crean un restaurante —el registro, los datos de prueba, una
+-- semilla a mano— y ninguno puede olvidarse.
+create or replace function public.seed_dietary_tags_on_new_restaurant()
+returns trigger language plpgsql as $$
+begin
+  perform public.seed_dietary_tags(new.id);
+  return new;
+end; $$;
+
+drop trigger if exists seed_dietary_tags_trg on restaurants;
+create trigger seed_dietary_tags_trg after insert on restaurants
+  for each row execute function public.seed_dietary_tags_on_new_restaurant();
+
+-- Y los que ya existían.
+select public.seed_dietary_tags(id) from restaurants;
+
 -- ── Subscription plans ──────────────────────────────────────────────────────
 -- What each tier unlocks, and what it costs. Reference data, not per-tenant:
 -- one row per plan, seeded here so the database is the single answer to "how

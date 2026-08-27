@@ -470,6 +470,18 @@ export async function seedMock(pg) {
       icons.map(([emoji, label], i) => [group.id, emoji, label, i]));
   }
 
+  // Las ocho de casa las siembra la base al crear el restaurante. Estas dos
+  // son suyas: es lo que enseña que la lista se puede ampliar.
+  await bulkInsert(
+    pg,
+    "dietary_tags",
+    ["restaurant_id", "key", "label", "label_en", "emoji", "sort_order"],
+    [
+      [rid, "sin_azucar", "Sin azúcar", "Sugar-free", "🍬", 8],
+      [rid, "de_la_casa", "Receta de la casa", "House recipe", "👩‍🍳", 9],
+    ],
+  );
+
   const forPromo = sample(products, 5);
   const {
     rows: [combo],
