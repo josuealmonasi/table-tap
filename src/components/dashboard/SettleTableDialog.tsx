@@ -8,6 +8,7 @@ import type { WriteOffReason } from "@/lib/write-off";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
+import { PAID_LINES_SHOWN } from "@/lib/table-bill";
 import { tableBill } from "@/lib/table-bill";
 import type { Order } from "@/lib/types";
 
@@ -48,6 +49,8 @@ export default function SettleTableDialog({
 }: SettleTableDialogProps) {
   const t = useT();
   const toast = useToast();
+  // Plegado de entrada: lo pagado es referencia, el total es a lo que vino.
+  const [showPaid, setShowPaid] = useState(false);
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
@@ -143,6 +146,39 @@ export default function SettleTableDialog({
               {item.qty}× {item.emoji} {item.name}
             </div>
           ))}
+
+          {/* Lo que alguien de la mesa ya pagó con tarjeta. Va aparte y sin
+              sumar: el mesero necesita saber que ese plato no se cobra, y
+              esconderlo es justo lo que lleva a cobrarlo dos veces. */}
+          {bill.paid.orders.length > 0 && (
+            <div className="tt-bill-settled" style={{ marginTop: 10 }}>
+              <button
+                type="button"
+                className="tt-mod-label tt-paid-toggle"
+                aria-expanded={showPaid}
+                onClick={() => setShowPaid(v => !v)}
+              >
+                {t("settle.alreadyPaid", {
+                  amount: formatMoney(bill.paid.total, currency),
+                })}
+                {bill.paid.items.length > PAID_LINES_SHOWN && (
+                  <span className="tt-muted">
+                    {" "}
+                    {t(showPaid ? "settle.hideLines" : "settle.showLines", {
+                      n: bill.paid.items.length,
+                    })}
+                  </span>
+                )}
+              </button>
+              {(showPaid ? bill.paid.items : bill.paid.items.slice(0, PAID_LINES_SHOWN)).map(
+                (item, i) => (
+                  <div key={i} className="tt-muted tt-subline" style={{ fontSize: 13 }}>
+                    {item.qty}× {item.emoji} {item.name}
+                  </div>
+                ),
+              )}
+            </div>
+          )}
 
           <div className="tt-bill-total tt-row">
             <strong>{t("settle.total")}</strong>

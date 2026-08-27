@@ -53,6 +53,16 @@ export interface TableBill {
   mine: BillSide;
   /** Placed from other phones at the same table. */
   others: BillSide;
+  /**
+   * Ya pagado en esta mesa, y por eso fuera del total.
+   *
+   * Se enseña, no se cobra. Donde la mesa liquida al final, un comensal puede
+   * pagar su plato con tarjeta mientras los demás dejan la cuenta abierta: si
+   * lo pagado desaparece, el mesero mira la mesa y no ve ni rastro de que
+   * alguien ya pagó, y el que pagó no tiene con qué demostrarlo. Aparece
+   * tachado, con su sello, y sin sumar.
+   */
+  paid: BillSide;
   /** Everything outstanding — what "pay the lot" settles. */
   total: number;
   /** Everything already taken off the table's bill. */
@@ -70,6 +80,16 @@ export interface TableBill {
  */
 export function unpaidOrders(orders: Order[]): Order[] {
   return orders.filter(o => !o.paid && !o.written_off && o.status !== "cancelled");
+}
+
+/**
+ * Lo que ya se pagó en esta mesa.
+ *
+ * Cancelado no, porque nunca se sirvió. Condonado tampoco: se sirvió y nadie
+ * lo cobró, y ponerlo junto a lo pagado diría que entró dinero que no entró.
+ */
+export function paidOrders(orders: Order[]): Order[] {
+  return orders.filter(o => o.paid && !o.written_off && o.status !== "cancelled");
 }
 
 function side(orders: Order[]): BillSide {
@@ -99,6 +119,7 @@ export function tableBill(orders: Order[], myOrderIds: string[]): TableBill {
   return {
     mine,
     others,
+    paid: side(paidOrders(orders)),
     total: round2(mine.total + others.total),
     discount: round2(mine.discount + others.discount),
     settled: owed.length === 0,
@@ -120,6 +141,16 @@ export function ordersToPay(bill: TableBill, scope: "all" | "mine"): Order[] {
 export function canPayMineOnly(bill: TableBill): boolean {
   return bill.mine.orders.length > 0 && bill.others.orders.length > 0;
 }
+
+/**
+ * Cuántos renglones ya pagados se enseñan antes de plegarlos.
+ *
+ * Lo pagado es referencia, no es lo que se viene a cobrar. Una lista larga
+ * encima del total empuja fuera de la pantalla justo el número que el mesero
+ * abrió el diálogo para leer, así que a partir de aquí se resume y se abre a
+ * pulsación. Tres cabe sin estorbar.
+ */
+export const PAID_LINES_SHOWN = 3;
 
 /** A table with money outstanding, for the floor's own view of who owes what. */
 export interface OpenTable {

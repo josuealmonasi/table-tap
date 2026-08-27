@@ -4,7 +4,13 @@ import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
-import { canPayMineOnly, ordersToPay, type BillSide, type TableBill } from "@/lib/table-bill";
+import {
+  canPayMineOnly,
+  ordersToPay,
+  PAID_LINES_SHOWN,
+  type BillSide,
+  type TableBill,
+} from "@/lib/table-bill";
 import { applyCoupon, itemSalePrice } from "@/lib/pricing";
 import { rememberSettling } from "@/hooks/useReceiptOffer";
 import type { AppliedCoupon } from "@/lib/pricing";
@@ -83,19 +89,40 @@ function Section({
   side,
   currency,
   photoOf,
+  settled = false,
+  collapsible = false,
 }: {
   heading: string;
   side: BillSide;
   currency: string;
   photoOf: (itemId: string) => string | null;
+  /** Ya pagado: se enseña apagado y no entra en ninguna suma. */
+  settled?: boolean;
+  /** Se resume cuando son muchos renglones, para no empujar el total fuera. */
+  collapsible?: boolean;
 }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
   if (side.orders.length === 0) return null;
+  const foldable = collapsible && side.items.length > PAID_LINES_SHOWN;
+  const shown = foldable && !open ? side.items.slice(0, PAID_LINES_SHOWN) : side.items;
   return (
-    <>
+    <div className={settled ? "tt-bill-settled" : undefined}>
       <div className="tt-mod-label" style={{ marginTop: 4 }}>
         {heading}
+        {settled && <span className="tt-badge tt-badge-green">{"\u2713"}</span>}
+        {foldable && (
+          <button
+            type="button"
+            className="tt-linkbtn"
+            aria-expanded={open}
+            onClick={() => setOpen(v => !v)}
+          >
+            {t(open ? "bill.hideLines" : "bill.showLines", { n: side.items.length })}
+          </button>
+        )}
       </div>
-      {side.items.map((item, i) => (
+      {shown.map((item, i) => (
         <BillLine
           key={i}
           name={item.name}
@@ -108,7 +135,7 @@ function Section({
           currency={currency}
         />
       ))}
-    </>
+    </div>
   );
 }
 
@@ -230,6 +257,19 @@ export default function BillSheet({
             side={bill.others}
             currency={currency}
             photoOf={photoOf}
+          />
+          {/* Lo ya pagado se queda a la vista y fuera del total: el que pagó su
+              plato con tarjeta necesita verlo, y el resto de la mesa necesita
+              entender por qué no se lo están cobrando. */}
+          <Section
+            heading={t("bill.alreadyPaid", {
+              amount: formatMoney(bill.paid.total, currency),
+            })}
+            side={bill.paid}
+            currency={currency}
+            photoOf={photoOf}
+            settled
+            collapsible
           />
 
           {/* Paying for the table or only for yourself changes what the totals
