@@ -47,6 +47,7 @@ for (const table of [
   "orders", "table_sessions", "write_off_requests", "discount_requests",
   "coupons", "coupon_redemptions", "staff", "user_logs", "profiles",
   "platform_admins", "rate_limits", "restaurant_tables",
+  "icon_groups", "icon_group_items",
 ]) {
   verdict(`cannot read ${table}`, await anon.from(table).select("*").limit(1));
 }
@@ -95,7 +96,7 @@ const signIn = owner
 if (signIn.error) {
   console.log(`  SKIPPED  could not sign in as ${owner?.email ?? "an owner"} (${signIn.error.message})`);
 } else {
-  for (const table of ["orders", "table_sessions", "write_off_requests", "discount_requests", "coupons", "user_logs", "staff"]) {
+  for (const table of ["orders", "table_sessions", "write_off_requests", "discount_requests", "coupons", "user_logs", "staff", "icon_groups"]) {
     verdict(
       `${mine.name} cannot read ${theirs.name}'s ${table}`,
       await asUser.from(table).select("id").eq("restaurant_id", theirs.id).limit(1),
@@ -122,6 +123,9 @@ for (const [method, path, body] of [
   ["POST", "/api/coupons", { code: "AAA-BBB", kind: "percent", value: 10 }],
   ["POST", "/api/staff", { email: "x@y.z", role: "owner" }],
   ["PATCH", "/api/orders", { id: crypto.randomUUID(), status: "ready" }],
+  ["POST", "/api/icon-groups", { name: "colado", variant: "addon", icons: [{ emoji: "🌮" }] }],
+  ["PATCH", "/api/icon-groups", { id: crypto.randomUUID(), name: "colado" }],
+  ["DELETE", "/api/icon-groups", { id: crypto.randomUUID() }],
 ]) {
   const res = await fetch(BASE + path, {
     method,
@@ -203,6 +207,78 @@ if (!signIn.error && theirs) {
     if (r6.status >= 400) ok(`checkout refuses pay-at-counter where it is off (${r6.status})`);
     else bad(`checkout allowed pay-at-counter where it is off (${r6.status})`);
   }
+}
+
+
+// ── Los grupos de iconos, del restaurante que los hizo ───────────────────────
+// Los escribe la llave de servicio, que salta la RLS: lo único que separa un
+// grupo de otro dueño es el `.eq("restaurant_id")` de la ruta. Y PostgREST no
+// se queja cuando un filtro no encuentra nada, así que aquí no basta con leer
+// el status — hay que volver a mirar la fila y ver que sigue como estaba.
+if (!signIn.error && theirs) {
+  console.log("\nIcon groups belonging to the restaurant next door");
+  const cookie = `sb-${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0]}-auth-token=base64-${Buffer.from(JSON.stringify(signIn.data.session)).toString("base64")}`;
+
+  const { data: victim } = await admin
+    .from("icon_groups")
+    .insert({ restaurant_id: theirs.id, variant: "addon", name: "sonda-rls", sort_order: 99 })
+    .select("id, name")
+    .single();
+  await admin.from("icon_group_items").insert({ group_id: victim.id, emoji: "🌮", sort_order: 0 });
+
+  const call = async (method, body) => {
+    const res = await fetch(BASE + "/api/icon-groups", {
+      method, headers: { "Content-Type": "application/json", cookie },
+      body: JSON.stringify(body),
+    });
+    return res.status;
+  };
+
+  const renamed = await call("PATCH", { id: victim.id, name: "secuestrado" });
+  const { data: afterPatch } = await admin
+    .from("icon_groups").select("name").eq("id", victim.id).maybeSingle();
+  if (afterPatch?.name === "sonda-rls") ok(`cannot rename another restaurant's icon group (${renamed})`);
+  else bad(`renamed another restaurant's icon group (${renamed})`);
+
+  const removed = await call("DELETE", { id: victim.id });
+  const { data: afterDelete } = await admin
+    .from("icon_groups").select("id").eq("id", victim.id).maybeSingle();
+  if (afterDelete) ok(`cannot delete another restaurant's icon group (${removed})`);
+  else bad(`deleted another restaurant's icon group (${removed})`);
+
+  // La cocina no toca la carta: la ruta pide gerencia, no sólo sesión.
+  const kitchen = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  );
+  const kSignIn = await kitchen.auth.signInWithPassword({
+    email: "demo-kitchen@tabletap.dev", password: "demo123",
+  });
+  if (!kSignIn.error) {
+    const kCookie = `sb-${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0]}-auth-token=base64-${Buffer.from(JSON.stringify(kSignIn.data.session)).toString("base64")}`;
+    const res = await fetch(BASE + "/api/icon-groups", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: kCookie },
+      body: JSON.stringify({ name: "cocina", variant: "addon", icons: [{ emoji: "🌮" }] }),
+    });
+    if (res.status === 403) ok("kitchen cannot create icon groups (403)");
+    else {
+      bad(`kitchen created an icon group (${res.status})`);
+      // Si de verdad entró, se borra por id — nunca por nombre: un `delete`
+      // por nombre en producción se llevaría por delante el grupo de alguien.
+      const { id } = await res.json().catch(() => ({}));
+      if (id) await admin.from("icon_groups").delete().eq("id", id);
+    }
+  }
+
+  // Y su vecino tampoco puede leerlos con su propia sesión.
+  verdict(
+    `${mine.name} cannot read ${theirs.name}'s icon group items`,
+    await asUser.from("icon_group_items").select("emoji").eq("group_id", victim.id).limit(1),
+  );
+
+  // Se recoge la sonda: nada de lo que crea esta revisión se queda.
+  await admin.from("icon_groups").delete().eq("id", victim.id);
 }
 
 // ── Un inquilino no lee al de al lado ────────────────────────────────────────
