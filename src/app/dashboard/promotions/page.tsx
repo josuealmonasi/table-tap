@@ -18,6 +18,9 @@ export default async function PromotionsPage() {
     allPlans(),
   ]);
   const couponsAllowed = plan ? can(plan.limits, "coupons") : false;
+  // Promotions themselves are gated too, and nothing said so: the panel
+  // offered "+ Nuevo combo" on a tier where /api/promotions answers 403.
+  const promosAllowed = plan ? can(plan.limits, "promotions") : false;
 
   return (
     <ConfirmProvider>
@@ -25,6 +28,8 @@ export default async function PromotionsPage() {
         restaurantId={membership.restaurant.id}
         currency={membership.restaurant.currency}
         couponsAllowed={couponsAllowed}
+        promosAllowed={promosAllowed}
+        promosUnlockWith={cheapestWith(catalog, "promotions")?.plan ?? "servicio"}
         couponsUnlockWith={cheapestWith(catalog, "coupons")?.plan ?? "casa"}
       />
     </ConfirmProvider>

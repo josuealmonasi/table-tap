@@ -24,6 +24,8 @@ export default function PromotionsPanel({
   currency,
   couponsAllowed,
   couponsUnlockWith,
+  promosAllowed = true,
+  promosUnlockWith = "servicio",
 }: {
   restaurantId: string;
   currency: string;
@@ -31,6 +33,10 @@ export default function PromotionsPanel({
   couponsAllowed: boolean;
   /** The cheapest tier that does, named by the lock. */
   couponsUnlockWith: string;
+  /** Whether this tier includes promotions at all. */
+  promosAllowed?: boolean;
+  /** The cheapest tier that includes them. */
+  promosUnlockWith?: string;
 }) {
   const t = useT();
   const toast = useToast();
@@ -135,21 +141,32 @@ export default function PromotionsPanel({
             </p>
 
             {/* The create forms live behind these, in the same dialog editing
-                uses, so the section leads with the deals that already exist. */}
-            <div className="tt-promo-add" style={{ marginBottom: 14 }}>
-              <button
-                className="tt-btn tt-btn-primary tt-btn-sm"
-                onClick={() => setCreating("combo")}
-              >
-                + {t("promos.newCombo")}
-              </button>
-              <button
-                className="tt-btn tt-btn-primary tt-btn-sm"
-                onClick={() => setCreating("deal")}
-              >
-                + {t("promos.newDeal")}
-              </button>
-            </div>
+                uses, so the section leads with the deals that already exist.
+
+                On a tier without promotions the lock stands where the buttons
+                would be. Before this the buttons were offered and the dialog
+                opened, and only on save did /api/promotions answer 403 — after
+                the owner had picked the dishes and set a price. */}
+            {promosAllowed ? (
+              <div className="tt-promo-add" style={{ marginBottom: 14 }}>
+                <button
+                  className="tt-btn tt-btn-primary tt-btn-sm"
+                  onClick={() => setCreating("combo")}
+                >
+                  + {t("promos.newCombo")}
+                </button>
+                <button
+                  className="tt-btn tt-btn-primary tt-btn-sm"
+                  onClick={() => setCreating("deal")}
+                >
+                  + {t("promos.newDeal")}
+                </button>
+              </div>
+            ) : (
+              <div style={{ marginBottom: 14 }}>
+                <PlanLock feature="promotions" unlocksWith={promosUnlockWith} />
+              </div>
+            )}
 
             {loading ? (
               <ListSkeleton rows={rows} />

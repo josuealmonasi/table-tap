@@ -194,6 +194,39 @@ console.log("\n  states\n");
   await admin.from("restaurants").update({ plan_status: full.plan_status }).eq("id", restaurant.id);
 }
 
+// What a tier does NOT include has to be said where the control would be, not
+// discovered on save. On the free plan the promotions panel offered "+ Nuevo
+// combo" and /api/promotions answered 403; the tables panel offered "+ Agregar
+// mesa" and the database refused with a plan-limit trigger.
+//
+// Hitting a LIMIT is a different thing and already works: the trigger raises a
+// parseable sentinel and the hooks turn it into "your Servicio plan includes 10
+// tables". That is a refusal the owner asked for, so it is not checked here.
+for (const [path, offers] of [
+  ["/dashboard/promotions", /nuevo combo|new combo/i],
+  ["/dashboard/tables", /agregar mesa|add table/i],
+]) {
+  await admin.from("restaurants").update({ plan: "carta", plan_status: "active" }).eq("id", restaurant.id);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await ctx.addCookies([await cookieFor(CREW[0].email), { name: "tt-locale", value: "es", url: BASE }]);
+  const tab = await ctx.newPage();
+  try {
+    await tab.goto(BASE + path, { waitUntil: "networkidle" });
+    await tab.waitForTimeout(1600);
+    const offered = await tab.evaluate(
+      `[...document.querySelectorAll("button")].some(b => b.offsetParent && ${offers}.test(b.innerText))`);
+    const explains = /viene con|comes with|ver planes|see plans/i.test(await tab.evaluate("document.body.innerText"));
+    if (!offered && explains) ok(`free plan · ${path} — names the tier instead of offering it`);
+    else if (offered) bad(`free plan · ${path} — offers a control this tier is refused`);
+    else bad(`free plan · ${path} — hides the control without saying why`);
+  } catch (e) {
+    bad(`free plan · ${path} — could not be checked (${e.message.slice(0, 45)})`);
+  }
+  await tab.close();
+  await ctx.close();
+  await admin.from("restaurants").update({ plan: full.plan, plan_status: full.plan_status }).eq("id", restaurant.id);
+}
+
 const guestCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
 await guestCtx.addCookies([{ name: "tt-locale", value: "es", url: BASE }]);
 for (const state of STATES) {
