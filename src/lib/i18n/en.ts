@@ -335,6 +335,8 @@ myBill: "View my bill",
     nothing: "Nothing outstanding on this table.",
   },
   cart: {
+    payLaterOnlyHint: "Order now and settle your bill at the end, at the table.",
+    counterOnlyHint: "Order now and pay at the till with your code.",
     noCardYet: "This restaurant can't take cards here yet.",
     orderCounter: "Pay at the counter",
     counterHint: "Pay now and skip the queue, or come to the counter with your code.",
@@ -936,6 +938,9 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     optional: "(optional)",
   },
   dash: {
+    noCardsConnected: "Your customers cannot pay online: you have not connected your Stripe account yet. Until you do, they will only see the pay-at-the-table or pay-at-the-till options.",
+    noPaymentAtAll: "Nobody can order right now: there is no Stripe account connected and both payment switches are off. Connect Stripe or turn one of them on.",
+    fixInPayments: "Go to Payments",
     dealsTabTitle: "Deals & combos tab",
     dealsTabHint: "Groups combos, discounts and promotions into their own tab on the menu so diners find them. It only appears when there is something to show.",
     cashier: "Cashier",

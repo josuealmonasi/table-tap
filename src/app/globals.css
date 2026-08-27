@@ -513,6 +513,20 @@ a.tt-btn {
   margin: 12px 0 4px;
 }
 
+/* El aviso con su enlace al lado. Se parte en pantalla angosta en vez de
+   empujar el enlace fuera de la caja. */
+.tt-hint-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.tt-hint-row a {
+  color: inherit;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .tt-hint {
   margin: 0;
   padding: 8px 12px;

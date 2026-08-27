@@ -97,6 +97,9 @@ export type Restaurant = {
    * de enterarse era tocarlo y recibir un 409.
    */
   cards_enabled?: boolean;
+  /** La cuenta conectada del restaurante. Sólo llega al panel, nunca al comensal. */
+  stripe_account_id?: string | null;
+  stripe_charges_enabled?: boolean | null;
   badges_enabled?: boolean;
   /** La pestaña de combos y ofertas del menú. Encendida por defecto. */
   deals_tab_enabled?: boolean;

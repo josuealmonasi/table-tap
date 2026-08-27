@@ -7,6 +7,7 @@ import type { Role } from "@/lib/membership";
 import { useSettings } from "@/hooks/useSettings";
 import { BADGES_CHANGED } from "@/hooks/useBadges";
 import { useT } from "@/lib/i18n/context";
+import { ownerWarningKey } from "@/lib/payment-options";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import PaymentsCard from "./PaymentsCard";
 import CoverCard from "./CoverCard";
@@ -17,6 +18,8 @@ interface SettingsFormProps {
   role: Role;
   /** Si el plan incluye cobrar en la caja. Falso lo deja visible y apagado. */
   counterPayAllowed?: boolean;
+  /** Si hay cuenta de Stripe conectada y cobrando. Decide qué ve el comensal. */
+  cardsEnabled?: boolean;
 }
 
 // Two-decimal currencies only, so checkout's Math.round(amount * 100) stays
@@ -28,6 +31,7 @@ export default function SettingsForm({
   restaurant,
   role,
   counterPayAllowed = false,
+  cardsEnabled = false,
 }: SettingsFormProps) {
   const t = useT();
   const { saving, save } = useSettings();
@@ -51,6 +55,15 @@ export default function SettingsForm({
   const [payLater, setPayLater] = useState(Boolean(restaurant.allow_pay_later));
   const [counterPay, setCounterPay] = useState(Boolean(restaurant.allow_counter_payment));
   const [dealsTab, setDealsTab] = useState(restaurant.deals_tab_enabled !== false);
+
+  // Se recalcula al vuelo: si apaga los dos interruptores sin Stripe, el aviso
+  // pasa de "no pueden pagar en línea" a "nadie puede ordenar" ahí mismo.
+  const paymentWarning = ownerWarningKey({
+    cardsEnabled,
+    allowPayLater: payLater,
+    allowCounterPayment: counterPay,
+    atTable: true,
+  });
   const [badges, setBadges] = useState(restaurant.badges_enabled !== false);
 
   async function saveRestaurant(e: React.FormEvent): Promise<void> {
@@ -403,6 +416,23 @@ export default function SettingsForm({
                   <span className="tt-switch-track" />
                 </span>
               </label>
+            )}
+
+            {/* Lo que el dueño no podía saber desde aquí: sin cuenta de Stripe
+                conectada, el pago en línea no se puede pintar en ninguna
+                pantalla, así que estos dos interruptores dejan de ser una
+                elección y pasan a ser la única forma de ordenar. Encender
+                "pagar al final" y no ver aparecer el botón de tarjeta no tenía
+                explicación en ningún lado.
+
+                Sólo al dueño, y no por discreción: conectar Stripe es suyo —la
+                tarjeta de Pagos ni siquiera se le pinta al gerente— así que al
+                gerente esto sería un aviso sobre algo que no puede arreglar. */}
+            {isOwner && paymentWarning && (
+              <div className="tt-hint tt-hint-row" style={{ marginTop: 10 }}>
+                <span>{t(paymentWarning)}</span>
+                <a href="#pagos">{t("dash.fixInPayments")}</a>
+              </div>
             )}
 
             {/* El de arriba es de mesa; éste es del QR general. Van juntos
