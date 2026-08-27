@@ -144,7 +144,79 @@ for (const [name, path] of [
   await tab.close();
 }
 await guest.close();
-await browser.close();
 
+// ── States, which is where the promises break ──────────────────────────────
+//
+// Every gap found by hand lived in a state, not on a page: orders paused, no
+// menu serving, no Stripe connected. A screen that is fine with the demo's
+// full data can still be a blank page or a dead button once a switch moves,
+// and nothing swept those.
+//
+// Each case flips one switch, looks, and puts it back. The rule is the same as
+// above: a screen with nothing to offer has to SAY so.
+const { data: full } = await admin.from("restaurants").select("*").eq("id", restaurant.id).single();
+const { data: menuRows } = await admin.from("menus").select("id, active").eq("restaurant_id", restaurant.id);
+
+const STATES = [
+  {
+    name: "orders paused",
+    apply: () => admin.from("restaurants").update({ accepting_orders: false }).eq("id", restaurant.id),
+    says: /no estamos tomando pedidos|not taking orders/i,
+  },
+  {
+    name: "no menu serving",
+    apply: () => admin.from("menus").update({ active: false }).eq("restaurant_id", restaurant.id),
+    says: /cerrados|closed/i,
+  },
+];
+
+console.log("\n  states\n");
+
+// The dashboard's own frozen state: the API answers 402 to every write while
+// the panel used to go on rendering enabled controls, with nothing on screen
+// saying why the save failed.
+{
+  await admin.from("restaurants").update({ plan_status: "locked" }).eq("id", restaurant.id);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await ctx.addCookies([await cookieFor(CREW[0].email), { name: "tt-locale", value: "es", url: BASE }]);
+  const tab = await ctx.newPage();
+  try {
+    await tab.goto(`${BASE}/dashboard/settings`, { waitUntil: "networkidle" });
+    await tab.waitForTimeout(1600);
+    const text = await tab.evaluate("document.body.innerText");
+    if (/solo de lectura|read-only/i.test(text)) ok("subscription paused — the dashboard says it is read-only");
+    else bad("subscription paused — the dashboard offers controls and never says saves will fail");
+  } catch (e) {
+    bad(`subscription paused — could not be checked (${e.message.slice(0, 50)})`);
+  }
+  await tab.close();
+  await ctx.close();
+  await admin.from("restaurants").update({ plan_status: full.plan_status }).eq("id", restaurant.id);
+}
+
+const guestCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+await guestCtx.addCookies([{ name: "tt-locale", value: "es", url: BASE }]);
+for (const state of STATES) {
+  await state.apply();
+  const tab = await guestCtx.newPage();
+  try {
+    await tab.goto(`${BASE}/r/${restaurant.id}/t/${table.id}`, { waitUntil: "networkidle" });
+    await tab.waitForTimeout(1800);
+    const text = await tab.evaluate("document.body.innerText");
+    if (state.says.test(text)) ok(`${state.name} — the screen says so`);
+    else bad(`${state.name} — the screen shows nothing and explains nothing`);
+  } catch (e) {
+    bad(`${state.name} — could not be checked (${e.message.slice(0, 50)})`);
+  }
+  await tab.close();
+  // Always put it back, whatever the result: a check that leaves the demo
+  // switched off is a check that looks like a bug tomorrow.
+  await admin.from("restaurants").update({ accepting_orders: full.accepting_orders }).eq("id", restaurant.id);
+  for (const m of menuRows ?? []) await admin.from("menus").update({ active: m.active }).eq("id", m.id);
+}
+await guestCtx.close();
+
+
+await browser.close();
 console.log(failed === 0 ? "\nNo screen promises more than it has.\n" : `\n${failed} GAP(S) — review one by one.\n`);
 process.exit(failed === 0 ? 0 : 1);

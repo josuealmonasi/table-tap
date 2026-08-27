@@ -111,6 +111,7 @@ export default function CartScreen({
     allowPayLater: payLaterAllowed,
     allowCounterPayment: counterAllowed,
     atTable: true,
+    acceptingOrders: restaurant.accepting_orders,
   });
   return (
     <div className="tt-root">
@@ -291,7 +292,7 @@ export default function CartScreen({
                     tarjeta, o deja la cuenta abierta" debajo de una pantalla
                     donde lo de la tarjeta no existía. */}
                 {(() => {
-                  const key = paymentHintKey(pay);
+                  const key = paymentHintKey(pay, restaurant.accepting_orders);
                   if (!canOrder(pay)) return t(key);
                   const Icon = pay.payNow && !pay.payLater && !pay.payCounter ? SecureIcon : BillIcon;
                   return (

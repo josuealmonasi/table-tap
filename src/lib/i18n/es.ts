@@ -106,6 +106,8 @@ export const es: Messages = {
     deleteSelected: "No se pudieron eliminar los elementos seleccionados",
   },
   menu: {
+    notReadyTitle: "Este menú todavía no está listo",
+    notReadyBody: "El restaurante aún no ha publicado su carta. Pregúntale a alguien del equipo.",
     dietaryEmpty: "Sin etiquetas. Agrega las que tu carta necesite.",
     addDietary: "+ Agregar etiqueta",
     dietaryName: "Nombre (p. ej. Sin azúcar)",
@@ -511,6 +513,8 @@ myBill: "Ver mi cuenta",
     waiterSent: "¡En camino!",
   },
   plan: {
+    frozenBanner: "Tu suscripción está pausada: el panel es solo de lectura y no se guardarán los cambios. Tu menú sigue activo y recibiendo pedidos.",
+    frozenFix: "Reactivar",
     docsTitle: "Tus documentos",
     docsHint: "Descárgalos cuando los necesites",
     docsAccepted: "Aceptaste la versión {version} el {date}.",

@@ -107,6 +107,8 @@ export type Restaurant = {
   terms_version?: string | null;
   /** The subscription tier this restaurant is on. */
   plan?: string | null;
+  /** Where the subscription stands. `locked` makes the dashboard read-only. */
+  plan_status?: string | null;
 };
 
 export type RestaurantTable = {

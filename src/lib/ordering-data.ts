@@ -118,7 +118,17 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
   // times for the round trip. Promotions, ratings and the plan depend on nothing
   // else, so they have no reason to wait their turn.
   const [menusRes, zoneRes, promotions, statsRes, plan, dietaryRes] = await Promise.all([
-    supabase
+    // Read with the service key, and ONLY these three columns, scoped to this
+    // restaurant. The public policy on `menus` is `using (active = true)`, so
+    // a customer's own query cannot see a switched-off menu — and `closedNow`
+    // is defined as "has menus but none open", which that query can never
+    // observe. A restaurant that switched everything off served its diners a
+    // blank page with no explanation, because the count came back zero and
+    // read as "this restaurant has no menus".
+    //
+    // Nothing hidden reaches the browser: `ids` only ever holds OPEN menus and
+    // filters the queries below, and `closedNow` is a boolean.
+    createAdminClient()
       .from("menus")
       .select("id, active, schedule")
       .eq("restaurant_id", restaurantId),

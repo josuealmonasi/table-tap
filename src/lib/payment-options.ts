@@ -17,6 +17,8 @@ export interface PaymentContext {
   allowCounterPayment: boolean;
   /** They scanned a table's QR, or the restaurant's general one. */
   atTable: boolean;
+  /** The restaurant's "taking orders" switch. Off stops every route in. */
+  acceptingOrders: boolean;
 }
 
 export interface PaymentOptions {
@@ -29,6 +31,9 @@ export interface PaymentOptions {
 }
 
 export function paymentOptions(ctx: PaymentContext): PaymentOptions {
+  // Paused beats everything: with orders off, checkout answers 409 whichever
+  // way they try to pay, so offering any of them is offering a refusal.
+  if (!ctx.acceptingOrders) return { payNow: false, payLater: false, payCounter: false };
   return {
     payNow: ctx.cardsEnabled,
     // Leaving a bill open needs a table to leave it against.
@@ -49,8 +54,13 @@ export function canOrder(options: PaymentOptions): boolean {
  * A translation key rather than a sentence: the caller has it translated, and
  * what is decided here is which one applies, which is the part that was wrong.
  */
-export function paymentHintKey(options: PaymentOptions): string {
+export function paymentHintKey(options: PaymentOptions, acceptingOrders = true): string {
   const { payNow, payLater, payCounter } = options;
+  // Why there is no button matters. "This restaurant does not take cards" and
+  // "the kitchen has stopped for now" send the diner to do different things,
+  // and the cart used to repeat "order now and pay at the end" under a button
+  // that could not be pressed.
+  if (!acceptingOrders) return "menu.closed";
   if (!canOrder(options)) return "cart.noCardYet";
   // Both together: the case the restaurant wants, and the only one where card
   // and open bill can be promised on the same line.

@@ -63,6 +63,9 @@ export default function SettingsForm({
     allowPayLater: payLater,
     allowCounterPayment: counterPay,
     atTable: true,
+    // Pausing orders is a deliberate, temporary act with its own banner; it is
+    // not a misconfiguration to warn about here.
+    acceptingOrders: true,
   });
   const [badges, setBadges] = useState(restaurant.badges_enabled !== false);
 

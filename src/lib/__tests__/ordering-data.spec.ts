@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { unwrap } from "../ordering-data";
+import { openMenuIds } from "@/lib/open-menus";
 
 /**
  * These guard the distinction the customer menu depends on: "this restaurant
@@ -47,5 +48,42 @@ describe("unwrap", () => {
   it("names what failed, so the log says which query broke", () => {
     const res = { data: null, error: { code: "08006", message: "connection failure" } };
     expect(() => unwrap(res, "categories")).toThrow(/Could not load categories/);
+  });
+});
+
+describe("a switched-off menu is a closed kitchen, not an empty restaurant", () => {
+  const tz = "America/Mexico_City";
+
+  it("says closed when every menu is switched off", () => {
+    // The customer's own query cannot see these rows — the public policy is
+    // `using (active = true)` — so this only works because the page reads them
+    // with the service key. Read as a customer, the count came back zero and
+    // `closedNow` said false, which served a blank page with no explanation.
+    const { ids, closedNow } = openMenuIds(
+      [
+        { id: "a", active: false, schedule: null },
+        { id: "b", active: false, schedule: null },
+      ],
+      tz,
+    );
+    expect(ids).toEqual([]);
+    expect(closedNow).toBe(true);
+  });
+
+  it("still says nothing when the restaurant genuinely has no menus", () => {
+    // A restaurant mid-setup has nothing to apologise for.
+    expect(openMenuIds([], tz).closedNow).toBe(false);
+  });
+
+  it("says open when at least one menu is on", () => {
+    const { ids, closedNow } = openMenuIds(
+      [
+        { id: "a", active: false, schedule: null },
+        { id: "b", active: true, schedule: null },
+      ],
+      tz,
+    );
+    expect(ids).toEqual(["b"]);
+    expect(closedNow).toBe(false);
   });
 });
