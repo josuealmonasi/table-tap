@@ -1116,6 +1116,13 @@ returns void language sql as $$
    on conflict (restaurant_id, key) do nothing;
 $$;
 
+-- La RLS ya la detiene —no es `security definer`, así que el insert corre con
+-- los permisos de quien llama y la política de gerencia lo rechaza— pero
+-- Postgres le da EXECUTE a PUBLIC a toda función nueva, y aquí no la llama
+-- nadie más que el disparador. Se cierra igual que las demás ayudantes.
+revoke all on function public.seed_dietary_tags(uuid) from public, anon, authenticated;
+grant execute on function public.seed_dietary_tags(uuid) to service_role;
+
 -- Por disparador y no desde la ruta de alta: así las siembran todos los
 -- caminos que crean un restaurante —el registro, los datos de prueba, una
 -- semilla a mano— y ninguno puede olvidarse.
@@ -1125,6 +1132,9 @@ begin
   perform public.seed_dietary_tags(new.id);
   return new;
 end; $$;
+
+revoke all on function public.seed_dietary_tags_on_new_restaurant() from public, anon, authenticated;
+grant execute on function public.seed_dietary_tags_on_new_restaurant() to service_role;
 
 drop trigger if exists seed_dietary_tags_trg on restaurants;
 create trigger seed_dietary_tags_trg after insert on restaurants

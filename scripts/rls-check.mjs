@@ -81,6 +81,9 @@ for (const [fn, args] of [
   ["claim_founding_price", { p_restaurant: crypto.randomUUID(), p_limit: 50 }],
   ["redeem_coupon", { p_coupon_id: crypto.randomUUID() }],
   ["rate_limit_hit", { p_bucket: "probe", p_window_seconds: 60 }],
+  // Sembrar etiquetas de dieta es del disparador, de nadie más. La RLS ya lo
+  // detendría; el permiso lo detiene antes de llegar a la tabla.
+  ["seed_dietary_tags", { p_restaurant: crypto.randomUUID() }],
 ]) {
   const { error } = await anon.rpc(fn, args);
   if (error) ok(`anon cannot call ${fn}()`);
