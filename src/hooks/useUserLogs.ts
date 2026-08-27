@@ -35,12 +35,12 @@ const COLUMNS =
 export function useUserLogs(
   restaurantId: string,
   /**
-   * Los tipos que el texto buscado nombra, ya resueltos por quien pinta.
+   * The kinds the searched text names, already resolved by the caller.
    *
-   * `entity` se guarda en inglés —"settings"— y en pantalla se lee traducido
-   * —"AJUSTES"—, así que quien escribía lo que estaba viendo no encontraba
-   * nada. La traducción la tiene el componente, no el hook, así que llega de
-   * fuera ya resuelta.
+   * `entity` is stored in English — "settings" — and reads translated on screen
+   * — "AJUSTES" — so anyone typing what they were looking at found nothing.
+   * The component has the translation, not the hook, so it arrives already
+   * resolved from outside.
    */
   matchedEntities: string[] = [],
 ) {
@@ -86,8 +86,8 @@ export function useUserLogs(
           `detail.ilike.${like}`,
           `target_email.ilike.${like}`,
         ];
-        // "ajustes" es lo que se lee en la fila; "settings" es lo que hay en la
-        // columna. Sin esto, buscar lo que se ve en pantalla no daba nada.
+        // "ajustes" is what the row reads; "settings" is what is in the column.
+        // Without this, searching for what is on screen returned nothing.
         if (matchedEntities.length) clauses.push(`entity.in.(${matchedEntities.join(",")})`);
         request = request.or(clauses.join(","));
       }
@@ -107,9 +107,9 @@ export function useUserLogs(
     return () => {
       cancelled = true;
     };
-    // Las entidades se comparan por su contenido: el arreglo se rehace en cada
-    // render y como dependencia dispararía una consulta por render. `entityKey`
-    // es ese mismo arreglo hecho cadena, que sí es estable.
+    // The entities are compared by content: the array is rebuilt on every render
+    // and as a dependency would fire a query per render. `entityKey` is that same
+    // array as a string, which is stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restaurantId, page, debounced, sort, ascending, entityKey]);
 

@@ -63,9 +63,9 @@ export async function POST(req: NextRequest) {
   const entitled = rateableDishes(
     (orders ?? []).map(o => ({ id: o.id, items: (o.items ?? []) as OrderLineItem[] })),
   );
-  // Y que los ids quepan en sus columnas. Una línea con un id que no es uuid
-  // pasaba la comprobación de compra y reventaba en el insert, y el 503 se
-  // llevaba por delante las calificaciones honestas del mismo envío.
+  // And that the ids fit their columns. A line with an id that is not a uuid
+  // passed the purchase check and blew up on the insert, and the 503 took the
+  // honest ratings in the same submission down with it.
   const accepted = acceptableRatings(ratings, entitled).filter(
     r => isStorableId(r.itemId) && isStorableId(r.orderId),
   );

@@ -1,9 +1,9 @@
 // ============================================================================
 // TableTap — what each role can reach
 //
-// Los módulos se mueven de pantalla y con ellos cambia quién los alcanza. Esto
-// entra con cada rol de verdad — dueño, gerente, mesero, cocina — y comprueba
-// página por página y ruta por ruta que ve y maneja lo que le toca, ni más.
+// Modules move between screens and who reaches them moves with them. This
+// signs in as every real role — owner, manager, waiter, kitchen — and checks
+// page by page and route by route that each sees and handles their own, no more.
 //
 //   pnpm roles          (dev)
 //   pnpm roles --prod
@@ -31,13 +31,13 @@ const ROLES = [
   { email: "demo-kitchen@tabletap.dev", password: "demo123", role: "kitchen" },
 ];
 
-// Página → quién debe poder abrirla, y un texto que SÓLO esa página imprime.
+// Page → who should be able to open it, and text ONLY that page prints.
 //
-// El estado HTTP no sirve para esto: redirect() de Next devuelve 200 con el
-// HTML del destino y sin cabecera Location, así que una página prohibida
-// responde 200 con el contenido de otra. Lo que distingue es lo que trae
-// dentro — y el marcador no puede ser un rótulo de la barra de navegación,
-// que sale en todas.
+// The HTTP status is no use here: Next's redirect() returns 200 with the
+// target's HTML and no Location header, so a forbidden page answers 200 with
+// somebody else's content. What tells them apart is what is inside — and the
+// marker cannot be a label from the nav bar, which appears on all of them.
+// which appears on all of them.
 const OWNER = ["owner"];
 const MANAGES = ["owner", "manager"];
 const OWNER_ONLY = ["owner"];
@@ -50,32 +50,32 @@ const PAGES = {
   "/dashboard/bills": {
     allow: SERVES,
     marker: "Busca por mesa o código de pedido",
-    // La bitácora se mudó aquí desde Personal. Sólo el dueño: la política de
-    // `user_logs` es `owns_restaurant`, así que al gerente se le pintaba el
-    // módulo entero con cero renglones. Esta lista decía MANAGES y pasaba,
-    // porque comprobaba que el encabezado existiera y no que la bitácora
-    // tuviera algo dentro — que es distinto.
+    // The activity log moved here from Staff. Owner only: the policy on
+    // `user_logs` is `owns_restaurant`, so the manager was being shown the whole
+    // module with zero rows. This list said MANAGES and passed, because it
+    // checked the heading existed and not that the log had anything in it —
+    // which is a different thing.
     sections: { "Actividad reciente": OWNER_ONLY },
   },
   "/dashboard/tables": { allow: MANAGES, marker: "Agregar mesa" },
   "/dashboard/analytics": {
     allow: MANAGES,
     marker: "Pedidos por hora del día",
-    // Historial y calificaciones se mudaron aquí desde el tablero de pedidos.
+    // History and ratings moved here from the orders board.
     sections: { "Busca por código": MANAGES, "Lo mejor calificado": MANAGES },
   },
   "/dashboard/promotions": { allow: MANAGES, marker: "Nuevo combo" },
   "/dashboard/settings": {
     allow: MANAGES,
     marker: "Guardar ajustes de impuesto",
-    // Abrir Ajustes no es poder tocarlo todo: identidad y cobros son del dueño.
+    // Opening Settings is not permission to touch it all: identity and billing are the owner's.
     sections: { "Zona horaria": OWNER, "Pagos": OWNER },
   },
   "/dashboard/staff": { allow: OWNER, marker: "Accesos del equipo" },
   "/dashboard/plan": { allow: OWNER, marker: "Tu plan" },
 };
 
-// Ruta → roles que deben poder usarla.
+// Route → roles that should be able to use it.
 const ROUTES = [
   { m: "GET", p: "/api/badges", allow: ALL },
   { m: "GET", p: "/api/table-bill?tableId=", allow: SERVES, needsTable: true },
@@ -98,7 +98,7 @@ console.log(`\nRoles — ${prod ? "production" : "development"}\n`);
 for (const who of ROLES) {
   const auth = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
   const { data, error } = await auth.auth.signInWithPassword({ email: who.email, password: who.password });
-  if (error) { console.log(`  ${who.role}: no pudo entrar (${error.message})`); failed++; continue; }
+  if (error) { console.log(`  ${who.role}: could not sign in (${error.message})`); failed++; continue; }
   const cookie = `sb-${ref}-auth-token=base64-${Buffer.from(JSON.stringify(data.session)).toString("base64")}`;
   console.log(`  ${who.role} (${who.email})`);
 
@@ -112,15 +112,15 @@ for (const who of ROLES) {
     const reached = html.includes(marker);
     const may = allow.includes(who.role);
     if (reached === may) ok(`${may ? "abre" : "rebota de"} ${path}`);
-    else bad(`${path}: ${reached ? "la abrió" : "no la abrió"} y ${may ? "debía" : "no debía"}`);
+    else bad(`${path}: ${reached ? "opened it" : "did not open it"} and ${may ? "should have" : "should not have"}`);
 
-    // Llegar a la página no dice qué trae dentro. Cada módulo que se mudó de
-    // pantalla se comprueba aquí, con el rol que lo abrió.
+    // Reaching the page says nothing about what is inside it. Every module that
+    // moved screens is checked here, as the role that opened it.
     for (const [text, roles] of Object.entries(reached && may ? (PAGES[path].sections ?? {}) : {})) {
       const sees = html.includes(text);
       const should = roles.includes(who.role);
-      if (sees === should) ok(`${sees ? "ve" : "no ve"} «${text}» en ${path}`);
-      else bad(`${path}: ${sees ? "ve" : "no ve"} «${text}» y ${should ? "debía" : "no debía"}`);
+      if (sees === should) ok(`${sees ? "sees" : "does not see"} «${text}» on ${path}`);
+      else bad(`${path}: ${sees ? "sees" : "does not see"} «${text}» and ${should ? "should have" : "should not have"}`);
     }
   }
 
@@ -137,12 +137,12 @@ for (const who of ROLES) {
     );
     const may = r.allow.includes(who.role);
     const refused = res.status === 401 || res.status === 403;
-    if (may && refused) bad(`${r.m} ${r.p.split("?")[0]} lo rechazó (${res.status}) y debía dejarlo`);
-    else if (!may && !refused) bad(`${r.m} ${r.p.split("?")[0]} lo dejó pasar (${res.status})`);
-    else ok(`${may ? "puede" : "no puede"} ${r.m} ${r.p.split("?")[0]}`);
+    if (may && refused) bad(`${r.m} ${r.p.split("?")[0]} refused it (${res.status}) and should have allowed it`);
+    else if (!may && !refused) bad(`${r.m} ${r.p.split("?")[0]} let it through (${res.status})`);
+    else ok(`${may ? "can" : "cannot"} ${r.m} ${r.p.split("?")[0]}`);
   }
   console.log("");
 }
 
-console.log(failed === 0 ? "Cada rol ve y maneja lo suyo.\n" : `${failed} PROBLEMA(S).\n`);
+console.log(failed === 0 ? "Each role sees and handles its own.\n" : `${failed} PROBLEM(S).\n`);
 process.exit(failed === 0 ? 0 : 1);

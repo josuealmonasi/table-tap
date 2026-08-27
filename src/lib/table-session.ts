@@ -40,10 +40,10 @@ export async function currentSessionId(
   const session = data as { id: string; opened_at: string } | null;
   if (!session) return null;
 
-  // Vencida: se cierra aquí en lugar de ignorarla. Dejarla abierta pero
-  // invisible es lo que hacía que el piso viera una cuenta de MX$91.85 que el
-  // comensal no podía ni ver ni pagar — la misma fila decía dos cosas según
-  // quién preguntara. La deuda sigue en las cuentas abiertas del gerente.
+  // Expired: closed here rather than ignored. Leaving it open but invisible is
+  // what had the floor seeing a MX$91.85 bill the diner could neither see nor
+  // pay — the same row saying two things depending on who asked. The debt stays
+  // on the manager's open bills.
   if (session.opened_at < cutoff) {
     await db
       .from("table_sessions")

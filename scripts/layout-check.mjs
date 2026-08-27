@@ -1,10 +1,10 @@
 // ============================================================================
-// TableTap — ¿se puede leer la pantalla?
+// TableTap — can the screen actually be read?
 //
-// Los tests dicen que el componente existe; no dicen que un humano pueda
-// leerlo. Esto abre cada pantalla en un navegador de verdad —con cada rol del
-// equipo, en teléfono y en escritorio, y abriendo los diálogos— y falla si el
-// texto se aplasta, se encima, se sale de la hoja o dos tarjetas no coinciden.
+// Tests say the component exists; they do not say a human can read it. This
+// opens every screen in a real browser — as each team role, on phone and
+// desktop, opening the dialogs — and fails if text is squashed, overlaps, runs
+// off the page, or two cards do not line up.
 //
 //   pnpm layout          (dev)
 //   pnpm layout --prod
@@ -29,8 +29,8 @@ const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0]
 
 const { data: r } = await admin
   .from("restaurants").select("id").eq("name", "Demo Bistro").maybeSingle();
-// Una mesa libre: una con cuenta abierta abre el seguimiento del pedido, no el
-// menú, y entonces no hay carrito que revisar.
+// A free table: one with an open bill opens the order tracker, not the menu,
+// and then there is no cart to check.
 const { data: tables } = await admin
   .from("restaurant_tables").select("id").eq("restaurant_id", r.id);
 const { data: busy } = await admin
@@ -52,10 +52,10 @@ const bad = (where, faults) => {
 };
 
 /**
- * Una navegación que reintenta una vez.
+ * A navigation that retries once.
  *
- * El servidor de desarrollo se cae a media revisión y el fallo de red salía
- * como si la pantalla estuviera rota. Un rojo falso enseña a ignorar los rojos.
+ * The dev server drops mid-run and the network failure showed up as though the
+ * screen were broken. A false red teaches people to ignore reds.
  */
 async function gotoOnce(tab, url, opts) {
   try {
@@ -66,7 +66,7 @@ async function gotoOnce(tab, url, opts) {
   }
 }
 
-/** Espera a que haya contenido de verdad: cargar no es tener qué medir. */
+/** Wait for real content: loading is not the same as having something to measure. */
 async function settle(tab) {
   await tab.waitForFunction("document.body.innerText.trim().length > 200", null, {
     timeout: 30000,
@@ -74,7 +74,7 @@ async function settle(tab) {
   await tab.waitForTimeout(900);
 }
 
-/** Pulsa desde la página: el clic de Playwright espera a que nada se mueva. */
+/** Click from inside the page: Playwright's click waits for everything to settle. */
 const tap = (tab, sel) =>
   tab.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(sel)}); if(e){e.click(); return true;} return false;})()`);
 
@@ -98,23 +98,23 @@ const cookieFor = async email => {
 };
 
 const browser = await chromium.launch();
-console.log(`\nEstilos — ${prod ? "production" : "development"}\n`);
+console.log(`\nLayout — ${prod ? "production" : "development"}\n`);
 
 for (const size of SIZES) {
   console.log(`  ${size.name} (${size.width}px)\n`);
 
-  // ── El comensal ──────────────────────────────────────────────────────────
-  // En los dos idiomas: el inglés es más largo en unos rótulos y más corto en
-  // otros, y el carrito ya se rompió una vez por un rótulo que no cabía. El
-  // panel se revisa sólo en español, que es donde trabaja el equipo.
+  // ── The diner ─────────────────────────────────────────────────────────────
+  // In both languages: English is longer on some labels and shorter on others,
+  // and the cart broke once over a label that did not fit. The dashboard is
+  // checked in Spanish only, which is where the team works.
   for (const lang of ["es", "en"]) {
   const diner = await browser.newContext({
     viewport: { width: size.width, height: size.height },
     locale: lang === "es" ? "es-MX" : "en-US",
   });
-  // El idioma es del restaurante, no del teléfono: la app arranca en español
-  // pase lo que pase y sólo la cookie lo cambia. Ponerle `locale` al navegador
-  // y creer que ya estaba en inglés era medir español dos veces.
+  // The language belongs to the restaurant, not the phone: the app starts in
+  // Spanish no matter what and only the cookie changes it. Setting the browser
+  // `locale` and believing it was English measured Spanish twice.
   await diner.addCookies([{ name: "tt-locale", value: lang, url: BASE }]);
   for (const flow of DINER) {
     const tab = await diner.newPage();
@@ -130,9 +130,9 @@ for (const size of SIZES) {
           await tab.evaluate(`(()=>{const b=[...document.querySelectorAll('button')].find(x=>/Agregar al carrito|Add to (cart|order)/i.test(x.textContent)); if(b) b.click();})()`);
           await tab.waitForSelector(".tt-fab", { timeout: 8000 });
         }
-        // Un paso que no encuentra su botón deja la pantalla anterior en
-        // pantalla, y entonces se mide dos veces el menú creyendo que se
-        // revisó la ficha. Eso no se calla.
+        // A step that cannot find its button leaves the previous screen up, and then
+        // the menu gets measured twice while we think the dish detail was checked.
+        // That does not get to pass quietly.
         if (step.click) {
           const sel = typeof step.click === "string" ? step.click : step.click[lang];
           if (!(await tap(tab, sel))) throw new Error(`no encontró «${sel}»`);
@@ -152,7 +152,7 @@ for (const size of SIZES) {
         const there = await tab.evaluate(
           `document.body.innerText.includes(${JSON.stringify(flow.expect[lang])})`,
         );
-        if (!there) throw new Error(`no llegó — falta «${flow.expect[lang]}»`);
+        if (!there) throw new Error(`did not arrive — missing «${flow.expect[lang]}»`);
       }
       await look(tab, `comensal ${lang} · ${flow.name}`);
     } catch (e) {
@@ -183,12 +183,12 @@ for (const size of SIZES) {
             ? await tapText(tab, dialog.text)
             : await tap(tab, dialog.click);
           await tab.waitForTimeout(900);
-          // Que se haya pulsado no quiere decir que algo se abriera. Un salto
-          // callado se lee igual que un ok, y así fue como un rol entero se
-          // quedó sin revisar sin que nada lo dijera.
+          // Having clicked does not mean anything opened. A silent no-op reads exactly
+          // like an ok, and that is how a whole role went unchecked with nothing
+          // saying so.
           const open = await tab.evaluate("!!document.querySelector('[role=dialog]')");
           if (!clicked || !open) {
-            console.log(`    –        ${who.role} · ${path} → ${dialog.name}: no abrió (sin datos)`);
+            console.log(`    –        ${who.role} · ${path} → ${dialog.name}: did not open (no data)`);
             continue;
           }
           await look(tab, `${who.role} · ${path} → ${dialog.name}`);
@@ -207,5 +207,5 @@ for (const size of SIZES) {
 }
 
 await browser.close();
-console.log(failed === 0 ? "Todo se lee.\n" : `${failed} PROBLEMA(S) de lectura.\n`);
+console.log(failed === 0 ? "Everything reads.\n" : `${failed} READABILITY PROBLEM(S).\n`);
 process.exit(failed === 0 ? 0 : 1);

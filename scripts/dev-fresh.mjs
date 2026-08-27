@@ -1,18 +1,18 @@
 // ============================================================================
-// TableTap — arrancar el servidor de desarrollo desde cero.
+// TableTap — start the dev server from scratch.
 //
 //   pnpm dev:fresh
 //
-// Tres problemas de una tarde larga, en un comando:
+// Three problems from one long afternoon, in a single command:
 //
-//   - el servidor se infla con las horas y se cae a media revisión;
-//   - matar `next-server` no basta: el `pnpm dev` que lo lanzó lo revive, y el
-//     puerto 3000 vuelve a estar ocupado un segundo después;
-//   - `.next` guarda compilaciones viejas, así que una página puede servirse
-//     con el código de hace tres merges y parecer un bug que no existe.
+//   - the server bloats over the hours and drops mid-run;
+//   - killing `next-server` is not enough: the `pnpm dev` that launched it
+//     revives it, and port 3000 is busy again a second later;
+//   - `.next` keeps stale builds, so a page can be served with code from three
+//     merges ago and look like a bug that does not exist.
 //
-// Sólo mata lo que es de este proyecto. Si el 3000 lo tiene otra cosa, lo dice
-// y se detiene en vez de matar algo que no era suyo.
+// It only kills what belongs to this project. If something else holds 3000 it
+// says so and stops, rather than killing something that was not its own.
 // ============================================================================
 import { execFileSync, spawn } from "node:child_process";
 import { rmSync } from "node:fs";
@@ -30,19 +30,19 @@ const sh = (cmd, args) => {
 };
 
 /**
- * Si un proceso es de este proyecto: tiene archivos suyos abiertos.
+ * Whether a process belongs to this project: it has our files open.
  *
- * Mirar el cwd no sirve — el servidor puede haberse lanzado desde el
- * directorio de arriba y seguir siendo el nuestro, que es justo lo que pasa
- * cuando lo arranca el panel de vista previa. Lo que no miente es qué archivos
- * tiene abiertos: su propio .next, sus propios node_modules.
+ * Looking at the cwd is no use — the server may have been launched from the
+ * directory above and still be ours, which is exactly what happens when the
+ * preview pane starts it. What does not lie is which files it has open: its
+ * own .next, its own node_modules.
  */
 const belongsHere = pid => sh("lsof", ["-p", String(pid)]).includes(here);
 
 const parentOf = pid => sh("ps", ["-o", "ppid=", "-p", String(pid)]).trim();
 const commandOf = pid => sh("ps", ["-o", "command=", "-p", String(pid)]).trim();
 
-/** Quién escucha en el puerto, y toda su ascendencia hasta el `pnpm dev`. */
+/** Who is listening on the port, and its whole ancestry up to `pnpm dev`. */
 function serverTree() {
   const listeners = sh("lsof", ["-ti", `tcp:${PORT}`, "-sTCP:LISTEN"])
     .split("\n")
@@ -54,7 +54,7 @@ function serverTree() {
     for (let hop = 0; hop < 5 && current && current !== "1"; hop++) {
       const command = commandOf(current);
       if (!command) break;
-      // El árbol de Next: next-server ← next dev ← pnpm dev.
+      // The Next tree: next-server ← next dev ← pnpm dev.
       if (/next|pnpm/.test(command)) tree.add(current);
       current = parentOf(current);
     }
@@ -68,7 +68,7 @@ if (listeners.length > 0 && tree.length === 0) {
   console.error(
     `\n  El puerto ${PORT} lo tiene otra cosa (pid ${listeners.join(", ")}):\n` +
       `    ${commandOf(listeners[0]).slice(0, 100)}\n\n` +
-      "  No es de este proyecto, así que no lo toco. Ciérralo y vuelve a intentar.\n",
+      "  Not this project's, so I am leaving it alone. Close it and try again.\n",
   );
   process.exit(1);
 }
@@ -77,19 +77,19 @@ if (tree.length > 0 && !tree.some(belongsHere)) {
   console.error(
     `\n  El servidor del puerto ${PORT} no tiene archivos de este proyecto abiertos:\n` +
       `    ${commandOf(tree[0]).slice(0, 100)}\n\n` +
-      "  Parece de otro sitio, así que no lo toco. Ciérralo y vuelve a intentar.\n",
+      "  Looks like it belongs elsewhere, so I am leaving it alone. Close it and try again.\n",
   );
   process.exit(1);
 }
 
 if (tree.length > 0) {
-  // El padre primero: matar sólo al hijo hace que el padre lo resucite.
+  // The parent first: killing only the child has the parent resurrect it.
   for (const pid of tree.reverse()) sh("kill", ["-9", pid]);
-  console.log(`  Servidor anterior detenido (${tree.length} procesos).`);
+  console.log(`  Previous server stopped (${tree.length} processes).`);
 }
 
 rmSync(join(here, ".next"), { recursive: true, force: true });
-console.log("  .next borrado — se recompila todo desde cero.");
+console.log("  .next cleared — everything recompiles from scratch.");
 console.log("  Arrancando…\n");
 
 spawn("pnpm", ["dev"], { stdio: "inherit", cwd: here }).on("exit", code => {

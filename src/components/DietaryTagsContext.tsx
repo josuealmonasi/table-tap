@@ -4,15 +4,15 @@ import { createContext, useContext } from "react";
 import { tagsFor, type DietaryTag, type StoredDietaryTag } from "@/lib/dietary";
 
 /**
- * Las etiquetas de dieta del restaurante, ya resueltas.
+ * The restaurant's dietary tags, already resolved.
  *
- * Las usan las dos mitades de la app —el editor para ponerlas y el menú del
- * comensal para leerlas y filtrar— y en las dos viven a tres o cuatro
- * componentes de profundidad. Por contexto y no por props: pasarlas a mano
- * sería atravesar pantallas que no tienen nada que ver con alérgenos.
+ * Both halves of the app use them — the editor to attach them and the diner's
+ * menu to read and filter by them — and in both they live three or four
+ * components deep. By context and not by props: passing them by hand would
+ * mean threading through screens that have nothing to do with allergens.
  *
- * Fuera de un proveedor devuelve las de casa, que es lo que la app enseñaba
- * antes de que la lista fuera del restaurante.
+ * Outside a provider it returns the built-ins, which is what the app showed
+ * before the list belonged to the restaurant.
  */
 const DietaryTagsContext = createContext<DietaryTag[]>(tagsFor(null));
 

@@ -1,11 +1,11 @@
 // ============================================================================
-// Qué pantallas revisa `pnpm layout`, y con quién.
+// Which screens `pnpm layout` checks, and as whom.
 //
-// Separado del runner porque esto es la lista y aquello es el trabajo: cuando
-// se agrega una pantalla o un rol, se toca este archivo y nada más.
+// Split from the runner because this is the list and that is the work: when a
+// screen or a role is added, you touch this file and nothing else.
 // ============================================================================
 
-/** Los cinco accesos del equipo demo, con lo que cada uno alcanza de verdad. */
+/** The five demo team logins, with what each one actually reaches. */
 export const CREW = [
   {
     role: "dueño",
@@ -27,8 +27,8 @@ export const CREW = [
   {
     role: "gerente",
     email: "demo-manager@tabletap.dev",
-    // Sin personal ni plan: rebotan, y una página a la que rebotas es otra
-    // página, que ya se revisa con su dueño.
+    // No staff or plan: they bounce, and a page you bounce off is another page,
+    // already checked with its owner.
     pages: [
       "/dashboard",
       "/dashboard/main-menu",
@@ -47,15 +47,15 @@ export const CREW = [
 ];
 
 /**
- * Diálogos, que es donde vive lo que no se ve.
+ * Dialogs, which is where the unseen lives.
  *
- * Una tarjeta encimada en una página se nota; dentro de un modal que sólo
- * aparece al pulsar algo, no la ve nadie hasta que un mesero la encuentra a
- * media comida. Cada uno abre lo suyo y se mide como una pantalla más.
+ * A card overlapping on a page gets noticed; inside a modal that only appears
+ * when something is clicked, nobody sees it until a waiter finds it mid-
+ * service. Each one opens its own and is measured as another screen.
  *
- * Son de mejor esfuerzo: si el disparador no está —porque esa cuenta no tiene
- * datos hoy— se salta en vez de fallar. Una prueba que exige datos concretos
- * es una prueba que se cae sola.
+ * Best effort: if the trigger is not there — because that account has no data
+ * today — it is skipped rather than failed. A test that demands specific data
+ * is a test that falls over on its own.
  */
 export const DIALOGS = {
   "/dashboard/orders": [
@@ -78,23 +78,23 @@ export const DIALOGS = {
     { name: "nueva etiqueta de dieta", text: "Agregar etiqueta" },
   ],
   "/dashboard/staff": [
-    // El botón dice lo que hace —"Enviar invitación"— no "Agregar".
+    // The button says what it does — "Enviar invitación" — not "Agregar".
     { name: "invitar a alguien", text: "Enviar invitación" },
   ],
 };
 
 /**
- * Lo que hace un comensal, paso a paso.
+ * What a diner does, step by step.
  *
- * El carrito ya se revisaba; lo demás no. La ficha del platillo es la pantalla
- * con más cosas apretadas de toda la app —foto, opciones, extras, nota, precio
- * y contador— y el cupón y la propina abren modales encima del carrito.
+ * The cart was already checked; the rest was not. The dish detail is the most
+ * crowded screen in the app — photo, options, extras, note, price and counter
+ * — and the coupon and the tip open modals on top of the cart.
  */
 export const DINER = [
-  // `expect` es lo que prueba que llegamos: sin él, un paso que no dispara
-  // deja la pantalla anterior puesta y se mide el menú creyendo que es otra
-  // cosa. Pasó — la fila de un platillo es un div con role="button", no un
-  // <button>, así que el selector no encontraba nada y nadie se enteraba.
+  // `expect` is what proves we arrived: without it, a step that does not fire
+  // leaves the previous screen up and the menu gets measured as something else.
+  // It happened — a dish row is a div with role="button", not a <button>, so the
+  // selector found nothing and nobody noticed.
   { name: "menú", expect: { es: "Llamar al mesero", en: "Call waiter" }, steps: [] },
   {
     name: "ficha del platillo",

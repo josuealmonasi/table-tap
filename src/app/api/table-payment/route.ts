@@ -34,9 +34,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     orderId?: string;
     settlement?: Settlement;
   };
-  // Una mesa o un pedido de mostrador, nunca las dos ni ninguna: si llegaran
-  // juntas habría que decidir cuál manda, y adivinar cuál cobrar es lo último
-  // que debe hacer un endpoint que marca dinero como recibido.
+  // A table or a counter order, never both and never neither: if both arrived
+  // we would have to decide which wins, and guessing which to charge is the
+  // last thing an endpoint marking money as received should do.
   if (!["cash", "card"].includes(settlement ?? "") || Boolean(tableId) === Boolean(orderId)) {
     return await apiError("apiErr.invalidRequest", 400);
   }
@@ -51,9 +51,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .update({ paid: true, pay_method: settlement })
     .eq("restaurant_id", actor.restaurantId);
 
-  // El pedido del QR general se cobra por sí mismo, y sólo si no tiene mesa:
-  // sin eso, este id serviría para saldar un pedido suelto de una mesa y dejar
-  // la cuenta a medias sin que nadie lo viera.
+  // A general-QR order is collected on its own, and only if it has no table:
+  // without that, this id could settle one loose order from a table and leave
+  // the bill half done with nobody seeing it.
   const base = (tableId ? scoped.eq("table_id", tableId) : scoped.eq("id", orderId!).is("table_id", null))
     .eq("paid", false)
     .eq("written_off", false)

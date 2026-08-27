@@ -39,11 +39,11 @@ const LIVE_STATUSES = new Set(["received", "preparing", "ready"]);
 /**
  * Kitchen dashboard: the live order grid.
  *
- * El historial se mudó a Analíticas. Vivían juntos detrás de una pestaña, y
- * son trabajos distintos: lo de en vivo se mira cada minuto durante el
- * servicio, el historial se busca por código de pedido cuando alguien
- * pregunta por uno. Compartir pantalla significaba que la cocina podía caer
- * en los datos del mes pasado en plena comida.
+ * The history moved to Analytics. They lived together behind a tab, and they
+ * are different jobs: the live one is watched every minute during service,
+ * the history is searched by order code when somebody asks about one.
+ * Sharing a screen meant the kitchen could land in last month's data in the
+ * middle of service.
  */
 export default function OrdersBoard({
   restaurant,

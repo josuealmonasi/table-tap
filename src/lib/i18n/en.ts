@@ -104,6 +104,8 @@ export const en = {
     deleteSelected: "Couldn't delete the selected items",
   },
   menu: {
+    notReadyTitle: "This menu is not ready yet",
+    notReadyBody: "The restaurant has not published its menu yet. Ask a member of staff.",
     dietaryEmpty: "No tags yet. Add the ones your menu needs.",
     addDietary: "+ Add tag",
     dietaryName: "Name (e.g. Sugar-free)",
@@ -514,6 +516,8 @@ myBill: "View my bill",
     waiterSent: "On the way!",
   },
   plan: {
+    frozenBanner: "Your subscription is paused: the dashboard is read-only and changes will not save. Your menu is still live and taking orders.",
+    frozenFix: "Reactivate",
     docsTitle: "Your documents",
     docsHint: "Download them whenever you need them",
     docsAccepted: "You accepted version {version} on {date}.",

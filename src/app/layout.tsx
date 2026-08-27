@@ -4,6 +4,9 @@ import "./globals.css";
 import { getMembership } from "@/lib/membership";
 import { getPlatformAdmin } from "@/lib/admin";
 import Navbar from "@/components/layout/Navbar";
+import FrozenBanner from "@/components/dashboard/plan/FrozenBanner";
+import { dashboardFrozen } from "@/lib/plan";
+import type { PlanStatus } from "@/lib/plan";
 import SectionNav from "@/components/layout/SectionNav";
 import TermsGate from "@/components/legal/TermsGate";
 import { needsTerms } from "@/lib/legal";
@@ -58,6 +61,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               />
             )}
             {admin && <SectionNav role="admin" />}
+            {/* The panel is read-only while the subscription is paused, and
+                until now nothing on screen said so — the API answered 402 to
+                saves the dashboard had happily offered. */}
+            {membership &&
+              dashboardFrozen(
+                (membership.restaurant.plan_status ?? "active") as PlanStatus,
+              ) && <FrozenBanner isOwner={membership.role === "owner"} />}
             {/* Only the owner is asked, and only in the dashboard: the diner's
                 menu renders through this same layout, and holding up somebody's
                 dinner over a contract with their restaurant would be absurd. */}

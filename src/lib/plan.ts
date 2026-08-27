@@ -35,7 +35,7 @@ export interface PlanLimits {
   max_items: number | null;
   allows_dine_in: boolean;
   allows_menu_schedules?: boolean;
-  /** Cobrar en la caja en el QR general. Sólo planes de paga. */
+  /** Paying at the till on the general QR. Paid plans only. */
   allows_counter_payment?: boolean;
   allows_promotions: boolean;
   allows_coupons: boolean;

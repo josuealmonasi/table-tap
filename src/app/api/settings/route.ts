@@ -69,8 +69,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  // Cobrar en la caja viene con el plan. Se comprueba al encenderlo y no al
-  // apagarlo: quien se baje de plan tiene que poder dejarlo como estaba.
+  // Paying at the till comes with the plan. Checked when switching it on and
+  // not off: someone downgrading has to be able to put it back as it was.
   if (update.allow_counter_payment === true) {
     const blocked = await planBlocks(actor.restaurantId, "counterPayment");
     if (blocked) return blocked;

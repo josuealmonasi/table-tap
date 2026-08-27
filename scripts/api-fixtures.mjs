@@ -1,9 +1,9 @@
 // ============================================================================
-// Los datos y las identidades que necesita `pnpm api`.
+// The data and identities `pnpm api` needs.
 //
-// Todo lo que crea lleva una marca y se borra al final: una prueba que deja
-// basura en la base es la que después parece un bug. (Pasó: un pedido de
-// prueba con un itemId inventado acabó pareciendo una falla del sistema de
+// Everything it creates carries a mark and is deleted at the end: a test that
+// leaves litter in the database is the one that later looks like a bug. (It
+// happened: a test order with a made-up itemId ended up looking like a fault
 // calificaciones.)
 // ============================================================================
 import { createClient } from "@supabase/supabase-js";
@@ -41,7 +41,7 @@ export async function setup(env, base) {
   const { data: menu } = await admin
     .from("menus").select("id").eq("restaurant_id", restaurant.id).limit(1).maybeSingle();
 
-  // Un pedido pagado y otro sin pagar, nuestros, para no tocar los del demo.
+  // One paid order and one unpaid, ours, so the demo's are left alone.
   const line = { itemId: dish.id, name: dish.name, emoji: dish.emoji ?? "🍽️", price: Number(dish.price), qty: 1, mods: {} };
   const make = async extra => {
     const { data, error } = await admin.from("orders").insert({
@@ -53,13 +53,13 @@ export async function setup(env, base) {
     return data.id;
   };
 
-  // Una sesión de mesa abierta, que es lo que /api/session pide por id.
+  // An open table session, which is what /api/session asks for by id.
   const { data: session } = await admin
     .from("table_sessions").select("id")
     .eq("restaurant_id", restaurant.id).is("closed_at", null)
     .limit(1).maybeSingle();
 
-  // Cuántas peticiones de servicio había ANTES, para borrar sólo las nuestras.
+  // How many service requests there were BEFORE, so only ours get deleted.
   const { count: serviceRequestBefore } = await admin
     .from("service_requests").select("*", { count: "exact", head: true })
     .eq("restaurant_id", restaurant.id).eq("status", "open");
@@ -70,21 +70,21 @@ export async function setup(env, base) {
     sessionId: session?.id ?? null,
     paidOrder: await make({ paid: true }),
     unpaidOrder: await make({ paid: false }),
-    // Una cuenta con mesa: descuentos y cancelaciones se piden por mesa.
+    // A bill with a table: discounts and cancellations are asked for by table.
     tableOrder: await make({ paid: false, table_id: tables[0].id, table_label: tables[0].label }),
   };
 }
 
-/** Todo lo marcado se va, pase lo que pase con las pruebas. */
+/** Everything marked goes, whatever happened to the tests. */
 export async function teardown(fx) {
   const { admin, restaurant } = fx;
   await admin.from("dish_ratings").delete().in("order_id", [fx.paidOrder, fx.unpaidOrder]);
   await admin.from("orders").delete().eq("note", MARK);
   await admin.from("coupons").delete().eq("restaurant_id", restaurant.id).like("code", "API-%");
-  // La petición de mesero que crea la prueba lleva mesa. El filtro decía
-  // `table_id is null` y no borraba nada: quedó una fila abierta en Mesa 1 que
-  // después apareció como un fallo visual en el tablero. Una prueba que deja
-  // basura es la que luego parece un bug.
+  // The waiter request the test creates carries a table. The filter said
+  // `table_id is null` and deleted nothing: an open row was left on Table 1
+  // that later showed up as a visual bug on the board. A test that leaves
+  // litter is the one that later looks like a bug.
   if (fx.serviceRequestBefore !== undefined) {
     const { data: now } = await admin
       .from("service_requests").select("id")
@@ -98,7 +98,7 @@ export async function teardown(fx) {
   await admin.from("dietary_tags").delete().eq("restaurant_id", restaurant.id).like("key", `${MARK}%`);
   await admin.from("restaurant_tables").delete().eq("restaurant_id", restaurant.id).like("label", `${MARK}%`);
   await admin.from("write_off_requests").delete().eq("restaurant_id", restaurant.id).eq("note", MARK);
-  // El acceso de prueba: la fila y el usuario que la sostiene.
+  // The test login: the row and the user holding it up.
   const { data: hired } = await admin.from("staff").select("user_id").eq("email", `${MARK}@tabletap.dev`).maybeSingle();
   await admin.from("staff").delete().eq("email", `${MARK}@tabletap.dev`);
   if (hired?.user_id) await admin.auth.admin.deleteUser(hired.user_id).catch(() => {});

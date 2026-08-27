@@ -72,7 +72,7 @@ export default function OrderingApp({
   closedNow?: boolean;
   /** A receipt can be emailed — false when no mail provider is configured. */
   receipts?: boolean;
-  /** Las etiquetas de dieta del restaurante. Sin ellas se enseñan las de casa. */
+  /** The restaurant's dietary tags. Without them the built-ins are shown. */
   dietaryTags?: StoredDietaryTag[] | null;
   /**
    * An order to open the tracker on: the landing Stripe returns to, and any
@@ -182,11 +182,11 @@ export default function OrderingApp({
     setTrackId(prev => prev ?? recallOrder(restaurant.id, table?.id));
   }, [restaurant.id, table?.id]);
 
-  // Y se retira solo cuando el pedido se entrega. Antes esto se leía una vez al
-  // montar y nada más: la cocina lo marcaba entregado y el botón seguía en
-  // pantalla hasta que alguien recargara, ofreciendo seguir un plato que ya se
-  // habían comido. Si el seguimiento está abierto no se cierra — el comensal
-  // merece ver "listo" — pero el botón de abajo ya desaparece.
+  // And it withdraws itself once the order is delivered. This used to be read
+  // once on mount and never again: the kitchen marked it delivered and the
+  // button stayed on screen until somebody reloaded, offering to track a dish
+  // they had already eaten. If the tracker is open it does not close — the
+  // diner deserves to see "ready" — but the button below is gone.
   const finished = useOrderFinished(trackId);
   useEffect(() => {
     if (!finished || !trackId) return;
@@ -400,13 +400,12 @@ export default function OrderingApp({
           restaurantId: restaurant.id,
           tableId: table?.id ?? null,
           tableLabel: table?.label ?? null,
-          // La lista es explícita a propósito —el servidor no debe recibir
-          // `cartId` ni nada de la vista— pero le faltaban las dos cosas que
-          // hacen que un combo sea un combo. Sin `comboId`, el servidor veía
-          // una línea suelta cuyo `itemId` es el id de una promoción, lo
-          // buscaba entre los platillos, no lo encontraba y respondía "ya no
-          // está disponible": los combos no se podían pedir, y son de plan de
-          // paga.
+          // The list is explicit on purpose — the server must not receive `cartId` or
+          // anything from the view — but it was missing the two things that make a
+          // combo a combo. Without `comboId` the server saw a loose line whose
+          // `itemId` is a promotion id, looked for it among the dishes, did not find
+          // it and answered "no longer available": combos could not be ordered
+          // at all, and they are a paid-plan feature.
           items: orderableItems.map(c => ({
             itemId: c.itemId,
             name: c.name,
@@ -599,7 +598,7 @@ export default function OrderingApp({
             onAddMore={() => setScreen("menu")}
             onCheckout={checkout}
             payLaterAllowed={Boolean(table) && Boolean(restaurant.allow_pay_later)}
-            // Sin mesa es el QR general: lo que retiene el pedido es la caja.
+            // With no table it is the general QR: what holds the order is the till.
             counterAllowed={!table && Boolean(restaurant.allow_counter_payment)}
             cardsEnabled={Boolean(restaurant.cards_enabled)}
           />

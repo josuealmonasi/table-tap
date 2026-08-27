@@ -46,7 +46,7 @@ export default function TablesPanel({
   // sends the older set of props, and Object.entries(undefined) throws — which
   // takes the whole screen down instead of losing one badge.
   const statusMap = useMemo(() => new Map(Object.entries(statuses ?? {})), [statuses]);
-  // Cobrar una mesa cambia su etiqueta aquí, sin recargar.
+  // Collecting on a table changes its label here, without a reload.
   useLiveOrders(restaurantId);
   const { busy, addTable, renameTable, deleteTable } = useTables(restaurantId);
   const [newLabel, setNewLabel] = useState("");

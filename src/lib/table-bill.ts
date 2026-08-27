@@ -54,13 +54,13 @@ export interface TableBill {
   /** Placed from other phones at the same table. */
   others: BillSide;
   /**
-   * Ya pagado en esta mesa, y por eso fuera del total.
+   * Already paid at this table, and therefore outside the total.
    *
-   * Se enseña, no se cobra. Donde la mesa liquida al final, un comensal puede
-   * pagar su plato con tarjeta mientras los demás dejan la cuenta abierta: si
-   * lo pagado desaparece, el mesero mira la mesa y no ve ni rastro de que
-   * alguien ya pagó, y el que pagó no tiene con qué demostrarlo. Aparece
-   * tachado, con su sello, y sin sumar.
+   * Shown, not charged. Where the table settles at the end, one diner can pay
+   * for their dish by card while the rest leave the bill open: if what was paid
+   * disappears, the waiter looks at the table and sees no trace that anyone has
+   * paid, and the one who paid has nothing to show for it. It appears struck
+   * through, with its mark, and does not add up.
    */
   paid: BillSide;
   /** Everything outstanding — what "pay the lot" settles. */
@@ -83,10 +83,11 @@ export function unpaidOrders(orders: Order[]): Order[] {
 }
 
 /**
- * Lo que ya se pagó en esta mesa.
+ * What has already been paid at this table.
  *
- * Cancelado no, porque nunca se sirvió. Condonado tampoco: se sirvió y nadie
- * lo cobró, y ponerlo junto a lo pagado diría que entró dinero que no entró.
+ * Not cancelled, because that was never served. Not written off either: that
+ * was served and nobody charged for it, and putting it beside what was paid
+ * would say money came in that did not.
  */
 export function paidOrders(orders: Order[]): Order[] {
   return orders.filter(o => o.paid && !o.written_off && o.status !== "cancelled");
@@ -143,12 +144,12 @@ export function canPayMineOnly(bill: TableBill): boolean {
 }
 
 /**
- * Cuántos renglones ya pagados se enseñan antes de plegarlos.
+ * How many already-paid rows are shown before folding them away.
  *
- * Lo pagado es referencia, no es lo que se viene a cobrar. Una lista larga
- * encima del total empuja fuera de la pantalla justo el número que el mesero
- * abrió el diálogo para leer, así que a partir de aquí se resume y se abre a
- * pulsación. Tres cabe sin estorbar.
+ * What was paid is reference, not what you came to collect. A long list above
+ * the total pushes the very number the waiter opened the dialog to read off
+ * the screen, so past this it is summarised and opens on a tap. Three fit
+ * without getting in the way.
  */
 export const PAID_LINES_SHOWN = 3;
 

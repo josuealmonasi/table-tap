@@ -4,11 +4,11 @@ import { createContext, useContext } from "react";
 import type { StoredIconGroup } from "@/lib/icon-groups";
 
 /**
- * Los grupos propios del restaurante, para el selector de iconos.
+ * The restaurant's own groups, for the icon picker.
  *
- * Van por contexto y no por props porque el selector vive dentro del formulario
- * del platillo, que a su vez vive dentro de la sección: pasarlos a mano sería
- * atravesar cuatro componentes que no tienen nada que ver con emojis.
+ * By context and not by props because the picker lives inside the dish form,
+ * which lives inside the section: passing them by hand would mean threading
+ * through four components that have nothing to do with emoji.
  */
 const IconGroupsContext = createContext<StoredIconGroup[]>([]);
 
@@ -22,7 +22,7 @@ export function IconGroupsProvider({
   return <IconGroupsContext.Provider value={groups}>{children}</IconGroupsContext.Provider>;
 }
 
-/** Vacío fuera del editor — ahí el selector enseña sólo los de fábrica. */
+/** Empty outside the editor — there the picker shows only the built-ins. */
 export function useStoredIconGroups(): StoredIconGroup[] {
   return useContext(IconGroupsContext);
 }

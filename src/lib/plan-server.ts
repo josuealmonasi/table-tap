@@ -80,10 +80,10 @@ async function endTrial(restaurantId: string): Promise<RestaurantPlan | null> {
 
 /** Every tier, cheapest first — for naming what an upgrade would unlock. */
 /**
- * Cuántos lugares de fundador se han tomado.
+ * How many founding places have been taken.
  *
- * Lo leen la pantalla de Plan y el checkout, para que el precio que se muestra
- * y el que se cobra salgan del mismo número.
+ * Read by the Plan screen and by checkout, so the price shown and the price
+ * charged come from the same number.
  */
 export const foundersTaken = cache(async (): Promise<number> => {
   const { count } = await createAdminClient()

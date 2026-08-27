@@ -11,15 +11,15 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const membership = await requireManager();
 
-  // Cobrar en la caja viene con el plan. El interruptor se enseña de todos
-  // modos, apagado y diciendo qué lo abre: esconderlo deja al dueño buscando
-  // una opción que existe y nadie le nombró.
+  // Paying at the till comes with the plan. The switch is shown anyway, off and
+  // saying what unlocks it: hiding it leaves the owner hunting for an option
+  // that exists and nobody named.
   const plan = await getPlan(membership.restaurant.id);
   const counterPay = plan ? can(plan.limits, "counterPayment") : false;
 
-  // Lo mismo que calcula el menú del comensal, para que Ajustes pueda decirle
-  // al dueño exactamente lo que su cliente está viendo. Sin esto, encendía
-  // "pagar al final" y nadie le avisaba de que el pago en línea no existía.
+  // The same thing the diner's menu computes, so Settings can tell the owner
+  // exactly what their customer is seeing. Without this they turned on "pay at
+  // the end" and nobody warned them online payment did not exist.
   const cardsEnabled = Boolean(
     membership.restaurant.stripe_account_id && membership.restaurant.stripe_charges_enabled,
   );

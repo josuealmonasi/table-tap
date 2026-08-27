@@ -10,11 +10,11 @@ import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 import IconGroupForm from "./IconGroupForm";
 
 /**
- * Los grupos del selector de iconos, del restaurante.
+ * The restaurant's own icon-picker groups.
  *
- * Mismo trato que los extras: el nombre abre el editor, el lápiz también, y la
- * baja pregunta antes. Los de fábrica no salen aquí — no se pueden tocar, y
- * enseñar filas que no se dejan editar sólo invita a intentarlo.
+ * Same treatment as the extras: the name opens the editor, so does the pencil,
+ * and deleting asks first. The built-ins do not appear here — they cannot be
+ * touched, and showing rows that refuse to be edited only invites trying.
  */
 export default function IconGroupsPanel({ groups }: { groups: StoredIconGroup[] }) {
   const t = useT();
@@ -77,8 +77,8 @@ export default function IconGroupsPanel({ groups }: { groups: StoredIconGroup[] 
                   onClick={async () => {
                     const ok = await confirm({
                       title: t("menu.deleteIconGroupConfirm", { name: group.name }),
-                      // Los platillos guardan el emoji, no el grupo: borrarlo no
-                      // les quita el icono que ya tienen puesto.
+                      // Dishes store the emoji, not the group: deleting it does not take away
+                      // the icon they already have.
                       message: t("menu.deleteIconGroupMsg"),
                       confirmLabel: t("common.delete"),
                       danger: true,

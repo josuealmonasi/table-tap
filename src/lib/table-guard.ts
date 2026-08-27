@@ -1,17 +1,16 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
- * ¿Esta mesa es de este restaurante?
+ * Does this table belong to this restaurant?
  *
- * Las rutas públicas reciben `restaurantId` y `tableId` del cuerpo de la
- * petición, y hasta ahora sólo /api/service-requests comprobaba que fueran
- * pareja. Sin la comprobación se puede crear un pedido en el restaurante A
- * etiquetado con una mesa del restaurante B: filas cruzadas, una sentada
- * abierta en la mesa de alguien más y, como sólo puede haber una sentada
- * abierta por mesa, los comensales reales de B acaban metidos en la sentada
- * que abrió A.
+ * Public routes receive `restaurantId` and `tableId` from the request body,
+ * and until now only /api/service-requests checked they were a pair. Without
+ * the check you can create an order in restaurant A tagged with a table from
+ * restaurant B: crossed rows, a sitting opened on somebody else's table and,
+ * since there can only be one open sitting per table, B's real diners end up
+ * inside the sitting A opened.
  *
- * Devuelve la mesa cuando son pareja, o null.
+ * Returns the table when they are a pair, or null.
  */
 export async function tableOf(
   restaurantId: string,

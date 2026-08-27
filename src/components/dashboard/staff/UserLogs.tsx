@@ -24,8 +24,8 @@ interface UserLogsProps {
  */
 export default function UserLogs({ restaurantId, currency }: UserLogsProps) {
   const t = useT();
-  // Lo que se escribe se compara contra lo que se lee en las filas, no contra
-  // el nombre inglés que hay en la columna.
+  // What is typed is compared against what the rows read, not against the
+  // English name in the column.
   const [typed, setTyped] = useState("");
   const named = useMemo(
     () => entitiesNamedBy(typed, entity => t(`log.entity.${entity}`)),

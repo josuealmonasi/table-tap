@@ -55,9 +55,9 @@ interface CartScreenProps {
   onCheckout: (payLater?: boolean) => void;
   /** Dine-in at a table, where the owner allows settling at the end. */
   payLaterAllowed?: boolean;
-  /** QR general, donde el dueño permite pasar a la caja a pagar. */
+  /** General QR, where the owner allows going to the till to pay. */
   counterAllowed?: boolean;
-  /** Si el restaurante puede cobrar con tarjeta ahora mismo. */
+  /** Whether the restaurant can take cards right now. */
   cardsEnabled?: boolean;
 }
 
@@ -103,14 +103,15 @@ export default function CartScreen({
   // "Service (10%) — $0.00" row for a fee nobody is being charged.
   const effectiveServicePct = restaurant.service_enabled ? restaurant.service_pct : 0;
 
-  // Las tres banderas ya vienen resueltas para esta pantalla —de mesa o del QR
-  // general— así que aquí sólo se juntan. `atTable` va en true porque quien
-  // decide si "pagar al final" aplica es OrderingApp, que sí sabe si hay mesa.
+  // The three flags arrive already resolved for this screen — table or general
+  // QR — so here they are only gathered. `atTable` is true because the one who
+  // decides whether "pay at the end" applies is OrderingApp, which knows.
   const pay = paymentOptions({
     cardsEnabled,
     allowPayLater: payLaterAllowed,
     allowCounterPayment: counterAllowed,
     atTable: true,
+    acceptingOrders: restaurant.accepting_orders,
   });
   return (
     <div className="tt-root">
@@ -291,7 +292,7 @@ export default function CartScreen({
                     tarjeta, o deja la cuenta abierta" debajo de una pantalla
                     donde lo de la tarjeta no existía. */}
                 {(() => {
-                  const key = paymentHintKey(pay);
+                  const key = paymentHintKey(pay, restaurant.accepting_orders);
                   if (!canOrder(pay)) return t(key);
                   const Icon = pay.payNow && !pay.payLater && !pay.payCounter ? SecureIcon : BillIcon;
                   return (

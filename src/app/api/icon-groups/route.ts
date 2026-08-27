@@ -8,11 +8,11 @@ import { isEmoji, type IconVariant } from "@/lib/icon-groups";
 export const runtime = "nodejs";
 
 /**
- * Los grupos del selector de iconos, del restaurante.
+ * The restaurant's own icon-picker groups.
  *
- * Gerencia, como los menús: es cómo se ve la carta por dentro, no dinero ni
- * accesos. Se escribe con la llave de servicio y SIEMPRE acotado al
- * restaurante de quien pide — un id de otro no encuentra nada.
+ * Management, like menus: this is how the menu looks from the inside, not money
+ * or logins. Written with the service key and ALWAYS scoped to the caller's
+ * restaurant — somebody else's id finds nothing.
  */
 
 interface Body {
@@ -24,7 +24,7 @@ interface Body {
 
 const VARIANTS: IconVariant[] = ["product", "addon"];
 
-/** Lo que se puede guardar: emojis de verdad, sin repetir, y no cien. */
+/** What can be stored: real emoji, no repeats, and not a hundred of them. */
 function cleanIcons(icons: Body["icons"]): { emoji: string; label: string | null }[] {
   const seen = new Set<string>();
   const out: { emoji: string; label: string | null }[] = [];
@@ -40,8 +40,8 @@ function cleanIcons(icons: Body["icons"]): { emoji: string; label: string | null
 
 async function writeIcons(groupId: string, icons: ReturnType<typeof cleanIcons>) {
   const db = createAdminClient();
-  // Se reemplazan en bloque: es una lista corta y así el orden que llega es el
-  // orden que queda, sin reconciliar altas y bajas una por una.
+  // Replaced wholesale: it is a short list, so the order that arrives is the
+  // order that stays, with no reconciling of additions and removals one by one.
   await db.from("icon_group_items").delete().eq("group_id", groupId);
   if (icons.length === 0) return;
   await db.from("icon_group_items").insert(
@@ -95,7 +95,7 @@ export async function PATCH(req: NextRequest) {
   if (!body.id) return await apiError("apiErr.invalidRequest", 400);
 
   const db = createAdminClient();
-  // Acotado al restaurante del que pide: sin esto un id ajeno se dejaría editar.
+  // Scoped to the caller's restaurant: without this another's id would be editable.
   const { data: mine } = await db
     .from("icon_groups")
     .select("id")
@@ -127,11 +127,11 @@ export async function DELETE(req: NextRequest) {
   const { id } = (await req.json().catch(() => ({}))) as Body;
   if (!id) return await apiError("apiErr.invalidRequest", 400);
 
-  // Los iconos se van con el grupo por la llave foránea. Los platillos que ya
-  // usaban uno no pierden nada: guardan el emoji, no el grupo.
-  // Con `.select()` para saber si borró algo de verdad: PostgREST no protesta
-  // cuando el filtro no encuentra nada, y un id ajeno saldría por aquí con un
-  // 200 diciendo que sí. La fila ajena está a salvo, pero la respuesta mentía.
+  // The icons go with the group via the foreign key. Dishes already using one
+  // lose nothing: they store the emoji, not the group.
+  // With `.select()` to know whether it really deleted anything: PostgREST does
+  // not complain when the filter matches nothing, and another's id would leave
+  // here with a 200 saying it had. The row is safe, but the answer was lying.
   const { data, error } = await createAdminClient()
     .from("icon_groups")
     .delete()

@@ -92,9 +92,9 @@ export async function POST(req: NextRequest) {
   if (inviteErr || !invited.user) {
     const raw = inviteErr?.message?.toLowerCase() ?? "";
     const already = raw.includes("already");
-    // Supabase dice "invalid" o "rate limit" cuando el que no puede mandar el
-    // correo es él, no cuando la dirección está mal. Decirle al dueño que el
-    // correo de su mesero es inválido lo manda a revisar lo único que sí
+    // Supabase says "invalid" or "rate limit" when it is the one that cannot send
+    // the mail, not when the address is wrong. Telling the owner their waiter's
+    // email is invalid sends them to check the one thing that is actually fine.
     // estaba bien.
     const mailer = raw.includes("rate limit") || raw.includes("invalid");
     return NextResponse.json(

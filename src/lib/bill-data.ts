@@ -57,12 +57,12 @@ export async function fetchTableBill(
       .order("created_at", { ascending: true });
 
   let owed = base().eq("paid", false);
-  // Lo ya pagado se enseña pero SIEMPRE acotado a esta comida, y ahí está la
-  // diferencia con lo que se debe: una deuda vieja es del mesero, se cobra o
-  // se condona, y por eso no lleva ventana. Lo pagado no se cobra — es
-  // contexto de la cuenta de ahora. Sin la ventana, la mesa 6 del demo abría
-  // el cobro con 25 renglones de meses pasados y un "ya pagado" de MX$1,797,
-  // que no dice nada de lo que hay en la mesa esta noche.
+  // What was already paid is shown but ALWAYS scoped to this meal, and that is
+  // the difference from what is owed: an old debt is the waiter's, to collect
+  // or write off, which is why it carries no window. What was paid is not
+  // collected — it is context for the bill now. Without the window, demo table
+  // 6 opened collection with 25 rows from months back and an "already paid" of
+  // MX$1,797, which says nothing about what is on the table tonight.
   let settled = base().eq("paid", true).gte("created_at", billWindowStart().toISOString());
 
   if (audience === "diner") {
@@ -84,7 +84,7 @@ export async function fetchTableBill(
 
   // `pending_payment` is already excluded above — those are carts mid-Stripe,
   // not debts. unpaidOrders drops cancelled ones; paidOrders drops those and
-  // the written-off, así que un pedido sólo cae de un lado o del otro.
+  // the written-off, so an order falls on one side or the other and never both.
   return [
     ...unpaidOrders((owedRes.data ?? []) as Order[]),
     ...paidOrders((settledRes.data ?? []) as Order[]),
@@ -110,7 +110,7 @@ export async function fetchCounterBill(
     .select(FIELDS)
     .eq("restaurant_id", restaurantId)
     .eq("id", orderId)
-    // Sin mesa: por aquí no se cobra media cuenta de una mesa.
+    // No table: half a table's bill is not collected through here.
     .is("table_id", null)
     .neq("status", "pending_payment");
 

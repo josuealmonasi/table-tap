@@ -14,7 +14,7 @@ export default function TrackedItemsCard({
   items: OrderLineItem[];
   total: number;
   currency: string;
-  /** Falso en una cuenta que se paga al final o en la caja. */
+  /** False on a bill paid at the end or at the till. */
   paid?: boolean;
 }) {
   const t = useT();

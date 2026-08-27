@@ -49,7 +49,7 @@ export default async function PlanPage() {
       .select("stripe_customer_id, terms_version, terms_accepted_at, founding_number, subscribed_price")
       .eq("id", membership.restaurant.id)
       .single(),
-    // Cuántos lugares de fundador se han tomado ya.
+    // How many founding places have been taken.
     createAdminClient()
       .from("restaurants")
       .select("id", { count: "exact", head: true })

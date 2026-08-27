@@ -25,9 +25,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!plan || !isSelfServe(plan)) return await apiError("apiErr.pickPlan", 400);
 
   const limits = (await allPlans()).find(p => p.plan === plan);
-  // El precio sube solo al llenarse el lugar 50: se calcula aquí, con el mismo
-  // conteo que vio la pantalla de Plan, para que lo que se cobra y lo que se
-  // mostró no puedan discrepar.
+  // The price rises by itself once place 50 fills: computed here, from the same
+  // count the Plan screen saw, so what is charged and what was shown cannot
+  // disagree.
   const taken = await foundersTaken();
   if (!limits) return await apiError("apiErr.pickPlan", 400);
 

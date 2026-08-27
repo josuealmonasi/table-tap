@@ -4,26 +4,26 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-/** Un respiro tras el aviso: cerrar una mesa toca varios pedidos de golpe y no
- *  hace falta re-renderizar una vez por cada uno. */
+/** A breath after the notice: closing a table touches several orders at once
+ *  and there is no need to re-render once per order. */
 const SETTLE_MS = 400;
 
 /**
- * Mantiene al día una pantalla cuyos números salen de los pedidos.
+ * Keeps a screen up to date when its numbers come from orders.
  *
- * "Libre" y "Debe MX$…" no son columnas: se calculan en el servidor a partir
- * de lo que sigue sin pagarse. Esas pantallas se pintaban una vez y ahí se
- * quedaban — el mesero cobraba la Mesa 3 y el dueño, mirando Mesas y QR, seguía
- * viendo que debía, o veía un importe que ya no era. La única forma de
- * enterarse era recargar.
+ * "Free" and "Owes MX$…" are not columns: the server computes them from what
+ * is still unpaid. Those screens painted once and stayed there — the waiter
+ * collected on Table 3 and the owner, looking at Tables & QR, still saw it as
+ * owing, or saw an amount that was no longer true. The only way to find out
+ * was to reload.
  *
- * El aviso llega por realtime y lo único que hace es pedirle al servidor que
- * vuelva a pintar. Rehacer la cuenta en el navegador sería un segundo lugar
- * donde vive la misma regla, y de esos ya hemos tenido bastantes: así el número
- * lo sigue calculando quien siempre lo calculó.
+ * The notice arrives over realtime and all it does is ask the server to paint
+ * again. Redoing the arithmetic in the browser would be a second place the
+ * same rule lives, and we have had enough of those: this way the number is
+ * still computed by whoever always computed it.
  *
- * También al volver a la pestaña, que es cuando alguien va a actuar sobre lo
- * que ve, y por si algún aviso se perdió mientras no miraba.
+ * Also on returning to the tab, which is when somebody is about to act on what
+ * they see, and in case a notice was missed while they were away.
  */
 export function useLiveOrders(restaurantId: string): void {
   const router = useRouter();
@@ -40,8 +40,8 @@ export function useLiveOrders(restaurantId: string): void {
     };
 
     void (async () => {
-      // Los pedidos son del equipo bajo RLS, así que el socket tiene que
-      // llevar su token o no llega ni un cambio.
+      // Orders belong to the team under RLS, so the socket has to carry their token
+      // or not a single change arrives.
       const {
         data: { session },
       } = await supabase.auth.getSession();

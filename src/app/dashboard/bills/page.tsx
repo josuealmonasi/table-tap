@@ -48,8 +48,8 @@ export default async function BillsPage() {
       .eq("restaurant_id", r.id)
       .eq("status", "pending")
       .order("created_at", { ascending: false }),
-    // Quién pidió la cuenta: son las mesas que están esperando a que alguien
-    // vaya a cobrarles, que no es lo mismo que tener saldo.
+    // Who asked for the bill: these are the tables waiting for somebody to come
+    // and collect, which is not the same as having a balance.
     db
       .from("service_requests")
       .select("table_id")

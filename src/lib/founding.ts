@@ -1,40 +1,40 @@
 /**
- * El precio de fundador.
+ * The founding price.
  *
- * Los primeros restaurantes que contratan se quedan con el precio con el que
- * entraron. No es un descuento: es el mismo precio, con la promesa de que no
- * sube — que es lo que de verdad le importa a un negocio que presupuesta en
- * cientos de pesos.
+ * The first restaurants to subscribe keep the price they came in at. It is not
+ * a discount: it is the same price, with the promise that it never rises —
+ * which is what actually matters to a business budgeting in hundreds of pesos.
+ * hundreds of pesos.
  *
- * También es lo que vuelve honesto el precio tachado. Hoy el precio de lista
- * es un número que nadie paga; cuando se acaben estos lugares será el precio
- * real de quien llegue después.
+ * It is also what makes the struck-through price honest. Today the list price
+ * is a number nobody pays; once these places run out it becomes the real price
+ * for whoever arrives next.
  */
 
-/** Cuántos lugares hay. Cambiarlo aquí lo cambia en todas partes. */
+/** How many places there are. Changing it here changes it everywhere. */
 export const FOUNDING_SLOTS = 50;
 
-/** Lugares que quedan, nunca negativo. */
+/** Places left, never negative. */
 export function slotsLeft(taken: number): number {
   return Math.max(0, FOUNDING_SLOTS - taken);
 }
 
-/** ¿Todavía se puede entrar como fundador? */
+/** Can someone still come in as a founder? */
 export function foundingOpen(taken: number): boolean {
   return slotsLeft(taken) > 0;
 }
 
 /**
- * El precio que paga quien contrata en este momento.
+ * The price paid by whoever subscribes right now.
  *
- * Se calcula, no se guarda. Cuando se llena el lugar 50 el precio sube solo,
- * sin que nadie tenga que acordarse de editar la tabla de planes — y si algún
- * día se quieren abrir más lugares, basta con mover FOUNDING_SLOTS y el precio
- * vuelve a bajar. Cambiar monthly_price a mano habría sido irreversible y una
- * cosa más que se puede olvidar.
+ * Computed, not stored. When place 50 fills the price rises by itself, with
+ * nobody having to remember to edit the plans table — and if one day more
+ * places are opened, moving FOUNDING_SLOTS brings the price back down. Editing
+ * monthly_price by hand would have been irreversible and one more thing to
+ * forget.
  *
- * A quien ya está suscrito no le afecta: Stripe no re-tarifica una suscripción
- * viva, y ese es justamente el candado.
+ * It does not touch anyone already subscribed: Stripe does not re-price a live
+ * subscription, and that is precisely the lock.
  */
 export function currentPrice(
   limits: { monthly_price: number; list_price?: number | null },
@@ -45,9 +45,9 @@ export function currentPrice(
 }
 
 /**
- * Cuánto se ahorra un fundador al año contra el precio de lista.
+ * What a founder saves in a year against the list price.
  *
- * El argumento no es el ahorro de un mes: es que el precio no sube nunca.
+ * The argument is not one month's saving: it is that the price never rises.
  */
 export function yearlySaving(locked: number, list: number | null | undefined): number {
   if (!list || list <= locked) return 0;
