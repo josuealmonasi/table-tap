@@ -65,7 +65,13 @@ export default function OrderStatusTimeline({
             color: "var(--tt-success)",
           }}
         >
-          {t("tracker.readyTable", { label: tableLabel ?? "" })}
+          {/* An order with no table was placed from the general QR: nobody is
+              carrying it anywhere, and the diner collects it with the code in
+              the header. Before this it read "we will bring it to Table  !",
+              with the number simply missing. */}
+          {tableLabel
+            ? t("tracker.readyTable", { label: tableLabel })
+            : t("tracker.readyCounter")}
         </div>
       ) : (
         <div
