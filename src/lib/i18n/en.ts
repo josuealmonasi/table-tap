@@ -1062,7 +1062,7 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
     roleManager: "Manager — menus, tables, settings, refunds",
     roleOwner: "Owner — everything (max 3 owners)",
     recentActivity: "Recent activity",
-    activityHint: "Every change to logins and roles, newest first",
+    activityHint: "Payments, cancellations, discounts, settings and logins — newest first",
     activityCount: "{n} entries",
     logOrders: "{n} order(s)",
     paycash: "cash",

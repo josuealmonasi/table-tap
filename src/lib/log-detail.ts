@@ -33,3 +33,39 @@ export function logDetail(fields: Record<string, string | number | null | undefi
     .map(([k, v]) => `${k}=${String(v).replaceAll(" ", "_")}`)
     .join(" ");
 }
+
+/** Los tipos de cosa que la bitácora registra, en el orden en que se nombran. */
+export const LOG_ENTITIES = [
+  "staff",
+  "order",
+  "bill",
+  "discount",
+  "coupon",
+  "promotion",
+  "settings",
+  "menu",
+] as const;
+
+/**
+ * Qué tipos nombra lo que alguien escribió en el buscador.
+ *
+ * La columna guarda "settings" y la fila enseña "Ajustes": quien busca lo que
+ * está viendo tiene que encontrarlo. Se compara sin acentos y sin mayúsculas
+ * porque nadie escribe "Cupón" con su tilde en un buscador.
+ */
+export function entitiesNamedBy(
+  query: string,
+  label: (entity: string) => string,
+): string[] {
+  const needle = fold(query);
+  if (!needle) return [];
+  return LOG_ENTITIES.filter(entity => fold(label(entity)).includes(needle));
+}
+
+function fold(value: string): string {
+  return value
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}

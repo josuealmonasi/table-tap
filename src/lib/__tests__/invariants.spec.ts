@@ -137,10 +137,27 @@ describe("each module sits behind the right guard", () => {
     }
   });
 
-  it("keeps the activity log behind a manager check", () => {
-    // Bills is open to waiters. The log is not.
+  it("gates the activity log with exactly what its RLS policy allows", () => {
+    // La reja de la página y la política de la tabla son dos sitios que tienen
+    // que decir lo mismo, y nada los comparaba: la página enseñaba la bitácora
+    // al gerente y `user_logs` sólo la deja leer al dueño, así que el gerente
+    // veía el módulo entero con cero renglones. Una reja más ancha que su
+    // política no protege de más — enseña una pantalla rota.
     const page = read("src/app/dashboard/bills/page.tsx");
-    expect(page).toMatch(/MANAGES\(membership\.role\)/);
+    const schema = read("supabase/schema.sql");
+    // La sentencia va en varias líneas: se toma desde `create policy` hasta su
+    // punto y coma, que es donde de verdad termina.
+    const policy = schema
+      .split(";")
+      .find(stmt => /create policy/.test(stmt) && /\bon user_logs\b/.test(stmt));
+
+    expect(policy, "no encuentro la política de user_logs en schema.sql").toBeTruthy();
+    // `owns_restaurant` es dueño; `has_role(..., 'manager')` sería dueño y
+    // gerente. Lo que diga la política decide el predicado de la página.
+    const ownerOnly = /owns_restaurant/.test(policy!);
+    expect(page).toMatch(ownerOnly ? /OWNS\(membership\.role\)/ : /MANAGES\(membership\.role\)/);
+    // Y nunca el otro, que es como se llegó aquí.
+    expect(page).not.toMatch(ownerOnly ? /MANAGES\(membership\.role\) && \(\s*<UserLogs/ : /OWNS\(membership\.role\) && \(\s*<UserLogs/);
   });
 });
 

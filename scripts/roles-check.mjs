@@ -40,6 +40,7 @@ const ROLES = [
 // que sale en todas.
 const OWNER = ["owner"];
 const MANAGES = ["owner", "manager"];
+const OWNER_ONLY = ["owner"];
 const SERVES = ["owner", "manager", "waiter", "cashier"];
 const ALL = ["owner", "manager", "waiter", "cashier", "kitchen"];
 
@@ -49,9 +50,12 @@ const PAGES = {
   "/dashboard/bills": {
     allow: SERVES,
     marker: "Busca por mesa o código de pedido",
-    // La bitácora se mudó aquí desde Personal: el gerente la necesita junto a
-    // las cuentas, el mesero no debe leer lo que hizo el resto del equipo.
-    sections: { "Actividad reciente": MANAGES },
+    // La bitácora se mudó aquí desde Personal. Sólo el dueño: la política de
+    // `user_logs` es `owns_restaurant`, así que al gerente se le pintaba el
+    // módulo entero con cero renglones. Esta lista decía MANAGES y pasaba,
+    // porque comprobaba que el encabezado existiera y no que la bitácora
+    // tuviera algo dentro — que es distinto.
+    sections: { "Actividad reciente": OWNER_ONLY },
   },
   "/dashboard/tables": { allow: MANAGES, marker: "Agregar mesa" },
   "/dashboard/analytics": {

@@ -1,11 +1,12 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useUserLogs } from "@/hooks/useUserLogs";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import { LogRowsSkeleton } from "@/components/ui/DashSkeletons";
 import { MoveDownIcon, MoveUpIcon, SearchIcon } from "@/components/ui/icons";
-import { parseLogDetail } from "@/lib/log-detail";
+import { entitiesNamedBy, parseLogDetail } from "@/lib/log-detail";
 
 interface UserLogsProps {
   restaurantId: string;
@@ -23,6 +24,13 @@ interface UserLogsProps {
  */
 export default function UserLogs({ restaurantId, currency }: UserLogsProps) {
   const t = useT();
+  // Lo que se escribe se compara contra lo que se lee en las filas, no contra
+  // el nombre inglés que hay en la columna.
+  const [typed, setTyped] = useState("");
+  const named = useMemo(
+    () => entitiesNamedBy(typed, entity => t(`log.entity.${entity}`)),
+    [typed, t],
+  );
   const {
     logs,
     loading,
@@ -35,7 +43,7 @@ export default function UserLogs({ restaurantId, currency }: UserLogsProps) {
     sort,
     ascending,
     sortBy,
-  } = useUserLogs(restaurantId);
+  } = useUserLogs(restaurantId, named);
 
   /**
    * The specifics, in the reader's language: the server wrote them as fields
@@ -97,7 +105,10 @@ export default function UserLogs({ restaurantId, currency }: UserLogsProps) {
           value={query}
           placeholder={t("dash.activitySearch")}
           aria-label={t("dash.activitySearch")}
-          onChange={e => setQuery(e.target.value)}
+          onChange={e => {
+            setQuery(e.target.value);
+            setTyped(e.target.value);
+          }}
         />
       </div>
 
