@@ -802,6 +802,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     billSettled: "That bill has already been paid.",
     nothingToSettle: "That table has nothing outstanding.",
     nothingToDiscount: "That bill has nothing left to discount.",
+    nothingToWriteOff: "That bill has nothing left to write off — it was collected or cancelled first.",
     requestGone: "That request has already been decided.",
     couponNotFound: "We couldn't find that coupon.",
     couponNotValid: "That coupon can't be used on this bill.",

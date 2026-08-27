@@ -796,6 +796,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     billSettled: "Esa cuenta ya fue pagada.",
     nothingToSettle: "Esa mesa no tiene nada pendiente.",
     nothingToDiscount: "Esa cuenta ya no tiene nada que descontar.",
+    nothingToWriteOff: "Esa cuenta ya no tiene nada que cancelar — la cobraron o la cancelaron antes.",
     requestGone: "Esa solicitud ya fue resuelta.",
     couponNotFound: "No encontramos ese cupón.",
     couponNotValid: "Ese cupón no se puede usar en esta cuenta.",
