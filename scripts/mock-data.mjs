@@ -65,12 +65,31 @@ async function ensureUser(pg, admin, email, name) {
   return userId;
 }
 
+/**
+ * The connected Stripe account, kept aside across a reseed.
+ *
+ * Onboarding is slow, done by a person on Stripe's own site, and the account
+ * that comes out of it belongs to the restaurant forever. The row here does
+ * not: reseeding deletes it and writes a fresh one, which silently threw the
+ * link away and left the app with no way back — the only button is "connect",
+ * which creates ANOTHER account. That is how four of them accumulated with one
+ * fully onboarded and none of them referenced.
+ */
+let keptStripe = null;
+
 /** Removes Demo Bistro (cascades all its data) and the demo logins. */
 export async function dropMock(pg) {
-  const { rows } = await pg.query("select id from restaurants where name = $1", [
-    DEMO_RESTAURANT,
-  ]);
+  const { rows } = await pg.query(
+    "select id, stripe_account_id, stripe_charges_enabled from restaurants where name = $1",
+    [DEMO_RESTAURANT],
+  );
   for (const r of rows) {
+    if (r.stripe_account_id) {
+      keptStripe = {
+        stripe_account_id: r.stripe_account_id,
+        stripe_charges_enabled: r.stripe_charges_enabled,
+      };
+    }
     await pg.query("delete from restaurants where id = $1", [r.id]);
   }
   const admin = adminClient();
@@ -165,6 +184,16 @@ export async function seedMock(pg) {
     [DEMO_RESTAURANT, ownerId],
   );
   const rid = rest.id;
+
+  // Hand the connected account back to the restaurant that owns it.
+  if (keptStripe) {
+    await pg.query(
+      "update restaurants set stripe_account_id = $2, stripe_charges_enabled = $3 where id = $1",
+      [rid, keptStripe.stripe_account_id, keptStripe.stripe_charges_enabled],
+    );
+    console.log(`  Stripe link kept: ${keptStripe.stripe_account_id}`);
+  }
+
   const tables = await bulkInsert(
     pg,
     "restaurant_tables",
