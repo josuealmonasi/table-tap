@@ -204,6 +204,12 @@ h2.tt-serif {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  /* A label, not a paragraph. Left to wrap, "Marcar listo" came out two lines
+     tall on a phone and stood a head above the "Cancelar" beside it, and
+     "Empezar a preparar" went three lines and out over the edge of its own
+     card. A row that cannot fit its buttons has to wrap the row — see
+     .tt-order-actions — not fold the words inside them. */
+  white-space: nowrap;
   transition:
     transform 0.12s,
     opacity 0.12s;
@@ -1738,6 +1744,24 @@ a.tt-btn {
      siempre estuvo. */
   margin-left: auto;
 }
+/* En un teléfono el precio y los tres controles nunca caben junto al nombre:
+   son unos 180px de una fila de 264. Bajaban siempre, pero apretados a la
+   derecha y con medio renglón vacío debajo del nombre, que es lo que se ve
+   como algo mal puesto. Que ocupen el renglón entero: el precio bajo el
+   platillo, los controles al filo derecho, y el renglón se lee como un
+   renglón. */
+@media (max-width: 480px) {
+  .tt-line-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+  /* El precio abre el renglón y el lápiz y el contador siguen juntos al final.
+     Con `space-between` los tres se repartían el ancho y el lápiz quedaba
+     flotando solo en medio, que es peor que apretado. */
+  .tt-line-actions > strong {
+    margin-right: auto;
+  }
+}
 /* Edit gets the stepper's pill so the two read as one group of controls
    rather than a loose icon parked beside a button. */
 .tt-line-actions .tt-iconbtn {
@@ -2074,6 +2098,9 @@ a.tt-btn {
   letter-spacing: 0.05em;
   padding: 4px 10px;
   border-radius: 20px;
+  /* One pill, one line. .tt-order-flags already wraps, so two badges stack
+     instead of each folding in half. */
+  white-space: nowrap;
 }
 /* El estado del pedido y si está pagado son dos cosas distintas y van juntas
    en la esquina; envueltas para que en un teléfono bajen en vez de encimarse. */
@@ -3206,8 +3233,16 @@ a.tt-btn {
   font-weight: 600;
 }
 /* What kind of thing the entry is about, so the eye can skip to the money. */
+/* It is a flex item beside the sentence, and the sentence's `overflow-wrap:
+   anywhere` reaches it by inheritance — so on a phone the pill shrank and split
+   its own word down the middle: "DESCUENT / O", "AJUST / ES". A one-word label
+   is the wrong thing to break. It keeps its width and the sentence takes what
+   is left. */
 .tt-log-tag {
   display: inline-block;
+  flex: none;
+  white-space: nowrap;
+  overflow-wrap: normal;
   padding: 1px 8px;
   border-radius: 999px;
   background: var(--tt-surface);
@@ -3288,7 +3323,22 @@ a.tt-btn {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 12px;
+}
+/* Two labels and a count have to share one line on a phone, and at the standard
+   width they need 352px of the 323 there are. These ghost buttons are labels
+   with a tap target around them — the same reasoning as .tt-plan-actions — so
+   the side padding comes off and the outer two sit flush with the column. */
+.tt-log-pager .tt-btn {
+  padding-inline: 6px;
+}
+.tt-log-pager .tt-btn:first-child {
+  margin-left: -6px;
+}
+.tt-log-pager .tt-btn:last-child {
+  margin-right: -6px;
 }
 
 /* Orders board: open call-waiter / request-bill chips */
@@ -3302,13 +3352,21 @@ a.tt-btn {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   background: var(--tt-white);
   border-left: 4px solid var(--tt-gold);
   border-radius: 12px;
   padding: 10px 14px;
   font-size: 14px;
   border: 1px solid var(--tt-line);
+}
+/* The counterpart of the label rule on .tt-btn: the button here can still be
+   squeezed narrower than its own label, and now that the label will not fold to
+   fit, the chip is what has to give. When it does, the button keeps the right
+   edge rather than landing under the first word of the sentence. */
+.tt-request-chip > .tt-btn {
+  margin-left: auto;
 }
 
 /* Customer menu: call-waiter / request-bill buttons (table QR only) */
@@ -3814,6 +3872,7 @@ a.tt-btn {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   background: var(--tt-white);
   border-top: 1px solid var(--tt-line);
@@ -3922,8 +3981,18 @@ a.tt-btn {
 .tt-dialog-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 20px;
+}
+/* On a phone the two share the width: side by side when they fit, and one per
+   line, still full width, when a pair like "Cancelar" / "Cancelar y
+   reembolsar" does not. Ranged right at their natural widths they stacked into
+   two ragged blocks that read as two unrelated controls. */
+@media (max-width: 480px) {
+  .tt-dialog-actions .tt-btn {
+    flex: 1 1 auto;
+  }
 }
 
 /* generic modal (form content instead of a fixed confirm message) */
@@ -3980,6 +4049,7 @@ a.tt-btn {
 }
 .tt-qr-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
 }
@@ -4413,6 +4483,7 @@ a.tt-btn {
 .tt-rate-actions {
   display: flex;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 18px;
 }
@@ -4658,6 +4729,39 @@ a.tt-btn {
    and a code never touch on a narrow card. */
 .tt-order-head .tt-row {
   gap: 10px;
+  /* The card is 300px whatever the screen, so "Mesa 10 · ORD-6E13" and the
+     time beside two status pills are both close to the edge of fitting. Let
+     the row drop to a second line rather than break "01:48 PM" in half. */
+  flex-wrap: wrap;
+}
+/* The stamp on a ticket. It is short; what it must never do is fold. */
+.tt-order-head .tt-row > .tt-muted {
+  white-space: nowrap;
+}
+
+/* Total on the left, what to do with the order on the right — and when the
+   buttons no longer fit beside the money, the whole group drops to its own
+   line still ranged right. They used to be squeezed in place: the labels wrapped
+   inside the buttons and the last one hung out over the edge of the card. */
+.tt-order-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+.tt-order-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+/* A kitchen ticket is 300px wide on every screen, so its buttons are the one
+   place the standard small button is genuinely too wide to sit three abreast. */
+.tt-order-actions .tt-btn-sm {
+  padding: 8px 12px;
 }
 .tt-order-code {
   font-size: 16px;
@@ -4679,6 +4783,18 @@ a.tt-btn {
   align-items: start;
   overflow-x: auto;
   padding-bottom: 8px;
+}
+/* On a phone only one column is ever on screen, so 300px leaves 60 of the 361
+   available doing nothing while the ticket inside cannot fit "Cancelar" beside
+   "Empezar a preparar". Give the column the width there is and keep a sliver of
+   the next one showing, which is what says the board scrolls. */
+@media (max-width: 560px) {
+  .tt-board {
+    /* A flat width, not a minmax: the board already overflows its container by
+       design, so there is never free space for a track to grow into and a
+       `minmax(300px, 92%)` sits at 300px forever. */
+    grid-auto-columns: min(92%, 340px);
+  }
 }
 .tt-board-col {
   display: flex;

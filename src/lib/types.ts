@@ -84,10 +84,12 @@ export type Restaurant = {
   cover_url?: string | null;
   /** Whether to show it. Off by default, so nothing changes until asked. */
   cover_enabled?: boolean;
-  /** Dine-in tables may order first and settle at the end. Off by default. */
+  /**
+   * The food may leave before it is paid for: at a table the bill stays open
+   * to the end, on the general QR the customer collects at the till. Off by
+   * default, and only on the paid plans — see `allows_deferred_payment`.
+   */
   allow_pay_later?: boolean;
-  /** The general QR allows paying at the till instead of by card. */
-  allow_counter_payment?: boolean;
   /**
    * Whether the restaurant can take cards right now.
    *

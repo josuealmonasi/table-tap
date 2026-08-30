@@ -21,6 +21,7 @@ function includes(limits: PlanLimits, t: (k: string, v?: Record<string, string |
         : t(`plan.tier.${key}`, { n });
 
   const lines = [cap(limits.max_tables, "tables"), cap(limits.max_staff, "staff")];
+  if (limits.allows_deferred_payment) lines.push(t("plan.tier.deferredPayment"));
   if (limits.allows_menu_schedules) lines.push(t("plan.tier.schedules"));
   if (limits.allows_promotions) lines.push(t("plan.tier.promotions"));
   if (limits.allows_coupons) lines.push(t("plan.tier.coupons"));

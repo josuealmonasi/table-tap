@@ -138,7 +138,35 @@ export const AUDIT = `(() => {
     }
   }
 
-  // 4. The page itself running off the side.
+  // 4. One word painted on two lines.
+  //
+  // A pill or a button label is one word wide; nothing legitimately breaks it.
+  // "DESCUENTO" came out "DESCUENT / O" and "Marcar listo" stood two lines tall
+  // beside a one-line "Cancelar", and every check above passed: the boxes were
+  // wide enough to measure and nothing overlapped. Short words only — an email
+  // or a URL is a single "word" too, and the activity log breaks those on
+  // purpose because there is nowhere else for them to go.
+  for (const el of all) {
+    const isButton = el.classList.contains("tt-btn");
+    for (const node of el.childNodes) {
+      if (node.nodeType !== 3) continue;
+      const text = node.textContent.trim();
+      if (text.length < 4) continue;
+      // A button's label is one line by contract, however many words it has.
+      // Anywhere else only a single short word proves a squeeze.
+      const suspect = isButton ? text.length <= 40 : text.length <= 16 && !/\\s/.test(text);
+      if (!suspect) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const lines = range.getClientRects().length;
+      range.detach?.();
+      if (lines > 1) {
+        faults.push({ kind: "partido", text: text.slice(0, 40), w: lines });
+      }
+    }
+  }
+
+  // 5. The page itself running off the side.
   const doc = document.documentElement;
   if (doc.scrollWidth > window.innerWidth + 1) {
     const wide = all.find(el => el.getBoundingClientRect().right > window.innerWidth + 1);

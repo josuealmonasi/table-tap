@@ -35,8 +35,8 @@ export interface PlanLimits {
   max_items: number | null;
   allows_dine_in: boolean;
   allows_menu_schedules?: boolean;
-  /** Paying at the till on the general QR. Paid plans only. */
-  allows_counter_payment?: boolean;
+  /** Taking the food before paying — at the table or at the till. Paid plans only. */
+  allows_deferred_payment?: boolean;
   allows_promotions: boolean;
   allows_coupons: boolean;
   allows_staff_discounts: boolean;
@@ -53,7 +53,7 @@ export type PlanFeature =
   | "coupons"
   | "staffDiscounts"
   | "menuSchedules"
-  | "counterPayment";
+  | "deferredPayment";
 
 const FEATURE_COLUMN: Record<PlanFeature, keyof PlanLimits> = {
   dineIn: "allows_dine_in",
@@ -61,7 +61,7 @@ const FEATURE_COLUMN: Record<PlanFeature, keyof PlanLimits> = {
   coupons: "allows_coupons",
   staffDiscounts: "allows_staff_discounts",
   menuSchedules: "allows_menu_schedules",
-  counterPayment: "allows_counter_payment",
+  deferredPayment: "allows_deferred_payment",
 };
 
 /** Whether this tier includes a feature at all. */

@@ -11,10 +11,17 @@
 export interface PaymentContext {
   /** A Stripe account is connected and cleared to take charges. */
   cardsEnabled: boolean;
-  /** The "let tables pay at the end" switch. */
-  allowPayLater: boolean;
-  /** The "pay at the counter" switch, which belongs to the general QR. */
-  allowCounterPayment: boolean;
+  /**
+   * The "pay at the end / at the counter" switch: may the food leave before it
+   * is paid for? One switch, because it is one decision — what changes with the
+   * QR is only who holds the order until someone pays, and the restaurant does
+   * not get to choose that. At a table it is the table; on the general QR,
+   * where there is no table to come back to, it is the till.
+   *
+   * It was two switches, and they disagreed: a restaurant with "let tables pay
+   * at the end" on still showed the general QR a cart with no way out of it.
+   */
+  allowDeferred: boolean;
   /** They scanned a table's QR, or the restaurant's general one. */
   atTable: boolean;
   /** The restaurant's "taking orders" switch. Off stops every route in. */
@@ -37,9 +44,9 @@ export function paymentOptions(ctx: PaymentContext): PaymentOptions {
   return {
     payNow: ctx.cardsEnabled,
     // Leaving a bill open needs a table to leave it against.
-    payLater: ctx.atTable && ctx.allowPayLater,
+    payLater: ctx.atTable && ctx.allowDeferred,
     // And the till only makes sense where no table is holding the order.
-    payCounter: !ctx.atTable && ctx.allowCounterPayment,
+    payCounter: !ctx.atTable && ctx.allowDeferred,
   };
 }
 
@@ -83,6 +90,6 @@ export function ownerWarningKey(ctx: PaymentContext): string | null {
   if (ctx.cardsEnabled) return null;
   // Without Stripe there is no online payment on any screen. What changes is how
   // bad that is, and that depends on what is left switched on.
-  if (!ctx.allowPayLater && !ctx.allowCounterPayment) return "dash.noPaymentAtAll";
+  if (!ctx.allowDeferred) return "dash.noPaymentAtAll";
   return "dash.noCardsConnected";
 }

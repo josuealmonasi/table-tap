@@ -18,6 +18,7 @@ us, and what now catches each one.
 | No dialog is rendered inside another dialog | Shipped three times — two focus traps, two Escapes to leave |
 | Anything marking an order paid or written off closes the sitting | A sitting that never closes holds the table and the diner forever |
 | Every API route has a guard or a rate limit | `order-status` was public and unlimited from the day it was written |
+| Nobody hands `paymentOptions` a hardcoded `atTable` | The cart passed `true` always, so paying at the till could never be offered |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -117,6 +118,24 @@ name at 38px on a phone — one word per line, the promo badge painted over the
 struck price, the amount hidden behind the button. Nothing failed. `pnpm layout`
 is what now catches this: every screen, phone and desktop, checked for text
 squashed to nothing, text over text, and the page running off the side.
+
+**A label folded in half is invisible to every check that measures boxes.**
+On a phone the activity log printed "DESCUENT / O", the kitchen board stood
+"Marcar listo" two lines tall beside a one-line "Cancelar" and pushed "Empezar a
+preparar" out over the edge of its own card, and the Cobrar button on a bill row
+left the screen entirely and took the page's horizontal scroll with it. Every
+box was wide enough to measure and nothing overlapped, so `pnpm layout` went
+green through all of it. It now also fails on **`partido`** — one short word, or
+any button label, painted on more than one line. A button label is a label:
+`.tt-btn` refuses to break, and the row it sits in wraps instead.
+
+**Two switches for one decision will disagree, and the owner sees only one of
+them.** Paying at the end (a table) and paying at the till (the general QR) were
+`allow_pay_later` and `allow_counter_payment`. They are the same question — may
+the food leave before it is paid for — and who holds the order is decided by the
+QR, not by the restaurant. An owner with the first on and the second off got a
+general-QR cart with no button on it at all. They are one column and one switch
+now, "Pagar al final / en la caja", on the paid plans.
 
 ## Before merging anything large
 

@@ -205,7 +205,7 @@ if (!signIn.error && theirs) {
   // without paying via the general QR — and nobody to bill for it.
   const { data: off } = await admin
     .from("restaurants").select("id, name")
-    .eq("allow_counter_payment", false).eq("allow_pay_later", false).limit(1).maybeSingle();
+    .eq("allow_pay_later", false).limit(1).maybeSingle();
   // With a real dish: an empty cart is refused for being empty, and that test
   // would pass even if the permission did not exist.
   const { data: dish } = await admin

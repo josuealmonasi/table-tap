@@ -597,9 +597,10 @@ export default function OrderingApp({
             onEditItem={editLine}
             onAddMore={() => setScreen("menu")}
             onCheckout={checkout}
-            payLaterAllowed={Boolean(table) && Boolean(restaurant.allow_pay_later)}
-            // With no table it is the general QR: what holds the order is the till.
-            counterAllowed={!table && Boolean(restaurant.allow_counter_payment)}
+            // One switch for both: at a table the bill stays open, on the
+            // general QR the till holds the order. The cart has the table, so
+            // it is the one that turns this into the right offer.
+            deferredAllowed={Boolean(restaurant.allow_pay_later)}
             cardsEnabled={Boolean(restaurant.cards_enabled)}
           />
         </div>

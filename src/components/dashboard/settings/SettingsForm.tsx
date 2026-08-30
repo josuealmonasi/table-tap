@@ -16,8 +16,8 @@ import LogoCard from "./LogoCard";
 interface SettingsFormProps {
   restaurant: Restaurant;
   role: Role;
-  /** Whether the plan includes paying at the till. False leaves it visible and off. */
-  counterPayAllowed?: boolean;
+  /** Whether the plan includes paying at the end. False leaves it visible and off. */
+  deferredPayAllowed?: boolean;
   /** Whether a Stripe account is connected and charging. Decides what the diner sees. */
   cardsEnabled?: boolean;
 }
@@ -30,7 +30,7 @@ const CURRENCIES = ["USD", "MXN"] as const;
 export default function SettingsForm({
   restaurant,
   role,
-  counterPayAllowed = false,
+  deferredPayAllowed = false,
   cardsEnabled = false,
 }: SettingsFormProps) {
   const t = useT();
@@ -53,15 +53,13 @@ export default function SettingsForm({
   // Ordering (owner + manager) — instant-save.
   const [acceptingOrders, setAcceptingOrders] = useState(restaurant.accepting_orders);
   const [payLater, setPayLater] = useState(Boolean(restaurant.allow_pay_later));
-  const [counterPay, setCounterPay] = useState(Boolean(restaurant.allow_counter_payment));
   const [dealsTab, setDealsTab] = useState(restaurant.deals_tab_enabled !== false);
 
-  // Recomputed on the fly: if they switch both off with no Stripe, the warning
+  // Recomputed on the fly: if they switch it off with no Stripe, the warning
   // goes from "they cannot pay online" to "nobody can order" right there.
   const paymentWarning = ownerWarningKey({
     cardsEnabled,
-    allowPayLater: payLater,
-    allowCounterPayment: counterPay,
+    allowDeferred: payLater,
     atTable: true,
     // Pausing orders is a deliberate, temporary act with its own banner; it is
     // not a misconfiguration to warn about here.
@@ -126,11 +124,6 @@ export default function SettingsForm({
   async function togglePayLater(next: boolean): Promise<void> {
     setPayLater(next);
     if (!(await save({ allow_pay_later: next }))) setPayLater(!next);
-  }
-
-  async function toggleCounterPay(next: boolean): Promise<void> {
-    setCounterPay(next);
-    if (!(await save({ allow_counter_payment: next }))) setCounterPay(!next);
   }
 
   return (
@@ -401,19 +394,27 @@ export default function SettingsForm({
               </span>
             </label>
 
+            {/* Una sola pregunta: ¿puede salir la comida antes de pagarse? La
+                respuesta es la misma para todo el negocio; lo que cambia según
+                el QR es quién retiene el pedido, y eso no lo elige el dueño.
+                Eran dos interruptores y se contradecían: con "las mesas pagan
+                al final" encendido, el QR general seguía sin darle al cliente
+                ninguna forma de salir del carrito. */}
             {isOwner && (
               <label className="tt-settings-toggle" style={{ marginTop: 10 }}>
                 <span>
                   <strong>{t("dash.payLaterTitle")}</strong>
                   <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
-                    {t("dash.payLaterHint")}
+                    {deferredPayAllowed
+                      ? t("dash.payLaterHint")
+                      : t("dash.payLaterLocked")}
                   </span>
                 </span>
                 <span className="tt-switch">
                   <input
                     type="checkbox"
                     checked={payLater}
-                    disabled={saving}
+                    disabled={saving || !deferredPayAllowed}
                     onChange={e => togglePayLater(e.target.checked)}
                   />
                   <span className="tt-switch-track" />
@@ -423,10 +424,10 @@ export default function SettingsForm({
 
             {/* Lo que el dueño no podía saber desde aquí: sin cuenta de Stripe
                 conectada, el pago en línea no se puede pintar en ninguna
-                pantalla, así que estos dos interruptores dejan de ser una
-                elección y pasan a ser la única forma de ordenar. Encender
-                "pagar al final" y no ver aparecer el botón de tarjeta no tenía
-                explicación en ningún lado.
+                pantalla, así que este interruptor deja de ser una elección y
+                pasa a ser la única forma de ordenar. Encender "pagar al final"
+                y no ver aparecer el botón de tarjeta no tenía explicación en
+                ningún lado.
 
                 Sólo al dueño, y no por discreción: conectar Stripe es suyo —la
                 tarjeta de Pagos ni siquiera se le pinta al gerente— así que al
@@ -436,31 +437,6 @@ export default function SettingsForm({
                 <span>{t(paymentWarning)}</span>
                 <a href="#pagos">{t("dash.fixInPayments")}</a>
               </div>
-            )}
-
-            {/* El de arriba es de mesa; éste es del QR general. Van juntos
-                porque son la misma pregunta — quién retiene el pedido — con
-                dos respuestas distintas según por dónde entró el cliente. */}
-            {isOwner && (
-              <label className="tt-settings-toggle" style={{ marginTop: 10 }}>
-                <span>
-                  <strong>{t("dash.counterPayTitle")}</strong>
-                  <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
-                    {counterPayAllowed
-                      ? t("dash.counterPayHint")
-                      : t("dash.counterPayLocked")}
-                  </span>
-                </span>
-                <span className="tt-switch">
-                  <input
-                    type="checkbox"
-                    checked={counterPay}
-                    disabled={saving || !counterPayAllowed}
-                    onChange={e => toggleCounterPay(e.target.checked)}
-                  />
-                  <span className="tt-switch-track" />
-                </span>
-              </label>
             )}
           </div>
         </div>

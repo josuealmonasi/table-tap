@@ -171,9 +171,12 @@ export default function OrderCard({
         )}
       </div>
 
-      <div className="tt-row" style={{ alignItems: "center" }}>
+      {/* The buttons drop below the total when the card is too narrow to hold
+          both — see .tt-order-actions. Squeezed in place they wrapped their own
+          labels and the last one hung off the edge of the card. */}
+      <div className="tt-order-foot">
         <strong className="tt-accent">{formatMoney(order.total, currency)}</strong>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div className="tt-order-actions">
           {/* Sending a ticket back a stage — a plate returned, a mis-tap. Only
               earlier stages appear: forward is what the main button does, and
               offering both here would make the obvious action ambiguous. */}

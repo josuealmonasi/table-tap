@@ -316,3 +316,22 @@ describe("a column exists before the grant that names it", () => {
     expect(late, `granted before they are created: ${late.join(", ")}`).toEqual([]);
   });
 });
+
+describe("which QR the diner came in through is never assumed", () => {
+  it("hands paymentOptions a real atTable rather than a literal", () => {
+    // Paying at the till is defined as "no table is holding this order", so a
+    // hardcoded `atTable: true` in the caller makes that option unreachable
+    // however the restaurant is configured. That shipped: an owner with
+    // "pay at the end / at the counter" switched on and no Stripe account saw
+    // their general QR hand the diner a cart with no button on it at all and a
+    // line saying the restaurant could not take cards. Only the screen holding
+    // the table knows the answer, so only it may supply it.
+    const guilty: string[] = [];
+    for (const file of sources) {
+      for (const call of read(file).match(/paymentOptions\(\{[^}]*\}/g) ?? []) {
+        if (/atTable:\s*(true|false)\b/.test(call)) guilty.push(file);
+      }
+    }
+    expect(guilty, `decides atTable for itself: ${guilty.join(", ")}`).toEqual([]);
+  });
+});

@@ -37,16 +37,18 @@ alter table restaurants add column if not exists cover_enabled boolean not null 
 -- a restaurant that hasn't got artwork.
 alter table restaurants add column if not exists logo_url text;
 
--- Dine-in tables may order first and settle at the end. Off by default: it lets
--- food leave the kitchen before it is paid for, which is the restaurant's risk
--- to accept rather than ours to assume on their behalf.
+-- "Pagar al final / en la caja": la comida puede salir antes de pagarse.
+-- Apagado de fábrica, porque es un riesgo que el restaurante acepta y no que
+-- nosotros asumamos por él.
+--
+-- Un solo interruptor porque es una sola decisión. Lo que cambia según el QR
+-- es quién retiene el pedido, y eso no lo elige el dueño: en una mesa lo
+-- retiene la mesa —la cuenta queda abierta y el mesero cobra al final—, y en
+-- el QR general, donde no hay mesa a la que volver, lo retiene el mostrador:
+-- el cliente pasa a la caja, paga y recoge. Eran dos columnas y se
+-- contradecían — con ésta encendida y la otra apagada, el carrito del QR
+-- general no le daba al cliente ninguna forma de salir de él.
 alter table restaurants add column if not exists allow_pay_later boolean not null default false;
--- Pagar en caja, para el QR general — el que no cuelga de ninguna mesa.
--- No es lo mismo que `allow_pay_later`: ahí la cuenta se queda abierta en una
--- mesa y el mesero la cobra al final. Aquí no hay mesa a la que volver, así
--- que lo que retiene el pedido es el mostrador: el cliente pasa a la caja,
--- paga y recoge. Por eso es del dueño decidir si su negocio funciona así.
-alter table restaurants add column if not exists allow_counter_payment boolean not null default false;
 
 -- La pestaña "Combos y ofertas" del menú del cliente. Encendida de fábrica —
 -- un restaurante con promociones quiere que se vean— y apagable por si a
@@ -587,7 +589,7 @@ revoke all on coupons, coupon_redemptions from anon;
 -- America/Mexico_City sin decir nada: hoy no se nota porque todos los
 -- restaurantes están ahí, y el día que entre uno en Cancún o Tijuana sus
 -- horarios de menú abrirían a la hora equivocada.
-grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, allow_counter_payment, timezone, deals_tab_enabled) on restaurants to anon;
+grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, timezone, deals_tab_enabled) on restaurants to anon;
 
 -- Y `authenticated` ve exactamente lo mismo, no la tabla entera. El revoke va
 -- primero a propósito: conceder columnas NO quita un permiso que ya se dio
@@ -605,7 +607,7 @@ revoke select on restaurants from authenticated;
 --
 -- Las columnas privadas se leen ahora con la llave de servicio y siempre
 -- acotadas al restaurante de quien pregunta (ver getMembership).
-grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, allow_counter_payment, timezone, deals_tab_enabled) on restaurants to authenticated;
+grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, timezone, deals_tab_enabled) on restaurants to authenticated;
 
 -- authenticated (logged-in staff) keeps the DML its dashboard needs — those
 -- writes are gated by the RLS policies below. But it never needs the
@@ -1370,12 +1372,39 @@ update plan_limits set
 alter table plan_limits add column if not exists allows_menu_schedules boolean not null default false;
 update plan_limits set allows_menu_schedules = (rank >= 2);
 
--- Cobrar en la caja es de plan de paga, y no por avaricia: el QR general de
--- Carta es gratis porque nos pagamos con la comisión de cada pedido con
--- tarjeta, y un pedido que se paga en efectivo en el mostrador no deja
--- ninguna. Regalar las dos cosas a la vez sería regalar el producto entero.
-alter table plan_limits add column if not exists allows_counter_payment boolean not null default false;
-update plan_limits set allows_counter_payment = (rank >= 1);
+-- Que la comida salga antes de pagarse —al final en la mesa, o en la caja con
+-- el QR general— es de plan de paga, y no por avaricia: Carta es gratis porque
+-- nos pagamos con la comisión de cada pedido con tarjeta, y un pedido que se
+-- paga en efectivo después no deja ninguna. Regalar las dos cosas a la vez
+-- sería regalar el producto entero.
+--
+-- Se llamaba `allows_counter_payment` cuando sólo abría la caja del QR
+-- general. Ahora abre las dos mitades de un mismo permiso, así que se llama
+-- como lo que hace. El valor se deriva del rango, así que no hay nada que
+-- migrar: se recalcula al vuelo.
+alter table plan_limits add column if not exists allows_deferred_payment boolean not null default false;
+alter table plan_limits drop column if exists allows_counter_payment;
+update plan_limits set allows_deferred_payment = (rank >= 1);
+
+-- Y del lado del restaurante, los dos interruptores se vuelven uno.
+-- `allow_counter_payment` era el mismo permiso contado aparte, y por eso podían
+-- contradecirse. Quien tenía encendido cualquiera de los dos quería que su
+-- comida pudiera salir antes de pagarse, así que eso es lo que conserva.
+--
+-- Envuelto en un bloque porque la columna ya no se crea más arriba: en una base
+-- nueva no existe, y el `update` que la lee fallaría.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'restaurants'
+      and column_name = 'allow_counter_payment'
+  ) then
+    update restaurants set allow_pay_later = true where allow_counter_payment;
+    alter table restaurants drop column allow_counter_payment;
+  end if;
+end $$;
 
 -- What we actually took from an order, recorded on the order itself. Needed to
 -- honour the monthly ceiling — the alternative is asking Stripe to add up its
