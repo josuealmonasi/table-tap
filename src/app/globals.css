@@ -524,6 +524,39 @@ a.tt-btn {
 /* The read-only notice, across the top of every dashboard screen. Warning
    tint rather than danger: nothing is broken and the menu is still taking
    orders — what stopped is saving. */
+/* The till: one big number and the split under it. Cash and card sit on one
+   row and wrap on a phone rather than squeezing the amounts. */
+.tt-till-figures {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 20px;
+}
+.tt-till-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.tt-till-main strong {
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+}
+.tt-till-main .tt-muted {
+  font-size: 13px;
+}
+.tt-till-split {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 14px;
+  color: var(--tt-muted);
+}
+.tt-till-split strong {
+  color: var(--tt-ink);
+  font-variant-numeric: tabular-nums;
+}
+
 .tt-frozen-banner {
   display: flex;
   flex-wrap: wrap;
