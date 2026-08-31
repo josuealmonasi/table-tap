@@ -38,8 +38,13 @@ const { data: busy } = await admin
 const taken = new Set((busy ?? []).map(o => o.table_id));
 const table = tables.find(t => !taken.has(t.id)) ?? tables[0];
 
+// The CSS pivots at 1025px, so everything from 768 to 1024 gets the
+// non-desktop layout stretched to its widest — which is every iPad in portrait
+// and the base iPad in landscape. Nothing swept that band, and the restaurant
+// side is what runs on a tablet at the pass.
 const SIZES = [
   { name: "teléfono", width: 390, height: 844 },
+  { name: "tableta", width: 820, height: 1180 },
   { name: "escritorio", width: 1280, height: 900 },
 ];
 

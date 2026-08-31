@@ -61,6 +61,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               />
             )}
             {admin && <SectionNav role="admin" />}
+            {/* Only the team is offered the installable app. The manifest is
+                linked here rather than through Next's metadata route because
+                that one goes on every page — including a diner's menu, where an
+                invitation to install the restaurant's dashboard is an odd thing
+                to be shown. React hoists these into <head>. */}
+            {membership && (
+              <>
+                <link rel="manifest" href="/manifest.webmanifest" />
+                <link rel="apple-touch-icon" href="/icons/icon-180.png" />
+                <meta name="mobile-web-app-capable" content="yes" />
+                <meta name="apple-mobile-web-app-title" content="TableTap" />
+                <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+              </>
+            )}
             {/* The panel is read-only while the subscription is paused, and
                 until now nothing on screen said so — the API answered 402 to
                 saves the dashboard had happily offered. */}
