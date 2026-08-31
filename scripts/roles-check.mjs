@@ -46,7 +46,12 @@ const ALL = ["owner", "manager", "waiter", "cashier", "kitchen"];
 
 const PAGES = {
   "/dashboard": { allow: MANAGES, marker: "Pedidos entrantes en vivo" },
-  "/dashboard/orders": { allow: ALL, marker: "En preparación" },
+  // "Activos" rather than a column heading: the board only renders "En
+  // preparación" when something is in that column, so the check failed against
+  // production for every role purely because the demo there has no live orders.
+  // A marker that needs data is a marker that goes red on its own, and a false
+  // red teaches people to ignore the real ones.
+  "/dashboard/orders": { allow: ALL, marker: "Activos" },
   "/dashboard/bills": {
     allow: SERVES,
     marker: "Busca por mesa o código de pedido",
