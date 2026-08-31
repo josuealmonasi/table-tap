@@ -26,8 +26,9 @@ import { useMenuFreshness } from "@/hooks/useMenuFreshness";
 import { rememberMyOrder } from "@/lib/my-orders";
 import { suggestItems } from "@/lib/suggestions";
 import { clearUpsell, offeredUpsell, rememberUpsell } from "@/lib/upsell";
-import { forgetOrder, recallOrder, rememberRecentOrder } from "@/lib/recent-order";
-import { useOrderFinished } from "@/hooks/useOrderFinished";
+import { forgetOrder, recallActiveOrders, rememberRecentOrder } from "@/lib/recent-order";
+import { recallDinerName, rememberDinerName } from "@/lib/diner-name";
+import { useFinishedOrders } from "@/hooks/useOrderFinished";
 import { useTableBill } from "@/hooks/useTableBill";
 import { useReceiptOffer } from "@/hooks/useReceiptOffer";
 import { useSitting } from "@/hooks/useSitting";
@@ -92,7 +93,13 @@ export default function OrderingApp({
   const [editingLine, setEditingLine] = useState<CartItem | null>(null);
   const [orderNote, setOrderNote] = useState("");
   // Only ever filled from the general QR; the cart hides the field at a table.
+  // Seeded from what they gave last time, so a second order does not mean
+  // typing their name again — and so two orders at one counter are not under
+  // two spellings of the same person.
   const [customerName, setCustomerName] = useState("");
+  useEffect(() => {
+    setCustomerName(prev => prev || recallDinerName(restaurant.id));
+  }, [restaurant.id]);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   // Product ids that sold out at checkout — kept in the cart but greyed out
@@ -179,9 +186,13 @@ export default function OrderingApp({
   // An order this phone placed and can still watch. Held here, where orders
   // are placed, so it appears the moment one is — read only by the menu, it
   // was seeded once on mount and a dine-in order never showed up at all.
-  const [trackId, setTrackId] = useState<string | null>(trackOrder?.id ?? null);
+  // Every order this phone can still watch, newest first. A list rather than
+  // one slot: a counter has no table to hang a running tab on, so "one more
+  // thing" is always a NEW order, and losing the first one to the second is
+  // exactly what used to happen.
+  const [trackIds, setTrackIds] = useState<string[]>(trackOrder?.id ? [trackOrder.id] : []);
   useEffect(() => {
-    setTrackId(prev => prev ?? recallOrder(restaurant.id, table?.id));
+    setTrackIds(prev => (prev.length > 0 ? prev : recallActiveOrders(restaurant.id, table?.id)));
   }, [restaurant.id, table?.id]);
 
   // And it withdraws itself once the order is delivered. This used to be read
@@ -189,12 +200,15 @@ export default function OrderingApp({
   // button stayed on screen until somebody reloaded, offering to track a dish
   // they had already eaten. If the tracker is open it does not close — the
   // diner deserves to see "ready" — but the button below is gone.
-  const finished = useOrderFinished(trackId);
+  // Each withdraws itself as it is delivered, and the others stay: a diner
+  // whose drink arrives before their food should keep watching the food.
+  const finished = useFinishedOrders(trackIds);
+  const finishedKey = finished.join(",");
   useEffect(() => {
-    if (!finished || !trackId) return;
-    forgetOrder(restaurant.id, table?.id ?? null);
-    setTrackId(null);
-  }, [finished, trackId, restaurant.id, table?.id]);
+    if (!finishedKey) return;
+    for (const id of finishedKey.split(",")) forgetOrder(restaurant.id, table?.id ?? null, id);
+    setTrackIds(prev => prev.filter(id => !finishedKey.split(",").includes(id)));
+  }, [finishedKey, restaurant.id, table?.id]);
 
   // Already owing at another table? Ordering here would open a second bill
   // beside one nobody has settled.
@@ -437,13 +451,14 @@ export default function OrderingApp({
         // order used to reach only the first.
         rememberMyOrder(restaurant.id, data.orderId);
         rememberRecentOrder(restaurant.id, data.orderId, table?.id);
+        if (customerName.trim()) rememberDinerName(restaurant.id, customerName);
         // This phone is now sitting at this table, and stays bound to it until
         // the bill is cleared.
         if (data.sessionId && table?.id) {
           rememberSitting(restaurant.id, data.sessionId, table.id);
         }
         clearUpsell(restaurant.id);
-        setTrackId(data.orderId);
+        setTrackIds(prev => [data.orderId, ...prev.filter(id => id !== data.orderId)]);
         cart.clear();
         // Back to the menu, nothing in the way. The bill is a tap away on the
         // receipt button whenever they are ready — pushing it in their face
@@ -621,7 +636,7 @@ export default function OrderingApp({
         <MenuScreen
           restaurant={restaurant}
           table={table}
-          trackId={trackId}
+          trackIds={trackIds}
           categories={categories}
           items={items}
           combos={combos}
@@ -633,7 +648,7 @@ export default function OrderingApp({
           onSelectItem={item => openItem(item)}
           onAddCombo={openCombo}
           onOpenCart={() => setScreen("cart")}
-          onTrack={() => setTracking(trackId)}
+          onTrack={id => setTracking(id ?? trackIds[0] ?? null)}
           billDue={Boolean(table && bill && !bill.settled)}
           onOpenBill={() => {
             reloadBill();

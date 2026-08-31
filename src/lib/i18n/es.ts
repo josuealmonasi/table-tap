@@ -106,6 +106,7 @@ export const es: Messages = {
     deleteSelected: "No se pudieron eliminar los elementos seleccionados",
   },
   menu: {
+    trackThisOrder: "Sigue tu pedido {code}",
     notReadyTitle: "Este menú todavía no está listo",
     notReadyBody: "El restaurante aún no ha publicado su carta. Pregúntale a alguien del equipo.",
     dietaryEmpty: "Sin etiquetas. Agrega las que tu carta necesite.",
@@ -326,6 +327,13 @@ myBill: "Ver mi cuenta",
     called: "Un mesero viene en camino",
     calledBody: "Muéstrale esta pantalla — cobra en efectivo o con tarjeta y la marca como pagada.",
     failed: "No se pudo cargar la cuenta. Inténtalo de nuevo.",
+  },
+  scan: {
+    button: "Escanear",
+    title: "Escanear para cobrar",
+    hint: "Apunta al código que trae el cliente en su pantalla. Se abre solo al reconocerlo.",
+    noCamera: "No se pudo abrir la cámara. Revisa el permiso del navegador, o busca la cuenta por mesa, nombre o código.",
+    notHere: "Ese código no es de una cuenta abierta aquí.",
   },
   settle: {
     showLines: "ver los {n}",

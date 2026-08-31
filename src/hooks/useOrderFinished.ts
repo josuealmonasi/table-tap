@@ -10,7 +10,7 @@ const EVERY_MS = 15_000;
 const DONE = ["completed", "cancelled"];
 
 /**
- * Whether the order this phone was following has finished.
+ * Which of the orders this phone is following have finished.
  *
  * The "track my order" button was read from localStorage once, on mount, and
  * nothing looked again: the kitchen marked the order delivered and the button
@@ -22,23 +22,36 @@ const DONE = ["completed", "cancelled"];
  * cannot read `orders` directly — their RLS forbids it and it should stay that
  * way — so there is no realtime to be had on this side.
  */
-export function useOrderFinished(orderId: string | null): boolean {
-  const [done, setDone] = useState(false);
+export function useFinishedOrders(orderIds: string[]): string[] {
+  const [done, setDone] = useState<string[]>([]);
+  // An array is a new value every render; its contents are what matter.
+  const key = orderIds.join(",");
 
   useEffect(() => {
-    setDone(false);
-    if (!orderId) return;
+    setDone([]);
+    const ids = key ? key.split(",") : [];
+    if (ids.length === 0) return;
 
     let alive = true;
     const read = async (): Promise<void> => {
-      try {
-        const res = await fetch(`/api/order-status?id=${orderId}`);
-        if (!res.ok) return; // un 404 es un pedido borrado: lo dirá la próxima
-        const order = (await res.json()) as { status?: string };
-        if (alive && order.status && DONE.includes(order.status)) setDone(true);
-      } catch {
-        // No network: try again on the next pass.
-      }
+      // All of them each pass. A diner has one or two orders open, not
+      // twenty — the cap on what is remembered keeps this small.
+      const finished = await Promise.all(
+        ids.map(async id => {
+          try {
+            const res = await fetch(`/api/order-status?id=${id}`);
+            // A 404 is an order that was deleted; the next pass will say so.
+            if (!res.ok) return null;
+            const order = (await res.json()) as { status?: string };
+            return order.status && DONE.includes(order.status) ? id : null;
+          } catch {
+            // No network: try again on the next pass.
+            return null;
+          }
+        }),
+      );
+      const out = finished.filter((id): id is string => id !== null);
+      if (alive && out.length > 0) setDone(prev => [...new Set([...prev, ...out])]);
     };
 
     // Only with the tab in view, like the menu refresh: a phone in a pocket has no
@@ -56,7 +69,7 @@ export function useOrderFinished(orderId: string | null): boolean {
       clearInterval(timer);
       document.removeEventListener("visibilitychange", tick);
     };
-  }, [orderId]);
+  }, [key]);
 
   return done;
 }

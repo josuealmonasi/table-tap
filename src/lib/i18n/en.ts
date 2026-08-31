@@ -104,6 +104,7 @@ export const en = {
     deleteSelected: "Couldn't delete the selected items",
   },
   menu: {
+    trackThisOrder: "Track your order {code}",
     notReadyTitle: "This menu is not ready yet",
     notReadyBody: "The restaurant has not published its menu yet. Ask a member of staff.",
     dietaryEmpty: "No tags yet. Add the ones your menu needs.",
@@ -331,6 +332,13 @@ myBill: "View my bill",
     called: "A waiter is on the way",
     calledBody: "Show them this screen — they'll take cash or card and mark it paid.",
     failed: "Couldn't load the bill. Please try again.",
+  },
+  scan: {
+    button: "Scan",
+    title: "Scan to collect",
+    hint: "Point at the code on the customer's screen. It opens as soon as it reads it.",
+    noCamera: "Could not open the camera. Check the browser permission, or find the bill by table, name or code.",
+    notHere: "That code is not for a bill open here.",
   },
   settle: {
     showLines: "show all {n}",
