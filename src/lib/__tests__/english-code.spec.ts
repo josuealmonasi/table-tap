@@ -32,6 +32,28 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
 }
 
 /**
+ * The comment on one line, if it has one.
+ *
+ * A comment does not have to open the line: `return; // un 404 es un pedido
+ * borrado` is one too, and the first version of this only looked at line
+ * starts, so every trailing comment was invisible to it.
+ *
+ * A `//` inside a string is not a comment. URLs are the common case, so a
+ * slash pair introduced by `:` is skipped, as is one sitting inside an odd
+ * number of quotes. Both tests can only make this miss a comment, never
+ * invent one — a guard that cries wolf gets switched off.
+ */
+function lineComment(line: string): string {
+  for (let i = 0; i < line.length - 1; i++) {
+    if (line[i] !== "/" || line[i + 1] !== "/") continue;
+    if (line[i - 1] === ":" || line[i - 1] === "\\") continue;
+    if ((line.slice(0, i).match(/(?<!\\)["'`]/g)?.length ?? 0) % 2) continue;
+    return line.slice(i + 2).replace(/^\/+/, "").trim();
+  }
+  return "";
+}
+
+/**
  * Every comment in a file, as blocks of prose.
  *
  * Three forms, because the first version of this only knew two and quietly
@@ -55,7 +77,7 @@ function comments(src: string): string[] {
 
   let run: string[] = [];
   src.split("\n").forEach((line, i) => {
-    const text = seen.has(i + 1) ? "" : (line.trim().match(/^\/\/+\s?(.*)$/)?.[1] ?? "");
+    const text = seen.has(i + 1) ? "" : lineComment(line);
     if (text) run.push(text);
     else if (run.length) {
       out.push(run.join(" ").replace(/\s+/g, " ").trim());
@@ -79,6 +101,12 @@ function spanishComments(path: string): string[] {
 }
 
 describe("the code is written in English", () => {
+  it("reads a comment that does not open its line", () => {
+    expect(lineComment("  return null; // el pedido ya no existe")).toBe("el pedido ya no existe");
+    expect(lineComment('const u = "https://x.mx/a//b";')).toBe("");
+    expect(lineComment("const s = '// not a comment';")).toBe("");
+  });
+
   it("has no Spanish comments outside the translated copy", () => {
     const offenders = [...sourceFiles("src"), ...sourceFiles("scripts")].flatMap(spanishComments);
     expect(
