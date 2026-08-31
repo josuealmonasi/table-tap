@@ -78,7 +78,7 @@ export default function TrackerOverlay({
   useEffect(() => {
     if (!order || asked.current) return;
     if (!TERMINAL.includes(order.status) || order.status === "cancelled") return;
-    asked.current = true; // una vez por pedido, no en cada latido del sondeo
+    asked.current = true; // once per order, not on every poll heartbeat
     void (async () => {
       try {
         const res = await fetch("/api/ratings/pending", {

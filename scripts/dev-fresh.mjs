@@ -18,7 +18,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 
-const PORT = 3000; // TableTap lo necesita: los QR y los webhooks apuntan ahí
+const PORT = 3000; // TableTap needs this one: the QR codes and the webhooks point at it
 const here = process.cwd();
 
 const sh = (cmd, args) => {
