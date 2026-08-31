@@ -85,8 +85,14 @@ the simpler one.
 **Run the whole gate, every time:**
 
 ```bash
-pnpm test && pnpm api && pnpm rls && pnpm roles && pnpm smoke && pnpm layout
+pnpm test && pnpm api && pnpm rls && pnpm roles && pnpm smoke && pnpm layout && pnpm promises
 ```
+
+`pnpm promises` opens every screen as every role and flips the switches that
+change what a screen can offer — orders paused, no menu serving, subscription
+locked, a tier without the feature — and fails when a screen offers a control
+the system refuses, or shows nothing and explains nothing. That is the shape of
+almost every bug this app has had.
 
 `pnpm api` calls all 34 API routes with a legitimate request as the right actor
 and checks each one does its job — the other checks only ever proved that a
@@ -103,11 +109,16 @@ Anything a script creates, it deletes. Test litter comes back disguised as a
 product bug: a leftover service request once looked like a layout fault, and an
 order seeded with a fake item id looked like a broken ratings system.
 
-**Run `pnpm layout`.** It opens every screen in a real browser at 390px and
-1280px and fails if text is squashed to nothing, painted on top of other text,
-or running off the side of the page. Tests prove a component exists; this is
-the only thing that proves a person can read it. A CSS change is not done until
-this passes and you have looked at a screenshot of what you changed.
+**Run `pnpm layout`.** It opens every screen in a real browser at 390px, 820px
+and 1280px and fails if text is squashed to nothing, painted on top of other
+text, or running off the side of the page. Tests prove a component exists; this
+is the only thing that proves a person can read it. A CSS change is not done
+until this passes and you have looked at a screenshot of what you changed.
+
+The middle width is the tablet band. The CSS pivots at 1025px, so everything
+from 768 to 1024 — every iPad in portrait, and the base iPad in landscape —
+gets the non-desktop layout stretched to its widest, which is where the
+restaurant's own screens run at the pass.
 
 Read `docs/regressions.md`. It is the list of bugs that have actually shipped
 here, what now catches each one automatically, and the handful that still need
