@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import { badgesChanged } from "@/hooks/useBadges";
 import { useT } from "@/lib/i18n/context";
@@ -73,6 +73,21 @@ export default function BillsPanel({
   const [chosen, setChosen] = useState<OpenBill | null>(null);
   // The table being collected on, if any.
   const [settling, setSettling] = useState<OpenBill | null>(null);
+
+  // Arriving from a scanned code: /dashboard/bills?order=<id> opens that bill
+  // ready to collect. The diner holds the code up, whoever is charging them
+  // points a camera at it, and the till is already on the right order — no
+  // reading a code aloud across a counter and no hunting the list.
+  //
+  // The id in the URL grants nothing on its own: this page is staff-gated and
+  // the bill has to be one of THIS restaurant's, which is why the match is
+  // against the list the server already scoped rather than a fresh lookup.
+  const scanned = useSearchParams().get("order");
+  useEffect(() => {
+    if (!scanned) return;
+    const found = bills.find(b => b.orderIds.includes(scanned));
+    if (found) setSettling(found);
+  }, [scanned, bills]);
   const [busy, setBusy] = useState<string | null>(null);
 
   // "waiting 1h 40m" is a different sentence a minute later, so the server's

@@ -681,6 +681,8 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     hint: "Si ya pagaste, pídele a tu mesero que cierre la cuenta y vuelve a escanear.",
   },
   tracker: {
+    showToPay: "Muestra este código para pagar",
+    showToPayHint: "El mesero o la caja lo escanea y cobra al instante. También puedes darles tu nombre o el número de pedido.",
     readyCounter: "🎉 ¡Ya está listo! Pásalo a recoger con tu código.",
     totalDue: "Total a pagar",
     received: "¡Pedido recibido!",

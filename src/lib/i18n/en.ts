@@ -684,6 +684,8 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     hint: "If you have already paid, ask your waiter to close the bill and scan again.",
   },
   tracker: {
+    showToPay: "Show this code to pay",
+    showToPayHint: "A waiter or the till scans it and charges you straight away. You can also just give them your name or the order number.",
     readyCounter: "🎉 It's ready! Collect it with your code.",
     totalDue: "Total to pay",
     received: "Order received!",

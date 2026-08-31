@@ -18,10 +18,13 @@ export type TrackedOrder = Pick<
   | "currency"
   // So a bill paid at the end is not called "Total paid".
   | "paid"
+  // Their own name, when they gave one at the counter. They should be able to
+  // check what the cashier is about to call out.
+  | "customer_name"
 >;
 
 const TRACKER_COLUMNS =
-  "id, restaurant_id, table_id, table_label, status, items, total, currency, paid";
+  "id, restaurant_id, table_id, table_label, status, items, total, currency, paid, customer_name";
 
 // UUIDs only — avoids sending malformed ids to Postgres' uuid column.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

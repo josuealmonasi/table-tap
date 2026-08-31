@@ -537,6 +537,30 @@ a.tt-btn {
    every number right-aligned so a column can be read down. `tabular-nums` is
    what keeps the digits in line — proportional figures wander and the total
    stops sitting under what it adds. */
+/* The pay-me code. Centred and given room: it is held up to a camera across a
+   counter, so it wants to be the biggest thing in its card. */
+.tt-pay-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  padding: 16px;
+  margin-top: 12px;
+}
+.tt-pay-qr p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  max-width: 320px;
+}
+.tt-pay-qr img {
+  width: 180px;
+  height: 180px;
+  /* White behind it, whatever the card sits on: a QR needs the contrast. */
+  background: #fff;
+  border-radius: 8px;
+}
+
 .tt-corte-scroll {
   overflow-x: auto;
 }
