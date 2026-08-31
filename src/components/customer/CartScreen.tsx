@@ -4,7 +4,6 @@ import type { Restaurant, RestaurantTable } from "@/lib/types";
 import type { CartItem } from "@/hooks/useCart";
 import type { MenuItem } from "@/lib/types";
 import type { AppliedCoupon, ItemPromoSaving, PromoHint } from "@/lib/pricing";
-import { formatMoney } from "@/lib/format";
 import { canOrder, paymentHintKey, paymentOptions } from "@/lib/payment-options";
 import { useT } from "@/lib/i18n/context";
 import NoteField from "./NoteField";
@@ -13,7 +12,7 @@ import CouponBox from "./CouponBox";
 import SuggestionStrip from "./SuggestionStrip";
 import OrderTotals from "./OrderTotals";
 import TipPicker from "./TipPicker";
-import { BackIcon, BillIcon, HintIcon, SecureIcon } from "@/components/ui/icons";
+import { BackIcon, BillIcon, SecureIcon } from "@/components/ui/icons";
 
 interface CartScreenProps {
   restaurant: Restaurant;
@@ -116,6 +115,17 @@ export default function CartScreen({
     atTable: Boolean(table),
     acceptingOrders: restaurant.accepting_orders,
   });
+
+  // A quantity deal belongs to the product, not to one line of it: the engine
+  // counts every line of a product together, so the nudge it produces is about
+  // all of them. Painting it on each line would tell a diner with two lines of
+  // the same dish to add one more, twice. The first line of that product
+  // carries it.
+  const nudgeByItem = new Map(hints.map(h => [h.itemId, h]));
+  const nudgeLine = new Map<string, number>();
+  for (const item of items) {
+    if (!nudgeLine.has(item.itemId)) nudgeLine.set(item.itemId, item.cartId);
+  }
   return (
     <div className="tt-root">
       <div className="tt-header">
@@ -152,6 +162,11 @@ export default function CartScreen({
                 imageUrl={photoOf(item.itemId)}
                 currency={restaurant.currency}
                 promoSaving={promoSavings[item.itemId]}
+                promoHint={
+                  nudgeLine.get(item.itemId) === item.cartId
+                    ? nudgeByItem.get(item.itemId)
+                    : undefined
+                }
                 soldOut={soldOut.has(item.itemId)}
                 onRemove={onRemoveItem}
                 onChangeQty={onChangeQty}
@@ -181,25 +196,11 @@ export default function CartScreen({
               onCustomTip={onCustomTip}
             />
 
-            {hints.length > 0 && (
-              <div className="tt-hints">
-                {hints.map(h => (
-                  <p key={`${h.itemId}-${h.promoName}`} className="tt-hint">
-                    <HintIcon size={14} weight="fill" />{" "}
-                    {t("promos.addMoreHint", {
-                      qty: h.addQty,
-                      // The hint carried the dish and the deal all along; the
-                      // copy just never used them, so it read as "add 2 more"
-                      // of nothing in particular.
-                      name: items.find(i => i.itemId === h.itemId)?.name ?? "",
-                      promo: h.promoName,
-                      amount: formatMoney(h.save, restaurant.currency),
-                    })}
-                  </p>
-                ))}
-              </div>
-            )}
-
+            {/* The nudges used to be a block of their own down here, below the
+                tip picker and named after dishes the diner had to scroll back
+                up to find. They belong on the line they are about: that is
+                where the "+" is, and where a dish under an unearned deal was
+                indistinguishable from a dish with no deal at all. */}
             {onPickSuggestion && suggestions.length > 0 && (
               <SuggestionStrip
                 items={suggestions}

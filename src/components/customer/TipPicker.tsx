@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
+import { tipFor } from "@/lib/pricing";
 import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
 
@@ -61,6 +62,17 @@ export default function TipPicker({
             onClick={() => onPresetTip(pct)}
           >
             {pct === 0 ? t("tip.none") : `${pct}%`}
+            {/* A percentage is not an amount, and the diner is deciding how
+                much to give — "15%" of a bill they have not added up is a
+                number they cannot feel. The figure comes from the same
+                function that charges it, on the same base, so the chip and
+                the total can never disagree. Nothing to print on a cart worth
+                nothing, and 0% of anything is not news. */}
+            {pct > 0 && maxTip > 0 && (
+              <span className="tt-tip-amount">
+                {formatMoney(tipFor(maxTip, pct), currency)}
+              </span>
+            )}
           </button>
         ))}
         <button

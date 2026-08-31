@@ -3,6 +3,7 @@ import {
   itemSalePrice,
   MAX_LINE_QTY,
   priceCart,
+  tipFor,
   type CartPromo,
   type PriceInput,
 } from "@/lib/pricing";
@@ -234,6 +235,19 @@ describe("priceCart — service fee and tip", () => {
       coupon: { code: "OFF-5", kind: "fixed", value: 5 },
     });
     expect(r.tip).toBe(1); // 20% of 5
+  });
+
+  it("charges exactly what the tip chip printed", () => {
+    // The chips show the money now, and a chip promising MX$10.00 over a charge
+    // of MX$9.80 is worse than one that says nothing. Both go through tipFor
+    // on the same base, and this is what says so — including the awkward
+    // subtotals, where a percentage of a fraction is where rounding bites.
+    for (const items of [[line({ qty: 3 })], [line({ price: 6.99, qty: 7 })]]) {
+      for (const pct of [10, 15, 20]) {
+        const r = price({ items, tipPct: pct });
+        expect(tipFor(r.subtotal, pct), `${pct}% of ${r.subtotal}`).toBe(r.tip);
+      }
+    }
   });
 
   it("prefers an exact tip and caps it at the subtotal", () => {

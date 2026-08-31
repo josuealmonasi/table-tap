@@ -107,6 +107,18 @@ export interface PricedCart {
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
+/**
+ * What a percentage tip comes to, on the subtotal a tip is taken from.
+ *
+ * Exported because the chips now print the figure, and a chip promising
+ * MX$10.00 over a charge of MX$9.80 is worse than a chip that says nothing at
+ * all. One formula and one base — the discounted subtotal — for the preview and
+ * for the charge.
+ */
+export function tipFor(subtotal: number, pct: number): number {
+  return round2(subtotal * (pct / 100));
+}
+
 const extrasTotal = (line: OrderLineItem): number =>
   line.extras?.reduce((sum, e) => sum + e.price, 0) ?? 0;
 
@@ -219,7 +231,7 @@ export function priceCart(input: PriceInput): PricedCart {
   const tip =
     input.tipAmount != null && input.tipAmount > 0
       ? Math.min(round2(input.tipAmount), subtotal)
-      : round2(subtotal * ((input.tipPct ?? 0) / 100));
+      : tipFor(subtotal, input.tipPct ?? 0);
 
   return {
     grossSubtotal,
