@@ -10,9 +10,9 @@ export default async function StaffPage() {
 
   return (
     <ConfirmProvider>
-      {/* La bitácora se mudó a Cuentas abiertas: registra dinero que se movió
-          —efectivo cobrado, deudas canceladas, promociones aplicadas— y sólo
-          vivía aquí porque empezó siendo "quién tocó qué acceso". */}
+      {/* The activity log moved to Cuentas abiertas: it records money that
+          moved — cash collected, debts written off, promotions applied — and
+          only lived here because it began as "who touched which login". */}
       <StaffPanel restaurantId={membership.restaurant.id} />
     </ConfirmProvider>
   );

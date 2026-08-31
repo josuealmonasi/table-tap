@@ -34,7 +34,7 @@ export default async function BillsPage() {
     db
       .from("orders")
       .select(
-        "id, table_id, table_label, items, total, discount, paid, written_off, status, coupon_code, created_at",
+        "id, table_id, table_label, items, total, discount, paid, written_off, status, coupon_code, customer_name, created_at",
       )
       .eq("restaurant_id", r.id)
       .eq("paid", false)
@@ -93,15 +93,15 @@ export default async function BillsPage() {
         canSettle={SETTLES(membership.role)}
         askedToPay={(asking ?? []).map(a => a.table_id).filter(Boolean) as string[]}
       >
-        {/* Sólo el dueño, porque es lo único que la base deja leer: la política
-            de `user_logs` es `owns_restaurant`. Enseñándosela al gerente, la
-            reja decía que sí y la base devolvía cero — el gerente abría
-            "Actividad reciente" con su buscador, sus botones de orden y la
-            lista vacía, y se iba pensando que la bitácora no sirve.
+        {/* Owner only, because that is all the database will hand over: the
+            policy on `user_logs` is `owns_restaurant`. Showing it to a manager
+            meant the gate said yes and the database returned zero — the manager
+            opened "Actividad reciente" with its search box, its sort buttons
+            and an empty list, and left thinking the log was broken.
 
-            No se abre la política en vez de cerrar la reja: la bitácora también
-            trae altas, bajas y cambios de rol del equipo, y el gerente no entra
-            a /dashboard/staff. */}
+            The policy is not widened to match: the log also carries staff
+            hires, removals and role changes, and a manager does not reach
+            /dashboard/staff. */}
         {/* Above the log, because counting your own drawer is a thing you do
             at the end of a shift and the log is a thing you read afterwards. */}
         <TillCard till={till} currency={r.currency} />

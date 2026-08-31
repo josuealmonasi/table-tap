@@ -7,6 +7,7 @@ import type { AppliedCoupon, ItemPromoSaving, PromoHint } from "@/lib/pricing";
 import { canOrder, paymentHintKey, paymentOptions } from "@/lib/payment-options";
 import { useT } from "@/lib/i18n/context";
 import NoteField from "./NoteField";
+import { NAME_MAX } from "@/lib/notes";
 import CartLineRow from "./CartLineRow";
 import CouponBox from "./CouponBox";
 import SuggestionStrip from "./SuggestionStrip";
@@ -42,6 +43,9 @@ interface CartScreenProps {
   /** False when nothing orderable remains (empty or all sold out). */
   canCheckout: boolean;
   onChangeNote: (note: string) => void;
+  /** Counter orders only — the name the cashier calls out. */
+  customerName?: string;
+  onChangeName?: (name: string) => void;
   onChangeTip: (pct: number) => void;
   onCustomTip: (amount: number | null) => void;
   onRemoveItem: (cartId: number) => void;
@@ -86,6 +90,8 @@ export default function CartScreen({
   loading,
   canCheckout,
   onChangeNote,
+  customerName = "",
+  onChangeName,
   onChangeTip,
   onCustomTip,
   onRemoveItem,
@@ -179,6 +185,24 @@ export default function CartScreen({
             </button>
 
             <div style={{ marginBottom: 20 }}>
+              {/* Only without a table: at a table, the table IS the name, and
+                  asking anyway would be collecting a name for nothing. The
+                  pickup code still identifies the order — this is what gets
+                  called across the room. */}
+              {!table && (
+                <label className="tt-field" style={{ marginBottom: 12 }}>
+                  <span className="tt-mod-label">{t("cart.yourName")}</span>
+                  <input
+                    className="tt-input"
+                    value={customerName}
+                    maxLength={NAME_MAX}
+                    placeholder={t("cart.yourNamePlaceholder")}
+                    aria-label={t("cart.yourName")}
+                    onChange={e => onChangeName?.(e.target.value)}
+                  />
+                </label>
+              )}
+
               <NoteField
                 label={t("cart.kitchenNote")}
                 placeholder={t("cart.kitchenNotePlaceholder")}
@@ -243,9 +267,9 @@ export default function CartScreen({
                   bill whether they pay now or after dessert. Everywhere else
                   the card is taken here, because there is no table to settle
                   against. */}
-              {/* Sin cuenta de Stripe conectada no hay pago con tarjeta, y
-                  ofrecerlo como acción principal sólo lleva a un 409 después
-                  de tocarlo. Cuando hay otra forma de pagar, ésa manda. */}
+              {/* With no connected Stripe account there is no card payment, and
+                  offering it as the main action only leads to a 409 after they
+                  tap it. Where another way to pay exists, that one leads. */}
               {pay.payNow && (
                 <button
                   className="tt-btn tt-btn-primary tt-btn-lg"
@@ -290,11 +314,11 @@ export default function CartScreen({
                 className="tt-muted"
                 style={{ textAlign: "center", fontSize: 12, marginTop: 12 }}
               >
-                {/* Lo que dice aquí abajo nombra SÓLO los botones que están
-                    arriba. Antes se decidía por `payLaterAllowed` a secas, así
-                    que una mesa sin Stripe conectado leía "Paga ahora con
-                    tarjeta, o deja la cuenta abierta" debajo de una pantalla
-                    donde lo de la tarjeta no existía. */}
+                {/* What this line says names ONLY the buttons above it. It used to
+                    be chosen from `payLaterAllowed` alone, so a table with no
+                    Stripe connected read "pay now by card, or leave the bill
+                    open" underneath a screen where the card half did not
+                    exist. */}
                 {(() => {
                   const key = paymentHintKey(pay, restaurant.accepting_orders);
                   if (!canOrder(pay)) return t(key);

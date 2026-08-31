@@ -164,11 +164,11 @@ export default function AddonsPanel({
                   <span>{addon.emoji || addon.name.charAt(0).toUpperCase()}</span>
                 </div>
                 <div style={{ flex: 1 }}>
-                  {/* El nombre abre el editor, igual que en un producto: el
-                      lápiz sigue ahí, pero nadie lo busca cuando lo que quiere
-                      cambiar es justo lo que está leyendo. Misma clase, para
-                      que se comporte igual y no haya un segundo estilo que
-                      mantener. */}
+                  {/* The name opens the editor, the same as on a product: the
+                      pencil is still there, but nobody hunts for it when the
+                      thing they want to change is what they are reading. Same
+                      class, so it behaves the same and there is no second
+                      style to maintain. */}
                   <button
                     type="button"
                     className="tt-prod-name"

@@ -26,9 +26,9 @@ export default function CategoryTabs({
       >
         {t("menu.all")}
       </button>
-      {/* Justo después de Todo, y con el color de las ofertas: un combo no es
-          una categoría del menú y el restaurante no debería tener que
-          inventarse una para que se vea. Sólo aparece si hay algo dentro. */}
+      {/* Right after "Todo", in the offers colour: a combo is not a menu
+          category and a restaurant should not have to invent one to make it
+          visible. It only appears when there is something in it. */}
       {hasDeals && (
         <button
           className={`tt-cat tt-cat-deal ${activeCat === "deals" ? "tt-cat-on" : ""}`}

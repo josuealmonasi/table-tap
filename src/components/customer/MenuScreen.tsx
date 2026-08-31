@@ -284,11 +284,11 @@ export default function MenuScreen({
           {table && (
             <div className="tt-service-row">
               <ServiceButtons restaurantId={restaurant.id} table={table} />
-              {/* Una sola puerta a la cuenta, y dice lo que hace. "Pedir la
-                  cuenta" describe pedirle a alguien que traiga un papel; aquí
-                  la cuenta se mira, y las dos formas de pagarla están dentro.
-                  Sin nada que deber no aparece: una cuenta vacía no es una
-                  pantalla que valga la pena abrir. */}
+              {/* One door to the bill, and it says what it does. "Ask for the
+                  bill" describes asking somebody to bring a piece of paper;
+                  here the bill is looked at, and both ways of paying it are
+                  inside. With nothing owed it does not appear: an empty bill
+                  is not a screen worth opening. */}
               {billDue && onOpenBill && (
                 <button type="button" className="tt-service-btn" onClick={onOpenBill}>
                   <BillIcon size={16} weight="bold" />
@@ -425,9 +425,9 @@ export default function MenuScreen({
                   >
                     {t("menu.all")}
                   </button>
-                  {/* En escritorio las categorías son esta lista, no la fila
-                      de pastillas: agregar la pestaña de ofertas allá y no
-                      aquí la dejaba invisible en pantalla grande. */}
+                  {/* On desktop the categories are this list, not the row of
+                      pills: adding the offers tab there and not here left it
+                      invisible on a large screen. */}
                   {hasDeals && (
                     <button
                       type="button"

@@ -31,21 +31,51 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** Comment lines whose prose reads as Spanish rather than English. */
+/**
+ * Every comment in a file, as blocks of prose.
+ *
+ * Three forms, because the first version of this only knew two and quietly
+ * missed 29 Spanish comments — every `{/* … *\/}` in the components, which is
+ * where most of the reasoning in this codebase lives. Consecutive `//` lines
+ * are joined so a sentence split across three of them is scored as a sentence.
+ */
+function comments(src: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<number>();
+
+  // JSX and block comments first, and remember where they were so the line
+  // scanner does not read their innards a second time.
+  for (const m of src.matchAll(/\{\s*\/\*([\s\S]*?)\*\/\s*\}|\/\*([\s\S]*?)\*\//g)) {
+    const body = (m[1] ?? m[2] ?? "").replace(/^\s*\*+/gm, " ");
+    out.push(body.replace(/\s+/g, " ").trim());
+    const from = src.slice(0, m.index).split("\n").length;
+    const to = from + m[0].split("\n").length - 1;
+    for (let i = from; i <= to; i++) seen.add(i);
+  }
+
+  let run: string[] = [];
+  src.split("\n").forEach((line, i) => {
+    const text = seen.has(i + 1) ? "" : (line.trim().match(/^\/\/+\s?(.*)$/)?.[1] ?? "");
+    if (text) run.push(text);
+    else if (run.length) {
+      out.push(run.join(" ").replace(/\s+/g, " ").trim());
+      run = [];
+    }
+  });
+  if (run.length) out.push(run.join(" ").replace(/\s+/g, " ").trim());
+
+  return out.filter(t => t.length >= 15);
+}
+
+/** The comments in a file that read as Spanish. */
 function spanishComments(path: string): string[] {
-  const found: string[] = [];
-  readFileSync(path, "utf8")
-    .split("\n")
-    .forEach((line, i) => {
-      const s = line.trim();
-      if (!(s.startsWith("//") || s.startsWith("*") || s.startsWith("/*"))) return;
-      const text = s.replace(/^(\/\/+|\/\*+|\*+\/?)/, "").replace(/\*\/\s*$/, "").trim();
-      if (text.length < 12) return;
+  return comments(readFileSync(path, "utf8"))
+    .filter(text => {
       const es = text.match(SPANISH)?.length ?? 0;
       const en = text.match(ENGLISH)?.length ?? 0;
-      if (es > en && es >= 2) found.push(`${path}:${i + 1}  ${text.slice(0, 60)}`);
-    });
-  return found;
+      return es > en && es >= 2;
+    })
+    .map(text => `${path}  ${text.slice(0, 70)}`);
 }
 
 describe("the code is written in English", () => {

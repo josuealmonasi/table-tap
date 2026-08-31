@@ -345,6 +345,8 @@ myBill: "View my bill",
     nothing: "Nothing outstanding on this table.",
   },
   cart: {
+    yourName: "What name is it under?",
+    yourNamePlaceholder: "Optional — so we can call you when it is ready",
     payLaterOnlyHint: "Order now and settle your bill at the end, at the table.",
     counterOnlyHint: "Order now and pay at the till with your code.",
     noCardYet: "This restaurant can't take cards here yet.",

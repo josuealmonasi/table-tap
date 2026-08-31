@@ -177,9 +177,9 @@ export default function AnalyticsView({
           )}
         </div>
 
-        {/* Qué gustó, junto a qué se vendió. Son la misma pregunta hecha dos
-            veces, y las calificaciones no tenían pantalla en ninguna parte:
-            157 estrellas en la base y nadie que las viera. */}
+        {/* What people liked, beside what sold. They are the same question
+            asked twice, and the ratings had no screen anywhere: 157 stars in
+            the database and nobody to see them. */}
         <div className="tt-section">
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>
@@ -216,9 +216,9 @@ export default function AnalyticsView({
           )}
         </div>
 
-        {/* El historial vivía detrás de una pestaña en el tablero de pedidos.
-            Se busca por código cuando alguien pregunta por un pedido: eso es
-            consulta, no servicio. */}
+        {/* The history lived behind a tab on the orders board. It is searched
+            by code when somebody asks about an order: that is lookup, not
+            service. */}
         <OrderHistory restaurantId={restaurantId} currency={currency} />
       </div>
     </div>

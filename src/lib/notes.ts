@@ -12,3 +12,17 @@ export function capNote(note: string | null | undefined): string | undefined {
   const text = (note ?? "").trim();
   return text ? text.slice(0, NOTE_MAX) : undefined;
 }
+
+/** A counter order's name is short by nature: it gets called across a room. */
+export const NAME_MAX = 40;
+
+/**
+ * The name a walk-in gives, trimmed to something a cashier can call out.
+ *
+ * Newlines and runs of space collapse: this is read aloud and printed on a
+ * slip, and "Ana   \n  María" is the same person as "Ana María".
+ */
+export function capName(name: string | null | undefined): string | undefined {
+  const text = (name ?? "").replace(/\s+/g, " ").trim();
+  return text ? text.slice(0, NAME_MAX) : undefined;
+}

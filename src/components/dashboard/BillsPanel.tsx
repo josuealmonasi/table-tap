@@ -142,9 +142,9 @@ export default function BillsPanel({
   /** An open bill: tapped for the promotion or the close, collected separately. */
   const billRow = (bill: OpenBill) => (
     <div key={bill.key} className="tt-bill-row tt-bill-open">
-      {/* La fila abre la promoción o el cierre; cobrar es su propia
-                      acción, porque es lo que más se hace y no debería estar
-                      escondida detrás de otro diálogo. */}
+      {/* The row opens the promotion or the close; collecting is its own
+                      action, because it is the thing done most often and should
+                      not hide behind another dialog. */}
       <button type="button" className="tt-bill-open-main" onClick={() => setChosen(bill)}>
         <span className="tt-bill-glyph" aria-hidden>
           {bill.tableLabel ? (
@@ -156,6 +156,12 @@ export default function BillsPanel({
         <span className="tt-bill-main">
           <strong className="tt-bill-name">
             {bill.tableLabel ? t("dash.tableN", { label: bill.tableLabel }) : bill.code}
+            {/* The name a walk-in gave, beside the code rather than instead of
+                it: the code is what the screen and the diner's phone agree on,
+                the name is what gets called across the room. */}
+            {bill.customerName && (
+              <span className="tt-bill-who"> · {bill.customerName}</span>
+            )}
           </strong>
           <span className="tt-muted tt-bill-sub">
             {t(
@@ -177,9 +183,9 @@ export default function BillsPanel({
           {formatMoney(bill.total, currency)}
         </strong>
       </button>
-      {/* También para el pedido de mostrador: es exactamente donde alguien
-          está esperando a que le cobren. Sin esto el cajero veía la cuenta y
-          no tenía con qué cerrarla. */}
+      {/* For the counter order too: that is exactly where somebody is
+          standing waiting to be charged. Without this the cashier saw the bill
+          and had nothing to close it with. */}
       {canSettle && (
         <button
           type="button"
@@ -333,9 +339,9 @@ export default function BillsPanel({
           )}
         </div>
 
-        {/* Dentro del contenedor: fuera de él la bitácora se pegaba al borde
-            de la ventana mientras la tarjeta de arriba respetaba el margen de
-            la página, y las dos secciones no coincidían en ninguna orilla. */}
+        {/* Inside the container: outside it the log hugged the window edge
+            while the card above respected the page margin, and the two sections
+            lined up on neither side. */}
         {children}
       </div>
 
@@ -347,7 +353,10 @@ export default function BillsPanel({
           // With no table, the bill is the order itself; `openBills` groups each
           // counter order into its own row, so there is exactly one.
           orderId={settling.tableId ? null : settling.orderIds[0]}
-          tableLabel={settling.tableLabel ?? settling.code ?? ""}
+          tableLabel={
+            settling.tableLabel ??
+            [settling.code, settling.customerName].filter(Boolean).join(" · ")
+          }
           currency={currency}
           canApprove={canApprove}
           onClose={() => setSettling(null)}

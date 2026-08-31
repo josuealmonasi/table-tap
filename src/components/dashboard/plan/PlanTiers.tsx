@@ -89,8 +89,9 @@ export default function PlanTiers({
         </span>
       </div>
 
-      {/* Fundador: la promesa es que el precio no sube, no que hoy esté
-          barato. A quien ya lo es se le dice su número — es el recibo. */}
+      {/* Founder: the promise is that the price never rises, not that it is
+          cheap today. Whoever already is one is told their number — it is the
+          receipt. */}
       {isFounder ? (
         <p className="tt-founding tt-founding-locked">
           <strong>{t("plan.foundingYou", { n: foundingNumber })}</strong>{" "}
@@ -138,10 +139,10 @@ export default function PlanTiers({
                 )}
               </div>
 
-              {/* Lo que costará cuando se acaben los lugares de fundador,
-                  tachado junto a lo que se paga hoy. El tachado dice algo
-                  verdadero: es el precio de quien llegue después, no un número
-                  inventado para que el de arriba se vea barato. */}
+              {/* What it will cost once the founding places run out, struck
+                  through beside what is paid today. The strike-through says
+                  something true: it is the price for whoever arrives next, not
+                  a number invented to make the one above look cheap. */}
               {stillOpen && launchSaving(tier) > 0 && (
                 <p className="tt-tier-launch">
                   <s>{formatMoney(tier.list_price ?? 0, currency)}</s>{" "}

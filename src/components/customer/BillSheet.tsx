@@ -258,9 +258,9 @@ export default function BillSheet({
             currency={currency}
             photoOf={photoOf}
           />
-          {/* Lo ya pagado se queda a la vista y fuera del total: el que pagó su
-              plato con tarjeta necesita verlo, y el resto de la mesa necesita
-              entender por qué no se lo están cobrando. */}
+          {/* What is already paid stays visible and out of the total: whoever
+              paid for their dish by card needs to see it, and the rest of the
+              table needs to understand why they are not being charged for it. */}
           <Section
             heading={t("bill.alreadyPaid", {
               amount: formatMoney(bill.paid.total, currency),

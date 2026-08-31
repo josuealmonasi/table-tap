@@ -106,12 +106,12 @@ export default function OrderCard({
       <div className="tt-order-head">
         <div className="tt-row">
           <strong style={{ fontSize: 16 }}>
-            {/* Un pedido del QR general no tiene mesa: decía "Mesa" a secas,
-                con el hueco donde iría el número. Lo que hay que saber de él
-                es justamente que no hay mesa a donde llevarlo. */}
+            {/* A general-QR order has no table: it used to read a bare "Mesa"
+                with a gap where the number goes. The thing worth knowing about
+                it is precisely that there is no table to carry it to. */}
             {order.table_label
               ? t("dash.tableN", { label: order.table_label })
-              : t("dash.billsToGo")}
+              : (order.customer_name ?? t("dash.billsToGo"))}
           </strong>
           <span className="tt-order-code">{orderCode(order.id)}</span>
         </div>
@@ -120,10 +120,10 @@ export default function OrderCard({
             {placedAt}
           </span>
           <span className="tt-order-flags">
-            {/* Quien entrega el pedido tiene que ver que no está pagado antes
-                de soltarlo. Un pedido del QR general que eligió pagar en caja
-                llega aquí igual que cualquier otro, y sin esto la comida sale
-                por la puerta sin que nadie haya cobrado. */}
+            {/* Whoever hands the order over has to see that it is unpaid before
+                letting go of it. A general-QR order that chose to pay at the
+                till arrives here like any other, and without this the food
+                leaves with nobody having collected. */}
             {!order.paid && (
               <span className="tt-status-badge tt-unpaid-badge">
                 {t("orders.notPaid")}

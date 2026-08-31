@@ -63,7 +63,7 @@ export default function DietaryTagForm({
         />
       </div>
 
-      {/* Las de casa ya se traducen solas; ofrecer el campo sólo confundiría. */}
+      {/* The built-ins translate themselves; offering the field would only confuse. */}
       {!builtIn && (
         <label className="tt-field">
           <span className="tt-mod-label">{t("menu.dietaryNameEn")}</span>

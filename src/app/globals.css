@@ -526,6 +526,13 @@ a.tt-btn {
    orders — what stopped is saving. */
 /* The till: one big number and the split under it. Cash and card sit on one
    row and wrap on a phone rather than squeezing the amounts. */
+/* The walk-in's name, after the pickup code. Lighter than the code, because
+   the code is what the diner's phone shows and the name is the courtesy. */
+.tt-bill-who {
+  font-weight: 500;
+  color: var(--tt-muted);
+}
+
 .tt-till-figures {
   display: flex;
   flex-wrap: wrap;
