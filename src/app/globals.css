@@ -533,6 +533,62 @@ a.tt-btn {
   color: var(--tt-muted);
 }
 
+/* The corte, laid out as a sum: one grid, every row on the same columns, and
+   every number right-aligned so a column can be read down. `tabular-nums` is
+   what keeps the digits in line — proportional figures wander and the total
+   stops sitting under what it adds. */
+.tt-corte-scroll {
+  overflow-x: auto;
+}
+.tt-corte-table {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto auto auto auto;
+  min-width: 460px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.tt-corte-head,
+.tt-corte-row,
+.tt-corte-sum {
+  display: contents;
+}
+.tt-corte-head > * {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--tt-muted);
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--tt-line);
+}
+.tt-corte-row > * {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--tt-line);
+}
+.tt-corte-sum > * {
+  padding: 10px 0 0;
+  /* The rule that says "add these up". */
+  border-top: 2px solid var(--tt-ink);
+}
+/* Every column but the first is a figure, and figures sit on the right edge. */
+.tt-corte-head > * + *,
+.tt-corte-row > * + *,
+.tt-corte-sum > * + * {
+  text-align: right;
+  padding-left: 18px;
+}
+.tt-corte-who {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.tt-corte-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin-top: 12px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
 .tt-till-figures {
   display: flex;
   flex-wrap: wrap;
