@@ -51,6 +51,10 @@ export default function TrackerBody({
         </h2>
         <div className="tt-sage" style={{ fontSize: 13, marginTop: 4 }}>
           {orderCode(order.id)}
+          {/* Their own name, if they gave one. They should be able to check
+              what the cashier is about to call out, and to see that it was
+              taken down correctly. */}
+          {order.customer_name && <> · {order.customer_name}</>}
         </div>
       </div>
 
@@ -62,6 +66,32 @@ export default function TrackerBody({
           currency={order.currency}
           paid={order.paid !== false}
         />
+
+        {/* Only while there is something to collect. On a settled order there
+            is nothing for anyone to scan, and a payment code on a paid bill
+            invites somebody to be charged twice. Placed after the total, which
+            is the order it gets used in: this is what you owe, this is how
+            they take it. */}
+        {order.paid === false && (
+          <div className="tt-card tt-pay-qr">
+            <strong>{t("tracker.showToPay")}</strong>
+            <p className="tt-muted">{t("tracker.showToPayHint")}</p>
+            {/* Server-rendered so the QR library never ships to the client, and
+                its own route so it is not re-sent with every five-second poll.
+
+                A plain <img>: next/image does not optimise SVG, and pointing it
+                at one needs `dangerouslyAllowSVG`, which turns on SVG handling
+                for every image in the app to save nothing here. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/api/order-qr?id=${order.id}`}
+              alt={t("tracker.showToPay")}
+              width={180}
+              height={180}
+            />
+          </div>
+        )}
+
         {children}
       </div>
     </>
