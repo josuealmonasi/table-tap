@@ -1145,6 +1145,17 @@ create trigger seed_dietary_tags_trg after insert on restaurants
 -- Y los que ya existían.
 select public.seed_dietary_tags(id) from restaurants;
 
+-- The name a walk-in gives at the counter.
+--
+-- The pickup code identifies the order; this is what the cashier calls out, and
+-- it is what a person answers to. Optional on purpose: it is a courtesy, not a
+-- gate in front of somebody's lunch. Only ever asked for where there is no
+-- table — at a table the table IS the name.
+--
+-- Personal data, and the privacy notice says so. Staff-only: `orders` has no
+-- anon grant, so it never reaches another diner's browser.
+alter table orders add column if not exists customer_name text;
+
 -- ── Subscription plans ──────────────────────────────────────────────────────
 -- What each tier unlocks, and what it costs. Reference data, not per-tenant:
 -- one row per plan, seeded here so the database is the single answer to "how

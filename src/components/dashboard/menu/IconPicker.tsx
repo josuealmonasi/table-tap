@@ -55,8 +55,8 @@ export default function IconPicker({
                 aria-expanded={isOpen}
                 onClick={() => setOpenGroup(isOpen ? null : key)}
               >
-                {/* Los de fábrica se traducen; el nombre que puso el restaurante
-                    se respeta tal cual lo escribió. */}
+                {/* The built-ins are translated; the name the restaurant typed is
+                    left exactly as they wrote it. */}
                 <span>{g.labelKey ? t(g.labelKey) : g.name}</span>
                 <span className="tt-acc-right">
                   {selected && <span style={{ fontSize: 15 }}>{selected.emoji}</span>}

@@ -41,9 +41,9 @@ export default function TrackedItemsCard({
         ))}
       </div>
       <div className="tt-row tt-total">
-        {/* Un pedido que se paga en la mesa o en la caja todavía no está
-            pagado, y decirle "Total pagado" al comensal es decirle que ya
-            saldó algo que va a tener que saldar. */}
+        {/* An order settled at the table or at the till is not paid yet, and
+            calling it "Total paid" tells the diner they have already settled
+            something they are still going to have to settle. */}
         <span>{t(paid ? "tracker.totalPaid" : "tracker.totalDue")}</span>
         <span className="tt-price">{formatMoney(total, currency)}</span>
       </div>

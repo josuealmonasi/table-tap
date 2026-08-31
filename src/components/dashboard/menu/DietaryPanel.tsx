@@ -59,8 +59,9 @@ export default function DietaryPanel({ tags }: { tags: StoredDietaryTag[] }) {
               >
                 {nameOf(tag)}
               </button>
-              {/* El inglés sólo si lo pusieron: las de casa ya vienen traducidas
-                  y repetirlo aquí sería decir dos veces lo mismo. */}
+              {/* The English only if they added one: the built-ins arrive
+                  translated, and repeating it here would say the same thing
+                  twice. */}
               {!isBuiltIn(tag.key) && tag.label_en && (
                 <div className="tt-muted" style={{ fontSize: 13, marginTop: 2 }}>
                   {tag.label_en}

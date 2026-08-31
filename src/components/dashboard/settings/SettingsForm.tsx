@@ -374,8 +374,8 @@ export default function SettingsForm({
               </span>
             </label>
 
-            {/* Del gerente también: es cómo se ve la carta, no una decisión de
-                dinero ni de accesos. */}
+            {/* The manager's too: this is how the menu looks, not a decision
+                about money or logins. */}
             <label className="tt-settings-toggle" style={{ marginTop: 10 }}>
               <span>
                 <strong>{t("dash.dealsTabTitle")}</strong>
@@ -394,12 +394,12 @@ export default function SettingsForm({
               </span>
             </label>
 
-            {/* Una sola pregunta: ¿puede salir la comida antes de pagarse? La
-                respuesta es la misma para todo el negocio; lo que cambia según
-                el QR es quién retiene el pedido, y eso no lo elige el dueño.
-                Eran dos interruptores y se contradecían: con "las mesas pagan
-                al final" encendido, el QR general seguía sin darle al cliente
-                ninguna forma de salir del carrito. */}
+            {/* One question: can the food leave before it is paid for? The
+                answer is the same for the whole business; what changes with the
+                QR is who holds the order, and that is not the owner's to
+                choose. It was two switches and they contradicted each other:
+                with "tables pay at the end" on, the general QR still gave the
+                customer no way out of the cart. */}
             {isOwner && (
               <label className="tt-settings-toggle" style={{ marginTop: 10 }}>
                 <span>
@@ -422,16 +422,16 @@ export default function SettingsForm({
               </label>
             )}
 
-            {/* Lo que el dueño no podía saber desde aquí: sin cuenta de Stripe
-                conectada, el pago en línea no se puede pintar en ninguna
-                pantalla, así que este interruptor deja de ser una elección y
-                pasa a ser la única forma de ordenar. Encender "pagar al final"
-                y no ver aparecer el botón de tarjeta no tenía explicación en
-                ningún lado.
+            {/* What the owner had no way of knowing from here: with no Stripe
+                account connected, online payment cannot be painted on any
+                screen, so this switch stops being a choice and becomes the only
+                way to order. Turning on "pay at the end" and not seeing the
+                card button appear had no explanation anywhere.
 
-                Sólo al dueño, y no por discreción: conectar Stripe es suyo —la
-                tarjeta de Pagos ni siquiera se le pinta al gerente— así que al
-                gerente esto sería un aviso sobre algo que no puede arreglar. */}
+                Owner only, and not out of discretion: connecting Stripe is
+                theirs — the Payments card is not even shown to a manager — so
+                to a manager this would be a warning about something they
+                cannot fix. */}
             {isOwner && paymentWarning && (
               <div className="tt-hint tt-hint-row" style={{ marginTop: 10 }}>
                 <span>{t(paymentWarning)}</span>

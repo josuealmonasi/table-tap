@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { tableOf } from "@/lib/table-guard";
 import { openSession } from "@/lib/table-session";
-import { capNote } from "@/lib/notes";
+import { capName, capNote } from "@/lib/notes";
 import { messagesFor, translate } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n/server";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
       tableLabel,
       items,
       note,
+      customerName,
       tipPct: rawTipPct,
       tipAmount: rawTipAmount,
       couponCode,
@@ -76,6 +77,8 @@ export async function POST(req: NextRequest) {
       tableLabel: string | null;
       items: OrderLineItem[];
       note?: string;
+      /** Only sent from the general QR: at a table, the table is the name. */
+      customerName?: string;
       tipPct?: number;
       tipAmount?: number;
       couponCode?: string;
@@ -352,6 +355,10 @@ export async function POST(req: NextRequest) {
         currency: restaurant.currency,
         items: verified,
         note: capNote(note) ?? null,
+        // Ignored outright when there is a table. A name is how the counter
+        // finds a person; a table already has one, and storing a name nobody
+        // asked for would be collecting personal data for nothing.
+        customer_name: tableId ? null : (capName(customerName) ?? null),
         paid: false,
       })
       .select("id")

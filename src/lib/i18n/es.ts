@@ -340,6 +340,8 @@ myBill: "Ver mi cuenta",
     nothing: "Esta mesa no debe nada.",
   },
   cart: {
+    yourName: "¿A nombre de quién?",
+    yourNamePlaceholder: "Opcional — para llamarte cuando esté listo",
     payLaterOnlyHint: "Ordena ahora y paga tu cuenta al final, en la mesa.",
     counterOnlyHint: "Ordena ahora y pasa a la caja con tu código.",
     noCardYet: "Este restaurante todavía no cobra con tarjeta aquí.",

@@ -91,6 +91,8 @@ export default function OrderingApp({
   const [selectedCombo, setSelectedCombo] = useState<Combo | null>(null);
   const [editingLine, setEditingLine] = useState<CartItem | null>(null);
   const [orderNote, setOrderNote] = useState("");
+  // Only ever filled from the general QR; the cart hides the field at a table.
+  const [customerName, setCustomerName] = useState("");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   // Product ids that sold out at checkout — kept in the cart but greyed out
@@ -418,6 +420,7 @@ export default function OrderingApp({
             ...(c.comboId ? { comboId: c.comboId, components: c.components } : {}),
           })),
           note: orderNote || undefined,
+          customerName: customerName || undefined,
           tipPct,
           tipAmount: tipCustom ?? undefined,
           couponCode: coupon?.code,
@@ -587,6 +590,8 @@ export default function OrderingApp({
             loading={loading}
             canCheckout={orderableItems.length > 0 && restaurant.accepting_orders}
             onChangeNote={setOrderNote}
+            customerName={customerName}
+            onChangeName={setCustomerName}
             onChangeTip={pct => {
               setTipPct(pct);
               setTipCustom(null); // picking a preset clears the exact amount

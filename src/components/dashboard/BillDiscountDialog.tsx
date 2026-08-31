@@ -314,11 +314,10 @@ export default function BillDiscountDialog({
                 {error}
               </p>
             )}
-            {/* Los tres en la misma fila: cerrar la cuenta a la izquierda, lo
-                que hace este formulario a la derecha. Antes colgaba en su
-                propio renglón, pegado al borde contrario al de los otros dos.
-                Quedan tan separados como cabe en la fila, que es lo que evita
-                que el pulgar caiga en el equivocado. */}
+            {/* All three on one row: closing the bill on the left, what this
+                form does on the right. It used to hang on its own line against
+                the opposite edge from the other two. They sit as far apart as
+                the row allows, which is what keeps a thumb off the wrong one. */}
             <div className="tt-prodform-actions" style={{ marginTop: 14 }}>
               <button
                 type="button"

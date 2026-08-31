@@ -16,6 +16,8 @@ export interface OpenBill {
   tableLabel: string | null;
   /** Short code shown for a to-go order, so it can be searched for. */
   code: string | null;
+  /** What a walk-in gave at the counter, when they gave one. */
+  customerName: string | null;
   orderIds: string[];
   items: OrderLineItem[];
   total: number;
@@ -47,6 +49,7 @@ export function openBills(orders: Order[]): OpenBill[] {
       tableId: order.table_id,
       tableLabel: order.table_label,
       code: order.table_id ? null : shortCode(order.id),
+      customerName: order.customer_name ?? null,
       orderIds: [order.id],
       items: [...(order.items ?? [])],
       total: round2(Number(order.total)),
@@ -66,6 +69,9 @@ export function matchesBill(bill: OpenBill, query: string): boolean {
   return (
     (bill.tableLabel ?? "").toLowerCase().includes(q) ||
     (bill.code ?? "").toLowerCase().includes(q) ||
+    // A cashier looking for a walk-in searches the name they were given, not
+    // the code the diner's phone shows.
+    (bill.customerName ?? "").toLowerCase().includes(q) ||
     bill.items.some(i => i.name.toLowerCase().includes(q))
   );
 }

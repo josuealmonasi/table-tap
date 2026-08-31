@@ -193,6 +193,8 @@ export type Order = {
   currency: string;
   items: OrderLineItem[];
   note: string | null;
+  /** The name a walk-in gave at the counter. Null at a table. */
+  customer_name?: string | null;
   pay_method: string | null;
   paid: boolean;
   /** Served but never paid for; out of revenue, and no longer owed. */

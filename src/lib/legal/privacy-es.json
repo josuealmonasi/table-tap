@@ -15,7 +15,8 @@
       "paragraphs": [
         "Del restaurante: nombre del negocio, nombre y correo electrónico de quien administra la cuenta, datos de contacto y datos fiscales cuando solicita factura.",
         "Del personal del restaurante: correo electrónico y rol, con el fin de otorgar acceso al panel.",
-        "Del comensal: lo estrictamente necesario para que su pedido opere — qué ordenó, en qué mesa, la nota que escriba para la cocina, el código de promoción que utilice, si dejó propina y la calificación del platillo si la otorga. No se solicita su nombre ni su teléfono, y no se crean cuentas de comensal.",
+        "Del comensal: lo estrictamente necesario para que su pedido opere — qué ordenó, en qué mesa, la nota que escriba para la cocina, el código de promoción que utilice, si dejó propina y la calificación del platillo si la otorga.",
+        "Nombre del comensal: únicamente en los pedidos que se recogen en el mostrador, y de manera opcional. Sirve para llamarle cuando su pedido está listo. Puede dejarlo en blanco: su pedido se identifica por su código de recogida, que se le muestra siempre. No se solicita en el servicio en mesa, donde la mesa cumple esa función, ni se solicita su teléfono, ni se crean cuentas de comensal.",
         "Correo electrónico del comensal: únicamente si lo proporciona para solicitar su recibo, y no se conserva. Se utiliza para enviar ese único correo y se descarta; no se incorpora a nuestra base de datos, no se da de alta en lista alguna y no se le remite publicidad.",
         "En el propio dispositivo del comensal, la aplicación conserva un registro local — los pedidos que hizo desde ese teléfono, la mesa en la que está sentado y el contenido de su carrito — con el fin de que pueda seguir su pedido y pagar su cuenta. Esa información permanece en su navegador, no se transmite a terceros y se elimina al borrar los datos del sitio.",
         "No se almacenan datos de tarjetas bancarias. Los pagos son procesados por Stripe conforme a su propia política de privacidad."
@@ -42,7 +43,7 @@
       "title": "5. Plazo de conservación",
       "paragraphs": [
         "Mientras la cuenta esté activa y, posteriormente, durante el plazo que exijan las obligaciones fiscales y legales aplicables.",
-        "Los pedidos y sus importes se conservan por constituir registro contable del restaurante.",
+        "Los pedidos y sus importes se conservan por constituir registro contable del restaurante. El nombre que un comensal proporciona en el mostrador se conserva junto con su pedido y por el mismo plazo.",
         "El correo electrónico que un comensal proporciona para su recibo no se conserva: del envío únicamente queda la fecha en que se realizó, sin la dirección. No existe información posterior que suprimir."
       ]
     },

@@ -129,8 +129,8 @@ export default function SettleTableDialog({
         label={t("settle.open")}
       >
       <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 12 }}>
-        {/* Un pedido de mostrador no es una mesa: llamarlo "Mesa ORD-E2EC"
-            le pone delante lo único que no tiene. */}
+        {/* A counter order is not a table: calling it "Mesa ORD-E2EC" leads
+            with the one thing it does not have. */}
         {t(tableId ? "settle.title" : "settle.titleToGo", { label: tableLabel })}
       </h3>
 
@@ -147,9 +147,9 @@ export default function SettleTableDialog({
             </div>
           ))}
 
-          {/* Lo que alguien de la mesa ya pagó con tarjeta. Va aparte y sin
-              sumar: el mesero necesita saber que ese plato no se cobra, y
-              esconderlo es justo lo que lleva a cobrarlo dos veces. */}
+          {/* What somebody at the table already paid by card. Apart, and not
+              added in: the waiter needs to know that dish is not being charged
+              for, and hiding it is exactly what leads to charging twice. */}
           {bill.paid.orders.length > 0 && (
             <div className="tt-bill-settled" style={{ marginTop: 10 }}>
               <button
@@ -206,9 +206,9 @@ export default function SettleTableDialog({
                 the board filling with debts nobody can clear is worse than
                 admitting one was never paid.
 
-                Sólo para mesas: un pedido de mostrador que nadie recogió se
-                cancela en el tablero, que ya pregunta el motivo, en vez de
-                cancelarse aquí por una vía que asume una mesa. */}
+                Tables only: a counter order nobody collected is cancelled on
+                the board, which already asks for a reason, rather than through
+                a path here that assumes a table. */}
             {tableId && <button
               className="tt-btn tt-btn-ghost tt-btn-sm"
               style={{ width: "100%", marginTop: 12 }}
