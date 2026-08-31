@@ -1,16 +1,7 @@
 "use client";
 
 import { useT } from "@/lib/i18n/context";
-
-/** Escape text for safe interpolation into an HTML string (the print window). */
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+import { escapeHtml } from "@/lib/html";
 
 /** A QR target: the URL it points to and its pre-rendered inline SVG. */
 export interface QrTarget {
