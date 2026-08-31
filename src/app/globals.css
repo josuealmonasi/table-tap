@@ -3401,6 +3401,10 @@ a.tt-btn {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  /* The percentage chips carry a second line with the money; "Sin propina" and
+     "Otro" do not. Stretching keeps every pill the same height so the row reads
+     as one set of options rather than two sizes of button. */
+  align-items: stretch;
 }
 .tt-tip-chip {
   /* `flex: 1` repartía el ancho a partes iguales y el padding lateral era
@@ -3417,11 +3421,26 @@ a.tt-btn {
   border: 1px solid var(--tt-cream);
   background: var(--tt-white);
   border-radius: 999px;
-  padding: 10px 14px;
+  padding: 8px 14px;
   font-size: 14px;
   cursor: pointer;
   font-family: inherit;
   color: var(--tt-muted);
+  /* A column, so "15%" can carry what 15% actually comes to underneath it. */
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  line-height: 1.25;
+}
+/* The figure, not a second label: it borrows the chip's colour so the selected
+   one stays legible, and sits back a step so the percentage still leads. */
+.tt-tip-amount {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.72;
+  font-variant-numeric: tabular-nums;
 }
 .tt-tip-chip-active {
   border-color: var(--tt-accent);
@@ -4208,8 +4227,18 @@ a.tt-btn {
 .tt-tag-row {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   margin-top: 4px;
+}
+/* What the deal on this line would still give, if the diner takes one more.
+   Deliberately not --tt-success: green on a cart line is money already saved,
+   and this is money not saved yet. Ink, so it reads as information beside the
+   badge rather than a second claim about the price. */
+.tt-nudge {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tt-ink-2);
 }
 
 /* ── dish detail: full screen on a phone, dialog on desktop ───────────────

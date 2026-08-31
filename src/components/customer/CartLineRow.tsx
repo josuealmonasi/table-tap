@@ -27,6 +27,13 @@ interface CartLineRowProps {
    * total reads as the deal not having worked.
    */
   promoSaving?: { saved: number; promoName: string };
+  /**
+   * A deal this product is in but has not reached yet, and what one more step
+   * would save. On the line because that is where the diner is deciding: a
+   * dish sitting in the cart under a deal it could still earn looked exactly
+   * like a dish with no deal at all.
+   */
+  promoHint?: { addQty: number; save: number; promoName: string };
 }
 
 /** A single line in the cart, with its modifiers, notes, edit and remove. */
@@ -39,6 +46,7 @@ export default function CartLineRow({
   onChangeQty,
   onEdit,
   promoSaving,
+  promoHint,
 }: CartLineRowProps) {
   const t = useT();
   const confirm = useConfirm();
@@ -61,6 +69,9 @@ export default function CartLineRow({
     });
     if (ok) onRemove(item.cartId);
   }
+  // The deal to name on this line: the one that has already paid out if there
+  // is one, otherwise the one still within reach.
+  const dealName = promoSaving?.promoName ?? promoHint?.promoName;
   const charged = lineUnitPrice(item) * item.qty;
   // What to strike through. For a quantity deal that's the line's own gross —
   // the saving comes off it. A combo is different: it is already sold at the
@@ -95,12 +106,36 @@ export default function CartLineRow({
               </span>
             )}
           </strong>
-          {promoSaving && !soldOut && (
+          {/* One row for the deal on this line, whether it has been earned, is
+              still one step away, or both — which is the usual case on a
+              tiered offer, and printing the badge twice for it read as a
+              rendering fault. The badge is the same either way because it
+              answers the same question: is there an offer on this dish? Before
+              this, a dish sitting under a deal it had not reached yet looked
+              exactly like a dish with no deal at all, and the nudge that said
+              otherwise was a separate block below the tip picker. A sold-out
+              line is going nowhere, so it is offered neither. */}
+          {dealName && !soldOut && (
             <div className="tt-tag-row">
-              <span className="tt-deal">{promoSaving.promoName}</span>
-              <span className="tt-save" style={{ fontSize: 12, fontWeight: 700 }}>
-                −{formatMoney(promoSaving.saved, currency)}
-              </span>
+              <span className="tt-deal">{dealName}</span>
+              {promoSaving && (
+                <span className="tt-save" style={{ fontSize: 12, fontWeight: 700 }}>
+                  −{formatMoney(promoSaving.saved, currency)}
+                </span>
+              )}
+              {/* Only when a second, different offer is what the nudge is
+                  about; otherwise the badge beside it already names it. */}
+              {promoHint && promoHint.promoName !== dealName && (
+                <span className="tt-deal">{promoHint.promoName}</span>
+              )}
+              {promoHint && (
+                <span className="tt-nudge">
+                  {t("cart.promoNudge", {
+                    qty: promoHint.addQty,
+                    amount: formatMoney(promoHint.save, currency),
+                  })}
+                </span>
+              )}
             </div>
           )}
           {Object.entries(item.mods ?? {}).map(([k, v]) => (
