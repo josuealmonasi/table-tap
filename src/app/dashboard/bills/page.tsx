@@ -5,6 +5,11 @@ import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import BillsPanel from "@/components/dashboard/BillsPanel";
 import UserLogs from "@/components/dashboard/staff/UserLogs";
 import { openBills } from "@/lib/open-bills";
+import { currentUser } from "@/lib/current-user";
+import { startOfLocalDay } from "@/lib/day-window";
+import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
+import { EMPTY_TILL, tillFrom } from "@/lib/till";
+import TillCard from "@/components/dashboard/TillCard";
 import type { Order } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +63,24 @@ export default async function BillsPage() {
       .eq("status", "open"),
   ]);
 
+  // Their own takings, read here with the secret key rather than by widening
+  // the log's policy. `user_logs` is the owner's to read, and it stays that
+  // way: the filter below is the session's own email, so nobody sees anybody
+  // else's collections and no new door was opened to get there.
+  const me = await currentUser();
+  const dayStart = startOfLocalDay(new Date(), r.timezone ?? DEFAULT_TIME_ZONE);
+  const { data: myPayments } = me?.email
+    ? await db
+        .from("user_logs")
+        .select("detail")
+        .eq("restaurant_id", r.id)
+        .eq("actor_email", me.email)
+        .eq("entity", "bill")
+        .eq("action", "paid")
+        .gte("created_at", dayStart.toISOString())
+    : { data: null };
+  const till = myPayments ? tillFrom(myPayments) : EMPTY_TILL;
+
   return (
     <ConfirmProvider>
       <BillsPanel
@@ -79,6 +102,9 @@ export default async function BillsPage() {
             No se abre la política en vez de cerrar la reja: la bitácora también
             trae altas, bajas y cambios de rol del equipo, y el gerente no entra
             a /dashboard/staff. */}
+        {/* Above the log, because counting your own drawer is a thing you do
+            at the end of a shift and the log is a thing you read afterwards. */}
+        <TillCard till={till} currency={r.currency} />
         {OWNS(membership.role) && (
           <UserLogs restaurantId={r.id} currency={r.currency} />
         )}
