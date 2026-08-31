@@ -53,10 +53,12 @@ interface CartScreenProps {
   suggestions?: MenuItem[];
   onPickSuggestion?: (item: MenuItem) => void;
   onCheckout: (payLater?: boolean) => void;
-  /** Dine-in at a table, where the owner allows settling at the end. */
-  payLaterAllowed?: boolean;
-  /** General QR, where the owner allows going to the till to pay. */
-  counterAllowed?: boolean;
+  /**
+   * The owner's "pay at the end / at the counter" switch. Which of the two it
+   * turns out to be is decided here, from `table` — the same switch means
+   * "settle at the end" at a table and "collect at the till" on the general QR.
+   */
+  deferredAllowed?: boolean;
   /** Whether the restaurant can take cards right now. */
   cardsEnabled?: boolean;
 }
@@ -94,8 +96,7 @@ export default function CartScreen({
   suggestions = [],
   onPickSuggestion,
   onCheckout,
-  payLaterAllowed = false,
-  counterAllowed = false,
+  deferredAllowed = false,
   cardsEnabled = true,
 }: CartScreenProps) {
   const t = useT();
@@ -103,14 +104,16 @@ export default function CartScreen({
   // "Service (10%) — $0.00" row for a fee nobody is being charged.
   const effectiveServicePct = restaurant.service_enabled ? restaurant.service_pct : 0;
 
-  // The three flags arrive already resolved for this screen — table or general
-  // QR — so here they are only gathered. `atTable` is true because the one who
-  // decides whether "pay at the end" applies is OrderingApp, which knows.
+  // Which QR the diner came in through is what turns one switch into two
+  // offers, and this screen is the only place that knows: it holds the table.
+  // `atTable` used to be hardcoded true here, which made `payCounter` — defined
+  // as "no table is holding this" — impossible to reach. A restaurant with the
+  // switch on showed the general QR a cart saying it could not take cards, and
+  // no button at all.
   const pay = paymentOptions({
     cardsEnabled,
-    allowPayLater: payLaterAllowed,
-    allowCounterPayment: counterAllowed,
-    atTable: true,
+    allowDeferred: deferredAllowed,
+    atTable: Boolean(table),
     acceptingOrders: restaurant.accepting_orders,
   });
   return (

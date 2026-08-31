@@ -9,8 +9,7 @@ import {
 
 const ctx = (over: Partial<PaymentContext> = {}): PaymentContext => ({
   cardsEnabled: false,
-  allowPayLater: false,
-  allowCounterPayment: false,
+  allowDeferred: false,
   atTable: true,
   acceptingOrders: true,
   ...over,
@@ -20,7 +19,7 @@ describe("lo que el comensal puede hacer", () => {
   it("con Stripe y pagar-al-final encendidos, ofrece las dos", () => {
     // This is what the restaurant asked for: pay for your own on sitting down, or
     // leave it open with the rest of the table.
-    const o = paymentOptions(ctx({ cardsEnabled: true, allowPayLater: true }));
+    const o = paymentOptions(ctx({ cardsEnabled: true, allowDeferred: true }));
     expect(o.payNow).toBe(true);
     expect(o.payLater).toBe(true);
     expect(paymentHintKey(o)).toBe("cart.payNowHint");
@@ -35,20 +34,24 @@ describe("lo que el comensal puede hacer", () => {
   it("sin Stripe no promete tarjeta por debajo del botón", () => {
     // The bug from the screenshot: the line said "pay now by card, or leave the
     // bill open" on a screen with no card button at all.
-    const o = paymentOptions(ctx({ allowPayLater: true }));
+    const o = paymentOptions(ctx({ allowDeferred: true }));
     expect(o.payNow).toBe(false);
     expect(paymentHintKey(o)).not.toBe("cart.payNowHint");
     expect(paymentHintKey(o)).toBe("cart.payLaterOnlyHint");
   });
 
-  it("dejar la cuenta abierta necesita una mesa", () => {
-    // El QR general no tiene a quién cobrarle después.
-    expect(paymentOptions(ctx({ allowPayLater: true, atTable: false })).payLater).toBe(false);
-  });
+  it("el mismo interruptor es la cuenta abierta en mesa y la caja en el QR general", () => {
+    // The one that shipped: the general QR was handed a cart with no button on
+    // it — no card connected, and the counter option unreachable — while the
+    // owner's screen showed "pay at the end" switched on. One switch, and which
+    // of the two offers it becomes is decided by the QR, never by the owner.
+    const table = paymentOptions(ctx({ allowDeferred: true, atTable: true }));
+    expect(table).toMatchObject({ payLater: true, payCounter: false });
 
-  it("la caja es del QR general, no de la mesa", () => {
-    expect(paymentOptions(ctx({ allowCounterPayment: true, atTable: true })).payCounter).toBe(false);
-    expect(paymentOptions(ctx({ allowCounterPayment: true, atTable: false })).payCounter).toBe(true);
+    const general = paymentOptions(ctx({ allowDeferred: true, atTable: false }));
+    expect(general).toMatchObject({ payLater: false, payCounter: true });
+    expect(canOrder(general)).toBe(true);
+    expect(paymentHintKey(general)).toBe("cart.counterOnlyHint");
   });
 
   it("sin nada encendido y sin Stripe, no hay forma de ordenar", () => {
@@ -61,14 +64,14 @@ describe("lo que el comensal puede hacer", () => {
 
 describe("lo que hay que advertirle al dueño", () => {
   it("no advierte nada cuando el cobro con tarjeta funciona", () => {
-    expect(ownerWarningKey(ctx({ cardsEnabled: true, allowPayLater: true }))).toBeNull();
+    expect(ownerWarningKey(ctx({ cardsEnabled: true, allowDeferred: true }))).toBeNull();
   });
 
   it("avisa que sus clientes no pueden pagar en línea", () => {
-    expect(ownerWarningKey(ctx({ allowPayLater: true }))).toBe("dash.noCardsConnected");
+    expect(ownerWarningKey(ctx({ allowDeferred: true }))).toBe("dash.noCardsConnected");
   });
 
-  it("sube el tono cuando además apagó los dos interruptores", () => {
+  it("sube el tono cuando además apagó el interruptor", () => {
     // At that point it is not one option fewer: it is that nobody can order.
     expect(ownerWarningKey(ctx())).toBe("dash.noPaymentAtAll");
   });
@@ -80,7 +83,7 @@ describe("orders paused", () => {
     // waiting to happen. The cart used to keep a dead "order and pay at the
     // end" button with the caption still telling them to order now.
     const o = paymentOptions(
-      ctx({ acceptingOrders: false, cardsEnabled: true, allowPayLater: true }),
+      ctx({ acceptingOrders: false, cardsEnabled: true, allowDeferred: true }),
     );
     expect(o).toMatchObject({ payNow: false, payLater: false, payCounter: false });
     expect(canOrder(o)).toBe(false);
@@ -88,13 +91,13 @@ describe("orders paused", () => {
 
   it("says the kitchen has stopped, not that there is no card reader", () => {
     // The two send the diner to do different things: wait, or pay another way.
-    const o = paymentOptions(ctx({ acceptingOrders: false, allowPayLater: true }));
+    const o = paymentOptions(ctx({ acceptingOrders: false, allowDeferred: true }));
     expect(paymentHintKey(o, false)).toBe("menu.closed");
     expect(paymentHintKey(o, false)).not.toBe("cart.noCardYet");
   });
 
   it("goes back to normal the moment orders are switched on", () => {
-    const o = paymentOptions(ctx({ cardsEnabled: true, allowPayLater: true }));
+    const o = paymentOptions(ctx({ cardsEnabled: true, allowDeferred: true }));
     expect(paymentHintKey(o, true)).toBe("cart.payNowHint");
   });
 });

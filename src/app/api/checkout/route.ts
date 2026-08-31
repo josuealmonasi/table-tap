@@ -50,7 +50,7 @@ async function cartError(
 // Body: { restaurantId, tableId, tableLabel, items: OrderLineItem[], note }
 // Creates a pending order, then a Stripe Checkout Session, and returns its URL.
 /** A restaurant with no readable plan has no plan permissions. */
-const NO_PLAN = { allows_counter_payment: false } as PlanLimits;
+const NO_PLAN = { allows_deferred_payment: false } as PlanLimits;
 
 export async function POST(req: NextRequest) {
   try {
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
     const { data: restaurant, error: rErr } = await supabase
       .from("restaurants")
       .select(
-        "id, currency, service_pct, service_enabled, accepting_orders, tax_pct, stripe_account_id, stripe_charges_enabled, allow_pay_later, allow_counter_payment",
+        "id, currency, service_pct, service_enabled, accepting_orders, tax_pct, stripe_account_id, stripe_charges_enabled, allow_pay_later",
       )
       .eq("id", restaurantId)
       .single();
@@ -156,17 +156,17 @@ export async function POST(req: NextRequest) {
     //     is the counter: the customer goes to the till, pays and collects.
     //
     // Without one of those two, anyone claiming `payLater` would walk off with
-    // food nobody can charge for.
-    // Paying at the till also comes with the plan, and is asked here rather than
-    // only when the switch is flipped: someone downgrading to Carta keeps the
-    // switch on in the database, and without this would go on giving away orders
-    // with no fee on the free plan.
-    const atTable = Boolean(tableId) && Boolean(restaurant.allow_pay_later);
-    const atCounter =
-      !tableId &&
-      Boolean(restaurant.allow_counter_payment) &&
-      can((await getPlan(restaurantId))?.limits ?? NO_PLAN, "counterPayment");
-    const deferred = Boolean(payLater) && (atTable || atCounter);
+    // food nobody can charge for. Both come from the one switch the owner has:
+    // which of them applies is decided by the QR, not by the restaurant.
+    //
+    // It also comes with the plan, and is asked here rather than only when the
+    // switch is flipped: someone downgrading to Carta keeps the switch on in
+    // the database, and without this would go on giving away orders with no
+    // fee on the free plan.
+    const allowDeferred =
+      Boolean(restaurant.allow_pay_later) &&
+      can((await getPlan(restaurantId))?.limits ?? NO_PLAN, "deferredPayment");
+    const deferred = Boolean(payLater) && allowDeferred;
     if (payLater && !deferred) {
       return await apiError("apiErr.payLaterNotAllowed", 403);
     }

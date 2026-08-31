@@ -155,7 +155,7 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
     supabase
       .from("restaurants")
       .select(
-        "id, name, tagline, logo, logo_url, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, allow_pay_later, allow_counter_payment, deals_tab_enabled",
+        "id, name, tagline, logo, logo_url, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, allow_pay_later, deals_tab_enabled",
       )
       .eq("id", restaurantId)
       .single(),
@@ -221,10 +221,6 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
   // (cart math and checkout both key off service_pct).
   if (restaurant && !restaurant.service_enabled) restaurant.service_pct = 0;
 
-  // Paying at the till comes with the plan, so the restaurant's switch is not
-  // enough on its own: someone who downgraded to Carta still has it on in the
-  // database. Resolved here so the cart never offers a button checkout would
-  // reject — the same rule, on both sides.
   // Can they take cards? Resolved here because the Stripe columns are not the
   // diner's — their read grant does not include them, and it should stay that
   // way. What reaches the browser is a yes or a no.
@@ -237,8 +233,12 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
     restaurant.cards_enabled = Boolean(pay?.stripe_account_id && pay?.stripe_charges_enabled);
   }
 
-  if (restaurant?.allow_counter_payment) {
-    restaurant.allow_counter_payment = plan ? can(plan.limits, "counterPayment") : false;
+  // Taking the food before paying comes with the plan, so the restaurant's own
+  // switch is not enough: someone who downgraded to Carta still has it on in
+  // the database. Resolved here so the cart never paints a button checkout
+  // would reject — the same rule, on both sides.
+  if (restaurant?.allow_pay_later) {
+    restaurant.allow_pay_later = plan ? can(plan.limits, "deferredPayment") : false;
   }
 
   return {

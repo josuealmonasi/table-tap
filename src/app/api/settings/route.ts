@@ -26,7 +26,6 @@ const OWNER_FIELDS = new Set([
   "cover_enabled",
   "logo_url",
   "allow_pay_later",
-  "allow_counter_payment",
   "badges_enabled",
   "deals_tab_enabled",
 ]);
@@ -69,10 +68,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  // Paying at the till comes with the plan. Checked when switching it on and
-  // not off: someone downgrading has to be able to put it back as it was.
-  if (update.allow_counter_payment === true) {
-    const blocked = await planBlocks(actor.restaurantId, "counterPayment");
+  // Letting the food out before it is paid for comes with the plan. Checked
+  // when switching it on and not off: someone downgrading has to be able to
+  // put it back as it was.
+  if (update.allow_pay_later === true) {
+    const blocked = await planBlocks(actor.restaurantId, "deferredPayment");
     if (blocked) return blocked;
   }
 
