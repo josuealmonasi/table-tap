@@ -539,6 +539,30 @@ a.tt-btn {
    stops sitting under what it adds. */
 /* The pay-me code. Centred and given room: it is held up to a camera across a
    counter, so it wants to be the biggest thing in its card. */
+/* The camera view. Fixed aspect so the dialog does not jump when the stream
+   starts, and mirrored off — this is the back camera looking at somebody
+   else's screen, not a selfie. */
+/* Search and scan on one row; the search takes the space and the button keeps
+   its label. Wraps on a narrow phone rather than crushing the input. */
+.tt-bill-find {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.tt-bill-find .tt-bill-search {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.tt-scan-view {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 12px;
+  background: var(--tt-ink);
+}
+
 .tt-pay-qr {
   display: flex;
   flex-direction: column;

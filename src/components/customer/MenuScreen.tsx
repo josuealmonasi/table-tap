@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Category, MenuItem, Restaurant, RestaurantTable } from "@/lib/types";
 import { tagLabel } from "@/lib/dietary";
+import { orderCode } from "@/lib/types";
 import { useDietaryTags } from "@/components/DietaryTagsContext";
 import { readMenuParams, syncMenuUrl } from "@/lib/menu-params";
 import { useT, useLocale } from "@/lib/i18n/context";
@@ -48,7 +49,7 @@ export default function MenuScreen({
   onOpenCart,
   billDue = false,
   onOpenBill,
-  trackId,
+  trackIds,
   onTrack,
 }: {
   restaurant: Restaurant;
@@ -69,9 +70,10 @@ export default function MenuScreen({
   billDue?: boolean;
   onOpenBill?: () => void;
   /** An order this phone placed and can still watch — shows the track link. */
-  trackId?: string | null;
-  /** Opens the live status of `trackId` over this menu. */
-  onTrack?: () => void;
+  /** Every order this phone can still watch here, newest first. */
+  trackIds?: string[];
+  /** Opens the live status of one of them over this menu. */
+  onTrack?: (orderId: string) => void;
 }) {
   const t = useT();
   const { locale: lang } = useLocale();
@@ -297,13 +299,25 @@ export default function MenuScreen({
               )}
             </div>
           )}
-          {trackId && onTrack && (
-            // A button, not a link: the status opens over this menu rather
-            // than taking the diner to a page of its own.
-            <button type="button" className="tt-track-banner" onClick={onTrack}>
-              <BillIcon size={14} weight="bold" /> {t("menu.trackOrder")}
-            </button>
-          )}
+          {/* One banner per order still in the kitchen. A counter has no table
+              to hang a running tab on, so remembering a drink after ordering
+              food makes a SECOND order — and both deserve watching. With more
+              than one, each says which it is; with one, the plain sentence
+              reads better than a code nobody needs yet. */}
+          {onTrack &&
+            (trackIds ?? []).map(id => (
+              <button
+                key={id}
+                type="button"
+                className="tt-track-banner"
+                onClick={() => onTrack(id)}
+              >
+                <BillIcon size={14} weight="bold" />{" "}
+                {(trackIds ?? []).length > 1
+                  ? t("menu.trackThisOrder", { code: orderCode(id) })
+                  : t("menu.trackOrder")}
+              </button>
+            ))}
           {!restaurant.accepting_orders && (
             <div className="tt-closed-banner" role="status">
               {t("menu.closed")}

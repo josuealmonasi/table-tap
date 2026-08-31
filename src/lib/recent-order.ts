@@ -7,7 +7,7 @@
 // on their own: the server re-reads every order before it acts on one.
 
 /**
- * The in-progress order is remembered per table, not per restaurant.
+ * The in-progress orders are remembered per table, not per restaurant.
  *
  * Keyed by restaurant alone, a phone that ordered at Mesa 2 and later scanned
  * Mesa 10 was offered its Mesa 2 order — and the tracker cheerfully said the
@@ -20,6 +20,30 @@ const key = (restaurantId: string, tableId?: string | null) =>
   tableId ? `tt-order:${restaurantId}:${tableId}` : `tt-order:${restaurantId}`;
 const listKey = (restaurantId: string) => `tt-orders:${restaurantId}`;
 
+/**
+ * Everything this device has ordered here that is not finished yet.
+ *
+ * This used to be one slot, and a second order overwrote the first: a diner
+ * who remembered a drink after ordering their food lost the way back to the
+ * food. At a counter that is the whole tracker gone; at a table the bill still
+ * showed the money, but watching the first order cook was no longer possible.
+ *
+ * A list, because more orders is the normal case and not an edge one — a
+ * counter has no table to hang a running tab on, so "one more thing" is
+ * always a NEW order, and each of them deserves watching until it is out.
+ */
+const activeKey = (restaurantId: string, tableId?: string | null) =>
+  tableId ? `tt-active:${restaurantId}:${tableId}` : `tt-active:${restaurantId}`;
+
+function readIds(storageKey: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(storageKey) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 /** How many orders back we remember. A table session, not a lifetime. */
 const MAX_REMEMBERED = 10;
 
@@ -30,10 +54,15 @@ export function rememberRecentOrder(
   tableId?: string | null,
 ): void {
   try {
+    // Newest first, so the tracker opens on what they just ordered.
+    const active = [orderId, ...recallActiveOrders(restaurantId, tableId).filter(id => id !== orderId)];
+    localStorage.setItem(activeKey(restaurantId, tableId), JSON.stringify(active.slice(0, MAX_REMEMBERED)));
+    // The old single slot is kept in step for one release: a device that
+    // upgrades mid-meal still has its order where the previous code looked.
     localStorage.setItem(key(restaurantId, tableId), orderId);
-    // Also append to the history. The single key above answers "what should
-    // the track-order link point at"; this list answers "what has this device
-    // bought", which is what the rating prompt is entitled to ask about.
+    // Also append to the history. The list above answers "what can this device
+    // still watch"; this one answers "what has this device bought", which is
+    // what the rating prompt is entitled to ask about.
     const seen = recallOrders(restaurantId).filter(id => id !== orderId);
     localStorage.setItem(
       listKey(restaurantId),
@@ -45,14 +74,53 @@ export function rememberRecentOrder(
   }
 }
 
-/** Clear the in-progress order (e.g. once it's completed or cancelled). */
-export function forgetOrder(restaurantId: string, tableId?: string | null): void {
+/**
+ * Drop one finished order, leaving the rest still watchable.
+ *
+ * Without an id it clears the scope entirely, which is what a finished single
+ * order used to mean and what a closed table still does.
+ *
+ * The history stays either way: an order is finished, which is exactly when it
+ * becomes rateable.
+ */
+export function forgetOrder(
+  restaurantId: string,
+  tableId?: string | null,
+  orderId?: string,
+): void {
   try {
-    localStorage.removeItem(key(restaurantId, tableId));
-    // The history stays: the order is finished, which is exactly when it
-    // becomes rateable.
+    if (!orderId) {
+      localStorage.removeItem(activeKey(restaurantId, tableId));
+      localStorage.removeItem(key(restaurantId, tableId));
+      return;
+    }
+    const left = recallActiveOrders(restaurantId, tableId).filter(id => id !== orderId);
+    localStorage.setItem(activeKey(restaurantId, tableId), JSON.stringify(left));
+    // Keep the legacy slot pointing at something real, or clear it.
+    if (left[0]) localStorage.setItem(key(restaurantId, tableId), left[0]);
+    else localStorage.removeItem(key(restaurantId, tableId));
   } catch {
     // Ignore — nothing to clean up if storage is unavailable.
+  }
+}
+
+/**
+ * The orders this device can still watch here, newest first.
+ *
+ * Falls back to the old single slot so a device that ordered before this
+ * existed does not lose its in-flight order the moment it loads new code.
+ */
+export function recallActiveOrders(
+  restaurantId: string,
+  tableId?: string | null,
+): string[] {
+  try {
+    const list = readIds(activeKey(restaurantId, tableId));
+    if (list.length > 0) return list;
+    const single = localStorage.getItem(key(restaurantId, tableId));
+    return single ? [single] : [];
+  } catch {
+    return [];
   }
 }
 

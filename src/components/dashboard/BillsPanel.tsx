@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import { badgesChanged } from "@/hooks/useBadges";
@@ -11,6 +11,7 @@ import { matchesBill, type OpenBill } from "@/lib/open-bills";
 import BillDiscountDialog from "./BillDiscountDialog";
 import SettleTableDialog from "./SettleTableDialog";
 import { BillIcon, SearchIcon, TableIcon } from "@/components/ui/icons";
+import ScanToCollect from "./ScanToCollect";
 import { useLiveOrders } from "@/hooks/useLiveOrders";
 
 export interface DiscountRequest {
@@ -83,11 +84,26 @@ export default function BillsPanel({
   // the bill has to be one of THIS restaurant's, which is why the match is
   // against the list the server already scoped rather than a fresh lookup.
   const scanned = useSearchParams().get("order");
+
+  /**
+   * Open the bill a scanned code points at.
+   *
+   * Matched against the list the server already scoped to this restaurant, so
+   * another venue's code finds nothing here — and says so, rather than opening
+   * silently onto the wrong thing or appearing to do nothing at all.
+   */
+  const openScanned = useCallback(
+    (orderId: string) => {
+      const found = bills.find(b => b.orderIds.includes(orderId));
+      if (found) setSettling(found);
+      else toast(t("scan.notHere"), "error");
+    },
+    [bills, toast, t],
+  );
+
   useEffect(() => {
-    if (!scanned) return;
-    const found = bills.find(b => b.orderIds.includes(scanned));
-    if (found) setSettling(found);
-  }, [scanned, bills]);
+    if (scanned) openScanned(scanned);
+  }, [scanned, openScanned]);
   const [busy, setBusy] = useState<string | null>(null);
 
   // "waiting 1h 40m" is a different sentence a minute later, so the server's
@@ -325,15 +341,21 @@ export default function BillsPanel({
             {t("dash.billsDesc")}
           </p>
 
-          <div className="tt-bill-search">
-            <SearchIcon size={16} weight="bold" />
-            <input
-              className="tt-input"
-              value={query}
-              placeholder={t("dash.billsSearch")}
-              aria-label={t("dash.billsSearch")}
-              onChange={e => setQuery(e.target.value)}
-            />
+          {/* Scanning sits beside the search, not instead of it: a diner who
+              says their name or reads out their code is served exactly as
+              before, and this is for the queue. */}
+          <div className="tt-bill-find">
+            <div className="tt-bill-search">
+              <SearchIcon size={16} weight="bold" />
+              <input
+                className="tt-input"
+                value={query}
+                placeholder={t("dash.billsSearch")}
+                aria-label={t("dash.billsSearch")}
+                onChange={e => setQuery(e.target.value)}
+              />
+            </div>
+            <ScanToCollect onFound={openScanned} />
           </div>
 
           {shown.length === 0 ? (
