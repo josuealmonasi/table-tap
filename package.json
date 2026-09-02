@@ -45,7 +45,9 @@
     "api:prod": "node scripts/api-check.mjs --prod",
     "dev:fresh": "node scripts/dev-fresh.mjs",
     "promises": "node scripts/promise-audit.mjs",
-    "promises:prod": "node scripts/promise-audit.mjs --prod"
+    "promises:prod": "node scripts/promise-audit.mjs --prod",
+    "dialogs": "node scripts/dialog-check.mjs",
+    "dialogs:prod": "node scripts/dialog-check.mjs --prod"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
