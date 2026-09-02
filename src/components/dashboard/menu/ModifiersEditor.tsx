@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Modifier } from "@/lib/types";
+import { reindexAfterRemoval } from "@/lib/reindex";
 import { useT } from "@/lib/i18n/context";
 import { CloseIcon, DeleteIcon } from "@/components/ui/icons";
 
@@ -64,7 +65,13 @@ export default function ModifiersEditor({ value, onChange }: ModifiersEditorProp
               type="button"
               className="tt-iconbtn"
               title={t("menu.removeGroup")}
-              onClick={() => onChange(value.filter((_, idx) => idx !== i))}
+              onClick={() => {
+                // The drafts move with their groups. Keyed by position, a
+                // half-typed option stayed on its old key and reappeared
+                // under the next group down.
+                setDrafts(prev => reindexAfterRemoval(prev, i));
+                onChange(value.filter((_, idx) => idx !== i));
+              }}
             >
               <DeleteIcon size={16} />
             </button>

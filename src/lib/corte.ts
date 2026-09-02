@@ -1,5 +1,6 @@
 import { parseLogDetail } from "@/lib/log-detail";
 import { EMPTY_TILL, tillFrom, type Till, type TillLine } from "@/lib/till";
+import { round2 } from "@/lib/money";
 
 /**
  * The register close — a "corte de caja".
@@ -81,6 +82,3 @@ export function corteFrom(rows: CorteRow[]): Corte {
   };
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}

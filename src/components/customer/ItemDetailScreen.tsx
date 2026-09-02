@@ -14,6 +14,7 @@ import { useT, useLocale } from "@/lib/i18n/context";
 import ModifierGroup from "./ModifierGroup";
 import { BackIcon } from "@/components/ui/icons";
 import DishImage from "./DishImage";
+import { round2 } from "@/lib/money";
 
 /** Item customisation screen: modifiers, extras, special requests, qty → add to cart. */
 export default function ItemDetailScreen({
@@ -71,7 +72,6 @@ export default function ItemDetailScreen({
     setExtraIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
   }
 
-  const round2 = (n: number): number => Math.round(n * 100) / 100;
   const chosenExtras = extras.filter(e => extraIds.includes(e.id));
   const extrasTotal = chosenExtras.reduce((sum, e) => sum + e.price, 0);
   // Extras are never discounted, so only the base price gets the % off.

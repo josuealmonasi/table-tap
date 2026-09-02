@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
+import ts from "typescript";
 import path from "node:path";
 
 /**
@@ -385,6 +386,105 @@ describe("the checks know about every route and screen", () => {
     expect(
       missing,
       `Screens nothing measures — add each to CREW or PUBLIC in scripts/layout-paths.mjs:\n${missing.join("\n")}`,
+    ).toEqual([]);
+  });
+});
+
+/**
+ * No client component can reach a secret.
+ *
+ * `src/lib/supabase/admin.ts` holds the key that bypasses RLS entirely. What
+ * stops it reaching a browser today is a comment saying "SERVER-ONLY. Never
+ * import this into a client component" — and five client components already
+ * sit two hops away from it through `order-tracking`, `plan-server` and
+ * `membership`. All five are `import type`, which the compiler erases, so
+ * nothing ships. Change one of them to a value import and the key ships.
+ *
+ * Walks the real import graph, counting only imports that survive compilation:
+ * a type-only import is not an edge, because it is not there at runtime.
+ */
+describe("secrets cannot reach the browser", () => {
+  const SECRETS = ["src/lib/supabase/admin.ts", "src/lib/stripe.ts", "src/lib/mail.ts"];
+
+  /** Where an import specifier actually lands, or null if it leaves src/. */
+  function resolveSpec(from: string, spec: string): string | null {
+    let base: string;
+    if (spec.startsWith("@/")) base = path.join("src", spec.slice(2));
+    else if (spec.startsWith(".")) base = path.relative(process.cwd(), path.resolve(path.dirname(from), spec));
+    else return null;
+    for (const ext of [".ts", ".tsx", "/index.ts", "/index.tsx"]) {
+      if (fs.existsSync(base + ext)) return base + ext;
+    }
+    return fs.existsSync(base) && fs.statSync(base).isFile() ? base : null;
+  }
+
+  it("has no value-import path from a client component to a secret", () => {
+    const files = walkAll("src").filter(f => /\.tsx?$/.test(f));
+    const edges = new Map<string, string[]>();
+    const clients: string[] = [];
+
+    for (const f of files) {
+      const src = read(f);
+      if (/^\s*["']use client["']/m.test(src.slice(0, 400))) clients.push(f);
+      const sf = ts.createSourceFile(f, src, ts.ScriptTarget.Latest, true);
+      const out: string[] = [];
+      sf.forEachChild(node => {
+        if (!ts.isImportDeclaration(node) || !ts.isStringLiteral(node.moduleSpecifier)) return;
+        const clause = node.importClause;
+        // `import type {…}` and `import {type A, type B}` are both erased.
+        if (clause?.isTypeOnly) return;
+        if (clause?.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+          const named = clause.namedBindings.elements;
+          if (named.length > 0 && named.every(e => e.isTypeOnly) && !clause.name) return;
+        }
+        const to = resolveSpec(f, node.moduleSpecifier.text);
+        if (to) out.push(to);
+      });
+      edges.set(f, out);
+    }
+
+    const leaks: string[] = [];
+    for (const start of clients) {
+      const seen = new Set([start]);
+      const queue: [string, string[]][] = [[start, [start]]];
+      while (queue.length) {
+        const [cur, trail] = queue.shift()!;
+        for (const next of edges.get(cur) ?? []) {
+          if (seen.has(next)) continue;
+          seen.add(next);
+          if (SECRETS.includes(next)) {
+            leaks.push(trail.concat(next).join(" → "));
+            queue.length = 0;
+            break;
+          }
+          queue.push([next, trail.concat(next)]);
+        }
+      }
+    }
+
+    expect(
+      leaks,
+      `A client component can reach a secret at runtime. Import the type only, or move the value behind an API route:\n${leaks.join("\n")}`,
+    ).toEqual([]);
+  });
+});
+
+/**
+ * The rule that rounds money lives in one file.
+ *
+ * It was written out eleven times — pricing, table-bill, till, corte,
+ * promotions, plan and five more. All eleven agreed, so nothing was wrong;
+ * but a cent of disagreement between the cart and the bill is the kind of
+ * thing nobody notices until a diner does.
+ */
+describe("money is rounded in one place", () => {
+  it("has no second copy of round2", () => {
+    const copies = walkAll("src")
+      .filter(f => /\.tsx?$/.test(f) && f !== "src/lib/money.ts" && !f.includes("__tests__"))
+      .filter(f => /(function|const)\s+round2\b/.test(read(f)));
+    expect(
+      copies,
+      `round2 is defined outside src/lib/money.ts — import it instead:\n${copies.join("\n")}`,
     ).toEqual([]);
   });
 });

@@ -1,4 +1,5 @@
 import { parseLogDetail } from "@/lib/log-detail";
+import { round2 } from "@/lib/money";
 
 /**
  * What one person has collected during the restaurant's day.
@@ -59,6 +60,3 @@ export function tillFrom(rows: TillLine[]): Till {
   };
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}

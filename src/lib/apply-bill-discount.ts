@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { claimCoupon, logRedemption } from "@/lib/coupon-service";
 import { spreadDiscount } from "@/lib/staff-discount";
 import type { Order } from "@/lib/types";
+import { round2 } from "@/lib/money";
 
 /**
  * Reserves the use and writes it across the bill.
@@ -49,6 +50,3 @@ export async function applyToOrders(
   return true;
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
