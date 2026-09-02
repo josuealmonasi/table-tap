@@ -61,6 +61,15 @@ export const AUDIT = `(() => {
     if (text.length < 4) continue;
     const r = el.getBoundingClientRect();
     if (r.width >= 40) continue;
+    // Text inside an absolutely-positioned descendant is not laid out in this
+    // box at all — it escapes it. The account menu hangs off a 38px avatar
+    // button, so measuring the button's whole textContent said five menu items
+    // were crushed into 38 pixels while the menu was sitting there, open and
+    // perfectly readable. Only in-flow text can be squashed by its container.
+    if ([...el.querySelectorAll("*")].some(d => {
+      const p = getComputedStyle(d).position;
+      return (p === "absolute" || p === "fixed") && d.textContent.trim().length > 0;
+    })) continue;
     // A parent at 40px is only guilty if the text really is wider than that.
     const range = document.createRange();
     range.selectNodeContents(el);

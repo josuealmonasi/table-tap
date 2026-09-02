@@ -88,6 +88,13 @@ the simpler one.
 pnpm test && pnpm api && pnpm rls && pnpm roles && pnpm smoke && pnpm layout && pnpm promises
 ```
 
+`pnpm dialogs` is the slow one, so it is not on that line — run it whenever you
+touch a dialog, a shared component or the stylesheet. It clicks every visible
+button on every screen as every role and measures whatever opens, so it needs
+no list of dialogs and cannot fall behind one. `pnpm layout` measures a curated
+list of nine; the app has thirty-one overlays, and a dialog is exactly where a
+layout fault hides, because nobody sees it until a waiter opens one mid-service.
+
 `pnpm promises` opens every screen as every role and flips the switches that
 change what a screen can offer — orders paused, no menu serving, subscription
 locked, a tier without the feature — and fails when a screen offers a control
