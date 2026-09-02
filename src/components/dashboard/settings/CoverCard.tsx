@@ -125,6 +125,7 @@ export default function CoverCard({ restaurant }: { restaurant: Restaurant }) {
         <span className="tt-switch">
           <input
             type="checkbox"
+            aria-label={t("img.show")}
             checked={enabled}
             disabled={busy || !url}
             onChange={e => toggle(e.target.checked)}

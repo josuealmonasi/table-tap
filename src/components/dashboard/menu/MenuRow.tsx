@@ -193,6 +193,7 @@ export default function MenuRow({
           >
             <input
               type="checkbox"
+              aria-label={t(menu.active ? "menu.visibleToCustomers" : "menu.hiddenTitle")}
               checked={menu.active}
               onChange={e => onToggle(menu, e.target.checked)}
             />

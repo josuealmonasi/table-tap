@@ -228,6 +228,7 @@ export default function SettingsForm({
                   >
                     <input
                       type="checkbox"
+                      aria-label={t(serviceEnabled ? "dash.serviceOn" : "dash.serviceOff")}
                       checked={serviceEnabled}
                       onChange={e => setServiceEnabled(e.target.checked)}
                     />
@@ -306,6 +307,7 @@ export default function SettingsForm({
                 >
                   <input
                     type="checkbox"
+                    aria-label={t(taxBreakdown ? "dash.breakdownShown" : "dash.breakdownHidden")}
                     checked={taxBreakdown}
                     onChange={e => setTaxBreakdown(e.target.checked)}
                   />
@@ -348,6 +350,7 @@ export default function SettingsForm({
               >
                 <input
                   type="checkbox"
+                  aria-label={t(acceptingOrders ? "dash.accepting" : "dash.paused")}
                   checked={acceptingOrders}
                   disabled={saving}
                   onChange={e => toggleAcceptingOrders(e.target.checked)}
@@ -366,6 +369,7 @@ export default function SettingsForm({
               <span className="tt-switch">
                 <input
                   type="checkbox"
+                  aria-label={t("dash.badgesTitle")}
                   checked={badges}
                   disabled={saving}
                   onChange={e => toggleBadges(e.target.checked)}
@@ -386,6 +390,7 @@ export default function SettingsForm({
               <span className="tt-switch">
                 <input
                   type="checkbox"
+                  aria-label={t("dash.dealsTabTitle")}
                   checked={dealsTab}
                   disabled={saving}
                   onChange={e => toggleDealsTab(e.target.checked)}
@@ -413,6 +418,7 @@ export default function SettingsForm({
                 <span className="tt-switch">
                   <input
                     type="checkbox"
+                    aria-label={t("dash.payLaterTitle")}
                     checked={payLater}
                     disabled={saving || !deferredPayAllowed}
                     onChange={e => togglePayLater(e.target.checked)}

@@ -193,6 +193,7 @@ export default function AddonsPanel({
                   >
                     <input
                       type="checkbox"
+                      aria-label={t(addon.available ? "menu.available" : "menu.unavailable")}
                       checked={addon.available}
                       onChange={e => onToggleAvailable(addon.id, e.target.checked)}
                     />

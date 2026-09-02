@@ -163,6 +163,7 @@ export default function ProductRow({
             >
               <input
                 type="checkbox"
+                aria-label={t(product.available ? "menu.available" : "menu.unavailable")}
                 checked={product.available}
                 onChange={e => onToggleAvailable(product.id, e.target.checked)}
               />
