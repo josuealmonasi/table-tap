@@ -20,6 +20,14 @@ async function pendingWriteOff(fx) {
   return data?.id ?? "";
 }
 
+async function pendingDiscount(fx) {
+  const { data } = await fx.admin
+    .from("discount_requests").select("id")
+    .eq("restaurant_id", fx.restaurant.id).eq("status", "pending")
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  return data?.id ?? "";
+}
+
 async function promoId(fx) {
   const { data } = await fx.admin
     .from("promotions").select("id")
@@ -77,6 +85,11 @@ export function cases(fx) {
       expect: [200], check: d => d.saved === 1 || `guardó ${d.saved}` },
     { name: "POST /api/coupons/validate", as: "diner", method: "POST", path: "/api/coupons/validate",
       body: { restaurantId: r, code: "API-001", subtotal: 100 }, expect: [200, 400, 404] },
+    { name: "GET  /api/order-qr", as: "diner", method: "GET",
+      path: `/api/order-qr?id=${paidOrder}`, expect: [200],
+      // A 200 with an empty body would be exactly the failure this file exists
+      // to catch: staff would point a camera at nothing.
+      checkText: t => t.startsWith("<svg") || `answered ${t.slice(0, 40)}` },
     { name: "POST /api/checkout (tarjeta)", as: "diner", method: "POST", path: "/api/checkout",
       // With no Stripe account connected the healthy answer is 409, not a 500.
       body: { restaurantId: r, tableId: null, items: [{ itemId: dish.id, name: dish.name,
@@ -138,6 +151,11 @@ export function cases(fx) {
       // With no valid coupon the correct refusal is 400; with one, the waiter
       // leaves a request. What it must not do is blow up.
       expect: [200, 400, 403, 404] },
+    { name: "POST /api/bill/discount/approve", as: "manager", method: "POST",
+      path: "/api/bill/discount/approve",
+      body: async f => ({ requestId: await pendingDiscount(f), approve: true }),
+      // 400 with no request pending, 409 if it was already decided. Never a 500.
+      expect: [200, 400, 409] },
     { name: "POST /api/bill/write-off (waiter asks)", as: "waiter", method: "POST",
       path: "/api/bill/write-off", body: { tableId: table.id, reason: "walkout", note: MARK },
       expect: [200], check: d => d.pending === true || "la petición de un mesero debería quedar pendiente" },
@@ -182,5 +200,25 @@ export function cases(fx) {
     // correct. Once Connect exists, this will be a 200.
     { name: "POST /api/connect/onboard", as: "owner", method: "POST", path: "/api/connect/onboard",
       body: {}, expect: [200, 400, 409, 502] },
+    { name: "POST /api/billing/checkout", as: "owner", method: "POST", path: "/api/billing/checkout",
+      body: { plan: "servicio" }, expect: [200, 400, 409, 502] },
+
+    // ── the routes that destroy things: checked by their refusal ─────────
+    //
+    // These delete restaurants, delete logins and cancel subscriptions. A case
+    // that exercised them for real would be a case that wrecks the demo
+    // restaurant, and `pnpm api:prod` would do it to production. What matters
+    // and what is safe to assert is the same thing: who is turned away.
+    { name: "POST /api/billing/cancel (waiter refused)", as: "waiter", method: "POST",
+      path: "/api/billing/cancel", body: {}, expect: [401, 403] },
+    { name: "POST /api/admin/users (manager refused)", as: "manager", method: "POST",
+      path: "/api/admin/users",
+      body: { email: "nobody@tabletap.dev", password: "not-a-real-one", role: "admin" },
+      expect: [401, 403] },
+    { name: "DELETE /api/admin/restaurants (manager refused)", as: "manager", method: "DELETE",
+      path: "/api/admin/restaurants", body: async f => ({ id: f.restaurant.id }),
+      expect: [401, 403] },
+    { name: "POST /api/signup (rejects an empty form)", as: "diner", method: "POST",
+      path: "/api/signup", body: {}, expect: [400, 429] },
   ];
 }

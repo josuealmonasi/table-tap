@@ -24,6 +24,16 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+/** Every file under a directory, whatever its name. */
+function walkAll(dir: string, out: string[] = []): string[] {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walkAll(full, out);
+    else out.push(full);
+  }
+  return out;
+}
+
 const schema = fs.readFileSync("supabase/schema.sql", "utf8");
 const sources = walk("src");
 const read = (f: string) => fs.readFileSync(f, "utf8");
@@ -333,5 +343,48 @@ describe("which QR the diner came in through is never assumed", () => {
       }
     }
     expect(guilty, `decides atTable for itself: ${guilty.join(", ")}`).toEqual([]);
+  });
+});
+
+/**
+ * The harness only ever checks what is on its lists.
+ *
+ * `pnpm api` opens `api-cases.mjs` and `pnpm layout` opens `layout-paths.mjs`.
+ * A route or a screen that nobody adds to those lists is not checked loosely —
+ * it is not checked at all, and every gate goes green around the hole. Seven
+ * routes and eight pages had accumulated that way, among them the platform
+ * admin console, which was unusable on a phone for as long as it had existed
+ * while `pnpm layout` reported that everything reads.
+ */
+describe("the checks know about every route and screen", () => {
+  const listed = (file: string): string =>
+    fs.readFileSync(path.join("scripts", file), "utf8");
+
+  it("has an api case for every API route", () => {
+    const cases = listed("api-cases.mjs");
+    const routes = walkAll("src/app/api")
+      .filter(f => f.endsWith("route.ts"))
+      .map(f => f.replace(/^src\/app/, "").replace(/\/route\.ts$/, ""));
+
+    const missing = routes.filter(r => !cases.includes(`"${r}`) && !cases.includes(`\`${r}`));
+    expect(
+      missing,
+      `API routes no case exercises — add one to scripts/api-cases.mjs.\nFor a route that destroys something, assert the refusal it must give rather than running it:\n${missing.join("\n")}`,
+    ).toEqual([]);
+  });
+
+  it("has a layout path for every page a person can open", () => {
+    const paths = listed("layout-paths.mjs");
+    const pages = walkAll("src/app")
+      .filter(f => f.endsWith("page.tsx"))
+      .map(f => f.replace(/^src\/app/, "").replace(/\/page\.tsx$/, "") || "/")
+      // A route with a parameter is opened through a flow, with a real id.
+      .filter(p => !p.includes("["));
+
+    const missing = pages.filter(p => !paths.includes(`"${p}"`));
+    expect(
+      missing,
+      `Screens nothing measures — add each to CREW or PUBLIC in scripts/layout-paths.mjs:\n${missing.join("\n")}`,
+    ).toEqual([]);
   });
 });

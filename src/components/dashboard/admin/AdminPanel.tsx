@@ -77,13 +77,7 @@ export default function AdminPanel({
             </span>
           </div>
           <div className="tt-admin-table">
-            <div
-              className="tt-admin-tr tt-staff-thead"
-              style={{
-                gridTemplateColumns: "minmax(0,1.4fr) minmax(0,1.4fr) 70px 100px 32px",
-              }}
-              aria-hidden="true"
-            >
+            <div className="tt-admin-tr tt-admin-tr--rest tt-staff-thead" aria-hidden="true">
               <span>{t("admin.restaurant")}</span>
               <span>{t("admin.foundingOwner")}</span>
               <span>{t("admin.team")}</span>
@@ -91,13 +85,7 @@ export default function AdminPanel({
               <span />
             </div>
             {restaurants.map(r => (
-              <div
-                key={r.id}
-                className="tt-admin-tr"
-                style={{
-                  gridTemplateColumns: "minmax(0,1.4fr) minmax(0,1.4fr) 70px 100px 32px",
-                }}
-              >
+              <div key={r.id} className="tt-admin-tr tt-admin-tr--rest">
                 <span className="tt-staff-cell" title={r.name}>
                   <strong>{r.name}</strong>
                 </span>
@@ -160,9 +148,7 @@ export default function AdminPanel({
                 <span className="tt-staff-cell tt-muted" title={u.full_name ?? ""}>
                   {u.full_name ?? "—"}
                 </span>
-                <span style={{ whiteSpace: "nowrap", fontSize: 13 }}>
-                  {roleLabel(u.role)}
-                </span>
+                <span className="tt-admin-role">{roleLabel(u.role)}</span>
                 <span className="tt-staff-cell tt-muted" title={u.restaurant_name ?? ""}>
                   {u.restaurant_name ?? "—"}
                 </span>

@@ -84,6 +84,15 @@ try {
         continue;
       }
     }
+    // Same idea for a route that does not answer JSON: the QR is an image, and
+    // an empty 200 there is a camera pointed at nothing.
+    if (c.checkText && res.status === 200) {
+      const verdict = c.checkText(text);
+      if (verdict !== true) {
+        bad(`${c.name} — answered 200 but ${verdict}`);
+        continue;
+      }
+    }
     if (c.save && res.status === 200) {
       try { Object.assign(saved, c.save(JSON.parse(text))); } catch { /* sin cuerpo */ }
     }
