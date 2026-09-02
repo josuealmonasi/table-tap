@@ -45,7 +45,7 @@ export default function AdminCreateUser({ restaurantOptions }: AdminCreateUserPr
   }
 
   return (
-    <div className="tt-section" style={{ maxWidth: 560 }}>
+    <div className="tt-section">
       <div className="tt-section-head">
         <h3 className="tt-serif" style={{ margin: 0 }}>
           {t("admin.createUser")}

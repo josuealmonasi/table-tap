@@ -3339,15 +3339,82 @@ a.tt-btn {
 }
 .tt-admin-tr {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) 110px minmax(0, 1fr) 60px;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) 124px minmax(0, 1fr) 60px;
   align-items: center;
   gap: 12px;
   padding: 9px 4px;
   border-top: 1px solid var(--tt-cream);
   font-size: 14px;
 }
+/* The restaurants table: name, founding owner, team, created, delete. Declared
+   here rather than inline on the element — an inline style outranks every rule
+   in this file, which is what stopped the phone layout below from applying. */
+.tt-admin-tr--rest {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) 70px 100px 32px;
+}
 .tt-admin-tr:first-of-type {
   border-top: none;
+}
+/* Roles wrap rather than run into the column beside them: "Admin de plataforma"
+   is wider than its cell, and nowrap painted the overflow over the restaurant. */
+.tt-admin-role {
+  font-size: 13px;
+}
+
+/* The same treatment .tt-staff-tr gets, for the same reason: at 390px these
+   five columns give the name 31px and the email 26px, so every word came out
+   one letter per line and the four headers painted on top of each other.
+   Each row becomes a card — the two identifying cells take a line each and the
+   rest share the last one.
+
+   It has to live AFTER .tt-admin-tr, not with the other phone rules further up:
+   a media query adds no specificity, so `.tt-staff-thead { display: none }`
+   declared earlier loses to `.tt-admin-tr { display: grid }` declared later,
+   and the header row stayed visible on every phone. */
+@media (max-width: 700px) {
+  .tt-admin-tr.tt-staff-thead {
+    display: none;
+  }
+  .tt-admin-tr,
+  .tt-admin-tr--rest {
+    grid-template-columns: 1fr auto auto;
+    gap: 4px 10px;
+    padding: 12px;
+    border: 1px solid var(--tt-line);
+    border-radius: var(--tt-radius-sm);
+    margin-bottom: 8px;
+  }
+  .tt-admin-tr:first-of-type {
+    border-top: 1px solid var(--tt-line);
+  }
+  /* A grid item's automatic minimum is min-content, so a long email refuses to
+     shrink and drags the card past the edge of the screen. */
+  .tt-admin-tr > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .tt-admin-tr > *:nth-child(1) {
+    grid-column: 1 / -1;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-weight: 600;
+  }
+  .tt-admin-tr > *:nth-child(2) {
+    grid-column: 1 / -1;
+    font-size: 13px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .tt-admin-tr > *:nth-child(3),
+  .tt-admin-tr > *:nth-child(4) {
+    margin-top: 6px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .tt-admin-tr > *:nth-child(5) {
+    margin-top: 6px;
+    justify-self: end;
+  }
 }
 
 /* user activity log rows + pager */

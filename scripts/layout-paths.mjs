@@ -44,6 +44,33 @@ export const CREW = [
   { role: "mesero", email: "demo-waiter@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/bills", "/dashboard/profile"] },
   { role: "cajero", email: "demo-cashier@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/bills", "/dashboard/profile"] },
   { role: "cocina", email: "demo-kitchen@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/profile"] },
+  // The platform admin runs the whole business from one screen and was in no
+  // check at all: at 390px its five columns gave the name 31px, so every
+  // restaurant came out one letter per line and the headers overlapped.
+  // Its password is its own, not the demo one.
+  {
+    role: "admin",
+    email: "admin@tabletap.dev",
+    passwordEnv: "PLATFORM_ADMIN_PASSWORD",
+    pages: ["/dashboard/admin"],
+  },
+];
+
+/**
+ * The front door: every page a person meets before they have an account.
+ *
+ * Checked signed out, because that is the only way anyone ever sees them, and
+ * because nothing else in this repo looked at them — landing, sign-up, sign-in
+ * and password recovery had never been measured at any width.
+ */
+export const PUBLIC = [
+  "/",
+  "/login",
+  "/signup",
+  "/forgot-password",
+  "/reset-password",
+  "/terminos",
+  "/privacidad",
 ];
 
 /**

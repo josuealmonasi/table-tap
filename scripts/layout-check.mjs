@@ -12,7 +12,7 @@
 import { join } from "node:path";
 import { chromium } from "playwright";
 import { AUDIT } from "./layout-audit.mjs";
-import { CREW, DIALOGS, DINER } from "./layout-paths.mjs";
+import { CREW, DIALOGS, DINER, PUBLIC } from "./layout-paths.mjs";
 import { requireServer } from "./preflight.mjs";
 
 const prod = process.argv.includes("--prod");
@@ -92,9 +92,9 @@ async function look(tab, where) {
   else bad(where, faults);
 }
 
-const cookieFor = async email => {
+const cookieFor = async (email, password = "demo123") => {
   const auth = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-  const { data } = await auth.auth.signInWithPassword({ email, password: "demo123" });
+  const { data } = await auth.auth.signInWithPassword({ email, password });
   return {
     name: `sb-${ref}-auth-token`,
     value: `base64-${Buffer.from(JSON.stringify(data.session)).toString("base64")}`,
@@ -169,13 +169,37 @@ for (const size of SIZES) {
   await diner.close();
   }
 
+  // ── The front door, signed out ────────────────────────────────────────────
+  const outside = await browser.newContext({
+    viewport: { width: size.width, height: size.height },
+    locale: "es-MX",
+  });
+  for (const path of PUBLIC) {
+    const tab = await outside.newPage();
+    try {
+      await gotoOnce(tab, BASE + path, { waitUntil: "load", timeout: 60000 });
+      await settle(tab);
+      await look(tab, `signed out · ${path}`);
+    } catch (e) {
+      failed++;
+      console.log(`    MAL      signed out · ${path}: ${e.message.split("\n")[0]}`);
+    }
+    await tab.close();
+  }
+  await outside.close();
+
   // ── El equipo ────────────────────────────────────────────────────────────
   for (const who of CREW) {
+    const password = who.passwordEnv ? process.env[who.passwordEnv] : undefined;
+    if (who.passwordEnv && !password) {
+      console.log(`    –        ${who.role}: ${who.passwordEnv} is not set — skipped`);
+      continue;
+    }
     const ctx = await browser.newContext({
       viewport: { width: size.width, height: size.height },
       locale: "es-MX",
     });
-    await ctx.addCookies([await cookieFor(who.email)]);
+    await ctx.addCookies([await cookieFor(who.email, password)]);
     for (const path of who.pages) {
       const tab = await ctx.newPage();
       try {

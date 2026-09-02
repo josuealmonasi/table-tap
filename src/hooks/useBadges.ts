@@ -35,7 +35,17 @@ export function useBadges(): Record<string, number> {
 
     const read = () => {
       fetch("/api/badges")
-        .then(r => (r.ok ? r.json() : { badges: {} }))
+        .then(r => {
+          // 403 means this person has no restaurant to count anything for — a
+          // platform admin, who still gets the dashboard shell. Nothing will
+          // change that before a reload, so stop asking rather than logging a
+          // refusal every thirty seconds for as long as the tab is open.
+          if (r.status === 403) {
+            clearInterval(timer);
+            return { badges: {} };
+          }
+          return r.ok ? r.json() : { badges: {} };
+        })
         .then((d: { badges?: Record<string, number> }) => {
           if (active) setBadges(d.badges ?? {});
         })
@@ -44,8 +54,8 @@ export function useBadges(): Record<string, number> {
         });
     };
 
-    read();
     const timer = setInterval(read, 30_000);
+    read();
     // Turning the setting off should clear them now, not in half a minute:
     // a switch that appears to do nothing gets flipped again.
     window.addEventListener(BADGES_CHANGED, read);
