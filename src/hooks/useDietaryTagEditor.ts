@@ -14,11 +14,15 @@ export interface DietaryTagInput {
 /**
  * Adding, changing and removing dietary tags.
  *
+ * Named for the editing it does, because `useDietaryTags` is also the name of
+ * the context hook that returns the list — same name, entirely different
+ * thing, and autocomplete offers both.
+ *
  * Refreshes from the server rather than keeping its own copy: the tags come
  * from the same query that paints the editor and the diner's menu, and a
  * second list here would be another place the truth can drift apart.
  */
-export function useDietaryTags() {
+export function useDietaryTagEditor() {
   const router = useRouter();
   const toast = useToast();
   const t = useT();

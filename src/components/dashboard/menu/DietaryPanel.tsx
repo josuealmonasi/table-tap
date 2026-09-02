@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
-import { useDietaryTags } from "@/hooks/useDietaryTags";
+import { useDietaryTagEditor } from "@/hooks/useDietaryTagEditor";
 import { isBuiltIn, tagLabel, type StoredDietaryTag } from "@/lib/dietary";
 import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 import DietaryTagForm from "./DietaryTagForm";
@@ -20,7 +20,7 @@ import DietaryTagForm from "./DietaryTagForm";
 export default function DietaryPanel({ tags }: { tags: StoredDietaryTag[] }) {
   const t = useT();
   const confirm = useConfirm();
-  const { busy, addTag, updateTag, deleteTag } = useDietaryTags();
+  const { busy, addTag, updateTag, deleteTag } = useDietaryTagEditor();
   const [editing, setEditing] = useState<StoredDietaryTag | null>(null);
   const [adding, setAdding] = useState(false);
 

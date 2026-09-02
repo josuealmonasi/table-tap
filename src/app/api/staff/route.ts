@@ -3,6 +3,7 @@ import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { actingOwner } from "@/lib/api-guard";
 import { frozenBlocks, seatBlocks } from "@/lib/plan-guard";
+import { logUserChange } from "@/lib/user-log";
 
 export const runtime = "nodejs";
 
@@ -10,23 +11,6 @@ const ROLES: readonly string[] = ["owner", "manager", "waiter", "cashier", "kitc
 
 /** Owners a restaurant may have, counting the founding owner. */
 const MAX_OWNERS = 3;
-
-/** Every user-management action lands in the restaurant's activity log. */
-async function log(
-  restaurantId: string,
-  actorEmail: string,
-  action: "created" | "updated" | "deleted",
-  targetRole: string,
-  targetEmail: string,
-): Promise<void> {
-  await createAdminClient().from("user_logs").insert({
-    restaurant_id: restaurantId,
-    actor_email: actorEmail,
-    action,
-    target_role: targetRole,
-    target_email: targetEmail,
-  });
-}
 
 /** True when adding one more owner login would pass the cap. */
 async function ownerSlotFree(restaurantId: string): Promise<boolean> {
@@ -117,7 +101,7 @@ export async function POST(req: NextRequest) {
     return await apiError("apiErr.staffAdd", 500);
   }
 
-  await log(actor.restaurantId, actor.email, "created", role, email);
+  await logUserChange(actor.restaurantId, actor.email, "created", role, email);
   return NextResponse.json({ ok: true });
 }
 
@@ -149,7 +133,7 @@ export async function PATCH(req: NextRequest) {
   const { error } = await admin.from("staff").update({ role }).eq("id", id);
   if (error) return await apiError("apiErr.staffRole", 500);
 
-  await log(actor.restaurantId, actor.email, "updated", role, member.email);
+  await logUserChange(actor.restaurantId, actor.email, "updated", role, member.email);
   return NextResponse.json({ ok: true });
 }
 
@@ -175,6 +159,6 @@ export async function DELETE(req: NextRequest) {
   const { error } = await admin.auth.admin.deleteUser(member.user_id);
   if (error) return await apiError("apiErr.loginRemove", 500);
 
-  await log(actor.restaurantId, actor.email, "deleted", member.role, member.email);
+  await logUserChange(actor.restaurantId, actor.email, "deleted", member.role, member.email);
   return NextResponse.json({ ok: true });
 }
