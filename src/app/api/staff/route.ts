@@ -74,10 +74,7 @@ export async function POST(req: NextRequest) {
   if (noSeat) return noSeat;
 
   if (role === "owner" && !(await ownerSlotFree(actor.restaurantId))) {
-    return NextResponse.json(
-      { error: `A restaurant can have at most ${MAX_OWNERS} owners.` },
-      { status: 409 },
-    );
+    return await apiError("apiErr.ownerCap", 409, { n: MAX_OWNERS });
   }
 
   const admin = createAdminClient();
@@ -146,10 +143,7 @@ export async function PATCH(req: NextRequest) {
   if (member.role === role) return NextResponse.json({ ok: true });
 
   if (role === "owner" && !(await ownerSlotFree(actor.restaurantId))) {
-    return NextResponse.json(
-      { error: `A restaurant can have at most ${MAX_OWNERS} owners.` },
-      { status: 409 },
-    );
+    return await apiError("apiErr.ownerCap", 409, { n: MAX_OWNERS });
   }
 
   const { error } = await admin.from("staff").update({ role }).eq("id", id);

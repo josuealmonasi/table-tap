@@ -37,22 +37,22 @@ alter table restaurants add column if not exists cover_enabled boolean not null 
 -- a restaurant that hasn't got artwork.
 alter table restaurants add column if not exists logo_url text;
 
--- "Pagar al final / en la caja": la comida puede salir antes de pagarse.
--- Apagado de fábrica, porque es un riesgo que el restaurante acepta y no que
--- nosotros asumamos por él.
+-- "Pay at the end / at the counter": food can leave before it is paid for.
+-- Off by default, because that is a risk the restaurant chooses to take and
+-- not one we take on its behalf.
 --
--- Un solo interruptor porque es una sola decisión. Lo que cambia según el QR
--- es quién retiene el pedido, y eso no lo elige el dueño: en una mesa lo
--- retiene la mesa —la cuenta queda abierta y el mesero cobra al final—, y en
--- el QR general, donde no hay mesa a la que volver, lo retiene el mostrador:
--- el cliente pasa a la caja, paga y recoge. Eran dos columnas y se
--- contradecían — con ésta encendida y la otra apagada, el carrito del QR
--- general no le daba al cliente ninguna forma de salir de él.
+-- One switch, because it is one decision. What changes with the QR is who
+-- holds the order, and the owner does not choose that: at a table the table
+-- holds it — the bill stays open and a waiter collects at the end — and on the
+-- general QR, where there is no table to come back to, the counter holds it:
+-- the diner walks to the till, pays and collects. This was two columns and
+-- they contradicted each other — with one on and the other off, the general
+-- QR's cart gave the diner no way out of it at all.
 alter table restaurants add column if not exists allow_pay_later boolean not null default false;
 
--- La pestaña "Combos y ofertas" del menú del cliente. Encendida de fábrica —
--- un restaurante con promociones quiere que se vean— y apagable por si a
--- alguien le estorba en su carta.
+-- The "Combos y ofertas" tab on the diner's menu. On by default — a
+-- restaurant running promotions wants them seen — and switchable off for
+-- anyone it gets in the way of.
 alter table restaurants add column if not exists deals_tab_enabled boolean not null default true;
 
 
@@ -289,10 +289,10 @@ create table if not exists platform_admins (
   created_at timestamptz not null default now()
 );
 alter table platform_admins enable row level security;
--- Sin política: RLS sin política niega todo, que es justo lo que queremos —
--- quién manda en la plataforma entera sólo se lee con la llave de servicio.
--- Los permisos igual se quitan: un permiso que nada usa es un permiso que
--- alguien hereda el día que se agregue una política "para desbloquear algo".
+-- No policy: RLS with no policy denies everything, which is exactly what we
+-- want — who runs the whole platform is readable only with the service key.
+-- The grants come off anyway: a grant nothing uses is a grant somebody
+-- inherits the day a policy is added "to unblock something".
 revoke all on platform_admins from anon, authenticated;
 
 -- ── User activity log (who created/updated/deleted which login) ─────────────
@@ -591,22 +591,22 @@ revoke all on coupons, coupon_redemptions from anon;
 -- horarios de menú abrirían a la hora equivocada.
 grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, timezone, deals_tab_enabled) on restaurants to anon;
 
--- Y `authenticated` ve exactamente lo mismo, no la tabla entera. El revoke va
--- primero a propósito: conceder columnas NO quita un permiso que ya se dio
--- sobre la tabla completa, así que sin esta línea la lista de abajo no cambia
--- nada. Lo aprendimos ejecutándolo y viendo que la fuga seguía ahí.
+-- And `authenticated` sees exactly the same, not the whole table. The revoke
+-- comes first on purpose: granting columns does NOT remove a grant already
+-- given on the entire table, so without this line the list below changes
+-- nothing. We learned that by running it and watching the leak stay open.
 revoke select on restaurants from authenticated;
--- Y `authenticated` ve exactamente lo mismo, no la tabla entera.
+-- And `authenticated` sees exactly the same, not the whole table.
 --
--- La política de fila de `restaurants` es `using (true)` a propósito: el menú
--- cuelga de un QR y cualquiera puede leerlo, incluido alguien con sesión
--- iniciada. Pero un permiso de columna no distingue filas — con SELECT sobre
--- toda la tabla, cualquier cuenta con sesión podía leer el owner_id, el plan,
--- el estado de cobro y las cuentas de Stripe de TODOS los restaurantes. Lo
--- comprobamos con la cuenta de cocina, que es la de menos permisos.
+-- The row policy on `restaurants` is `using (true)` on purpose: the menu hangs
+-- off a QR code and anyone may read it, signed in or not. But a column grant
+-- does not distinguish rows — with SELECT over the whole table, any signed-in
+-- account could read the owner_id, the plan, the billing state and the Stripe
+-- accounts of EVERY restaurant. We confirmed it with the kitchen login, which
+-- has the fewest permissions of any.
 --
--- Las columnas privadas se leen ahora con la llave de servicio y siempre
--- acotadas al restaurante de quien pregunta (ver getMembership).
+-- The private columns are read with the service key now, and always scoped to
+-- the restaurant of whoever is asking (see getMembership).
 grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, timezone, deals_tab_enabled) on restaurants to authenticated;
 
 -- authenticated (logged-in staff) keeps the DML its dashboard needs — those
@@ -1013,17 +1013,17 @@ $$;
 revoke all on function public.dish_rating_stats(uuid) from public;
 grant execute on function public.dish_rating_stats(uuid) to anon, authenticated;
 
--- ── Grupos de iconos ───────────────────────────────────────────────────────
--- Las pestañas del selector de emoji ("Condimentos", "Complementos de bebida").
--- Venían fijas en el código; esto deja que cada restaurante arme las suyas.
+-- ── Icon groups ────────────────────────────────────────────────────────────
+-- The tabs in the emoji picker ("Condimentos", "Complementos de bebida").
+-- They were fixed in the code; this lets each restaurant build its own.
 --
--- Nada de esto lo ve un comensal: el platillo guarda su emoji como texto, así
--- que estos grupos sólo existen mientras alguien elige uno. Por eso `anon` no
--- tiene nada aquí.
+-- A diner never sees any of it: a dish stores its emoji as text, so these
+-- groups exist only while somebody is choosing one. That is why `anon` has
+-- nothing here.
 create table if not exists icon_groups (
   id            uuid primary key default gen_random_uuid(),
   restaurant_id uuid not null references restaurants(id) on delete cascade,
-  -- Dos paletas distintas: los platillos no comparten iconos con los extras.
+  -- Two separate palettes: dishes do not share icons with extras.
   variant       text not null check (variant in ('product', 'addon')),
   name          text not null,
   sort_order    int not null default 0,
@@ -1053,27 +1053,27 @@ create policy "team manages icon group items" on icon_group_items for all
   using (has_role((select g.restaurant_id from icon_groups g where g.id = group_id), array['manager']))
   with check (has_role((select g.restaurant_id from icon_groups g where g.id = group_id), array['manager']));
 
--- El comensal nunca los necesita: su platillo ya trae el emoji dentro.
+-- A diner never needs them: the dish already carries its emoji inside.
 revoke all on icon_groups from anon;
 revoke all on icon_group_items from anon;
 
--- ── Etiquetas de dieta y alérgenos ──────────────────────────────────────────
--- Ocho venían fijas en el código. Un restaurante vegano quiere "crudivegano" y
--- una marisquería no necesita "contiene mariscos" en todo el menú, así que
--- ahora la lista es suya: agrega, renombra y quita.
+-- ── Dietary and allergen tags ──────────────────────────────────────────────
+-- Eight of them were fixed in the code. A vegan restaurant wants "crudivegano"
+-- and a seafood place does not need "contiene mariscos" on its entire menu, so
+-- the list belongs to them now: add, rename and remove.
 --
--- Sí las lee el comensal —las etiquetas salen en el platillo y filtran el
--- menú—, así que a diferencia de los grupos de iconos, `anon` sí las lee.
+-- A diner does read these — the tags show on the dish and filter the menu — so
+-- unlike the icon groups, `anon` reads them.
 create table if not exists dietary_tags (
   id            uuid primary key default gen_random_uuid(),
   restaurant_id uuid not null references restaurants(id) on delete cascade,
-  -- El identificador que se guarda dentro del platillo. Estable: renombrar la
-  -- etiqueta no debe despegarla de los platillos que ya la traen.
+  -- The identifier stored inside the dish. Stable: renaming a tag must not
+  -- detach it from the dishes already carrying it.
   key           text not null,
   label         text not null,
-  -- Opcional. Las ocho de casa se traducen por su `key`; una etiqueta que el
-  -- restaurante inventó sólo existe en sus palabras, y sin esto un comensal en
-  -- inglés leería español a media carta.
+  -- Optional. The eight built-in tags are translated by their `key`; a tag the
+  -- restaurant invented exists only in its own words, and without this an
+  -- English-reading diner would meet Spanish halfway down the menu.
   label_en      text,
   emoji         text not null default '🏷️',
   sort_order    int not null default 0,
@@ -1094,13 +1094,13 @@ create policy "team manages dietary tags" on dietary_tags for all
   using (has_role(restaurant_id, array['manager']))
   with check (has_role(restaurant_id, array['manager']));
 
--- El bloqueo general de `anon` corre mucho antes que esta tabla, así que el
--- permiso se vuelve a dar aquí.
+-- The blanket `anon` lockdown runs long before this table exists, so the
+-- grant is given again here.
 grant select on dietary_tags to anon;
 
--- Las ocho de siempre, para que nadie empiece con la lista vacía. `key` es la
--- misma que traía el código, así que los platillos existentes no se despegan
--- de la suya y las traducciones siguen sirviendo.
+-- The usual eight, so nobody starts with an empty list. `key` is the same one
+-- the code carried, so existing dishes stay attached to theirs and the
+-- translations keep working.
 create or replace function public.seed_dietary_tags(p_restaurant uuid)
 returns void language sql as $$
   insert into dietary_tags (restaurant_id, key, label, label_en, emoji, sort_order)
@@ -1118,16 +1118,16 @@ returns void language sql as $$
    on conflict (restaurant_id, key) do nothing;
 $$;
 
--- La RLS ya la detiene —no es `security definer`, así que el insert corre con
--- los permisos de quien llama y la política de gerencia lo rechaza— pero
--- Postgres le da EXECUTE a PUBLIC a toda función nueva, y aquí no la llama
--- nadie más que el disparador. Se cierra igual que las demás ayudantes.
+-- RLS already stops it — this is not `security definer`, so the insert runs
+-- with the caller's permissions and the management policy refuses it — but
+-- Postgres grants EXECUTE to PUBLIC on every new function, and nothing here
+-- calls this one except the trigger. It is closed like the other helpers.
 revoke all on function public.seed_dietary_tags(uuid) from public, anon, authenticated;
 grant execute on function public.seed_dietary_tags(uuid) to service_role;
 
--- Por disparador y no desde la ruta de alta: así las siembran todos los
--- caminos que crean un restaurante —el registro, los datos de prueba, una
--- semilla a mano— y ninguno puede olvidarse.
+-- By trigger rather than from the sign-up route, so that every path which
+-- creates a restaurant seeds them — registration, the test data, a seed run by
+-- hand — and none of them can forget.
 create or replace function public.seed_dietary_tags_on_new_restaurant()
 returns trigger language plpgsql as $$
 begin
@@ -1142,7 +1142,7 @@ drop trigger if exists seed_dietary_tags_trg on restaurants;
 create trigger seed_dietary_tags_trg after insert on restaurants
   for each row execute function public.seed_dietary_tags_on_new_restaurant();
 
--- Y los que ya existían.
+-- And the ones that already existed.
 select public.seed_dietary_tags(id) from restaurants;
 
 -- The name a walk-in gives at the counter.
@@ -1383,27 +1383,28 @@ update plan_limits set
 alter table plan_limits add column if not exists allows_menu_schedules boolean not null default false;
 update plan_limits set allows_menu_schedules = (rank >= 2);
 
--- Que la comida salga antes de pagarse —al final en la mesa, o en la caja con
--- el QR general— es de plan de paga, y no por avaricia: Carta es gratis porque
--- nos pagamos con la comisión de cada pedido con tarjeta, y un pedido que se
--- paga en efectivo después no deja ninguna. Regalar las dos cosas a la vez
--- sería regalar el producto entero.
+-- Letting food leave before it is paid for — at the end at a table, or at the
+-- till on the general QR — belongs to a paid plan, and not out of greed: Carta
+-- is free because we are paid by the commission on each card order, and an
+-- order settled later in cash leaves none. Giving away both at once would be
+-- giving away the whole product.
 --
--- Se llamaba `allows_counter_payment` cuando sólo abría la caja del QR
--- general. Ahora abre las dos mitades de un mismo permiso, así que se llama
--- como lo que hace. El valor se deriva del rango, así que no hay nada que
--- migrar: se recalcula al vuelo.
+-- It was called `allows_counter_payment` when it only opened the general QR's
+-- till. It now opens both halves of one permission, so it is named after what
+-- it does. The value is derived from the tier, so there is nothing to migrate:
+-- it is recomputed on the fly.
 alter table plan_limits add column if not exists allows_deferred_payment boolean not null default false;
 alter table plan_limits drop column if exists allows_counter_payment;
 update plan_limits set allows_deferred_payment = (rank >= 1);
 
--- Y del lado del restaurante, los dos interruptores se vuelven uno.
--- `allow_counter_payment` era el mismo permiso contado aparte, y por eso podían
--- contradecirse. Quien tenía encendido cualquiera de los dos quería que su
--- comida pudiera salir antes de pagarse, así que eso es lo que conserva.
+-- And on the restaurant's side, the two switches become one.
+-- `allow_counter_payment` was the same permission counted separately, which is
+-- how they came to contradict each other. Anyone with either one on wanted
+-- their food to be able to leave before it was paid for, so that is what they
+-- keep.
 --
--- Envuelto en un bloque porque la columna ya no se crea más arriba: en una base
--- nueva no existe, y el `update` que la lee fallaría.
+-- Wrapped in a block because the column is no longer created above: on a fresh
+-- database it does not exist, and the `update` that reads it would fail.
 do $$
 begin
   if exists (
@@ -1449,35 +1450,35 @@ alter table restaurants add column if not exists terms_accepted_email text;
 -- it would rather not be told.
 alter table restaurants add column if not exists badges_enabled boolean not null default true;
 
--- ── Precio de fundador ─────────────────────────────────────────────────────
--- Los primeros restaurantes que contratan un plan de paga se quedan con el
--- precio con el que entraron, para siempre, mientras no cambien de plan.
+-- ── Founding price ─────────────────────────────────────────────────────────
+-- The first restaurants to take a paid plan keep the price they came in at,
+-- for as long as they stay on that plan.
 --
--- Es la alternativa honesta a un precio tachado que nadie paga nunca: cuando
--- se acaben los lugares, el precio de lista es de verdad el que pagan los que
--- llegan después, y el tachado deja de ser un adorno.
+-- It is the honest alternative to a struck-through price nobody ever pays:
+-- once the places run out, the list price really is what later arrivals pay,
+-- and the struck-through number stops being decoration.
 --
--- El número también es el recibo de la promesa: queda escrito quién es
--- fundador y en qué orden llegó.
+-- The number is also the receipt for that promise: it is written down who is a
+-- founder and in what order they arrived.
 alter table restaurants add column if not exists founding_number int;
--- Lo que este restaurante paga de verdad al mes, tal como quedó en Stripe.
--- Sin esto, la pantalla de Plan mostraría el precio base del catálogo, y a
--- quien contrató después de subir los precios le diría que paga menos de lo
--- que le cobramos.
+-- What this restaurant actually pays each month, as it stands in Stripe.
+-- Without it the Plan screen would show the catalogue's base price, and would
+-- tell anyone who subscribed after a price rise that they pay less than we
+-- charge them.
 alter table restaurants add column if not exists subscribed_price numeric;
 create unique index if not exists restaurants_founding_number_idx
   on restaurants(founding_number) where founding_number is not null;
 
--- Toma el siguiente lugar de fundador, si queda alguno.
+-- Takes the next founding place, if any are left.
 --
--- El advisory lock serializa la asignación: dos restaurantes que contratan en
--- el mismo segundo calcularían el mismo número y uno se quedaría fuera con un
--- lugar todavía libre. Se libera al terminar la transacción.
+-- The advisory lock serialises the assignment: two restaurants subscribing in
+-- the same second would compute the same number, and one would be left out
+-- with a place still free. It is released when the transaction ends.
 create or replace function public.claim_founding_price(p_restaurant uuid, p_limit int)
 returns int language plpgsql security definer set search_path = public as $$
 declare v_next int;
 begin
-  -- Ya es fundador: conserva su número, pase lo que pase.
+  -- Already a founder: they keep their number, whatever happens.
   select founding_number into v_next from restaurants where id = p_restaurant;
   if v_next is not null then return v_next; end if;
 
@@ -1559,8 +1560,8 @@ begin
      and closed_at is null
      and opened_at < now() - make_interval(hours => p_max_hours);
 
-  -- Acotado al restaurante: una mesa sólo tiene sentada dentro del local al
-  -- que pertenece, y así un id de mesa ajeno no se cuela en la de nadie.
+  -- Scoped to the restaurant: a table only seats people inside the venue it
+  -- belongs to, so another venue's table id cannot slip into anybody's.
   select id into v_id
     from table_sessions
    where table_id = p_table and restaurant_id = p_restaurant and closed_at is null

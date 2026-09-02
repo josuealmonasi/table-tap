@@ -21,12 +21,15 @@ const ENGLISH =
 
 const SKIP = ["i18n/es.ts", "i18n/en.ts", "legal/", "node_modules"];
 
+/** Where the sources are. `supabase` holds the schema, which is source too. */
+const ROOTS = ["src", "scripts", "supabase"];
+
 function sourceFiles(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
     const path = join(dir, name);
     if (SKIP.some(s => path.includes(s))) continue;
     if (statSync(path).isDirectory()) sourceFiles(path, out);
-    else if (/\.(ts|tsx|mjs)$/.test(name)) out.push(path);
+    else if (/\.(ts|tsx|mjs|sql|css)$/.test(name)) out.push(path);
   }
   return out;
 }
@@ -44,6 +47,13 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
  * invent one — a guard that cries wolf gets switched off.
  */
 function lineComment(line: string): string {
+  // SQL says `--`. The schema is the most security-critical file in the repo
+  // and no check had ever read a word of it, because the file list stopped at
+  // .ts/.tsx/.mjs — so 23 blocks of reasoning about who may read which column
+  // were written in Spanish with nothing to notice.
+  const sql = line.match(/^\s*--+\s?(.*)$/);
+  if (sql) return sql[1].trim();
+
   for (let i = 0; i < line.length - 1; i++) {
     if (line[i] !== "/" || line[i + 1] !== "/") continue;
     if (line[i - 1] === ":" || line[i - 1] === "\\") continue;
@@ -89,18 +99,31 @@ function comments(src: string): string[] {
   return out.filter(t => t.length >= 15);
 }
 
-/** The comments in a file that read as Spanish. */
+/**
+ * The comments in a file that read as Spanish.
+ *
+ * `EN` and `ES` in capitals are the names of the two languages, not the
+ * Spanish words *en* and *es* — without this, the comment above the language
+ * switch ("Customer EN/ES language switch") scored two Spanish words and no
+ * English ones, and the guard reported perfectly good English as Spanish.
+ */
 function spanishComments(path: string): string[] {
   return comments(readFileSync(path, "utf8"))
-    .filter(text => {
+    .filter(raw => {
+      const text = raw.replace(/\b(EN|ES)\b/g, " ");
       const es = text.match(SPANISH)?.length ?? 0;
       const en = text.match(ENGLISH)?.length ?? 0;
       return es > en && es >= 2;
     })
-    .map(text => `${path}  ${text.slice(0, 70)}`);
+    .map(raw => `${path}  ${raw.slice(0, 70)}`);
 }
 
 describe("the code is written in English", () => {
+  it("reads a SQL comment", () => {
+    expect(lineComment("-- una política que no existe")).toBe("una política que no existe");
+    expect(lineComment("  -- indented too")).toBe("indented too");
+  });
+
   it("reads a comment that does not open its line", () => {
     expect(lineComment("  return null; // el pedido ya no existe")).toBe("el pedido ya no existe");
     expect(lineComment('const u = "https://x.mx/a//b";')).toBe("");
@@ -108,7 +131,7 @@ describe("the code is written in English", () => {
   });
 
   it("has no Spanish comments outside the translated copy", () => {
-    const offenders = [...sourceFiles("src"), ...sourceFiles("scripts")].flatMap(spanishComments);
+    const offenders = ROOTS.flatMap(r => sourceFiles(r)).flatMap(spanishComments);
     expect(
       offenders,
       `Spanish comments — the code is English, only i18n and legal copy are Spanish:\n${offenders.join("\n")}`,

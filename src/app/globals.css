@@ -244,9 +244,9 @@ a.tt-btn {
   background: var(--tt-danger);
   color: var(--tt-white);
 }
-/* La segunda opción de una pantalla, no un enlace: se ve tocable sin competir
-   con la principal. `tt-btn-ghost` es texto suelto — sirve para "Cancelar" al
-   lado de un botón, pero solo, a lo ancho, no parece un botón siquiera. */
+/* A screen's second option, not a link: it looks tappable without competing
+   with the main one. `tt-btn-ghost` is loose text — fine for "Cancelar" beside
+   a button, but on its own, full width, it does not read as a button at all. */
 .tt-btn-outline {
   background: var(--tt-white);
   color: var(--tt-ink);
@@ -463,9 +463,9 @@ a.tt-btn {
   text-decoration: underline;
 }
 
-/* El encabezado de "ya pagado" es un botón porque abre la lista, pero no debe
-   parecerlo: es un rótulo, no la acción de la pantalla. Sin esto se pintaba
-   con la caja gris que el navegador le pone a cualquier <button>. */
+/* The "already paid" heading is a button because it opens the list, but it
+   must not look like one: it is a label, not the screen's action. Without this
+   it was painted with the grey box a browser gives any <button>. */
 .tt-paid-toggle {
   background: none;
   border: 0;
@@ -519,8 +519,8 @@ a.tt-btn {
   margin: 12px 0 4px;
 }
 
-/* El aviso con su enlace al lado. Se parte en pantalla angosta en vez de
-   empujar el enlace fuera de la caja. */
+/* The notice with its link beside it. It wraps on a narrow screen rather than
+   pushing the link out of the box. */
 /* The read-only notice, across the top of every dashboard screen. Warning
    tint rather than danger: nothing is broken and the menu is still taking
    orders — what stopped is saving. */
@@ -1310,11 +1310,11 @@ a.tt-btn {
   font-weight: 700;
 }
 
-/* La pestaña de ofertas se ve como las demás.
-   En esta app lo activo es agave y el rojo es lo que cuesta menos —la etiqueta
-   "Ahorra"—, así que pintar de rojo un control enseña justo lo contrario: una
-   pastilla roja entre pastillas agave dice "cuidado", no "aquí hay descuentos".
-   Lo único que añade es un punto, y se retira al entrar porque ya cumplió. */
+/* The offers tab looks like the others.
+   In this app active is agave and red means costs-less — the "Ahorra" tag — so
+   painting a control red teaches the opposite: a red pill among agave pills
+   says "careful", not "there are discounts here". All it adds is a dot, which
+   goes away once you are inside, because by then it has done its job. */
 .tt-cat-deal,
 .tt-side-link-deal {
   display: inline-flex;
@@ -1492,10 +1492,10 @@ a.tt-btn {
   .tt-bill-list .tt-bill-row:first-child {
     border-top: 1px solid var(--tt-line);
   }
-  /* Un rótulo de grupo es un encabezado, no una tarjeta. Como celda de la
-     rejilla se quedaba a un tercio de ancho y las mesas caían bajo el título
-     equivocado: "Mesa 5" aparecía en "mesas por cobrar" sin haber pedido la
-     cuenta. Ocupa la fila entera y el grupo vuelve a leerse. */
+  /* A group label is a heading, not a card. As a grid cell it sat at a third
+     of the width and tables fell under the wrong title: "Mesa 5" appeared
+     under "mesas por cobrar" without having asked for the bill. It takes the
+     whole row, and the grouping reads again. */
   .tt-bill-list > .tt-bill-group {
     grid-column: 1 / -1;
   }
@@ -1541,11 +1541,11 @@ a.tt-btn {
   flex-direction: column;
   gap: 2px;
   flex: 1;
-  /* El nombre de la mesa es lo único elástico de la fila: con min-width 0 se
-     aplastaba a cero cuando la etiqueta, el importe y el botón ya no cabían,
-     y su texto salía por encima de ellos — en un teléfono el mesero veía
-     "SOLO PERSONAL" encima de "3 pedidos" y el importe tapado por "Cobrar".
-     Con un mínimo, la fila se parte en dos renglones en vez de encimarse. */
+  /* The table's name is the only elastic thing in the row: with min-width 0 it
+     was crushed to nothing once the tag, the amount and the button no longer
+     fit, and its text spilled over them — on a phone a waiter saw "SOLO
+     PERSONAL" on top of "3 pedidos" and the amount hidden behind "Cobrar".
+     With a minimum, the row breaks onto two lines instead of overlapping. */
   min-width: 150px;
 }
 .tt-bill-name {
@@ -1844,9 +1844,9 @@ a.tt-btn {
 /* One cart line: emoji, the dish and its details, then price + controls.
    Centred as a group so the price and the icons land on the dish's line
    rather than stepping down below it. */
-/* La fila de un platillo: foto, nombre, y a la derecha precio y controles.
-   Se parte en dos renglones cuando el nombre ya no cabe — ver .tt-line-body,
-   que es lo único elástico de la fila. */
+/* A dish's row: photo, name, and price and controls on the right. It breaks
+   onto two lines when the name no longer fits — see .tt-line-body, the only
+   elastic thing in the row. */
 .tt-line {
   display: flex;
   align-items: center;
@@ -1869,11 +1869,11 @@ a.tt-btn {
 }
 .tt-line-body {
   flex: 1;
-  /* El nombre es lo único elástico de la fila. Con min-width 0 se aplastaba a
-     cero en cuanto el precio tachado, la etiqueta de oferta, el lápiz y el
-     contador ya no cabían: "Comida del día" salía una palabra por renglón y
-     la etiqueta roja se encimaba sobre el precio. Con un mínimo, la fila se
-     parte en dos renglones en vez de encimarse. */
+  /* The name is the only elastic thing in the row. With min-width 0 it was
+     crushed to nothing as soon as the struck-through price, the offer tag, the
+     pencil and the counter no longer fit: "Comida del día" came out one word
+     per line and the red tag sat on top of the price. With a minimum, the row
+     breaks onto two lines instead of overlapping. */
   min-width: 150px;
 }
 /* The customer column is capped at 460px on every screen, so the price and
@@ -1884,24 +1884,23 @@ a.tt-btn {
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
-  /* Cuando bajan al segundo renglón siguen a la derecha, donde el precio
-     siempre estuvo. */
+  /* When they drop to the second line they stay on the right, where the price
+     always was. */
   margin-left: auto;
 }
-/* En un teléfono el precio y los tres controles nunca caben junto al nombre:
-   son unos 180px de una fila de 264. Bajaban siempre, pero apretados a la
-   derecha y con medio renglón vacío debajo del nombre, que es lo que se ve
-   como algo mal puesto. Que ocupen el renglón entero: el precio bajo el
-   platillo, los controles al filo derecho, y el renglón se lee como un
-   renglón. */
+/* On a phone the price and the three controls never fit beside the name:
+   they are some 180px of a 264px row. They always dropped, but squeezed to the
+   right with half an empty line under the name, which is what reads as
+   misplaced. Let them take the whole line instead: price under the dish,
+   controls at the right edge, and the line reads as a line. */
 @media (max-width: 480px) {
   .tt-line-actions {
     width: 100%;
     margin-left: 0;
   }
-  /* El precio abre el renglón y el lápiz y el contador siguen juntos al final.
-     Con `space-between` los tres se repartían el ancho y el lápiz quedaba
-     flotando solo en medio, que es peor que apretado. */
+  /* The price opens the line and the pencil and counter stay together at the
+     end. With `space-between` all three shared the width and the pencil was
+     left floating alone in the middle, which is worse than crowded. */
   .tt-line-actions > strong {
     margin-right: auto;
   }
@@ -2246,8 +2245,9 @@ a.tt-btn {
      instead of each folding in half. */
   white-space: nowrap;
 }
-/* El estado del pedido y si está pagado son dos cosas distintas y van juntas
-   en la esquina; envueltas para que en un teléfono bajen en vez de encimarse. */
+/* An order's state and whether it is paid are two different things sitting
+   together in the corner; wrapped so that on a phone they drop rather than
+   overlap. */
 .tt-order-flags {
   display: flex;
   align-items: center;
@@ -2255,7 +2255,7 @@ a.tt-btn {
   justify-content: flex-end;
   gap: 6px;
 }
-/* Rojo, porque quien entrega la comida tiene que verlo sin buscarlo. */
+/* Red, because whoever carries the food out has to see it without looking. */
 .tt-unpaid-badge {
   color: var(--tt-sale-ink);
   background: var(--tt-sale);
@@ -3618,14 +3618,14 @@ a.tt-btn {
   align-items: stretch;
 }
 .tt-tip-chip {
-  /* `flex: 1` repartía el ancho a partes iguales y el padding lateral era
-     cero, así que la etiqueta más larga — "Sin propina" — quedaba pegada al
-     borde de su píldora. Ahora crecen desde su contenido y se reparten lo que
-     sobra; la fila envuelve, porque cinco píldoras con aire no caben en un
-     teléfono y salirse de la hoja es peor que bajar a un segundo renglón. */
-  /* Y no crecen: repartir el sobrante dejaba a "Otro", solo en el segundo
-     renglón, estirado de lado a lado como si fuera un botón de acción y no
-     una opción más. Cada píldora mide lo que dice. */
+  /* `flex: 1` split the width evenly and the side padding was zero, so the
+     longest label — "Sin propina" — ended up against the edge of its pill.
+     They grow from their content now and share what is left over; the row
+     wraps, because five pills with room to breathe do not fit on a phone, and
+     running off the page is worse than dropping to a second line. */
+  /* And they do not grow: sharing the leftover space stretched "Otro", alone
+     on the second line, from edge to edge as though it were an action button
+     rather than one more option. Each pill is as wide as what it says. */
   flex: 0 1 auto;
   min-width: max-content;
   white-space: nowrap;
@@ -5810,20 +5810,20 @@ a.tt-user-plan:hover {
 /* Closing a bill without collecting sits below the discount form, behind a
    rule: it is the opposite of what the form does, and it should not be the
    thing a thumb lands on by accident. */
-/* Cerrar la cuenta vive en la misma fila que los otros dos, pero empujado al
-   extremo contrario: `.tt-prodform-actions` alinea a la derecha, y el margen
-   automático manda éste a la izquierda sin tocar la clase que comparten diez
-   formularios más. */
+/* Closing the account lives in the same row as the other two, but pushed to
+   the opposite end: `.tt-prodform-actions` aligns right, and the automatic
+   margin sends this one left without touching the class ten other forms
+   share. */
 .tt-bill-close {
   margin-right: auto;
   color: var(--tt-danger);
 }
 
-/* En un teléfono los tres en fila parten las etiquetas en dos renglones y
-   dejan el botón que borra una deuda a ocho píxeles del principal. Apilados:
-   primero lo que hace este formulario, y cancelar la cuenta hasta abajo, lejos
-   del pulgar. Acotado con :has() para no tocar los otros diez formularios que
-   comparten .tt-prodform-actions. */
+/* On a phone all three in a row break the labels onto two lines and leave the
+   button that erases a debt eight pixels from the main one. Stacked instead:
+   what this form does first, and closing the account at the bottom, away from
+   the thumb. Scoped with :has() so the other ten forms sharing
+   .tt-prodform-actions are untouched. */
 @media (max-width: 560px) {
   .tt-prodform-actions:has(.tt-bill-close) {
     flex-direction: column;
@@ -5868,9 +5868,9 @@ a.tt-user-plan:hover {
   }
 }
 
-/* El aviso de fundador: una línea, no una banda publicitaria. Lo que vende no
-   es un descuento sino que el precio no sube, y eso se lee mejor dicho en
-   voz baja. */
+/* The founder notice: one line, not an advertising banner. What it sells is
+   not a discount but a price that does not rise, and that reads better said
+   quietly. */
 .tt-founding {
   margin: 0 0 16px;
   padding: 10px 14px;
@@ -5888,8 +5888,8 @@ a.tt-user-plan:hover {
   background: var(--tt-success-wash);
 }
 
-/* Encabezado de grupo dentro de las cuentas abiertas: las que pidieron la
-   cuenta primero, el resto debajo. */
+/* A group heading inside the open bills: the ones who asked for the bill
+   first, the rest underneath. */
 .tt-bill-group {
   margin: 14px 0 6px;
   font-size: 11px;
@@ -5900,7 +5900,7 @@ a.tt-user-plan:hover {
 }
 .tt-bill-list > .tt-bill-group:first-child { margin-top: 0; }
 
-/* La fila se parte en dos: lo que abre el diálogo, y cobrar. */
+/* The row splits in two: what opens the dialog, and collecting. */
 .tt-bill-open-main {
   display: flex;
   align-items: center;
@@ -5918,17 +5918,18 @@ a.tt-user-plan:hover {
 }
 .tt-bill-collect { flex: none; margin-left: 12px; }
 
-/* Lo ya pagado, en una cuenta que sigue abierta.
-   ---------------------------------------------
-   Donde la mesa liquida al final, uno puede pagar su plato con tarjeta y el
-   resto dejar la cuenta abierta. Antes ese plato desaparecía de la cuenta: el
-   que pagó se quedaba sin comprobante a la vista y el mesero sin señal de que
-   ya estaba cobrado — que es exactamente como se cobra dos veces.
+/* What is already paid, on a bill that is still open.
+   ---------------------------------------------------
+   Where a table settles at the end, one person can pay for their own dish by
+   card and the rest leave the bill open. That dish used to disappear from the
+   bill: whoever paid was left with no receipt in sight and the waiter with no
+   sign it had been collected — which is exactly how something gets charged
+   twice.
 
-   Se queda listado, apagado y con el precio tachado, para que se lea como
-   referencia y no como algo por cobrar. Apagado con `color`, no con `opacity`:
-   bajarle la opacidad al bloque entero se lleva por delante el contraste del
-   nombre del platillo, y un alérgeno ilegible no es un detalle de estilo. */
+   It stays listed, dimmed and struck through, so it reads as a reference and
+   not as something still owed. Dimmed with `color`, not `opacity`: lowering
+   the opacity of the whole block takes the contrast of the dish name with it,
+   and an unreadable allergen is not a styling detail. */
 .tt-bill-settled .tt-line-body strong,
 .tt-bill-settled .tt-subline {
   color: var(--tt-muted);
@@ -5942,6 +5943,6 @@ a.tt-user-plan:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  /* El renglón se parte en pantalla angosta en vez de empujar el sello fuera. */
+  /* The line wraps on a narrow screen rather than pushing the stamp out. */
   flex-wrap: wrap;
 }

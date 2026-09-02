@@ -67,10 +67,7 @@ export async function POST(req: NextRequest) {
       .eq("restaurant_id", restaurantId)
       .eq("role", "owner");
     if ((r?.owner_id ? 1 : 0) + (count ?? 0) >= MAX_OWNERS) {
-      return NextResponse.json(
-        { error: `That restaurant already has ${MAX_OWNERS} owners.` },
-        { status: 409 },
-      );
+      return await apiError("apiErr.ownerCap", 409, { n: MAX_OWNERS });
     }
   }
 
@@ -80,10 +77,10 @@ export async function POST(req: NextRequest) {
     email_confirm: true,
   });
   if (userErr || !created.user) {
-    return NextResponse.json(
-      { error: userErr?.message ?? "Could not create the login." },
-      { status: 400 },
-    );
+    if (userErr?.message) {
+      return NextResponse.json({ error: userErr.message }, { status: 400 });
+    }
+    return await apiError("apiErr.loginCreate", 400);
   }
 
   try {
@@ -158,10 +155,7 @@ export async function PATCH(req: NextRequest) {
       .eq("restaurant_id", member.restaurant_id)
       .eq("role", "owner");
     if ((r?.owner_id ? 1 : 0) + (count ?? 0) >= MAX_OWNERS) {
-      return NextResponse.json(
-        { error: `That restaurant already has ${MAX_OWNERS} owners.` },
-        { status: 409 },
-      );
+      return await apiError("apiErr.ownerCap", 409, { n: MAX_OWNERS });
     }
   }
 
@@ -234,10 +228,7 @@ export async function DELETE(req: NextRequest) {
     .eq("owner_id", userId)
     .single();
   if (owned) {
-    return NextResponse.json(
-      { error: `This user founded "${owned.name}" — delete that restaurant first.` },
-      { status: 409 },
-    );
+    return await apiError("apiErr.foundedRestaurant", 409, { name: owned.name });
   }
 
   // Capture staff membership before it cascades away, so we can log it.
