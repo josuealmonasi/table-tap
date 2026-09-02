@@ -72,10 +72,28 @@ async function gotoOnce(tab, url, opts) {
 }
 
 /** Wait for real content: loading is not the same as having something to measure. */
+/**
+ * Wait for the page to stop changing.
+ *
+ * The bar used to be "more than 200 characters of text", which is a stand-in
+ * for settled rather than a measure of it — and the front door walked straight
+ * into it: /login has exactly 200 and /reset-password 174, so both real,
+ * fully-rendered pages sat here for thirty seconds and were reported as
+ * failures. Two consecutive samples that agree is what settled actually means,
+ * and it does not care how much a screen has to say.
+ */
 async function settle(tab) {
-  await tab.waitForFunction("document.body.innerText.trim().length > 200", null, {
-    timeout: 30000,
-  });
+  await tab.waitForFunction(
+    `(() => {
+      const n = document.body.innerText.trim().length;
+      if (n < 40) return false;
+      const before = window.__ttSettleLen;
+      window.__ttSettleLen = n;
+      return before === n;
+    })()`,
+    null,
+    { timeout: 30000, polling: 400 },
+  );
   await tab.waitForTimeout(900);
 }
 
