@@ -41,13 +41,13 @@ console.log(`\nPermisos — ${prod ? "production" : "development"}`);
 await show("Tablas sin RLS", `
   select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
    where n.nspname='public' and c.relkind='r' and not c.relrowsecurity order by 1`,
-  "— cualquiera con la llave pública las lee enteras");
+  "— anyone with the public key reads them whole");
 
 await show("Tables with RLS and no policy", `
   select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
    where n.nspname='public' and c.relkind='r' and c.relrowsecurity
      and not exists (select 1 from pg_policies p where p.schemaname='public' and p.tablename=c.relname)
-   order by 1`, "— niegan todo, que suele ser lo correcto");
+   order by 1`, "— they deny everything, which is usually right");
 
 await show("What anon can see", `
   select table_name, string_agg(distinct column_name, ', ' order by column_name)
@@ -65,7 +65,7 @@ await show("What authenticated can see", `
 await show("Policies that let any row through", `
   select tablename, cmd, policyname from pg_policies
    where schemaname='public' and (qual='true' or with_check='true') order by 1,2`,
-  "— sólo son seguras si el permiso de columnas las acota");
+  "— safe only if a column grant narrows them");
 
 await show("Security definer functions", `
   select p.proname,
@@ -75,7 +75,7 @@ await show("Security definer functions", `
                       and r.rolname in ('anon','authenticated','service_role')), 'nadie')
     from pg_proc p join pg_namespace n on n.oid=p.pronamespace
    where n.nspname='public' and p.prosecdef order by 1`,
-  "— corren como su dueño: search_path fijo y sólo quien deba ejecutarlas");
+  "— they run as their owner: pinned search_path, executable only by who must");
 
 await c.end();
 console.log("");

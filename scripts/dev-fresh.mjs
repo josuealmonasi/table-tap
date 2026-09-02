@@ -75,7 +75,7 @@ if (listeners.length > 0 && tree.length === 0) {
 
 if (tree.length > 0 && !tree.some(belongsHere)) {
   console.error(
-    `\n  El servidor del puerto ${PORT} no tiene archivos de este proyecto abiertos:\n` +
+    `\n  The server on port ${PORT} has no files from this project open:\n` +
       `    ${commandOf(tree[0]).slice(0, 100)}\n\n` +
       "  Looks like it belongs elsewhere, so I am leaving it alone. Close it and try again.\n",
   );
