@@ -1,5 +1,6 @@
 import type { OrderLineItem } from "@/lib/types";
 import { nextPromoStep, promoCost, type QuantityPromo } from "@/lib/promo-math";
+import { round2 } from "@/lib/money";
 
 // The single source of truth for what a cart costs. Pure — no IO, no DB — so
 // the customer's preview and the server's actual charge run the exact same
@@ -104,8 +105,6 @@ export interface PricedCart {
    */
   promoSavings: Record<string, ItemPromoSaving>;
 }
-
-const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 /**
  * What a percentage tip comes to, on the subtotal a tip is taken from.

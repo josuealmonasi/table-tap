@@ -1,5 +1,6 @@
 import type { ComboComponent, MenuItem } from "@/lib/types";
 import type { CartPromo } from "@/lib/pricing";
+import { round2 } from "@/lib/money";
 
 // Shapes and helpers for promotions (combo bundles and quantity deals). The
 // row shape is shared by the dashboard editor, the customer menu and checkout
@@ -39,8 +40,6 @@ export interface Combo {
   regularPrice: number;
   components: ComboComponent[];
 }
-
-const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 /**
  * Turns combo promotions into menu cards, using live item prices. A combo is

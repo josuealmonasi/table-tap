@@ -1,4 +1,5 @@
 import type { Order, OrderLineItem } from "@/lib/types";
+import { round2 } from "@/lib/money";
 
 /**
  * What a dine-in table still owes.
@@ -104,10 +105,6 @@ function side(orders: Order[]): BillSide {
   };
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-
 /**
  * @param orders   every order on the table (paid ones are filtered out here)
  * @param myOrderIds ids this phone placed, from its own local record
@@ -152,48 +149,3 @@ export function canPayMineOnly(bill: TableBill): boolean {
  * without getting in the way.
  */
 export const PAID_LINES_SHOWN = 3;
-
-/** A table with money outstanding, for the floor's own view of who owes what. */
-export interface OpenTable {
-  tableId: string;
-  tableLabel: string;
-  total: number;
-  orderCount: number;
-  /** When the table's oldest unpaid order was placed — how long they've sat. */
-  since: string;
-}
-
-/**
- * Which tables owe money right now, oldest debt first.
- *
- * The board answers "what is the kitchen cooking"; this answers "who hasn't
- * paid", which is a different question and the one a manager asks on a busy
- * floor. Oldest first because a table that has been sitting on an unpaid bill
- * the longest is the one most likely to walk.
- *
- * Orders with no table are excluded: those are fast-food QRs, which pay before
- * the kitchen ever sees them, so an unpaid one is a cart mid-Stripe, not a debt.
- */
-export function openTables(orders: Order[]): OpenTable[] {
-  const byTable = new Map<string, OpenTable>();
-
-  for (const order of unpaidOrders(orders)) {
-    if (!order.table_id) continue;
-    const found = byTable.get(order.table_id);
-    if (found) {
-      found.total = round2(found.total + Number(order.total));
-      found.orderCount += 1;
-      if (order.created_at < found.since) found.since = order.created_at;
-    } else {
-      byTable.set(order.table_id, {
-        tableId: order.table_id,
-        tableLabel: order.table_label ?? "",
-        total: round2(Number(order.total)),
-        orderCount: 1,
-        since: order.created_at,
-      });
-    }
-  }
-
-  return [...byTable.values()].sort((a, b) => a.since.localeCompare(b.since));
-}

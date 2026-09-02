@@ -1,4 +1,5 @@
 import { itemSalePrice } from "@/lib/pricing";
+import { round2 } from "@/lib/money";
 
 /** A product a promotion covers, with the price a diner would pay for one. */
 export interface PricedProduct {
@@ -13,8 +14,6 @@ export interface PromoShape {
   tiers?: { qty: number | string; price: number | string }[] | null;
   items: { itemId: string; qty: number }[];
 }
-
-const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 /** What the promotion's products cost bought one by one. */
 export function regularTotal(

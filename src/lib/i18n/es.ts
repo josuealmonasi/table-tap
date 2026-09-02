@@ -340,9 +340,6 @@ myBill: "Ver mi cuenta",
     hideLines: "ocultar",
     alreadyPaid: "Ya pagado en esta mesa · {amount}",
     titleToGo: "{label} · cobrar",
-    openTables: "Mesas por cobrar",
-    openTablesHint: "Primero las que llevan más tiempo",
-    searchTables: "Busca mesas…",
     tableOwes: "{n} pedido · {amount}",
     tableOwesPlural: "{n} pedidos · {amount}",
     title: "Mesa {label} · cobrar",
@@ -747,6 +744,9 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     errorBody:
       "Hubo un problema de nuestro lado, no del tuyo. Tu mesa está bien: inténtalo de nuevo.",
     retry: "Intentar de nuevo",
+    appErrorTitle: "Algo se rompió de nuestro lado",
+    appErrorBody:
+      "Nada de lo que hiciste lo causó y no se perdió ningún pedido. Vuelve a intentarlo.",
     notFoundTitle: "Este código no lleva a ningún lado",
     notFoundBody:
       "El código QR que escaneaste no está vinculado a un menú. Pide ayuda a alguien del personal.",

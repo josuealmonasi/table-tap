@@ -1,4 +1,5 @@
 import type { Order } from "@/lib/types";
+import { round2 } from "@/lib/money";
 
 /**
  * A discount the floor applies to a bill that is already open.
@@ -83,6 +84,3 @@ export function spreadDiscount(orders: Order[], amount: number): DiscountShare[]
   });
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}

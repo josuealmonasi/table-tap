@@ -2,28 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logUserChange } from "@/lib/user-log";
 
 export const runtime = "nodejs";
 
 const ROLES: readonly string[] = ["admin", "owner", "manager", "waiter", "cashier", "kitchen"];
 const MAX_OWNERS = 3;
-
-/** Restaurant-scoped actions also land in that restaurant's activity log. */
-async function log(
-  restaurantId: string,
-  actorEmail: string,
-  action: "created" | "updated" | "deleted",
-  targetRole: string,
-  targetEmail: string,
-): Promise<void> {
-  await createAdminClient().from("user_logs").insert({
-    restaurant_id: restaurantId,
-    actor_email: actorEmail,
-    action,
-    target_role: targetRole,
-    target_email: targetEmail,
-  });
-}
 
 // POST /api/admin/users — a platform admin creates any kind of login:
 // another admin, a founding owner (with a new restaurant), or a team member
@@ -102,7 +86,7 @@ export async function POST(req: NextRequest) {
         role,
       });
       if (error) throw error;
-      await log(restaurantId, admin.email, "created", role, email);
+      await logUserChange(restaurantId, admin.email, "created", role, email);
     }
   } catch {
     await db.auth.admin.deleteUser(created.user.id); // roll back the login
@@ -188,7 +172,7 @@ export async function PATCH(req: NextRequest) {
       const { error } = await db.from("staff").update(changes).eq("id", member.id);
       if (error) return await apiError("apiErr.staffRow", 500);
     }
-    await log(
+    await logUserChange(
       member.restaurant_id,
       admin.email,
       "updated",
@@ -242,6 +226,6 @@ export async function DELETE(req: NextRequest) {
   if (error) return await apiError("apiErr.loginDelete", 500);
 
   if (member)
-    await log(member.restaurant_id, admin.email, "deleted", member.role, member.email);
+    await logUserChange(member.restaurant_id, admin.email, "deleted", member.role, member.email);
   return NextResponse.json({ ok: true });
 }

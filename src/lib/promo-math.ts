@@ -1,3 +1,4 @@
+import { round2 } from "@/lib/money";
 // Quantity-deal maths: what a given number of one product actually costs.
 // Pure and self-contained so the pricing engine stays readable and this can be
 // unit-tested on its own.
@@ -14,8 +15,6 @@ export interface QuantityPromo {
   /** kind='tiered': e.g. [{ qty: 1, price: 5 }, { qty: 2, price: 8 }]. */
   tiers?: { qty: number; price: number }[] | null;
 }
-
-const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 /**
  * What `qty` units cost under a promo, given the unit price the customer would

@@ -17,12 +17,9 @@ import {
   toAppliedCoupon,
 } from "@/lib/coupon-service";
 import type { Order } from "@/lib/types";
+import { round2 } from "@/lib/money";
 
 export const runtime = "nodejs";
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
 
 // POST /api/bill/pay
 // Body: { restaurantId, tableId, orderIds: string[] }
@@ -87,7 +84,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (orders.length === 0) return await apiError("apiErr.billSettled", 409);
 
   const food = round2(orders.reduce((sum, o) => sum + Number(o.total), 0));
-
 
   // A coupon here discounts the share being settled, which is what lets two
   // people at one table each use their own on their own food. Two rules keep

@@ -1,5 +1,6 @@
 import type { Order, OrderLineItem } from "@/lib/types";
 import { unpaidOrders } from "@/lib/table-bill";
+import { round2 } from "@/lib/money";
 
 /**
  * A bill the floor can still act on: a table that hasn't settled, or a to-go
@@ -81,6 +82,3 @@ export function shortCode(orderId: string): string {
   return `ORD-${orderId.slice(0, 4).toUpperCase()}`;
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}

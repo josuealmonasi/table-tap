@@ -1,3 +1,4 @@
+import { round2 } from "@/lib/money";
 /**
  * What a restaurant's subscription tier allows.
  *
@@ -145,10 +146,6 @@ export function trialDaysLeft(trialEndsAt: string | null, now: Date = new Date()
 export function launchSaving(limits: PlanLimits): number {
   const list = limits.list_price ?? 0;
   return list > limits.monthly_price ? round2(list - limits.monthly_price) : 0;
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
 }
 
 /**

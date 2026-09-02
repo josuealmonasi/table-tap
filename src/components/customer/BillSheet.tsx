@@ -19,6 +19,7 @@ import DishImage from "./DishImage";
 import OrderTotals from "./OrderTotals";
 import TipPicker from "./TipPicker";
 import type { Restaurant } from "@/lib/types";
+import { round2 } from "@/lib/money";
 
 interface BillSheetProps {
   open: boolean;
@@ -371,6 +372,3 @@ export default function BillSheet({
   );
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}

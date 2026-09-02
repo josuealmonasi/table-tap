@@ -345,9 +345,6 @@ myBill: "View my bill",
     hideLines: "hide",
     alreadyPaid: "Already paid at this table · {amount}",
     titleToGo: "{label} · collect",
-    openTables: "Tables still to pay",
-    openTablesHint: "Longest wait first",
-    searchTables: "Search tables…",
     tableOwes: "{n} order · {amount}",
     tableOwesPlural: "{n} orders · {amount}",
     title: "Table {label} · settle up",
@@ -753,6 +750,9 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     errorBody:
       "Something went wrong on our side, not yours. Your table is fine — please try again.",
     retry: "Try again",
+    appErrorTitle: "Something broke on our side",
+    appErrorBody:
+      "Nothing you did caused it and no order was lost. Please try again.",
     notFoundTitle: "This code doesn't lead anywhere",
     notFoundBody:
       "The QR code you scanned isn't linked to a menu. Please ask a member of staff for help.",

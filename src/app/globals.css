@@ -1384,23 +1384,6 @@ a.tt-btn {
   place-items: center;
   overflow: hidden;
 }
-/* Tables that still owe, above the kitchen board. Bordered rather than filled:
-   it is a standing fact about the floor, not an alert. */
-.tt-open-tables {
-  border: 1px solid var(--tt-line);
-  border-radius: 12px;
-  padding: 14px;
-  margin-bottom: 12px;
-}
-.tt-open-tables-head {
-  align-items: center;
-}
-.tt-open-tables-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-}
 /* ── open bills ──
    One row per bill, built like the product rows: a glyph, the identity, and
    the money hard against the right edge so a manager can read down the column
@@ -1590,31 +1573,6 @@ a.tt-btn {
 
 /* Three across on a wide screen, like the bills list — a row of one card the
    width of the board wastes it, and the floor reads these in a glance. */
-@media (min-width: 1025px) {
-  .tt-open-tables-list {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-  }
-}
-
-.tt-open-table {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  text-align: left;
-  padding: 10px 12px;
-  border: 1px solid var(--tt-line);
-  border-radius: 10px;
-  background: var(--tt-white);
-  font: inherit;
-  cursor: pointer;
-}
-.tt-open-table:hover {
-  background: var(--tt-surface);
-}
 
 /* The bill's running total, ruled off from the items above it. */
 .tt-bill-total {
