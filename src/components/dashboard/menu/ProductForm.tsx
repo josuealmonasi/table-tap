@@ -49,6 +49,11 @@ export default function ProductForm({
   const [modifiers, setModifiers] = useState<Modifier[]>(initial?.modifiers ?? []);
   const [dietary, setDietary] = useState<string[]>(initial?.dietary ?? []);
   const [discountPct, setDiscountPct] = useState(String(initial?.discount_pct ?? ""));
+  // Empty string and "not counted" are the same thing here, which is why this
+  // holds a string rather than a number: 0 means "sold out", not "untracked".
+  const [stock, setStock] = useState(
+    initial?.stock === null || initial?.stock === undefined ? "" : String(initial.stock),
+  );
   const [picked, setPicked] = useState<string[]>(selectedAddonIds);
   const [saving, setSaving] = useState(false);
 
@@ -109,6 +114,7 @@ export default function ProductForm({
           .filter(g => g.label && g.options.length > 0),
         dietary,
         discount_pct: pct,
+        stock: stock.trim() === "" ? null : Math.max(0, Math.floor(Number(stock) || 0)),
       },
       picked,
     );
@@ -162,6 +168,24 @@ export default function ProductForm({
           ) : (
             t("menu.discountHint")
           )}
+        </span>
+      </div>
+
+      <div className="tt-prodform-row">
+        <input
+          className="tt-input"
+          style={{ width: 110 }}
+          type="number"
+          step="1"
+          min="0"
+          inputMode="numeric"
+          aria-label={t("menu.stock")}
+          placeholder={t("menu.stockPlaceholder")}
+          value={stock}
+          onChange={e => setStock(e.target.value)}
+        />
+        <span className="tt-muted" style={{ fontSize: 13 }}>
+          {t("menu.stockHint")}
         </span>
       </div>
 

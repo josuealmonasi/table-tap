@@ -31,6 +31,17 @@ export type MenuItem = {
   dietary: string[];
   /** % off the base price (0 = full price). Extras are never discounted. */
   discount_pct: number;
+  /**
+   * Units left, or null when this dish is not counted. Null is the default and
+   * leaves `available` exactly as it was: a switch somebody flips by hand.
+   */
+  stock?: number | null;
+  /**
+   * Set when the count — not a person — took the dish off the menu, so that
+   * giving the stock back can put it on again without overriding a decision
+   * the restaurant made itself.
+   */
+  stock_auto_off?: boolean;
   sort_order: number;
 };
 
@@ -102,6 +113,10 @@ export type Restaurant = {
   /** The restaurant's connected account. Reaches the dashboard only, never the diner. */
   stripe_account_id?: string | null;
   stripe_charges_enabled?: boolean | null;
+  /** Warn owner and managers when a tracked dish runs low. */
+  low_stock_alerts_enabled?: boolean;
+  /** The count at or below which that warning is raised. */
+  low_stock_threshold?: number;
   badges_enabled?: boolean;
   /** The menu's combos and offers tab. On by default. */
   deals_tab_enabled?: boolean;

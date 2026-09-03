@@ -25,6 +25,7 @@ import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { fetchPromotions } from "@/lib/promotions-data";
 import { toCartPromos } from "@/lib/promotions";
 import { verifyCart, type VerifiableItem } from "@/lib/verify-cart";
+import { raiseStockNotifications, releaseStock, reserveStock } from "@/lib/stock-service";
 import type { OrderLineItem } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -105,7 +106,7 @@ export async function POST(req: NextRequest) {
     const { data: restaurant, error: rErr } = await supabase
       .from("restaurants")
       .select(
-        "id, currency, service_pct, service_enabled, accepting_orders, tax_pct, stripe_account_id, stripe_charges_enabled, allow_pay_later",
+        "id, currency, service_pct, service_enabled, accepting_orders, tax_pct, stripe_account_id, stripe_charges_enabled, allow_pay_later, low_stock_alerts_enabled, low_stock_threshold",
       )
       .eq("id", restaurantId)
       .single();
@@ -288,9 +289,13 @@ export async function POST(req: NextRequest) {
     const { subtotal, serviceFee, tip, total } = pricing;
     const servicePct = restaurant.service_enabled ? restaurant.service_pct : 0;
 
-    /** Give back a reserved coupon use when this checkout doesn't complete. */
+    /** Set once the stock is ours, so the undo below knows to hand it back. */
+    let stockReserved = false;
+
+    /** Give back what this checkout reserved when it doesn't complete. */
     const undoClaim = async () => {
       if (coupon) await releaseCoupon(coupon.id);
+      if (stockReserved) await releaseStock(restaurantId, verified);
     };
 
     // What we take from this order, worked out before the row is written so it
@@ -319,6 +324,36 @@ export async function POST(req: NextRequest) {
     // Which sitting this order belongs to. A dine-in order joins whoever is
     // already at the table; a counter order has no table and no sitting.
     const sessionId = tableId ? await openSession(restaurantId, tableId) : null;
+
+    // Take the stock this order needs before asking anyone for money.
+    //
+    // Counting down only once the payment lands would let two tables each be
+    // sold the last portion while both sit on a Stripe page — so the count
+    // moves here, and the webhook's abandon handler gives it back when the
+    // payment never happens.
+    const reservation = await reserveStock(
+      restaurantId,
+      verified,
+      Number(restaurant.low_stock_threshold) || 0,
+    );
+    if (!reservation.ok) {
+      await undoClaim();
+      // Name the first dish that fell short and say how many there really are.
+      // A bare "unavailable" would send them back to a cart that looks fine.
+      const first = reservation.short[0];
+      return await cartError(
+        first ? "apiErr.onlyLeft" : "apiErr.stockGone",
+        { name: first?.name ?? "", count: first?.available ?? 0 },
+        409,
+        {
+          shortStock: reservation.short.map(s => ({
+            itemId: s.itemId,
+            available: s.available,
+          })),
+        },
+      );
+    }
+    stockReserved = true;
 
     // Create the pending order first so the webhook can find it.
     const { data: order, error: oErr } = await supabase
@@ -367,6 +402,13 @@ export async function POST(req: NextRequest) {
     if (oErr || !order) {
       await undoClaim();
       return await apiError("apiErr.orderCreate", 500);
+    }
+
+    // Only once the order is real: a warning about stock an order never took
+    // would send someone to count a shelf that is still full. Off by default,
+    // because a restaurant that tracks nothing would only get noise.
+    if (restaurant.low_stock_alerts_enabled) {
+      await raiseStockNotifications(restaurantId, reservation.low);
     }
 
     // Nothing to charge now: the order is with the kitchen and the table owes

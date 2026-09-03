@@ -142,6 +142,15 @@ export default function ProductRow({
               {!product.available && (
                 <span className="tt-badge">{t("menu.unavailable")}</span>
               )}
+              {/* Only for a dish that is actually counted. Nothing is shown for
+                  the ones left untracked, which is most of them. */}
+              {typeof product.stock === "number" && (
+                <span className="tt-badge">
+                  {product.stock === 0
+                    ? t("menu.stockOut")
+                    : t("menu.stockLeft", { count: product.stock })}
+                </span>
+              )}
             </div>
             {product.description && (
               <div className="tt-desc tt-muted" style={{ margin: "2px 0" }}>

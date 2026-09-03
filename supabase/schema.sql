@@ -1696,3 +1696,198 @@ alter table orders add column if not exists receipt_sent_at timestamptz;
 alter table orders drop column if exists receipt_email;
 -- Never readable with the publishable key: orders carry no anon grant at all,
 -- so nothing here reaches a browser. Only the server, which sends the mail.
+
+-- ── Inventory ───────────────────────────────────────────────────────────────
+-- How many are left, when the restaurant wants us to count.
+--
+-- Null means untracked, and untracked is the default: `available` stays the
+-- manual switch it has always been, and a restaurant that never opens this
+-- feature sees no change at all. A number turns the switch automatic — the
+-- count falls as orders are placed, and the dish takes itself off the menu at
+-- zero. The two are deliberately not merged: a kitchen that has run out of gas
+-- still needs to pull a dish that it has plenty of stock for.
+alter table menu_items add column if not exists stock int;
+alter table menu_items drop constraint if exists menu_items_stock_check;
+alter table menu_items add constraint menu_items_stock_check
+  check (stock is null or stock >= 0);
+
+-- When to warn the people who can do something about it. Off by default,
+-- because a restaurant that has not set any counts would only get noise.
+alter table restaurants add column if not exists low_stock_alerts_enabled
+  boolean not null default false;
+alter table restaurants add column if not exists low_stock_threshold
+  int not null default 5;
+alter table restaurants drop constraint if exists restaurants_low_stock_threshold_check;
+alter table restaurants add constraint restaurants_low_stock_threshold_check
+  check (low_stock_threshold >= 0 and low_stock_threshold <= 999);
+
+-- ── Notifications ───────────────────────────────────────────────────────────
+-- What the bell in the nav shows.
+--
+-- The text is NOT stored. A restaurant reads the dashboard in Spanish or in
+-- English and can change that at any moment, so a row keeps the `kind` and the
+-- facts (`data`), and the screen renders the sentence in whichever language is
+-- being read. Storing the sentence would freeze it in the language it happened
+-- to be written in.
+--
+-- Read is a timestamp rather than a flag because the requirement is that a
+-- read notification stays in the list: nothing here is ever deleted on being
+-- read, it only stops counting towards the unread total.
+create table if not exists notifications (
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  id         uuid primary key default gen_random_uuid(),
+  kind       text not null check (kind in ('low_stock', 'out_of_stock')),
+  data       jsonb not null default '{}'::jsonb,
+  read_at    timestamptz,
+  created_at timestamptz not null default now()
+);
+
+-- The bell asks for the newest ten for one restaurant, on every poll. Without
+-- this that is a scan of every notification on the platform.
+create index if not exists notifications_recent_idx
+  on notifications(restaurant_id, created_at desc);
+
+alter table notifications enable row level security;
+
+-- Owner and manager only — has_role() already answers true for the founding
+-- owner. The floor and the kitchen cannot act on a stock warning and do not
+-- get told about one.
+drop policy if exists "managers read notifications" on notifications;
+create policy "managers read notifications"
+  on notifications for select
+  using (has_role(restaurant_id, array['manager']));
+
+-- Marking one read is the only write a browser may make. There is no insert
+-- policy on purpose: notifications are raised server-side with the secret key,
+-- so nothing can forge one.
+drop policy if exists "managers mark notifications read" on notifications;
+create policy "managers mark notifications read"
+  on notifications for update
+  using (has_role(restaurant_id, array['manager']))
+  with check (has_role(restaurant_id, array['manager']));
+
+revoke all on notifications from anon;
+grant select (restaurant_id, id, kind, data, read_at, created_at) on notifications to authenticated;
+grant update (read_at) on notifications to authenticated;
+
+-- Which dishes the system took off the menu itself, so that giving the stock
+-- back can put them back. Without it, an abandoned checkout that emptied the
+-- last unit would return the count and leave the dish hidden, and the only
+-- clue would be a number that disagreed with the switch beside it.
+alter table menu_items add column if not exists stock_auto_off boolean not null default false;
+
+-- Take the stock an order needs, atomically.
+--
+-- `p_demand` is [{"item_id": uuid, "qty": int}, …], already summed per dish by
+-- the caller — one cart can list the same dish on several lines, and each
+-- component of a combo eats from its own count.
+--
+-- All or nothing: if any dish is short, nothing is taken and the shortfall
+-- comes back so the diner can be told what is actually left. The rows are
+-- locked in id order, which is what stops two diners at different tables from
+-- both getting the last portion, and what stops two carts holding overlapping
+-- dishes from deadlocking against each other.
+--
+-- Dishes with a null count are not tracked and are skipped entirely.
+--
+-- `low` reports only the dishes this order pushed ACROSS the threshold, not
+-- every dish already under it — otherwise every subsequent order would raise
+-- the same warning again until someone restocked, and a bell that repeats
+-- itself is a bell people stop reading.
+create or replace function public.reserve_stock(
+  p_restaurant uuid,
+  p_demand     jsonb,
+  p_threshold  int
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_short jsonb := '[]'::jsonb;
+  v_low   jsonb := '[]'::jsonb;
+  v_row   record;
+begin
+  -- Lock every tracked row this cart touches, in a deterministic order.
+  for v_row in
+    select m.id, m.name, m.stock, m.available, (d.qty)::int as want
+      from jsonb_to_recordset(p_demand) as d(item_id uuid, qty int)
+      join menu_items m on m.id = d.item_id
+     where m.restaurant_id = p_restaurant
+       and m.stock is not null
+     order by m.id
+       for update of m
+  loop
+    if v_row.stock < v_row.want then
+      v_short := v_short || jsonb_build_object(
+        'item_id', v_row.id, 'name', v_row.name, 'available', v_row.stock);
+    end if;
+  end loop;
+
+  if jsonb_array_length(v_short) > 0 then
+    return jsonb_build_object('ok', false, 'short', v_short, 'low', '[]'::jsonb);
+  end if;
+
+  -- Nothing was short, so take it all. A dish that reaches zero takes itself
+  -- off the menu, and remembers that it was us who did it.
+  for v_row in
+    select m.id, m.name, m.stock, (d.qty)::int as want
+      from jsonb_to_recordset(p_demand) as d(item_id uuid, qty int)
+      join menu_items m on m.id = d.item_id
+     where m.restaurant_id = p_restaurant
+       and m.stock is not null
+     order by m.id
+  loop
+    update menu_items
+       set stock          = v_row.stock - v_row.want,
+           available      = case when v_row.stock - v_row.want = 0 then false else available end,
+           stock_auto_off = case when v_row.stock - v_row.want = 0 then true  else stock_auto_off end
+     where id = v_row.id;
+
+    if v_row.stock - v_row.want = 0 then
+      v_low := v_low || jsonb_build_object(
+        'item_id', v_row.id, 'name', v_row.name, 'stock', 0, 'kind', 'out_of_stock');
+    elsif v_row.stock > p_threshold and v_row.stock - v_row.want <= p_threshold then
+      v_low := v_low || jsonb_build_object(
+        'item_id', v_row.id, 'name', v_row.name,
+        'stock', v_row.stock - v_row.want, 'kind', 'low_stock');
+    end if;
+  end loop;
+
+  return jsonb_build_object('ok', true, 'short', '[]'::jsonb, 'low', v_low);
+end;
+$$;
+revoke all on function public.reserve_stock(uuid, jsonb, int) from public, anon, authenticated;
+grant execute on function public.reserve_stock(uuid, jsonb, int) to service_role;
+
+-- Give stock back when the checkout it was taken for never completed, or when
+-- a placed order is cancelled. A dish the system hid at zero comes back on the
+-- menu; one the restaurant switched off by hand stays off, because that switch
+-- was somebody's decision and not ours to undo.
+create or replace function public.release_stock(p_restaurant uuid, p_demand jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update menu_items m
+     set stock          = m.stock + d.qty,
+         available      = case when m.stock = 0 and m.stock_auto_off then true  else m.available end,
+         stock_auto_off = case when m.stock = 0 and m.stock_auto_off then false else m.stock_auto_off end
+    from jsonb_to_recordset(p_demand) as d(item_id uuid, qty int)
+   where m.id = d.item_id
+     and m.restaurant_id = p_restaurant
+     and m.stock is not null;
+end;
+$$;
+revoke all on function public.release_stock(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.release_stock(uuid, jsonb) to service_role;
+
+-- `stock` rides along on the anon grant that menu_items already had, and that
+-- is deliberate. The customer page selects `*`, so a column-list grant would
+-- have to name every column or the menu stops loading — and the count is not a
+-- secret we are keeping from diners in the first place: the checkout tells
+-- them "only 5 left" the moment they ask for six. Kept in one place so the next
+-- reader knows it was weighed rather than missed.

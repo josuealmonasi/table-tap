@@ -11,6 +11,7 @@ import { ownerWarningKey } from "@/lib/payment-options";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import PaymentsCard from "./PaymentsCard";
 import CoverCard from "./CoverCard";
+import InventoryCard from "./InventoryCard";
 import LogoCard from "./LogoCard";
 
 interface SettingsFormProps {
@@ -269,6 +270,15 @@ export default function SettingsForm({
           {isOwner && <LogoCard restaurant={restaurant} />}
 
           {isOwner && <CoverCard restaurant={restaurant} />}
+
+          {/* The manager's too. Running out of a dish is the floor's problem
+              before it is the owner's, and they are who reorders. */}
+          <InventoryCard
+            alertsEnabled={restaurant.low_stock_alerts_enabled === true}
+            threshold={restaurant.low_stock_threshold ?? 5}
+            saving={saving}
+            save={save}
+          />
 
           <div className="tt-section">
             <div className="tt-section-head">

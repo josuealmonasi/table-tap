@@ -5,6 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { actingManager } from "@/lib/api-guard";
+import { releaseStock } from "@/lib/stock-service";
+import type { OrderLineItem } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -27,7 +29,7 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient();
   const { data: order } = await admin
     .from("orders")
-    .select("id, status, paid, stripe_payment_intent, stripe_refund_id")
+    .select("id, status, paid, stripe_payment_intent, stripe_refund_id, items")
     .eq("id", id)
     .eq("restaurant_id", actor.restaurantId)
     .maybeSingle();
@@ -85,6 +87,11 @@ export async function POST(req: NextRequest) {
     .eq("id", id)
     .eq("restaurant_id", actor.restaurantId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // The food was never served, so put it back on the shelf. After the status
+  // write, not before: a cancel that failed halfway would otherwise return
+  // stock for an order still standing.
+  await releaseStock(actor.restaurantId, (order.items ?? []) as OrderLineItem[]);
 
   await logEvent({
     restaurantId: actor.restaurantId,

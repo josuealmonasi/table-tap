@@ -88,6 +88,8 @@ export const DashboardIcon = House;
 export const SignOutIcon = SignOut;
 export const AccountIcon = User;
 export const CallWaiterIcon = Bell;
+/** The nav's bell. Same shape as the diner's, because it means the same thing. */
+export const NotificationsIcon = Bell;
 export const BillIcon = Receipt;
 export const TableIcon = Chair;
 export const SecureIcon = LockSimple;

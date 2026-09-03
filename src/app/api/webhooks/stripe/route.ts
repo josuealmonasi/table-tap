@@ -4,6 +4,8 @@ import { FOUNDING_SLOTS } from "@/lib/founding";
 import { closeSessionsFor } from "@/lib/table-session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readPlanName, subscriptionOutcome } from "@/lib/billing";
+import { releaseStock } from "@/lib/stock-service";
+import type { OrderLineItem } from "@/lib/types";
 import type Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -271,11 +273,31 @@ async function releaseAbandonedOrder(orderId: string): Promise<void> {
   const supabase = createAdminClient();
   await releaseReservation(orderId);
 
+  // Read the lines before the row goes, because the stock they reserved is
+  // worked out from them. Deleting first would lose the only record of what
+  // this checkout was holding, and the food would stay sold to nobody.
+  const { data: abandoned } = await supabase
+    .from("orders")
+    .select("restaurant_id, items")
+    .eq("id", orderId)
+    .eq("status", "pending_payment")
+    .eq("paid", false)
+    .maybeSingle();
+
   // Only ever remove an order that was never paid for.
-  await supabase
+  const { error } = await supabase
     .from("orders")
     .delete()
     .eq("id", orderId)
     .eq("status", "pending_payment")
     .eq("paid", false);
+
+  // Only after the row is really gone: releasing first and then failing to
+  // delete would hand the same stock back twice if this ran again.
+  if (!error && abandoned) {
+    await releaseStock(
+      abandoned.restaurant_id as string,
+      (abandoned.items ?? []) as OrderLineItem[],
+    );
+  }
 }

@@ -7,6 +7,7 @@ import { useT } from "@/lib/i18n/context";
 import { planLabel } from "@/lib/plan";
 import LanguageToggle from "@/components/customer/LanguageToggle";
 import NavDrawer from "./NavDrawer";
+import NotificationsMenu from "./NotificationsMenu";
 import { AccountIcon } from "@/components/ui/icons";
 import RestaurantMark from "@/components/ui/RestaurantMark";
 
@@ -99,6 +100,10 @@ export default function Navbar({
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <LanguageToggle className="tt-lang-toggle-nav" />
+          {/* Owner and manager only, matching the API and the table's policy:
+              nobody else can act on a dish running out, so nobody else is
+              told about one. */}
+          <NotificationsMenu enabled={role === "owner" || role === "manager"} />
           <div className="tt-user-menu" ref={menuRef}>
             <button
               type="button"
