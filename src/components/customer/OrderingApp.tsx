@@ -493,6 +493,15 @@ export default function OrderingApp({
         setLoading(false);
         return;
       }
+      // The kitchen has some, but not as many as they asked for. Cut the cart
+      // to what is really there and say so, rather than making them find the
+      // line and count it down themselves.
+      if (data.shortStock) {
+        cart.trimToStock(data.shortStock);
+        setNotice(`${data.error} ${t("cart.stockTrimmed")}`);
+        setLoading(false);
+        return;
+      }
       // An item sold out between loading the menu and checking out: mark it
       // sold out (it greys out and drops from the total) so the rest can pay.
       if (data.unavailableItemId) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { trimCartToStock, type StockLimit } from "@/lib/cart-stock";
 import type { OrderLineItem } from "@/lib/types";
 import { MAX_LINE_QTY } from "@/lib/pricing";
 
@@ -123,11 +124,30 @@ export function useCart(restaurantId: string) {
     );
   }
 
+  /**
+   * Cuts the cart down to what the kitchen still has, after the checkout said
+   * a dish fell short. Unlike `setQty` this may drop a line: when there are
+   * none left, a row asking for zero is worse than no row.
+   */
+  function trimToStock(limits: StockLimit[]) {
+    setItems(prev => trimCartToStock(prev, limits));
+  }
+
   function clear() {
     setItems([]);
   }
 
   const count = items.reduce((sum, i) => sum + i.qty, 0);
 
-  return { items, addItem, removeItem, setQty, updateItem, removeExtras, clear, count };
+  return {
+    items,
+    addItem,
+    removeItem,
+    setQty,
+    updateItem,
+    removeExtras,
+    trimToStock,
+    clear,
+    count,
+  };
 }

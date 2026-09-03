@@ -137,6 +137,30 @@ QR, not by the restaurant. An owner with the first on and the second off got a
 general-QR cart with no button on it at all. They are one column and one switch
 now, "Pagar al final / en la caja", on the paid plans.
 
+**A count that goes down only when the money lands sells the same portion
+twice.** Stock is taken at checkout, before the diner is sent to Stripe, and
+handed back by the webhook's abandon handler and by an order being cancelled —
+the same reserve-then-release shape coupons already had. Counting down on
+payment instead would let two tables each be sold the last portion while both
+sit on a payment page. `reserve_stock` locks the rows it touches in id order,
+which is what makes ten simultaneous attempts on one portion produce exactly one
+winner; the check that proves it is a concurrency test run by hand against the
+dev database, and it is the thing to re-run if that function is ever edited.
+
+**A dish the system hides is not a dish a person hid.** When stock reaches zero
+the dish comes off the menu automatically and `stock_auto_off` records that we
+did it, so giving the stock back can put it on again. Without that column, an
+abandoned checkout returned the count and left the dish invisible, and the only
+clue was a number that disagreed with the switch beside it. A dish the
+restaurant switched off by hand stays off — releasing stock never overrides
+somebody's own decision.
+
+**Storing a notification's sentence freezes it in one language.** The bell keeps
+`kind` and the facts, never the wording. A restaurant that reads the dashboard
+in Spanish and switches to English would otherwise find last week's warnings
+still in Spanish, because the row was written by a server that had no idea who
+would read it.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`

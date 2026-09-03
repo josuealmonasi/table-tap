@@ -641,6 +641,43 @@ export async function seedMock(pg) {
     ],
   );
 
+  // ── Stock, and the bell that watches it ────────────────────────────────
+  // A few dishes are counted so the demo shows what tracked stock looks like:
+  // one comfortable, one about to run out, one already gone. The rest stay
+  // untracked, which is how most of a real menu looks.
+  const counted = sample(
+    (await pg.query("select id, name from menu_items where restaurant_id = $1 and not is_addon", [rid])).rows,
+    3,
+  );
+  if (counted.length === 3) {
+    await pg.query("update menu_items set stock = 24 where id = $1", [counted[0].id]);
+    await pg.query("update menu_items set stock = 3 where id = $1", [counted[1].id]);
+    await pg.query(
+      "update menu_items set stock = 0, available = false, stock_auto_off = true where id = $1",
+      [counted[2].id],
+    );
+    await pg.query(
+      "update restaurants set low_stock_alerts_enabled = true, low_stock_threshold = 5 where id = $1",
+      [rid],
+    );
+    // The warnings those two counts would have raised, so the bell has
+    // something in it the first time anybody opens the demo. One unread.
+    await bulkInsert(
+      pg,
+      "notifications",
+      ["restaurant_id", "kind", "data", "read_at"],
+      [
+        [rid, "low_stock", JSON.stringify({ itemId: counted[1].id, name: counted[1].name, stock: 3 }), null],
+        [
+          rid,
+          "out_of_stock",
+          JSON.stringify({ itemId: counted[2].id, name: counted[2].name, stock: 0 }),
+          new Date().toISOString(),
+        ],
+      ],
+    );
+  }
+
   return {
     restaurantId: rid,
     tableId: tables[0].id,

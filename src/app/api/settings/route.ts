@@ -28,10 +28,14 @@ const OWNER_FIELDS = new Set([
   "allow_pay_later",
   "badges_enabled",
   "deals_tab_enabled",
+  "low_stock_alerts_enabled",
+  "low_stock_threshold",
 ]);
 // A manager runs the floor, so they decide whether the floor is being told
 // about work waiting — the same reasoning that gives them the kill switch.
 const MANAGER_FIELDS = new Set([
+  "low_stock_alerts_enabled",
+  "low_stock_threshold",
   "tax_pct",
   "tax_show_breakdown",
   "accepting_orders",
@@ -97,6 +101,14 @@ export async function POST(req: NextRequest) {
   }
   if ("tax_pct" in update) {
     update.tax_pct = Math.min(100, Math.max(0, Number(update.tax_pct) || 0));
+  }
+  // Same range the column's constraint allows, so a fat-fingered number comes
+  // back as a clamped setting rather than a 500 from Postgres.
+  if ("low_stock_threshold" in update) {
+    update.low_stock_threshold = Math.min(
+      999,
+      Math.max(0, Math.floor(Number(update.low_stock_threshold) || 0)),
+    );
   }
 
   const { error } = await createAdminClient()
