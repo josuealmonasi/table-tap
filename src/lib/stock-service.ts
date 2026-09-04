@@ -1,4 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { can } from "@/lib/plan";
+import { getPlan } from "@/lib/plan-server";
 import {
   parseReserveResult,
   stockDemand,
@@ -25,6 +27,22 @@ import type { OrderLineItem } from "@/lib/types";
 const NOTHING_TO_DO: ReserveResult = { ok: true, short: [], low: [] };
 
 /**
+ * Whether this restaurant's plan counts stock at all.
+ *
+ * Asked on both halves, so they agree: a restaurant that drops to the free tier
+ * stops having its counts spent AND stops having them given back. Gating only
+ * the taking would hand stock back that was never taken, and gating only the
+ * giving would strand it.
+ *
+ * A restaurant with no plan row is treated as free — the same answer the rest
+ * of the app gives when it cannot prove otherwise.
+ */
+async function countsStock(restaurantId: string): Promise<boolean> {
+  const plan = await getPlan(restaurantId);
+  return plan ? can(plan.limits, "inventory") : false;
+}
+
+/**
  * Take what the order needs, all or nothing.
  *
  * Returns `ok: false` with the shortfalls when the kitchen cannot fill it, so
@@ -37,6 +55,7 @@ export async function reserveStock(
 ): Promise<ReserveResult> {
   const demand = stockDemand(lines);
   if (demand.length === 0) return NOTHING_TO_DO;
+  if (!(await countsStock(restaurantId))) return NOTHING_TO_DO;
 
   const { data, error } = await createAdminClient().rpc("reserve_stock", {
     p_restaurant: restaurantId,
@@ -55,7 +74,8 @@ export async function reserveStock(
  * Give an order's stock back.
  *
  * Safe to call for an order that never reserved anything: untracked dishes are
- * skipped inside the function, and an empty cart never reaches it.
+ * skipped inside the function, an empty cart never reaches it, and a tier that
+ * does not count stock never took any to give back.
  */
 export async function releaseStock(
   restaurantId: string,
@@ -63,6 +83,7 @@ export async function releaseStock(
 ): Promise<void> {
   const demand = stockDemand(lines);
   if (demand.length === 0) return;
+  if (!(await countsStock(restaurantId))) return;
 
   await createAdminClient().rpc("release_stock", {
     p_restaurant: restaurantId,

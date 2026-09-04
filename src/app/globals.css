@@ -745,8 +745,20 @@ a.tt-btn {
 }
 
 @media (min-width: 1025px) {
+  /* Two columns that pack, rather than two columns that line up.
+     As a grid, every row was as tall as its tallest card, so an 84px Pagos card
+     sat beside a 579px Restaurante card and left five hundred pixels of hole
+     under it — seven cards of heights 579, 84, 196, 469, 128, 299 and 444 read
+     as pieces of different sizes rather than a page. Columns let each card
+     start where the last one ended. */
   .tt-cols {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: block;
+    columns: 2;
+    column-gap: 16px;
+  }
+  .tt-cols > * {
+    break-inside: avoid;
+    margin-bottom: 16px;
   }
   /* A card that should keep the full width inside a .tt-cols grid. */
   .tt-cols-full {
@@ -4048,6 +4060,17 @@ a.tt-btn {
 .tt-prodform-row {
   display: flex;
   gap: 8px;
+  /* A hint sits level with the field it describes. Left at the default
+     `stretch`, the hint's box grew to the height of the row and its words
+     rendered at the top of it, so every hint floated above the middle of its
+     control — nothing overlapped, nothing was cut off, it just looked unset. */
+  align-items: center;
+}
+/* Except where the row holds stacked fields: two label-over-input columns of
+   unequal height should start together at the top, not drift to a shared
+   middle. Scoped with :has() so the rule above still covers every other row. */
+.tt-prodform-row:has(> .tt-field) {
+  align-items: stretch;
 }
 /* Save stays in view. The product form runs long — modifiers, extras, dietary
    tags — so the actions scrolled off exactly like add-to-cart did on the

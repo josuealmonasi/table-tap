@@ -1212,6 +1212,18 @@ on conflict (plan) do update set
   analytics_days         = excluded.analytics_days,
   log_days               = excluded.log_days;
 
+-- ── Inventory, on the paid tiers ────────────────────────────────────────────
+-- Counting stock is the difference between a menu and a kitchen that knows what
+-- it has, and it is the kind of thing a restaurant only wants once it is busy
+-- enough to run out — which is the same point it outgrows the free tier.
+--
+-- Added after the tiers were seeded, so it needs its own backfill: `default
+-- false` gives every existing row the free tier's answer, and the update below
+-- turns it on wherever it belongs.
+alter table plan_limits add column if not exists allows_inventory
+  boolean not null default false;
+update plan_limits set allows_inventory = true where plan in ('servicio', 'casa', 'grupo');
+
 alter table plan_limits enable row level security;
 
 -- Every signed-in user may read the tiers: the plan screen shows what the next

@@ -175,7 +175,55 @@ export const AUDIT = `(() => {
     }
   }
 
-  // 5. The page itself running off the side.
+  // 5. A label sitting at the top of the control it belongs to.
+  //
+  // A flex row left at its default "align-items: stretch" makes a short text
+  // child as tall as the row and paints its words at the top, so the hint
+  // beside a field floats level with the field's upper edge instead of its
+  // middle. Nothing overlaps and nothing is cut off, so every other check here
+  // passes; it just looks like nobody laid it out.
+  //
+  // Measured on the text itself, not its box: a stretched span's box IS the
+  // full height, which is exactly what hides the fault from a box comparison.
+  for (const row of all) {
+    const rs = getComputedStyle(row);
+    if (rs.display !== "flex" && rs.display !== "inline-flex") continue;
+    if (rs.flexDirection.startsWith("column")) continue;
+    if (rs.alignItems !== "stretch" && rs.alignItems !== "normal") continue;
+
+    const kids = [...row.children].filter(vis);
+    if (kids.length < 2) continue;
+    if (row.getBoundingClientRect().height < 24) continue;
+
+    const isControl = el =>
+      /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(el.tagName) ||
+      el.querySelector("input, select, textarea, button");
+    const control = kids.find(isControl);
+    if (!control) continue;
+
+    for (const kid of kids) {
+      if (kid === control || isControl(kid)) continue;
+      const words = kid.textContent.trim();
+      if (words.length < 8) continue;
+
+      const range = document.createRange();
+      range.selectNodeContents(kid);
+      const textBox = range.getBoundingClientRect();
+      range.detach?.();
+      if (textBox.height === 0) continue;
+
+      const box = control.getBoundingClientRect();
+      // Only when the words could sit level and simply do not: a block taller
+      // than its control has nowhere to centre to.
+      if (textBox.height > box.height + 2) continue;
+      const off = Math.round(Math.abs((textBox.top + textBox.bottom) / 2 - (box.top + box.bottom) / 2));
+      if (off > 4) {
+        faults.push({ kind: "descentrado", text: words.slice(0, 40), w: off });
+      }
+    }
+  }
+
+  // 6. The page itself running off the side.
   const doc = document.documentElement;
   if (doc.scrollWidth > window.innerWidth + 1) {
     const wide = all.find(el => el.getBoundingClientRect().right > window.innerWidth + 1);

@@ -15,6 +15,8 @@ interface SectionEditorProps {
   restaurantId: string;
   section: Category | null; // null = "Uncategorized" catch-all
   products: MenuItem[];
+  /** Whether the plan includes counting stock. */
+  inventoryAllowed?: boolean;
   addons: MenuItem[];
   links: Record<string, string[]>;
   currency: string;
@@ -51,6 +53,7 @@ export default function SectionEditor({
   restaurantId,
   section,
   products,
+  inventoryAllowed = false,
   addons,
   links,
   currency,
@@ -194,6 +197,7 @@ export default function SectionEditor({
             const addForm = (
               <ProductForm
                 restaurantId={restaurantId}
+                inventoryAllowed={inventoryAllowed}
                 addons={addons}
                 currency={currency}
                 submitLabel={t("menu.addProduct")}
@@ -240,6 +244,7 @@ export default function SectionEditor({
         {products.map((p, i) => (
           <ProductRow
             restaurantId={restaurantId}
+            inventoryAllowed={inventoryAllowed}
             key={p.id}
             product={p}
             addons={addons}
