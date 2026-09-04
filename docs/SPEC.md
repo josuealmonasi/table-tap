@@ -90,6 +90,13 @@ is paid rides the same track and carries its debt on the bills screen instead.
 - **Discounts and write-offs** are requests a waiter raises and a manager
   approves — `discount_requests`, `write_off_requests` — so the person who gives
   money away is never the person who asks.
+- **`payments` is the ledger of money that arrived**, as opposed to
+  `orders.paid`, which only says an order is settled. That boolean is enough
+  while a payment always covers whole orders and stops being enough the moment a
+  table divides a bill: a third of MX$100 across orders of MX$60 and MX$40 is an
+  amount belonging to no order. Every route that marks an order paid records the
+  payment in the same breath; two invariants and `pnpm money` are what keep the
+  two records from drifting apart.
 - **Corte de caja**: the day's takings by whoever took them, laid out as a sum.
 
 ## Data model
@@ -101,7 +108,7 @@ Twenty-six tables, in groups:
   `plan_limits`, `user_logs`
 - **The menu** — `menus`, `categories`, `menu_items`, `item_addons`,
   `dietary_tags`, `icon_groups`, `icon_group_items`
-- **Selling** — `orders`, `table_sessions`, `restaurant_tables`,
+- **Selling** — `orders`, `payments`, `table_sessions`, `restaurant_tables`,
   `service_requests`, `dish_ratings`
 - **Offers** — `promotions`, `promotion_items`, `coupons`, `coupon_redemptions`
 - **Money asked for** — `discount_requests`, `write_off_requests`
@@ -163,6 +170,7 @@ The gate, all of which must pass before anything ships:
 | `pnpm layout` | every screen reads at 390 / 820 / 1280 |
 | `pnpm promises` | no screen offers what the system will refuse |
 | `pnpm dialogs` | every dialog, found by opening it rather than by listing it |
+| `pnpm money` | the ledger and the orders tell the same story |
 
 Two rules behind them, both learned the hard way. **A check only covers what is
 on its list** — invariants now fail when a route or screen exists that nothing

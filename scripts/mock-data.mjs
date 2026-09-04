@@ -455,6 +455,23 @@ export async function seedMock(pg) {
     }
   }
 
+  // ── The ledger for everything already settled ─────────────────────────
+  // The demo has to look like a restaurant that has been trading, and money
+  // received is part of that: the till card and the daily count both read from
+  // what was actually taken, not from which orders are ticked.
+  await pg.query(
+    `insert into payments (restaurant_id, order_id, session_id, amount, method, created_at)
+     select o.restaurant_id, o.id, o.session_id, o.total,
+            case when coalesce(o.pay_method, '') = 'cash' then 'cash' else 'card' end,
+            o.created_at
+       from orders o
+      where o.restaurant_id = $1
+        and o.paid
+        and o.total > 0
+        and not exists (select 1 from payments p where p.order_id = o.id)`,
+    [rid],
+  );
+
   // ── A written-off bill: the customer left without paying ───────────────
   const walkoutTable = tables.find(t => !openTables.includes(t)) ?? tables[0];
   const walkoutLines = buildLines(products);

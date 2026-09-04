@@ -1903,3 +1903,58 @@ grant execute on function public.release_stock(uuid, jsonb) to service_role;
 -- secret we are keeping from diners in the first place: the checkout tells
 -- them "only 5 left" the moment they ask for six. Kept in one place so the next
 -- reader knows it was weighed rather than missed.
+
+-- ── Money received ──────────────────────────────────────────────────────────
+-- What was actually paid, as opposed to which orders are settled.
+--
+-- `orders.paid` is a boolean, so the only thing the system could say was "this
+-- order is done". That is enough while a payment always covers whole orders,
+-- and it stops being enough the moment a table divides a bill: paying a third
+-- of MX$100 across orders of MX$60 and MX$40 is an amount that belongs to no
+-- order at all.
+--
+-- Every row here is money that arrived. `order_id` says which order it settled
+-- when it settled one; a share of a divided bill will carry a session and no
+-- order. Nothing is deleted — a refund is its own negative-sense record, never
+-- an edit of the row that says money came in.
+create table if not exists payments (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  -- Kept when the order or the sitting is removed: the money still happened.
+  order_id      uuid references orders(id) on delete set null,
+  session_id    uuid references table_sessions(id) on delete set null,
+  amount        numeric not null check (amount > 0),
+  method        text not null check (method in ('card', 'cash')),
+  stripe_payment_intent text,
+  -- Who took it. Null when the diner paid online and nobody was holding a till.
+  actor_email   text,
+  created_at    timestamptz not null default now()
+);
+create index if not exists payments_restaurant_idx
+  on payments(restaurant_id, created_at desc);
+create index if not exists payments_order_idx on payments(order_id);
+create index if not exists payments_session_idx on payments(session_id);
+
+alter table payments enable row level security;
+
+-- The whole team reads them: a cashier's own takings and the day's count are
+-- both built from this. Nobody writes from a browser — money is recorded by
+-- the routes that took it, with the secret key.
+drop policy if exists "team reads payments" on payments;
+create policy "team reads payments"
+  on payments for select using (works_at(restaurant_id));
+
+revoke all on payments from anon;
+grant select on payments to authenticated;
+
+-- Backfill: one payment for every order already settled, so the ledger agrees
+-- with the boolean from its first day. Idempotent, because this file re-runs —
+-- an order that already has a payment is skipped rather than doubled.
+insert into payments (restaurant_id, order_id, session_id, amount, method, created_at)
+select o.restaurant_id, o.id, o.session_id, o.total,
+       case when coalesce(o.pay_method, '') = 'cash' then 'cash' else 'card' end,
+       o.created_at
+  from orders o
+ where o.paid
+   and o.total > 0
+   and not exists (select 1 from payments p where p.order_id = o.id);
