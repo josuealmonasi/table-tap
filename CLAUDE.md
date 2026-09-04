@@ -17,6 +17,13 @@ the simpler one.
   script output — all English. The only Spanish in this repo is text a customer
   or a restaurant actually reads: `src/lib/i18n/es.ts` and `src/lib/legal/*`.
   Those stay Spanish, and every new UI string needs both languages.
+- **A big change updates `docs/SPEC.md` in the same PR.** A new feature, a new
+  table, a new role, a new plan flag, a change to how money moves or how a
+  screen is checked — if it changes what the app *is*, the spec says so before
+  the PR merges. It went stale once by four months and ended up describing a
+  prototype: it claimed the menu was edited by SQL, that i18n was future work,
+  and asked open questions that had all been answered. A spec nobody trusts is
+  worse than none, because the next person believes it.
 
 ## File & folder naming
 
