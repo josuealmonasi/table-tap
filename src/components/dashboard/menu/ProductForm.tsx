@@ -18,6 +18,9 @@ interface ProductFormProps {
   restaurantId: string;
   /** The product being edited; omit to add a new one. */
   initial?: Partial<MenuItem>;
+  /** Whether the plan includes counting stock. False shows the field switched
+   *  off with what unlocks it, rather than taking a number nothing will act on. */
+  inventoryAllowed?: boolean;
   addons: MenuItem[];
   selectedAddonIds?: string[];
   currency: string;
@@ -30,6 +33,7 @@ interface ProductFormProps {
 export default function ProductForm({
   restaurantId,
   initial,
+  inventoryAllowed = false,
   addons,
   selectedAddonIds = [],
   currency,
@@ -115,7 +119,9 @@ export default function ProductForm({
           .filter(g => g.label && g.options.length > 0),
         dietary,
         discount_pct: pct,
-        stock: stock.trim() === "" ? null : Math.max(0, Math.floor(Number(stock) || 0)),
+        stock: !inventoryAllowed || stock.trim() === ""
+          ? null
+          : Math.max(0, Math.floor(Number(stock) || 0)),
       },
       picked,
     );
@@ -182,24 +188,21 @@ export default function ProductForm({
           inputMode="numeric"
           aria-label={t("menu.stock")}
           placeholder={t("menu.stockPlaceholder")}
-          value={stock}
+          disabled={!inventoryAllowed}
+          value={inventoryAllowed ? stock : ""}
           onChange={e => {
-            // A dish that has sold out really does hold zero, and it opens the
-            // form showing it — so the zero already there is left alone and
-            // only a typed one is refused. Otherwise a sold-out dish could not
-            // have its name corrected without being restocked first.
-            // Zero is valid to HOLD — it is what selling out leaves behind,
+            // Zero is valid to hold — it is what selling out leaves behind,
             // and the form opens on it — so the refusal lives here rather than
             // in `min`. As min="1" the field made a sold-out dish's whole form
             // invalid, and its name could not be corrected until it was
-            // restocked. Here, only a zero somebody types is refused.
+            // restocked. Only a zero somebody types is refused.
             const next = e.target.value;
             if (next !== "" && Number(next) === 0) return;
             setStock(next);
           }}
         />
         <span className="tt-muted" style={{ fontSize: 13 }}>
-          {t("menu.stockHint")}
+          {inventoryAllowed ? t("menu.stockHint") : t("menu.stockLocked")}
         </span>
       </div>
 

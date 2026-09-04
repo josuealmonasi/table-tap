@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import { can } from "@/lib/plan";
+import { getPlan } from "@/lib/plan-server";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership, MANAGES } from "@/lib/membership";
 import MenuEditor from "@/components/dashboard/menu/MenuEditor";
@@ -53,6 +55,12 @@ export default async function MenuEditorPage({
   const menu = ((menus as Menu[]) ?? []).find(m => menuSlug(m.name) === slug);
   if (!menu) redirect("/dashboard");
 
+  // Counting stock comes with a paid plan. The field stays on screen and
+  // switched off, saying what unlocks it, rather than a number an owner can
+  // type that nothing will ever act on.
+  const plan = await getPlan(restaurant.id);
+  const inventoryAllowed = plan ? can(plan.limits, "inventory") : false;
+
   return (
     <ConfirmProvider>
       <MenuEditor
@@ -61,6 +69,7 @@ export default async function MenuEditorPage({
         menuName={menu.name}
         iconGroups={(iconGroups as StoredIconGroup[]) ?? []}
         dietaryTags={(dietary as StoredDietaryTag[]) ?? []}
+        inventoryAllowed={inventoryAllowed}
       />
     </ConfirmProvider>
   );

@@ -13,6 +13,8 @@ import ProductForm from "./ProductForm";
 import { DeleteIcon, DuplicateIcon, EditIcon, MoveToIcon } from "@/components/ui/icons";
 
 interface ProductRowProps {
+  /** Whether the plan includes counting stock. */
+  inventoryAllowed?: boolean;
   restaurantId: string;
   product: MenuItem;
   addons: MenuItem[];
@@ -49,6 +51,7 @@ export default function ProductRow({
   onDelete,
   onDuplicate,
   onToggleAvailable,
+  inventoryAllowed = false,
   modalForms = true,
   categories,
   onMove,
@@ -71,6 +74,7 @@ export default function ProductRow({
   const editForm = (
     <ProductForm
       restaurantId={restaurantId}
+      inventoryAllowed={inventoryAllowed}
       initial={product}
       addons={addons}
       selectedAddonIds={linkedAddonIds}

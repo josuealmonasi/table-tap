@@ -31,7 +31,7 @@
       "paragraphs": [
         "Se ofrecen 30 días de prueba sin necesidad de tarjeta, sobre el plan Servicio. La prueba se otorga por una sola ocasión por restaurante.",
         "Al concluir, si no se contrata un plan de paga, el restaurante pasa al plan gratuito.",
-        "No se elimina información alguna al terminar la prueba: el menú, las mesas y los pedidos permanecen disponibles. Lo que deja de estar disponible son las funciones propias del plan de paga, incluido el servicio en mesa."
+        "No se elimina información alguna al terminar la prueba: el menú, las mesas y los pedidos permanecen disponibles. Lo que deja de estar disponible son las funciones propias del plan de paga, entre ellas el servicio en mesa y el conteo de existencias. Las existencias que ya haya capturado se conservan, pero dejan de descontarse con cada pedido y los platillos dejan de retirarse solos de la carta al llegar a cero: la disponibilidad vuelve a depender del interruptor de cada platillo."
       ]
     },
     {

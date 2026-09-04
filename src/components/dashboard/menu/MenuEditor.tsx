@@ -31,6 +31,8 @@ interface MenuEditorProps {
   iconGroups?: StoredIconGroup[];
   /** The restaurant's dietary / allergen tags, from the server. */
   dietaryTags?: StoredDietaryTag[];
+  /** Whether the plan includes counting stock. */
+  inventoryAllowed?: boolean;
 }
 
 /**
@@ -44,6 +46,7 @@ export default function MenuEditor({
   modalForms = true,
   iconGroups = [],
   dietaryTags = [],
+  inventoryAllowed = false,
 }: MenuEditorProps) {
   const t = useT();
   const editor = useMenuEditor(restaurant.id);
@@ -161,6 +164,7 @@ export default function MenuEditor({
                 while a search filters the view (indices wouldn't be real). */}
                   {shownSections.map((section, i) => (
                     <SectionEditor
+            inventoryAllowed={inventoryAllowed}
                       restaurantId={restaurant.id}
                       key={section.id}
                       section={section}

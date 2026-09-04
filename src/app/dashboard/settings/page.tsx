@@ -17,6 +17,10 @@ export default async function SettingsPage() {
   const plan = await getPlan(membership.restaurant.id);
   const deferredPay = plan ? can(plan.limits, "deferredPayment") : false;
 
+  // Counting stock is a paid feature. Shown on every plan and switched off on
+  // the free one, so the owner can see what upgrading buys them.
+  const inventory = plan ? can(plan.limits, "inventory") : false;
+
   // The same thing the diner's menu computes, so Settings can tell the owner
   // exactly what their customer is seeing. Without this they turned on "pay at
   // the end" and nobody warned them online payment did not exist.
@@ -31,6 +35,7 @@ export default async function SettingsPage() {
         restaurant={membership.restaurant}
         role={membership.role}
         deferredPayAllowed={deferredPay}
+        inventoryAllowed={inventory}
         cardsEnabled={cardsEnabled}
       />
     </ConfirmProvider>

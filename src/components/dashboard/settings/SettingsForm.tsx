@@ -19,6 +19,8 @@ interface SettingsFormProps {
   role: Role;
   /** Whether the plan includes paying at the end. False leaves it visible and off. */
   deferredPayAllowed?: boolean;
+  /** Whether the plan includes counting stock. */
+  inventoryAllowed?: boolean;
   /** Whether a Stripe account is connected and charging. Decides what the diner sees. */
   cardsEnabled?: boolean;
 }
@@ -32,6 +34,7 @@ export default function SettingsForm({
   restaurant,
   role,
   deferredPayAllowed = false,
+  inventoryAllowed = false,
   cardsEnabled = false,
 }: SettingsFormProps) {
   const t = useT();
@@ -265,20 +268,15 @@ export default function SettingsForm({
             </div>
           )}
 
-          {isOwner && <PaymentsCard />}
-
+          {/* Order matters here: the cards flow down one column and into the
+              next, so keeping a theme together also decides what shares a
+              column. How the place looks comes first — name, logo, cover —
+              then how it takes money and runs. */}
           {isOwner && <LogoCard restaurant={restaurant} />}
 
           {isOwner && <CoverCard restaurant={restaurant} />}
 
-          {/* The manager's too. Running out of a dish is the floor's problem
-              before it is the owner's, and they are who reorders. */}
-          <InventoryCard
-            alertsEnabled={restaurant.low_stock_alerts_enabled === true}
-            threshold={restaurant.low_stock_threshold ?? 5}
-            saving={saving}
-            save={save}
-          />
+          {isOwner && <PaymentsCard />}
 
           <div className="tt-section">
             <div className="tt-section-head">
@@ -336,6 +334,16 @@ export default function SettingsForm({
               </div>
             </form>
           </div>
+
+          {/* The manager's too. Running out of a dish is the floor's problem
+              before it is the owner's, and they are who reorders. */}
+          <InventoryCard
+            alertsEnabled={restaurant.low_stock_alerts_enabled === true}
+            threshold={restaurant.low_stock_threshold ?? 5}
+            allowed={inventoryAllowed}
+            saving={saving}
+            save={save}
+          />
 
           <div className="tt-section">
             <div className="tt-section-head">

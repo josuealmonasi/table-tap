@@ -40,6 +40,8 @@ export interface PlanLimits {
   allows_deferred_payment?: boolean;
   allows_promotions: boolean;
   allows_coupons: boolean;
+  /** Counting stock, and the low-stock warnings that come with it. Paid only. */
+  allows_inventory?: boolean;
   allows_staff_discounts: boolean;
   analytics_days: number;
   log_days: number;
@@ -54,7 +56,8 @@ export type PlanFeature =
   | "coupons"
   | "staffDiscounts"
   | "menuSchedules"
-  | "deferredPayment";
+  | "deferredPayment"
+  | "inventory";
 
 const FEATURE_COLUMN: Record<PlanFeature, keyof PlanLimits> = {
   dineIn: "allows_dine_in",
@@ -63,6 +66,7 @@ const FEATURE_COLUMN: Record<PlanFeature, keyof PlanLimits> = {
   staffDiscounts: "allows_staff_discounts",
   menuSchedules: "allows_menu_schedules",
   deferredPayment: "allows_deferred_payment",
+  inventory: "allows_inventory",
 };
 
 /** Whether this tier includes a feature at all. */

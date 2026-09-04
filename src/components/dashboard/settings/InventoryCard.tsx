@@ -15,11 +15,16 @@ import type { SettingsInput } from "@/hooks/useSettings";
 export default function InventoryCard({
   alertsEnabled,
   threshold,
+  allowed = true,
   saving,
   save,
 }: {
   alertsEnabled: boolean;
   threshold: number;
+  /** Whether the plan includes counting stock. False leaves the card visible
+   *  and off, saying what unlocks it — the same shape "pay at the end" uses.
+   *  Hiding it leaves an owner hunting for a feature nobody named. */
+  allowed?: boolean;
   saving: boolean;
   save: (input: Partial<SettingsInput>) => Promise<boolean>;
 }) {
@@ -53,14 +58,14 @@ export default function InventoryCard({
         {/* The name is the section heading directly above; repeating it here
             would have the screen say the same thing twice in a row. */}
         <span className="tt-muted" style={{ fontSize: 12 }}>
-          {t("dash.stockAlertsHint")}
+          {allowed ? t("dash.stockAlertsHint") : t("dash.stockAlertsLocked")}
         </span>
         <span className="tt-switch">
           <input
             type="checkbox"
             aria-label={t("dash.stockAlertsTitle")}
-            checked={enabled}
-            disabled={saving}
+            checked={allowed && enabled}
+            disabled={saving || !allowed}
             onChange={e => toggle(e.target.checked)}
           />
           <span className="tt-switch-track" />
@@ -69,7 +74,7 @@ export default function InventoryCard({
 
       {/* Only once the alerts are on: a threshold that warns nobody is a
           question the screen has no reason to ask. */}
-      {enabled && (
+      {allowed && enabled && (
         <div style={{ marginTop: 12 }}>
           <label className="tt-field" style={{ maxWidth: 260 }}>
             <span className="tt-mod-label">{t("dash.stockThreshold")}</span>
