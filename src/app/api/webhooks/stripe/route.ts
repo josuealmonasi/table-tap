@@ -37,6 +37,94 @@ export async function POST(req: NextRequest) {
     // A bill settlement pays for several orders at once; a cart checkout pays
     // for the one it just created. Both arrive here, and only here is a
     // payment believed — a browser coming back from Stripe proves nothing.
+    // ── A share of a divided bill ─────────────────────────────────────────
+    //
+    // Two things arrive together: the share the table agreed on, which belongs
+    // to no single order, and whatever this diner ordered afterwards, which
+    // belongs entirely to them. The share is recorded against the sitting; the
+    // later orders are settled the ordinary way.
+    //
+    // Only when the last share lands does the food the table divided become
+    // paid — before that, the bill is genuinely part-paid, and the floor should
+    // see exactly that rather than a table that looks settled and is not.
+    const splitId = session.metadata?.split_id;
+    if (splitId && session.payment_status === "paid") {
+      const db = createAdminClient();
+      const shareNo = Number(session.metadata?.split_share ?? -1);
+      const shareAmount = Number(session.metadata?.split_amount ?? 0);
+
+      const { data: split } = await db
+        .from("bill_splits")
+        .select("id, restaurant_id, session_id, shares, status, locked_at")
+        .eq("id", splitId)
+        .maybeSingle();
+
+      if (split) {
+        // Their seat, marked once — a webhook Stripe repeats must not record
+        // the same money twice.
+        const { data: claimed } = await db
+          .from("bill_split_claims")
+          .update({ paid_at: new Date().toISOString() })
+          .eq("split_id", splitId)
+          .eq("share_no", shareNo)
+          .is("paid_at", null)
+          .select("share_no");
+
+        if (claimed?.length) {
+          await recordPayment({
+            restaurantId: split.restaurant_id as string,
+            sessionId: split.session_id as string,
+            amount: shareAmount,
+            method: "card",
+            stripePaymentIntent:
+              typeof session.payment_intent === "string" ? session.payment_intent : null,
+          });
+
+          // Anything they ordered after the freeze is theirs, and settles now.
+          const ownIds = (session.metadata?.settle_order_ids ?? "")
+            .split(",").map(x => x.trim()).filter(Boolean);
+          if (ownIds.length > 0) {
+            const { data: own } = await db
+              .from("orders")
+              .update({ paid: true, pay_method: "card" })
+              .in("id", ownIds)
+              .eq("paid", false)
+              .select("id, total, session_id, restaurant_id");
+            await recordPayments(
+              (own ?? []).map(o => ({
+                restaurantId: o.restaurant_id as string,
+                orderId: o.id as string,
+                sessionId: o.session_id as string | null,
+                amount: Number(o.total),
+                method: "card" as const,
+              })),
+            );
+          }
+
+          // The last share closes the pot: everything the table divided is
+          // paid for, so the orders it covered stop being owed.
+          const { count: unpaidShares } = await db
+            .from("bill_split_claims")
+            .select("share_no", { count: "exact", head: true })
+            .eq("split_id", splitId)
+            .is("paid_at", null);
+
+          if ((unpaidShares ?? 0) === 0) {
+            const { data: covered } = await db
+              .from("orders")
+              .update({ paid: true, pay_method: "card" })
+              .eq("session_id", split.session_id)
+              .eq("paid", false)
+              .lt("created_at", split.locked_at as string)
+              .select("session_id");
+            await db.from("bill_splits").update({ status: "done" }).eq("id", splitId);
+            await closeSessionsFor(covered ?? [], "paid");
+          }
+        }
+      }
+      return NextResponse.json({ received: true });
+    }
+
     const settleIds = (session.metadata?.settle_order_ids ?? "")
       .split(",")
       .map(id => id.trim())

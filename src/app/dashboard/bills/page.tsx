@@ -4,7 +4,7 @@ import { requireSettles } from "@/lib/page-guard";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import BillsPanel from "@/components/dashboard/BillsPanel";
 import UserLogs from "@/components/dashboard/staff/UserLogs";
-import { openBills } from "@/lib/open-bills";
+import { openBills, withSplits } from "@/lib/open-bills";
 import { currentUser } from "@/lib/current-user";
 import { startOfLocalDay } from "@/lib/day-window";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
@@ -34,7 +34,7 @@ export default async function BillsPage() {
     db
       .from("orders")
       .select(
-        "id, table_id, table_label, items, total, discount, paid, written_off, status, coupon_code, customer_name, created_at",
+        "id, session_id, table_id, table_label, items, total, discount, paid, written_off, status, coupon_code, customer_name, created_at",
       )
       .eq("restaurant_id", r.id)
       .eq("paid", false)
@@ -81,10 +81,42 @@ export default async function BillsPage() {
     : { data: null };
   const till = myPayments ? tillFrom(myPayments) : EMPTY_TILL;
 
+  // Tables part-way through dividing their bill, and what has already come in.
+  // A share is money against the sitting rather than any order, so without this
+  // the floor would see the whole amount still owing and could take it again.
+  // The select asks for the columns the screen needs, which is fewer than an
+  // Order has — so the row shape is named here rather than asserted into one.
+  type BillRow = Order & { session_id?: string | null };
+  const rows = (orders ?? []) as unknown as BillRow[];
+  const sessionOf = new Map(
+    rows.filter(o => o.session_id).map(o => [o.id, o.session_id as string]),
+  );
+  const { data: liveSplits } = await db
+    .from("bill_splits")
+    .select("id, session_id, shares, bill_split_claims(paid_at, amount)")
+    .eq("restaurant_id", r.id)
+    .eq("status", "locked");
+
+  type LiveSplit = {
+    session_id: string;
+    shares: number;
+    bill_split_claims: { paid_at: string | null; amount: number }[] | null;
+  };
+  const splits = ((liveSplits ?? []) as unknown as LiveSplit[]).map(s => {
+    const claims = s.bill_split_claims ?? [];
+    const settled = claims.filter(c => c.paid_at);
+    return {
+      session_id: s.session_id,
+      shares: s.shares,
+      paidShares: settled.length,
+      collected: settled.reduce((sum, c) => sum + Number(c.amount), 0),
+    };
+  });
+
   return (
     <ConfirmProvider>
       <BillsPanel
-        bills={openBills((orders ?? []) as Order[])}
+        bills={withSplits(openBills(rows as Order[]), splits, sessionOf)}
         requests={MANAGES(membership.role) ? (requests ?? []) : []}
         writeOffs={MANAGES(membership.role) ? (writeOffs ?? []) : []}
         currency={r.currency}

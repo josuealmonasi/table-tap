@@ -90,6 +90,16 @@ is paid rides the same track and carries its debt on the bills screen instead.
 - **Discounts and write-offs** are requests a waiter raises and a manager
   approves — `discount_requests`, `write_off_requests` — so the person who gives
   money away is never the person who asks.
+- **A table can divide its bill evenly.** It stays a proposal until every
+  person has joined, and the last one to join **freezes** it: the table divides
+  what it owed at that instant, the odd cent goes to whoever asked (MX$10
+  between three is 3.34 / 3.33 / 3.33), and anything ordered afterwards belongs
+  to whoever ordered it. Freezing is what lets a table keep ordering while the
+  others are paying, which is money that would otherwise be turned away. Food
+  and the service charge are divided; the tip is each person's own. A share is
+  money against the *sitting* rather than any order, so the floor's bill screen
+  says how much of it is already in — a waiter taking cash for a table that has
+  half-paid by card is how the same money gets collected twice.
 - **`payments` is the ledger of money that arrived**, as opposed to
   `orders.paid`, which only says an order is settled. That boolean is enough
   while a payment always covers whole orders and stops being enough the moment a
@@ -109,7 +119,7 @@ Twenty-six tables, in groups:
 - **The menu** — `menus`, `categories`, `menu_items`, `item_addons`,
   `dietary_tags`, `icon_groups`, `icon_group_items`
 - **Selling** — `orders`, `payments`, `table_sessions`, `restaurant_tables`,
-  `service_requests`, `dish_ratings`
+  `service_requests`, `dish_ratings`, `bill_splits`, `bill_split_claims`
 - **Offers** — `promotions`, `promotion_items`, `coupons`, `coupon_redemptions`
 - **Money asked for** — `discount_requests`, `write_off_requests`
 - **Telling people** — `notifications`

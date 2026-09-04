@@ -194,6 +194,18 @@ export default function BillsPanel({
               <span className="tt-bill-who"> · {bill.customerName}</span>
             )}
           </strong>
+          {bill.split && (
+            /* Said on the row itself, not behind a tap: the number beside it is
+               what the table still owes, and a waiter about to take cash needs
+               to know part of it is already paid. */
+            <span className="tt-badge tt-bill-split">
+              {t("dash.splitting", {
+                paid: bill.split.paidShares,
+                of: bill.split.shares,
+                amount: formatMoney(bill.split.collected, currency),
+              })}
+            </span>
+          )}
           <span className="tt-muted tt-bill-sub">
             {t(
               bill.orderIds.length === 1 ? "dash.billsOrders" : "dash.billsOrdersPlural",
