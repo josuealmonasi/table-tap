@@ -7,6 +7,7 @@ import { readPlanName, subscriptionOutcome } from "@/lib/billing";
 import { releaseStock } from "@/lib/stock-service";
 import type { OrderLineItem } from "@/lib/types";
 import type Stripe from "stripe";
+import { recordPayment, recordPayments } from "@/lib/payments";
 
 export const runtime = "nodejs";
 
@@ -46,7 +47,19 @@ export async function POST(req: NextRequest) {
         .from("orders")
         .update({ paid: true, pay_method: "card" })
         .in("id", settleIds)
-        .select("session_id");
+        .select("id, total, session_id, restaurant_id");
+
+      await recordPayments(
+        (settled ?? []).map(o => ({
+          restaurantId: o.restaurant_id as string,
+          orderId: o.id as string,
+          sessionId: o.session_id as string | null,
+          amount: Number(o.total),
+          method: "card" as const,
+          stripePaymentIntent:
+            typeof session.payment_intent === "string" ? session.payment_intent : null,
+        })),
+      );
 
       // Paid in full is the ordinary way a table empties.
       await closeSessionsFor(settled ?? [], "paid");
@@ -119,9 +132,21 @@ export async function POST(req: NextRequest) {
       // A pay-now order can be the only thing the table owed.
       const { data: justPaid } = await supabase
         .from("orders")
-        .select("session_id")
+        .select("session_id, total, restaurant_id")
         .eq("id", orderId)
         .maybeSingle();
+
+      if (justPaid) {
+        await recordPayment({
+          restaurantId: justPaid.restaurant_id as string,
+          orderId,
+          sessionId: justPaid.session_id as string | null,
+          amount: Number(justPaid.total),
+          method: "card",
+          stripePaymentIntent:
+            typeof session.payment_intent === "string" ? session.payment_intent : null,
+        });
+      }
       await closeSessionsFor(justPaid ? [justPaid] : [], "paid");
 
       // The coupon use was reserved at checkout; the payment makes it real.

@@ -92,8 +92,12 @@ the simpler one.
 **Run the whole gate, every time:**
 
 ```bash
-pnpm test && pnpm api && pnpm rls && pnpm roles && pnpm smoke && pnpm layout && pnpm promises
+pnpm test && pnpm api && pnpm rls && pnpm roles && pnpm smoke && pnpm layout && pnpm promises && pnpm money
 ```
+
+`pnpm money` reconciles the `payments` ledger against `orders.paid`. They are
+two records of one fact — a settled order with no payment behind it, or money
+against an order nobody settled, means one of them is lying.
 
 `pnpm dialogs` is the slow one, so it is not on that line — run it whenever you
 touch a dialog, a shared component or the stylesheet. It clicks every visible

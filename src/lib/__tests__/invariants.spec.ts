@@ -541,3 +541,42 @@ describe("money is rounded in one place", () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * Money that arrives is written down.
+ *
+ * `orders.paid` and the `payments` ledger are two records of one fact, which is
+ * the shape of every bug this app has had. `pnpm money` catches them drifting
+ * in the data; this catches the cause — a route that marks an order paid and
+ * forgets to say who paid what.
+ *
+ * Looking for a CALL rather than the name, because an import line alone would
+ * satisfy a substring check long after somebody deleted the call beneath it.
+ */
+describe("every route that settles an order records the payment", () => {
+  const SETTLES = [
+    ["src/app/api/table-payment/route.ts", "the till stopped recording what it took"],
+    ["src/app/api/webhooks/stripe/route.ts", "a card payment is no longer written to the ledger"],
+  ] as const;
+
+  it("calls recordPayment wherever it sets paid", () => {
+    for (const [file, complaint] of SETTLES) {
+      const lines = read(file).split("\n").filter(l => !l.trimStart().startsWith("import"));
+      const marksPaid = lines.filter(l => /paid:\s*true/.test(l)).length;
+      const records = lines.filter(l => /\brecordPayments?\s*\(/.test(l)).length;
+      expect(marksPaid, `${file}: nothing marks an order paid any more`).toBeGreaterThan(0);
+      expect(records, `${file}: ${complaint}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("has no other route marking an order paid on the quiet", () => {
+    const known = new Set<string>(SETTLES.map(([f]) => f));
+    const rogue = walkAll("src/app/api")
+      .filter(f => f.endsWith("route.ts") && !known.has(f))
+      .filter(f => /paid:\s*true/.test(read(f)));
+    expect(
+      rogue,
+      `A route settles orders without recording the money. Add recordPayment, and add it to the list above:\n${rogue.join("\n")}`,
+    ).toEqual([]);
+  });
+});

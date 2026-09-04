@@ -5,6 +5,7 @@ import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
+import { recordPayments } from "@/lib/payments";
 
 export const runtime = "nodejs";
 
@@ -63,6 +64,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { data: updated, error } = await base.select("id, table_label, total, session_id");
   if (error) return await apiError("apiErr.orderData", 500);
   if (!updated?.length) return await apiError("apiErr.nothingToSettle", 409);
+
+  // The ledger, in the same breath as the boolean.
+  await recordPayments(
+    updated.map(o => ({
+      restaurantId: actor.restaurantId,
+      orderId: o.id,
+      sessionId: o.session_id,
+      amount: Number(o.total),
+      method: settlement as "card" | "cash",
+      actorEmail: actor.email,
+    })),
+  );
 
   // Money moved without a card, so it is worth being able to ask about later.
   await logEvent({

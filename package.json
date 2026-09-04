@@ -47,7 +47,9 @@
     "promises": "node scripts/promise-audit.mjs",
     "promises:prod": "node scripts/promise-audit.mjs --prod",
     "dialogs": "node scripts/dialog-check.mjs",
-    "dialogs:prod": "node scripts/dialog-check.mjs --prod"
+    "dialogs:prod": "node scripts/dialog-check.mjs --prod",
+    "money": "node scripts/money-check.mjs",
+    "money:prod": "node scripts/money-check.mjs --prod"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
