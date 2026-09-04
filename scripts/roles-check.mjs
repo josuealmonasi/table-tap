@@ -83,6 +83,10 @@ const PAGES = {
 // Route → roles that should be able to use it.
 const ROUTES = [
   { m: "GET", p: "/api/badges", allow: ALL },
+  // The bell. Only the people who can order more stock are told a dish is
+  // running out — the same line the table's RLS policy draws.
+  { m: "GET", p: "/api/notifications", allow: MANAGES },
+  { m: "POST", p: "/api/notifications", body: { all: true }, allow: MANAGES },
   { m: "GET", p: "/api/table-bill?tableId=", allow: SERVES, needsTable: true },
   { m: "POST", p: "/api/settings", body: { accepting_orders: true }, allow: MANAGES },
   { m: "POST", p: "/api/coupons", body: { code: "ZZZ-999", kind: "percent", value: 5 }, allow: MANAGES },

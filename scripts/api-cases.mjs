@@ -92,15 +92,21 @@ export function cases(fx) {
       checkText: t => t.startsWith("<svg") || `answered ${t.slice(0, 40)}` },
     { name: "POST /api/checkout (tarjeta)", as: "diner", method: "POST", path: "/api/checkout",
       // With no Stripe account connected the healthy answer is 409, not a 500.
+      //
+      // Three of them, not one: Stripe will not take a card payment under
+      // MX$10, and the cheapest dish on the demo menu is MX$6.50. At qty 1
+      // this case was testing Stripe's floor rather than our checkout, and
+      // whether it passed depended on which dish the fixture happened to pick.
       body: { restaurantId: r, tableId: null, items: [{ itemId: dish.id, name: dish.name,
-        price: Number(dish.price), qty: 1, emoji: "🍽️", mods: {} }] }, expect: [200, 409] },
+        price: Number(dish.price), qty: 3, emoji: "🍽️", mods: {} }] }, expect: [200, 409] },
     { name: "POST /api/receipt", as: "diner", method: "POST", path: "/api/receipt",
       body: { orderId: paidOrder, email: "nadie@tabletap.dev" }, expect: [200, 400, 409, 503] },
 
     // ── el piso ──────────────────────────────────────────────────────────
     { name: "GET  /api/badges", as: "waiter", method: "GET", path: "/api/badges", expect: [200] },
-    // The bell. A manager may read it and mark it read; the floor and the
-    // kitchen are refused, which is what `pnpm rls` checks separately.
+    // The bell. A manager may read it and mark it read; that the floor and the
+    // kitchen are refused is checked by `pnpm roles`, which owns the question
+    // of who may call what.
     { name: "GET  /api/notifications", as: "manager", method: "GET",
       path: "/api/notifications", expect: [200],
       check: d => Array.isArray(d.notifications) || "did not answer with a list" },

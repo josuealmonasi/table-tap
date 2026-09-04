@@ -522,6 +522,12 @@ export async function POST(req: NextRequest) {
           ...(discounts ? { discounts } : {}),
           success_url: `${origin}/order/${order.id}?paid=1`,
           cancel_url: `${origin}/r/${restaurantId}${tableId ? `/t/${tableId}` : ""}?cancelled=1`,
+          // Stock is taken before the diner reaches this page and comes back
+          // when Stripe says the session expired. Left to Stripe's default that
+          // is twenty-four hours, so one diner closing a tab holds the last
+          // portions of a dish off the menu for a day. Thirty minutes is
+          // Stripe's floor and longer than anyone is still deciding.
+          expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
           metadata: { order_id: order.id },
           payment_intent_data: {
             metadata: { order_id: order.id },
