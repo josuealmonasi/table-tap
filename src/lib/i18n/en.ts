@@ -105,7 +105,7 @@ export const en = {
   },
   menu: {
     stock: "Stock",
-    stockHint: "Leave it empty to keep using the switch. Give it a number — one or more — and it counts down as orders come in, and the dish leaves the menu by itself at zero. To take it off right now, use the switch.",
+    stockHint: "Counts down with each order. At zero it leaves the menu.",
     stockPlaceholder: "Not counted",
     stockLeft: "{count} left",
     stockOut: "Sold out",

@@ -107,7 +107,7 @@ export const es: Messages = {
   },
   menu: {
     stock: "Existencias",
-    stockHint: "Déjalo vacío para seguir usando el interruptor. Ponle un número —de 1 en adelante— y se descuenta con cada pedido, y el platillo sale solo de la carta al llegar a cero. Para quitarlo ahora mismo, usa el interruptor.",
+    stockHint: "Se descuenta con cada pedido. Al llegar a cero sale de la carta.",
     stockPlaceholder: "Sin contar",
     stockLeft: "Quedan {count}",
     stockOut: "Agotado",
