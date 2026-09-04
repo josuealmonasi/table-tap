@@ -37,7 +37,10 @@ export async function setup(env, base) {
   const { data: dish } = await admin
     .from("menu_items").select("id, name, price, emoji")
     .eq("restaurant_id", restaurant.id).eq("available", true).eq("is_addon", false)
-    .limit(1).maybeSingle();
+    // Ordered, so every run uses the same dish. Unordered with limit(1),
+    // Postgres returns whichever row it likes and the suite quietly changes
+    // what it is testing between runs.
+    .order("name").limit(1).maybeSingle();
   const { data: menu } = await admin
     .from("menus").select("id").eq("restaurant_id", restaurant.id).limit(1).maybeSingle();
 

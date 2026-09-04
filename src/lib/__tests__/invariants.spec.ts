@@ -291,6 +291,59 @@ describe("a combo survives the trip to the server", () => {
 });
 
 describe("a column exists before the grant that names it", () => {
+  it("keeps reserve_stock locking the rows it counts", () => {
+    // The whole promise of the stock count is that two diners cannot both be
+    // sold the last portion, and the only thing delivering it is the row lock
+    // inside reserve_stock. Ten simultaneous attempts on one portion produce
+    // exactly one winner — verified by hand against a real database, which is
+    // the sort of proof that rots the moment somebody edits the function.
+    //
+    // This cannot re-run that race without a database, so it guards the two
+    // lines the race depends on: the lock, and the deterministic order that
+    // stops two overlapping carts deadlocking against each other. Losing
+    // either silently turns overselling back on.
+    const sql = read("supabase/schema.sql");
+    const fn = sql.slice(
+      sql.indexOf("create or replace function public.reserve_stock"),
+      sql.indexOf("grant execute on function public.reserve_stock"),
+    );
+    expect(fn, "reserve_stock is not in schema.sql").not.toBe("");
+    expect(fn.includes("for update"), "reserve_stock no longer locks the rows it reads").toBe(
+      true,
+    );
+    expect(
+      /order by m\.id\s*\n\s*for update/.test(fn),
+      "reserve_stock locks without a deterministic order — two carts can deadlock",
+    ).toBe(true);
+  });
+
+  it("gives back stock wherever a reserved order stops being an order", () => {
+    // Reserving at checkout is only safe because every way out hands the stock
+    // back. A new exit that forgets to is an order's worth of food sold to
+    // nobody, and nothing else would notice.
+    // Looking for a CALL, not the name: the import line alone would satisfy
+    // `includes("releaseStock")` long after somebody deleted the call under
+    // it, which is exactly the shape of the bug this is here to catch.
+    const calls = (file: string): number =>
+      read(file)
+        .split("\n")
+        .filter(l => !l.trimStart().startsWith("import"))
+        .filter(l => /\breleaseStock\s*\(/.test(l)).length;
+
+    expect(
+      calls("src/app/api/webhooks/stripe/route.ts"),
+      "an abandoned checkout no longer returns its stock",
+    ).toBeGreaterThan(0);
+    expect(
+      calls("src/app/api/orders/cancel/route.ts"),
+      "a cancelled order no longer returns its stock",
+    ).toBeGreaterThan(0);
+    expect(
+      calls("src/app/api/checkout/route.ts"),
+      "a checkout that falls over no longer returns what it reserved",
+    ).toBeGreaterThan(0);
+  });
+
   it("creates every granted column earlier in schema.sql than its grant", () => {
     // schema.sql runs top to bottom, and the column grants sit a few hundred
     // lines above where new columns naturally get appended. Adding one the

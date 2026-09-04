@@ -68,6 +68,7 @@ export default function ProductForm({
     modifiers,
     dietary,
     discountPct,
+    stock,
     picked,
   ]);
 
@@ -182,7 +183,20 @@ export default function ProductForm({
           aria-label={t("menu.stock")}
           placeholder={t("menu.stockPlaceholder")}
           value={stock}
-          onChange={e => setStock(e.target.value)}
+          onChange={e => {
+            // A dish that has sold out really does hold zero, and it opens the
+            // form showing it — so the zero already there is left alone and
+            // only a typed one is refused. Otherwise a sold-out dish could not
+            // have its name corrected without being restocked first.
+            // Zero is valid to HOLD — it is what selling out leaves behind,
+            // and the form opens on it — so the refusal lives here rather than
+            // in `min`. As min="1" the field made a sold-out dish's whole form
+            // invalid, and its name could not be corrected until it was
+            // restocked. Here, only a zero somebody types is refused.
+            const next = e.target.value;
+            if (next !== "" && Number(next) === 0) return;
+            setStock(next);
+          }}
         />
         <span className="tt-muted" style={{ fontSize: 13 }}>
           {t("menu.stockHint")}
