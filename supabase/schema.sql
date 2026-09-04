@@ -1958,3 +1958,122 @@ select o.restaurant_id, o.id, o.session_id, o.total,
  where o.paid
    and o.total > 0
    and not exists (select 1 from payments p where p.order_id = o.id);
+
+-- ── Dividing a bill ─────────────────────────────────────────────────────────
+-- A table agreeing to pay the same amount each.
+--
+-- It only works if everybody agrees, so a split is a proposal until every
+-- person has joined it. The moment the last one does, the amount FREEZES: the
+-- table divides what it owed at that instant, and anything ordered afterwards
+-- belongs to whoever ordered it. That is the rule a table actually follows —
+-- they agreed to divide the meal they had eaten, not to buy each other another
+-- round — and freezing is also what lets someone keep ordering while the others
+-- are paying, which is money we would otherwise be turning away.
+--
+-- No browser policy: a diner has no login, so every read and write goes through
+-- the routes with the secret key, addressed by a sitting id nobody can guess.
+create table if not exists bill_splits (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  session_id    uuid not null references table_sessions(id) on delete cascade,
+  shares        int not null check (shares between 2 and 20),
+  -- What the table owed when everyone agreed. Zero until it locks.
+  amount        numeric not null default 0 check (amount >= 0),
+  status        text not null default 'proposed'
+                check (status in ('proposed', 'locked', 'cancelled', 'done')),
+  -- The device that asked, which is also the one that carries the odd cent.
+  proposed_by   text not null,
+  created_at    timestamptz not null default now(),
+  locked_at     timestamptz,
+  -- A proposal nobody finishes must not trap the table forever: one person in
+  -- the bathroom would otherwise leave the rest unable to pay at all.
+  expires_at    timestamptz not null default now() + interval '30 minutes'
+);
+
+-- One live proposal per sitting. Two people asking at once would otherwise
+-- divide the same bill twice and each collect a different amount.
+create unique index if not exists bill_splits_one_live
+  on bill_splits(session_id) where status in ('proposed', 'locked');
+create index if not exists bill_splits_session_idx on bill_splits(session_id);
+
+-- Who has agreed, and what each of them owes once it froze.
+create table if not exists bill_split_claims (
+  split_id   uuid not null references bill_splits(id) on delete cascade,
+  share_no   int not null,
+  -- The diner's own device, the only identity anybody has here.
+  diner      text not null,
+  amount     numeric not null default 0 check (amount >= 0),
+  payment_id uuid references payments(id) on delete set null,
+  claimed_at timestamptz not null default now(),
+  paid_at    timestamptz,
+  primary key (split_id, share_no)
+);
+-- One share each: a device that joined cannot quietly take a second.
+create unique index if not exists bill_split_claims_one_each
+  on bill_split_claims(split_id, diner);
+
+alter table bill_splits enable row level security;
+alter table bill_split_claims enable row level security;
+
+-- The team can look at what a table is doing, so a waiter can see why the
+-- screen says a bill is being divided and can call it off.
+drop policy if exists "team reads splits" on bill_splits;
+create policy "team reads splits"
+  on bill_splits for select using (works_at(restaurant_id));
+
+drop policy if exists "team reads split claims" on bill_split_claims;
+create policy "team reads split claims"
+  on bill_split_claims for select using (
+    exists (select 1 from bill_splits s
+             where s.id = split_id and works_at(s.restaurant_id))
+  );
+
+revoke all on bill_splits from anon;
+revoke all on bill_split_claims from anon;
+grant select on bill_splits to authenticated;
+grant select on bill_split_claims to authenticated;
+
+-- Taking a share, atomically.
+--
+-- Two phones tapping "join" at the same instant must not take the same seat,
+-- and the last one in is what freezes the amount — so the whole thing is one
+-- statement holding the row, the way a coupon is claimed.
+create or replace function public.join_bill_split(
+  p_split uuid,
+  p_diner text,
+  p_amount numeric
+) returns int language plpgsql security definer set search_path = public as $$
+declare
+  v_taken int;
+  v_shares int;
+  v_status text;
+  v_next int;
+begin
+  -- Hold the split while we look, so two joiners cannot both see the last seat.
+  select shares, status into v_shares, v_status
+    from bill_splits where id = p_split for update;
+  if v_status is null or v_status <> 'proposed' then return null; end if;
+
+  select count(*) into v_taken from bill_split_claims where split_id = p_split;
+  -- Already in? Their own seat back, rather than a second one.
+  select share_no into v_next from bill_split_claims
+   where split_id = p_split and diner = p_diner;
+  if v_next is not null then return v_next; end if;
+  if v_taken >= v_shares then return null; end if;
+
+  v_next := v_taken;
+  insert into bill_split_claims (split_id, share_no, diner)
+  values (p_split, v_next, p_diner);
+
+  -- The last one in freezes it.
+  if v_taken + 1 = v_shares then
+    update bill_splits
+       set status = 'locked', locked_at = now(), amount = p_amount
+     where id = p_split;
+  end if;
+
+  return v_next;
+end; $$;
+
+revoke all on function public.join_bill_split(uuid, text, numeric) from public, anon, authenticated;
+grant execute on function public.join_bill_split(uuid, text, numeric) to service_role;

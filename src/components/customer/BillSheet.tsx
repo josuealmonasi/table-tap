@@ -20,6 +20,8 @@ import OrderTotals from "./OrderTotals";
 import TipPicker from "./TipPicker";
 import type { Restaurant } from "@/lib/types";
 import { round2 } from "@/lib/money";
+import SplitBillCard from "@/components/customer/SplitBillCard";
+import { useSplit } from "@/hooks/useSplit";
 
 interface BillSheetProps {
   open: boolean;
@@ -30,6 +32,9 @@ interface BillSheetProps {
   tableLabel: string;
   /** The dish's photo, looked up from the live menu — null falls back to emoji. */
   photoOf: (itemId: string) => string | null;
+  /** The sitting this phone is bound to; without one there is no table to
+   *  divide a bill with. */
+  sessionId?: string | null;
 }
 
 /** One dish on the bill, laid out like a cart line but not editable. */
@@ -159,6 +164,7 @@ export default function BillSheet({
   onClose,
   bill,
   restaurant,
+  sessionId = null,
   tableId,
   tableLabel,
   photoOf,
@@ -168,6 +174,44 @@ export default function BillSheet({
   const [busy, setBusy] = useState(false);
   const [called, setCalled] = useState(false);
   const [scope, setScope] = useState<"all" | "mine">("all");
+
+  // Only while the sheet is open: a bill nobody is looking at does not need
+  // asking about every five seconds.
+  const {
+    split, diner, busy: splitBusy, propose, join, cancel: cancelSplit,
+  } = useSplit(
+    restaurant.id,
+    tableId,
+    sessionId,
+    open,
+    bill.mine.orders.filter(o => !o.paid).map(o => o.id),
+  );
+
+  // Once it has frozen and this phone holds a seat, the split card is how they
+  // pay. Everything that settles the whole bill is put away.
+  const splitLocked = split?.status === "locked" && Boolean(split.mine);
+
+  /** Their share, plus anything they ordered since it froze. */
+  async function payShare(): Promise<void> {
+    if (!split?.mine || !sessionId) return;
+    const res = await fetch("/api/split/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        splitId: split.id,
+        sessionId,
+        diner,
+        restaurantId: restaurant.id,
+        tableId,
+        // Which orders this phone believes are its own. Checked on the server
+        // against what was actually placed after the freeze.
+        ownOrderIds: bill.mine.orders.filter(o => !o.paid).map(o => o.id),
+        tipPct,
+      }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { url?: string };
+    if (data.url) window.location.href = data.url;
+  }
   const [tipPct, setTipPct] = useState(0);
   const [tipCustom, setTipCustom] = useState<number | null>(null);
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
@@ -273,9 +317,23 @@ export default function BillSheet({
             collapsible
           />
 
+          {/* Dividing it evenly is a decision about the whole bill, so it is
+              asked before the smaller question of whose dishes to pay for. */}
+          <SplitBillCard
+            split={split}
+            diner={diner}
+            busy={splitBusy}
+            currency={currency}
+            outstanding={bill.total}
+            propose={propose}
+            join={join}
+            cancel={cancelSplit}
+            onPay={payShare}
+          />
+
           {/* Paying for the table or only for yourself changes what the totals
               below are counting, so it sits above them. */}
-          {canPayMineOnly(bill) && (
+          {!split && canPayMineOnly(bill) && (
             <div className="tt-tip-row" style={{ marginTop: 14 }}>
               <button
                 type="button"
@@ -294,7 +352,10 @@ export default function BillSheet({
             </div>
           )}
 
-          {!alreadyDiscounted && (
+          {/* Everything below settles the WHOLE bill, which is not what this
+              phone owes any more once the table has divided it. Two ways to
+              pay, disagreeing about the amount, is how somebody pays twice. */}
+          {!splitLocked && !alreadyDiscounted && (
             <div className="tt-coupon-row">
               <CouponBox
                 restaurantId={restaurant.id}
@@ -306,6 +367,7 @@ export default function BillSheet({
             </div>
           )}
 
+          {!splitLocked && (
           <div style={{ marginTop: 16 }}>
             <TipPicker
               currency={currency}
@@ -319,7 +381,10 @@ export default function BillSheet({
               onCustomTip={setTipCustom}
             />
           </div>
+          )}
 
+          {!splitLocked && (
+          <>
           <OrderTotals
             subtotal={base}
             grossSubtotal={round2(food + applied)}
@@ -365,6 +430,8 @@ export default function BillSheet({
                 {busy ? t("bill.calling") : t("bill.payAtTable")}
               </button>
             </div>
+          )}
+          </>
           )}
         </>
       )}

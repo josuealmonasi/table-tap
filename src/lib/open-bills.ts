@@ -27,6 +27,36 @@ export interface OpenBill {
   /** A promotion is already on it; a second would discount the same food twice. */
   discounted: boolean;
   since: string;
+  /**
+   * A table part-way through dividing its bill.
+   *
+   * Shares are money against the SITTING, not against any order, so until the
+   * last one lands every order still reads as unpaid. Without this the floor
+   * sees the full amount owing on a table that has already handed over half of
+   * it — and settling it in cash would take that half twice.
+   */
+  split?: { shares: number; paidShares: number; collected: number } | null;
+}
+
+/**
+ * Fold what a split has collected into the bills it belongs to.
+ *
+ * Kept separate from `openBills` so the grouping stays a pure function of the
+ * orders, and this is the one place that knows about sittings.
+ */
+export function withSplits(
+  bills: OpenBill[],
+  splits: { session_id: string; shares: number; paidShares: number; collected: number }[],
+  sessionOf: Map<string, string>,
+): OpenBill[] {
+  const bySession = new Map(splits.map(s => [s.session_id, s]));
+  return bills.map(bill => {
+    const session = bill.orderIds.map(id => sessionOf.get(id)).find(Boolean);
+    const found = session ? bySession.get(session) : undefined;
+    return found
+      ? { ...bill, split: { shares: found.shares, paidShares: found.paidShares, collected: found.collected } }
+      : bill;
+  });
 }
 
 export function openBills(orders: Order[]): OpenBill[] {

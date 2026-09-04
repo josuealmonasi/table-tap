@@ -6022,3 +6022,58 @@ a.tt-user-plan:hover {
 .tt-notif-when {
   font-size: 11px;
 }
+
+/* ── Dividing the bill ─────────────────────────────────────────────────────
+   A decision the table makes out loud, so it reads as one block rather than a
+   row of controls: the question, what it would cost each, and the answer. */
+.tt-split {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--tt-line);
+  border-radius: var(--tt-radius-sm);
+}
+.tt-split-hint {
+  font-size: 12px;
+}
+.tt-split-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+/* The count is a small field beside a wide button: it is one digit, and the
+   button is the thing being decided. */
+.tt-split-people {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 96px;
+}
+.tt-split-row .tt-btn {
+  flex: 1;
+  min-width: 0;
+}
+/* Once it is agreed, the number IS the screen. */
+.tt-split-locked .tt-split-amount {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.tt-split-since {
+  font-size: 13px;
+}
+.tt-split-done {
+  color: var(--tt-accent);
+  font-weight: 600;
+}
+/* A table mid-split, said on its row. Not a warning colour: nothing is wrong,
+   there is simply money already in that the amount beside it does not show. */
+.tt-bill-split {
+  background: var(--tt-cream);
+  color: var(--tt-ink);
+  font-weight: 600;
+}

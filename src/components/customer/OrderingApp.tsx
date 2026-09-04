@@ -33,7 +33,7 @@ import { useTableBill } from "@/hooks/useTableBill";
 import { useReceiptOffer } from "@/hooks/useReceiptOffer";
 import { useSitting } from "@/hooks/useSitting";
 import { formatMoney } from "@/lib/format";
-import { rememberSitting } from "@/lib/table-binding";
+import { recallSitting, rememberSitting } from "@/lib/table-binding";
 import BillSheet from "./BillSheet";
 import ReceiptPrompt from "./ReceiptPrompt";
 import TrackerOverlay from "./TrackerOverlay";
@@ -191,6 +191,17 @@ export default function OrderingApp({
   // thing" is always a NEW order, and losing the first one to the second is
   // exactly what used to happen.
   const [trackIds, setTrackIds] = useState<string[]>(trackOrder?.id ? [trackOrder.id] : []);
+  // Which sitting this phone belongs to. Written when an order lands and read
+  // back here, because dividing a bill is addressed to the sitting rather than
+  // the table: tonight's diners must not inherit a split from whoever sat here
+  // before them.
+  const [sittingSessionId, setSittingSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!table?.id) return;
+    const sitting = recallSitting(restaurant.id);
+    setSittingSessionId(sitting?.tableId === table.id ? sitting.sessionId : null);
+  }, [restaurant.id, table?.id]);
   useEffect(() => {
     setTrackIds(prev => (prev.length > 0 ? prev : recallActiveOrders(restaurant.id, table?.id)));
   }, [restaurant.id, table?.id]);
@@ -456,6 +467,7 @@ export default function OrderingApp({
         // the bill is cleared.
         if (data.sessionId && table?.id) {
           rememberSitting(restaurant.id, data.sessionId, table.id);
+          setSittingSessionId(data.sessionId);
         }
         clearUpsell(restaurant.id);
         setTrackIds(prev => [data.orderId, ...prev.filter(id => id !== data.orderId)]);
@@ -684,6 +696,7 @@ export default function OrderingApp({
             restaurant={restaurant}
             tableId={table.id}
             tableLabel={table.label}
+            sessionId={sittingSessionId}
           />
         )}
         {/* Not dismissible into ordering: the point is that a second bill does

@@ -612,6 +612,24 @@ export async function seedMock(pg) {
 
   // ── Things waiting on a manager's decision ────────────────────────────
   // This is what lights the bar's badges: the owner walks in and sees work.
+  // ── A table part-way through agreeing to divide its bill ──────────────
+  // Proposed rather than frozen: the demo should show the asking, which is the
+  // part a restaurant has never seen before. Nobody's money has moved.
+  const splitting = openBills[0];
+  if (splitting) {
+    const {
+      rows: [sp],
+    } = await pg.query(
+      `insert into bill_splits (restaurant_id, session_id, shares, proposed_by)
+       values ($1, $2, 3, 'demo-phone-1') returning id`,
+      [rid, splitting.sessionId],
+    );
+    await pg.query(
+      `insert into bill_split_claims (split_id, share_no, diner) values ($1, 0, 'demo-phone-1')`,
+      [sp.id],
+    );
+  }
+
   const waiting = openBills[0];
   await pg.query(
     `insert into discount_requests (restaurant_id, table_id, table_label, order_ids, code, amount, requested_by)

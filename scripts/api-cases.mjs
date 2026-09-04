@@ -90,6 +90,24 @@ export function cases(fx) {
       // A 200 with an empty body would be exactly the failure this file exists
       // to catch: staff would point a camera at nothing.
       checkText: t => t.startsWith("<svg") || `answered ${t.slice(0, 40)}` },
+    // ── dividing a bill ───────────────────────────────────────────────────
+    // The read is real. The writes are checked by the refusals they must give:
+    // proposing one for real would leave a live split on the demo table, and
+    // `pnpm api:prod` would leave it on a real one.
+    { name: "GET  /api/split (nothing going on)", as: "diner", method: "GET",
+      path: `/api/split?sessionId=${fx.sessionId ?? ""}&diner=apicheck&restaurantId=${r}&tableId=${table.id}`,
+      expect: [200, 400] },
+    { name: "POST /api/split (refuses one person)", as: "diner", method: "POST", path: "/api/split",
+      body: { sessionId: fx.sessionId ?? "", diner: "apicheck", restaurantId: r, tableId: table.id, shares: 1 },
+      expect: [400] },
+    { name: "POST /api/split/join (no such split)", as: "diner", method: "POST", path: "/api/split/join",
+      body: { splitId: "00000000-0000-0000-0000-000000000000", sessionId: fx.sessionId ?? "",
+              diner: "apicheck", restaurantId: r, tableId: table.id },
+      expect: [409] },
+    { name: "POST /api/split/pay (no such split)", as: "diner", method: "POST", path: "/api/split/pay",
+      body: { splitId: "00000000-0000-0000-0000-000000000000", sessionId: fx.sessionId ?? "",
+              diner: "apicheck", restaurantId: r, tableId: table.id },
+      expect: [409] },
     { name: "POST /api/checkout (tarjeta)", as: "diner", method: "POST", path: "/api/checkout",
       // With no Stripe account connected the healthy answer is 409, not a 500.
       //

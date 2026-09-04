@@ -13,6 +13,8 @@
 -- Generated from the `create table if not exists` lines in schema.sql; when
 -- you add a table there, add it here.
 -- ============================================================================
+drop table if exists bill_split_claims   cascade;
+drop table if exists bill_splits         cascade;
 drop table if exists payments             cascade;
 drop table if exists notifications       cascade;
 drop table if exists dietary_tags        cascade;
@@ -53,6 +55,7 @@ drop policy if exists "team manages its own menu images" on storage.objects;
 drop function if exists public.claim_founding_price(uuid, int);
 drop function if exists public.close_session_if_clear(uuid, text);
 drop function if exists public.open_table_session(uuid, uuid, int);
+drop function if exists public.join_bill_split(uuid, text, numeric);
 drop function if exists public.reserve_stock(uuid, jsonb, int);
 drop function if exists public.release_stock(uuid, jsonb);
 drop function if exists public.redeem_coupon(uuid);
