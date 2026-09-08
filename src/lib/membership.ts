@@ -57,6 +57,22 @@ export const SETTLES = (role: Role): boolean => role !== "kitchen";
  */
 export const MOVES_ORDERS = (role: Role): boolean => !SERVES(role);
 
+/**
+ * Who may take an order at the counter and charge for it.
+ *
+ * The cashier, because that is the job, and the two roles that can already do
+ * everything. Not the waiter: they carry a card machine to a table, which is
+ * settling a bill somebody else placed — a different act from ringing a sale
+ * and sending it to the pass. Widen it here if a floor ever works both.
+ *
+ * Creating an order is deliberately its own permission rather than a corner of
+ * SETTLES. Taking money for food already eaten and deciding what the kitchen
+ * cooks are different powers, and a till that can invent orders is the one
+ * worth naming on its own.
+ */
+export const TAKES_COUNTER_ORDERS = (role: Role): boolean =>
+  MANAGES(role) || role === "cashier";
+
 export interface Membership {
   restaurant: Restaurant;
   role: Role;

@@ -23,7 +23,8 @@
         "Los planes, sus límites y sus precios están publicados en el panel, en la sección Plan. Ahí aparece en todo momento el precio vigente, la comisión por pedido pagado con tarjeta y el tope mensual de esa comisión.",
         "Los precios pueden modificarse. Si cambia el precio de su plan, se le notificará por correo electrónico con al menos 30 días naturales de anticipación, y el cambio surtirá efecto hasta su siguiente periodo de facturación. Si no está de acuerdo, podrá cancelar antes de esa fecha sin penalización alguna. Lo anterior no aplica a los precios de fundador, que no se incrementan.",
         "Precio de fundador: los primeros restaurantes que contratan un plan de paga conservan el precio con el que ingresaron mientras mantengan ese plan, aun cuando posteriormente se incrementen los precios de lista. Si cambia de plan, o si cancela y contrata nuevamente, aplicará el precio vigente en ese momento. El panel indica si su restaurante cuenta con este beneficio.",
-        "Los precios están expresados en pesos mexicanos y no incluyen impuestos, salvo que se indique lo contrario."
+        "Los precios están expresados en pesos mexicanos y no incluyen impuestos, salvo que se indique lo contrario.",
+        "La caja del mostrador está incluida únicamente en los planes de pago. Al no procesarse esos cobros a través de nuestra plataforma, no generan comisión por pedido y su costo está cubierto por la suscripción."
       ]
     },
     {
@@ -49,7 +50,8 @@
         "Los pagos con tarjeta se procesan a través de Stripe. Para recibirlos se requiere una cuenta conectada de Stripe a nombre del restaurante y la aceptación de los términos de dicho proveedor.",
         "El cobro se realiza en su cuenta de Stripe: el importe de sus ventas le corresponde y se le entrega directamente, descontadas la comisión de Stripe y la nuestra. TableTap no retiene el importe de sus ventas.",
         "Cuando el restaurante permite que la cuenta se liquide al final, un comensal puede pagar en línea una parte del consumo y dejar el resto en la cuenta abierta. Lo pagado en línea se registra como cubierto, se muestra en la cuenta a título informativo y queda excluido del importe por cobrar, de modo que no se cobre dos veces.",
-        "TableTap no almacena datos de tarjetas bancarias. Esa información es tratada directamente por Stripe."
+        "TableTap no almacena datos de tarjetas bancarias. Esa información es tratada directamente por Stripe.",
+        "Los cobros que el restaurante realiza en su propio mostrador —en efectivo o con su propia terminal bancaria— no pasan por Stripe ni por TableTap. Ese dinero es recibido directamente por el restaurante y en ningún momento es procesado, retenido ni intermediado por nosotros; sobre esas ventas no se cobra comisión por pedido. La caja del mostrador únicamente registra la venta y el corte correspondiente."
       ]
     },
     {
@@ -58,7 +60,8 @@
         "Utilizar el servicio conforme a la legislación aplicable y para el negocio que registró.",
         "Abstenerse de vulnerar la plataforma, de extraer información de otros restaurantes y de revender el servicio como propio.",
         "Mantener su menú veraz. Los precios, las descripciones y las etiquetas de dieta y alérgenos son responsabilidad del restaurante, incluidas las que cree, modifique o elimine desde el panel. TableTap proporciona un conjunto inicial de etiquetas como sugerencia; su exactitud frente a cada platillo corresponde al restaurante.",
-        "Cumplir con sus obligaciones fiscales, incluida la expedición de comprobantes a sus comensales cuando los soliciten."
+        "Cumplir con sus obligaciones fiscales, incluida la expedición de comprobantes a sus comensales cuando los soliciten.",
+        "Cuando el restaurante utiliza la caja del mostrador, es el único responsable del manejo del efectivo, de la operación de su terminal bancaria, de la entrega de comprobantes fiscales y del cumplimiento de sus obligaciones fiscales por esas ventas. Los registros de venta y de corte que ofrece TableTap son una herramienta de apoyo operativo y no sustituyen la contabilidad ni la facturación del restaurante."
       ]
     },
     {

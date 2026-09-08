@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { PlanFeature } from "@/lib/plan";
 import { navItemsFor, type DashboardRole } from "@/lib/nav";
 import { useT } from "@/lib/i18n/context";
 import { NAV_ICONS } from "@/components/ui/icons";
@@ -30,10 +31,13 @@ const SETTINGS_AREAS = ["/dashboard/staff", "/dashboard/plan", "/dashboard/setti
 export default function SectionNav({
   role,
   restaurantId,
+  features = [],
 }: {
   role: DashboardRole;
   /** Whose menus the Menús tab unfolds. */
   restaurantId?: string;
+  /** Areas this restaurant's tier includes. Empty means none are gated in. */
+  features?: PlanFeature[];
 }) {
   const t = useT();
   const pathname = usePathname();
@@ -42,7 +46,9 @@ export default function SectionNav({
   // the same trap TermsGate fell into. Dashboard only.
   if (!pathname.startsWith("/dashboard")) return null;
 
-  const items = navItemsFor(role).filter(i => !SETTINGS_AREAS.includes(i.href));
+  const items = navItemsFor(role, f => features.includes(f)).filter(
+    i => !SETTINGS_AREAS.includes(i.href),
+  );
 
   // One section is not a choice; the kitchen has only its board.
   if (items.length < 2) return null;

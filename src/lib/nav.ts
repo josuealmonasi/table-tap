@@ -1,5 +1,9 @@
+import type { PlanFeature } from "@/lib/plan";
+
 export type NavItem = {
   href: string;
+  /** Present when a tier decides whether this area exists at all. */
+  feature?: PlanFeature;
   /**
    * Key into the shared icon set (src/components/ui/icons.tsx). A key rather
    * than a component, because this module is plain data — importing React
@@ -48,6 +52,16 @@ export const NAV_ITEMS: NavItem[] = [
     icon: "Orders",
     titleKey: "nav.orders",
     descKey: "nav.ordersDesc",
+  },
+  {
+    // The counter till. Only on the tiers that include it — the screen itself
+    // refuses too, but a link to a screen that turns you away is a promise the
+    // dashboard should not make.
+    href: "/dashboard/pos",
+    icon: "Bills",
+    titleKey: "nav.pos",
+    descKey: "nav.posDesc",
+    feature: "pos",
   },
   {
     href: "/dashboard/analytics",
@@ -110,8 +124,21 @@ export type DashboardRole =
 // the restaurant, but hiring and the card are not theirs to change.
 const OWNER_ONLY = ["/dashboard/staff", "/dashboard/plan"];
 
-/** The dashboard areas a role may see (drawer links and home tiles). */
-export function navItemsFor(role: DashboardRole): NavItem[] {
+/**
+ * The dashboard areas a role may see (drawer links and home tiles).
+ *
+ * `includes` answers whether the restaurant's tier carries a feature. It
+ * defaults to yes, so a caller with no plan to hand — the loading skeleton —
+ * still counts the same rows. A caller that knows the plan passes it, and an
+ * area the tier does not include never appears: a link to a screen that turns
+ * you away is a promise the dashboard should not make.
+ */
+export function navItemsFor(
+  role: DashboardRole,
+  includes: (feature: PlanFeature) => boolean = () => true,
+): NavItem[] {
+  const allowed = (items: NavItem[]): NavItem[] =>
+    items.filter(i => !i.feature || includes(i.feature));
   if (role === "admin") {
     return [
       {
@@ -125,12 +152,21 @@ export function navItemsFor(role: DashboardRole): NavItem[] {
   // The kitchen only gets its board. Waiter and cashier also get open bills:
   // one asks for a discount on a table, the other collects at the till, and
   // both need the same screen to do it.
-  if (role === "kitchen") return NAV_ITEMS.filter(i => i.href === "/dashboard/orders");
-  if (role === "waiter" || role === "cashier") {
-    return NAV_ITEMS.filter(
-      i => i.href === "/dashboard/orders" || i.href === "/dashboard/bills",
+  if (role === "kitchen") return allowed(NAV_ITEMS.filter(i => i.href === "/dashboard/orders"));
+  // The till is the cashier's own screen; a waiter carries a card machine to a
+  // table, which is a different job and a different screen.
+  if (role === "cashier") {
+    return allowed(
+      NAV_ITEMS.filter(i =>
+        ["/dashboard/orders", "/dashboard/bills", "/dashboard/pos"].includes(i.href),
+      ),
     );
   }
-  if (role === "manager") return NAV_ITEMS.filter(i => !OWNER_ONLY.includes(i.href));
-  return NAV_ITEMS;
+  if (role === "waiter") {
+    return allowed(
+      NAV_ITEMS.filter(i => i.href === "/dashboard/orders" || i.href === "/dashboard/bills"),
+    );
+  }
+  if (role === "manager") return allowed(NAV_ITEMS.filter(i => !OWNER_ONLY.includes(i.href)));
+  return allowed(NAV_ITEMS);
 }

@@ -14,6 +14,8 @@ import Footer from "@/components/layout/Footer";
 import { ToastProvider } from "@/components/ui/Toast";
 import { LocaleProvider } from "@/lib/i18n/context";
 import { getLocale } from "@/lib/i18n/server";
+import { getPlan } from "@/lib/plan-server";
+import { can, type PlanFeature } from "@/lib/plan";
 
 // One family, weight carries the hierarchy. next/font self-hosts the files at
 // build time, so there's no request to a font CDN at runtime and no swap flash.
@@ -37,6 +39,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const membership = admin ? null : await getMembership();
   const locale = await getLocale();
 
+  // Which areas this tier includes at all. Read once here so the drawer, the
+  // section bar and the home tiles cannot disagree about what exists.
+  const plan = membership ? await getPlan(membership.restaurant.id) : null;
+  const features: PlanFeature[] = plan && can(plan.limits, "pos") ? ["pos"] : [];
+
   return (
     <html lang={locale} className={archivo.variable}>
       <body>
@@ -52,12 +59,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 restaurantLogoUrl={membership.restaurant.logo_url}
                 role={membership.role}
                 plan={membership.restaurant.plan}
+                features={features}
               />
             )}
             {membership && (
               <SectionNav
                 role={membership.role}
                 restaurantId={membership.restaurant.id}
+                features={features}
               />
             )}
             {admin && <SectionNav role="admin" />}

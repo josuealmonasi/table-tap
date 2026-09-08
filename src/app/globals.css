@@ -668,6 +668,264 @@ a.tt-btn {
   font-variant-numeric: tabular-nums;
 }
 
+/* ── The counter till ──────────────────────────────────────────────────────
+   Built from the same pieces as every other card here: white on
+   `--tt-line`, 12px corners. The first version invented a `--tt-border`
+   token that does not exist, so every border resolved to nothing and the
+   tiles rendered as bare text on the page. */
+.tt-pos {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+/* A grid child's default min-width is auto, so the tile grid inside pushed
+   this column wider than its track and the page scrolled sideways. */
+.tt-pos-menu {
+  min-width: 0;
+}
+@media (min-width: 900px) {
+  .tt-pos {
+    /* Wide enough that a cart line fits on ONE line: `.tt-line` wraps once the
+       thumb, the name's 150px minimum, the price and the controls stop
+       fitting. Measured: 44 + 10 + 150 + 10 + 186 = 400px of line, and the
+       card's own padding sits outside that — at 460 the line came out 396 and
+       every row broke in two over four pixels. */
+    grid-template-columns: minmax(0, 1fr) 500px;
+  }
+  .tt-pos-cart {
+    position: sticky;
+    top: 16px;
+    /* Taller than the window it was cut off at the bottom, so the charge
+       buttons scrolled away exactly when they were needed. It keeps its own
+       height and scrolls inside itself instead. */
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+  }
+}
+.tt-pos-search {
+  margin-bottom: 12px;
+}
+/* Jump to a section without hiding the others. */
+.tt-pos-jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.tt-pos-jump button {
+  padding: 7px 14px;
+  border: 1px solid var(--tt-line);
+  border-radius: 999px;
+  background: var(--tt-white);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tt-pos-jump button:hover {
+  border-color: var(--tt-accent);
+  color: var(--tt-accent);
+}
+/* Sections need air between them or the grid reads as one wall of tiles. */
+.tt-pos-section + .tt-pos-section {
+  margin-top: 32px;
+}
+.tt-pos-cat {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--tt-muted);
+}
+/* Four across: enough room for a dish's name on one or two lines, and it
+   leaves the sale panel the width its rows need. Below the two-column
+   breakpoint the grid packs itself. */
+.tt-pos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+@media (min-width: 900px) {
+  .tt-pos-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+/* A till button is hit with a thumb, in a hurry, over and over: a real target
+   with a real edge, the price where the eye already is. */
+.tt-pos-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  min-height: 76px;
+  padding: 12px;
+  text-align: left;
+  background: var(--tt-white);
+  border: 1px solid var(--tt-line);
+  border-radius: 12px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.tt-pos-tile:hover {
+  border-color: var(--tt-accent);
+}
+.tt-pos-tile:active {
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.08);
+}
+.tt-pos-tile-name {
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.3;
+}
+.tt-pos-tile-price {
+  margin-top: auto;
+  color: var(--tt-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.tt-pos-cart {
+  padding: 16px;
+  background: var(--tt-white);
+  border: 1px solid var(--tt-line);
+  border-radius: 12px;
+}
+.tt-pos-lines {
+  list-style: none;
+  margin: 0 0 4px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tt-pos-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding-top: 14px;
+  margin-bottom: 16px;
+  border-top: 2px solid var(--tt-ink);
+  font-size: 15px;
+}
+.tt-pos-total strong {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+/* Stacked, not side by side. "Cobrar en efectivo" does not shrink to half a
+   320px panel — a button's content sets its min-width, so the second one hung
+   over the card's edge and took the page's horizontal scroll with it. Two full
+   width targets is also what a till wants: no ambiguity about which was hit. */
+/* Fields need air between them: `.tt-field` spaces a label from its own input
+   and nothing separated one group from the next, so each label sat on the box
+   above it. */
+.tt-pos-cart .tt-field + .tt-field,
+.tt-pos-cart .tt-field {
+  margin-top: 14px;
+}
+.tt-pos-cart .tt-field:first-of-type {
+  margin-top: 0;
+}
+.tt-pos-charge {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+.tt-pos-charge .tt-btn {
+  min-width: 0;
+}
+/* The extras sheet asks a question and takes an answer, so its two sit side
+   by side, where there is room for them. */
+.tt-pos-sheet .tt-pos-charge {
+  flex-direction: row;
+}
+.tt-pos-sheet .tt-pos-charge .tt-btn {
+  flex: 1;
+}
+/* The ticket, which is the only thing on screen once it is rung. */
+.tt-pos-done {
+  text-align: center;
+  padding: 56px 20px;
+}
+.tt-pos-code {
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  margin: 12px 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+/* The dish screen, shown over the till. Same panel the diner gets, sized for
+   a counter rather than a phone. */
+/* Who it is for, asked at the moment of charging rather than sitting in the
+   sale panel taking three fields of room on every sale. */
+.tt-pos-ask {
+  width: min(420px, 100%);
+  margin: auto;
+  padding: 24px;
+  background: var(--tt-white);
+  border-radius: 12px;
+}
+.tt-pos-tip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.tt-pos-ask .tt-field {
+  margin-top: 14px;
+}
+.tt-pos-ask-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+.tt-pos-ask-actions .tt-btn {
+  flex: 1;
+  min-width: 0;
+}
+.tt-pos-ticket {
+  width: min(360px, 100%);
+  margin: auto;
+  padding: 36px 24px;
+  text-align: center;
+  background: var(--tt-white);
+  border-radius: 12px;
+}
+.tt-pos-sheet {
+  max-width: 420px;
+  margin: 10vh auto;
+  padding: 20px;
+  background: var(--tt-white);
+  border-radius: 12px;
+}
+.tt-pos-extras {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tt-pos-extras li {
+  border-top: 1px solid var(--tt-cream);
+}
+.tt-pos-extras li:first-child {
+  border-top: none;
+}
+.tt-pos-extras label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  cursor: pointer;
+}
+.tt-pos-extras label span:last-child {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Offline. Same shape as the frozen-plan banner, because it is the same kind
    of statement: the screen is telling you what it cannot do before you try. */
 .tt-offline-banner {

@@ -42,7 +42,7 @@ export const CREW = [
     ],
   },
   { role: "waiter", email: "demo-waiter@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/bills", "/dashboard/profile"] },
-  { role: "cashier", email: "demo-cashier@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/bills", "/dashboard/profile"] },
+  { role: "cashier", email: "demo-cashier@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/bills", "/dashboard/pos", "/dashboard/profile"] },
   { role: "kitchen", email: "demo-kitchen@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/profile"] },
   // The platform admin runs the whole business from one screen and was in no
   // check at all: at 390px its five columns gave the name 31px, so every
