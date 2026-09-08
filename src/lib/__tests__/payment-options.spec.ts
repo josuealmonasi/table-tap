@@ -15,8 +15,8 @@ const ctx = (over: Partial<PaymentContext> = {}): PaymentContext => ({
   ...over,
 });
 
-describe("lo que el comensal puede hacer", () => {
-  it("con Stripe y pagar-al-final encendidos, ofrece las dos", () => {
+describe("what the diner is able to do", () => {
+  it("offers both when Stripe and pay-at-the-end are on", () => {
     // This is what the restaurant asked for: pay for your own on sitting down, or
     // leave it open with the rest of the table.
     const o = paymentOptions(ctx({ cardsEnabled: true, allowDeferred: true }));
@@ -25,13 +25,13 @@ describe("lo que el comensal puede hacer", () => {
     expect(paymentHintKey(o)).toBe("cart.payNowHint");
   });
 
-  it("con Stripe y pagar-al-final apagado, sólo tarjeta", () => {
+  it("offers card only when pay-at-the-end is off", () => {
     const o = paymentOptions(ctx({ cardsEnabled: true }));
     expect(o).toMatchObject({ payNow: true, payLater: false, payCounter: false });
     expect(paymentHintKey(o)).toBe("cart.securedBy");
   });
 
-  it("sin Stripe no promete tarjeta por debajo del botón", () => {
+  it("promises no card under the button when there is no Stripe", () => {
     // The bug from the screenshot: the line said "pay now by card, or leave the
     // bill open" on a screen with no card button at all.
     const o = paymentOptions(ctx({ allowDeferred: true }));
@@ -40,7 +40,7 @@ describe("lo que el comensal puede hacer", () => {
     expect(paymentHintKey(o)).toBe("cart.payLaterOnlyHint");
   });
 
-  it("el mismo interruptor es la cuenta abierta en mesa y la caja en el QR general", () => {
+  it("is one switch: an open bill at a table, the counter on the general QR", () => {
     // The one that shipped: the general QR was handed a cart with no button on
     // it — no card connected, and the counter option unreachable — while the
     // owner's screen showed "pay at the end" switched on. One switch, and which
@@ -54,7 +54,7 @@ describe("lo que el comensal puede hacer", () => {
     expect(paymentHintKey(general)).toBe("cart.counterOnlyHint");
   });
 
-  it("sin nada encendido y sin Stripe, no hay forma de ordenar", () => {
+  it("leaves no way to order with nothing switched on and no Stripe", () => {
     // The second screenshot: the general QR with the cart in a dead end.
     const o = paymentOptions(ctx({ atTable: false }));
     expect(canOrder(o)).toBe(false);
@@ -62,16 +62,16 @@ describe("lo que el comensal puede hacer", () => {
   });
 });
 
-describe("lo que hay que advertirle al dueño", () => {
-  it("no advierte nada cuando el cobro con tarjeta funciona", () => {
+describe("what the owner has to be warned about", () => {
+  it("warns about nothing while taking cards works", () => {
     expect(ownerWarningKey(ctx({ cardsEnabled: true, allowDeferred: true }))).toBeNull();
   });
 
-  it("avisa que sus clientes no pueden pagar en línea", () => {
+  it("says their customers cannot pay online", () => {
     expect(ownerWarningKey(ctx({ allowDeferred: true }))).toBe("dash.noCardsConnected");
   });
 
-  it("sube el tono cuando además apagó el interruptor", () => {
+  it("raises its voice when they switched the other one off too", () => {
     // At that point it is not one option fewer: it is that nobody can order.
     expect(ownerWarningKey(ctx())).toBe("dash.noPaymentAtAll");
   });

@@ -45,14 +45,14 @@ async function staffId(fx) {
 async function dietaryTagId(fx) {
   const { data } = await fx.admin
     .from("dietary_tags").select("id").eq("restaurant_id", fx.restaurant.id)
-    .eq("key", `${MARK}_dieta`).maybeSingle();
+    .eq("key", `${MARK}_diet`).maybeSingle();
   return data?.id ?? "";
 }
 
 async function iconGroupId(fx) {
   const { data } = await fx.admin
     .from("icon_groups").select("id").eq("restaurant_id", fx.restaurant.id)
-    .eq("name", `${MARK} iconos`).maybeSingle();
+    .eq("name", `${MARK} icons`).maybeSingle();
   return data?.id ?? "";
 }
 
@@ -118,9 +118,9 @@ export function cases(fx) {
       body: { restaurantId: r, tableId: null, items: [{ itemId: dish.id, name: dish.name,
         price: Number(dish.price), qty: 3, emoji: "🍽️", mods: {} }] }, expect: [200, 409] },
     { name: "POST /api/receipt", as: "diner", method: "POST", path: "/api/receipt",
-      body: { orderId: paidOrder, email: "nadie@tabletap.dev" }, expect: [200, 400, 409, 503] },
+      body: { orderId: paidOrder, email: "nobody@tabletap.dev" }, expect: [200, 400, 409, 503] },
 
-    // ── el piso ──────────────────────────────────────────────────────────
+    // ── the floor ────────────────────────────────────────────────────────
     { name: "GET  /api/badges", as: "waiter", method: "GET", path: "/api/badges", expect: [200] },
     // The bell. A manager may read it and mark it read; that the floor and the
     // kitchen are refused is checked by `pnpm roles`, which owns the question
@@ -159,18 +159,18 @@ export function cases(fx) {
     { name: "DELETE /api/coupons", as: "manager", method: "DELETE", path: "/api/coupons",
       body: async f => ({ id: await couponId(f) }), expect: [200] },
     { name: "POST /api/dietary-tags (create)", as: "manager", method: "POST", path: "/api/dietary-tags",
-      body: { label: `${MARK} dieta`, labelEn: "apicheck diet", emoji: "🍬" },
-      expect: [200], check: d => Boolean(d.id) || "no devolvió el id de la etiqueta" },
+      body: { label: `${MARK} diet`, labelEn: "apicheck diet", emoji: "🍬" },
+      expect: [200], check: d => Boolean(d.id) || "returned no tag id" },
     { name: "PATCH /api/dietary-tags (rename)", as: "manager", method: "PATCH", path: "/api/dietary-tags",
-      body: async f => ({ id: await dietaryTagId(f), label: `${MARK} dieta`, emoji: "🍭" }),
+      body: async f => ({ id: await dietaryTagId(f), label: `${MARK} diet`, emoji: "🍭" }),
       expect: [200] },
     { name: "DELETE /api/dietary-tags", as: "manager", method: "DELETE", path: "/api/dietary-tags",
       body: async f => ({ id: await dietaryTagId(f) }), expect: [200] },
     { name: "POST /api/icon-groups (create)", as: "manager", method: "POST", path: "/api/icon-groups",
-      body: { name: `${MARK} iconos`, variant: "addon", icons: [{ emoji: "🌮" }, { emoji: "🌶️" }] },
-      expect: [200], check: d => Boolean(d.id) || "no devolvió el id del grupo" },
+      body: { name: `${MARK} icons`, variant: "addon", icons: [{ emoji: "🌮" }, { emoji: "🌶️" }] },
+      expect: [200], check: d => Boolean(d.id) || "returned no icon group id" },
     { name: "PATCH /api/icon-groups (rename)", as: "manager", method: "PATCH", path: "/api/icon-groups",
-      body: async f => ({ id: await iconGroupId(f), name: `${MARK} iconos`, icons: [{ emoji: "🧄" }] }),
+      body: async f => ({ id: await iconGroupId(f), name: `${MARK} icons`, icons: [{ emoji: "🧄" }] }),
       expect: [200] },
     { name: "DELETE /api/icon-groups", as: "manager", method: "DELETE", path: "/api/icon-groups",
       body: async f => ({ id: await iconGroupId(f) }), expect: [200] },

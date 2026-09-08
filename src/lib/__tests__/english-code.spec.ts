@@ -10,16 +10,55 @@ import { describe, expect, it } from "vitest";
  * included, is English, so anyone can read the reasoning without translating
  * it. Comments had drifted into Spanish across 87 files before anyone noticed.
  *
- * Scored rather than pattern-matched: a comment naming a Spanish UI string
- * ("the button says 'Agregar mesa'") is fine, and only prose that is mostly
- * Spanish gets flagged.
+ * The vocabulary is READ FROM THE APP'S OWN DICTIONARIES rather than written
+ * out here. Three times a hand-written list was the thing that hid the next
+ * batch: it had no word for "tarjeta", so `POST /api/checkout (tarjeta)` rode
+ * through; no word for "encontró", so a thrown error did; and it was never
+ * pointed at test titles at all, so four whole spec files were in Spanish —
+ * `el precio de fundador`, `lo que el comensal puede hacer` — printed on every
+ * run and read by nobody. `es.ts` is a thousand real Spanish words and grows
+ * with the app; a list I think of does not.
  */
-const SPANISH =
-  /\b(que|para|porque|cuando|desde|sólo|pero|este|esta|los|las|una|del|con|sin|más|así|hay|está|pedido|mesa|cuenta|comensal|platillo|dueño|gerente|mesero|cocina|pantalla|carrito|etiqueta|nada|todo|aquí|pagar|cobrar|guarda|enseña|tarjeta|efectivo|propina|cupón|descuento|contraseña|usuario|correo|código|sesión|botón|mensaje|precio|hora|día|noche|se|le|lo|su|es|no|al|un|de|en|por|como|si)\b/gi;
-const ENGLISH =
-  /\b(the|and|of|to|is|for|that|with|this|it|as|are|be|not|which|when|from|but|only|so|because|what|who|how|they|their|has|have|we|you|its|there|then|than|into|on|at|by|an|a|or|if|no|all|one)\b/gi;
+const words = (file: string): Set<string> => {
+  const out = new Set<string>();
+  for (const m of readFileSync(file, "utf8").matchAll(/:\s*"((?:\\.|[^"\\])*)"/g)) {
+    for (const w of m[1].toLowerCase().match(/[a-záéíóúñü]+/g) ?? []) {
+      if (w.length > 1) out.add(w);
+    }
+  }
+  return out;
+};
 
-const SKIP = ["i18n/es.ts", "i18n/en.ts", "legal/", "node_modules"];
+const ES = words("src/lib/i18n/es.ts");
+const EN = words("src/lib/i18n/en.ts");
+/** Words that belong to one language only — the ones that actually decide. */
+const ES_ONLY = new Set([...ES].filter(w => !EN.has(w)));
+const EN_ONLY = new Set([...EN].filter(w => !ES.has(w)));
+
+/** How Spanish a piece of prose reads, against the app's own vocabulary. */
+function readsSpanish(text: string, minimum = 2): boolean {
+  const ws = text.toLowerCase().match(/[a-záéíóúñü]+/g) ?? [];
+  let es = 0;
+  let en = 0;
+  for (const w of ws) {
+    if (ES_ONLY.has(w)) es++;
+    else if (EN_ONLY.has(w)) en++;
+  }
+  return es > en && es >= minimum;
+}
+
+// The Spanish that is allowed: what a customer or a restaurant actually reads.
+// `legal-pdf.mjs` is on the list because it writes the Spanish legal documents —
+// its strings ARE the copy — and `test-users.mjs` because `servicio` and
+// `grupo` are plan identifiers the database stores, not words to anybody.
+const SKIP = [
+  "i18n/es.ts",
+  "i18n/en.ts",
+  "legal/",
+  "node_modules",
+  "scripts/legal-pdf.mjs",
+  "scripts/test-users.mjs",
+];
 
 /** Where the sources are. `supabase` holds the schema, which is source too. */
 const ROOTS = ["src", "scripts", "supabase"];
@@ -110,10 +149,7 @@ function comments(src: string): string[] {
 function spanishComments(path: string): string[] {
   return comments(readFileSync(path, "utf8"))
     .filter(raw => {
-      const text = raw.replace(/\b(EN|ES)\b/g, " ");
-      const es = text.match(SPANISH)?.length ?? 0;
-      const en = text.match(ENGLISH)?.length ?? 0;
-      return es > en && es >= 2;
+      return readsSpanish(raw.replace(/\b(EN|ES)\b/g, " "));
     })
     .map(raw => `${path}  ${raw.slice(0, 70)}`);
 }
@@ -132,7 +168,20 @@ function spanishComments(path: string): string[] {
  * about a Spanish thing rather than words addressed to a developer, and both
  * are identifiable from the line: a matcher sits behind one of these keys.
  */
-const MATCHER = /\b(text|marker|expect|sections|es|en|body)\s*:|includes\(|hasText|getByText/;
+/**
+ * A string is exempt when IT is the value of a matcher key — not when some
+ * other string on the same line is.
+ *
+ * The line-wide version was too coarse and hid a real one: `expect: [200],
+ * check: d => … || "no devolvió el id de la etiqueta"` was let through whole,
+ * because `expect:` appeared on it. The status codes and the failure message
+ * are not the same kind of string and must not share an exemption.
+ */
+// `plan: "servicio"` is a database enum, as much an identifier as a uuid.
+const MATCHER_KEY = /\b(text|marker|expect|sections|es|en|body|label|labelEn|name|plan|role)\s*:\s*\{?\s*$/;
+/** A `sections: { "Zona horaria": OWNER, "Pagos": OWNER }` — every key is UI text. */
+const MATCHER_MAP = /\bsections\s*:\s*\{[^}]*$/;
+const MATCHER_CALL = /(includes|hasText|getByText|eq|ilike)\s*\(\s*$/;
 
 /** Seed content for the demo restaurant — Spanish because the diners are. */
 const SEED = ["scripts/mock-data.mjs", "scripts/seed-"];
@@ -147,20 +196,38 @@ function spanishOutput(path: string): string[] {
     m.replace(/[^\n]/g, " "),
   );
   src.split("\n").forEach((line, i) => {
-    if (MATCHER.test(line)) return;
     const code = line.slice(0, lineComment(line) ? line.indexOf("//") : undefined);
     for (const m of code.matchAll(/(["'`])((?:\\.|(?!\1)[^\\])*)\1/g)) {
+      // What sits immediately before this string decides whether it is data
+      // about a Spanish thing or words written to a developer.
+      const before = code.slice(0, m.index);
+      if (MATCHER_KEY.test(before) || MATCHER_CALL.test(before)) continue;
+      if (MATCHER_MAP.test(before)) continue;
       const text = m[2].replace(/\$\{[^}]*\}/g, " ").replace(/\b(EN|ES)\b/g, " ");
       // A locale code, a path or a selector is an identifier, not prose: "es-MX"
       // and "terms-es.json" are not Spanish sentences, they only contain "es".
       if (/^[a-z]{2}-[A-Z]{2}$/.test(m[2].trim()) || m[2].includes("/")) continue;
       if (text.trim().length < 4) continue;
-      const es = text.match(SPANISH)?.length ?? 0;
-      const en = text.match(ENGLISH)?.length ?? 0;
-      if (es > en && es >= 1) out.push(`${path}:${i + 1}  ${m[2].slice(0, 60)}`);
+      if (readsSpanish(text, 1)) out.push(`${path}:${i + 1}  ${m[2].slice(0, 60)}`);
     }
   });
   return out;
+}
+
+/**
+ * Every `describe()` and `it()` title in the repo.
+ *
+ * A test title is output: it is printed on every run and it is how a failure
+ * names itself. Nothing checked them, and four whole spec files had been in
+ * Spanish the entire time — thirty titles, read out loud by the runner on
+ * every single run, and invisible to a guard that only looked at comments and
+ * at `scripts/`.
+ */
+function testTitles(path: string): string[] {
+  const src = readFileSync(path, "utf8");
+  return [
+    ...src.matchAll(/\b(?:describe|it)(?:\.each(?:<[^>]*>)?\([^)]*\))?\s*\(\s*(["'`])((?:\\.|(?!\1)[^\\])*)\1/g),
+  ].map(m => m[2]);
 }
 
 describe("the code is written in English", () => {
@@ -188,6 +255,21 @@ describe("the code is written in English", () => {
     expect(
       offenders,
       `Spanish in script output — the terminal is read by developers, so it is\nEnglish. Text that matches the app's Spanish UI belongs behind a matcher\nkey (text:, marker:, expect:, es:):\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
+
+  it("names its own tests in English", () => {
+    const specs = ROOTS.flatMap(r => sourceFiles(r)).filter(f => /\.spec\.tsx?$/.test(f));
+    expect(specs.length, "the spec scan found nothing").toBeGreaterThan(20);
+
+    const offenders = specs.flatMap(path =>
+      testTitles(path)
+        .filter(title => readsSpanish(title, 1))
+        .map(title => `${path}  ${title.slice(0, 66)}`),
+    );
+    expect(
+      offenders,
+      `Spanish test titles — the runner prints these on every run:\n${offenders.join("\n")}`,
     ).toEqual([]);
   });
 });

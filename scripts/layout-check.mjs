@@ -38,14 +38,25 @@ const { data: busy } = await admin
 const taken = new Set((busy ?? []).map(o => o.table_id));
 const table = tables.find(t => !taken.has(t.id)) ?? tables[0];
 
+// Any order at all is enough to measure the tracker: the screen is the same
+// shape whether it is paid or still owing, apart from the payment QR.
+const { data: tracked } = await admin
+  .from("orders")
+  .select("id")
+  .eq("restaurant_id", r.id)
+  .neq("status", "pending_payment")
+  .limit(1)
+  .maybeSingle();
+const anyOrder = tracked?.id ?? null;
+
 // The CSS pivots at 1025px, so everything from 768 to 1024 gets the
 // non-desktop layout stretched to its widest — which is every iPad in portrait
 // and the base iPad in landscape. Nothing swept that band, and the restaurant
 // side is what runs on a tablet at the pass.
 const SIZES = [
-  { name: "teléfono", width: 390, height: 844 },
-  { name: "tableta", width: 820, height: 1180 },
-  { name: "escritorio", width: 1280, height: 900 },
+  { name: "phone", width: 390, height: 844 },
+  { name: "tablet", width: 820, height: 1180 },
+  { name: "desktop", width: 1280, height: 900 },
 ];
 
 let failed = 0;
@@ -142,7 +153,13 @@ for (const size of SIZES) {
   for (const flow of DINER) {
     const tab = await diner.newPage();
     try {
-      await gotoOnce(tab, `${BASE}/r/${r.id}/t/${table.id}`, { waitUntil: "load", timeout: 60000 });
+      // Most flows start at the table. One does not: the tracker has its own
+      // URL, so it says where it begins.
+      const start = flow.at
+        ? `${BASE}${flow.at.replace(":orderId", anyOrder ?? "")}`
+        : `${BASE}/r/${r.id}/t/${table.id}`;
+      if (flow.at && !anyOrder) throw new Error("no order in the demo data to track");
+      await gotoOnce(tab, start, { waitUntil: "load", timeout: 60000 });
       await settle(tab);
       for (const step of flow.steps) {
         if (step.addToCart) {
@@ -158,7 +175,7 @@ for (const size of SIZES) {
         // That does not get to pass quietly.
         if (step.click) {
           const sel = typeof step.click === "string" ? step.click : step.click[lang];
-          if (!(await tap(tab, sel))) throw new Error(`no encontró «${sel}»`);
+          if (!(await tap(tab, sel))) throw new Error(`could not find «${sel}»`);
         }
         if (step.text) {
           const label = typeof step.text === "string" ? step.text : step.text[lang];
@@ -206,7 +223,7 @@ for (const size of SIZES) {
   }
   await outside.close();
 
-  // ── El equipo ────────────────────────────────────────────────────────────
+  // ── The team ─────────────────────────────────────────────────────────────
   for (const who of CREW) {
     const password = who.passwordEnv ? process.env[who.passwordEnv] : undefined;
     if (who.passwordEnv && !password) {

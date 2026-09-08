@@ -114,7 +114,7 @@ export function useStaff(restaurantId: string) {
         toast(data.error ?? t("apiErr.staffRole"), "error");
         return;
       }
-      toast("Role updated");
+      toast(t("done.roleUpdated"));
       setMembers(prev => prev.map(m => (m.id === id ? { ...m, role } : m)));
     } catch {
       toast(t("done.networkError"), "error");
@@ -136,7 +136,7 @@ export function useStaff(restaurantId: string) {
         toast(data.error ?? t("apiErr.loginRemove"), "error");
         return;
       }
-      toast("Staff login removed");
+      toast(t("done.loginRemoved"));
       setMembers(prev => prev.filter(m => m.id !== id));
     } catch {
       toast(t("done.networkError"), "error");

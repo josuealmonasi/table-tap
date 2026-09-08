@@ -74,15 +74,23 @@ export function usePromotions(restaurantId: string) {
       method: "POST" | "PATCH" | "DELETE",
       body: unknown,
     ): Promise<string | null> => {
-      const res = await fetch("/api/promotions", {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) return data.error ?? t("apiErr.generic");
-      await reload();
-      return null;
+      // This promises a message or null, so a dead connection has to become a
+      // message too. Left to throw, the rejection reached a caller that was
+      // only ever written to read a returned string, and the panel simply
+      // stopped responding.
+      try {
+        const res = await fetch("/api/promotions", {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return data.error ?? t("apiErr.generic");
+        await reload();
+        return null;
+      } catch {
+        return t("done.networkError");
+      }
     },
     [reload, t],
   );

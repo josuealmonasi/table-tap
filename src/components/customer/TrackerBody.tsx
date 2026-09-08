@@ -6,6 +6,7 @@ import { useT } from "@/lib/i18n/context";
 import OrderStatusTimeline from "./OrderStatusTimeline";
 import TrackedItemsCard from "./TrackedItemsCard";
 import {
+  BackIcon,
   StatusPreparingIcon,
   StatusReadyIcon,
   StatusReceivedIcon,
@@ -32,11 +33,11 @@ const HERO: Record<string, { headlineKey: string; Glyph: typeof StatusReadyIcon 
  */
 export default function TrackerBody({
   order,
-  children,
+  onBack,
 }: {
   order: TrackedOrder;
-  /** The way out: a link back to the menu, or a dialog's close button. */
-  children?: React.ReactNode;
+  /** The way out, in the corner every other screen keeps it in. */
+  onBack: () => void;
 }) {
   const t = useT();
   const status = toDisplayStatus(order.status);
@@ -45,6 +46,18 @@ export default function TrackerBody({
   return (
     <>
       <div className="tt-track-hero">
+        {/* Top left, where this app already keeps a way back — the dish screen
+            and the combo screen both put one here. It used to sit under
+            everything, which on an unpaid order meant scrolling past a
+            180px QR code to leave the screen. */}
+        <button
+          type="button"
+          className="tt-back"
+          onClick={onBack}
+          aria-label={t("tracker.backToMenu")}
+        >
+          <BackIcon size={18} weight="bold" />
+        </button>
         <hero.Glyph size={46} weight="duotone" />
         <h2 className="tt-serif" style={{ margin: 0, fontSize: 22 }}>
           {t(hero.headlineKey)}
@@ -91,8 +104,6 @@ export default function TrackerBody({
             />
           </div>
         )}
-
-        {children}
       </div>
     </>
   );
