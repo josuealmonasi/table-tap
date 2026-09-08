@@ -113,7 +113,7 @@ describe("every public endpoint has a ceiling", () => {
 
     const naked = routes.filter(
       f =>
-        !/acting(Staff|FrontOfHouse|Manager|Owner)|isRateLimited|getPlatformAdmin|stripe-signature/.test(
+        !/acting(Staff|FrontOfHouse|Manager|Owner)|isRateLimited|getPlatformAdmin|stripe-signature|readStripeEvent/.test(
           read(f),
         ),
     );
@@ -331,7 +331,7 @@ describe("a column exists before the grant that names it", () => {
         .filter(l => /\breleaseStock\s*\(/.test(l)).length;
 
     expect(
-      calls("src/app/api/webhooks/stripe/route.ts"),
+      calls("src/lib/checkout-settle.ts"),
       "an abandoned checkout no longer returns its stock",
     ).toBeGreaterThan(0);
     expect(
@@ -465,6 +465,57 @@ function callBody(src: string, from: number): string {
   }
   return src.slice(from);
 }
+
+describe("each Stripe stream has its own endpoint and its own secret", () => {
+  /**
+   * The app takes money on two Stripe accounts. A diner's food is a DIRECT
+   * charge on the restaurant's own account — the change that stopped Stripe
+   * billing us MX$13.80 on a MX$300 ticket against MX$0.75 collected — so
+   * those events fire there. A subscription is charged on ours. Stripe has no
+   * endpoint that receives both, and issues a separate signing secret for each.
+   *
+   * The tempting shortcut is one route trying several secrets until one fits.
+   * It works, and it also means the code can no longer say which account an
+   * event came from: a connected-account settlement arriving on the platform
+   * endpoint would be paid out identically. So: one secret per route, and each
+   * route handles only its own account's events.
+   */
+  const PLATFORM = "src/app/api/webhooks/stripe/route.ts";
+  const CONNECT = "src/app/api/webhooks/stripe/connect/route.ts";
+
+  it("verifies each endpoint against exactly one secret", () => {
+    for (const file of [PLATFORM, CONNECT]) {
+      const secrets = new Set(
+        [...read(file).matchAll(/process\.env\.(STRIPE_WEBHOOK_SECRET\w*)/g)].map(m => m[1]),
+      );
+      expect(
+        [...secrets],
+        `${file} should read exactly one webhook secret — trying several is how\nan endpoint stops knowing which Stripe account sent it`,
+      ).toHaveLength(1);
+    }
+
+    const platformSecret = read(PLATFORM).match(/process\.env\.(STRIPE_WEBHOOK_SECRET\w*)/)?.[1];
+    const connectSecret = read(CONNECT).match(/process\.env\.(STRIPE_WEBHOOK_SECRET\w*)/)?.[1];
+    expect(
+      platformSecret,
+      "both endpoints read the same secret, so only one of them can ever verify",
+    ).not.toBe(connectSecret);
+  });
+
+  it("keeps each account's events on its own endpoint", () => {
+    // A subscription cannot arrive on a connected account, and a diner's
+    // checkout cannot arrive on ours. Handling one on the other's route would
+    // be dead code at best and a trust boundary crossed at worst.
+    expect(
+      read(PLATFORM).includes("checkout.session."),
+      "the platform endpoint handles a connected account's checkout",
+    ).toBe(false);
+    expect(
+      read(CONNECT).includes("customer.subscription."),
+      "the connect endpoint handles our own account's subscription",
+    ).toBe(false);
+  });
+});
 
 describe("nothing that moves money waits offline", () => {
   /**
@@ -712,7 +763,7 @@ describe("money is rounded in one place", () => {
 describe("every route that settles an order records the payment", () => {
   const SETTLES = [
     ["src/app/api/table-payment/route.ts", "the till stopped recording what it took"],
-    ["src/app/api/webhooks/stripe/route.ts", "a card payment is no longer written to the ledger"],
+    ["src/lib/checkout-settle.ts", "a card payment is no longer written to the ledger"],
   ] as const;
 
   it("calls recordPayment wherever it sets paid", () => {

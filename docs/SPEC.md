@@ -107,6 +107,16 @@ is paid rides the same track and carries its debt on the bills screen instead.
   amount belonging to no order. Every route that marks an order paid records the
   payment in the same breath; two invariants and `pnpm money` are what keep the
   two records from drifting apart.
+- **Two Stripe accounts, so two webhooks.** A diner's food is a DIRECT charge
+  on the restaurant's own Stripe account: Stripe's processing fee comes out of
+  their balance and our per-order fee comes to us clean. As a destination
+  charge on the platform it billed *us* MX$13.80 on a MX$300 ticket against
+  MX$0.75 collected, and every restaurant we signed made that worse. The
+  consequence is that a diner's events fire on the restaurant's account and a
+  subscription's fire on ours — separate streams with separate signing secrets,
+  so `/api/webhooks/stripe` takes our own account's events and
+  `/api/webhooks/stripe/connect` takes the restaurants'. One secret each: an
+  endpoint that tries several can no longer say which account sent it.
 - **Corte de caja**: the day's takings by whoever took them, laid out as a sum,
   and the till each of them can count on their own. Both read `payments`, where
   an amount is a number the database checked. They used to be parsed out of the
