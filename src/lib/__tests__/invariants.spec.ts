@@ -456,6 +456,49 @@ describe("the checks know about every route and screen", () => {
  * Walks the real import graph, counting only imports that survive compilation:
  * a type-only import is not an edge, because it is not there at runtime.
  */
+/** The source between an opening `(` and its match. */
+function callBody(src: string, from: number): string {
+  let depth = 1;
+  for (let i = from; i < src.length; i++) {
+    if (src[i] === "(") depth++;
+    else if (src[i] === ")" && --depth === 0) return src.slice(from, i);
+  }
+  return src.slice(from);
+}
+
+describe("cash names the person who took it", () => {
+  /**
+   * Card money can arrive with nobody standing there — a diner pays online and
+   * the webhook records it, so `actor_email` is null and that is correct. Cash
+   * cannot: somebody physically took it, and the corte they sign at the end of
+   * the night is grouped by exactly that column. A cash payment recorded
+   * without an actor is money in a drawer that belongs to no drawer.
+   *
+   * `pnpm money` checks the rows; this checks the code that writes them, so a
+   * new settlement route cannot ship the hole and wait to be noticed in data.
+   */
+  it("passes actorEmail wherever a payment might not be a card", () => {
+    const offenders: string[] = [];
+
+    for (const file of walkAll("src/app/api").filter(f => f.endsWith("route.ts"))) {
+      const src = fs.readFileSync(file, "utf8");
+      for (const m of src.matchAll(/recordPayments?\s*\(/g)) {
+        const call = callBody(src, m.index + m[0].length);
+        // A call that hard-codes "card" is the online path and needs no actor.
+        if (/method:\s*"card"(\s+as\s+const)?\s*,/.test(call)) continue;
+        if (/actorEmail:/.test(call)) continue;
+        const line = src.slice(0, m.index).split("\n").length;
+        offenders.push(`${file}:${line}`);
+      }
+    }
+
+    expect(
+      offenders,
+      `a payment that could be cash is recorded with nobody named — pass actorEmail,\nor hard-code method: "card" if it can only ever be an online payment:\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
+});
+
 describe("an API error reaches the person in their own language", () => {
   /**
    * `apiError` looks the sentence up in the caller's locale; a sentence written

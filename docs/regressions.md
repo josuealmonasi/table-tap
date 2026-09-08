@@ -184,6 +184,23 @@ of the five demo accounts and `layout-paths` carried another; rename an account
 in one and the other signs in as somebody else, or fails and blames the app.
 They agreed by luck, not by anything checking. Now an invariant compares them.
 
+**Money a cashier signs for was a substring.** The till and the corte were
+built by parsing `amount=120 method=cash` out of the activity log, so a row
+written a little differently added nothing and still counted as a settlement,
+and the two records of one night's cash — the log the cashier signs and the
+ledger the owner audits — had nothing comparing them. Both now read `payments`,
+where the amount is `numeric not null check (amount > 0)` and the method is one
+of two words. `pnpm money` reconciles the log against the ledger per person and
+method, from the moment the ledger began naming who took the money; the backfill
+before that could not know an actor and is not its business.
+
+**Cash with nobody's name on it belongs to no drawer.** Card can arrive with
+nobody standing there — a diner pays online and the webhook records it — but
+cash was physically handed to a person, and the corte is grouped by exactly
+that column. `pnpm money` checks the rows and an invariant checks the code, so
+a new settlement route cannot ship without an actor and wait to be noticed in
+the data.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`

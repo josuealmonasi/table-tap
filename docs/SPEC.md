@@ -107,7 +107,16 @@ is paid rides the same track and carries its debt on the bills screen instead.
   amount belonging to no order. Every route that marks an order paid records the
   payment in the same breath; two invariants and `pnpm money` are what keep the
   two records from drifting apart.
-- **Corte de caja**: the day's takings by whoever took them, laid out as a sum.
+- **Corte de caja**: the day's takings by whoever took them, laid out as a sum,
+  and the till each of them can count on their own. Both read `payments`, where
+  an amount is a number the database checked. They used to be parsed out of the
+  activity log's `amount=120 method=cash` sentence, which made the money a
+  cashier signs for a substring — and the ledger and the log, two records of one
+  night, had nothing comparing them. `pnpm money` now reconciles them per person
+  and method. Money given up (write-offs, discounts) still comes from the log,
+  because money that never arrived cannot be in a payments table. Card paid
+  online is reported apart from every drawer: it is real, and nobody was
+  standing there to put it in one.
 
 ## Data model
 

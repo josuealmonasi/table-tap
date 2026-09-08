@@ -56,7 +56,11 @@ export default function CorteCard({
         `<td>${escapeHtml(t("corte.total"))}</td><td>${corte.totals.count}</td>` +
         `<td>${money(corte.totals.cash)}</td><td>${money(corte.totals.card)}</td>` +
         `<td>${money(corte.totals.total)}</td></tr></tfoot></table>` +
-        `<p style="margin-top:20px;font-size:14px">${escapeHtml(t("corte.writtenOff"))}: ${money(corte.writtenOff)}` +
+        `<p style="margin-top:20px;font-size:14px">` +
+        (corte.online > 0
+          ? `${escapeHtml(t("corte.online"))}: ${money(corte.online)} &nbsp;·&nbsp; `
+          : "") +
+        `${escapeHtml(t("corte.writtenOff"))}: ${money(corte.writtenOff)}` +
         ` &nbsp;·&nbsp; ${escapeHtml(t("corte.discounted"))}: ${money(corte.discounted)}</p>` +
         `<p style="margin-top:44px;font-size:13px;color:#70707a">${escapeHtml(t("corte.signature"))}</p>` +
         `<div style="margin-top:34px;border-top:1px solid #111113;width:260px"></div>` +
@@ -83,7 +87,7 @@ export default function CorteCard({
         {t("corte.hint")}
       </p>
 
-      {corte.totals.count === 0 ? (
+      {corte.totals.count === 0 && corte.online === 0 ? (
         <p className="tt-muted" style={{ fontSize: 13, margin: 0 }}>
           {t("corte.empty")}
         </p>
@@ -94,6 +98,10 @@ export default function CorteCard({
               column it adds up. Reading a corte means running your eye down a
               column, which a row of inline labels does not let you do. The
               screen matches the printed sheet for the same reason. */}
+          {/* A day where every diner paid online fills no drawer at all: there
+              is nobody to list, but there is still money to report, so the
+              table steps aside rather than showing a row of zeros. */}
+          {corte.people.length > 0 && (
           <div className="tt-corte-scroll">
             <div className="tt-corte-table" role="table">
               <div className="tt-corte-head" role="row">
@@ -123,10 +131,16 @@ export default function CorteCard({
               </div>
             </div>
           </div>
+          )}
 
           {/* Underneath, not netted off: subtracting what never arrived would
               hide the two numbers a manager most wants on a bad night. */}
           <div className="tt-corte-foot">
+            {corte.online > 0 && (
+              <span className="tt-muted">
+                {t("corte.online")} <strong>{money(corte.online)}</strong>
+              </span>
+            )}
             <span className="tt-muted">
               {t("corte.writtenOff")} <strong>{money(corte.writtenOff)}</strong>
             </span>

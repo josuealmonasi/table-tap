@@ -64,19 +64,17 @@ export default async function BillsPage() {
   ]);
 
   // Their own takings, read here with the secret key rather than by widening
-  // the log's policy. `user_logs` is the owner's to read, and it stays that
-  // way: the filter below is the session's own email, so nobody sees anybody
-  // else's collections and no new door was opened to get there.
+  // any policy. `payments` is nobody's to read from a browser, and it stays
+  // that way: the filter below is the session's own email, so nobody sees
+  // anybody else's collections and no new door was opened to get there.
   const me = await currentUser();
   const dayStart = startOfLocalDay(new Date(), r.timezone ?? DEFAULT_TIME_ZONE);
   const { data: myPayments } = me?.email
     ? await db
-        .from("user_logs")
-        .select("detail")
+        .from("payments")
+        .select("amount, method")
         .eq("restaurant_id", r.id)
         .eq("actor_email", me.email)
-        .eq("entity", "bill")
-        .eq("action", "paid")
         .gte("created_at", dayStart.toISOString())
     : { data: null };
   const till = myPayments ? tillFrom(myPayments) : EMPTY_TILL;

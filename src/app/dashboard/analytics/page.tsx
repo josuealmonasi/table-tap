@@ -10,7 +10,7 @@ import AnalyticsView, { type RatedDish } from "@/components/dashboard/analytics/
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { startOfLocalDay } from "@/lib/day-window";
-import { corteFrom, EMPTY_CORTE, type CorteRow } from "@/lib/corte";
+import { corteFrom, EMPTY_CORTE, type CorteAdjustment, type CortePayment } from "@/lib/corte";
 
 export const dynamic = "force-dynamic";
 
@@ -44,21 +44,33 @@ export default async function AnalyticsPage({
   // A corte is the thing somebody signs at the end of a shift; a corte "for the
   // last 30 days" is not a document anybody counts a drawer against.
   //
-  // From the activity log, because it is the only place that records who
-  // settled each bill. Read with the secret key: the log is the owner's to read
-  // and stays that way, and this page is already manager-gated.
+  // Money that arrived comes from the ledger, where an amount is a number the
+  // database checked rather than a word in a sentence. Money that never
+  // arrived cannot be in a payments table at all, so write-offs and discounts
+  // still come from the log, which is where giving them up was recorded.
+  //
+  // Both read with the secret key: neither is readable from a browser and both
+  // stay that way, and this page is already manager-gated.
   const dayStart = startOfLocalDay(new Date(), timeZone);
-  const { data: logRows } = await createAdminClient()
-    .from("user_logs")
-    .select("actor_email, entity, action, detail")
-    .eq("restaurant_id", membership.restaurant.id)
-    .in("action", ["paid", "written_off", "discounted"])
-    .gte("created_at", dayStart.toISOString());
-  const corte = logRows
-    ? corteFrom(
-        (logRows as { actor_email: string; entity: string; action: string; detail: string | null }[])
-          .map(r => ({ actor: r.actor_email, entity: r.entity, action: r.action, detail: r.detail }) as CorteRow),
-      )
+  const admin = createAdminClient();
+  const since = dayStart.toISOString();
+
+  const [{ data: paidRows }, { data: givenUp }] = await Promise.all([
+    admin
+      .from("payments")
+      .select("actor_email, amount, method")
+      .eq("restaurant_id", membership.restaurant.id)
+      .gte("created_at", since),
+    admin
+      .from("user_logs")
+      .select("action, detail")
+      .eq("restaurant_id", membership.restaurant.id)
+      .in("action", ["written_off", "discounted"])
+      .gte("created_at", since),
+  ]);
+
+  const corte = paidRows
+    ? corteFrom(paidRows as CortePayment[], (givenUp ?? []) as CorteAdjustment[])
     : EMPTY_CORTE;
   const dayLabel = new Intl.DateTimeFormat("es-MX", {
     timeZone,
@@ -70,7 +82,6 @@ export default async function AnalyticsPage({
 
   // What people thought of the dishes. The function aggregates per dish; the
   // names come from the menu, to avoid running the same query twice.
-  const admin = createAdminClient();
   const [{ data: stats }, { data: dishes }] = await Promise.all([
     admin.rpc("dish_rating_stats", { p_restaurant_id: membership.restaurant.id }),
     admin
