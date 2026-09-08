@@ -17,7 +17,7 @@ export async function setup(env, base) {
   const cookieFor = async email => {
     const c = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
     const { data, error } = await c.auth.signInWithPassword({ email, password: "demo123" });
-    if (error) throw new Error(`no pude entrar como ${email}: ${error.message}`);
+    if (error) throw new Error(`could not sign in as ${email}: ${error.message}`);
     return `sb-${ref}-auth-token=base64-${Buffer.from(JSON.stringify(data.session)).toString("base64")}`;
   };
 
@@ -52,7 +52,7 @@ export async function setup(env, base) {
       items: [line], subtotal: line.price, service_fee: 0, tip: 0, tax_pct: 0,
       discount: 0, total: line.price, note: MARK, status: "received", ...extra,
     }).select("id").single();
-    if (error) throw new Error(`no pude crear el pedido de prueba: ${error.message}`);
+    if (error) throw new Error(`could not create the test order: ${error.message}`);
     return data.id;
   };
 

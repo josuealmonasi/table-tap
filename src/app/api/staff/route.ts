@@ -76,17 +76,11 @@ export async function POST(req: NextRequest) {
     // Supabase says "invalid" or "rate limit" when it is the one that cannot send
     // the mail, not when the address is wrong. Telling the owner their waiter's
     // email is invalid sends them to check the one thing that is actually fine.
-    // estaba bien.
     const mailer = raw.includes("rate limit") || raw.includes("invalid");
-    return NextResponse.json(
-      {
-        error: already
-          ? "That email already has an account."
-          : mailer
-            ? "No pudimos enviar la invitación — el correo del panel no está configurado. Avísanos y lo dejamos listo."
-            : (inviteErr?.message ?? "Could not send the invite."),
-      },
-      { status: 400 },
+    console.error("staff invite failed", inviteErr?.message);
+    return await apiError(
+      already ? "apiErr.emailHasAccount" : mailer ? "apiErr.inviteMailerOff" : "apiErr.inviteFailed",
+      400,
     );
   }
 

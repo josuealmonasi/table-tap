@@ -161,6 +161,29 @@ in Spanish and switches to English would otherwise find last week's warnings
 still in Spanish, because the row was written by a server that had no idea who
 would read it.
 
+**An error that bypasses `apiError` speaks one language forever.** 237 API
+errors resolved in the caller's locale and 7 did not, because they wrote the
+sentence straight into the response. A Spanish owner who reused a coupon code
+was told "That code already exists."; a diner under the card minimum got English
+in the middle of paying; and one invite failure answered every English speaker
+in Spanish. `invariants.spec.ts` now refuses any sentence in a route under
+`src/app/api` except the Stripe webhook, whose reader is Stripe.
+
+**The English rule was enforced on comments only, so the output drifted.** Every
+check printed its verdict in Spanish — `MAL`, `rebota de /dashboard`, `comensal
+es · carrito`, six layout faults named `aplastado`, `encimado`, `desalineado`,
+`partido`, `descentrado`, `desbordado` — and no test could see a word of it,
+because the guard read comments and nothing else. `english-code.spec.ts` now
+also reads the string literals in `scripts/`. Text that must match the Spanish
+UI belongs behind a matcher key (`text:`, `marker:`, `expect:`, `es:`), which is
+what tells the guard it is data about a Spanish thing rather than words written
+to a developer.
+
+**The same demo login was described twice.** `roles-check` carried its own list
+of the five demo accounts and `layout-paths` carried another; rename an account
+in one and the other signs in as somebody else, or fails and blames the app.
+They agreed by luck, not by anything checking. Now an invariant compares them.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`

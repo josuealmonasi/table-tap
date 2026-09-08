@@ -19,7 +19,7 @@ export async function reachable(base) {
 export async function requireServer(base, prod) {
   if (await reachable(base)) return;
   console.error(
-    `\n  El servidor no responde en ${base}.\n` +
+    `\n  The server does not answer at ${base}.\n` +
       (prod
         ? "  Check the deployment before reading anything below.\n"
         : "  Start it with `pnpm dev`. If it has been up for hours, kill it and\n" +

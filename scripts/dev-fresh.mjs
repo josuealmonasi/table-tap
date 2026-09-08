@@ -66,7 +66,7 @@ const { listeners, tree } = serverTree();
 
 if (listeners.length > 0 && tree.length === 0) {
   console.error(
-    `\n  El puerto ${PORT} lo tiene otra cosa (pid ${listeners.join(", ")}):\n` +
+    `\n  Something else holds port ${PORT} (pid ${listeners.join(", ")}):\n` +
       `    ${commandOf(listeners[0]).slice(0, 100)}\n\n` +
       "  Not this project's, so I am leaving it alone. Close it and try again.\n",
   );

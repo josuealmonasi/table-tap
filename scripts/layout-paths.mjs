@@ -8,7 +8,7 @@
 /** The five demo team logins, with what each one actually reaches. */
 export const CREW = [
   {
-    role: "dueño",
+    role: "owner",
     email: "demo@tabletap.dev",
     pages: [
       "/dashboard",
@@ -25,7 +25,7 @@ export const CREW = [
     ],
   },
   {
-    role: "gerente",
+    role: "manager",
     email: "demo-manager@tabletap.dev",
     // No staff or plan: they bounce, and a page you bounce off is another page,
     // already checked with its owner.
@@ -41,9 +41,9 @@ export const CREW = [
       "/dashboard/profile",
     ],
   },
-  { role: "mesero", email: "demo-waiter@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/bills", "/dashboard/profile"] },
-  { role: "cajero", email: "demo-cashier@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/bills", "/dashboard/profile"] },
-  { role: "cocina", email: "demo-kitchen@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/profile"] },
+  { role: "waiter", email: "demo-waiter@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/bills", "/dashboard/profile"] },
+  { role: "cashier", email: "demo-cashier@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/bills", "/dashboard/profile"] },
+  { role: "kitchen", email: "demo-kitchen@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/profile"] },
   // The platform admin runs the whole business from one screen and was in no
   // check at all: at 390px its five columns gave the name 31px, so every
   // restaurant came out one letter per line and the headers overlapped.
@@ -86,27 +86,27 @@ export const PUBLIC = [
  */
 export const DIALOGS = {
   "/dashboard/orders": [
-    { name: "detalle del pedido", click: ".tt-order-card" },
+    { name: "order detail", click: ".tt-order-card" },
   ],
   "/dashboard/bills": [
-    { name: "cobrar", text: "Cobrar" },
-    { name: "promoción en la cuenta", click: ".tt-bill-open-main" },
+    { name: "settle", text: "Cobrar" },
+    { name: "promotion on the bill", click: ".tt-bill-open-main" },
   ],
   "/dashboard/tables": [
-    { name: "agregar mesa", text: "Agregar mesa" },
+    { name: "add table", text: "Agregar mesa" },
   ],
   "/dashboard/promotions": [
-    { name: "nuevo combo", text: "Nuevo combo" },
+    { name: "new combo", text: "Nuevo combo" },
   ],
   "/dashboard/main-menu": [
-    { name: "nuevo producto", text: "Agregar producto" },
-    { name: "nuevo extra", text: "Agregar extra" },
-    { name: "nuevo grupo de iconos", text: "Agregar grupo" },
-    { name: "nueva etiqueta de dieta", text: "Agregar etiqueta" },
+    { name: "new product", text: "Agregar producto" },
+    { name: "new add-on", text: "Agregar extra" },
+    { name: "new icon group", text: "Agregar grupo" },
+    { name: "new dietary tag", text: "Agregar etiqueta" },
   ],
   "/dashboard/staff": [
     // The button says what it does — "Enviar invitación" — not "Agregar".
-    { name: "invitar a alguien", text: "Enviar invitación" },
+    { name: "invite someone", text: "Enviar invitación" },
   ],
 };
 
@@ -122,24 +122,24 @@ export const DINER = [
   // leaves the previous screen up and the menu gets measured as something else.
   // It happened — a dish row is a div with role="button", not a <button>, so the
   // selector found nothing and nobody noticed.
-  { name: "menú", expect: { es: "Llamar al mesero", en: "Call waiter" }, steps: [] },
+  { name: "menu", expect: { es: "Llamar al mesero", en: "Call waiter" }, steps: [] },
   {
-    name: "ficha del platillo",
+    name: "dish detail",
     expect: { es: "Agregar al carrito", en: "Add to cart" },
     steps: [{ click: { es: "[aria-label^='Abrir ']", en: "[aria-label^='Open ']" } }],
   },
   {
-    name: "carrito",
+    name: "cart",
     expect: { es: "Total", en: "Total" },
     steps: [{ addToCart: true }, { click: ".tt-fab" }, { bottom: true }],
   },
   {
-    name: "cupón",
+    name: "coupon",
     expect: { es: "Aplicar", en: "Apply" },
     steps: [{ addToCart: true }, { click: ".tt-fab" }, { text: { es: "cupón", en: "coupon" } }],
   },
   {
-    name: "propina personalizada",
+    name: "custom tip",
     expect: { es: "Monto de propina", en: "Tip amount" },
     steps: [{ addToCart: true }, { click: ".tt-fab" }, { text: { es: "Otro", en: "Other" } }],
   },

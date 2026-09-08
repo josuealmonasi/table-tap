@@ -544,13 +544,7 @@ export async function POST(req: NextRequest) {
       await undoClaim();
       const code = err && typeof err === "object" && "code" in err ? err.code : undefined;
       if (code === "amount_too_small") {
-        return NextResponse.json(
-          {
-            error:
-              "That total is below the card minimum — please add a little more to your order.",
-          },
-          { status: 400 },
-        );
+        return await apiError("apiErr.belowCardMinimum", 400);
       }
       throw err; // anything else falls through to the generic handler below
     }

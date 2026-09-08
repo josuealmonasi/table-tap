@@ -855,6 +855,13 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     paid: "Your share is paid",
   },
   apiErr: {
+    belowCardMinimum: "That total is below the card minimum — please add a little more to your order.",
+    couponExists: "That code already exists.",
+    couponCreateFailed: "Could not create the coupon.",
+    signupFailed: "Could not create the account.",
+    emailHasAccount: "That email already has an account.",
+    inviteMailerOff: "We could not send the invite — the dashboard's email is not set up. Tell us and we will sort it out.",
+    inviteFailed: "Could not send the invite.",
     onlyLeft: "Only {count} left of {name}. Adjust your order and try again.",
     stockGone: "That sold out while you were ordering.",
     dietaryTagName: "Give it a name with letters — an emoji alone is not enough.",

@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
  * Spanish gets flagged.
  */
 const SPANISH =
-  /\b(que|para|porque|cuando|desde|sólo|pero|este|esta|los|las|una|del|con|sin|más|así|hay|está|pedido|mesa|cuenta|comensal|platillo|dueño|gerente|mesero|cocina|pantalla|carrito|etiqueta|nada|todo|aquí|pagar|cobrar|guarda|enseña|se|le|lo|su|es|no|al|un|de|en|por|como|si)\b/gi;
+  /\b(que|para|porque|cuando|desde|sólo|pero|este|esta|los|las|una|del|con|sin|más|así|hay|está|pedido|mesa|cuenta|comensal|platillo|dueño|gerente|mesero|cocina|pantalla|carrito|etiqueta|nada|todo|aquí|pagar|cobrar|guarda|enseña|tarjeta|efectivo|propina|cupón|descuento|contraseña|usuario|correo|código|sesión|botón|mensaje|precio|hora|día|noche|se|le|lo|su|es|no|al|un|de|en|por|como|si)\b/gi;
 const ENGLISH =
   /\b(the|and|of|to|is|for|that|with|this|it|as|are|be|not|which|when|from|but|only|so|because|what|who|how|they|their|has|have|we|you|its|there|then|than|into|on|at|by|an|a|or|if|no|all|one)\b/gi;
 
@@ -118,6 +118,51 @@ function spanishComments(path: string): string[] {
     .map(raw => `${path}  ${raw.slice(0, 70)}`);
 }
 
+/**
+ * The strings in a script that read as Spanish.
+ *
+ * The comment guard above reads comments and nothing else, so for months every
+ * check printed its verdict in Spanish — `MAL`, `rebota de /dashboard`,
+ * `comensal es · carrito` — and no test could see it. The terminal is where a
+ * developer reads this app's reasoning; it is code output, so it is English.
+ *
+ * Two kinds of Spanish string are legitimate here and must not be flagged:
+ * text that MATCHES the app's Spanish UI (a selector, a marker, an expected
+ * phrase) and the seed content of a Mexican demo restaurant. Both are data
+ * about a Spanish thing rather than words addressed to a developer, and both
+ * are identifiable from the line: a matcher sits behind one of these keys.
+ */
+const MATCHER = /\b(text|marker|expect|sections|es|en|body|check)\s*:|includes\(|hasText|getByText/;
+
+/** Seed content for the demo restaurant — Spanish because the diners are. */
+const SEED = ["scripts/mock-data.mjs", "scripts/seed-"];
+
+function spanishOutput(path: string): string[] {
+  if (SEED.some(s => path.includes(s))) return [];
+  const out: string[] = [];
+  // Block comments are the other guard's territory, and a comment is allowed to
+  // quote a Spanish UI string. Blank them out — keeping the newlines, so the
+  // reported line numbers still point at the right place.
+  const src = readFileSync(path, "utf8").replace(/\/\*[\s\S]*?\*\//g, m =>
+    m.replace(/[^\n]/g, " "),
+  );
+  src.split("\n").forEach((line, i) => {
+    if (MATCHER.test(line)) return;
+    const code = line.slice(0, lineComment(line) ? line.indexOf("//") : undefined);
+    for (const m of code.matchAll(/(["'`])((?:\\.|(?!\1)[^\\])*)\1/g)) {
+      const text = m[2].replace(/\$\{[^}]*\}/g, " ").replace(/\b(EN|ES)\b/g, " ");
+      // A locale code, a path or a selector is an identifier, not prose: "es-MX"
+      // and "terms-es.json" are not Spanish sentences, they only contain "es".
+      if (/^[a-z]{2}-[A-Z]{2}$/.test(m[2].trim()) || m[2].includes("/")) continue;
+      if (text.trim().length < 4) continue;
+      const es = text.match(SPANISH)?.length ?? 0;
+      const en = text.match(ENGLISH)?.length ?? 0;
+      if (es > en && es >= 1) out.push(`${path}:${i + 1}  ${m[2].slice(0, 60)}`);
+    }
+  });
+  return out;
+}
+
 describe("the code is written in English", () => {
   it("reads a SQL comment", () => {
     expect(lineComment("-- una política que no existe")).toBe("una política que no existe");
@@ -135,6 +180,14 @@ describe("the code is written in English", () => {
     expect(
       offenders,
       `Spanish comments — the code is English, only i18n and legal copy are Spanish:\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
+
+  it("prints its output in English", () => {
+    const offenders = sourceFiles("scripts").flatMap(spanishOutput);
+    expect(
+      offenders,
+      `Spanish in script output — the terminal is read by developers, so it is\nEnglish. Text that matches the app's Spanish UI belongs behind a matcher\nkey (text:, marker:, expect:, es:):\n${offenders.join("\n")}`,
     ).toEqual([]);
   });
 });

@@ -16,13 +16,31 @@ import type { Locale } from "@/lib/i18n";
  * Two places that had to agree — the routes and the dictionary — with nothing
  * comparing them.
  */
+/** The source between `apiError(` and its matching `)`. */
+function callArgs(src: string, from: number): string {
+  let depth = 1;
+  for (let i = from; i < src.length; i++) {
+    if (src[i] === "(") depth++;
+    else if (src[i] === ")" && --depth === 0) return src.slice(from, i);
+  }
+  return src.slice(from);
+}
+
 function apiErrorKeys(dir: string, found = new Map<string, string>()): Map<string, string> {
   for (const name of readdirSync(dir)) {
     const path = join(dir, name);
     if (statSync(path).isDirectory()) apiErrorKeys(path, found);
     else if (path.endsWith(".ts")) {
-      for (const m of readFileSync(path, "utf8").matchAll(/apiError\(\s*"([^"]+)"/g)) {
-        if (!found.has(m[1])) found.set(m[1], path);
+      const src = readFileSync(path, "utf8");
+      // Not `apiError("literal"` — the first argument is often a ternary, and
+      // reading only the literal form left 8 of 241 calls unchecked, including
+      // every branch of `already ? … : mailer ? … : …`. Read the whole call and
+      // take every key-shaped string in it.
+      for (const m of src.matchAll(/apiError\(/g)) {
+        const args = callArgs(src, m.index + m[0].length);
+        for (const k of args.matchAll(/"([A-Za-z][\w]*(?:\.[\w]+)+)"/g)) {
+          if (!found.has(k[1])) found.set(k[1], path);
+        }
       }
     }
   }

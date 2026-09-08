@@ -108,9 +108,9 @@ export async function POST(req: NextRequest) {
     // The unique index on (restaurant_id, upper(code)) is what actually
     // prevents duplicates — this just turns it into a readable message.
     const duplicate = error.code === "23505";
-    return NextResponse.json(
-      { error: duplicate ? "That code already exists." : "Could not create the coupon." },
-      { status: duplicate ? 409 : 500 },
+    return await apiError(
+      duplicate ? "apiErr.couponExists" : "apiErr.couponCreateFailed",
+      duplicate ? 409 : 500,
     );
   }
   await logEvent({
