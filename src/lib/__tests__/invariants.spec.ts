@@ -466,6 +466,46 @@ function callBody(src: string, from: number): string {
   return src.slice(from);
 }
 
+describe("nothing that moves money waits offline", () => {
+  /**
+   * A status move is safe to hold and replay: marking a ready ticket ready
+   * again changes nothing. A payment is not. A settlement replayed on
+   * reconnect charges a table twice, a refund replayed gives money away twice,
+   * and an approval replayed decides on a board that has moved on.
+   *
+   * So the queue takes order status and nothing else, and this is what says so
+   * — the file is small enough to read, and the next person adding a route to
+   * it will find out here rather than from a double charge.
+   */
+  it("queues no endpoint but the order board's own", () => {
+    const src = fs.readFileSync("src/hooks/useRestaurantOrders.ts", "utf8");
+    const queued = [...src.matchAll(/writeQueue\(|enqueue\(/g)];
+    expect(queued.length, "the queue is no longer wired in").toBeGreaterThan(0);
+
+    // Every path that reaches the queue sits in this one hook, and the only
+    // endpoint it sends is /api/orders. Anything else here is a red flag.
+    const endpoints = [...src.matchAll(/fetch\(\s*"(\/api\/[^"]+)"/g)].map(m => m[1]);
+    const forbidden = endpoints.filter(e => e !== "/api/orders" && e !== "/api/orders/cancel");
+    expect(
+      forbidden,
+      `a money endpoint is being called from the hook that holds work offline —\nqueue order status only:\n${forbidden.join("\n")}`,
+    ).toEqual([]);
+  });
+
+  it("keeps the offline queue out of every settlement path", () => {
+    const offenders: string[] = [];
+    for (const file of walkAll("src/components").concat(walkAll("src/hooks"))) {
+      if (file.endsWith("useRestaurantOrders.ts")) continue;
+      const src = fs.readFileSync(file, "utf8");
+      if (/\bfrom "@\/lib\/offline-queue"/.test(src)) offenders.push(file);
+    }
+    expect(
+      offenders,
+      `only the order board may hold work offline; these import the queue:\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
+});
+
 describe("cash names the person who took it", () => {
   /**
    * Card money can arrive with nobody standing there — a diner pays online and

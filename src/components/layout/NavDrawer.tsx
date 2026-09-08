@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navItemsFor } from "@/lib/nav";
-import { createClient } from "@/lib/supabase/client";
+import { signOutEverywhere } from "@/lib/sign-out";
 import { useT } from "@/lib/i18n/context";
 import { CloseIcon, DashboardIcon, SignOutIcon, NAV_ICONS } from "@/components/ui/icons";
 import RestaurantMark from "@/components/ui/RestaurantMark";
@@ -29,11 +29,6 @@ export default function NavDrawer({
   const t = useT();
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-
-  async function signOut() {
-    await createClient().auth.signOut();
-    window.location.assign("/login");
-  }
 
   // Close the drawer whenever the route changes.
   useEffect(() => {
@@ -136,7 +131,7 @@ export default function NavDrawer({
             <button
               type="button"
               className="tt-drawer-link tt-drawer-signout"
-              onClick={signOut}
+              onClick={signOutEverywhere}
             >
               <SignOutIcon size={18} className="tt-drawer-emoji" /> {t("nav.signOut")}
             </button>

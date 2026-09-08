@@ -79,7 +79,7 @@ export function cases(fx) {
       body: { restaurantId: r, tableId: table.id, kind: "waiter" }, expect: [200] },
     { name: "POST /api/ratings/pending", as: "diner", method: "POST", path: "/api/ratings/pending",
       body: { restaurantId: r, orderIds: [paidOrder] }, expect: [200],
-      check: d => Array.isArray(d.dishes) && d.dishes.length > 0 || "no ofreció el platillo comprado" },
+      check: d => Array.isArray(d.dishes) && d.dishes.length > 0 || "did not offer the dish that was bought" },
     { name: "POST /api/ratings", as: "diner", method: "POST", path: "/api/ratings",
       body: { restaurantId: r, ratings: [{ orderId: paidOrder, itemId: dish.id, rating: 5 }] },
       expect: [200], check: d => d.saved === 1 || `guardó ${d.saved}` },
@@ -134,14 +134,20 @@ export function cases(fx) {
       path: `/api/table-bill?tableId=${table.id}`, expect: [200] },
     { name: "GET  /api/table-bill (counter)", as: "cashier", method: "GET",
       path: `/api/table-bill?orderId=${unpaidOrder}`, expect: [200],
-      check: d => d.orders?.length === 1 || "no encontró el pedido de mostrador" },
+      check: d => d.orders?.length === 1 || "did not find the counter order" },
     { name: "GET  /api/bill/discount/options", as: "manager", method: "GET",
       path: `/api/bill/discount/options?tableId=${table.id}`, expect: [200] },
     { name: "PATCH /api/orders (move)", as: "kitchen", method: "PATCH", path: "/api/orders",
       body: { id: unpaidOrder, status: "preparing" }, expect: [200] },
+    // A move that waited out a dropped connection carries the status it began
+    // at. The order is "preparing" by now, so a queued "from: received" is
+    // older than the board and must be dropped rather than drag it backwards.
+    { name: "PATCH /api/orders (a stale queued move loses)", as: "kitchen", method: "PATCH",
+      path: "/api/orders", body: { id: unpaidOrder, status: "received", from: "received" },
+      expect: [200], check: d => d.superseded === true || "a stale move was applied" },
     { name: "POST /api/table-payment (counter)", as: "cashier", method: "POST",
       path: "/api/table-payment", body: { orderId: unpaidOrder, settlement: "cash" },
-      expect: [200], check: d => d.orders === 1 || `saldó ${d.orders} pedidos` },
+      expect: [200], check: d => d.orders === 1 || `settled ${d.orders} order(s)` },
 
     // ── gerencia ─────────────────────────────────────────────────────────
     { name: "POST /api/settings", as: "manager", method: "POST", path: "/api/settings",

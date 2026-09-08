@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { badgesChanged } from "@/hooks/useBadges";
+import { useOnline } from "@/hooks/useOnline";
+import { enqueue, readQueue, writeQueue, type QueuedMove } from "@/lib/offline-queue";
 import { useT } from "@/lib/i18n/context";
 import type { Order, OrderStatus } from "@/lib/types";
 
@@ -31,6 +33,11 @@ function playPing() {
 export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]) {
   const t = useT();
   const [orders, setOrders] = useState<Order[]>(initialOrders);
+  const { online, markOffline } = useOnline();
+  const [pending, setPending] = useState<QueuedMove[]>([]);
+
+  // Work from a previous session on this device, still unsent.
+  useEffect(() => setPending(readQueue()), []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -77,13 +84,65 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
     };
   }, [restaurantId]);
 
+  /**
+   * Sends what has been waiting, oldest first.
+   *
+   * Each move carries the status it started from, so the server drops anything
+   * a live connection has already overtaken. A move that fails to send stays in
+   * the queue; one the server refuses as superseded does not, because the board
+   * it was arguing with is newer than it is.
+   */
+  const flush = useCallback(async () => {
+    const queue = readQueue();
+    if (queue.length === 0) return;
+
+    const stuck: QueuedMove[] = [];
+    for (const move of queue) {
+      try {
+        const res = await fetch("/api/orders", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: move.id, status: move.to, from: move.from }),
+        });
+        if (!res.ok) stuck.push(move);
+      } catch {
+        stuck.push(move); // still no connection: keep it for next time
+      }
+    }
+    writeQueue(stuck);
+    setPending(stuck);
+    badgesChanged();
+  }, []);
+
+  // Coming back is the moment to send, and the board reloads itself after so
+  // what everyone else did while we were away lands too.
+  useEffect(() => {
+    if (online) void flush();
+  }, [online, flush]);
+
   async function updateStatus(id: string, status: OrderStatus) {
+    const was = orders.find(o => o.id === id)?.status;
     setOrders(prev => prev.map(o => (o.id === id ? { ...o, status } : o))); // optimistic
-    await fetch("/api/orders", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status }),
-    });
+
+    try {
+      const res = await fetch("/api/orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+    } catch {
+      // The tap used to be fired and forgotten: on a dropped connection the
+      // ticket showed as moved to whoever moved it and untouched to everybody
+      // else. Hold it instead, and say so on the board.
+      if (was) {
+        const queue = enqueue(readQueue(), { id, from: was, to: status, at: Date.now() });
+        writeQueue(queue);
+        setPending(queue);
+      }
+      markOffline();
+    }
+
     // The board's own count changed, so the tab's should too.
     badgesChanged();
   }
@@ -105,9 +164,12 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
       setOrders(prev => prev.map(o => (o.id === id ? { ...o, status: "cancelled" } : o)));
       return null;
     } catch {
-      return "Network error — please try again.";
+      // Cancelling refunds money, so it is never queued and never optimistic:
+      // a refund replayed on reconnect is a refund given twice.
+      markOffline();
+      return t("offline.blocked");
     }
   }
 
-  return { orders, updateStatus, cancelOrder };
+  return { orders, updateStatus, cancelOrder, online, pending: pending.length };
 }

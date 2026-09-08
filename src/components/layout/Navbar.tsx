@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import { signOutEverywhere } from "@/lib/sign-out";
 import { useT } from "@/lib/i18n/context";
 import { planLabel } from "@/lib/plan";
 import LanguageToggle from "@/components/customer/LanguageToggle";
@@ -49,11 +49,6 @@ export default function Navbar({
       document.removeEventListener("keydown", onEscape);
     };
   }, [open]);
-
-  async function signOut() {
-    await createClient().auth.signOut();
-    window.location.assign("/login");
-  }
 
   return (
     <nav className="tt-navbar">
@@ -160,7 +155,7 @@ export default function Navbar({
                   </Link>
                 )}
                 <div className="tt-user-divider" />
-                <button type="button" className="tt-user-item" onClick={signOut}>
+                <button type="button" className="tt-user-item" onClick={signOutEverywhere}>
                   {t("nav.signOut")}
                 </button>
               </div>

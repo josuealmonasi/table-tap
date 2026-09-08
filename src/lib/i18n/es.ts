@@ -849,6 +849,11 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     payShare: "Pagar {amount}",
     paid: "Tu parte ya está pagada",
   },
+  offline: {
+    banner: "Sin conexión. La pantalla muestra el último estado que alcanzó a cargar.",
+    queued: "{n} cambio(s) guardado(s), se enviarán al volver la conexión.",
+    blocked: "Necesitas conexión para cobrar, cancelar o aprobar.",
+  },
   apiErr: {
     belowCardMinimum: "Ese total es menor al mínimo que acepta la tarjeta — agrega algo más a tu pedido.",
     couponExists: "Ya existe un cupón con ese código.",

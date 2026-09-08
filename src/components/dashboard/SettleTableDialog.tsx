@@ -89,6 +89,11 @@ export default function SettleTableDialog({
       setAsking(false);
       onSettled();
       onClose();
+    } catch {
+      // No catch at all until now: offline this threw straight past the toast
+      // and the dialog just sat there, so the bill looked untouched and the
+      // person had no idea whether they had asked for it twice.
+      toast(t("offline.blocked"), "error");
     } finally {
       setBusy(false);
     }
@@ -111,7 +116,9 @@ export default function SettleTableDialog({
       onSettled();
       onClose();
     } catch {
-      toast(t("settle.failed"), "error");
+      // Money, so this never queues: a settlement replayed on reconnect is a
+      // table charged twice. Refuse it and say why.
+      toast(t("offline.blocked"), "error");
     } finally {
       setBusy(false);
     }

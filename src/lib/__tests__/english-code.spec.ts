@@ -132,7 +132,7 @@ function spanishComments(path: string): string[] {
  * about a Spanish thing rather than words addressed to a developer, and both
  * are identifiable from the line: a matcher sits behind one of these keys.
  */
-const MATCHER = /\b(text|marker|expect|sections|es|en|body|check)\s*:|includes\(|hasText|getByText/;
+const MATCHER = /\b(text|marker|expect|sections|es|en|body)\s*:|includes\(|hasText|getByText/;
 
 /** Seed content for the demo restaurant — Spanish because the diners are. */
 const SEED = ["scripts/mock-data.mjs", "scripts/seed-"];
