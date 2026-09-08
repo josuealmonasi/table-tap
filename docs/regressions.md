@@ -201,6 +201,35 @@ that column. `pnpm money` checks the rows and an invariant checks the code, so
 a new settlement route cannot ship without an actor and wait to be noticed in
 the data.
 
+**A status change made on a dropped connection was thrown away.** The kitchen
+board moved the ticket optimistically and fired the PATCH with no `catch`, so
+the tap showed as applied to whoever made it and never happened to anyone else.
+Those moves are now held and sent when the connection returns. Only status
+moves: a settlement replayed on reconnect charges a table twice, so settling,
+cancelling and approving refuse while offline and say why — an invariant keeps
+every other module out of the queue.
+
+**A queued move must not beat live work.** A waiter's "preparing", held through
+a drop and flushed later, would have dragged back an order the kitchen had
+already called ready — stale work quietly overwriting current work. Each queued
+move now carries the status it started from and `PATCH /api/orders` applies it
+only if that is still the current status, answering `superseded` otherwise.
+
+**Detecting a drop is not the same as recovering from one.** The first version
+went offline on a failed request and waited for the browser's `online` event to
+come back — an event that never fires when the tablet never left the wifi and
+it was the router's uplink that died, which is the commonest way a restaurant
+goes offline. The board sat behind a banner with work in its pocket long after
+the connection returned. Found by stopping the dev server, moving a ticket and
+starting it again: nothing came back on its own. It now probes while it
+believes it is offline.
+
+**The service worker cannot be exercised in the preview browser.** Service
+workers do not register there at all — a one-line worker fails identically — so
+`service-worker.spec.ts` runs `public/sw.js` against a stand-in scope instead,
+and checks what it caches, what it refuses to cache (bills, every API call) and
+that a sign-out empties it.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`

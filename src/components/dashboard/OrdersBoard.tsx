@@ -2,6 +2,7 @@
 
 import { formatMoney } from "@/lib/format";
 import { useRestaurantOrders } from "@/hooks/useRestaurantOrders";
+import OfflineBanner from "@/components/dashboard/OfflineBanner";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { orderCode, type Order, type Restaurant, type ServiceRequest } from "@/lib/types";
@@ -59,7 +60,7 @@ export default function OrdersBoard({
 }: OrdersBoardProps) {
   const router = useRouter();
   const t = useT();
-  const { orders, updateStatus, cancelOrder } = useRestaurantOrders(
+  const { orders, updateStatus, cancelOrder, online, pending } = useRestaurantOrders(
     restaurant.id,
     initialOrders,
   );
@@ -105,6 +106,9 @@ export default function OrdersBoard({
   return (
     <div className="tt-dash">
       <div className="container">
+        {/* Before anything else on the page: what the board can and cannot do
+            right now, so nobody learns it from a control that fails. */}
+        {!online && <OfflineBanner pending={pending} />}
         <header className="tt-dash-head">
           <Breadcrumb
             trail={[

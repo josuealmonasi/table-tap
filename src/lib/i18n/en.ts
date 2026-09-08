@@ -855,6 +855,11 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     payShare: "Pay {amount}",
     paid: "Your share is paid",
   },
+  offline: {
+    banner: "No connection. This screen shows the last state that loaded.",
+    queued: "{n} change(s) saved — they will be sent when the connection returns.",
+    blocked: "Taking payment, cancelling and approving all need a connection.",
+  },
   apiErr: {
     belowCardMinimum: "That total is below the card minimum — please add a little more to your order.",
     couponExists: "That code already exists.",

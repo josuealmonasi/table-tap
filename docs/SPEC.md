@@ -199,6 +199,27 @@ gets, measure it in a browser.
 `docs/regressions.md` is the list of bugs that have really shipped here and what
 now catches each one.
 
+## Losing the connection
+
+The kitchen board keeps working when the wifi does not. A service worker holds
+the last board that loaded and serves it when the network does not answer, and
+a banner says the screen is reading history rather than the kitchen.
+
+**One page is cached, deliberately.** The board carries tickets. A stale bills
+screen showing a paid table as still owing is how the same money gets collected
+twice, so nothing under `/dashboard/bills`, and no API response at all, is ever
+stored. The cache holds a signed-in page, so signing out empties it — most
+restaurant tablets are shared.
+
+**Status moves are held; money is refused.** A move made on a dead connection
+is kept and sent when the connection returns, folded so three taps on one
+ticket are one change. Settling, cancelling and approving refuse offline and
+say why: replaying them charges a table twice. Each held move carries the
+status it began at, and the server applies it only if nothing has happened
+since — stale work never overwrites live work.
+
+Available on every plan.
+
 ## Stack
 
 Next.js 15 (App Router) · Supabase (Postgres, Auth, Realtime, RLS) · Stripe

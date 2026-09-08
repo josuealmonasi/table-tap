@@ -668,6 +668,26 @@ a.tt-btn {
   font-variant-numeric: tabular-nums;
 }
 
+/* Offline. Same shape as the frozen-plan banner, because it is the same kind
+   of statement: the screen is telling you what it cannot do before you try. */
+.tt-offline-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-bottom: 14px;
+  padding: 10px 16px;
+  border-radius: var(--tt-radius);
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--tt-warning-wash);
+  border: 1px solid color-mix(in srgb, var(--tt-warning) 30%, transparent);
+  color: var(--tt-warning);
+}
+.tt-offline-banner strong {
+  font-weight: 700;
+}
+
 .tt-frozen-banner {
   display: flex;
   flex-wrap: wrap;
