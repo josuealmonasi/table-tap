@@ -108,7 +108,7 @@ export function cases(fx) {
       body: { splitId: "00000000-0000-0000-0000-000000000000", sessionId: fx.sessionId ?? "",
               diner: "apicheck", restaurantId: r, tableId: table.id },
       expect: [409] },
-    { name: "POST /api/checkout (tarjeta)", as: "diner", method: "POST", path: "/api/checkout",
+    { name: "POST /api/checkout (card)", as: "diner", method: "POST", path: "/api/checkout",
       // With no Stripe account connected the healthy answer is 409, not a 500.
       //
       // Three of them, not one: Stripe will not take a card payment under
@@ -189,7 +189,7 @@ export function cases(fx) {
       expect: [200, 400, 409] },
     { name: "POST /api/bill/write-off (waiter asks)", as: "waiter", method: "POST",
       path: "/api/bill/write-off", body: { tableId: table.id, reason: "walkout", note: MARK },
-      expect: [200], check: d => d.pending === true || "la petición de un mesero debería quedar pendiente" },
+      expect: [200], check: d => d.pending === true || "a waiter's request should stay pending" },
     { name: "POST /api/bill/write-off/approve", as: "manager", method: "POST",
       path: "/api/bill/write-off/approve", body: async f => ({ id: await pendingWriteOff(f), approve: false }),
       expect: [200, 400, 404] },
@@ -211,7 +211,7 @@ export function cases(fx) {
     // directly, not by invitation.
     { name: "POST /api/staff (invite)", as: "owner", method: "POST", path: "/api/staff",
       body: { email: `${MARK}@tabletap.dev`, role: "waiter" }, expect: [200],
-      known: "Supabase sin SMTP: invitar por correo no funciona" },
+      known: "Supabase has no SMTP: inviting by email does not work" },
     { name: "PATCH /api/staff (change role)", as: "owner", method: "PATCH", path: "/api/staff",
       body: async f => ({ id: await staffId(f), role: "cashier" }), expect: [200, 400, 404] },
     { name: "DELETE /api/staff", as: "owner", method: "DELETE", path: "/api/staff",

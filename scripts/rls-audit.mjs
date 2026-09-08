@@ -36,9 +36,9 @@ const show = async (label, sql, note) => {
   for (const r of rows) console.log("   ", Object.values(r).map(v => v ?? "—").join("  ·  "));
 };
 
-console.log(`\nPermisos — ${prod ? "production" : "development"}`);
+console.log(`\nPermissions — ${prod ? "production" : "development"}`);
 
-await show("Tablas sin RLS", `
+await show("Tables without RLS", `
   select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
    where n.nspname='public' and c.relkind='r' and not c.relrowsecurity order by 1`,
   "— anyone with the public key reads them whole");
@@ -60,7 +60,7 @@ await show("What authenticated can see", `
     from information_schema.role_column_grants
    where grantee='authenticated' and table_schema='public' and privilege_type='SELECT'
    group by table_name order by 1`,
-  "— ojo con las tablas enteras cuya política sea using (true)");
+  "— watch for whole tables whose policy is using (true)");
 
 await show("Policies that let any row through", `
   select tablename, cmd, policyname from pg_policies
@@ -69,10 +69,10 @@ await show("Policies that let any row through", `
 
 await show("Security definer functions", `
   select p.proname,
-         coalesce(array_to_string(p.proconfig,','),'SIN search_path ⚠') ,
+         coalesce(array_to_string(p.proconfig,','),'NO search_path ⚠') ,
          coalesce((select string_agg(r.rolname, ',') from pg_roles r
                     where has_function_privilege(r.rolname, p.oid, 'EXECUTE')
-                      and r.rolname in ('anon','authenticated','service_role')), 'nadie')
+                      and r.rolname in ('anon','authenticated','service_role')), 'nobody')
     from pg_proc p join pg_namespace n on n.oid=p.pronamespace
    where n.nspname='public' and p.prosecdef order by 1`,
   "— they run as their owner: pinned search_path, executable only by who must");

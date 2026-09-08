@@ -48,10 +48,10 @@ export async function POST(req: NextRequest) {
   });
 
   if (userErr || !created?.user) {
-    return NextResponse.json(
-      { error: userErr?.message ?? "Could not create the account." },
-      { status: 400 },
-    );
+    // Supabase's own message is English and phrased for a developer; it goes to
+    // the log, and the person signing up gets a sentence in their language.
+    console.error("signup failed", userErr?.message);
+    return await apiError("apiErr.signupFailed", 400);
   }
 
   const { error: restaurantErr } = await admin

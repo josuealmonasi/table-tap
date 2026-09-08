@@ -1,14 +1,21 @@
 /**
  * The audit that runs inside the page.
  *
- * Three faults, each one something that actually shipped:
+ * Six faults, each one something that actually shipped:
  *
- *  - *aplastado*: the only elastic column in a flex row collapsed to nothing
+ *  - *squashed*: the only elastic column in a flex row collapsed to nothing
  *    and its text spilled out. That is how "Comida del día" came out one word
  *    per line and how the amount owed ended up behind the Cobrar button.
- *  - *encimado*: two pieces of text painted on top of each other. Reading the
+ *  - *overlapping*: two pieces of text painted on top of each other. Reading the
  *    DOM never shows it; only the rectangles do.
- *  - *desbordado*: the page scrolls sideways, which on a phone means content
+ *  - *misaligned*: sibling cards whose left or right edges disagree by more
+ *    than 2px, which is what a grid of mismatched pieces looks like up close.
+ *  - *wrapped*: a short label or a button caption broken across lines. Measured
+ *    with a Range, because the element's own box is as tall as the row.
+ *  - *off-center*: text sitting off the vertical middle of its box — the
+ *    stretched flex child whose label rides high while the field beside it
+ *    fills the height.
+ *  - *overflowing*: the page scrolls sideways, which on a phone means content
  *    nobody will ever find.
  *
  * Kept as a plain string of source because it is evaluated in the browser.
@@ -77,7 +84,7 @@ export const AUDIT = `(() => {
     range.detach?.();
     if (needs > r.width + 4) {
       faults.push({
-        kind: "aplastado",
+        kind: "squashed",
         text: text.slice(0, 40),
         w: Math.round(r.width),
       });
@@ -109,7 +116,7 @@ export const AUDIT = `(() => {
       // 4px of overlap is a hairline; 8 is two words sharing the same pixels.
       if (w > 8 && h > 8) {
         faults.push({
-          kind: "encimado",
+          kind: "overlapping",
           text: own(a).slice(0, 28) + " ⟂ " + own(b).slice(0, 28),
           w: Math.round(w),
         });
@@ -139,7 +146,7 @@ export const AUDIT = `(() => {
       if (dl > 2 || dr > 2) {
         const name = el => (el.querySelector("h2,h3")?.textContent ?? el.className).trim().slice(0, 26);
         faults.push({
-          kind: "desalineado",
+          kind: "misaligned",
           text: name(cards[i]) + " ⇄ " + name(cards[j]),
           w: Math.round(Math.max(dl, dr)),
         });
@@ -170,7 +177,7 @@ export const AUDIT = `(() => {
       const lines = range.getClientRects().length;
       range.detach?.();
       if (lines > 1) {
-        faults.push({ kind: "partido", text: text.slice(0, 40), w: lines });
+        faults.push({ kind: "wrapped", text: text.slice(0, 40), w: lines });
       }
     }
   }
@@ -218,7 +225,7 @@ export const AUDIT = `(() => {
       if (textBox.height > box.height + 2) continue;
       const off = Math.round(Math.abs((textBox.top + textBox.bottom) / 2 - (box.top + box.bottom) / 2));
       if (off > 4) {
-        faults.push({ kind: "descentrado", text: words.slice(0, 40), w: off });
+        faults.push({ kind: "off-center", text: words.slice(0, 40), w: off });
       }
     }
   }
@@ -228,7 +235,7 @@ export const AUDIT = `(() => {
   if (doc.scrollWidth > window.innerWidth + 1) {
     const wide = all.find(el => el.getBoundingClientRect().right > window.innerWidth + 1);
     faults.push({
-      kind: "desbordado",
+      kind: "overflowing",
       text: wide ? (wide.className || wide.tagName).toString().slice(0, 40) : "?",
       w: doc.scrollWidth - window.innerWidth,
     });

@@ -849,6 +849,13 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     paid: "Tu parte ya está pagada",
   },
   apiErr: {
+    belowCardMinimum: "Ese total es menor al mínimo que acepta la tarjeta — agrega algo más a tu pedido.",
+    couponExists: "Ya existe un cupón con ese código.",
+    couponCreateFailed: "No pudimos crear el cupón.",
+    signupFailed: "No pudimos crear la cuenta.",
+    emailHasAccount: "Ese correo ya tiene una cuenta.",
+    inviteMailerOff: "No pudimos enviar la invitación — el correo del panel no está configurado. Avísanos y lo dejamos listo.",
+    inviteFailed: "No pudimos enviar la invitación.",
     onlyLeft: "Sólo quedan {count} de {name}. Ajusta tu pedido e inténtalo de nuevo.",
     stockGone: "Se agotó mientras hacías tu pedido.",
     dietaryTagName: "Ponle un nombre con letras: el emoji solo no alcanza.",

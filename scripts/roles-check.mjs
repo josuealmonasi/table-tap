@@ -120,7 +120,7 @@ for (const who of ROLES) {
     const html = res.status === 200 ? await res.text() : "";
     const reached = html.includes(marker);
     const may = allow.includes(who.role);
-    if (reached === may) ok(`${may ? "abre" : "rebota de"} ${path}`);
+    if (reached === may) ok(`${may ? "opens" : "bounces from"} ${path}`);
     else bad(`${path}: ${reached ? "opened it" : "did not open it"} and ${may ? "should have" : "should not have"}`);
 
     // Reaching the page says nothing about what is inside it. Every module that

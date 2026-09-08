@@ -52,7 +52,7 @@ let failed = 0;
 const ok = m => console.log(`    ok       ${m}`);
 const bad = (where, faults) => {
   failed += faults.length;
-  console.log(`    MAL      ${where}`);
+  console.log(`    BAD      ${where}`);
   for (const f of faults) console.log(`             ${f.kind}: «${f.text}» (${f.w}px)`);
 };
 
@@ -163,7 +163,7 @@ for (const size of SIZES) {
         if (step.text) {
           const label = typeof step.text === "string" ? step.text : step.text[lang];
           if (!(await tapText(tab, label))) {
-            throw new Error(`no encontró el botón «${label}»`);
+            throw new Error(`could not find the button «${label}»`);
           }
         }
         if (step.bottom) {
@@ -177,10 +177,10 @@ for (const size of SIZES) {
         );
         if (!there) throw new Error(`did not arrive — missing «${flow.expect[lang]}»`);
       }
-      await look(tab, `comensal ${lang} · ${flow.name}`);
+      await look(tab, `diner ${lang} · ${flow.name}`);
     } catch (e) {
       failed++;
-      console.log(`    MAL      comensal ${lang} · ${flow.name}: ${e.message.split("\n")[0]}`);
+      console.log(`    BAD      diner ${lang} · ${flow.name}: ${e.message.split("\n")[0]}`);
     }
     await tab.close();
   }
@@ -200,7 +200,7 @@ for (const size of SIZES) {
       await look(tab, `signed out · ${path}`);
     } catch (e) {
       failed++;
-      console.log(`    MAL      signed out · ${path}: ${e.message.split("\n")[0]}`);
+      console.log(`    BAD      signed out · ${path}: ${e.message.split("\n")[0]}`);
     }
     await tab.close();
   }
@@ -244,7 +244,7 @@ for (const size of SIZES) {
         }
       } catch (e) {
         failed++;
-        console.log(`    MAL      ${who.role} · ${path}: ${e.message.split("\n")[0]}`);
+        console.log(`    BAD      ${who.role} · ${path}: ${e.message.split("\n")[0]}`);
       }
       await tab.close();
     }

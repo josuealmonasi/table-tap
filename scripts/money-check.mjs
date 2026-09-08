@@ -20,7 +20,7 @@ const CENT = 0.011; // a cent of slack, for rounding that happened elsewhere
 
 let failed = 0;
 const ok = w => console.log(`    ok       ${w}`);
-const bad = w => { failed++; console.log(`    MAL      ${w}`); };
+const bad = w => { failed++; console.log(`    BAD      ${w}`); };
 
 console.log(`\nMoney — ${prod ? "production" : "development"}\n`);
 

@@ -456,6 +456,79 @@ describe("the checks know about every route and screen", () => {
  * Walks the real import graph, counting only imports that survive compilation:
  * a type-only import is not an edge, because it is not there at runtime.
  */
+describe("an API error reaches the person in their own language", () => {
+  /**
+   * `apiError` looks the sentence up in the caller's locale; a sentence written
+   * straight into the response does not. 237 errors went through it and 7 did
+   * not, so a Spanish owner who typed a coupon code twice was told "That code
+   * already exists." and a diner under the card minimum got English mid-payment
+   * — and one invite failure answered every English speaker in Spanish.
+   */
+  it("has no route answering with a sentence of its own", () => {
+    // Stripe reads the webhook's errors, not a person, so it keeps English.
+    const forMachines = ["src/app/api/webhooks/"];
+    const offenders: string[] = [];
+
+    for (const file of walkAll("src/app/api").filter(f => f.endsWith("route.ts"))) {
+      if (forMachines.some(m => file.startsWith(m))) continue;
+      const code = fs
+        .readFileSync(file, "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, " "))
+        .replace(/(^|[^:"'`\\])\/\/[^\n]*/g, (_m, before: string) => before);
+
+      code.split("\n").forEach((line, i) => {
+        for (const m of line.matchAll(/"([^"]{15,})"/g)) {
+          // A sentence starts with a capital and has a space in it; a key, a
+          // header name and a column name have neither.
+          if (!/^[A-ZÁÉÍÓÚÑ¿].*\s/.test(m[1])) continue;
+          offenders.push(`${file}:${i + 1}  ${m[1].slice(0, 60)}`);
+        }
+      });
+    }
+
+    expect(
+      offenders,
+      `these answer in one fixed language — hand the key to apiError() instead and\nadd the sentence to both i18n/es.ts and i18n/en.ts:\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
+});
+
+describe("the demo team is one list", () => {
+  /** Every `email: "x", … role: "y"` pair a script hard-codes, in file order. */
+  const crewIn = (file: string): Map<string, string> => {
+    const src = fs.readFileSync(path.join("scripts", file), "utf8");
+    const out = new Map<string, string>();
+    // The two files write the pair in opposite orders, so match either way.
+    for (const m of src.matchAll(
+      /email:\s*"([^"]+)"[^}]*?role:\s*"([^"]+)"|role:\s*"([^"]+)"[^}]*?email:\s*"([^"]+)"/g,
+    )) {
+      const email = m[1] ?? m[4];
+      // A request body carries an email and a role too — `POST /api/staff` with
+      // `nope@x.dev` is a refusal being tested, not somebody who signs in.
+      if (email.endsWith("@tabletap.dev")) out.set(email, m[2] ?? m[3]);
+    }
+    return out;
+  };
+
+  it("gives each demo login the same role in every check that signs in as it", () => {
+    // `roles-check` proves who may open what; `layout-check` and `dialog-check`
+    // read their crew from `layout-paths`. Two lists of the same five logins,
+    // and nothing compared them: rename a demo account in one and the other
+    // signs in as somebody else, or fails and blames the app.
+    const roles = crewIn("roles-check.mjs");
+    const crew = crewIn("layout-paths.mjs");
+    expect(roles.size, "roles-check.mjs lists no demo logins — the scan broke").toBeGreaterThan(4);
+
+    const disagree = [...roles]
+      .filter(([email, role]) => crew.get(email) !== role)
+      .map(([email, role]) => `${email}: roles-check says ${role}, layout-paths says ${crew.get(email) ?? "nothing"}`);
+    expect(
+      disagree,
+      `the same demo login is two different people:\n${disagree.join("\n")}`,
+    ).toEqual([]);
+  });
+});
+
 describe("secrets cannot reach the browser", () => {
   const SECRETS = ["src/lib/supabase/admin.ts", "src/lib/stripe.ts", "src/lib/mail.ts"];
 

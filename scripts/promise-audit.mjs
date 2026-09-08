@@ -81,10 +81,10 @@ for (const who of CREW) {
 // The diner, who loses most when a screen promises more than it has.
 const guest = await browser.newContext({ viewport: { width: 390, height: 844 } });
 await guest.addCookies([{ name: "tt-locale", value: "es", url: BASE }]);
-console.log("  comensal\n");
+console.log("  diner\n");
 for (const [name, path] of [
-  ["QR general", `/r/${restaurant.id}`],
-  ["QR de mesa", `/r/${restaurant.id}/t/${table.id}`],
+  ["general QR", `/r/${restaurant.id}`],
+  ["table QR", `/r/${restaurant.id}/t/${table.id}`],
 ]) {
   const tab = await guest.newPage();
   await tab.goto(BASE + path, { waitUntil: "networkidle" });

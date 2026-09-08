@@ -27,7 +27,7 @@ await requireServer(BASE, prod);
 
 let failed = 0;
 const ok = m => console.log(`    ok       ${m}`);
-const bad = m => { failed++; console.log(`    MAL      ${m}`); };
+const bad = m => { failed++; console.log(`    BAD      ${m}`); };
 
 console.log(`\nRequests — ${prod ? "production" : "development"}\n`);
 

@@ -34,7 +34,7 @@ let opened = 0;
 const ok = w => console.log(`    ok       ${w}`);
 const bad = (w, faults) => {
   failed++;
-  console.log(`    MAL      ${w}`);
+  console.log(`    BAD      ${w}`);
   for (const f of faults) console.log(`             ${f.kind}: «${f.text}» (${f.w}px)`);
 };
 
