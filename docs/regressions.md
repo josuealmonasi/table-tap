@@ -230,6 +230,16 @@ workers do not register there at all — a one-line worker fails identically —
 and checks what it caches, what it refuses to cache (bills, every API call) and
 that a sign-out empties it.
 
+**One webhook route cannot serve two Stripe accounts.** Checkout moved to
+direct charges so Stripe would stop billing the platform MX$13.80 on a MX$300
+ticket — right call, and it moved every diner payment's events onto the
+restaurant's account while subscriptions stayed on ours. Stripe issues a
+separate signing secret per endpoint, and the route read one, so registering
+both endpoints would have failed every event on one of them with a 400 that
+looks exactly like a delivery problem. Now two routes, one secret each, and an
+invariant that fails if they ever read the same secret or start handling each
+other's events.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`
