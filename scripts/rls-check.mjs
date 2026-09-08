@@ -236,7 +236,7 @@ if (!signIn.error && theirs) {
 
   const { data: victim } = await admin
     .from("icon_groups")
-    .insert({ restaurant_id: theirs.id, variant: "addon", name: "sonda-rls", sort_order: 99 })
+    .insert({ restaurant_id: theirs.id, variant: "addon", name: "probe-rls", sort_order: 99 })
     .select("id, name")
     .single();
   await admin.from("icon_group_items").insert({ group_id: victim.id, emoji: "🌮", sort_order: 0 });
@@ -252,7 +252,7 @@ if (!signIn.error && theirs) {
   const renamed = await call("PATCH", { id: victim.id, name: "secuestrado" });
   const { data: afterPatch } = await admin
     .from("icon_groups").select("name").eq("id", victim.id).maybeSingle();
-  if (afterPatch?.name === "sonda-rls") ok(`cannot rename another restaurant's icon group (${renamed})`);
+  if (afterPatch?.name === "probe-rls") ok(`cannot rename another restaurant's icon group (${renamed})`);
   else bad(`renamed another restaurant's icon group (${renamed})`);
 
   const removed = await call("DELETE", { id: victim.id });

@@ -41,22 +41,22 @@ const DOCS = [
   ["public/legal/aviso-de-privacidad.pdf", privacy],
 ] as const;
 
-describe("el PDF legal no se queda atrás del texto", () => {
-  it.each(DOCS.map(([file]) => file))("%s lleva la versión vigente", file => {
+describe("the legal PDF keeps up with the text", () => {
+  it.each(DOCS.map(([file]) => file))("%s carries the version in force", file => {
     expect(
       pdfText(file),
       `${file} no dice ${TERMS_VERSION} — corre \`node scripts/legal-pdf.mjs\``,
     ).toContain(TERMS_VERSION);
   });
 
-  it.each(DOCS)("%s trae todas sus cláusulas", (file, doc) => {
+  it.each(DOCS)("%s carries every one of its clauses", (file, doc) => {
     const text = pdfText(file).replace(/\s+/g, " ");
     for (const clause of doc.clauses) {
       expect(text, `${file} no trae "${clause.title}"`).toContain(clause.title);
     }
   });
 
-  it.each(DOCS)("%s trae el texto de cada cláusula, no sólo el título", (file, doc) => {
+  it.each(DOCS)("%s carries each clause's text, not just its heading", (file, doc) => {
     const text = pdfText(file).replace(/\s+/g, " ");
     for (const clause of doc.clauses) {
       // The first paragraph is enough: if the PDF was built from the old JSON, it changes.

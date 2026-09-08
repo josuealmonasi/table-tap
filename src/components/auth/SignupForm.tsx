@@ -22,14 +22,25 @@ export default function SignupForm() {
     setError("");
 
     // Server creates the auth user (pre-confirmed) + the restaurant row.
-    const res = await fetch("/api/signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ restaurantName, email, password, acceptedTerms }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error ?? t("auth.couldNotCreate"));
+    //
+    // Wrapped because it was not: a dropped connection here threw past every
+    // `setLoading(false)` below, so the button stayed spinning for good and the
+    // form never said a word about why.
+    let data: { error?: string };
+    try {
+      const res = await fetch("/api/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ restaurantName, email, password, acceptedTerms }),
+      });
+      data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? t("auth.couldNotCreate"));
+        setLoading(false);
+        return;
+      }
+    } catch {
+      setError(t("done.networkError"));
       setLoading(false);
       return;
     }

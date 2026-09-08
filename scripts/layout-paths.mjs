@@ -138,6 +138,15 @@ export const DINER = [
     expect: { es: "Aplicar", en: "Apply" },
     steps: [{ addToCart: true }, { click: ".tt-fab" }, { text: { es: "cupón", en: "coupon" } }],
   },
+  // The order tracker, which nothing measured until it was found scrolling a
+  // 180px QR code to reach the way out. `at` starts the flow somewhere other
+  // than the table, because this screen is reached by its own URL.
+  {
+    name: "order tracker",
+    at: "/order/:orderId",
+    expect: { es: "Tus platillos", en: "Your items" },
+    steps: [],
+  },
   {
     name: "custom tip",
     expect: { es: "Monto de propina", en: "Tip amount" },

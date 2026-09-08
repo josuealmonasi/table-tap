@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { entitiesNamedBy } from "@/lib/log-detail";
 
-describe("buscar por el nombre que se ve en la fila", () => {
+describe("searching by the name shown on the row", () => {
   // The column stores "settings"; the row shows "Ajustes". Without this, typing
   // what is on screen found nothing.
   const es = (entity: string) =>
@@ -16,27 +16,27 @@ describe("buscar por el nombre que se ve en la fila", () => {
       menu: "Menú",
     })[entity] ?? entity;
 
-  it("encuentra el tipo por su rótulo traducido", () => {
+  it("finds the kind by its translated label", () => {
     expect(entitiesNamedBy("ajustes", es)).toEqual(["settings"]);
     expect(entitiesNamedBy("Cuenta", es)).toEqual(["bill"]);
   });
 
-  it("no exige acentos ni mayúsculas", () => {
+  it("demands neither accents nor capitals", () => {
     expect(entitiesNamedBy("cupon", es)).toEqual(["coupon"]);
     expect(entitiesNamedBy("PROMOCIÓN", es)).toEqual(["promotion"]);
   });
 
-  it("acepta un prefijo, que es como se escribe en un buscador", () => {
+  it("accepts a prefix, which is how people type into a search box", () => {
     expect(entitiesNamedBy("desc", es)).toEqual(["discount"]);
   });
 
-  it("devuelve todos los que el texto nombra, no adivina uno", () => {
+  it("returns every kind the text names rather than guessing one", () => {
     // "cu" is inside Cuenta, Cupón and desCUento: all three are searched, and the
     // search shows rows from all three instead of choosing on its own.
     expect(entitiesNamedBy("cu", es).sort()).toEqual(["bill", "coupon", "discount"]);
   });
 
-  it("no devuelve nada cuando el texto no nombra ningún tipo", () => {
+  it("returns nothing when the text names no kind at all", () => {
     expect(entitiesNamedBy("demo@tabletap.dev", es)).toEqual([]);
     expect(entitiesNamedBy("   ", es)).toEqual([]);
   });

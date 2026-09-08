@@ -44,8 +44,8 @@ for (const [name, file] of targets) {
   console.log(`\n▸ [${name}] rebuilding Demo Bistro…`);
   try {
     const out = await seedMock(client);
-    console.log(`✓ [${name}] ${out.orders} pedidos · ${out.products} platillos`);
-    console.log(`  menú: /r/${out.restaurantId}/t/${out.tableId}`);
+    console.log(`✓ [${name}] ${out.orders} order(s) · ${out.products} dish(es)`);
+    console.log(`  menu: /r/${out.restaurantId}/t/${out.tableId}`);
   } finally {
     await client.end();
   }

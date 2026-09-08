@@ -69,7 +69,7 @@ try {
         console.log(`    –        ${c.name} — ${c.known} (${res.status})`);
         continue;
       }
-      bad(`${c.name} — ${res.status}, esperaba ${c.expect.join("/")}  ${text.slice(0, 90)}`);
+      bad(`${c.name} — ${res.status}, expected ${c.expect.join("/")}  ${text.slice(0, 90)}`);
       continue;
     }
 

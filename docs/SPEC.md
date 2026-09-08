@@ -238,7 +238,10 @@ for staff, invitations for the team.
 
 ## Still open
 
-Not code — the things only the business can do: registering the Stripe webhook
-with Connect events, live Stripe keys, a published contact address for privacy
+Not code — the things only the business can do: registering the two Stripe
+webhook endpoints, live Stripe keys, a published contact address for privacy
 requests, razón social / RFC / domicilio, a lawyer's read of the legal text, and
 a mail provider for receipts and staff invitations.
+
+`docs/before-launch.md` is the checked list, with what each one breaks while it
+is missing and how to prove it works once it is done.

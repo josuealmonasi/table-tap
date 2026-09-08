@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
+import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
 import {
   canPayMineOnly,
@@ -172,6 +173,7 @@ export default function BillSheet({
   const t = useT();
   const currency = restaurant.currency;
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
   const [called, setCalled] = useState(false);
   const [scope, setScope] = useState<"all" | "mine">("all");
 
@@ -193,7 +195,9 @@ export default function BillSheet({
 
   /** Their share, plus anything they ordered since it froze. */
   async function payShare(): Promise<void> {
-    if (!split?.mine || !sessionId) return;
+    if (!split?.mine || !sessionId || busy) return;
+    setBusy(true);
+    try {
     const res = await fetch("/api/split/pay", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -209,8 +213,19 @@ export default function BillSheet({
         tipPct,
       }),
     });
-    const data = (await res.json().catch(() => ({}))) as { url?: string };
-    if (data.url) window.location.href = data.url;
+      const data = (await res.json().catch(() => ({}))) as { url?: string };
+      // Only a redirect leaves this screen. Anything else has to say so: a pay
+      // button that silently does nothing is a button somebody taps again, and
+      // this one opens a Stripe session each time.
+      if (data.url) window.location.href = data.url;
+      else {
+        toast(t("done.networkError"), "error");
+        setBusy(false);
+      }
+    } catch {
+      toast(t("done.networkError"), "error");
+      setBusy(false);
+    }
   }
   const [tipPct, setTipPct] = useState(0);
   const [tipCustom, setTipCustom] = useState<number | null>(null);
@@ -259,8 +274,12 @@ export default function BillSheet({
         rememberSettling(orders.map(o => o.id));
         window.location.href = data.url;
       }
-      else setBusy(false);
+      else {
+        toast(t("done.networkError"), "error");
+        setBusy(false);
+      }
     } catch {
+      toast(t("done.networkError"), "error");
       setBusy(false);
     }
   }
@@ -322,7 +341,7 @@ export default function BillSheet({
           <SplitBillCard
             split={split}
             diner={diner}
-            busy={splitBusy}
+            busy={splitBusy || busy}
             currency={currency}
             outstanding={bill.total}
             propose={propose}

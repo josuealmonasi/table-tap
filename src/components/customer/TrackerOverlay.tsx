@@ -112,16 +112,7 @@ export default function TrackerOverlay({
   const content = (
     <div className="tt-track-shell">
       {order ? (
-        <TrackerBody order={order}>
-          <button
-            type="button"
-            className="tt-btn tt-btn-ghost"
-            style={{ width: "100%" }}
-            onClick={onClose}
-          >
-            {t("tracker.backToMenu")}
-          </button>
-        </TrackerBody>
+        <TrackerBody order={order} onBack={onClose} />
       ) : (
         <TrackerSkeleton />
       )}

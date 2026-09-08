@@ -50,8 +50,8 @@ export async function retryFetch(url, init, base) {
       const up = base ? await reachable(base) : false;
       throw new Error(
         up
-          ? `la petición falló dos veces (${first.message})`
-          : "el servidor se cayó a media revisión — levántalo y vuelve a correr",
+          ? `the request failed twice (${first.message})`
+          : "the server died mid-sweep — start it and run again",
       );
     }
   }

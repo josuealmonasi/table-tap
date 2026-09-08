@@ -2096,6 +2096,9 @@ a.tt-btn {
   padding: 28px 20px;
   color: var(--tt-white);
   text-align: center;
+  /* The way back is absolutely placed in this corner, as it is on the dish
+     and combo screens. Without this it would anchor to the page instead. */
+  position: relative;
 }
 .tt-track-hero .tt-serif {
   color: var(--tt-white);

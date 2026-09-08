@@ -90,7 +90,7 @@ if (tree.length > 0) {
 
 rmSync(join(here, ".next"), { recursive: true, force: true });
 console.log("  .next cleared — everything recompiles from scratch.");
-console.log("  Arrancando…\n");
+console.log("  Starting…\n");
 
 spawn("pnpm", ["dev"], { stdio: "inherit", cwd: here }).on("exit", code => {
   process.exit(code ?? 0);

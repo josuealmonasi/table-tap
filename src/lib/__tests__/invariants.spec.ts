@@ -466,6 +466,101 @@ function callBody(src: string, from: number): string {
   return src.slice(from);
 }
 
+describe("what a person is told goes through the dictionaries", () => {
+  /** Every .ts/.tsx under src that ships to a browser. */
+  const clientFiles = (): string[] =>
+    walkAll("src").filter(
+      f => /\.tsx?$/.test(f) && !f.includes("__tests__") && !f.includes("/i18n/"),
+    );
+
+  const parse = (file: string) =>
+    ts.createSourceFile(
+      file,
+      fs.readFileSync(file, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+
+  it("shows no toast written in one fixed language", () => {
+    // Two of these sat in the staff screens: an owner reading the dashboard in
+    // Spanish changed somebody's role and was told "Role updated". The API
+    // errors were fixed the same week and these were missed, because nothing
+    // looked anywhere but the routes.
+    const offenders: string[] = [];
+    for (const file of clientFiles()) {
+      const sf = parse(file);
+      const visit = (n: ts.Node): void => {
+        if (
+          ts.isCallExpression(n) &&
+          ts.isIdentifier(n.expression) &&
+          ["toast", "alert"].includes(n.expression.text) &&
+          n.arguments.length > 0
+        ) {
+          const arg = n.arguments[0];
+          const written =
+            ts.isStringLiteral(arg) ||
+            (ts.isTemplateExpression(arg) && !arg.getText().includes("t("));
+          if (written && /[A-Za-z]{3}/.test(arg.getText())) {
+            const line = sf.getLineAndCharacterOfPosition(arg.getStart()).line + 1;
+            offenders.push(`${file}:${line}  ${arg.getText().slice(0, 50)}`);
+          }
+        }
+        ts.forEachChild(n, visit);
+      };
+      visit(sf);
+    }
+    expect(
+      offenders,
+      `a toast in one fixed language — hand it a key instead:\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
+
+  it("lets no browser request fail in silence", () => {
+    // A fetch with nothing catching it does nothing at all when the connection
+    // is gone. That is how a status change was thrown away, how signing up
+    // spun for ever on a dead network, and how a diner could tap "pay my
+    // share" and watch nothing happen — twice, opening two Stripe sessions.
+    const offenders: string[] = [];
+    for (const file of clientFiles()) {
+      const text = fs.readFileSync(file, "utf8");
+      if (!text.includes("fetch(")) continue;
+      // A server component's failure is a 500, which is loud already.
+      if (!text.startsWith('"use client"') && !file.includes("/hooks/")) continue;
+
+      const sf = parse(file);
+      const visit = (n: ts.Node): void => {
+        if (ts.isCallExpression(n) && n.expression.getText() === "fetch") {
+          let p: ts.Node | undefined = n.parent;
+          let guarded = false;
+          while (p) {
+            if (ts.isTryStatement(p)) {
+              guarded = true;
+              break;
+            }
+            // Or a .catch() chained onto the promise this fetch starts.
+            if (ts.isExpressionStatement(p) && /\.catch\s*\(/.test(p.getText())) {
+              guarded = true;
+              break;
+            }
+            p = p.parent;
+          }
+          if (!guarded) {
+            const line = sf.getLineAndCharacterOfPosition(n.getStart()).line + 1;
+            offenders.push(`${file}:${line}`);
+          }
+        }
+        ts.forEachChild(n, visit);
+      };
+      visit(sf);
+    }
+    expect(
+      offenders,
+      `a browser request with nothing catching it — wrap it, or chain a .catch():\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
+});
+
 describe("each Stripe stream has its own endpoint and its own secret", () => {
   /**
    * The app takes money on two Stripe accounts. A diner's food is a DIRECT
