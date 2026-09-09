@@ -150,6 +150,10 @@ async function settleBill(session: Stripe.Checkout.Session): Promise<void> {
     .from("orders")
     .update({ paid: true, pay_method: "card" })
     .in("id", settleIds)
+    // The guard this file says every path has and this one did not: without
+    // it a repeated delivery matches the same rows again, and every one of
+    // them is recorded as money that arrived a second time.
+    .eq("paid", false)
     .select("id, total, session_id, restaurant_id");
 
   await recordPayments(
@@ -223,7 +227,11 @@ async function settleOrder(session: Stripe.Checkout.Session): Promise<void> {
   const orderId = session.metadata!.order_id!;
 
   const supabase = createAdminClient();
-  await supabase
+  // `.eq("paid", false)` and then reading the rows the update RETURNED, rather
+  // than marking it paid and looking it up again afterwards. The second read
+  // finds the order whether or not this delivery was the one that changed it,
+  // so a webhook Stripe repeats recorded the same money twice.
+  const { data: settled } = await supabase
     .from("orders")
     .update({
       paid: true,
@@ -232,14 +240,12 @@ async function settleOrder(session: Stripe.Checkout.Session): Promise<void> {
       stripe_payment_intent:
         typeof session.payment_intent === "string" ? session.payment_intent : null,
     })
-    .eq("id", orderId);
+    .eq("id", orderId)
+    .eq("paid", false)
+    .select("session_id, total, restaurant_id");
 
   // A pay-now order can be the only thing the table owed.
-  const { data: justPaid } = await supabase
-    .from("orders")
-    .select("session_id, total, restaurant_id")
-    .eq("id", orderId)
-    .maybeSingle();
+  const justPaid = settled?.[0] ?? null;
 
   if (justPaid) {
     await recordPayment({

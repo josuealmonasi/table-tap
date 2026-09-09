@@ -764,6 +764,30 @@ create policy "owner manages restaurant"
   using (owns_restaurant(id))
   with check (owns_restaurant(id));
 
+-- ...and nothing a browser holds may write this table at all.
+--
+-- The policy above says an owner manages their own restaurant, which is true
+-- and was read as though it meant the columns an owner edits. It does not: a
+-- policy decides which ROWS a statement may touch, never which columns. With
+-- Supabase's default table-wide grant still in place, `owns_restaurant(id)`
+-- let an owner write every column of their own row from the browser console —
+-- `plan` to grupo, `plan_status` to active, `trial_ends_at` to 2099, and
+-- `stripe_account_id` to any account they liked. Proved by doing it, and by
+-- reading the values back with the secret key afterwards.
+--
+-- Every legitimate write to this table already goes through the server: the
+-- settings screen posts to /api/settings, billing is written by the Stripe
+-- webhook, and signup and deletion use the secret key. Nothing in the app
+-- loses anything by this, and the tier a restaurant is on stops being
+-- something the restaurant can set.
+revoke insert, update, delete on restaurants from authenticated;
+
+-- The same reasoning, for the table that names what each tier costs and
+-- allows. It is world-readable on purpose — the pricing page renders from
+-- it — and it must be readable ONLY: it is the platform's price list, shared
+-- by every restaurant, and one of them editing it is not a tenancy question.
+revoke insert, update, delete on plan_limits from authenticated;
+
 -- DISCOUNT REQUESTS: a waiter asking for a discount they may not grant alone.
 -- The row is the ask; approving it is what actually moves money, and only a
 -- manager or owner can do that.
@@ -1364,6 +1388,67 @@ drop trigger if exists items_plan_limit on menu_items;
 create trigger items_plan_limit before insert on menu_items
   for each row execute function public.enforce_plan_limit('items');
 
+-- A paid feature has to be paid for in the database too.
+--
+-- Five of the eight tiered features are refused by an API route. Three are not,
+-- because the menu editor writes them straight to Postgres with the browser's
+-- own key: counting stock and scheduling a menu were hidden by the screen and
+-- allowed by the row. A restaurant on the free tier could set either by
+-- calling Supabase directly, which is the UI enforcing the price list and the
+-- database not.
+--
+-- Two things this deliberately does NOT do:
+--
+--   * It never fires for the server. `auth.uid()` is null when the secret key
+--     writes, and stock is decremented by the server on every order — a
+--     restaurant that downgrades with stock still set must not find that its
+--     orders stop going through.
+--   * It only refuses a write that SETS or CHANGES the gated value. Clearing
+--     it is always allowed, and so is renaming a dish that happens to carry a
+--     stock count from a tier the restaurant used to be on. Otherwise a
+--     downgrade would freeze every row it touched.
+create or replace function public.enforce_plan_feature()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_column  text := tg_argv[0];
+  v_allows  text := tg_argv[1];
+  v_allowed boolean;
+  v_before  text;
+  v_after   text;
+begin
+  -- The server is not a customer. Only a browser session is held to the tier.
+  if auth.uid() is null then return new; end if;
+
+  if v_column = 'stock' then
+    v_before := (case when tg_op = 'UPDATE' then old.stock::text end);
+    v_after  := new.stock::text;
+  else
+    v_before := (case when tg_op = 'UPDATE' then old.schedule::text end);
+    v_after  := new.schedule::text;
+  end if;
+
+  -- Unchanged, or being cleared: nothing is being taken that was not paid for.
+  if v_after is null or v_after is not distinct from v_before then return new; end if;
+
+  execute format('select l.%I from restaurants r join plan_limits l on l.plan = r.plan where r.id = $1', v_allows)
+    into v_allowed using new.restaurant_id;
+
+  if v_allowed is distinct from true then
+    raise exception 'tt_plan_feature %', v_allows using errcode = 'check_violation';
+  end if;
+  return new;
+end $$;
+
+revoke all on function public.enforce_plan_feature() from public, anon, authenticated;
+
+drop trigger if exists items_plan_feature_stock on menu_items;
+create trigger items_plan_feature_stock before insert or update on menu_items
+  for each row execute function public.enforce_plan_feature('stock', 'allows_inventory');
+
+drop trigger if exists menus_plan_feature_schedule on menus;
+create trigger menus_plan_feature_schedule before insert or update on menus
+  for each row execute function public.enforce_plan_feature('schedule', 'allows_menu_schedules');
+
 -- A real Stripe Price for a tier, once one exists. Left null, checkout builds
 -- the line item from monthly_price instead — which means subscriptions work
 -- with no manual setup in the Stripe dashboard, and a proper catalogue can be
@@ -1959,6 +2044,23 @@ create index if not exists payments_restaurant_idx
   on payments(restaurant_id, created_at desc);
 create index if not exists payments_order_idx on payments(order_id);
 create index if not exists payments_session_idx on payments(session_id);
+
+-- One Stripe payment settles one order, once.
+--
+-- Stripe delivers a webhook again whenever it is not certain the first one
+-- landed, and for a while two of the three settle paths took that second
+-- delivery as a second payment: the row was marked paid, then read back and
+-- recorded again, so the ledger, the corte and the day's takings all counted
+-- money that arrived once as though it had arrived twice.
+--
+-- The paths are guarded now. This is the guard under the guard — the next
+-- settle path somebody writes cannot get it wrong, because the database will
+-- not hold the duplicate. Partial, because the two legitimate nulls must stay
+-- allowed: cash carries no payment intent, and a share of a divided bill
+-- belongs to the sitting rather than to any single order.
+create unique index if not exists payments_one_per_intent
+  on payments (order_id, stripe_payment_intent)
+  where order_id is not null and stripe_payment_intent is not null;
 
 alter table payments enable row level security;
 

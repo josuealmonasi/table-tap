@@ -304,6 +304,78 @@ watching the load be refused. `payment` is deliberately left OUT of the
 Permissions-Policy: checkout is a redirect today, and a header nobody remembers
 writing is a bad way to discover Apple Pay does not work.
 
+**A webhook Stripe delivers twice was money that arrived twice.** Stripe
+re-sends an event whenever it is not sure the first delivery landed.
+`checkout-settle.ts` says in its own header that every path is written to
+survive that — and two of its three paths had no guard at all: `settleBill`
+updated by id without `.eq("paid", false)`, and `settleOrder` marked the row
+paid, then read it back in a *separate* query and recorded a payment whether or
+not this delivery was the one that changed anything. Reproduced by calling
+`settleCheckout` twice with the same session: one payment became two rows. The
+ledger, the corte and the day's takings would all have counted it twice. It
+never bit only because the webhooks have never been registered — it would have
+fired on the first real payment after they were. Both guarded now, plus
+`payments_one_per_intent` so the next settle path cannot get it wrong, and
+`recordPayment` treats the refusal as "already recorded" rather than an error.
+
+**A row policy is not a column policy.** `owner manages restaurant` is
+`for all using (owns_restaurant(id))`, which reads as though it grants an owner
+the settings they edit. It does not: a policy decides which ROWS a statement
+may touch and never which columns, and Supabase's default table-wide grant to
+`authenticated` was still in place. So an owner could open the browser console
+and write any column of their own row — `plan` to grupo, `plan_status` to
+active, `trial_ends_at` to 2099, and `stripe_account_id` to any account they
+named. Proved by doing all four and reading the values back with the secret key.
+Every legitimate write to that table already went through the server, so the fix
+is a revoke; `plan_limits` — the platform's shared price list, world-readable on
+purpose — got the same treatment.
+
+The near miss is worth recording too: the first probe asked whether the write
+returned an ERROR, and a write RLS filters to zero rows returns no error at all.
+By that measure four more tables looked wide open — the ledger, the audit log,
+the price list, marking an order paid — and all four were fine. **Measure the
+effect, not the absence of a complaint.**
+
+**The UI enforced the price list and the database did not.** Five of the eight
+tiered features are refused by an API route. Three were not, because the menu
+editor writes them straight to Postgres with the browser's own key — so a
+restaurant on the free tier could set a stock count or a menu schedule by
+calling Supabase directly, with nothing but its own manager login. No RLS
+policy consults the plan. `enforce_plan_feature()` does now, on the two columns
+that were reachable, and it deliberately skips the server (`auth.uid()` is
+null when the secret key writes, and stock is decremented on every order) and
+only refuses a write that SETS or CHANGES the value, so a downgrade cannot
+freeze the rows it already touched.
+
+**The account holding the money had the weakest password rule.** A platform
+admin creating a staff login was held to eight characters. The owner signing
+up — the account with the Stripe connection, the staff list and the settings —
+was held to six, in the route and in both forms. One constant now, in
+`src/lib/password.ts`.
+
+**An open mail endpoint was limited by sender, not by subject.** `/api/receipt`
+capped requests per IP, which bounds how fast one machine can send and not how
+much: anybody holding a single order id could point our sender at any address
+they liked, five a minute, indefinitely, from our own domain. Capped per order
+per day as well.
+
+**A guard that reads string literals cannot see a variable.** Six routes handed
+the client a raw `error.message` from Postgres — the column, the constraint,
+sometimes the value that broke it, always in English — and the invariant that
+exists to stop exactly that saw nothing, because it scans for sentences written
+as literals. It reads both now.
+
+**The session cookie was not marked Secure.** Read off a real production
+login: `sameSite: Lax` (which is what stops a cross-site POST carrying it, and
+was already right), `httpOnly: false` — unavoidable, Supabase's browser client
+writes and reads it with `document.cookie` — and `secure: false`, on an HTTPS
+site. HSTS is sent with `preload`, so no browser would have made a plaintext
+request to the domain and nothing was leaking; the flag was simply not saying
+so itself. It follows `location.protocol` rather than `NODE_ENV`, on purpose: a
+build variable would have to be guessed right for an environment this can never
+be tested in, and guessing it wrong sets `Secure` on a cookie served over http,
+which the browser silently drops — and then nobody can log in at all.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`

@@ -119,7 +119,8 @@ export async function POST(req: NextRequest) {
     .update(update)
     .eq("id", actor.restaurantId);
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("settings save failed:", error.message);
+    return await apiError("apiErr.nameSave", 500);
   }
 
   // Named fields only: a log line reading "settings updated" answers nothing,

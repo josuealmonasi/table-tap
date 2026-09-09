@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { PASSWORD_MIN } from "@/lib/password";
 import { useT } from "@/lib/i18n/context";
 
 /** Sets a new password using the recovery session established by /auth/callback. */
@@ -81,7 +82,7 @@ export default function ResetPasswordForm() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               style={{ marginBottom: 12 }}
-              minLength={6}
+              minLength={PASSWORD_MIN}
               required
             />
             <input
@@ -92,14 +93,17 @@ export default function ResetPasswordForm() {
               value={confirm}
               onChange={e => setConfirm(e.target.value)}
               style={{ marginBottom: 12 }}
-              minLength={6}
+              minLength={PASSWORD_MIN}
               required
             />
             <button
               className="tt-btn tt-btn-primary"
               style={{ width: "100%" }}
               disabled={
-                password.length < 6 || confirm.length < 6 || loading || ready === null
+                password.length < PASSWORD_MIN ||
+                confirm.length < PASSWORD_MIN ||
+                loading ||
+                ready === null
               }
               type="submit"
             >

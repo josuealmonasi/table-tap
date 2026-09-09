@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { passwordTooShort } from "@/lib/password";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logUserChange } from "@/lib/user-log";
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (typeof email !== "string" || !/^\S+@\S+\.\S+$/.test(email)) {
     return await apiError("apiErr.email", 400);
   }
-  if (typeof password !== "string" || password.length < 8) {
+  if (passwordTooShort(password)) {
     return await apiError("apiErr.password8", 400);
   }
   if (!ROLES.includes(role)) {
@@ -62,7 +63,8 @@ export async function POST(req: NextRequest) {
   });
   if (userErr || !created.user) {
     if (userErr?.message) {
-      return NextResponse.json({ error: userErr.message }, { status: 400 });
+      console.error("admin create user failed:", userErr.message);
+      return await apiError("apiErr.staffAdd", 400);
     }
     return await apiError("apiErr.loginCreate", 400);
   }
@@ -108,7 +110,7 @@ export async function PATCH(req: NextRequest) {
   if (email !== undefined && !/^\S+@\S+\.\S+$/.test(email)) {
     return await apiError("apiErr.email", 400);
   }
-  if (password !== undefined && (typeof password !== "string" || password.length < 8)) {
+  if (password !== undefined && passwordTooShort(password)) {
     return await apiError("apiErr.newPassword8", 400);
   }
   if (role !== undefined && !["owner", "manager", "waiter", "cashier", "kitchen"].includes(role)) {
@@ -150,7 +152,8 @@ export async function PATCH(req: NextRequest) {
       ...(password !== undefined ? { password } : {}),
     });
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.error("admin update user failed:", error.message);
+      return await apiError("apiErr.staffRow", 400);
     }
   }
 
