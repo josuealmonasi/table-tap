@@ -2,11 +2,11 @@ import { Skeleton } from "@/components/ui/Skeleton";
 
 /**
  * Shaped like the till: the search box, the section chips, a grid of tiles
- * five across, and the sale panel beside them.
+ * four across, and the sale panel beside them.
  *
  * Measured against the real screen rather than guessed — a 150px minimum tile
- * 76px tall, the same 12px gaps, and the panel at its own 320px track — so the
- * page does not change shape when the menu arrives.
+ * 76px tall, the same 12px gaps, four tracks from 900px up, and the panel on
+ * its own — so the page does not change shape when the menu arrives.
  */
 export default function PosLoading() {
   return (
@@ -38,12 +38,14 @@ export default function PosLoading() {
             ))}
           </div>
 
-          {/* The sale panel: heading, the empty line, the total rule, three
-              fields and the two charge buttons stacked under them. */}
+          {/* The sale panel: heading, the empty line, where the total will be,
+              three fields and the two charge buttons stacked under them. The
+              total's rule keeps its space but not its ink — a hard black line
+              across a panel of grey blocks reads as a fault, not a heading. */}
           <aside className="tt-pos-cart">
             <Skeleton width={72} height={22} style={{ marginBottom: 12 }} />
             <Skeleton width={180} height={16} />
-            <div className="tt-pos-total">
+            <div className="tt-pos-total tt-pos-total-loading">
               <Skeleton width={46} height={16} />
               <Skeleton width={104} height={26} />
             </div>
