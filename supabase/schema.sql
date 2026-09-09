@@ -2187,9 +2187,20 @@ begin
        where r.id = new.restaurant_id and r.auto_print_kitchen
      )
   then
-    insert into print_jobs (restaurant_id, order_id, kind)
-    values (new.restaurant_id, new.id, 'kitchen')
-    on conflict (order_id, kind) do nothing;
+    -- Swallowed on purpose, and this is the whole reason the block exists: an
+    -- order is money, a print job is paper. If queuing the ticket ever fails —
+    -- a constraint nobody predicted, a table mid-migration — the sale must
+    -- still be recorded. A trigger that raises here would roll back the order
+    -- that fired it, and a restaurant would lose a paid sale because a printer
+    -- queue hiccuped. The kitchen board still shows the order; only the paper
+    -- is missed.
+    begin
+      insert into print_jobs (restaurant_id, order_id, kind)
+      values (new.restaurant_id, new.id, 'kitchen')
+      on conflict (order_id, kind) do nothing;
+    exception when others then
+      null;
+    end;
   end if;
   return new;
 end; $$;

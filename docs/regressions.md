@@ -277,6 +277,15 @@ line and kept them on every continuation. Every modifier printed flush against
 the dish above it, and it looked deliberate. The indent is applied to all the
 lines by the wrapper now, after the split rather than before it.
 
+**A trigger that raises rolls back the row that fired it.** Queuing the kitchen
+ticket is an `after insert` on `orders`, which means anything that can make the
+queue insert fail — a constraint nobody predicted, a table caught
+mid-migration — would have taken the paid sale down with it. A restaurant would
+have lost money because a printer queue hiccuped. The insert is wrapped in a
+block that swallows everything now, and the failure mode was proved by breaking
+`print_jobs` with an impossible constraint and watching the order save anyway.
+An order is money; a print job is paper.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`
