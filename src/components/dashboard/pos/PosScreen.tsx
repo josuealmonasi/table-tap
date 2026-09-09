@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
 import { CheckIcon } from "@/components/ui/icons";
 import { priceCart } from "@/lib/pricing";
+import { printableReceipt } from "@/lib/print-document";
 
 import ItemDetailScreen from "@/components/customer/ItemDetailScreen";
 import CartLineRow from "@/components/customer/CartLineRow";
@@ -206,11 +207,15 @@ export default function PosScreen({
   /**
    * Prints the ticket when nobody asked for it by email.
    *
-   * Through the browser's own print dialog for now, which is what a counter
-   * with a USB or network printer already has. The Bluetooth thermal printer
-   * comes later and plugs in HERE: the server hands back the same receipt
-   * either way, so swapping this one function for a driver changes nothing
-   * else — the decision "email it or print it" is already made upstream.
+   * Through the browser's own print dialog, which means any printer the
+   * counter machine can already see — USB, Ethernet, AirPrint — works with
+   * nothing to integrate. Chrome started with `--kiosk-printing` puts it on
+   * the roll with no dialog at all, which is what a counter actually wants.
+   *
+   * The receipt itself is the server's, unchanged: the same document that goes
+   * in the email. `printableReceipt` only describes the paper — an 80mm page
+   * with the screen's greys pushed to black — so a printed ticket cannot drift
+   * away from an emailed one.
    */
   function printReceipt(html: string): void {
     const w = window.open("", "_blank", "width=380,height=640");
@@ -219,10 +224,9 @@ export default function PosScreen({
       toast(t("pos.printBlocked"), "error");
       return;
     }
-    w.document.write(html);
+    w.document.write(printableReceipt(html, restaurant.name));
     w.document.close();
     w.focus();
-    w.print();
   }
 
   /** Ring it up. The money is already in the drawer by the time this runs. */
