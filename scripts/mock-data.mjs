@@ -718,9 +718,18 @@ export async function seedMock(pg) {
   // queue to read. The oldest order stands in for one that has been printed;
   // nothing is left waiting, because a demo that permanently claims to have an
   // unprinted ticket is a demo with a red badge nobody can clear.
-  const shelfItem = products.find(p => /agua|refresco|bebida|water|soda/i.test(p.name));
-  if (shelfItem) {
-    await pg.query("update menu_items set skips_kitchen = true where id = $1", [shelfItem.id]);
+  //
+  // Matched against the names this seeder actually writes, and checked: the
+  // first attempt looked for "agua" and "refresco", found nothing in a menu
+  // that says Craft Beer and House Red Wine, and quietly seeded a demo with
+  // the feature switched off everywhere.
+  const shelfItems = products.filter(p =>
+    /beer|wine|cerveza|vino|agua|water|soda|refresco|bottled/i.test(p.name),
+  );
+  if (shelfItems.length > 0) {
+    await pg.query("update menu_items set skips_kitchen = true where id = any($1)", [
+      shelfItems.map(p => p.id),
+    ]);
   }
   await pg.query("update restaurants set auto_print_kitchen = true where id = $1", [rid]);
   const { rows: printed } = await pg.query(

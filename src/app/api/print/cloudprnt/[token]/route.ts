@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { kitchenTicket } from "@/lib/ticket";
-import { messagesFor, translate } from "@/lib/i18n";
+import { DEFAULT_LOCALE, messagesFor, translate } from "@/lib/i18n";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 
 export const runtime = "nodejs";
@@ -160,7 +160,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
     .eq("id", job.id as string)
     .eq("restaurant_id", printer.restaurantId);
 
-  const messages = messagesFor("es");
+  // A printer carries no cookie, so nothing here can ask the reader what
+  // language they want — the ticket has to pick one. It picks the app's own
+  // default, which is Spanish for the same reason the menu is: this ships in
+  // Mexico, and the person reading this ticket is standing in the kitchen.
+  const messages = messagesFor(DEFAULT_LOCALE);
   const body = kitchenTicket(
     {
       id: order.id as string,
