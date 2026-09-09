@@ -88,6 +88,31 @@ is set today. A full policy has to be tested against Stripe Checkout, Supabase
 storage and the fonts before it can be trusted, and a half-written one either
 blocks checkout or lulls somebody into thinking the app has one.
 
+## What a security review found, and what it left
+
+Swept 2026-09-09: routes and their guards, RLS under real cross-tenant attack,
+storage, the money paths, injection, redirects, logging, headers and
+dependencies. Six findings, all fixed and guarded, written up in
+`docs/regressions.md`.
+
+Two things it deliberately did NOT fix:
+
+- **A real Content-Security-Policy.** Only `frame-ancestors` is set. The
+  session cookie cannot be `httpOnly` — Supabase's browser client has to read
+  it — so any XSS is a full account takeover, and a CSP is the defence that
+  actually addresses that. Writing one needs its own testing pass against
+  Stripe, Supabase and the fonts. This is the largest piece of security work
+  still outstanding.
+
+- **`authenticated` holds Supabase's default write grants on 24 tables.** RLS
+  covers every one of them — cross-tenant writes, the ledger, the audit log and
+  the price list were all attacked directly and all held. But the schema
+  already argues, for `anon`, that leaving RLS as the *only* thing between a
+  browser key and the data is worth avoiding, and that argument applies here
+  too. `restaurants` and `plan_limits` have been revoked because a hole was
+  proved in them; the rest is defence in depth on a working defence, and worth
+  doing deliberately rather than in the middle of a review.
+
 ## Still a decision, not a task
 
 - **Loyalty** is parked pending the identity question: what a returning diner

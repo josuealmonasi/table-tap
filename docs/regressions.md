@@ -365,6 +365,17 @@ sometimes the value that broke it, always in English — and the invariant that
 exists to stop exactly that saw nothing, because it scans for sentences written
 as literals. It reads both now.
 
+**The session cookie was not marked Secure.** Read off a real production
+login: `sameSite: Lax` (which is what stops a cross-site POST carrying it, and
+was already right), `httpOnly: false` — unavoidable, Supabase's browser client
+writes and reads it with `document.cookie` — and `secure: false`, on an HTTPS
+site. HSTS is sent with `preload`, so no browser would have made a plaintext
+request to the domain and nothing was leaking; the flag was simply not saying
+so itself. It follows `location.protocol` rather than `NODE_ENV`, on purpose: a
+build variable would have to be guessed right for an environment this can never
+be tested in, and guessing it wrong sets `Secure` on a cookie served over http,
+which the browser silently drops — and then nobody can log in at all.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`

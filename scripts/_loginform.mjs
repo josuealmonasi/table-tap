@@ -1,0 +1,17 @@
+import { chromium } from "playwright";
+const BASE = "http://localhost:3000";
+const browser = await chromium.launch();
+const ctx = await browser.newContext();
+const page = await ctx.newPage();
+page.setDefaultTimeout(60000);
+await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded", timeout: 90000 });
+await page.fill('input[type="email"]', "demo@tabletap.dev");
+await page.fill('input[type="password"]', "demo123");
+await page.click('button[type="submit"]');
+await page.waitForTimeout(8000);
+const cookies = (await ctx.cookies()).filter(c => c.name.includes("auth-token"));
+console.log("landed on   :", new URL(page.url()).pathname);
+console.log("auth cookie :", cookies.length ? `set (secure=${cookies[0].secure}, sameSite=${cookies[0].sameSite})` : "NOT SET — LOGIN BROKEN");
+const status = await page.evaluate(async () => (await fetch("/api/badges")).status);
+console.log("GET /api/badges:", status, status === 200 ? "(logged in — the cookie change is safe)" : "(NOT logged in)");
+await browser.close();
