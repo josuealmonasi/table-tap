@@ -5,11 +5,14 @@ import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
+import { CheckIcon } from "@/components/ui/icons";
 import { priceCart } from "@/lib/pricing";
 
 import ItemDetailScreen from "@/components/customer/ItemDetailScreen";
 import CartLineRow from "@/components/customer/CartLineRow";
 import TipPicker from "@/components/customer/TipPicker";
+import ComboDetailScreen from "@/components/customer/ComboDetailScreen";
+import type { Combo } from "@/lib/promotions";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import type { CartItem } from "@/hooks/useCart";
 import { DietaryTagsProvider } from "@/components/DietaryTagsContext";
@@ -37,6 +40,7 @@ export default function PosScreen({
   extras,
   extrasByProduct,
   promos,
+  combos,
   closedNow,
   dietaryTags,
   canEmailReceipt,
@@ -47,6 +51,8 @@ export default function PosScreen({
   extras: MenuItem[];
   extrasByProduct: Record<string, string[]>;
   promos: CartPromo[];
+  /** Bundles, sold at the counter the same way a diner buys one. */
+  combos: Combo[];
   closedNow: boolean;
   /** The restaurant's own allergen list, for the dish screen. */
   dietaryTags: StoredDietaryTag[];
@@ -65,6 +71,7 @@ export default function PosScreen({
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [openItem, setOpenItem] = useState<MenuItem | null>(null);
+  const [openCombo, setOpenCombo] = useState<Combo | null>(null);
   const [search, setSearch] = useState("");
   const [note, setNote] = useState("");
   const [ticket, setTicket] = useState<{ code: string; total: number } | null>(null);
@@ -133,10 +140,14 @@ export default function PosScreen({
   // lunch menu and a dinner menu has a Starters in each, and listing "STARTERS"
   // twice tells a cashier nothing about which is which — they are the same
   // section of the same counter.
-  const sellable = items.filter(i => i.available);
-  const sections = new Map<string, { name: string; dishes: typeof sellable }>();
+  // Sold-out dishes stay on the till, unlike the diner's menu which hides
+  // them. A cashier is standing in front of somebody who just asked for one,
+  // and "it is not on my screen" is not an answer — "we've run out of that"
+  // is. Shown, marked, and not orderable.
+  const onTill = items;
+  const sections = new Map<string, { name: string; dishes: typeof onTill }>();
   for (const category of categories) {
-    const dishes = sellable.filter(i => i.category_id === category.id);
+    const dishes = onTill.filter(i => i.category_id === category.id);
     if (dishes.length === 0) continue;
     const key = category.name.trim().toLowerCase();
     const existing = sections.get(key);
@@ -257,7 +268,7 @@ export default function PosScreen({
 
         <div className="tt-pos">
           {/* What is for sale, by section, one tap to add. */}
-          <div className="tt-pos-menu">
+          <div className={`tt-pos-menu ${busy ? "tt-pos-menu-sending" : ""}`} aria-busy={busy}>
             <input
               className="tt-input tt-pos-search"
               value={search}
@@ -287,6 +298,25 @@ export default function PosScreen({
               </nav>
             )}
 
+            {combos.length > 0 && !needle && (
+              <section id="pos-combos" className="tt-pos-section">
+                <h3 className="tt-pos-cat">{t("menu.deals")}</h3>
+                <div className="tt-pos-grid">
+                  {combos.map(combo => (
+                    <button
+                      type="button"
+                      key={combo.id}
+                      className="tt-pos-tile"
+                      onClick={() => setOpenCombo(combo)}
+                    >
+                      <span className="tt-pos-tile-name">{combo.name}</span>
+                      <span className="tt-pos-tile-price">{money(combo.price)}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {byCategory.map(({ name, dishes }) => (
               <section key={name} id={sectionId(name)} className="tt-pos-section">
                 <h3 className="tt-pos-cat">{name}</h3>
@@ -295,13 +325,18 @@ export default function PosScreen({
                     <button
                       type="button"
                       key={dish.id}
-                      className="tt-pos-tile"
+                      className={`tt-pos-tile ${dish.available ? "" : "tt-pos-tile-out"}`}
+                      disabled={!dish.available}
                       onClick={() => setOpenItem(dish)}
                     >
                       <span className="tt-pos-tile-name">
                         {dish.emoji} {dish.name}
                       </span>
-                      <span className="tt-pos-tile-price">{money(Number(dish.price))}</span>
+                      {dish.available ? (
+                        <span className="tt-pos-tile-price">{money(Number(dish.price))}</span>
+                      ) : (
+                        <span className="tt-badge tt-pos-tile-out-tag">{t("cart.soldOut")}</span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -446,9 +481,30 @@ export default function PosScreen({
                 disabled={busy}
                 onClick={() => void charge(pending)}
               >
-                {t("pos.sendToKitchen")}
+                {busy ? t("cart.placingOrder") : t("pos.sendToKitchen")}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {openCombo && (
+        <div className="tt-detail-overlay" onClick={() => setOpenCombo(null)}>
+          <div className="tt-detail-panel" onClick={e => e.stopPropagation()}>
+            <DietaryTagsProvider tags={dietaryTags}>
+              <ComboDetailScreen
+                combo={openCombo}
+                currency={restaurant.currency}
+                itemsById={new Map(items.map(i => [i.id, i]))}
+                extrasById={new Map(extras.map(e => [e.id, e]))}
+                extrasByProduct={extrasByProduct}
+                onBack={() => setOpenCombo(null)}
+                onAdd={line => {
+                  setLines(prev => [...prev, { ...line, cartId: nextCartId.current++ }]);
+                  setOpenCombo(null);
+                }}
+              />
+            </DietaryTagsProvider>
           </div>
         </div>
       )}
@@ -458,14 +514,17 @@ export default function PosScreen({
       {ticket && (
         <div className="tt-detail-overlay" onClick={() => setTicket(null)}>
           <div className="tt-pos-ticket" onClick={e => e.stopPropagation()}>
-            <h2 className="tt-serif" style={{ margin: 0 }}>
-              {t("pos.charged")}
-            </h2>
+            <span className="tt-pos-ticket-mark" aria-hidden="true">
+              <CheckIcon size={26} weight="bold" />
+            </span>
+            <p className="tt-pos-ticket-said">{t("pos.charged")}</p>
             <p className="tt-pos-code">{ticket.code}</p>
-            <p className="tt-muted" style={{ margin: 0 }}>{money(ticket.total)}</p>
+            <p className="tt-pos-ticket-total">{money(ticket.total)}</p>
+            <p className="tt-muted tt-pos-ticket-hint">{t("pos.calledOut")}</p>
             <button
               type="button"
               className="tt-btn tt-btn-primary"
+              autoFocus
               onClick={() => setTicket(null)}
             >
               {t("pos.newSale")}

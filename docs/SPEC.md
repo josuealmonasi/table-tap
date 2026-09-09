@@ -259,6 +259,17 @@ Owner, manager and cashier. Not the waiter: carrying a card machine to a table
 is settling a bill somebody else placed, which is a different act from ringing
 a sale.
 
+## The connection is a requirement
+
+TableTap runs online, and the terms say so rather than implying it. Without a
+connection the dashboard, the till and the diner's menu are all unavailable,
+and nothing — an order, a charge, a corte — is recorded until it returns. The
+restaurant is responsible for that connection in its own premises.
+
+The kitchen board is the one exception, and deliberately so: it keeps showing
+the tickets it already had, because losing sight of what is cooking is worse
+than the alternative. Everything else refuses rather than pretending.
+
 ## Losing the connection
 
 The kitchen board keeps working when the wifi does not. A service worker holds

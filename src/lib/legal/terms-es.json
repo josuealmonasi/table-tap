@@ -68,6 +68,7 @@
       "title": "8. Disponibilidad del servicio",
       "paragraphs": [
         "TableTap procura la disponibilidad continua del servicio, sin garantizar que opere libre de interrupciones. Pueden presentarse labores de mantenimiento, fallas de proveedores o causas ajenas a nuestro control.",
+        "TableTap funciona en línea. Una conexión a internet estable es un requisito de operación, no una recomendación: sin ella el panel, la caja del mostrador y el menú de los comensales dejan de estar disponibles, y ningún pedido, cobro ni corte puede registrarse mientras dure la interrupción. El restaurante es responsable de contar con esa conexión en su local; las interrupciones de su proveedor de internet, de su red interna o de sus propios equipos quedan fuera de nuestro control y no constituyen una falla del servicio.",
         "Cuando la causa dependa de nosotros, se resolverá a la brevedad y se informará al restaurante si la incidencia se prolonga."
       ]
     },

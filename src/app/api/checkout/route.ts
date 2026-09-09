@@ -24,7 +24,7 @@ import {
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { fetchPromotions } from "@/lib/promotions-data";
 import { toCartPromos } from "@/lib/promotions";
-import { verifyCart, type VerifiableItem } from "@/lib/verify-cart";
+import { referencedItemIds, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
 import { raiseStockNotifications, releaseStock, reserveStock } from "@/lib/stock-service";
 import type { OrderLineItem } from "@/lib/types";
 
@@ -193,15 +193,7 @@ export async function POST(req: NextRequest) {
     // IMPORTANT: never trust client prices. Re-fetch every referenced item
     // (products AND extras) plus every combo component, so the verification
     // below can price them from the DB and check they're all still orderable.
-    const comboComponentIds = promotions
-      .filter(p => items.some(i => i.comboId === p.id))
-      .flatMap(p => p.items.map(i => i.item_id));
-    const referencedIds = [
-      ...new Set([
-        ...items.flatMap(i => [i.itemId, ...(i.extras?.map(e => e.id) ?? [])]),
-        ...comboComponentIds,
-      ]),
-    ];
+    const referencedIds = referencedItemIds(items, promotions);
     const { data: dbItems, error: iErr } = await supabase
       .from("menu_items")
       .select("id, name, price, emoji, available, discount_pct, modifiers, category_id")

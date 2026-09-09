@@ -879,6 +879,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     askTitle: "Cobrar {amount}",
     sendToKitchen: "Enviar a la cocina",
     printBlocked: "El navegador bloqueó la impresión. Permite las ventanas emergentes.",
+    calledOut: "En la cocina. Llama al cliente cuando esté listo.",
     chargeCash: "Cobrar en efectivo",
     chargeCard: "Cobrar con tarjeta",
     charged: "Cobrado",

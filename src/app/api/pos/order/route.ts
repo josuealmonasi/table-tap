@@ -6,7 +6,7 @@ import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { capName, capNote } from "@/lib/notes";
 import { priceCart } from "@/lib/pricing";
-import { verifyCart, type VerifiableItem } from "@/lib/verify-cart";
+import { referencedItemIds, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
 import { fetchPromotions } from "@/lib/promotions-data";
 import { toCartPromos } from "@/lib/promotions";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
@@ -135,7 +135,11 @@ export async function POST(req: NextRequest) {
     return !menuId || openIds.includes(menuId);
   };
 
-  const referencedIds = [...new Set(items.map(i => i.itemId))];
+  // Products AND extras AND every combo component — the same list checkout
+  // fetches, from the same function, because verifyCart prices only what it is
+  // handed and a missing extra reads to it as one that has vanished.
+  const promotions = await fetchPromotions(supabase, actor.restaurantId);
+  const referencedIds = referencedItemIds(items, promotions);
   const { data: dbItems } = await supabase
     .from("menu_items")
     .select("id, name, price, emoji, available, discount_pct, modifiers, category_id")
@@ -143,7 +147,6 @@ export async function POST(req: NextRequest) {
     .eq("restaurant_id", actor.restaurantId);
   if (!dbItems) return await apiError("apiErr.verifyItems", 400);
 
-  const promotions = await fetchPromotions(supabase, actor.restaurantId);
   const result = verifyCart({
     items,
     promotions,

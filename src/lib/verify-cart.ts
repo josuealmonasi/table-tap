@@ -50,6 +50,31 @@ export type CartRejection =
   /** Extras vanished; the customer is asked to confirm before paying. */
   | { kind: "removedExtras"; ids: string[]; names: string[] };
 
+/**
+ * Every menu row a cart refers to: the dishes, their extras, and the
+ * components of any bundle in it.
+ *
+ * Written once because it was written twice. `verifyCart` prices from the rows
+ * it is given, so a caller that fetches only the dishes hands it a cart whose
+ * extras look like they have vanished — and the till did exactly that, failing
+ * every sale with an extra on it. The list of what to fetch belongs with the
+ * function that consumes it.
+ */
+export function referencedItemIds(
+  items: OrderLineItem[],
+  promotions: PromotionWithItems[],
+): string[] {
+  const comboComponents = promotions
+    .filter(p => items.some(i => i.comboId === p.id))
+    .flatMap(p => p.items.map(i => i.item_id));
+  return [
+    ...new Set([
+      ...items.flatMap(i => [i.itemId, ...(i.extras?.map(e => e.id) ?? [])]),
+      ...comboComponents,
+    ]),
+  ];
+}
+
 export interface VerifyCartInput {
   /** The client's cart, trusted only for *what* was asked for. */
   items: OrderLineItem[];

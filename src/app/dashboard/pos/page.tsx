@@ -40,7 +40,8 @@ export default async function PosPage() {
     );
   }
 
-  const data = await loadOrderingData(membership.restaurant.id);
+  // The till shows what has run out; the diner's menu never does.
+  const data = await loadOrderingData(membership.restaurant.id, { includeSoldOut: true });
   if (!data.restaurant) redirect("/dashboard");
 
   return (
@@ -51,6 +52,7 @@ export default async function PosPage() {
       extras={data.extras}
       extrasByProduct={data.extrasByProduct}
       promos={data.promos}
+      combos={data.combos}
       closedNow={data.closedNow}
       dietaryTags={data.dietaryTags}
       canEmailReceipt={data.receipts}

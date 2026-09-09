@@ -885,6 +885,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     askTitle: "Charge {amount}",
     sendToKitchen: "Send to the kitchen",
     printBlocked: "The browser blocked printing. Allow pop-ups for this site.",
+    calledOut: "On the pass. Call them when it is ready.",
     chargeCash: "Charge cash",
     chargeCard: "Charge card",
     charged: "Charged",

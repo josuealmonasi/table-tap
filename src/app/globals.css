@@ -683,6 +683,13 @@ a.tt-btn {
 .tt-pos-menu {
   min-width: 0;
 }
+/* While a sale is going to the kitchen the menu takes no more taps. Adding a
+   dish to a cart that has already been sent is how somebody pays for four
+   things and walks away with five. */
+.tt-pos-menu-sending {
+  opacity: 0.45;
+  pointer-events: none;
+}
 @media (min-width: 900px) {
   .tt-pos {
     /* Wide enough that a cart line fits on ONE line: `.tt-line` wraps once the
@@ -770,8 +777,17 @@ a.tt-btn {
   color: inherit;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
-.tt-pos-tile:hover {
+.tt-pos-tile:hover:not(:disabled) {
   border-color: var(--tt-accent);
+}
+/* Run out, and still on the till: the cashier has to be able to say so. Faded
+   the same amount a sold-out cart line is, and not pressable. */
+.tt-pos-tile-out {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.tt-pos-tile-out-tag {
+  margin-top: auto;
 }
 .tt-pos-tile:active {
   box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.08);
@@ -851,10 +867,10 @@ a.tt-btn {
   padding: 56px 20px;
 }
 .tt-pos-code {
-  font-size: 40px;
+  font-size: 38px;
   font-weight: 800;
   letter-spacing: 0.04em;
-  margin: 12px 0 4px;
+  margin: 6px 0 6px;
   font-variant-numeric: tabular-nums;
 }
 /* The dish screen, shown over the till. Same panel the diner gets, sized for
@@ -889,10 +905,39 @@ a.tt-btn {
 .tt-pos-ticket {
   width: min(360px, 100%);
   margin: auto;
-  padding: 36px 24px;
+  padding: 32px 24px 28px;
   text-align: center;
   background: var(--tt-white);
   border-radius: 12px;
+}
+/* Said once, plainly: it worked, this is the number, this is what they paid. */
+.tt-pos-ticket-mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 14px;
+  border-radius: 999px;
+  background: var(--tt-success-wash);
+  color: var(--tt-success);
+}
+.tt-pos-ticket-said {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tt-muted);
+}
+.tt-pos-ticket-total {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.tt-pos-ticket-hint {
+  margin: 0 0 20px;
+  font-size: 13px;
 }
 .tt-pos-sheet {
   max-width: 420px;
