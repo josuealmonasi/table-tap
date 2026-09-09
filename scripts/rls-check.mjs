@@ -351,5 +351,117 @@ if (!signIn.error && theirs) {
   else bad(`anon cannot read the menu's own columns (${tzErr?.message ?? "no timezone"})`);
 }
 
+// ── Every table, every role, measured by effect ────────────────────────────
+//
+// The checks above name the leaks somebody thought of. This one names none: it
+// walks every tenant-scoped table as every role and asks whether another
+// restaurant's rows can be read or destroyed. It exists because each hand
+// review found a different thing, which is a sign the reviewing should not be
+// by hand.
+//
+// It measures EFFECT, never the absence of an error. A write RLS filters to
+// zero rows returns no error at all, and reading that as "allowed" reported
+// four tables as wide open that were all fine.
+{
+  console.log("\n  Every table, every role\n");
+
+  const { data: rs } = await admin.from("restaurants").select("id,name");
+  const home = rs.find(r => r.name === "Demo Bistro") ?? rs[0];
+  const others = rs.filter(r => r.id !== home.id).map(r => r.id);
+
+  // Deliberately public: a diner scanning a QR has no login and must be able to
+  // read the menu. Every other tenant-scoped table must be invisible.
+  const PUBLIC_MENU = ["categories", "dietary_tags", "menu_items", "menus", "promotions"];
+  const TENANT = ["bill_splits", "categories", "coupon_redemptions", "coupons", "dietary_tags",
+    "discount_requests", "dish_ratings", "icon_groups", "menu_items", "menus", "notifications",
+    "orders", "payments", "print_jobs", "promotions", "restaurant_tables", "service_requests",
+    "staff", "table_sessions", "user_logs", "write_off_requests"];
+  const TEAM = [["anon", null], ["owner", "demo@tabletap.dev"], ["manager", "demo-manager@tabletap.dev"],
+    ["waiter", "demo-waiter@tabletap.dev"], ["cashier", "demo-cashier@tabletap.dev"],
+    ["kitchen", "demo-kitchen@tabletap.dev"]];
+
+  if (others.length === 0) {
+    bad("only one restaurant exists — cross-tenant checks cannot run");
+  }
+
+  // A neighbour with an order and a payment of its own.
+  //
+  // Without this the sweep passed on twelve of twenty-one tables by finding
+  // nothing to attack — orders and payments among them — which is a green tick
+  // for a question never asked. Planted here, attacked below, removed after.
+  //
+  // Never against production. This plants rows, and production is somebody's
+  // real accounting: a probe order and a probe payment there would show up in
+  // their takings and in the corte. The sweep runs with whatever real data
+  // production happens to hold, and says plainly what it therefore could not
+  // reach.
+  const planted = { order: null, payment: null };
+  if (!prod && others.length > 0) {
+    const { data: o } = await admin.from("orders").insert({
+      restaurant_id: others[0], status: "received", paid: true, subtotal: 11.5,
+      service_fee: 0, tip: 0, tax_pct: 0, total: 11.5, currency: "MXN",
+      items: [{ itemId: "x", name: "rls fixture", emoji: "x", price: 11.5, qty: 1, mods: {} }],
+    }).select("id").maybeSingle();
+    planted.order = o?.id ?? null;
+    if (planted.order) {
+      const { data: pmt } = await admin.from("payments").insert({
+        restaurant_id: others[0], order_id: planted.order, amount: 11.5, method: "cash",
+      }).select("id").maybeSingle();
+      planted.payment = pmt?.id ?? null;
+    }
+    if (!planted.order || !planted.payment) bad("could not plant a neighbour's order — orders/payments went unchecked");
+  }
+
+  // Which tables this sweep could actually bite on, so a silent gap is visible.
+  const testable = [];
+  for (const table of TENANT) {
+    const { count } = await admin
+      .from(table).select("id", { count: "exact", head: true }).in("restaurant_id", others);
+    if ((count ?? 0) > 0) testable.push(table);
+  }
+  const untested = TENANT.filter(t => !testable.includes(t));
+  console.log(`  ..       attacking ${testable.length}/${TENANT.length} tables that hold another restaurant's rows`);
+  if (untested.length) console.log(`  ..       no fixture, so not attacked: ${untested.join(", ")}`);
+  for (const must of ["orders", "payments", "menu_items", "staff"]) {
+    if (testable.includes(must)) continue;
+    // In development the fixture is planted, so a gap here is a real fault. In
+    // production nothing may be planted, so it is a limit of the sweep and is
+    // said out loud rather than counted as a pass.
+    if (prod) console.log(`  ..       ${must} has no second restaurant's rows here — not attacked`);
+    else bad(`${must} has no other restaurant's rows — this sweep proves nothing about it`);
+  }
+
+  for (const [role, email] of TEAM) {
+    const who = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    );
+    if (email) {
+      const { error } = await who.auth.signInWithPassword({ email, password: "demo123" });
+      if (error) { bad(`cannot sign in as ${role} — this role went unchecked`); continue; }
+    }
+    let reads = 0, writes = 0;
+    for (const table of TENANT) {
+      const seen = await who.from(table).select("id").in("restaurant_id", others).limit(1);
+      if (!seen.error && seen.data?.length && !PUBLIC_MENU.includes(table)) {
+        reads++; bad(`${role} reads ${table} belonging to another restaurant`);
+      }
+      // Try to destroy a real foreign row, then ask the secret key whether it survived.
+      const { data: victim } = await admin
+        .from(table).select("id").in("restaurant_id", others).limit(1).maybeSingle();
+      if (!victim) continue;
+      await who.from(table).delete().eq("id", victim.id);
+      const { data: alive } = await admin.from(table).select("id").eq("id", victim.id).maybeSingle();
+      if (!alive) { writes++; bad(`${role} DESTROYED a row of ${table} in another restaurant`); }
+    }
+    if (reads === 0 && writes === 0) {
+      ok(`${role} reaches nothing of another restaurant's, by read or by write`);
+    }
+  }
+
+  if (planted.payment) await admin.from("payments").delete().eq("id", planted.payment);
+  if (planted.order) await admin.from("orders").delete().eq("id", planted.order);
+}
+
 console.log(failed === 0 ? "\nNothing is exposed.\n" : `\n${failed} PROBLEM(S) — fix before shipping.\n`);
 process.exit(failed === 0 ? 0 : 1);
