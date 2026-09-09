@@ -35,7 +35,20 @@ export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Constant time, and never leaking length through an early return. */
+/**
+ * Compare in constant time.
+ *
+ * Belt and braces, and worth being honest about which: the row was already
+ * found with `.eq("print_token", …)`, so Postgres matched it exactly and this
+ * can only ever agree. It is here so that a later refactor which loosens that
+ * lookup — a prefix, a join, a cache — does not quietly turn the comparison
+ * into a byte-by-byte one that answers faster the closer a guess gets.
+ *
+ * The length check returns early because `timingSafeEqual` throws on unequal
+ * lengths. That does leak the length, which is fine: every token this issues
+ * is the same 43 characters, so the length tells an attacker nothing they
+ * could not read off the format.
+ */
 function tokenMatches(given: string, actual: string): boolean {
   const a = Buffer.from(given);
   const b = Buffer.from(actual);
