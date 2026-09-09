@@ -826,6 +826,14 @@ a.tt-btn {
   border-top: 2px solid var(--tt-ink);
   font-size: 15px;
 }
+/* The same row while the till is still loading.
+   The rule under the total is 2px of near-black, which is right once there is
+   a total under it and wrong while there is not: among soft grey blocks it
+   reads as a mistake rather than as structure. Transparent rather than absent,
+   so the 2px it occupies stays and nothing shifts when the real one arrives. */
+.tt-pos-total-loading {
+  border-top-color: transparent;
+}
 .tt-pos-total strong {
   font-size: 22px;
   font-variant-numeric: tabular-nums;
