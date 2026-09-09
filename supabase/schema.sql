@@ -2102,3 +2102,112 @@ end; $$;
 
 revoke all on function public.join_bill_split(uuid, text, numeric) from public, anon, authenticated;
 grant execute on function public.join_bill_split(uuid, text, numeric) to service_role;
+
+
+-- ── Printing ────────────────────────────────────────────────────────────────
+-- Tickets on paper: the receipt handed across the counter, and the order that
+-- lands on the pass.
+--
+-- The counter receipt needs nothing here — it prints from the browser through
+-- whatever printer the machine already has. The kitchen is the part that needs
+-- the database, because nobody is standing at the kitchen printer to press
+-- print. The printer asks us instead: a CloudPRNT printer polls a URL over
+-- plain outbound HTTPS every few seconds, and we answer with whatever is
+-- waiting. No inbound access to the restaurant's network, no software
+-- installed on their machines, and no port forwarding — the shape that does
+-- not require us to reach into somebody else's LAN.
+alter table restaurants add column if not exists auto_print_kitchen boolean not null default false;
+
+-- Products that need no preparation: a bottled drink, a bag of coffee, a
+-- packaged snack. The cashier takes them off the shelf and puts them in the
+-- customer's hand, so there is nothing for a cook to make and nothing to wait
+-- for.
+--
+-- It means "needs no preparation", not "skip the order". A bottled water
+-- ordered from table 6 still has to be carried to table 6, so a QR order goes
+-- to the pass exactly as before whatever this says. The counter is the one
+-- place where no preparation ALSO means already delivered, because the person
+-- ringing it up is the person handing it over.
+alter table menu_items add column if not exists skips_kitchen boolean not null default false;
+
+-- The printer's only credential. It cannot log in, hold a session or send a
+-- header we choose, so the URL it is configured with IS the secret — which is
+-- why this column appears in NO grant list: neither `anon` nor `authenticated`
+-- can read it, and the settings screen fetches it through the server. Null
+-- until somebody turns printing on, and rotatable from the same screen, so a
+-- token that ends up on a sticky note can be revoked without new hardware.
+alter table restaurants add column if not exists print_token text;
+create unique index if not exists restaurants_print_token_once
+  on restaurants (print_token) where print_token is not null;
+
+-- What is waiting to be printed. One row per ticket, not per attempt: a job is
+-- claimed when the printer fetches it and closed when the printer confirms, so
+-- a printer that dies mid-ticket leaves the row claimed and re-prints rather
+-- than losing the order.
+create table if not exists print_jobs (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  order_id      uuid not null references orders(id) on delete cascade,
+  kind          text not null default 'kitchen',
+  created_at    timestamptz not null default now(),
+  claimed_at    timestamptz,
+  printed_at    timestamptz
+);
+-- The queue is read as "the oldest thing this restaurant has not printed",
+-- which is exactly this index.
+create index if not exists print_jobs_pending_idx
+  on print_jobs (restaurant_id, created_at) where printed_at is null;
+-- An order is queued once. A retried write, or a status that flips back and
+-- forth, must not put the same ticket on the paper twice.
+create unique index if not exists print_jobs_once
+  on print_jobs (order_id, kind);
+
+-- Nobody but the server touches the queue: a diner has no business knowing
+-- what the kitchen is printing, and staff read the board, not this table.
+alter table print_jobs enable row level security;
+revoke all on print_jobs from anon, authenticated;
+
+-- An order reaches the pass from several directions — a diner paying online, a
+-- table ordering to settle later, a cashier ringing a sale — and every one of
+-- them has to queue a ticket. Rather than remembering that in each, the row
+-- itself decides: the moment an order becomes `received`, it is queued, and
+-- only if the restaurant asked for automatic printing. A path added later is
+-- covered without anybody having to notice this exists.
+create or replace function public.enqueue_kitchen_ticket()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.status = 'received'
+     and (tg_op = 'INSERT' or old.status is distinct from 'received')
+     and exists (
+       select 1 from restaurants r
+       where r.id = new.restaurant_id and r.auto_print_kitchen
+     )
+  then
+    -- Swallowed on purpose, and this is the whole reason the block exists: an
+    -- order is money, a print job is paper. If queuing the ticket ever fails —
+    -- a constraint nobody predicted, a table mid-migration — the sale must
+    -- still be recorded. A trigger that raises here would roll back the order
+    -- that fired it, and a restaurant would lose a paid sale because a printer
+    -- queue hiccuped. The kitchen board still shows the order; only the paper
+    -- is missed.
+    begin
+      insert into print_jobs (restaurant_id, order_id, kind)
+      values (new.restaurant_id, new.id, 'kitchen')
+      on conflict (order_id, kind) do nothing;
+    exception when others then
+      null;
+    end;
+  end if;
+  return new;
+end; $$;
+
+drop trigger if exists orders_enqueue_kitchen_ticket on orders;
+create trigger orders_enqueue_kitchen_ticket
+  after insert or update of status on orders
+  for each row execute function public.enqueue_kitchen_ticket();
+
+revoke all on function public.enqueue_kitchen_ticket() from public, anon, authenticated;

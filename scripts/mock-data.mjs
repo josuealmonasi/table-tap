@@ -713,6 +713,39 @@ export async function seedMock(pg) {
     );
   }
 
+  // A counter product and a kitchen printer with a ticket already through it,
+  // so the printing screens have something real to show and `pnpm api` has a
+  // queue to read. The oldest order stands in for one that has been printed;
+  // nothing is left waiting, because a demo that permanently claims to have an
+  // unprinted ticket is a demo with a red badge nobody can clear.
+  //
+  // Matched against the names this seeder actually writes, and checked: the
+  // first attempt looked for "agua" and "refresco", found nothing in a menu
+  // that says Craft Beer and House Red Wine, and quietly seeded a demo with
+  // the feature switched off everywhere.
+  const shelfItems = products.filter(p =>
+    /beer|wine|cerveza|vino|agua|water|soda|refresco|bottled/i.test(p.name),
+  );
+  if (shelfItems.length > 0) {
+    await pg.query("update menu_items set skips_kitchen = true where id = any($1)", [
+      shelfItems.map(p => p.id),
+    ]);
+  }
+  await pg.query("update restaurants set auto_print_kitchen = true where id = $1", [rid]);
+  const { rows: printed } = await pg.query(
+    "select id from orders where restaurant_id = $1 order by created_at desc limit 1",
+    [rid],
+  );
+  if (printed.length > 0) {
+    const now = new Date().toISOString();
+    await bulkInsert(
+      pg,
+      "print_jobs",
+      ["restaurant_id", "order_id", "kind", "claimed_at", "printed_at"],
+      [[rid, printed[0].id, "kitchen", now, now]],
+    );
+  }
+
   return {
     restaurantId: rid,
     tableId: tables[0].id,

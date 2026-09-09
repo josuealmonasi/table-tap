@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
 import { CheckIcon } from "@/components/ui/icons";
 import { priceCart } from "@/lib/pricing";
+import { printableReceipt } from "@/lib/print-document";
 
 import ItemDetailScreen from "@/components/customer/ItemDetailScreen";
 import CartLineRow from "@/components/customer/CartLineRow";
@@ -74,7 +75,16 @@ export default function PosScreen({
   const [openCombo, setOpenCombo] = useState<Combo | null>(null);
   const [search, setSearch] = useState("");
   const [note, setNote] = useState("");
-  const [ticket, setTicket] = useState<{ code: string; total: number } | null>(null);
+  // The customer waved the ticket away. Very common on a sale that is handed
+  // over as it is rung up — a bottle of water does not need paperwork — and
+  // the till should not print one nobody is going to take.
+  const [noTicket, setNoTicket] = useState(false);
+  const [ticket, setTicket] = useState<{
+    code: string;
+    total: number;
+    /** Nothing to make: it went in their hand, not on the pass. */
+    handedOver: boolean;
+  } | null>(null);
   const [pending, setPending] = useState<"cash" | "card" | null>(null);
   const [tipPct, setTipPct] = useState(0);
   const [tipCustom, setTipCustom] = useState<number | null>(null);
@@ -137,6 +147,20 @@ export default function PosScreen({
   );
 
   // Grouped by the name on the heading, not by the row id. A restaurant with a
+  // Whether this sale is finished the moment it is charged: everything in it
+  // comes off a shelf, so it goes in the customer's hand rather than to a
+  // cook. Worked out here from the menu the till was given, and decided again
+  // on the server from the DB — the screen only needs it to word a button.
+  const skipsKitchen = useMemo(() => {
+    const byId = new Map(items.map(i => [i.id, i]));
+    const flag = (id: string) => byId.get(id)?.skips_kitchen ?? false;
+    return (line: CartItem) =>
+      line.components?.length
+        ? line.components.every(c => flag(c.itemId))
+        : flag(line.itemId);
+  }, [items]);
+  const allHandedOver = lines.length > 0 && lines.every(skipsKitchen);
+
   // lunch menu and a dinner menu has a Starters in each, and listing "STARTERS"
   // twice tells a cashier nothing about which is which — they are the same
   // section of the same counter.
@@ -183,11 +207,15 @@ export default function PosScreen({
   /**
    * Prints the ticket when nobody asked for it by email.
    *
-   * Through the browser's own print dialog for now, which is what a counter
-   * with a USB or network printer already has. The Bluetooth thermal printer
-   * comes later and plugs in HERE: the server hands back the same receipt
-   * either way, so swapping this one function for a driver changes nothing
-   * else — the decision "email it or print it" is already made upstream.
+   * Through the browser's own print dialog, which means any printer the
+   * counter machine can already see — USB, Ethernet, AirPrint — works with
+   * nothing to integrate. Chrome started with `--kiosk-printing` puts it on
+   * the roll with no dialog at all, which is what a counter actually wants.
+   *
+   * The receipt itself is the server's, unchanged: the same document that goes
+   * in the email. `printableReceipt` only describes the paper — an 80mm page
+   * with the screen's greys pushed to black — so a printed ticket cannot drift
+   * away from an emailed one.
    */
   function printReceipt(html: string): void {
     const w = window.open("", "_blank", "width=380,height=640");
@@ -196,10 +224,9 @@ export default function PosScreen({
       toast(t("pos.printBlocked"), "error");
       return;
     }
-    w.document.write(html);
+    w.document.write(printableReceipt(html, restaurant.name));
     w.document.close();
     w.focus();
-    w.print();
   }
 
   /** Ring it up. The money is already in the drawer by the time this runs. */
@@ -221,7 +248,8 @@ export default function PosScreen({
           note: note.trim() || undefined,
           tipPct: tipCustom === null ? tipPct : undefined,
           tipAmount: tipCustom ?? undefined,
-          email: canEmailReceipt ? email.trim() || undefined : undefined,
+          email: canEmailReceipt && !noTicket ? email.trim() || undefined : undefined,
+          noReceipt: noTicket || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -238,11 +266,12 @@ export default function PosScreen({
       else if (data.receipt === "sent") toast(t("pos.receiptSent"));
       // No address, or an address the mail never reached: it prints.
       if (data.receiptHtml) printReceipt(data.receiptHtml);
-      setTicket({ code: data.code, total: data.total });
+      setTicket({ code: data.code, total: data.total, handedOver: Boolean(data.handedOver) });
       setLines([]);
       setCustomerName("");
       setEmail("");
       setNote("");
+      setNoTicket(false);
       setTipPct(0);
       setTipCustom(null);
       // The kitchen board and the badges have a new ticket to show.
@@ -453,7 +482,26 @@ export default function PosScreen({
               />
             </label>
 
-            {canEmailReceipt ? (
+            {/* Not a second way to pay — a modifier on the one there is. The
+                customer said no thank you, so there is nowhere to send a
+                receipt and nothing to print, and the address field goes away
+                rather than sitting there asking a question that no longer has
+                a point. */}
+            <label className="tt-pos-noticket">
+              <input
+                type="checkbox"
+                checked={noTicket}
+                disabled={busy}
+                onChange={e => setNoTicket(e.target.checked)}
+              />
+              <span>{t("pos.noTicket")}</span>
+            </label>
+
+            {noTicket ? (
+              <p className="tt-muted" style={{ fontSize: 13, margin: "0 0 4px" }}>
+                {t("pos.noTicketHint")}
+              </p>
+            ) : canEmailReceipt ? (
               <label className="tt-field">
                 <span className="tt-mod-label">{t("pos.receiptEmail")}</span>
                 <input
@@ -481,7 +529,11 @@ export default function PosScreen({
                 disabled={busy}
                 onClick={() => void charge(pending)}
               >
-                {busy ? t("cart.placingOrder") : t("pos.sendToKitchen")}
+                {busy
+                  ? t("cart.placingOrder")
+                  : allHandedOver
+                    ? t("pos.finishSale")
+                    : t("pos.sendToKitchen")}
               </button>
             </div>
           </div>
@@ -520,7 +572,12 @@ export default function PosScreen({
             <p className="tt-pos-ticket-said">{t("pos.charged")}</p>
             <p className="tt-pos-code">{ticket.code}</p>
             <p className="tt-pos-ticket-total">{money(ticket.total)}</p>
-            <p className="tt-muted tt-pos-ticket-hint">{t("pos.calledOut")}</p>
+            {/* Telling a cashier to call somebody who is still standing there
+                with their drink in their hand is the screen not knowing what
+                just happened. */}
+            <p className="tt-muted tt-pos-ticket-hint">
+              {ticket.handedOver ? t("pos.handedOver") : t("pos.calledOut")}
+            </p>
             <button
               type="button"
               className="tt-btn tt-btn-primary"

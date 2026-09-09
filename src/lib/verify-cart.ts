@@ -39,6 +39,8 @@ export interface VerifiableItem {
   discount_pct: number | string | null;
   modifiers: Modifier[] | null;
   category_id: string | null;
+  /** Needs no preparation. Absent on rows fetched before this existed. */
+  skips_kitchen?: boolean | null;
 }
 
 /** Why a cart can't be charged, as data — the caller supplies the wording. */
@@ -185,6 +187,11 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
       }),
       ...(comboExtras.length > 0 ? { extras: comboExtras } : {}),
       notes: capNote(line.notes),
+      // A bundle needs no preparation only when NONE of its plates do. One
+      // burger in a meal deal is enough to send the whole thing to a cook.
+      ...(combo.components.length > 0 && combo.components.every(c => priceMap.get(c.itemId)?.skips_kitchen)
+        ? { skipsKitchen: true }
+        : {}),
     });
   }
 
@@ -226,6 +233,9 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
       mods: line.mods ?? {},
       extras: verifiedExtras.length ? verifiedExtras : undefined,
       notes: capNote(line.notes),
+      // From the DB, like the name and the price: the ticket has to say what
+      // was true when the order was placed, not what the menu says today.
+      ...(db.skips_kitchen ? { skipsKitchen: true } : {}),
     });
   }
 

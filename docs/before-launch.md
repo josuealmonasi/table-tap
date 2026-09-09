@@ -50,7 +50,22 @@ Two separate things, both currently unset:
 - A lawyer's read of the terms and the aviso de privacidad.
 - Regenerate the PDFs after any wording change: `node scripts/legal-pdf.mjs`.
 
-## 5. Keys for features not yet built
+## 5. The kitchen printer, when a restaurant wants one
+
+Nothing to buy centrally and nothing to configure on our side: printing is off
+until a restaurant turns it on, and the till's own receipt already prints
+through whatever printer the counter machine can see.
+
+What a restaurant needs for the KITCHEN printer is a CloudPRNT-capable one —
+the Star TSP143IV is the cheapest that does it, the mC-Print3 if the counter is
+tight — and then Settings → Impresora de cocina, switch on, "Crear la
+dirección", and paste that URL into the printer's CloudPRNT server field.
+
+The URL is the printer's only credential. If it is ever seen by somebody who
+should not have it, pressing the button again revokes it, and the printer is
+set up once more with the new one.
+
+## 6. Keys for features not yet built
 
 - **Push notifications** need a VAPID key pair in Vercel. Everything else can
   be built without them; the sending half stays inert until they exist.

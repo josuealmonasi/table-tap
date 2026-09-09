@@ -50,6 +50,8 @@ export default function ProductForm({
   const [imageUrl, setImageUrl] = useState(initial?.image_url ?? "");
   const [emoji, setEmoji] = useState(initial?.emoji ?? "");
   const [popular, setPopular] = useState(initial?.popular ?? false);
+  // Comes off a shelf rather than out of a kitchen.
+  const [skipsKitchen, setSkipsKitchen] = useState(initial?.skips_kitchen ?? false);
   const [modifiers, setModifiers] = useState<Modifier[]>(initial?.modifiers ?? []);
   const [dietary, setDietary] = useState<string[]>(initial?.dietary ?? []);
   const [discountPct, setDiscountPct] = useState(String(initial?.discount_pct ?? ""));
@@ -69,6 +71,7 @@ export default function ProductForm({
     imageUrl,
     emoji,
     popular,
+    skipsKitchen,
     modifiers,
     dietary,
     discountPct,
@@ -102,6 +105,7 @@ export default function ProductForm({
         image_url: imageUrl.trim() || null,
         emoji,
         popular,
+        skips_kitchen: skipsKitchen,
         // Only keep groups that actually have a name and choices. Every field
         // the group carries has to be listed here — this rebuilds the object
         // rather than spreading it, so anything omitted is silently dropped on
@@ -230,6 +234,22 @@ export default function ProductForm({
         />
         {t("menu.markPopular")}
       </label>
+
+      {/* A bottled drink, a packaged snack, a bag of beans: nothing for a cook
+          to do. It stays off the kitchen ticket, and a counter sale of nothing
+          but these is finished the moment it is charged. Ordering one from a
+          table is unchanged — somebody still has to carry it there. */}
+      <label className="tt-check">
+        <input
+          type="checkbox"
+          checked={skipsKitchen}
+          onChange={e => setSkipsKitchen(e.target.checked)}
+        />
+        {t("menu.skipsKitchen")}
+      </label>
+      <p className="tt-muted" style={{ fontSize: 12, margin: "-2px 0 0 26px" }}>
+        {t("menu.skipsKitchenHint")}
+      </p>
 
       <IconPicker value={emoji} onChange={setEmoji} />
 

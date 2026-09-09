@@ -19,6 +19,7 @@ function item(id: string, name: string, price: number, available = true): MenuIt
     modifiers: [],
     dietary: [],
     discount_pct: 0,
+    skips_kitchen: false,
     sort_order: 0,
   };
 }

@@ -27,6 +27,7 @@ export type SettingsInput = Pick<
   | "deals_tab_enabled"
   | "low_stock_alerts_enabled"
   | "low_stock_threshold"
+  | "auto_print_kitchen"
 >;
 
 /**

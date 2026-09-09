@@ -32,6 +32,14 @@ export type MenuItem = {
   /** % off the base price (0 = full price). Extras are never discounted. */
   discount_pct: number;
   /**
+   * Needs no preparation: a bottled drink, a packaged snack, a bag of beans.
+   * It stays off the kitchen ticket, and a counter sale of nothing but these
+   * is finished the moment it is rung up, because the cashier just handed it
+   * over. Ordering one from a table changes nothing — somebody still has to
+   * carry it there.
+   */
+  skips_kitchen: boolean;
+  /**
    * Units left, or null when this dish is not counted. Null is the default and
    * leaves `available` exactly as it was: a switch somebody flips by hand.
    */
@@ -120,6 +128,15 @@ export type Restaurant = {
   badges_enabled?: boolean;
   /** The menu's combos and offers tab. On by default. */
   deals_tab_enabled?: boolean;
+  /**
+   * Print every order that reaches the pass, in the kitchen. Off by default:
+   * the printer has to be set up before the switch means anything.
+   *
+   * The printer's own address is deliberately NOT on this type. It is that
+   * printer's whole credential, it is not in any column grant, and a page that
+   * never receives it cannot leak it.
+   */
+  auto_print_kitchen?: boolean;
   /** Which version of the terms this restaurant's owner accepted. */
   terms_version?: string | null;
   /** The subscription tier this restaurant is on. */
@@ -178,6 +195,13 @@ export type OrderLineItem = {
   notes?: string;
   /** % off the base price at the time of ordering (0/absent = full price). */
   discountPct?: number;
+  /**
+   * This line needs no preparation — a bottled drink, a packaged snack. Copied
+   * from the menu row when the order is written rather than looked up later,
+   * the same way `name` and `price` are: what the kitchen was told to make
+   * must not change because somebody edited the menu afterwards.
+   */
+  skipsKitchen?: boolean;
   /** Set when this line is a combo package; `price` is then the combo price. */
   comboId?: string;
   components?: ComboComponent[];
