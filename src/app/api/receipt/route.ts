@@ -12,6 +12,14 @@ import { isValidEmail, normalizeEmail } from "@/lib/email";
 export const runtime = "nodejs";
 
 /**
+ * How many times one order may be emailed in a day.
+ *
+ * Generous for the honest case — sent, mistyped, sent again, and one spare —
+ * and useless as a way to reach strangers from our domain.
+ */
+const RESENDS_PER_ORDER = 4;
+
+/**
  * POST /api/receipt — a diner asks for their own receipt by email.
  *
  * The address is used for this one message and then forgotten. It is never
@@ -45,6 +53,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const address = normalizeEmail(String(email ?? ""));
   if (ids.length === 0 || !isValidEmail(address)) {
     return await apiError("receipt.badEmail", 400);
+  }
+
+  // Per ORDER as well as per caller. The IP limit alone bounds how fast one
+  // machine can send, not how much: anybody holding a single order id could
+  // point our sender at any address they liked, five a minute, for as long as
+  // they cared to — from our domain, which is the part that gets a sending
+  // reputation blocked. A real diner asks for a receipt once, and mistypes the
+  // address at most a couple of times.
+  for (const id of ids) {
+    if (await isRateLimited(`receipt-order:${id}`, RESENDS_PER_ORDER, 86_400)) {
+      return await apiError("apiErr.tooManyRequests", 429);
+    }
   }
 
   const db = createAdminClient();

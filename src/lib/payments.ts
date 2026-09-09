@@ -46,7 +46,11 @@ export async function recordPayment(payment: PaymentRecord): Promise<void> {
     actor_email: payment.actorEmail ?? null,
   });
 
-  if (error) {
+  // A duplicate is not a failure. `payments_one_per_intent` refuses a second
+  // row for the same order and the same Stripe payment, which is exactly what
+  // a webhook Stripe delivers twice would otherwise insert — the money is
+  // already in the ledger, so there is nothing to do and nothing to report.
+  if (error && error.code !== "23505") {
     // Loud in the platform logs, silent to the caller, on purpose.
     console.error("payment not recorded:", payment.orderId, error.message);
   }

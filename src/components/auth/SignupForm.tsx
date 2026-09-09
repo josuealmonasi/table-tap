@@ -4,6 +4,7 @@ import { useState } from "react";
 import { PRIVACY_PATH, TERMS_PATH } from "@/lib/legal";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { PASSWORD_MIN } from "@/lib/password";
 import { useT } from "@/lib/i18n/context";
 
 /** Create a restaurant account: provisions the user + their restaurant, then signs in. */
@@ -94,7 +95,7 @@ export default function SignupForm() {
             value={password}
             onChange={e => setPassword(e.target.value)}
             style={{ marginBottom: 12 }}
-            minLength={6}
+            minLength={PASSWORD_MIN}
             required
           />
           {/* Consent is given here, deliberately unticked, with both documents
@@ -125,7 +126,7 @@ export default function SignupForm() {
             disabled={
               !restaurantName ||
               !email ||
-              password.length < 6 ||
+              password.length < PASSWORD_MIN ||
               !acceptedTerms ||
               loading
             }

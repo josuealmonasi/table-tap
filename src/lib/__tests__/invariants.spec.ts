@@ -721,6 +721,30 @@ describe("an API error reaches the person in their own language", () => {
    * already exists." and a diner under the card minimum got English mid-payment
    * — and one invite failure answered every English speaker in Spanish.
    */
+  /**
+   * The same rule, for the errors that are not written as sentences.
+   *
+   * The check below reads string literals, so six routes handed the client a
+   * raw `error.message` from Postgres and it saw nothing: not a literal, so not
+   * a sentence. What actually reached the person was a database's own words —
+   * the column, the constraint, sometimes the value that broke it — always in
+   * English, and describing the schema to whoever asked.
+   */
+  it("hands nobody a database's own error text", () => {
+    const offenders: string[] = [];
+    for (const file of walkAll("src/app/api").filter(f => f.endsWith("route.ts"))) {
+      read(file).split("\n").forEach((line, i) => {
+        if (/NextResponse\.json\(\s*\{[^}]*\b(error|message)\s*:[^}]*\.message\b/.test(line)) {
+          offenders.push(`${file}:${i + 1}`);
+        }
+      });
+    }
+    expect(
+      offenders,
+      `these return a raw database message — log it and answer with an apiError key:\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
+
   it("has no route answering with a sentence of its own", () => {
     // Stripe reads the webhook's errors, not a person, so it keeps English.
     const forMachines = ["src/app/api/webhooks/"];
@@ -910,6 +934,85 @@ describe("secrets cannot reach the browser", () => {
  * but a cent of disagreement between the cart and the bill is the kind of
  * thing nobody notices until a diner does.
  */
+/**
+ * A webhook Stripe delivers twice must not be money that arrived twice.
+ *
+ * Stripe re-sends an event whenever it is not certain the first delivery
+ * landed. `checkout-settle.ts` says in its own header that every path is
+ * written to survive that — "the guards are `.eq("paid", false)` and
+ * `.is("paid_at", null)`" — and for a while two of its three paths had
+ * neither: the row was marked paid, read back, and recorded again. The ledger,
+ * the corte and the day's takings all counted one payment as two. It never bit
+ * only because the webhooks had not been registered yet.
+ */
+describe("a repeated webhook cannot record the same money twice", () => {
+  const settle = read("src/lib/checkout-settle.ts");
+
+  it("guards every update that marks an order paid", () => {
+    // Each `.update({...paid: true...})` must carry the guard that makes the
+    // second delivery match nothing.
+    const marks = [...settle.matchAll(/\.update\(\{[^}]*paid:\s*true[\s\S]{0,400}?(?=\n\n|;)/g)];
+    expect(marks.length, "found no path that marks an order paid — has the file moved?").toBeGreaterThan(1);
+
+    const unguarded = marks
+      .map(m => m[0])
+      .filter(block => !/\.eq\(\s*["']paid["']\s*,\s*false\s*\)/.test(block));
+
+    expect(
+      unguarded.map(b => b.split("\n")[0]),
+      "an update marks an order paid without .eq(\"paid\", false) — a repeated delivery would record the money again",
+    ).toEqual([]);
+  });
+
+  it("keeps the guard under the guard", () => {
+    // The next settle path somebody writes cannot get this wrong, because the
+    // database will not hold the duplicate.
+    expect(read("supabase/schema.sql")).toMatch(
+      /create unique index if not exists payments_one_per_intent[\s\S]*?on payments \(order_id, stripe_payment_intent\)/,
+    );
+  });
+
+  it("treats a refused duplicate as already recorded, not as a failure", () => {
+    expect(read("src/lib/payments.ts")).toMatch(/error\.code !== "23505"/);
+  });
+});
+
+/**
+ * A row policy is not a column policy.
+ *
+ * `owner manages restaurant` reads as though it grants an owner the settings
+ * they edit. It does not: a policy decides which ROWS a statement may touch and
+ * never which columns, so with Supabase's default table-wide grant still in
+ * place an owner could write every column of their own row from the browser
+ * console — the tier they are on, whether their trial has ended, and which
+ * Stripe account their diners' money goes to.
+ *
+ * The fix is a revoke, and it is a single line that a later `grant` could undo
+ * without anybody noticing, so it is asserted here.
+ */
+describe("a browser key cannot write what it must not set", () => {
+  const schema = read("supabase/schema.sql");
+
+  /** Tables whose every write goes through the server, with the secret key. */
+  const SERVER_ONLY = ["restaurants", "plan_limits"];
+
+  it("revokes browser writes on the tables that decide what is owed", () => {
+    for (const table of SERVER_ONLY) {
+      expect(
+        schema,
+        `${table} must be read-only to a logged-in browser — an owner could otherwise set their own plan`,
+      ).toMatch(new RegExp(`revoke insert, update, delete on ${table} from authenticated`));
+    }
+  });
+
+  it("never grants those writes back", () => {
+    for (const table of SERVER_ONLY) {
+      const granted = new RegExp(`grant [^;]*\\b(insert|update|delete)\\b[^;]*on [^;]*\\b${table}\\b[^;]*to [^;]*authenticated`, "i");
+      expect(granted.test(schema), `${table} is granted back to authenticated somewhere`).toBe(false);
+    }
+  });
+});
+
 describe("money is rounded in one place", () => {
   it("has no second copy of round2", () => {
     const copies = walkAll("src")

@@ -3,6 +3,7 @@ import { apiError } from "@/lib/api-error";
 import { TERMS_VERSION } from "@/lib/legal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { passwordTooShort } from "@/lib/password";
 
 export const runtime = "nodejs";
 
@@ -34,9 +35,13 @@ export async function POST(req: NextRequest) {
   // ask; this is the place that makes the answer mean something.
   if (!acceptedTerms) return await apiError("auth.termsRequired", 400);
 
-  if (!restaurantName?.trim() || !email || !password || password.length < 6) {
+  if (!restaurantName?.trim() || !email) {
     return await apiError("apiErr.signupFields", 400);
   }
+  // Held to the same length as every other password in the app. This account
+  // holds the Stripe connection, the staff list and the settings, and it used
+  // to be the one with the weakest rule.
+  if (passwordTooShort(password)) return await apiError("apiErr.password8", 400);
 
   const admin = createAdminClient();
 
@@ -75,7 +80,8 @@ export async function POST(req: NextRequest) {
   if (restaurantErr) {
     // Roll back the orphaned user so the email is free to try again.
     await admin.auth.admin.deleteUser(created.user.id);
-    return NextResponse.json({ error: restaurantErr.message }, { status: 400 });
+    console.error("signup restaurant insert failed:", restaurantErr.message);
+    return await apiError("apiErr.signupFailed", 400);
   }
 
   return NextResponse.json({ ok: true });

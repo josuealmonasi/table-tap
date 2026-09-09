@@ -68,6 +68,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!all) query = query.eq("id", id!);
 
   const { error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("notifications update failed:", error.message);
+    return await apiError("apiErr.generic", 500);
+  }
   return NextResponse.json({ ok: true });
 }

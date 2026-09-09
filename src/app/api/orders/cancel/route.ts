@@ -86,7 +86,10 @@ export async function POST(req: NextRequest) {
     .update({ status: "cancelled", stripe_refund_id: refundId })
     .eq("id", id)
     .eq("restaurant_id", actor.restaurantId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("cancel failed:", error.message);
+    return await apiError("apiErr.orderCancel", 500);
+  }
 
   // The food was never served, so put it back on the shelf. After the status
   // write, not before: a cancel that failed halfway would otherwise return

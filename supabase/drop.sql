@@ -65,6 +65,7 @@ drop function if exists public.release_coupon(uuid);
 drop function if exists public.rate_limit_hit(text, int);
 drop function if exists public.dish_rating_stats(uuid);
 drop function if exists public.plan_ceiling(uuid, text);
+drop function if exists public.enforce_plan_feature();
 drop function if exists public.enforce_plan_limit();
 drop function if exists public.seed_dietary_tags_on_new_restaurant();
 drop function if exists public.seed_dietary_tags(uuid);
