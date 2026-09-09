@@ -262,6 +262,21 @@ the right list all along, with a comment in capitals saying products AND
 extras; the till was written beside it rather than from it. Both now call
 `referencedItemIds`, which lives next to the function that consumes it.
 
+**A guard that only knows one shape of route checks nothing outside it.** The
+list `pnpm api` reads was matched against route folders by string containment,
+which works right up until a route has a `[token]` in its path — and the first
+one the app ever had would have been waved through by any stray mention of it
+anywhere in the file. The check now collapses `[segment]` on one side and
+`${...}` on the other to "one segment, contents unknown" and compares the
+patterns, so a dynamic route is covered by a case that actually requests it.
+
+**An indent written into the text is eaten by the code that wraps it.** The
+kitchen ticket built each modifier as `"   " + text` and handed it to a wrapper
+that splits on whitespace — which stripped the leading spaces off the first
+line and kept them on every continuation. Every modifier printed flush against
+the dish above it, and it looked deliberate. The indent is applied to all the
+lines by the wrapper now, after the split rather than before it.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`

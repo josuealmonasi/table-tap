@@ -162,6 +162,20 @@ export function cases(fx) {
       body: { posRef: "00000000-0000-4000-8000-000000000003", method: "cash", items: [] },
       // An empty sale is refused before anything is priced or reserved.
       expect: [400, 403] },
+    // The printer's address is a credential: a manager may mint one, a cashier
+    // may not, and a wrong one is told nothing it did not already know.
+    { name: "POST /api/print/token (cashier refused)", as: "cashier", method: "POST",
+      path: "/api/print/token", expect: [403] },
+    { name: "POST /api/print/token", as: "manager", method: "POST", path: "/api/print/token",
+      expect: [200],
+      check: d => (typeof d.token === "string" && d.token.length >= 40) || "returned no token" },
+    { name: "POST /api/print/cloudprnt (wrong address)", as: "diner", method: "POST",
+      path: "/api/print/cloudprnt/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", expect: [200],
+      // Not an error, and not a hint: the same "nothing waiting" a real
+      // printer gets on a quiet counter.
+      check: d => d.jobReady === false || "a wrong address was offered a job" },
+    { name: "GET  /api/print/cloudprnt (wrong address)", as: "diner", method: "GET",
+      path: "/api/print/cloudprnt/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", expect: [404] },
     { name: "POST /api/settings", as: "manager", method: "POST", path: "/api/settings",
       body: { accepting_orders: true }, expect: [200] },
     { name: "POST /api/coupons (create)", as: "manager", method: "POST", path: "/api/coupons",

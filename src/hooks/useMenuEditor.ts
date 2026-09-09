@@ -30,6 +30,8 @@ export interface ProductInput {
   dietary: string[];
   /** % off the base price (0 = full price). */
   discount_pct: number;
+  /** Needs no preparation — stays off the kitchen ticket. */
+  skips_kitchen: boolean;
   /**
    * How many are left, or null when the restaurant is not counting this dish.
    * Null is the default: `available` stays the manual switch it always was.
@@ -284,6 +286,7 @@ export function useMenuEditor(restaurantId: string) {
         modifiers: source.modifiers,
         dietary: source.dietary,
         discount_pct: source.discount_pct,
+        skips_kitchen: source.skips_kitchen,
         // `stock` is deliberately NOT copied: the copy starts untracked. Two
         // dishes each claiming the same twenty portions is twenty portions the
         // kitchen does not have, and a duplicate is a new thing to count.

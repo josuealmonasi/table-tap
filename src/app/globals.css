@@ -935,6 +935,19 @@ a.tt-btn {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+/* "No thank you" — a modifier on the one action the modal has, not a rival to
+   it. Reads as a line of the form rather than as a button, which is the whole
+   point: pressing it must never feel like paying. */
+.tt-pos-noticket {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Bound to the field BELOW it, not the note above: this is the switch that
+     decides what happens to the receipt, so it sits with the receipt. */
+  margin: 14px 0 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
 .tt-pos-ticket-hint {
   margin: 0 0 20px;
   font-size: 13px;

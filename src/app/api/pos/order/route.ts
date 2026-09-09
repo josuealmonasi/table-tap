@@ -65,6 +65,8 @@ export async function POST(req: NextRequest) {
     note?: string;
     tipPct?: number;
     tipAmount?: number;
+    /** The customer declined the ticket: build nothing. */
+    noReceipt?: boolean;
   };
   const { posRef, items, method } = body;
 
@@ -142,7 +144,7 @@ export async function POST(req: NextRequest) {
   const referencedIds = referencedItemIds(items, promotions);
   const { data: dbItems } = await supabase
     .from("menu_items")
-    .select("id, name, price, emoji, available, discount_pct, modifiers, category_id")
+    .select("id, name, price, emoji, available, discount_pct, modifiers, category_id, skips_kitchen")
     .in("id", referencedIds)
     .eq("restaurant_id", actor.restaurantId);
   if (!dbItems) return await apiError("apiErr.verifyItems", 400);
@@ -198,6 +200,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Only at the counter. The flag means "needs no preparation", and the
+  // counter is the one place where that also means already delivered — a
+  // bottled water ordered from table 6 still has to be carried to table 6.
+  const handedOverAtOnce = verified.length > 0 && verified.every(line => line.skipsKitchen);
+
   const { data: order, error } = await db
     .from("orders")
     .insert({
@@ -205,9 +212,15 @@ export async function POST(req: NextRequest) {
       table_id: null,
       table_label: null,
       session_id: null,
-      // Straight to the pass. There is nothing to wait for: the money is in
-      // the drawer before this request is made.
-      status: "received",
+      // Straight to the pass, because the money is in the drawer before this
+      // request is made and there is nothing to wait for.
+      //
+      // Unless there is nothing to make. A sale of nothing but shelf items —
+      // a bottled drink, a packaged snack — was handed over across the counter
+      // as it was rung up, so it is finished, not waiting: no kitchen ticket,
+      // nothing on the pass, and no name to call out. One prepared line is
+      // enough to make it an ordinary order again.
+      status: handedOverAtOnce ? "completed" : "received",
       paid: true,
       pay_method: method,
       pos_ref: posRef,
@@ -300,8 +313,14 @@ export async function POST(req: NextRequest) {
   let receiptHtml: string | null = null;
   const address = typeof body.email === "string" ? normalizeEmail(body.email) : "";
   const wantsMail = Boolean(address) && isValidEmail(address) && mailConfigured();
+  // The customer waved it away. Common on a sale handed over as it is rung up,
+  // and the honest response is to build nothing rather than to build a receipt
+  // and quietly drop it: no mail, no paper, and no address anywhere near this
+  // request. The sale is recorded exactly as any other — declining the ticket
+  // does not decline the accounting.
+  const declined = body.noReceipt === true;
 
-  {
+  if (!declined) {
     const locale = await getLocale();
     const messages = messagesFor(locale);
     const built = buildReceipt(
@@ -358,5 +377,8 @@ export async function POST(req: NextRequest) {
     total: pricing.total,
     receipt,
     receiptHtml,
+    // So the screen can stop telling a cashier to call somebody who is already
+    // walking away with their drink.
+    handedOver: handedOverAtOnce,
   });
 }

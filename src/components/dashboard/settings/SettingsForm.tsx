@@ -12,6 +12,7 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 import PaymentsCard from "./PaymentsCard";
 import CoverCard from "./CoverCard";
 import InventoryCard from "./InventoryCard";
+import PrintingCard from "./PrintingCard";
 import LogoCard from "./LogoCard";
 
 interface SettingsFormProps {
@@ -23,6 +24,9 @@ interface SettingsFormProps {
   inventoryAllowed?: boolean;
   /** Whether a Stripe account is connected and charging. Decides what the diner sees. */
   cardsEnabled?: boolean;
+  /** Whether a printer address has been issued. Never the address itself —
+   *  it is a credential, and a page that does not receive it cannot leak it. */
+  printerConfigured?: boolean;
 }
 
 // Two-decimal currencies only, so checkout's Math.round(amount * 100) stays
@@ -36,6 +40,7 @@ export default function SettingsForm({
   deferredPayAllowed = false,
   inventoryAllowed = false,
   cardsEnabled = false,
+  printerConfigured = false,
 }: SettingsFormProps) {
   const t = useT();
   const { saving, save } = useSettings();
@@ -341,6 +346,15 @@ export default function SettingsForm({
             alertsEnabled={restaurant.low_stock_alerts_enabled === true}
             threshold={restaurant.low_stock_threshold ?? 5}
             allowed={inventoryAllowed}
+            saving={saving}
+            save={save}
+          />
+
+          {/* The manager's as well: the kitchen printer is floor equipment, and
+              whoever is running the shift is who turns it off when it jams. */}
+          <PrintingCard
+            autoPrint={restaurant.auto_print_kitchen === true}
+            hasToken={printerConfigured}
             saving={saving}
             save={save}
           />

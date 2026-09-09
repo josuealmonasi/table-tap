@@ -423,7 +423,32 @@ describe("the checks know about every route and screen", () => {
       .filter(f => f.endsWith("route.ts"))
       .map(f => f.replace(/^src\/app/, "").replace(/\/route\.ts$/, ""));
 
-    const missing = routes.filter(r => !cases.includes(`"${r}`) && !cases.includes(`\`${r}`));
+    // Every path a case actually requests. Read as text rather than imported,
+    // because the file builds most of them from fixtures that do not exist
+    // until the server is up.
+    const requested = [...cases.matchAll(/path:\s*[`"']([^`"']+)/g)].map(m => m[1]);
+
+    // A dynamic route is one pattern, not one path: `[token]` is filled in at
+    // request time, and so is a `${...}` in the case that exercises it. Both
+    // sides collapse to "one segment, contents unknown" before they are
+    // compared — otherwise the app's first dynamic route is matched by nothing
+    // and waved through, which is the exact hole this test exists to close.
+    const segment = "[^/?#]+";
+    const covered = (route: string): boolean => {
+      const pattern = new RegExp(
+        "^" +
+          route
+            .split("/")
+            .map(part =>
+              /^\[.+\]$/.test(part) ? segment : part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+            )
+            .join("/") +
+          "([/?].*)?$",
+      );
+      return requested.some(path => pattern.test(path.replace(/\$\{[^}]*\}/g, "x")));
+    };
+
+    const missing = routes.filter(r => !covered(r));
     expect(
       missing,
       `API routes no case exercises — add one to scripts/api-cases.mjs.\nFor a route that destroys something, assert the refusal it must give rather than running it:\n${missing.join("\n")}`,
@@ -762,6 +787,56 @@ describe("the demo team is one list", () => {
 });
 
 describe("secrets cannot reach the browser", () => {
+  /**
+   * Columns whose value is a credential, and the grants that must never name
+   * them.
+   *
+   * `restaurants` is granted column by column rather than whole, which is what
+   * keeps a diner's key from reading a restaurant's private settings — but a
+   * column list is edited by hand, and the edit that adds a secret to it looks
+   * exactly like the edit that adds a colour. `print_token` is the kitchen
+   * printer's ONLY credential: it cannot log in, so whoever holds the URL is
+   * the printer. One careless addition to either of these two lines would hand
+   * it to every browser that has ever loaded a menu.
+   */
+  const CREDENTIAL_COLUMNS = ["print_token"];
+
+  it("grants no browser key a column that is a credential", () => {
+    const schema = read("supabase/schema.sql");
+    const grants = schema
+      .split("\n")
+      .filter(l => /^grant select \(/.test(l) && /\bto (anon|authenticated)/.test(l));
+
+    expect(grants.length, "no column-scoped grants found — has the schema moved?").toBeGreaterThan(0);
+
+    const leaked: string[] = [];
+    for (const line of grants) {
+      const columns = line.slice(line.indexOf("(") + 1, line.indexOf(")")).split(",").map(c => c.trim());
+      for (const secret of CREDENTIAL_COLUMNS) {
+        if (columns.includes(secret)) leaked.push(`${secret} in: ${line.slice(0, 80)}…`);
+      }
+    }
+    expect(
+      leaked,
+      `a credential column is granted to a browser key — remove it from the grant:\n${leaked.join("\n")}`,
+    ).toEqual([]);
+  });
+
+  it("never sends a credential column to a client component", () => {
+    const offenders: string[] = [];
+    for (const file of walkAll("src").filter(f => /\.tsx$/.test(f))) {
+      const src = read(file);
+      if (!/^\s*["']use client["']/m.test(src.slice(0, 400))) continue;
+      for (const secret of CREDENTIAL_COLUMNS) {
+        if (src.includes(secret)) offenders.push(`${file} mentions ${secret}`);
+      }
+    }
+    expect(
+      offenders,
+      `a client component names a credential column — it must be resolved on the server:\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
+
   const SECRETS = ["src/lib/supabase/admin.ts", "src/lib/stripe.ts", "src/lib/mail.ts"];
 
   /** Where an import specifier actually lands, or null if it leaves src/. */

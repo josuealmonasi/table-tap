@@ -259,6 +259,66 @@ Owner, manager and cashier. Not the waiter: carrying a card machine to a table
 is settling a bill somebody else placed, which is a different act from ringing
 a sale.
 
+## Tickets on paper
+
+Two printers, two different documents, two different ways of reaching them.
+
+The counter receipt prints from the browser. It is the same document that goes
+in the email — built once, so a printed ticket cannot disagree with an emailed
+one — wrapped at print time in an 80mm page with the screen's greys pushed to
+black, because a thermal head has no grey. Any printer the counter machine can
+see works: USB, Ethernet, AirPrint. Chrome started with `--kiosk-printing`
+prints it with no dialog at all, which is what a counter actually wants.
+
+The kitchen printer is polled, not pushed. Nobody stands at it to press print,
+and reaching into a restaurant's network to talk to it is not a shape we will
+build. So the printer asks us: a CloudPRNT printer POSTs to its own URL every
+few seconds, we answer whether anything is waiting, it GETs the ticket and
+DELETEs to confirm. Outbound HTTPS only — no port forwarding, no static IP, no
+agent installed on anybody's machine.
+
+That URL is the printer's whole credential; it cannot log in. So it is 32
+random bytes, it is in no column grant, only an owner or manager can mint one,
+and minting a new one revokes the old. Automatic printing is off until somebody
+turns it on, and a wrong URL is told the same "nothing waiting" a quiet counter
+hears.
+
+A kitchen ticket is not a receipt. It carries no money at all: a cook does not
+need the total and should not read it off the paper while food is waiting. What
+it carries loudly is what to make, how many, and what somebody asked to be
+different about it.
+
+Queuing is a database trigger, not a line in each route. An order reaches the
+pass from several directions — a diner paying online, a table ordering to
+settle later, a cashier ringing a sale — and the row itself decides: the moment
+an order becomes `received`, a ticket is queued, once. A path added later is
+covered without anybody having to remember this exists.
+
+## Some products never reach the kitchen
+
+A bottled drink, a packaged snack, a bag of beans: `skips_kitchen` on the menu
+row means the dish needs no preparation. Those lines stay off the kitchen
+ticket — listed below the rule as handed over, so the runner still knows what
+was in the bag, but not among the things a cook has to make.
+
+At the counter it means more than that. A sale of nothing but shelf items was
+put in the customer's hand as it was rung up, so it is created `completed`: no
+ticket, nothing on the pass, no name to call out. One prepared line is enough to
+make it an ordinary order again.
+
+Only at the counter. The flag means "needs no preparation", and the counter is
+the one place where that also means already delivered — a bottled water ordered
+from table 6 still has to be carried to table 6, so a QR order is unchanged.
+
+## The customer can decline the ticket
+
+Very common on a sale handed over as it is rung up. The cashier ticks one box
+and nothing is printed and nothing is emailed — not built and quietly dropped,
+but never built, so no address goes anywhere near the request. The sale is
+recorded exactly as any other: declining the ticket does not decline the
+accounting, and the restaurant's obligation to issue a fiscal receipt to
+anybody who asks is unchanged.
+
 ## The connection is a requirement
 
 TableTap runs online, and the terms say so rather than implying it. Without a

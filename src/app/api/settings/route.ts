@@ -30,6 +30,7 @@ const OWNER_FIELDS = new Set([
   "deals_tab_enabled",
   "low_stock_alerts_enabled",
   "low_stock_threshold",
+  "auto_print_kitchen",
 ]);
 // A manager runs the floor, so they decide whether the floor is being told
 // about work waiting — the same reasoning that gives them the kill switch.
@@ -41,6 +42,8 @@ const MANAGER_FIELDS = new Set([
   "accepting_orders",
   "badges_enabled",
   "deals_tab_enabled",
+  // A manager runs the floor, and the kitchen printer is floor equipment.
+  "auto_print_kitchen",
 ]);
 
 // POST /api/settings — owner or manager updates restaurant settings, with the

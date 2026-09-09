@@ -1,4 +1,5 @@
 import { requireManager } from "@/lib/page-guard";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
@@ -28,6 +29,16 @@ export default async function SettingsPage() {
     membership.restaurant.stripe_account_id && membership.restaurant.stripe_charges_enabled,
   );
 
+  // Whether a printer address exists — never the address. It is the printer's
+  // whole credential, so the page is told yes-or-no and the value only ever
+  // travels in the response to somebody who pressed the button asking for it.
+  const { data: printer } = await createAdminClient()
+    .from("restaurants")
+    .select("print_token")
+    .eq("id", membership.restaurant.id)
+    .maybeSingle();
+  const printerConfigured = Boolean(printer?.print_token);
+
   // ConfirmProvider so the coupons panel can ask before deleting a code.
   return (
     <ConfirmProvider>
@@ -37,6 +48,7 @@ export default async function SettingsPage() {
         deferredPayAllowed={deferredPay}
         inventoryAllowed={inventory}
         cardsEnabled={cardsEnabled}
+        printerConfigured={printerConfigured}
       />
     </ConfirmProvider>
   );

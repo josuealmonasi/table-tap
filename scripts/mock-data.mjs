@@ -713,6 +713,30 @@ export async function seedMock(pg) {
     );
   }
 
+  // A counter product and a kitchen printer with a ticket already through it,
+  // so the printing screens have something real to show and `pnpm api` has a
+  // queue to read. The oldest order stands in for one that has been printed;
+  // nothing is left waiting, because a demo that permanently claims to have an
+  // unprinted ticket is a demo with a red badge nobody can clear.
+  const shelfItem = products.find(p => /agua|refresco|bebida|water|soda/i.test(p.name));
+  if (shelfItem) {
+    await pg.query("update menu_items set skips_kitchen = true where id = $1", [shelfItem.id]);
+  }
+  await pg.query("update restaurants set auto_print_kitchen = true where id = $1", [rid]);
+  const { rows: printed } = await pg.query(
+    "select id from orders where restaurant_id = $1 order by created_at desc limit 1",
+    [rid],
+  );
+  if (printed.length > 0) {
+    const now = new Date().toISOString();
+    await bulkInsert(
+      pg,
+      "print_jobs",
+      ["restaurant_id", "order_id", "kind", "claimed_at", "printed_at"],
+      [[rid, printed[0].id, "kitchen", now, now]],
+    );
+  }
+
   return {
     restaurantId: rid,
     tableId: tables[0].id,

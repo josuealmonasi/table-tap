@@ -196,7 +196,7 @@ export async function POST(req: NextRequest) {
     const referencedIds = referencedItemIds(items, promotions);
     const { data: dbItems, error: iErr } = await supabase
       .from("menu_items")
-      .select("id, name, price, emoji, available, discount_pct, modifiers, category_id")
+      .select("id, name, price, emoji, available, discount_pct, modifiers, category_id, skips_kitchen")
       .in("id", referencedIds)
       .eq("restaurant_id", restaurantId);
 
