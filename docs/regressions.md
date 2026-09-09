@@ -286,6 +286,24 @@ block that swallows everything now, and the failure mode was proved by breaking
 `print_jobs` with an impossible constraint and watching the order save anyway.
 An order is money; a print job is paper.
 
+**The framework is a dependency too.** `pnpm audit` had been reporting two
+CRITICAL unauthenticated RCEs against Next itself — one of them CVSS 9.5, via
+AVIF decoding in the image optimiser, affecting Vercel deployments and not only
+self-hosted ones — and the fix was a patch bump inside 15.5.x. Nothing in the
+app's own code was wrong; the whole exposure was a version number nobody had
+looked at. `security-headers.spec.ts` now fails if the range can resolve below
+15.5.24, because a caret range silently drifting backwards is exactly how this
+returns.
+
+**A money app that can be framed can be clicked for you.** Production sent HSTS
+from Vercel and nothing else, so any page could put `/dashboard` in an iframe,
+overlay its own buttons and let a signed-in manager approve a refund or write
+off a table without seeing what they pressed. `frame-ancestors 'none'` plus
+`X-Frame-Options: DENY` now, verified by actually framing it in a browser and
+watching the load be refused. `payment` is deliberately left OUT of the
+Permissions-Policy: checkout is a redirect today, and a header nobody remembers
+writing is a bad way to discover Apple Pay does not work.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`

@@ -72,6 +72,22 @@ set up once more with the new one.
 - **Menu import from a photo or PDF** needs an Anthropic API key, and costs
   real money per import — which is why it is gated to Casa and above.
 
+## Keeping the framework patched
+
+`pnpm audit` is worth running before each release. The app's own code was clean
+when this was last swept; the finding was Next itself, sitting two critical
+unauthenticated RCEs behind a patch release nobody had taken.
+
+`security-headers.spec.ts` fails if the pinned range can resolve below the
+patched version, so the floor cannot drift backwards unnoticed — but it only
+knows about the advisories that were open when it was written. A new one needs
+a new floor.
+
+A real **Content-Security-Policy** is still outstanding. Only `frame-ancestors`
+is set today. A full policy has to be tested against Stripe Checkout, Supabase
+storage and the fonts before it can be trusted, and a half-written one either
+blocks checkout or lulls somebody into thinking the app has one.
+
 ## Still a decision, not a task
 
 - **Loyalty** is parked pending the identity question: what a returning diner
