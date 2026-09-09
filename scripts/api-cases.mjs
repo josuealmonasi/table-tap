@@ -150,6 +150,18 @@ export function cases(fx) {
       expect: [200], check: d => d.orders === 1 || `settled ${d.orders} order(s)` },
 
     // ── gerencia ─────────────────────────────────────────────────────────
+    // The counter till. A cashier may ring a sale; a waiter may not, and the
+    // route says so rather than the screen merely hiding the link.
+    { name: "POST /api/pos/order (waiter refused)", as: "waiter", method: "POST",
+      path: "/api/pos/order",
+      body: { posRef: "00000000-0000-4000-8000-000000000001", method: "cash",
+              items: [{ itemId: "00000000-0000-4000-8000-000000000002", qty: 1 }] },
+      expect: [403] },
+    { name: "POST /api/pos/order (no cart)", as: "cashier", method: "POST",
+      path: "/api/pos/order",
+      body: { posRef: "00000000-0000-4000-8000-000000000003", method: "cash", items: [] },
+      // An empty sale is refused before anything is priced or reserved.
+      expect: [400, 403] },
     { name: "POST /api/settings", as: "manager", method: "POST", path: "/api/settings",
       body: { accepting_orders: true }, expect: [200] },
     { name: "POST /api/coupons (create)", as: "manager", method: "POST", path: "/api/coupons",

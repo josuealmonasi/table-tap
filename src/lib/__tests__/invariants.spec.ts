@@ -90,10 +90,13 @@ describe("money that stops being owed closes the sitting", () => {
     // bound to it forever. There is no single chokepoint — a card, cash at the
     // table and a write-off are three routes to the same empty table — so each
     // one has to do it.
-    const clearing = sources.filter(f => {
-      const body = read(f);
-      return /paid:\s*true|written_off:\s*true/.test(body) && /\.update\(/.test(body);
-    });
+    // Only a route that SETTLES something: `paid: true` inside an `.update()`,
+    // which is an order that was owed and now is not. A counter sale inserts a
+    // row already paid, with no table and no sitting — there was never
+    // anything holding a table to close. Matching the whole file rather than
+    // the call is what made that look like the same act.
+    const settlesExisting = /\.update\(\s*\{[\s\S]*?(paid:\s*true|written_off:\s*true)/;
+    const clearing = sources.filter(f => settlesExisting.test(read(f)));
     expect(clearing.length).toBeGreaterThan(0);
 
     const missing = clearing.filter(f => !/closeSession/.test(read(f)));
@@ -859,6 +862,7 @@ describe("every route that settles an order records the payment", () => {
   const SETTLES = [
     ["src/app/api/table-payment/route.ts", "the till stopped recording what it took"],
     ["src/lib/checkout-settle.ts", "a card payment is no longer written to the ledger"],
+    ["src/app/api/pos/order/route.ts", "a counter sale is no longer written to the ledger"],
   ] as const;
 
   it("calls recordPayment wherever it sets paid", () => {

@@ -240,6 +240,28 @@ looks exactly like a delivery problem. Now two routes, one secret each, and an
 invariant that fails if they ever read the same secret or start handling each
 other's events.
 
+**A counter sale filed away from the money it took.** The till recorded its
+payment in the ledger but logged the event as `order/paid`, while the drawer
+and the ledger are reconciled against `bill/paid`. The two records of the same
+cash disagreed by exactly the counter's takings, and `pnpm money` said so on
+the first sale. A counter sale is money taken, so it files where money is filed.
+
+**A staff client cannot read a restaurant's own settings.** The till first read
+`restaurants` with the cashier's session and got nothing back: the column
+grants deliberately give a browser only what a diner's menu needs, so
+`service_pct` is not among them — and a till that cannot read the service
+charge cannot price a sale. It reads with the secret key now, scoped to the
+actor's own restaurant, which is what makes that safe.
+
+**A cart is priced from the rows the server fetched, so it has to fetch them
+all.** The till looked up only the dishes a sale referenced, not their extras
+or a bundle's components — and `verifyCart`, which prices only what it is
+handed, read the missing extras as extras that had vanished. Every sale with an
+extra on it failed with "no se pudieron verificar los productos". Checkout had
+the right list all along, with a comment in capitals saying products AND
+extras; the till was written beside it rather than from it. Both now call
+`referencedItemIds`, which lives next to the function that consumes it.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`

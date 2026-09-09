@@ -103,8 +103,31 @@ export function unwrap<T>(
  * fast-food route (/r/[id]) and the table route (/r/[id]/t/[tableId]); the
  * table route additionally loads its table.
  */
-export async function loadOrderingData(restaurantId: string): Promise<OrderingData> {
-  const supabase = await createClient();
+export async function loadOrderingData(
+  restaurantId: string,
+  /**
+   * Keep dishes that have run out.
+   *
+   * A diner's menu hides them: offering something the kitchen cannot make is
+   * the one thing a menu must not do. The till is the opposite — a cashier is
+   * standing in front of somebody who just asked for one, and "it is not on my
+   * screen" is not an answer where "we've run out" is. They come back marked,
+   * and the screen refuses to ring them.
+   *
+   * This also switches to the secret key, because it has to: `public read
+   * available menu` grants a browser only items that ARE available, and only
+   * owner and manager qualify under `team manages menu` — a cashier's own
+   * session cannot see a sold-out dish at all. The alternative was widening
+   * that policy, which would hand every diner's key the hidden menu too.
+   *
+   * So it is only for a caller that has already established staff access. The
+   * till checks membership and the POS capability before it asks.
+   */
+  { includeSoldOut = false }: { includeSoldOut?: boolean } = {},
+): Promise<OrderingData> {
+  // See `includeSoldOut`: staff reading a hidden dish needs the secret key,
+  // and every query below is scoped to the one restaurant asked for.
+  const supabase = includeSoldOut ? createAdminClient() : await createClient();
 
   // Which menus a customer may order from now. The decision is shared with
   // /api/checkout so the page and the charge can't disagree about what's on
@@ -165,12 +188,15 @@ export async function loadOrderingData(restaurantId: string): Promise<OrderingDa
       .eq("restaurant_id", restaurantId)
       .in("menu_id", menuFilter)
       .order("sort_order"),
-    // Products AND available add-on items; split client-side.
-    supabase
-      .from("menu_items")
-      .select("*")
-      .eq("restaurant_id", restaurantId)
-      .eq("available", true)
+    // Products AND add-on items; split client-side.
+    (includeSoldOut
+      ? supabase.from("menu_items").select("*").eq("restaurant_id", restaurantId)
+      : supabase
+          .from("menu_items")
+          .select("*")
+          .eq("restaurant_id", restaurantId)
+          .eq("available", true)
+    )
       .in("menu_id", menuFilter)
       .order("sort_order"),
   ]);

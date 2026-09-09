@@ -1,5 +1,7 @@
 "use client";
 
+import type { PlanFeature } from "@/lib/plan";
+
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { signOutEverywhere } from "@/lib/sign-out";
@@ -21,6 +23,7 @@ export default function Navbar({
   restaurantLogoUrl,
   role,
   plan,
+  features = [],
 }: {
   restaurantName: string;
   restaurantLogo: string | null;
@@ -29,6 +32,8 @@ export default function Navbar({
   role: "owner" | "manager" | "waiter" | "cashier" | "kitchen" | "admin";
   /** Which tier the restaurant is on, for the badge in the account menu. */
   plan?: string | null;
+  /** Areas this restaurant's tier includes. */
+  features?: PlanFeature[];
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -59,6 +64,7 @@ export default function Navbar({
             restaurantLogo={restaurantLogo}
             restaurantLogoUrl={restaurantLogoUrl}
             role={role}
+            features={features}
           />
           <Link
             href={

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { PlanFeature } from "@/lib/plan";
 import { navItemsFor } from "@/lib/nav";
 import { signOutEverywhere } from "@/lib/sign-out";
 import { useT } from "@/lib/i18n/context";
@@ -19,12 +20,15 @@ export default function NavDrawer({
   restaurantLogo,
   restaurantLogoUrl,
   role,
+  features = [],
 }: {
   restaurantName: string;
   restaurantLogo: string | null;
   restaurantLogoUrl?: string | null;
   /** Managers lose Staff/Settings; kitchen only gets the orders board. */
   role: "owner" | "manager" | "waiter" | "cashier" | "kitchen" | "admin";
+  /** Areas this restaurant's tier includes. */
+  features?: PlanFeature[];
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -105,7 +109,7 @@ export default function NavDrawer({
                 </Link>
               )}
 
-              {navItemsFor(role).map(item => {
+              {navItemsFor(role, f => features.includes(f)).map(item => {
                 const Glyph = NAV_ICONS[item.icon];
                 return item.soon ? (
                   <span key={item.href} className="tt-drawer-link tt-drawer-link-soon">

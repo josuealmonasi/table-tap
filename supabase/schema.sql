@@ -1224,6 +1224,18 @@ alter table plan_limits add column if not exists allows_inventory
   boolean not null default false;
 update plan_limits set allows_inventory = true where plan in ('servicio', 'casa', 'grupo');
 
+-- The counter till: a cashier taking an order face to face, charging cash or a
+-- card on their own terminal, and sending it to the kitchen once the money is
+-- in. It earns us no per-order fee — none of that money touches Stripe — so
+-- the subscription is what pays for it, and it belongs to the paid tiers.
+--
+-- Not on `carta` even though carta is the counter tier: carta is how a
+-- restaurant tries us, and this is the feature that replaces the cash register
+-- they already own.
+alter table plan_limits add column if not exists allows_pos
+  boolean not null default false;
+update plan_limits set allows_pos = true where plan in ('servicio', 'casa', 'grupo');
+
 alter table plan_limits enable row level security;
 
 -- Every signed-in user may read the tiers: the plan screen shows what the next
@@ -1708,6 +1720,19 @@ alter table orders add column if not exists receipt_sent_at timestamptz;
 alter table orders drop column if exists receipt_email;
 -- Never readable with the publishable key: orders carry no anon grant at all,
 -- so nothing here reaches a browser. Only the server, which sends the mail.
+
+-- ── The counter till ────────────────────────────────────────────────────────
+-- A cashier rings a sale, takes cash or a card on their own terminal, and the
+-- order goes to the pass already paid for. No Stripe is involved at any point.
+--
+-- `pos_ref` is the cart the cashier was ringing, generated on their screen. It
+-- makes the sale idempotent: a request that times out and is sent again lands
+-- on this unique index instead of charging the same customer twice and putting
+-- two tickets on the pass. Null for every order that did not come from a till,
+-- so the index has to ignore those.
+alter table orders add column if not exists pos_ref uuid;
+create unique index if not exists orders_pos_ref_once
+  on orders (pos_ref) where pos_ref is not null;
 
 -- ── Inventory ───────────────────────────────────────────────────────────────
 -- How many are left, when the restaurant wants us to count.

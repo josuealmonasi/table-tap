@@ -209,6 +209,67 @@ gets, measure it in a browser.
 `docs/regressions.md` is the list of bugs that have really shipped here and what
 now catches each one.
 
+## The counter till
+
+A cashier rings a sale face to face, takes cash or a card on the restaurant's
+own terminal, and the order lands on the pass already paid for. The customer is
+called by name when it is ready; there is nothing for them to track, because
+they never had a phone in this at all.
+
+**No Stripe touches it**, which is the whole shape of the feature. Nothing is
+written while the cart is being built, so an order abandoned half-rung leaves
+nothing behind and holds no stock — and there is no async payment to wait for,
+so one request creates the order already paid and already received. `pos_ref`
+makes that request idempotent: sent twice, it answers with the ticket that
+already exists rather than charging again.
+
+Because none of that money reaches Stripe there is **no per-order fee** to
+take; the subscription is what pays for the till, and it is on the paid tiers
+for that reason. Not on `carta`, even though carta is the counter tier: carta
+is how a restaurant tries us, and this is the feature that replaces the
+register they already own.
+
+Prices come from the database through the same `verifyCart` and `priceCart` the
+diner's own cart runs, so a dish cannot cost one thing at the counter and
+another on a QR. Stock is taken before any payment is recorded — if the last
+portion went while the cashier was ringing it up, the sale is refused and names
+what is short, rather than selling food the kitchen cannot make.
+
+Charging opens one modal: the tip, a name to call them by, a special request,
+and an address for the receipt. Filled in or left blank, one button sends it;
+clicking outside closes and changes nothing, because a stray click must never
+take money. No address means the ticket prints — through the browser for now,
+with `printReceipt()` as the single seam a Bluetooth thermal driver replaces.
+An address that the mail never reached falls back to printing rather than
+leaving the cashier with nothing.
+
+The tip is priced by the same `priceCart` the diner's cart runs, so an exact
+tip is capped at the subtotal by the engine rather than trusted from the till.
+
+The cart lives in the cashier's own browser until it is charged, so an
+accidental reload does not lose a half-rung sale — a counter is the worst place
+to start an order again with the customer still standing there.
+
+The cashier may ask for a name (to call them) and an address (to send the
+receipt instead of printing). The address is used for that one message and
+never stored, exactly as the diner's own receipt works — the privacy notice
+makes that promise and the schema keeps it.
+
+Owner, manager and cashier. Not the waiter: carrying a card machine to a table
+is settling a bill somebody else placed, which is a different act from ringing
+a sale.
+
+## The connection is a requirement
+
+TableTap runs online, and the terms say so rather than implying it. Without a
+connection the dashboard, the till and the diner's menu are all unavailable,
+and nothing — an order, a charge, a corte — is recorded until it returns. The
+restaurant is responsible for that connection in its own premises.
+
+The kitchen board is the one exception, and deliberately so: it keeps showing
+the tickets it already had, because losing sight of what is cooking is worse
+than the alternative. Everything else refuses rather than pretending.
+
 ## Losing the connection
 
 The kitchen board keeps working when the wifi does not. A service worker holds
