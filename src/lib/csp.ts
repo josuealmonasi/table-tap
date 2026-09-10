@@ -32,9 +32,15 @@ const LOOPBACK = [
 /**
  * Vercel's preview toolbar, which is how this repo's pull requests are
  * commented on. It is a real production build, so it needs none of the
- * development allowances — only its own host, and only on a preview.
+ * development allowances — only these hosts, and only on a preview.
+ *
+ * Taken from what Vercel documents the toolbar needs rather than from
+ * watching it work: a preview deployment sits behind deployment protection,
+ * so this could not be verified from here. It reaches production as nothing
+ * at all, which is the only part that had to be certain.
  */
 const PREVIEW_TOOLBAR = "https://vercel.live";
+const PREVIEW_SOCKET = "wss://ws-us3.pusher.com";
 
 /**
  * @param nonce   a fresh value per request; Next stamps it on its own scripts
@@ -73,7 +79,7 @@ export function contentSecurityPolicy(nonce: string, dev: boolean, preview = fal
     // uses one and an editor's console bridge the other — and a host in a
     // policy is matched literally, so `localhost` does not cover `127.0.0.1`.
     `connect-src 'self' ${SUPABASE} ${SUPABASE_SOCKET}${dev ? " " + LOOPBACK : ""}${
-      preview ? " " + PREVIEW_TOOLBAR + " wss://ws-us3.pusher.com" : ""
+      preview ? ` ${PREVIEW_TOOLBAR} ${PREVIEW_SOCKET}` : ""
     }`,
 
     "media-src 'self' blob:",

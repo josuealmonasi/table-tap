@@ -269,7 +269,7 @@ export default function TableOrderScreen({
                     className="tt-input"
                     value={tableId}
                     onChange={e => setTableId(e.target.value)}
-                    disabled={busy}
+                    disabled={sending}
                   >
                     <option value="">{t("waiter.pickTable")}</option>
                     {tables.map(x => (
@@ -333,7 +333,7 @@ export default function TableOrderScreen({
                   value={note}
                   onChange={e => setNote(e.target.value)}
                   placeholder={t("pos.noteHint")}
-                  disabled={busy}
+                  disabled={sending}
                 />
               </label>
 
@@ -352,7 +352,7 @@ export default function TableOrderScreen({
                 <button
                   type="button"
                   className="tt-btn tt-btn-primary"
-                  disabled={busy || closedNow || lines.length === 0 || !tableId}
+                  disabled={sending || closedNow || lines.length === 0 || !tableId}
                   onClick={() => void send()}
                 >
                   {busy ? t("cart.placingOrder") : t("waiter.send")}
