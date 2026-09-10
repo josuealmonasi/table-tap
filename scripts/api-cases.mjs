@@ -42,6 +42,13 @@ async function staffId(fx) {
   return data?.id ?? "";
 }
 
+/** Any order of this restaurant's — the print route only needs one to exist. */
+async function anyOrderId(fx) {
+  const { data } = await fx.admin
+    .from("orders").select("id").eq("restaurant_id", fx.restaurant.id).limit(1).maybeSingle();
+  return data?.id ?? "";
+}
+
 async function dietaryTagId(fx) {
   const { data } = await fx.admin
     .from("dietary_tags").select("id").eq("restaurant_id", fx.restaurant.id)
@@ -176,6 +183,26 @@ export function cases(fx) {
       check: d => d.jobReady === false || "a wrong address was offered a job" },
     { name: "GET  /api/print/cloudprnt (wrong address)", as: "diner", method: "GET",
       path: "/api/print/cloudprnt/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", expect: [404] },
+    // Paper for an order that already exists, from the board or the history.
+    { name: "POST /api/orders/print (kitchen, no printer)", as: "waiter", method: "POST",
+      path: "/api/orders/print",
+      body: async f => ({ orderId: await anyOrderId(f), to: "kitchen" }),
+      // A restaurant with no printer address must be told, not queued for a
+      // machine that will never ask. 200 once one is configured.
+      expect: [200, 409] },
+    { name: "POST /api/orders/print (receipt)", as: "waiter", method: "POST",
+      path: "/api/orders/print",
+      body: async f => ({ orderId: await anyOrderId(f), to: "receipt" }),
+      expect: [200],
+      check: d => (typeof d.html === "string" && d.html.length > 40) || "returned no receipt" },
+    { name: "POST /api/orders/print (another restaurant's order)", as: "waiter", method: "POST",
+      path: "/api/orders/print",
+      body: { orderId: "00000000-0000-4000-8000-000000000000", to: "receipt" },
+      expect: [404] },
+    { name: "POST /api/orders/print (bad target)", as: "waiter", method: "POST",
+      path: "/api/orders/print",
+      body: async f => ({ orderId: await anyOrderId(f), to: "wherever" }),
+      expect: [400] },
     { name: "POST /api/settings", as: "manager", method: "POST", path: "/api/settings",
       body: { accepting_orders: true }, expect: [200] },
     { name: "POST /api/coupons (create)", as: "manager", method: "POST", path: "/api/coupons",
