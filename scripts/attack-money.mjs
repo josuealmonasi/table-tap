@@ -49,6 +49,20 @@ async function cookieFor(email) {
   return `sb-${ref}-auth-token=base64-${session}`;
 }
 
+async function get(path, cookie) {
+  const res = await fetch(`${base}${path}`, { headers: cookie ? { cookie } : {} });
+  return { status: res.status, body: await res.json().catch(() => ({})) };
+}
+
+async function patch(path, body, cookie) {
+  const res = await fetch(`${base}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...(cookie ? { cookie } : {}) },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json().catch(() => ({})) };
+}
+
 async function post(path, body, cookie) {
   const res = await fetch(`${base}${path}`, {
     method: "POST",
@@ -120,6 +134,16 @@ const { data: theirTable } = await admin
   .from("restaurant_tables").select("id").eq("restaurant_id", neighbour.id)
   .limit(1).maybeSingle();
 
+// A live ticket of the neighbour's, planted rather than borrowed: what they
+// happen to have on their board is not something a check may depend on, and
+// the ones that fail for having nothing to attack are the ones that pass
+// without asking anything.
+const { data: theirTicket } = await admin.from("orders").insert({
+  restaurant_id: neighbour.id, status: "received", paid: true, subtotal: 11.5,
+  service_fee: 0, tip: 0, tax_pct: 0, total: 11.5, currency: "MXN", note: MARK,
+  items: [{ itemId: "x", name: "attack fixture", emoji: "x", price: 11.5, qty: 1, mods: {} }],
+}).select("id, status").maybeSingle();
+
 try {
   // ── Somebody else's table ───────────────────────────────────────────────
   if (theirTable) {
@@ -135,6 +159,30 @@ try {
       : bad(`a waiter moved ${(after.amount - before.amount).toFixed(2)} into another restaurant`);
   } else {
     bad("the neighbour has no table — the cross-tenant case did not run");
+  }
+
+  // ── Somebody else's bill, read rather than collected ────────────────────
+  if (theirTable) {
+    const res = await get(`/api/table-bill?tableId=${theirTable.id}`, who.waiter);
+    const empty = (res.body.orders ?? []).length === 0 && (res.body.outstanding?.owed ?? 0) === 0;
+    empty
+      ? ok("a waiter cannot read what another restaurant's table owes")
+      : bad(`a waiter read ${res.body.orders?.length} order(s) and ${res.body.outstanding?.owed} owed elsewhere`);
+  }
+
+  // ── Somebody else's ticket, moved off the pass ──────────────────────────
+  {
+    const theirs = theirTicket;
+    if (theirs) {
+      await patch("/api/orders", { id: theirs.id, status: "completed" }, who.waiter);
+      const { data: now } = await admin
+        .from("orders").select("status").eq("id", theirs.id).maybeSingle();
+      now?.status === theirs.status
+        ? ok("a waiter cannot move another restaurant's ticket")
+        : bad(`a waiter moved another restaurant's ticket to ${now?.status}`);
+    } else {
+      bad("could not plant the neighbour a ticket — the cross-tenant move did not run");
+    }
   }
 
   // ── The kitchen, which never handles money ──────────────────────────────
