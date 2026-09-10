@@ -1382,6 +1382,8 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
     daysAgo: "{d}d ago",
     wantsWaiter: "wants a waiter",
     wantsBill: "wants the bill",
+    readyToCarry: "{n} ready to take out",
+    delivered: "Delivered",
     requestDone: "Done",
   },
   analytics: {

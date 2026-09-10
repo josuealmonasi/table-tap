@@ -1371,6 +1371,8 @@ badgesHint: "Muestra cuántas cosas esperan acción en cada sección. Aplica a t
     daysAgo: "hace {d} d",
     wantsWaiter: "quiere un mesero",
     wantsBill: "quiere la cuenta",
+    readyToCarry: "{n} listo(s) para entregar",
+    delivered: "Entregado",
     requestDone: "Listo",
   },
   analytics: {

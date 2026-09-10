@@ -12,6 +12,7 @@ import OrderCard from "./OrderCard";
 import { BOARD_COLUMNS, columnOrders } from "@/lib/order-flow";
 import { useRouter } from "next/navigation";
 import ServiceRequestsBar from "./ServiceRequestsBar";
+import { readyToDeliver } from "@/lib/ready-tables";
 import { EmptyIcon } from "@/components/ui/icons";
 
 interface OrdersBoardProps {
@@ -142,6 +143,15 @@ export default function OrdersBoard({
           initialRequests={initialRequests}
           currency={restaurant.currency}
           onSettled={() => router.refresh()}
+          // Only for whoever carries the plate. The pass put it there; a chip
+          // telling the kitchen their own food is ready is a chip they learn
+          // to ignore, and then they ignore the table asking for a waiter too.
+          ready={canSettle ? readyToDeliver(live) : []}
+          onDelivered={
+            canSettle
+              ? ids => ids.forEach(id => updateStatus(id, "completed"))
+              : undefined
+          }
         />
 
 

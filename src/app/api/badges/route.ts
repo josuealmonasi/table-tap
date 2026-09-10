@@ -29,12 +29,19 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json({ badges: {} });
   }
 
-  const [orders, discounts, writeOffs] = await Promise.all([
+  // Counted apart, because the two halves of the board belong to different
+  // people: `badgesFor` decides which of them this person is answerable for.
+  const [cooking, ready, discounts, writeOffs] = await Promise.all([
     db
       .from("orders")
       .select("id", { count: "exact", head: true })
       .eq("restaurant_id", actor.restaurantId)
       .in("status", ["received", "preparing"]),
+    db
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("restaurant_id", actor.restaurantId)
+      .eq("status", "ready"),
     db
       .from("discount_requests")
       .select("id", { count: "exact", head: true })
@@ -49,7 +56,8 @@ export async function GET(): Promise<NextResponse> {
 
   return NextResponse.json({
     badges: badgesFor(actor.role, {
-      orders: orders.count ?? 0,
+      cooking: cooking.count ?? 0,
+      ready: ready.count ?? 0,
       approvals: (discounts.count ?? 0) + (writeOffs.count ?? 0),
     }),
   });

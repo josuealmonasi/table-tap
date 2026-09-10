@@ -3,7 +3,8 @@
 import { useServiceRequests } from "@/hooks/useServiceRequests";
 import type { ServiceRequest } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
-import { BillIcon, CallWaiterIcon } from "@/components/ui/icons";
+import { BillIcon, CallWaiterIcon, StatusReadyIcon } from "@/components/ui/icons";
+import type { ReadyTable } from "@/lib/ready-tables";
 import { useEffect, useState } from "react";
 import SettleTableDialog from "./SettleTableDialog";
 
@@ -16,6 +17,16 @@ interface ServiceRequestsBarProps {
   /** Refreshes the board after a table is settled. */
   onSettled?: () => void;
   canApprove: boolean;
+  /**
+   * Food that is cooked and waiting on the pass, a trip at a time.
+   *
+   * The kitchen's job ends at `ready` and the floor's begins, and nothing used
+   * to say so — a waiter had to keep looking across the room at a board, which
+   * is the thing the board was meant to save them.
+   */
+  ready?: ReadyTable[];
+  /** Handed over: every ticket on that trip is finished. */
+  onDelivered?: (orderIds: string[]) => void;
 }
 
 /** Open call-waiter / request-bill taps, pinned above the orders grid. */
@@ -26,6 +37,8 @@ export default function ServiceRequestsBar({
   currency,
   onSettled,
   canApprove,
+  ready = [],
+  onDelivered,
 }: ServiceRequestsBarProps) {
   const t = useT();
   const { requests, markDone } = useServiceRequests(restaurantId, initialRequests);
@@ -55,10 +68,34 @@ export default function ServiceRequestsBar({
     return t("orders.daysAgo", { d: Math.floor(hours / 24) });
   };
 
-  if (requests.length === 0) return null;
+  const carrying = onDelivered ? ready : [];
+  if (requests.length === 0 && carrying.length === 0) return null;
 
   return (
     <div className="tt-requests-bar" role="status">
+      {/* Above the raised hands: a plate under a lamp is going cold while
+          somebody who has already been served waits for a menu. */}
+      {carrying.map(trip => (
+        <div key={trip.key} className="tt-request-chip tt-request-ready">
+          <span>
+            <StatusReadyIcon size={14} weight="bold" />{" "}
+            <strong>
+              {trip.label
+                ? t("dash.tableN", { label: trip.label })
+                : [trip.code, trip.customerName].filter(Boolean).join(" · ")}
+            </strong>{" "}
+            {t("orders.readyToCarry", { n: trip.dishes })}
+            <span className="tt-muted"> · {age(trip.since)}</span>
+          </span>
+          <button
+            className="tt-btn tt-btn-primary tt-btn-sm"
+            onClick={() => onDelivered?.(trip.orderIds)}
+          >
+            {t("orders.delivered")}
+          </button>
+        </div>
+      ))}
+
       {requests.map(r => (
         <div key={r.id} className="tt-request-chip">
           <span>
