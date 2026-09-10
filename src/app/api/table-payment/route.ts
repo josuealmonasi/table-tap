@@ -7,6 +7,7 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { recordPayment, recordPayments } from "@/lib/payments";
 import { tableOutstanding } from "@/lib/table-outstanding";
+import { shareOut } from "@/lib/table-balance";
 
 export const runtime = "nodejs";
 
@@ -83,13 +84,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const collectedNow = partly ? already!.owed : total(updated);
 
   if (partly) {
-    await recordPayment({
-      restaurantId: actor.restaurantId,
-      sessionId: updated[0].session_id,
-      amount: collectedNow,
-      method: settlement as "card" | "cash",
-      actorEmail: actor.email,
-    });
+    // Across the sittings it pays for, oldest first. A table can owe on more
+    // than one — an old sitting expires with something still on it and the
+    // next party opens another — and recording the lot against one leaves that
+    // sitting holding money it did not owe and the other marked paid with
+    // nothing behind it.
+    for (const share of shareOut(collectedNow, already!.sittings)) {
+      await recordPayment({
+        restaurantId: actor.restaurantId,
+        sessionId: share.id,
+        amount: share.amount,
+        method: settlement as "card" | "cash",
+        actorEmail: actor.email,
+      });
+    }
   } else {
     await recordPayments(
       updated.map(o => ({

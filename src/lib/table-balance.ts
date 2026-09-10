@@ -96,3 +96,50 @@ export function applyPayment(
 export function suggestEqual(owed: number, people: number): number[] {
   return sharesFor(round2(owed), people);
 }
+
+/** What one sitting on the table still owes. */
+export interface Owes {
+  id: string;
+  owed: number;
+}
+
+/** How much of a collection each sitting is credited with. */
+export interface Share {
+  id: string;
+  amount: number;
+}
+
+/**
+ * Spread a collection across the sittings it pays for, oldest first.
+ *
+ * A table can owe on more than one sitting: one expires with something still
+ * on it and the next party opens another, and the waiter settling that table
+ * is settling both. The money is one handful of notes, but a payment belongs
+ * to a sitting — so recording all of it against one leaves that sitting
+ * holding money it did not owe and the other marked paid with nothing behind
+ * it. Both of those are real: `pnpm money` found them on a live table.
+ *
+ * Oldest first, because that is the order a bill is paid off in and it puts
+ * the gratuity — which lands on the oldest order — on the same sitting as the
+ * order it was added to.
+ *
+ * Sittings that get nothing are left out rather than returned as zero: a
+ * payment of nothing is not a payment.
+ */
+export function shareOut(amount: number, sittings: Owes[]): Share[] {
+  let left = round2(Math.max(0, amount));
+  const shares: Share[] = [];
+  for (const sitting of sittings) {
+    if (left <= 0) break;
+    const take = Math.min(left, Math.max(0, round2(sitting.owed)));
+    if (take <= 0) continue;
+    shares.push({ id: sitting.id, amount: round2(take) });
+    left = round2(left - take);
+  }
+  // Anything over what every sitting owed — a gratuity, or a waiter rounding
+  // up — rides with the first, which is where the tip is attributed anyway.
+  if (left > 0 && shares.length > 0) {
+    shares[0] = { id: shares[0].id, amount: round2(shares[0].amount + left) };
+  }
+  return shares;
+}
