@@ -22,7 +22,7 @@ market is Mexico — prices in MXN, interface in Spanish with English alongside.
 | --- | --- | --- |
 | **Diner** | the QR, no login | browse, order, pay, track, rate, ask for the bill |
 | **Kitchen** | `/dashboard/orders` | the board, and nothing that costs money |
-| **Waiter** | orders + open bills | collect, ask for a discount or a write-off |
+| **Waiter** | orders + open bills + the pad | take the order, carry it out, collect in parts, ask for a discount or a write-off |
 | **Cashier** | orders + open bills | take money at the till, see their own takings |
 | **Manager** | most of the dashboard | the menu, promotions, approvals, the daily count |
 | **Owner** | all of it | plan, billing, staff, Stripe, settings |
@@ -81,7 +81,8 @@ is paid rides the same track and carries its debt on the bills screen instead.
 - **Plans** (`plan_limits`): `carta` free, `servicio`, `casa`, `grupo`. Each row
   carries the ceilings (tables, staff, menus, items) and the feature flags:
   dine-in, menu schedules, deferred payment, promotions, coupons, staff
-  discounts, inventory. `can(limits, feature)` is the only way to ask.
+  discounts, inventory, the counter till, waiter service.
+  `can(limits, feature)` is the only way to ask.
 - **Founding price**: the first restaurants on a paid tier keep the price they
   came in at. `claim_founding_price` serialises the assignment with an advisory
   lock so two simultaneous subscribers cannot take the same place.
@@ -99,7 +100,9 @@ is paid rides the same track and carries its debt on the bills screen instead.
   and the service charge are divided; the tip is each person's own. A share is
   money against the *sitting* rather than any order, so the floor's bill screen
   says how much of it is already in — a waiter taking cash for a table that has
-  half-paid by card is how the same money gets collected twice.
+  half-paid by card is how the same money gets collected twice. A waiter
+  collecting the bill in parts puts money there the same way, and the board
+  reads both from the ledger rather than from the split's own claims.
 - **`payments` is the ledger of money that arrived**, as opposed to
   `orders.paid`, which only says an order is settled. That boolean is enough
   while a payment always covers whole orders and stops being enough the moment a
@@ -348,6 +351,80 @@ board, on the bill, and in the history search.
 On `servicio` and above. Deliberately the entry paid tier rather than higher:
 `servicio` is the tier named for service and already carries dine-in and
 settling at the end, and `carta` has no tables at all.
+
+## The waiter collects
+
+A table of three where one pays MX$100 and the others MX$50 each is an ordinary
+Tuesday here, and the app could do neither: it took the whole bill at once, or
+froze it into equal shares the diners claimed on their own phones. The waiter's
+calculator is the other thing — a running balance, standing at the table.
+
+**All of it, equal parts, or a figure somebody names.** Equal parts reuse
+`sharesFor`, the app's one way of dividing a bill, so the odd centavo lands on
+the first share exactly as it does when the diners divide it themselves. The
+waiter can take any amount; the parts are the numbers the screen offers so
+nobody does long division at a table.
+
+**The balance is one sentence:** what the orders come to, less what has been
+paid against them. A gratuity is added to the order as it is collected — the
+attribution settling a whole table already used — so it appears on both sides
+of that subtraction and never moves it. The bill closes when the balance reaches
+zero, and only then are the orders marked paid.
+
+An early version counted the food by taking `tip` back off `total`. It cancelled
+the tips it had just added, and also cancelled a tip a diner had committed to
+when ordering and nobody had collected: a table owing MX$94.07 read as MX$93.17.
+
+**Every collection is recorded as it is taken**, against the sitting rather than
+any one order — the money belongs to the table, and pinning it to a dish would
+say that dish was paid for. `payments.tip` says how much of each was a gratuity,
+which is what lets a corte separate the food from the tips.
+
+**A tap is not a payment; a collection is.** `payments.client_ref` is unique per
+restaurant: the phone names each collection and reuses that name on every retry,
+so a button tapped twice on a bad signal lands in the ledger once. Without it a
+second MX$100 reads as a bill covered while the table walks out still owing.
+
+**Settling in full subtracts what was already collected.** Otherwise the orders
+are recorded at their full totals and money that arrived once is counted twice.
+The bills board says how much is already in on any part-paid table, read from
+the ledger — which covers a divided bill and a waiter's collection alike.
+
+A promotion still goes to whoever may grant one. The waiter asks from the
+calculator instead of leaving the table.
+
+## A bill the waiter opened is settled with the waiter
+
+`table_sessions.opened_by` records who opened a sitting, and only when the call
+creates one: a waiter bringing a round to a table that opened its own bill has
+not taken it off them.
+
+The diners keep everything except the card. They see what has been ordered, they
+add to it, and the bill screen says who is collecting and offers to call them.
+The coupon box and the tip chips go with the card button, because neither
+changes a number the waiter's calculator will use. `/api/bill/pay`, `/api/split`
+and `/api/split/pay` refuse — a screen that hides a button is not a guard.
+
+Two people collecting the same bill through different doors is how a table pays
+twice.
+
+## The floor is told when the food is ready
+
+The board's two jobs meet at `ready`: the end of the kitchen's and the start of
+the floor's. Nothing said so, and a waiter had to keep glancing at a screen
+across the room while a plate sat under a lamp.
+
+Ready food sits in the same bar as a raised hand, **one chip per trip** rather
+than per ticket and longest wait first — a waiter walks to a table, and three
+dishes for table four is one journey. Handing them over closes every ticket on
+that trip through the board's own move, so it queues offline like any other.
+
+No new column and no new kind of notification: `ready` already meant this, and
+the bar was already how the floor is told something is waiting.
+
+The nav badge follows the rule its own file states — count people only on what
+they can act on. The kitchen is counted on what is still to cook, the floor on
+what is waiting to go out, and whoever covers both jobs on both.
 
 ## Paper for an order that already exists
 
