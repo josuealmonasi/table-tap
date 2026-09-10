@@ -27,35 +27,62 @@ export interface OpenBill {
   /** A promotion is already on it; a second would discount the same food twice. */
   discounted: boolean;
   since: string;
+  /** A table part-way through dividing its bill, and how far it has got. */
+  split?: { shares: number; paidShares: number } | null;
   /**
-   * A table part-way through dividing its bill.
+   * Money already handed over against the SITTING rather than any one order.
    *
-   * Shares are money against the SITTING, not against any order, so until the
-   * last one lands every order still reads as unpaid. Without this the floor
-   * sees the full amount owing on a table that has already handed over half of
-   * it — and settling it in cash would take that half twice.
+   * A share of a divided bill, or a waiter collecting part of it at the table
+   * — the same thing as far as this row is concerned, and the same danger:
+   * every order still reads as unpaid until the bill closes, so without this
+   * the floor sees the full amount owing on a table that has already paid half
+   * of it, and settling it in cash would take that half twice.
    */
-  split?: { shares: number; paidShares: number; collected: number } | null;
+  collected?: number;
 }
 
 /**
- * Fold what a split has collected into the bills it belongs to.
+ * Which sitting a bill belongs to, if its orders are on one.
  *
  * Kept separate from `openBills` so the grouping stays a pure function of the
- * orders, and this is the one place that knows about sittings.
+ * orders, and these are the only places that know about sittings.
  */
+function sessionOfBill(bill: OpenBill, sessionOf: Map<string, string>): string | undefined {
+  return bill.orderIds.map(id => sessionOf.get(id)).find(Boolean);
+}
+
+/** How far a table has got through dividing its bill. */
 export function withSplits(
   bills: OpenBill[],
-  splits: { session_id: string; shares: number; paidShares: number; collected: number }[],
+  splits: { session_id: string; shares: number; paidShares: number }[],
   sessionOf: Map<string, string>,
 ): OpenBill[] {
   const bySession = new Map(splits.map(s => [s.session_id, s]));
   return bills.map(bill => {
-    const session = bill.orderIds.map(id => sessionOf.get(id)).find(Boolean);
-    const found = session ? bySession.get(session) : undefined;
+    const found = bySession.get(sessionOfBill(bill, sessionOf) ?? "");
     return found
-      ? { ...bill, split: { shares: found.shares, paidShares: found.paidShares, collected: found.collected } }
+      ? { ...bill, split: { shares: found.shares, paidShares: found.paidShares } }
       : bill;
+  });
+}
+
+/**
+ * What has already been paid against each sitting.
+ *
+ * One number from one place — the ledger — however it was collected. Reading
+ * the split's own claims instead would have shown a share of a divided bill
+ * and missed a waiter's collection entirely, which is the half of the money
+ * the floor most needs to know about: it is the half somebody could take
+ * again.
+ */
+export function withCollected(
+  bills: OpenBill[],
+  collected: Map<string, number>,
+  sessionOf: Map<string, string>,
+): OpenBill[] {
+  return bills.map(bill => {
+    const paid = collected.get(sessionOfBill(bill, sessionOf) ?? "") ?? 0;
+    return paid > 0 ? { ...bill, collected: round2(paid) } : bill;
   });
 }
 

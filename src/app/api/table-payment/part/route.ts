@@ -80,38 +80,43 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     clientRef: ref,
   });
 
-  // The database refused it as a copy of a collection already recorded. The
-  // money is in the ledger once, which is right; there is nothing to add, and
-  // the tip below must not land a second time.
-  if (!wrote) {
-    const now = await tableOutstanding(actor.restaurantId, body.tableId);
-    return NextResponse.json({ ok: true, duplicate: true, ...summary(now) });
-  }
-
-  if (taken.tip > 0) await addTip(actor.restaurantId, before, taken.tip);
+  // `wrote` is false when the database refused this as a copy of a collection
+  // already recorded — a button tapped twice, or a request retried when the
+  // signal came back. The money is in the ledger once, which is right: the tip
+  // must not land a second time and neither must the log line. Everything
+  // after that still runs, because the first attempt may have been cut off
+  // before it closed the bill.
+  if (wrote && taken.tip > 0) await addTip(actor.restaurantId, before, taken.tip);
 
   const after = await tableOutstanding(actor.restaurantId, body.tableId);
   const settled = after.owed <= 0 && (await closeBill(actor, body.tableId, method!));
 
-  await logEvent({
-    restaurantId: actor.restaurantId,
-    actor: actor.email,
-    entity: "bill",
-    action: settled ? "paid" : "collected",
-    detail: logDetail({
-      table: before.orders[0]?.table_label,
-      amount: taken.amount.toFixed(2),
-      method,
-      left: settled ? null : after.owed.toFixed(2),
-    }),
-  });
+  if (wrote) {
+    await logEvent({
+      restaurantId: actor.restaurantId,
+      actor: actor.email,
+      entity: "bill",
+      action: settled ? "paid" : "collected",
+      detail: logDetail({
+        table: before.orders[0]?.table_label,
+        amount: taken.amount.toFixed(2),
+        method,
+        left: settled ? null : after.owed.toFixed(2),
+      }),
+    });
+  }
 
-  return NextResponse.json({ ok: true, settled, ...summary(after) });
+  return NextResponse.json({
+    ok: true,
+    settled,
+    duplicate: !wrote,
+    ...summary(after),
+  });
 }
 
 /** What the calculator needs back: the numbers, not the rows. */
-function summary(now: Outstanding): { owed: number; collected: number; tips: number } {
-  return { owed: now.owed, collected: now.collected, tips: now.tips };
+function summary(now: Outstanding): Omit<Outstanding, "orders"> {
+  return { ordered: now.ordered, owed: now.owed, collected: now.collected, tips: now.tips };
 }
 
 /**

@@ -2080,11 +2080,13 @@ create index if not exists payments_session_idx on payments(session_id);
 -- How much of this payment was a gratuity.
 --
 -- Attribution is unchanged: the tip lands on the order, accumulating, exactly
--- as settling a whole table already does. This is arithmetic, not attribution.
--- A table's bill closes when the FOOD is covered, and without knowing which
--- part of MX$115 was the tip, a run of partial payments cannot tell how much of
--- the food is still owed — MX$115 against a MX$200 bill would read as MX$115 of
--- food and the table would appear to owe MX$85 when it owes MX$100.
+-- as settling a whole table already does, and the balance a waiter collects
+-- against is simply what the orders come to less what has been paid — a tip is
+-- on both sides of that and never moves it.
+--
+-- This is for the takings. A cashier counting a drawer and an owner reading
+-- the day want the gratuities separated from the food, and `amount` alone
+-- cannot say which part of MX$115 was which.
 alter table payments add column if not exists tip numeric not null default 0
   check (tip >= 0);
 

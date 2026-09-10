@@ -1,23 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { round2 } from "@/lib/money";
-import { applyPayment, foodOrdered, isSettled, stillOwed, suggestEqual } from "@/lib/table-balance";
+import { applyPayment, billTotal, isSettled, stillOwed, suggestEqual } from "@/lib/table-balance";
 
 describe("what a table still owes", () => {
-  it("subtracts the food, never the tip", () => {
-    // The example that named this: 200 of food, paid 100 + 15% tip.
-    expect(stillOwed([{ total: 200 }], [{ amount: 115, tip: 15 }])).toBe(100);
+  it("is what the orders come to, less what has been paid", () => {
+    expect(stillOwed([{ total: 200 }], [{ amount: 115, tip: 15 }])).toBe(85);
+    expect(billTotal([{ total: 60 }, { total: 40 }])).toBe(100);
   });
 
-  it("adds up across payments that tipped differently", () => {
-    // 100 at 15%, then 50 at 10%, then 50 at 10% — 200 of food, 25 of tips.
-    const paid = [
-      { amount: 115, tip: 15 },
-      { amount: 55, tip: 5 },
-      { amount: 55, tip: 5 },
-    ];
-    expect(stillOwed([{ total: 215, tip: 15 }], paid)).toBe(0);
-    expect(isSettled([{ total: 215, tip: 15 }], paid)).toBe(true);
-    expect(paid.reduce((s, p) => s + p.tip, 0)).toBe(25);
+  it("still owes a gratuity the diner committed to and nobody collected", () => {
+    // The bug this replaced: an unpaid order carrying a MX$0.90 tip read as
+    // MX$93.17 of food, and the table closed ninety centavos light. What is
+    // owed is the order's total, whatever the total is made of.
+    expect(stillOwed([{ total: 94.07 }], [])).toBe(94.07);
   });
 
   it("is not settled while a centavo is missing", () => {
@@ -25,19 +20,17 @@ describe("what a table still owes", () => {
     expect(stillOwed([{ total: 100 }], [{ amount: 99.99, tip: 0 }])).toBe(0.01);
   });
 
-  it("never goes below nothing, however generous the tip", () => {
+  it("never goes below nothing, however generous the payment", () => {
     expect(stillOwed([{ total: 50 }], [{ amount: 500, tip: 450 }])).toBe(0);
-    expect(stillOwed([{ total: 50 }], [{ amount: 80, tip: 0 }])).toBe(0);
   });
 
   it("sums several orders on one sitting", () => {
-    expect(stillOwed([{ total: 60 }, { total: 40 }], [])).toBe(100);
     expect(stillOwed([{ total: 60 }, { total: 40 }], [{ amount: 60, tip: 0 }])).toBe(40);
   });
 });
 
 describe("taking one payment", () => {
-  it("never takes more food than is owed", () => {
+  it("never takes more than is owed", () => {
     // A waiter typing 1000 for 100 must not leave the bill owing minus 900.
     expect(applyPayment(100, 1000, 0)).toEqual({ food: 100, tip: 0, amount: 100 });
   });
@@ -71,13 +64,12 @@ describe("suggesting equal parts", () => {
   });
 });
 
-describe("a tip lands on the order without moving the balance", () => {
+describe("a gratuity lands on the order without moving the balance", () => {
   it("walks a MX$200 bill through three uneven payments", () => {
     // The convention this has to survive: a collected tip is added to BOTH
     // `orders.tip` and `orders.total`, the way settling a whole table already
-    // does. Replayed step by step here, because the danger is the opposite of
-    // obvious — the food owed grows by every tip and the table never reaches
-    // zero, so the waiter keeps collecting.
+    // does. Replayed step by step, because it appears on both sides of the
+    // subtraction at once and it is not obvious that it cancels.
     const order = { total: 200, tip: 0 };
     const paid: { amount: number; tip: number }[] = [];
 
@@ -92,11 +84,13 @@ describe("a tip lands on the order without moving the balance", () => {
     expect(stillOwed([order], paid)).toBe(0);
     expect(isSettled([order], paid)).toBe(true);
     expect(order.tip).toBe(25);
-    expect(foodOrdered([order])).toBe(200);
     expect(round2(paid.reduce((sum, p) => sum + p.amount, 0))).toBe(225);
   });
 
-  it("counts the food of an order whose tip is already on it", () => {
-    expect(foodOrdered([{ total: 115, tip: 15 }, { total: 40 }])).toBe(140);
+  it("leaves the bill exactly as short as the food not yet handed over", () => {
+    // Halfway through the same table: 115 in, of which 15 was a tip, so the
+    // order is 215 and 100 of food is still to come.
+    const order = { total: 215 };
+    expect(stillOwed([order], [{ amount: 115, tip: 15 }])).toBe(100);
   });
 });

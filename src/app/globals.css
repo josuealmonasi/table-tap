@@ -1940,6 +1940,20 @@ a.tt-btn {
   margin-top: 18px;
 }
 
+/* The waiter's calculator: what the table ordered, what is in, what is left. */
+.tt-calc-figures {
+  margin-bottom: 16px;
+}
+/* The three answers to "how much are they paying?", as one set of options.
+   Same pills as the tip chips, which is what they are — a row of choices — so
+   they inherit that shape rather than growing a second one beside it. */
+.tt-calc-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
 /* A waiter is coming: a settled state, not another thing to press. */
 .tt-bill-called {
   margin-top: 16px;

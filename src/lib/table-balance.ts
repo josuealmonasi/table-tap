@@ -10,56 +10,46 @@ import { sharesFor } from "@/lib/split";
  * somebody hands over MX$100, somebody else MX$50, and the question after each
  * is simply how much is left.
  *
+ * The whole balance is one sentence: what the orders come to, minus what has
+ * been paid against them. A gratuity is added to the order as it is collected,
+ * the way settling a whole table already does, so it appears on both sides at
+ * once and never moves the answer.
+ *
+ * The arithmetic that says otherwise is the arithmetic that loses money. An
+ * earlier version of this counted the food by taking `tip` back off `total`,
+ * which cancelled the tips it had just added — and also cancelled a tip a
+ * diner had committed to when ordering and nobody had collected yet. A table
+ * owing MX$94.07 read as MX$93.17, and closed ninety centavos light.
+ *
  * Everything here is pure. What the table ordered and what has been collected
  * are read elsewhere; this only subtracts.
  */
 
-/** An order on the table. `total` includes its tip, the way it does everywhere. */
+/** An order on the table. `total` is everything owed for it, gratuity included. */
 export interface Owing {
   total: number;
-  tip?: number;
 }
 
 /** A payment already taken, and how much of it was a gratuity. */
 export interface Collected {
   amount: number;
+  /** Reference, for the takings. It is inside `amount` and never subtracted twice. */
   tip: number;
 }
 
-/**
- * The food an order came to, with the gratuity taken back out.
- *
- * A tip is added to `total` as it is collected — that convention is older than
- * this file and the takings depend on it. So a bill settled in parts has to
- * subtract it again, or the food owed would grow by every tip and the table
- * could never reach zero.
- */
-export function foodOf(order: Owing): number {
-  return round2(Number(order.total || 0) - Number(order.tip || 0));
+/** What the table's orders come to. */
+export function billTotal(orders: Owing[]): number {
+  return round2(orders.reduce((sum, o) => sum + Number(o.total || 0), 0));
 }
 
-/** What the table ordered, before anybody paid anything. */
-export function foodOrdered(orders: Owing[]): number {
-  return round2(orders.reduce((sum, o) => sum + foodOf(o), 0));
+/** What has been handed over against them. */
+export function paidSoFar(collected: Collected[]): number {
+  return round2(collected.reduce((sum, p) => sum + Number(p.amount || 0), 0));
 }
 
-/** The food covered so far. A tip never counts towards it. */
-export function foodCollected(collected: Collected[]): number {
-  return round2(
-    collected.reduce((sum, p) => sum + (Number(p.amount || 0) - Number(p.tip || 0)), 0),
-  );
-}
-
-/**
- * The FOOD still owed. A tip never moves it.
- *
- * That is the whole reason a payment records its own tip: MX$115 handed over
- * against a MX$200 bill covers MX$100 of food, and a balance that could not
- * tell would say the table owes MX$85 when it owes MX$100 — and would close
- * the bill early, which is the expensive direction to be wrong in.
- */
+/** Still owed, never less than nothing. */
 export function stillOwed(orders: Owing[], collected: Collected[]): number {
-  return Math.max(0, round2(foodOrdered(orders) - foodCollected(collected)));
+  return Math.max(0, round2(billTotal(orders) - paidSoFar(collected)));
 }
 
 /** Nothing left to collect, to the centavo. */
@@ -70,10 +60,10 @@ export function isSettled(orders: Owing[], collected: Collected[]): boolean {
 /**
  * What this payment may actually take.
  *
- * Never more food than is owed — a waiter mistyping 1000 for 100 must not
- * create a bill that owes minus MX$900 — and never less than nothing. The tip
- * is the diner's own and is not capped by the food: somebody settling the last
- * MX$20 of a bill may leave MX$50 if they want to.
+ * Never more than is owed — a waiter mistyping 1000 for 100 must not create a
+ * bill that owes minus MX$900 — and never less than nothing. The tip is not
+ * capped by it: it is the diner's own, and somebody settling the last MX$20 of
+ * a bill may leave MX$50 if they want to.
  */
 export function applyPayment(
   owed: number,

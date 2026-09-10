@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { billTotal, discountableOrders, spreadDiscount } from "@/lib/staff-discount";
-import { matchesBill, openBills } from "@/lib/open-bills";
+import { matchesBill, openBills, withCollected } from "@/lib/open-bills";
 import type { Order } from "@/lib/types";
 
 function order(id: string, total: number, over: Partial<Order> = {}): Order {
@@ -113,5 +113,52 @@ describe("the bills the floor can still act on", () => {
     expect(matchesBill(table, "burger")).toBe(true);
     expect(matchesBill(table, "")).toBe(true);
     expect(matchesBill(table, "sushi")).toBe(false);
+  });
+});
+
+describe("money already in against a sitting", () => {
+  const at = (id: string, table: string, total: number, created: string): Order =>
+    ({
+      id,
+      table_id: table,
+      table_label: table,
+      total,
+      created_at: created,
+      paid: false,
+      written_off: false,
+      status: "received",
+      items: [],
+    }) as unknown as Order;
+
+  const sessionOf = new Map([["a", "s1"]]);
+
+  it("carries a waiter's collection onto the bill it belongs to", () => {
+    const [bill] = withCollected(
+      openBills([at("a", "4", 200, "2026-08-15T12:00:00Z")]),
+      new Map([["s1", 115]]),
+      sessionOf,
+    );
+    // The orders still come to 200; 115 of it is already in the till, and the
+    // row has to say so or somebody collects it a second time.
+    expect(bill.total).toBe(200);
+    expect(bill.collected).toBe(115);
+  });
+
+  it("leaves a bill nobody has paid against alone", () => {
+    const [bill] = withCollected(
+      openBills([at("a", "4", 200, "2026-08-15T12:00:00Z")]),
+      new Map(),
+      sessionOf,
+    );
+    expect(bill.collected).toBeUndefined();
+  });
+
+  it("ignores a sitting that is not this bill's", () => {
+    const [bill] = withCollected(
+      openBills([at("a", "4", 200, "2026-08-15T12:00:00Z")]),
+      new Map([["somebody-else", 115]]),
+      sessionOf,
+    );
+    expect(bill.collected).toBeUndefined();
   });
 });

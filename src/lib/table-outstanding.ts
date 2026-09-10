@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { unpaidOrders } from "@/lib/table-bill";
-import { foodCollected, foodOrdered, stillOwed } from "@/lib/table-balance";
+import { billTotal, paidSoFar, stillOwed } from "@/lib/table-balance";
 import type { Order } from "@/lib/types";
 
 /**
@@ -22,13 +22,13 @@ import type { Order } from "@/lib/types";
 export interface Outstanding {
   /** Every order still owed for, oldest first. */
   orders: OwedOrder[];
-  /** What the table ordered, gratuities excluded. */
+  /** What those orders come to, gratuities included. */
   ordered: number;
-  /** The food already covered by payments against the sitting. */
+  /** What has already been handed over against the sitting. */
   collected: number;
-  /** Gratuities already collected — reference, never part of the balance. */
+  /** How much of that was a gratuity. Reference: it is inside `collected`. */
   tips: number;
-  /** Food still to collect. */
+  /** Still to collect. */
   owed: number;
 }
 
@@ -95,8 +95,8 @@ export async function tableOutstanding(
 
   return {
     orders: owed,
-    ordered: foodOrdered(owed),
-    collected: foodCollected(paid),
+    ordered: billTotal(owed),
+    collected: paidSoFar(paid),
     tips: Number(paid.reduce((sum, p) => sum + p.tip, 0).toFixed(2)),
     owed: stillOwed(owed, paid),
   };

@@ -4,7 +4,7 @@ import { actingFrontOfHouse } from "@/lib/api-guard";
 import { fetchCounterBill, fetchTableBill } from "@/lib/bill-data";
 import { tableOutstanding } from "@/lib/table-outstanding";
 import { unpaidOrders } from "@/lib/table-bill";
-import { foodOrdered } from "@/lib/table-balance";
+import { billTotal } from "@/lib/table-balance";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // A counter order is one order, collected on its own: nothing can have been
     // taken against it in parts, so what is owed is simply what it came to.
     const orders = await fetchCounterBill(actor.restaurantId, orderId!);
-    const ordered = foodOrdered(unpaidOrders(orders));
+    const ordered = billTotal(unpaidOrders(orders));
     return NextResponse.json({
       orders,
       outstanding: { ordered, collected: 0, tips: 0, owed: ordered },

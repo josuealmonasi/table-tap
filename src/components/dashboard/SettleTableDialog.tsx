@@ -4,11 +4,11 @@ import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { badgesChanged } from "@/hooks/useBadges";
 import WriteOffDialog from "./WriteOffDialog";
+import TableCalculator from "./TableCalculator";
+import SettleBillLines from "./SettleBillLines";
 import type { WriteOffReason } from "@/lib/write-off";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
-import { formatMoney } from "@/lib/format";
-import { PAID_LINES_SHOWN } from "@/lib/table-bill";
 import { tableBill } from "@/lib/table-bill";
 import type { Order } from "@/lib/types";
 
@@ -26,6 +26,8 @@ interface SettleTableDialogProps {
   onSettled: () => void;
   /** Owner or manager — a waiter may ask to cancel a bill, not cancel it. */
   canApprove: boolean;
+  /** Opens the promotion dialog on this bill, where the screen has one. */
+  onDiscount?: () => void;
 }
 
 /**
@@ -46,14 +48,15 @@ export default function SettleTableDialog({
   currency,
   onSettled,
   canApprove,
+  onDiscount,
 }: SettleTableDialogProps) {
   const t = useT();
   const toast = useToast();
-  // Folded by default: what was paid is reference, the total is what they came for.
-  const [showPaid, setShowPaid] = useState(false);
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
+  // The calculator, for a table paying a bit at a time.
+  const [inParts, setInParts] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -130,7 +133,7 @@ export default function SettleTableDialog({
           the settle sheet rather than stacking over it — two open dialogs trap
           focus against each other and take two Escapes to leave. */}
       <Modal
-        open={open && !asking}
+        open={open && !asking && !inParts}
         onClose={onClose}
         maxWidth={460}
         label={t("settle.open")}
@@ -147,50 +150,7 @@ export default function SettleTableDialog({
         <p className="tt-muted">{t("settle.nothing")}</p>
       ) : (
         <>
-          <div className="tt-mod-label">{t("settle.items")}</div>
-          {bill.others.items.concat(bill.mine.items).map((item, i) => (
-            <div key={i} className="tt-muted tt-subline" style={{ fontSize: 13 }}>
-              {item.qty}× {item.emoji} {item.name}
-            </div>
-          ))}
-
-          {/* What somebody at the table already paid by card. Apart, and not
-              added in: the waiter needs to know that dish is not being charged
-              for, and hiding it is exactly what leads to charging twice. */}
-          {bill.paid.orders.length > 0 && (
-            <div className="tt-bill-settled" style={{ marginTop: 10 }}>
-              <button
-                type="button"
-                className="tt-mod-label tt-paid-toggle"
-                aria-expanded={showPaid}
-                onClick={() => setShowPaid(v => !v)}
-              >
-                {t("settle.alreadyPaid", {
-                  amount: formatMoney(bill.paid.total, currency),
-                })}
-                {bill.paid.items.length > PAID_LINES_SHOWN && (
-                  <span className="tt-muted">
-                    {" "}
-                    {t(showPaid ? "settle.hideLines" : "settle.showLines", {
-                      n: bill.paid.items.length,
-                    })}
-                  </span>
-                )}
-              </button>
-              {(showPaid ? bill.paid.items : bill.paid.items.slice(0, PAID_LINES_SHOWN)).map(
-                (item, i) => (
-                  <div key={i} className="tt-muted tt-subline" style={{ fontSize: 13 }}>
-                    {item.qty}× {item.emoji} {item.name}
-                  </div>
-                ),
-              )}
-            </div>
-          )}
-
-          <div className="tt-bill-total tt-row">
-            <strong>{t("settle.total")}</strong>
-            <strong style={{ fontSize: 18 }}>{formatMoney(bill.total, currency)}</strong>
-          </div>
+          <SettleBillLines bill={bill} currency={currency} />
 
           <div className="tt-bill-actions">
             <button
@@ -209,6 +169,19 @@ export default function SettleTableDialog({
             >
               {t("settle.card")}
             </button>
+            {/* Tables only: a counter order is one person at a till paying
+                for one thing, and offering to divide it is offering something
+                nobody standing there has ever asked for. */}
+            {tableId && (
+              <button
+                className="tt-btn tt-btn-ghost tt-btn-lg"
+                style={{ width: "100%", marginTop: 8 }}
+                disabled={busy}
+                onClick={() => setInParts(true)}
+              >
+                {t("settle.parts")}
+              </button>
+            )}
             {/* Last, and quiet: a table that walks out is the exception, and
                 the board filling with debts nobody can clear is worse than
                 admitting one was never paid.
@@ -228,6 +201,20 @@ export default function SettleTableDialog({
         </>
       )}
       </Modal>
+      {tableId && (
+        <TableCalculator
+          open={inParts}
+          onClose={() => {
+            setInParts(false);
+            onClose();
+          }}
+          tableId={tableId}
+          tableLabel={tableLabel}
+          currency={currency}
+          onCollected={onSettled}
+          onDiscount={onDiscount}
+        />
+      )}
       {bill && (
         <WriteOffDialog
           open={asking}
