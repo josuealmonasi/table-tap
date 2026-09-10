@@ -1659,6 +1659,16 @@ create table if not exists table_sessions (
   -- outlived the longest sitting anybody has.
   close_reason  text check (close_reason in ('paid', 'settled', 'written_off', 'expired'))
 );
+
+-- Who opened this sitting: a member of staff, by email, or nobody.
+--
+-- A waiter who seats a party and takes their order owns the bill. The diners
+-- can scan the table, see what has been ordered and add to it, but the money
+-- is settled with the person standing in front of them — so the bill screen
+-- offers to call them rather than a card field, and the routes that charge a
+-- card refuse. Two people collecting the same bill through different doors is
+-- how a table pays twice.
+alter table table_sessions add column if not exists opened_by text;
 -- One open sitting per table, enforced by the database rather than by whoever
 -- got there first: two diners ordering at the same moment must land in the
 -- same session or they cannot see each other's food on the bill.
@@ -1685,10 +1695,17 @@ create index if not exists orders_session_idx on orders(session_id);
 -- cannot touch this table, and the decision has to be atomic. The unique index
 -- above is what makes the race safe — the loser of an insert re-reads the
 -- winner's row instead of failing.
+-- The three-argument version, replaced by the one below. Named exactly, so
+-- re-running this file drops nothing that is still wanted.
+drop function if exists public.open_table_session(uuid, uuid, int);
+
 create or replace function public.open_table_session(
   p_restaurant uuid,
   p_table uuid,
-  p_max_hours int
+  p_max_hours int,
+  -- Set only when this call CREATES the sitting. A waiter adding a round to a
+  -- table the diners opened themselves has not taken their bill off them.
+  p_opened_by text default null
 ) returns uuid language plpgsql security definer set search_path = public as $$
 declare v_id uuid;
 begin
@@ -1709,8 +1726,8 @@ begin
    limit 1;
 
   if v_id is null then
-    insert into table_sessions (restaurant_id, table_id)
-    values (p_restaurant, p_table)
+    insert into table_sessions (restaurant_id, table_id, opened_by)
+    values (p_restaurant, p_table, p_opened_by)
     on conflict do nothing
     returning id into v_id;
 
@@ -1724,9 +1741,9 @@ begin
 
   return v_id;
 end; $$;
-revoke all on function public.open_table_session(uuid, uuid, int)
+revoke all on function public.open_table_session(uuid, uuid, int, text)
   from public, anon, authenticated;
-grant execute on function public.open_table_session(uuid, uuid, int) to service_role;
+grant execute on function public.open_table_session(uuid, uuid, int, text) to service_role;
 
 -- Closes a sitting once nothing on it is owed. Called after every way money
 -- stops being outstanding: a card, cash at the table, or a debt written off.
@@ -2164,7 +2181,19 @@ select o.restaurant_id, o.id, o.session_id, o.total,
   from orders o
  where o.paid
    and o.total > 0
-   and not exists (select 1 from payments p where p.order_id = o.id);
+   and not exists (select 1 from payments p where p.order_id = o.id)
+   -- An order settled as part of a TABLE has no payment of its own on purpose:
+   -- a share of a divided bill, or a waiter collecting the bill a hundred pesos
+   -- at a time, is money against the sitting. Inventing one here counts the
+   -- same pesos a second time — and this file runs on every deploy, so it would
+   -- do it to every such table on the next migration. It cost MX$98.78 on the
+   -- first table ever settled in parts, in development, where it was cheap.
+   and not exists (
+     select 1 from payments p
+      where p.order_id is null
+        and p.session_id is not null
+        and p.session_id = o.session_id
+   );
 
 -- ── Dividing a bill ─────────────────────────────────────────────────────────
 -- A table agreeing to pay the same amount each.

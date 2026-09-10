@@ -76,18 +76,52 @@ export async function sessionAtTable(
   return (data as { id: string } | null)?.id ?? null;
 }
 
-/** Opens the table's sitting, or joins the one already open. */
+/**
+ * Opens the table's sitting, or joins the one already open.
+ *
+ * @param openedBy a member of staff, when it is staff opening the bill. It is
+ * recorded only if this call CREATES the sitting: a waiter bringing a round to
+ * a table that opened its own bill has not taken it over, and the diners keep
+ * the card field they have been using all evening.
+ */
 export async function openSession(
   restaurantId: string,
   tableId: string,
+  openedBy?: string | null,
 ): Promise<string | null> {
   const { data, error } = await createAdminClient().rpc("open_table_session", {
     p_restaurant: restaurantId,
     p_table: tableId,
     p_max_hours: OPEN_BILL_HOURS,
+    p_opened_by: openedBy ?? null,
   });
   if (error) return null;
   return (data as string) ?? null;
+}
+
+/**
+ * Is this table's bill being settled by a member of staff in person?
+ *
+ * The one question every route that charges a card has to ask about a table
+ * before charging it. A waiter who seated the party and took their order is
+ * standing there with the machine; a diner paying online at the same moment
+ * pays for food the waiter is about to collect for.
+ *
+ * Answered from the sitting rather than from the screen, because the screen is
+ * not a guard: it hides a button, and a request can be made without one.
+ */
+export async function staffOpenedBill(
+  restaurantId: string,
+  tableId: string,
+): Promise<boolean> {
+  const { data } = await createAdminClient()
+    .from("table_sessions")
+    .select("opened_by")
+    .eq("restaurant_id", restaurantId)
+    .eq("table_id", tableId)
+    .is("closed_at", null)
+    .maybeSingle();
+  return Boolean((data as { opened_by: string | null } | null)?.opened_by);
 }
 
 /**

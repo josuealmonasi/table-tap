@@ -84,6 +84,30 @@ shortSittings.length === 0
         shortSittings.slice(0, 3).map(([id, owed]) => `${id.slice(0, 8)} owed ${owed.toFixed(2)} got ${(paidForSitting.get(id) ?? 0).toFixed(2)}`).join("; "),
     );
 
+// 1c. And never MORE than the orders it could be paying for. The other
+// direction, because double-counting is the one that flatters the takings: a
+// schema backfill invented a payment for every paid order that had none, which
+// is exactly the shape of an order settled as part of a table — and the first
+// table ever settled in parts read as MX$197.56 against MX$98.78 of food.
+//
+// Counted over every order on the sitting, whatever state it is in: a table
+// half way through paying has collections against orders still unpaid, and one
+// that was written off after paying something still had food to pay for.
+const sittingHolds = new Map();
+for (const o of orders) {
+  if (!o.session_id || paidFor.has(o.id)) continue;
+  sittingHolds.set(o.session_id, (sittingHolds.get(o.session_id) ?? 0) + Number(o.total));
+}
+const overpaid = [...paidForSitting.entries()].filter(
+  ([id, got]) => got > (sittingHolds.get(id) ?? 0) + CENT,
+);
+overpaid.length === 0
+  ? ok(`no sitting holds more money than it owed (${paidForSitting.size} checked)`)
+  : bad(
+      `${overpaid.length} sitting(s) with more against them than they owed: ` +
+        overpaid.slice(0, 3).map(([id, got]) => `${id.slice(0, 8)} owed ${(sittingHolds.get(id) ?? 0).toFixed(2)} got ${got.toFixed(2)}`).join("; "),
+    );
+
 // 2. And the right amount of it.
 const wrong = settled.filter(o => paidFor.has(o.id) && Math.abs(paidFor.get(o.id) - Number(o.total)) > CENT);
 wrong.length === 0

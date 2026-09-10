@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { staffOpenedBill } from "@/lib/table-session";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { currentSplit } from "@/lib/split-service";
@@ -51,6 +52,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   if (!Number.isInteger(shares) || (shares as number) < 2 || (shares as number) > 20) {
     return await apiError("apiErr.splitPeople", 400);
+  }
+  // Nothing to divide: the waiter who opened this bill is the one collecting
+  // it, and they have a calculator that does the same job at the table.
+  if (await staffOpenedBill(restaurantId, tableId)) {
+    return await apiError("apiErr.waiterSettles", 409);
   }
 
   const db = createAdminClient();

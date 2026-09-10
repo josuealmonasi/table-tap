@@ -108,7 +108,7 @@ export default function OrderingApp({
   // What the table still owes. Only meaningful at a table: a fast-food QR pays
   // as it orders, so there is never an open bill.
   const [billOpen, setBillOpen] = useState(false);
-  const { bill, reload: reloadBill } = useTableBill(
+  const { bill, reload: reloadBill, staffBill } = useTableBill(
     restaurant.id,
     table?.id ?? null,
     billOpen,
@@ -697,6 +697,7 @@ export default function OrderingApp({
             tableId={table.id}
             tableLabel={table.label}
             sessionId={sittingSessionId}
+            staffBill={staffBill}
           />
         )}
         {/* Not dismissible into ordering: the point is that a second bill does
