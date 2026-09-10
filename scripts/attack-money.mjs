@@ -23,8 +23,10 @@ import { createClient } from "@supabase/supabase-js";
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(prod ? ".env.production.local" : ".env.development.local");
 
+// The same host every other prod-facing check uses, so this one cannot end up
+// quietly pointed somewhere else.
 const base = prod
-  ? (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "")
+  ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
   : "http://localhost:3000";
 
 const admin = createClient(
