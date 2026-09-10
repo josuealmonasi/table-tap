@@ -6,62 +6,86 @@ import terms from "@/lib/legal/terms-es.json";
 import privacy from "@/lib/legal/privacy-es.json";
 
 /**
- * The PDFs say the same as the page, and say their version.
+ * The PDF says what the app says.
  *
- * The legal text lives in the JSON and the PDF is built separately, by a
- * script somebody has to remember to run. Two copies of the same contract is
- * a contract that sooner or later says two different things — and the one
- * people download and keep is precisely the one that goes stale.
- *
- * It reads the PDF that ships, not one built here: what matters is what is in
- * `public/legal`, which is the file somebody takes away.
+ * The terms live in JSON, and the file people download is built from it by
+ * `node scripts/legal-pdf.mjs`. Nothing made anyone run it: the text on the
+ * screen could move while the signed-looking document in `public/` still said
+ * last month's promise, and a contract that says two things is worse than one
+ * nobody reads. This is the thing that makes somebody run it.
  */
-function pdfText(file: string): string {
-  const buf = readFileSync(file);
-  const raw = buf.toString("latin1");
-  let streams = "";
-  // pdfkit compresses each stream and announces its length in the dictionary:
-  // that finds the boundaries without needing a full PDF reader.
-  for (const m of raw.matchAll(/\/Length (\d+)[^>]*>>\s*stream\r?\n/g)) {
-    const start = m.index + m[0].length;
+
+/** Text drawn by the document, in the order it is drawn. */
+function textOf(path: string): string {
+  const pdf = readFileSync(path);
+  const runs: string[] = [];
+  // Every stream that inflates; the ones that do not are fonts and images.
+  for (const match of pdf.toString("latin1").matchAll(/stream\r?\n([\s\S]*?)endstream/g)) {
+    let page: string;
     try {
-      streams += inflateSync(buf.subarray(start, start + Number(m[1]))).toString("latin1");
+      page = inflateSync(Buffer.from(match[1], "latin1")).toString("latin1");
     } catch {
-      // A stream that is not text (fonts, metadata) does no harm.
+      continue;
+    }
+    // Glyphs are written as hex strings, broken up by kerning numbers.
+    for (const hex of page.matchAll(/<([0-9a-fA-F]+)>/g)) {
+      runs.push(Buffer.from(hex[1], "hex").toString("latin1"));
     }
   }
-  // The text sits in hex inside the TJ arrays.
-  return [...streams.matchAll(/<([0-9A-Fa-f]+)>/g)]
-    .map(hex => Buffer.from(hex[1], "hex").toString("latin1"))
-    .join("");
+  return runs.join("");
 }
 
-const DOCS = [
-  ["public/legal/terminos.pdf", terms],
-  ["public/legal/aviso-de-privacidad.pdf", privacy],
-] as const;
+/**
+ * Back from what the page is encoded in to what the JSON is written in.
+ *
+ * The document is drawn in WinAnsi, where the em dash somebody typed into the
+ * contract is one byte the JSON has never heard of.
+ */
+const TYPOGRAPHY: Record<string, string> = {
+  "": "‘",
+  "": "’",
+  "": "“",
+  "": "”",
+  "": "–",
+  "": "—",
+  "": "…",
+};
 
-describe("the legal PDF keeps up with the text", () => {
-  it.each(DOCS.map(([file]) => file))("%s carries the version in force", file => {
+/** Whitespace is where the page wraps, and it wraps wherever it likes. */
+function packed(text: string): string {
+  return text
+    .replace(/[-]/g, ch => TYPOGRAPHY[ch] ?? ch)
+    .replace(/\s+/g, "");
+}
+
+describe("the legal PDFs say what the app says", () => {
+  const documents = [
+    ["public/legal/terminos.pdf", terms],
+    ["public/legal/aviso-de-privacidad.pdf", privacy],
+  ] as const;
+
+  it("carries every paragraph of every clause", () => {
+    for (const [path, doc] of documents) {
+      const drawn = packed(textOf(path));
+      for (const clause of doc.clauses) {
+        expect(drawn, `${path}: the clause "${clause.title}" is not in the PDF`).toContain(
+          packed(clause.title),
+        );
+        for (const paragraph of clause.paragraphs) {
+          expect(
+            drawn,
+            `${path}: a paragraph of "${clause.title}" is not in the PDF — ` +
+              `run \`node scripts/legal-pdf.mjs\`:\n  ${paragraph.slice(0, 70)}`,
+          ).toContain(packed(paragraph));
+        }
+      }
+    }
+  });
+
+  it("is the version the app is asking people to accept", () => {
     expect(
-      pdfText(file),
-      `${file} no dice ${TERMS_VERSION} — corre \`node scripts/legal-pdf.mjs\``,
+      packed(textOf("public/legal/terminos.pdf")),
+      "the terms PDF was built before the version was bumped — rebuild it",
     ).toContain(TERMS_VERSION);
-  });
-
-  it.each(DOCS)("%s carries every one of its clauses", (file, doc) => {
-    const text = pdfText(file).replace(/\s+/g, " ");
-    for (const clause of doc.clauses) {
-      expect(text, `${file} no trae "${clause.title}"`).toContain(clause.title);
-    }
-  });
-
-  it.each(DOCS)("%s carries each clause's text, not just its heading", (file, doc) => {
-    const text = pdfText(file).replace(/\s+/g, " ");
-    for (const clause of doc.clauses) {
-      // The first paragraph is enough: if the PDF was built from the old JSON, it changes.
-      const first = clause.paragraphs[0].replace(/\s+/g, " ").slice(0, 60);
-      expect(text, `${file}: "${clause.title}" dice algo distinto al JSON`).toContain(first);
-    }
   });
 });
