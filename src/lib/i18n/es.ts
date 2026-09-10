@@ -636,7 +636,8 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
       staff: "Tu plan {plan} no incluye accesos para tu equipo. Mejora tu plan para agregarlos.",
     },
     needs: {
-      pos: "La caja del mostrador viene con {plan}.",
+      waiterService: "Tomar pedidos en la mesa viene con {plan}.",
+    pos: "La caja del mostrador viene con {plan}.",
       deferredPayment: "Cobrar al final o en la caja viene con {plan}. Con el plan gratuito se cobra con tarjeta al ordenar.",
       dineIn: "Las mesas y el servicio en mesa vienen con {plan}.",
       promotions: "Las promociones vienen con {plan}.",
@@ -818,6 +819,8 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     menusEmpty: "Aún no tienes menús",
     menuPaused: "En pausa",
     waiting: "{n} pendientes",
+    tableOrder: "Tomar pedido",
+    tableOrderDesc: "Toma el pedido en la mesa; la cuenta se paga al final.",
     pos: "Caja",
     posDesc: "Cobra en el mostrador y manda el pedido a la cocina",
     orders: "Pedidos",
@@ -868,6 +871,19 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     counterFor: "Mostrador · {name}",
     handedOver: "Entregado en mostrador:",
     note: "Nota",
+  },
+
+  // The waiter's order pad.
+  waiter: {
+    title: "Tomar pedido",
+    order: "Pedido",
+    table: "Mesa",
+    pickTable: "Elige la mesa…",
+    send: "Enviar a la cocina",
+    paysLater: "La cuenta se paga al final. Aquí no se cobra nada.",
+    sentTitle: "EN LA COCINA",
+    sentHint: "La cuenta queda abierta en la mesa.",
+    next: "Otro pedido",
   },
 
   pos: {

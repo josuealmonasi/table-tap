@@ -64,6 +64,17 @@ export const NAV_ITEMS: NavItem[] = [
     feature: "pos",
   },
   {
+    // The waiter's own screen: a table is seated, and the person standing at it
+    // writes down what they want. Tiered, like the till — and the screen itself
+    // refuses too, because a link to a screen that turns you away is a promise
+    // the dashboard should not make.
+    href: "/dashboard/table-order",
+    icon: "Table",
+    titleKey: "nav.tableOrder",
+    descKey: "nav.tableOrderDesc",
+    feature: "waiterService",
+  },
+  {
     href: "/dashboard/analytics",
     icon: "Analytics",
     titleKey: "nav.analytics",
@@ -133,6 +144,17 @@ const OWNER_ONLY = ["/dashboard/staff", "/dashboard/plan"];
  * area the tier does not include never appears: a link to a screen that turns
  * you away is a promise the dashboard should not make.
  */
+/**
+ * Every feature the navigation gates an area on.
+ *
+ * Read off the items themselves, so adding a tiered area to the nav is one
+ * edit rather than two — the second of which used to be a hardcoded list in
+ * the root layout that named "pos" and nothing else.
+ */
+export const NAV_FEATURES: PlanFeature[] = [
+  ...new Set(NAV_ITEMS.map(i => i.feature).filter((f): f is PlanFeature => Boolean(f))),
+];
+
 export function navItemsFor(
   role: DashboardRole,
   includes: (feature: PlanFeature) => boolean = () => true,
@@ -164,7 +186,9 @@ export function navItemsFor(
   }
   if (role === "waiter") {
     return allowed(
-      NAV_ITEMS.filter(i => i.href === "/dashboard/orders" || i.href === "/dashboard/bills"),
+      NAV_ITEMS.filter(i =>
+        ["/dashboard/orders", "/dashboard/bills", "/dashboard/table-order"].includes(i.href),
+      ),
     );
   }
   if (role === "manager") return allowed(NAV_ITEMS.filter(i => !OWNER_ONLY.includes(i.href)));

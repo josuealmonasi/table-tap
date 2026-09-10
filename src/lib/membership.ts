@@ -70,6 +70,17 @@ export const MOVES_ORDERS = (role: Role): boolean => !SERVES(role);
  * cooks are different powers, and a till that can invent orders is the one
  * worth naming on its own.
  */
+/**
+ * Who may take an order at a table.
+ *
+ * The waiter, which is the whole point — and management, who cover the floor
+ * when it is busy. Not the cashier: they have the till, and a cashier walking
+ * to a table is a different restaurant from the one this is for. Not the
+ * kitchen, who cook what arrives.
+ */
+export const TAKES_TABLE_ORDERS = (role: Role): boolean =>
+  MANAGES(role) || role === "waiter";
+
 export const TAKES_COUNTER_ORDERS = (role: Role): boolean =>
   MANAGES(role) || role === "cashier";
 

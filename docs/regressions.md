@@ -470,6 +470,16 @@ BOTH names. It hid a second fault too: the regression plant appeared to pass
 because the schema apply had silently failed, so the guard was never exercised.
 Verify the apply, then plant.
 
+**A nav link that could never appear.** The root layout built the list of
+features the navigation gates on BY HAND — `can(plan.limits, "pos") ? ["pos"] :
+[]` — so the next tiered area added to the nav was filtered straight back out of
+it by a line that had no idea the area existed. The waiter's order screen was
+correctly in `NAV_ITEMS`, correctly allowed for the role, on a plan that
+includes it, and the link simply never rendered. Nothing failed; the tests
+passed; only opening the page in a browser showed it. `NAV_FEATURES` is read off
+the items now, so adding a tiered area is one edit rather than two, and a test
+fails if the two ever disagree.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`
