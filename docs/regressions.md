@@ -434,6 +434,19 @@ the ledger are one fact recorded twice rather than two guesses. One hand-written
 demo log went with it: it claimed MX$412.00 of cash that no payment had ever
 backed. Proved by reseeding three times and reconciling on each.
 
+**The demo stopped looking like the app.** The seeder is written once and the
+schema keeps moving, and a column added later is not a syntax error in
+`mock-data.mjs` — it is a column the demo silently leaves null. Two had drifted:
+every cash payment named nobody (so the corte could not be built from the demo
+at all, in dev or in production), and no menu carried a schedule — including one
+literally named "Weekend Brunch", so the whole menu-hours path was never once
+exercised by any gate that reads seeded data.
+
+`pnpm seed:shape` now walks the tables the demo fills and fails when a column
+the app reads is null in every row, or when a shape the app depends on is
+missing entirely. Run it against production too: that is where the drift is
+least visible and most expensive.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`

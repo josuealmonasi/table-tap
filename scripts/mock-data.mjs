@@ -203,15 +203,25 @@ export async function seedMock(pg) {
   );
 
   // ── Menus (rich catalog via the shared populator) ──
-  for (const [name, sort] of [
-    ["Main Menu", 0],
-    ["Weekend Brunch", 1],
+  //
+  // Weekend Brunch carries the hours its name promises. It had none, so the
+  // whole menu-hours path — a menu that closes, the checkout that refuses an
+  // order for it, the diner's screen saying so — was never once exercised by
+  // the demo or by any gate that reads it. Main Menu deliberately keeps no
+  // schedule: something has to be open at whatever hour the sweep runs.
+  const BRUNCH_HOURS = {
+    enabled: true,
+    rules: [{ days: [0, 6], allDay: false, start: "09:00", end: "14:00" }],
+  };
+  for (const [name, sort, schedule] of [
+    ["Main Menu", 0, null],
+    ["Weekend Brunch", 1, BRUNCH_HOURS],
   ]) {
     const {
       rows: [m],
     } = await pg.query(
-      "insert into menus (restaurant_id, name, active, sort_order) values ($1, $2, true, $3) returning id",
-      [rid, name, sort],
+      "insert into menus (restaurant_id, name, active, sort_order, schedule) values ($1, $2, true, $3, $4) returning id",
+      [rid, name, sort, schedule ? JSON.stringify(schedule) : null],
     );
     await populateMenu(pg, rid, m.id);
   }
