@@ -8,6 +8,8 @@ import { formatMoney } from "@/lib/format";
 import { CheckIcon } from "@/components/ui/icons";
 import { priceCart } from "@/lib/pricing";
 import { printableReceipt } from "@/lib/print-document";
+import { printWhenReady } from "@/lib/print-window";
+import { Modal } from "@/components/ui/Modal";
 
 import ItemDetailScreen from "@/components/customer/ItemDetailScreen";
 import CartLineRow from "@/components/customer/CartLineRow";
@@ -85,6 +87,14 @@ export default function PosScreen({
     /** Nothing to make: it went in their hand, not on the pass. */
     handedOver: boolean;
   } | null>(null);
+  /**
+   * The till is not to be typed into.
+   *
+   * While the sale is in flight, and while the ticket is still up: `busy` goes
+   * false the instant the route answers, and a dish tapped into that gap lands
+   * in a sale the cashier believes they have already rung up.
+   */
+  const sending = busy || ticket !== null;
   const [pending, setPending] = useState<"cash" | "card" | null>(null);
   const [tipPct, setTipPct] = useState(0);
   const [tipCustom, setTipCustom] = useState<number | null>(null);
@@ -227,6 +237,7 @@ export default function PosScreen({
     w.document.write(printableReceipt(html, restaurant.name));
     w.document.close();
     w.focus();
+    printWhenReady(w);
   }
 
   /** Ring it up. The money is already in the drawer by the time this runs. */
@@ -297,7 +308,10 @@ export default function PosScreen({
 
         <div className="tt-pos">
           {/* What is for sale, by section, one tap to add. */}
-          <div className={`tt-pos-menu ${busy ? "tt-pos-menu-sending" : ""}`} aria-busy={busy}>
+          <div
+            className={`tt-pos-menu ${sending ? "tt-pos-menu-sending" : ""}`}
+            aria-busy={sending}
+          >
             <input
               className="tt-input tt-pos-search"
               value={search}
@@ -563,9 +577,18 @@ export default function PosScreen({
 
       {/* Charged. Shown over the till rather than instead of it — the menu is
           still there, and the next customer is already at the counter. */}
-      {ticket && (
-        <div className="tt-detail-overlay" onClick={() => setTicket(null)}>
-          <div className="tt-pos-ticket" onClick={e => e.stopPropagation()}>
+      {/* A dialog rather than a screen: `.tt-detail-overlay` is a full-bleed
+          sheet below 1025px, which is right for choosing modifiers and wrong
+          for four lines of confirmation — on a phone it read as being taken
+          somewhere, with the till gone and most of the page empty. */}
+      <Modal
+        open={Boolean(ticket)}
+        onClose={() => setTicket(null)}
+        maxWidth={360}
+        label={t("pos.charged")}
+      >
+        {ticket && (
+          <div className="tt-pos-ticket-body">
             <span className="tt-pos-ticket-mark" aria-hidden="true">
               <CheckIcon size={26} weight="bold" />
             </span>
@@ -581,14 +604,13 @@ export default function PosScreen({
             <button
               type="button"
               className="tt-btn tt-btn-primary"
-              autoFocus
               onClick={() => setTicket(null)}
             >
               {t("pos.newSale")}
             </button>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
       {/* The diner's own dish screen, in the diner's own panel: the modifiers,
           the extras, THIS item's special request, the quantity and the live

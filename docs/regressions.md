@@ -545,6 +545,29 @@ Production had no completed split, so nothing there was affected. `pnpm money`
 now fails on a sitting holding MORE money than it owed — the direction nothing
 checked, because it is the one that flatters the takings.
 
+## A camera header that refused our own camera
+
+`Permissions-Policy: camera=()` is an EMPTY allowlist — it denies every origin,
+including the page that sent it. The scan-to-collect button shipped and could
+never open a lens; `document.featurePolicy.allowsFeature('camera')` was false
+on every page in production, and the failure looked exactly like a customer
+declining the permission.
+
+Found while adding a second scanner beside it, which would have been dead on
+arrival. It is `camera=(self)` now, and `security-headers.spec.ts` asserts it.
+
+## An inline handler the policy would refuse
+
+The printed ticket said `<body onload="window.print()">`. Under the new
+Content-Security-Policy that is script the browser refuses, and a ticket that
+opens and never prints is worse than one that never opens. The opener prints
+it now, waiting for the same moment `onload` did — printing before the
+stylesheet applies puts an 80mm ticket on a Letter page — and the test asserts
+the document carries no inline handler at all.
+
+The other two print windows had always done it this way. Two ways of doing one
+thing, and the policy only broke the older one.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`

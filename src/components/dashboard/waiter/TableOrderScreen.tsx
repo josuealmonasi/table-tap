@@ -11,6 +11,9 @@ import ItemDetailScreen from "@/components/customer/ItemDetailScreen";
 import ComboDetailScreen from "@/components/customer/ComboDetailScreen";
 import CartLineRow from "@/components/customer/CartLineRow";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
+import { Modal } from "@/components/ui/Modal";
+import QrScanner from "@/components/dashboard/QrScanner";
+import { tableFromScan } from "@/lib/scan-target";
 import { DietaryTagsProvider } from "@/components/DietaryTagsContext";
 import type { CartItem } from "@/hooks/useCart";
 import type { Combo } from "@/lib/promotions";
@@ -71,6 +74,15 @@ export default function TableOrderScreen({
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<{ code: string; table: string } | null>(null);
+  /**
+   * The pad is not to be typed into.
+   *
+   * While the order is in flight, and while the confirmation is still up:
+   * `busy` goes false the instant the route answers, and the board behind is
+   * still repainting from `router.refresh()`. A dish tapped into that gap
+   * lands in a pad the waiter believes they have already sent.
+   */
+  const sending = busy || sent !== null;
   const nextCartId = useRef(1);
 
   const money = (n: number) => formatMoney(n, restaurant.currency);
@@ -165,7 +177,10 @@ export default function TableOrderScreen({
           {closedNow && <p className="tt-offline-banner">{t("pos.closedNow")}</p>}
 
           <div className="tt-pos">
-            <div className={`tt-pos-menu ${busy ? "tt-pos-menu-sending" : ""}`} aria-busy={busy}>
+            <div
+              className={`tt-pos-menu ${sending ? "tt-pos-menu-sending" : ""}`}
+              aria-busy={sending}
+            >
               <input
                 className="tt-input tt-pos-search"
                 value={search}
@@ -249,19 +264,48 @@ export default function TableOrderScreen({
                   bill, and in the history search. */}
               <label className="tt-field">
                 <span className="tt-mod-label">{t("waiter.table")}</span>
-                <select
-                  className="tt-input"
-                  value={tableId}
-                  onChange={e => setTableId(e.target.value)}
-                  disabled={busy}
-                >
-                  <option value="">{t("waiter.pickTable")}</option>
-                  {tables.map(x => (
-                    <option key={x.id} value={x.id}>
-                      {x.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="tt-waiter-table">
+                  <select
+                    className="tt-input"
+                    value={tableId}
+                    onChange={e => setTableId(e.target.value)}
+                    disabled={sending}
+                  >
+                    <option value="">{t("waiter.pickTable")}</option>
+                    {tables.map(x => (
+                      <option key={x.id} value={x.id}>
+                        {x.label}
+                      </option>
+                    ))}
+                  </select>
+                  {/* For a waiter who has been shown to a table and does not
+                      know what the app calls it. The list is still there and
+                      still works; this is for the ones who have not learned
+                      thirty table names yet, on their first week. */}
+                  <QrScanner
+                    label={t("waiter.scan")}
+                    title={t("waiter.scanTitle")}
+                    hint={t("waiter.scanHint")}
+                    noCamera={t("scan.noCamera")}
+                    buttonClass="tt-btn tt-btn-ghost"
+                    onRead={raw => {
+                      const found = tableFromScan(raw);
+                      // A poster or a wifi card: keep looking, say nothing.
+                      if (!found) return "keep-looking";
+                      // Another venue's table decodes perfectly well. Pointing
+                      // an order at it is exactly what must not happen quietly
+                      // — and the route would refuse it anyway.
+                      if (found.restaurantId !== restaurant.id) {
+                        return { problem: t("waiter.scanElsewhere") };
+                      }
+                      const known = tables.find(x => x.id === found.tableId);
+                      if (!known) return { problem: t("waiter.scanUnknown") };
+                      setTableId(known.id);
+                      toast(t("waiter.scanned", { label: known.label }));
+                      return "taken";
+                    }}
+                  />
+                </div>
               </label>
 
               {lines.length === 0 ? (
@@ -289,7 +333,7 @@ export default function TableOrderScreen({
                   value={note}
                   onChange={e => setNote(e.target.value)}
                   placeholder={t("pos.noteHint")}
-                  disabled={busy}
+                  disabled={sending}
                 />
               </label>
 
@@ -308,7 +352,7 @@ export default function TableOrderScreen({
                 <button
                   type="button"
                   className="tt-btn tt-btn-primary"
-                  disabled={busy || closedNow || lines.length === 0 || !tableId}
+                  disabled={sending || closedNow || lines.length === 0 || !tableId}
                   onClick={() => void send()}
                 >
                   {busy ? t("cart.placingOrder") : t("waiter.send")}
@@ -382,20 +426,33 @@ export default function TableOrderScreen({
           </div>
         )}
 
-        {/* Sent. The kitchen has it; the table owes for it. */}
-        {sent && (
-          <div className="tt-detail-overlay" onClick={() => setSent(null)}>
-            <div className="tt-pos-ticket" onClick={e => e.stopPropagation()}>
+        {/* Sent. The kitchen has it; the table owes for it.
+            A dialog rather than a screen: `.tt-detail-overlay` is a full-bleed
+            sheet below 1025px, which is right for choosing modifiers and wrong
+            for four lines of confirmation — on a phone it read as being taken
+            somewhere, with the pad gone and most of the page empty. */}
+        <Modal
+          open={Boolean(sent)}
+          onClose={() => setSent(null)}
+          maxWidth={360}
+          label={t("waiter.sentTitle")}
+        >
+          {sent && (
+            <div className="tt-pos-ticket-body">
               <p className="tt-pos-ticket-said">{t("waiter.sentTitle")}</p>
               <p className="tt-pos-code">{sent.code}</p>
               <p className="tt-pos-ticket-total">{t("dash.tableN", { label: sent.table })}</p>
               <p className="tt-muted tt-pos-ticket-hint">{t("waiter.sentHint")}</p>
-              <button type="button" className="tt-btn tt-btn-primary" autoFocus onClick={() => setSent(null)}>
+              <button
+                type="button"
+                className="tt-btn tt-btn-primary"
+                onClick={() => setSent(null)}
+              >
                 {t("waiter.next")}
               </button>
             </div>
-          </div>
-        )}
+          )}
+        </Modal>
       </div>
     </ConfirmProvider>
   );

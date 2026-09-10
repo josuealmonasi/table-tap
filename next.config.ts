@@ -18,27 +18,32 @@ const nextConfig: NextConfig = {
    * an iframe and Stripe Checkout is a full-page redirect, so refusing to be
    * framed at all costs nothing.
    *
-   * Deliberately NOT a Content-Security-Policy. A real one has to be tested
-   * against Stripe, Supabase and the fonts before it can be trusted, and a
-   * half-written CSP either blocks checkout or lulls somebody into thinking
-   * the app has one. That is its own piece of work.
+   * The Content-Security-Policy is NOT here. It carries a per-request nonce,
+   * so it is written in `src/middleware.ts` from `src/lib/csp.ts`. What stays
+   * here is everything that is the same on every response, including the
+   * paths middleware does not run on.
    */
   async headers() {
     return [
       {
         source: "/:path*",
         headers: [
-          // No framing, by either the old header or the modern one. Both,
-          // because browsers disagree about which they honour.
+          // No framing. The modern half of this is `frame-ancestors` in the
+          // policy the middleware writes; this covers the static files it does
+          // not run on, and the browsers that still prefer it.
           { key: "X-Frame-Options", value: "DENY" },
-          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
           // A stored file is served as what it says it is, never as what the
           // browser guesses from its bytes.
           { key: "X-Content-Type-Options", value: "nosniff" },
           // An order URL names an order. Off-site requests get the origin and
           // not the path it was reading.
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          // The menu needs none of these. Asked for and refused up front.
+          // Asked for and refused up front — except the camera, which this
+          // app genuinely uses: a cashier scans a diner's bill code and a
+          // waiter scans the code on a table. `camera=()` is an EMPTY list,
+          // which refuses our own page as well, and it did: the scanner
+          // shipped and could never open a lens. `(self)` is us and nobody
+          // else, including anything we ever embed.
           //
           // `payment` is deliberately absent from the list. Checkout is a
           // full-page redirect today, so denying it would change nothing —
@@ -47,7 +52,7 @@ const nextConfig: NextConfig = {
           // one thing that does not get a speculative restriction.
           {
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=(), usb=(), interest-cohort=()",
+            value: "camera=(self), microphone=(), geolocation=(), usb=(), interest-cohort=()",
           },
         ],
       },
