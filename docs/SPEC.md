@@ -491,6 +491,29 @@ since — stale work never overwrites live work.
 
 Available on every plan.
 
+## What is checked, and how
+
+`pnpm test` `api` `rls` `roles` `smoke` `layout` `promises` `money` `attack`,
+plus `dialogs` when a dialog, a shared component or the stylesheet moves.
+
+The two that guard the money are `money` and `attack`. `money` reconciles the
+ledger against `orders.paid` — two records of one fact, which is the shape of
+every bug this app has had — and now fails in both directions: a sitting with
+less money against it than it owed, and a sitting with more, which is the one
+that flatters the takings and nothing checked before.
+
+`attack` asks what somebody who IS signed in can do that they should not, and
+judges every case on EFFECT rather than on the absence of an error: the ledger
+is counted before and after with the secret key. A write RLS filters to zero
+rows returns no error at all, and reading that as "allowed" once reported four
+tables as wide open that were all fine.
+
+Every check plants what it needs rather than depending on what the demo data
+happens to hold, and removes it afterwards. A check that finds nothing to
+attack passes without asking anything — the RLS sweep did exactly that on ten
+of twenty-one tables — and test litter comes back later disguised as a product
+bug.
+
 ## Stack
 
 Next.js 15 (App Router) · Supabase (Postgres, Auth, Realtime, RLS) · Stripe
