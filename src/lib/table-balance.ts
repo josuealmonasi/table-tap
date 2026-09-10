@@ -61,18 +61,23 @@ export function isSettled(orders: Owing[], collected: Collected[]): boolean {
  * What this payment may actually take.
  *
  * Never more than is owed — a waiter mistyping 1000 for 100 must not create a
- * bill that owes minus MX$900 — and never less than nothing. The tip is not
- * capped by it: it is the diner's own, and somebody settling the last MX$20 of
- * a bill may leave MX$50 if they want to.
+ * bill that owes minus MX$900 — and never less than nothing.
+ *
+ * The tip is bounded by the food it is thanking somebody for, which is the
+ * ceiling every other tip in the app already has: `tipFor` clamps a percentage
+ * at 100, and both routes that charge a card clamp an exact amount at what is
+ * payable. It is not a judgement about generosity — it is what stops a
+ * mistyped MX$50,000 becoming cash a waiter has to account for at the count.
  */
 export function applyPayment(
   owed: number,
   asked: number,
   tip: number,
 ): { food: number; tip: number; amount: number } {
-  const safeTip = Number.isFinite(tip) ? Math.max(0, round2(tip)) : 0;
   const wanted = Number.isFinite(asked) ? Math.max(0, round2(asked)) : 0;
   const food = Math.min(wanted, Math.max(0, round2(owed)));
+  const asked2 = Number.isFinite(tip) ? Math.max(0, round2(tip)) : 0;
+  const safeTip = Math.min(asked2, food);
   return { food, tip: safeTip, amount: round2(food + safeTip) };
 }
 

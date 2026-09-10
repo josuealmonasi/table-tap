@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { unpaidOrders } from "@/lib/table-bill";
-import { billTotal, paidSoFar, stillOwed } from "@/lib/table-balance";
+import { billTotal, stillOwed } from "@/lib/table-balance";
+import { round2 } from "@/lib/money";
 import type { Order } from "@/lib/types";
 
 /**
@@ -24,9 +25,9 @@ export interface Outstanding {
   orders: OwedOrder[];
   /** What those orders come to, gratuities included. */
   ordered: number;
-  /** What has already been handed over against the sitting. */
+  /** Money already in that is still credited to them. */
   collected: number;
-  /** How much of that was a gratuity. Reference: it is inside `collected`. */
+  /** Gratuities collected on this sitting. Reference: inside `collected`. */
   tips: number;
   /** Still to collect. */
   owed: number;
@@ -45,26 +46,41 @@ const FIELDS = "id, total, tip, session_id, table_label, paid, written_off, stat
 /** What the query above hands back, before the cancelled ones are dropped. */
 type OwedRow = OwedOrder & Pick<Order, "paid" | "written_off" | "status">;
 
+/** A payment, as this file needs it. */
+export interface Paid {
+  order_id: string | null;
+  amount: number;
+  tip: number;
+}
+
 /**
- * Payments belonging to a sitting rather than to any one order.
+ * Money against the sitting that is still credited to what is unpaid.
  *
  * A payment carrying an `order_id` was recorded when that order was marked
- * paid, so it left with it — counting it here as well would subtract the same
- * money twice. What is left is what a bill settled in parts is made of: a
- * waiter's collections, and shares of a divided bill.
+ * paid, so it left with it. The rest belongs to the sitting: a waiter's
+ * collections, and shares of a divided bill.
+ *
+ * The subtlety is what happens after a bill closes. Those collections settled
+ * the orders they closed, and the orders stay on the sitting — so counting the
+ * whole lifetime of a sitting's money against whatever is unpaid NOW would
+ * spend the same pesos twice. A table that paid MX$200 and then ordered
+ * MX$60 more read as owing nothing.
+ *
+ * So the money that settled an order is deducted from it: what is left over is
+ * what the next round can be paid with, and usually that is everything,
+ * because usually nothing has closed yet.
  */
-async function collectedOn(
-  restaurantId: string,
-  sessionIds: string[],
-): Promise<{ amount: number; tip: number }[]> {
-  if (sessionIds.length === 0) return [];
-  const { data } = await createAdminClient()
-    .from("payments")
-    .select("amount, tip")
-    .eq("restaurant_id", restaurantId)
-    .in("session_id", sessionIds)
-    .is("order_id", null);
-  return (data ?? []).map(p => ({ amount: Number(p.amount), tip: Number(p.tip ?? 0) }));
+export function creditFor(
+  sittingPaid: Paid[],
+  settled: { id: string; total: number }[],
+  ownPaid: Map<string, number>,
+): number {
+  const collected = sittingPaid.reduce((sum, p) => sum + p.amount, 0);
+  const spent = settled.reduce(
+    (sum, o) => sum + Math.max(0, o.total - (ownPaid.get(o.id) ?? 0)),
+    0,
+  );
+  return Math.max(0, round2(collected - spent));
 }
 
 /**
@@ -75,7 +91,8 @@ export async function tableOutstanding(
   restaurantId: string,
   tableId: string,
 ): Promise<Outstanding> {
-  const { data } = await createAdminClient()
+  const db = createAdminClient();
+  const { data } = await db
     .from("orders")
     .select(FIELDS)
     .eq("restaurant_id", restaurantId)
@@ -91,13 +108,57 @@ export async function tableOutstanding(
   // was nothing.
   const owed = unpaidOrders((data ?? []) as OwedRow[]);
   const sessions = [...new Set(owed.map(o => o.session_id).filter(Boolean))] as string[];
-  const paid = await collectedOn(restaurantId, sessions);
+  const ordered = billTotal(owed);
+
+  if (sessions.length === 0) {
+    return { orders: owed, ordered, collected: 0, tips: 0, owed: ordered };
+  }
+
+  // Orders on those sittings that are already settled, and every payment the
+  // sittings carry. Both are needed to say how much of the money is still free
+  // to pay for what is left.
+  const [settledRes, paidRes] = await Promise.all([
+    db
+      .from("orders")
+      .select("id, total")
+      .eq("restaurant_id", restaurantId)
+      .in("session_id", sessions)
+      .eq("paid", true)
+      .eq("written_off", false)
+      .neq("status", "cancelled")
+      .neq("status", "pending_payment"),
+    db
+      .from("payments")
+      .select("order_id, amount, tip")
+      .eq("restaurant_id", restaurantId)
+      .in("session_id", sessions),
+  ]);
+
+  const settled = (settledRes.data ?? []).map(o => ({
+    id: o.id as string,
+    total: Number(o.total),
+  }));
+  const payments: Paid[] = (paidRes.data ?? []).map(p => ({
+    order_id: (p.order_id as string | null) ?? null,
+    amount: Number(p.amount),
+    tip: Number(p.tip ?? 0),
+  }));
+
+  const ownPaid = new Map<string, number>();
+  for (const p of payments) {
+    if (!p.order_id) continue;
+    ownPaid.set(p.order_id, (ownPaid.get(p.order_id) ?? 0) + p.amount);
+  }
+
+  const sittingPaid = payments.filter(p => !p.order_id);
+  const credit = creditFor(sittingPaid, settled, ownPaid);
+  const tips = round2(sittingPaid.reduce((sum, p) => sum + p.tip, 0));
 
   return {
     orders: owed,
-    ordered: billTotal(owed),
-    collected: paidSoFar(paid),
-    tips: Number(paid.reduce((sum, p) => sum + p.tip, 0).toFixed(2)),
-    owed: stillOwed(owed, paid),
+    ordered,
+    collected: credit,
+    tips,
+    owed: stillOwed(owed, [{ amount: credit, tip: 0 }]),
   };
 }

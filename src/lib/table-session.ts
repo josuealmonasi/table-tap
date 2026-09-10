@@ -104,8 +104,14 @@ export async function openSession(
  *
  * The one question every route that charges a card has to ask about a table
  * before charging it. A waiter who seated the party and took their order is
- * standing there with the machine; a diner paying online at the same moment
- * pays for food the waiter is about to collect for.
+ * standing there with the machine and a running balance; a diner paying online
+ * at the same moment pays for food the waiter is about to collect for.
+ *
+ * Asked of the sittings the table's UNPAID orders belong to — which is exactly
+ * the set those routes would charge for. Asking only about the sitting that is
+ * open right now was too narrow: a waiter's bill whose sitting had closed with
+ * something still owed on it became payable online again, and the debt that is
+ * most obviously the waiter's to collect is the one nobody is sitting at.
  *
  * Answered from the sitting rather than from the screen, because the screen is
  * not a guard: it hides a button, and a request can be made without one.
@@ -114,14 +120,27 @@ export async function staffOpenedBill(
   restaurantId: string,
   tableId: string,
 ): Promise<boolean> {
-  const { data } = await createAdminClient()
-    .from("table_sessions")
-    .select("opened_by")
+  const db = createAdminClient();
+  const { data: owed } = await db
+    .from("orders")
+    .select("session_id")
     .eq("restaurant_id", restaurantId)
     .eq("table_id", tableId)
-    .is("closed_at", null)
-    .maybeSingle();
-  return Boolean((data as { opened_by: string | null } | null)?.opened_by);
+    .eq("paid", false)
+    .eq("written_off", false)
+    .neq("status", "pending_payment")
+    .neq("status", "cancelled");
+
+  const sessions = [...new Set((owed ?? []).map(o => o.session_id).filter(Boolean))] as string[];
+  if (sessions.length === 0) return false;
+
+  const { count } = await db
+    .from("table_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("restaurant_id", restaurantId)
+    .in("id", sessions)
+    .not("opened_by", "is", null);
+  return (count ?? 0) > 0;
 }
 
 /**

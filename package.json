@@ -30,6 +30,8 @@
     "db:promos:prod": "node scripts/seed-promos.mjs --prod",
     "db:ratings:prod": "node scripts/seed-ratings.mjs --prod",
     "prod:check": "node scripts/prod-check.mjs",
+    "attack": "node scripts/attack-money.mjs",
+    "attack:prod": "node scripts/attack-money.mjs --prod",
     "smoke": "node scripts/smoke.mjs",
     "smoke:prod": "node scripts/smoke.mjs --prod",
     "demo:reset": "node scripts/demo-reset.mjs",

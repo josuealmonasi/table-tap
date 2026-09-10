@@ -35,8 +35,13 @@ describe("taking one payment", () => {
     expect(applyPayment(100, 1000, 0)).toEqual({ food: 100, tip: 0, amount: 100 });
   });
 
-  it("lets the tip exceed what is left, because a tip is not the food", () => {
-    expect(applyPayment(20, 20, 50)).toEqual({ food: 20, tip: 50, amount: 70 });
+  it("caps the tip at the food it is thanking somebody for", () => {
+    // The ceiling every other tip in the app has: `tipFor` clamps a percentage
+    // at 100, and the two routes that charge a card clamp an exact amount at
+    // what is payable. A mistyped MX$50 on a MX$20 collection is cash the
+    // waiter would have to account for at the count.
+    expect(applyPayment(20, 20, 50)).toEqual({ food: 20, tip: 20, amount: 40 });
+    expect(applyPayment(100, 50, 7.5)).toEqual({ food: 50, tip: 7.5, amount: 57.5 });
   });
 
   it("refuses a negative amount or a negative tip", () => {
