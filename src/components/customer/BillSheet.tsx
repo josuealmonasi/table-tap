@@ -367,7 +367,7 @@ export default function BillSheet({
           {/* Paying for the table or only for yourself changes what the totals
               below are counting, so it sits above them. */}
           {!split && canPayMineOnly(bill) && (
-            <div className="tt-tip-row" style={{ marginTop: 14 }}>
+            <div className="tt-tip-row tt-bill-scope">
               <button
                 type="button"
                 className={`tt-tip-chip ${scope === "all" ? "tt-tip-chip-active" : ""}`}
