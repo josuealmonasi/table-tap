@@ -13,6 +13,7 @@
 // ============================================================================
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
+import { plantNeighbour } from "./rls-fixture.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -425,32 +426,24 @@ if (!signIn.error && theirs) {
     bad("only one restaurant exists — cross-tenant checks cannot run");
   }
 
-  // A neighbour with an order and a payment of its own.
+  // A neighbour with one of everything.
   //
-  // Without this the sweep passed on twelve of twenty-one tables by finding
-  // nothing to attack — orders and payments among them — which is a green tick
-  // for a question never asked. Planted here, attacked below, removed after.
+  // Without a foreign row to reach for, the sweep passed on twelve of
+  // twenty-one tables by finding nothing to attack — a green tick for a
+  // question never asked, which is exactly how a leak survives a check that
+  // "passed". Planted here, attacked below, removed after.
   //
   // Never against production. This plants rows, and production is somebody's
   // real accounting: a probe order and a probe payment there would show up in
   // their takings and in the corte. The sweep runs with whatever real data
   // production happens to hold, and says plainly what it therefore could not
   // reach.
-  const planted = { order: null, payment: null };
+  let fixture = null;
   if (!prod && others.length > 0) {
-    const { data: o } = await admin.from("orders").insert({
-      restaurant_id: others[0], status: "received", paid: true, subtotal: 11.5,
-      service_fee: 0, tip: 0, tax_pct: 0, total: 11.5, currency: "MXN",
-      items: [{ itemId: "x", name: "rls fixture", emoji: "x", price: 11.5, qty: 1, mods: {} }],
-    }).select("id").maybeSingle();
-    planted.order = o?.id ?? null;
-    if (planted.order) {
-      const { data: pmt } = await admin.from("payments").insert({
-        restaurant_id: others[0], order_id: planted.order, amount: 11.5, method: "cash",
-      }).select("id").maybeSingle();
-      planted.payment = pmt?.id ?? null;
+    fixture = await plantNeighbour(admin, others[0]);
+    if (!fixture.planted.order || !fixture.planted.payment) {
+      bad("could not plant a neighbour's order — orders/payments went unchecked");
     }
-    if (!planted.order || !planted.payment) bad("could not plant a neighbour's order — orders/payments went unchecked");
   }
 
   // Which tables this sweep could actually bite on, so a silent gap is visible.
@@ -500,8 +493,7 @@ if (!signIn.error && theirs) {
     }
   }
 
-  if (planted.payment) await admin.from("payments").delete().eq("id", planted.payment);
-  if (planted.order) await admin.from("orders").delete().eq("id", planted.order);
+  if (fixture) await fixture.remove();
 }
 
 console.log(failed === 0 ? "\nNothing is exposed.\n" : `\n${failed} PROBLEM(S) — fix before shipping.\n`);
