@@ -8,7 +8,7 @@ import { logDetail } from "@/lib/log-detail";
 import { recordPayment } from "@/lib/payments";
 import { closeSessionsFor, openSession } from "@/lib/table-session";
 import { tableOutstanding, type Outstanding } from "@/lib/table-outstanding";
-import { applyPayment } from "@/lib/table-balance";
+import { applyPayment, shareOut } from "@/lib/table-balance";
 import { round2 } from "@/lib/money";
 
 export const runtime = "nodejs";
@@ -67,18 +67,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const sessionId = await sittingFor(actor, body.tableId, before);
   if (!sessionId) return await apiError("apiErr.nothingToSettle", 409);
 
-  const wrote = await recordPayment({
-    restaurantId: actor.restaurantId,
-    // The sitting, not an order: this money belongs to the table, and pinning
-    // it to one of the orders would say that dish was paid for when what was
-    // handed over covers a share of all of them.
-    sessionId,
-    amount: taken.amount,
-    tip: taken.tip,
-    method: method as "cash" | "card",
-    actorEmail: actor.email,
-    clientRef: ref,
-  });
+  const wrote = await record(actor, before, sessionId, taken, method!, ref);
 
   // `wrote` is false when the database refused this as a copy of a collection
   // already recorded — a button tapped twice, or a request retried when the
@@ -114,8 +103,68 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   });
 }
 
-/** What the calculator needs back: the numbers, not the rows. */
-function summary(now: Outstanding): Omit<Outstanding, "orders"> {
+/**
+ * Write the collection down, against the sittings it actually pays for.
+ *
+ * A table can owe on more than one: an old sitting expires with something
+ * still on it and the next party opens another, and the waiter settling that
+ * table is settling both. The money is one handful of notes, but a payment
+ * belongs to a sitting — recording all of it against one leaves that sitting
+ * holding money it did not owe and the other marked paid with nothing behind
+ * it. Both of those turned up on a real table.
+ *
+ * Each row carries its own reference, so the guard against a double tap still
+ * refuses the whole collection rather than half of it.
+ *
+ * @returns whether anything was written. False for a copy the database
+ * refused, which the caller must know about: the tip must not land twice.
+ */
+async function record(
+  actor: Actor,
+  before: Outstanding,
+  fallback: string,
+  taken: { amount: number; tip: number },
+  method: "cash" | "card",
+  ref: string,
+): Promise<boolean> {
+  // The first sitting is credited with the gratuity it is ABOUT to receive:
+  // `addTip` puts it on the oldest order a moment from now, and splitting the
+  // money against totals that do not include it yet spills the tip into the
+  // next sitting's share — which then reads as money it never owed.
+  const owedNow = before.sittings.map((sitting, n) =>
+    n === 0 ? { ...sitting, owed: round2(sitting.owed + taken.tip) } : sitting,
+  );
+
+  // `sittings` is empty only when nothing owed had one, and `sittingFor` has
+  // just given them all the same new one. And if the split somehow comes back
+  // with nothing, the whole amount goes on the fallback rather than nowhere:
+  // money that has changed hands is recorded somewhere, always.
+  const split = owedNow.length > 0 ? shareOut(taken.amount, owedNow) : [];
+  const across = split.length > 0 ? split : [{ id: fallback, amount: taken.amount }];
+
+  let wrote = false;
+  for (const [n, share] of across.entries()) {
+    const landed = await recordPayment({
+      restaurantId: actor.restaurantId,
+      // The sitting, not an order: this money belongs to the table, and
+      // pinning it to one of the orders would say that dish was paid for when
+      // what was handed over covers a share of all of them.
+      sessionId: share.id,
+      amount: share.amount,
+      // The gratuity rides with the first share, which is the oldest sitting —
+      // the same one whose order `addTip` puts it on.
+      tip: n === 0 ? taken.tip : 0,
+      method,
+      actorEmail: actor.email,
+      clientRef: n === 0 ? ref : `${ref}#${n}`,
+    });
+    wrote = wrote || landed;
+  }
+  return wrote;
+}
+
+/** What the calculator needs back: the numbers, not the rows or the sittings. */
+function summary(now: Outstanding): Omit<Outstanding, "orders" | "sittings"> {
   return { ordered: now.ordered, owed: now.owed, collected: now.collected, tips: now.tips };
 }
 

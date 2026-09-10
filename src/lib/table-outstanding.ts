@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { unpaidOrders } from "@/lib/table-bill";
-import { billTotal, stillOwed } from "@/lib/table-balance";
+import { billTotal, stillOwed, type Owes } from "@/lib/table-balance";
 import { round2 } from "@/lib/money";
 import type { Order } from "@/lib/types";
 
@@ -31,6 +31,14 @@ export interface Outstanding {
   tips: number;
   /** Still to collect. */
   owed: number;
+  /**
+   * What each sitting on the table owes, oldest first.
+   *
+   * A table can owe on more than one: one expires with something still on it
+   * and the next party opens another. A payment belongs to a sitting, so a
+   * collection covering both has to be shared between them — see `shareOut`.
+   */
+  sittings: Owes[];
 }
 
 export interface OwedOrder {
@@ -49,6 +57,8 @@ type OwedRow = OwedOrder & Pick<Order, "paid" | "written_off" | "status">;
 /** A payment, as this file needs it. */
 export interface Paid {
   order_id: string | null;
+  /** The sitting it was recorded against. */
+  session: string;
   amount: number;
   tip: number;
 }
@@ -111,7 +121,7 @@ export async function tableOutstanding(
   const ordered = billTotal(owed);
 
   if (sessions.length === 0) {
-    return { orders: owed, ordered, collected: 0, tips: 0, owed: ordered };
+    return { orders: owed, ordered, collected: 0, tips: 0, owed: ordered, sittings: [] };
   }
 
   // Orders on those sittings that are already settled, and every payment the
@@ -120,7 +130,7 @@ export async function tableOutstanding(
   const [settledRes, paidRes] = await Promise.all([
     db
       .from("orders")
-      .select("id, total")
+      .select("id, total, session_id")
       .eq("restaurant_id", restaurantId)
       .in("session_id", sessions)
       .eq("paid", true)
@@ -129,17 +139,19 @@ export async function tableOutstanding(
       .neq("status", "pending_payment"),
     db
       .from("payments")
-      .select("order_id, amount, tip")
+      .select("order_id, session_id, amount, tip")
       .eq("restaurant_id", restaurantId)
       .in("session_id", sessions),
   ]);
 
   const settled = (settledRes.data ?? []).map(o => ({
     id: o.id as string,
+    session: o.session_id as string,
     total: Number(o.total),
   }));
   const payments: Paid[] = (paidRes.data ?? []).map(p => ({
     order_id: (p.order_id as string | null) ?? null,
+    session: p.session_id as string,
     amount: Number(p.amount),
     tip: Number(p.tip ?? 0),
   }));
@@ -150,15 +162,43 @@ export async function tableOutstanding(
     ownPaid.set(p.order_id, (ownPaid.get(p.order_id) ?? 0) + p.amount);
   }
 
-  const sittingPaid = payments.filter(p => !p.order_id);
-  const credit = creditFor(sittingPaid, settled, ownPaid);
-  const tips = round2(sittingPaid.reduce((sum, p) => sum + p.tip, 0));
+  // Everything per sitting, because that is what a payment belongs to. The
+  // table's own numbers are then the sum of its sittings' rather than a second
+  // calculation that can disagree with them — and one that did: a sitting's
+  // whole history of payments was set against what it still owed, so a sitting
+  // that had already closed one bill looked as though it owed nothing on the
+  // next, and a collection for it was recorded nowhere at all.
+  const unpaidOn = new Map<string, number>();
+  for (const o of owed) {
+    if (!o.session_id) continue;
+    unpaidOn.set(o.session_id, round2((unpaidOn.get(o.session_id) ?? 0) + Number(o.total)));
+  }
+
+  const sittings: Owes[] = [];
+  let collected = 0;
+  for (const id of sessions) {
+    const credit = creditFor(
+      payments.filter(p => !p.order_id && p.session === id),
+      settled.filter(o => o.session === id),
+      ownPaid,
+    );
+    collected = round2(collected + credit);
+    const unpaid = unpaidOn.get(id) ?? 0;
+    // Kept even at zero: it is a sitting this table owes on, and `shareOut`
+    // needs the ones with nothing left as much as the ones with something.
+    if (unpaid > 0) sittings.push({ id, owed: Math.max(0, round2(unpaid - credit)) });
+  }
+
+  const tips = round2(
+    payments.filter(p => !p.order_id).reduce((sum, p) => sum + p.tip, 0),
+  );
 
   return {
     orders: owed,
     ordered,
-    collected: credit,
+    collected,
     tips,
-    owed: stillOwed(owed, [{ amount: credit, tip: 0 }]),
+    owed: round2(sittings.reduce((sum, x) => sum + x.owed, 0)),
+    sittings,
   };
 }

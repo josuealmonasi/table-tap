@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { round2 } from "@/lib/money";
-import { applyPayment, billTotal, isSettled, stillOwed, suggestEqual } from "@/lib/table-balance";
+import {
+  applyPayment,
+  billTotal,
+  isSettled,
+  shareOut,
+  stillOwed,
+  suggestEqual,
+} from "@/lib/table-balance";
 
 describe("what a table still owes", () => {
   it("is what the orders come to, less what has been paid", () => {
@@ -97,5 +104,55 @@ describe("a gratuity lands on the order without moving the balance", () => {
     // order is 215 and 100 of food is still to come.
     const order = { total: 215 };
     expect(stillOwed([order], [{ amount: 115, tip: 15 }])).toBe(100);
+  });
+});
+
+describe("a collection spread across the sittings it pays for", () => {
+  it("is one share when the table has one sitting", () => {
+    expect(shareOut(100, [{ id: "a", owed: 100 }])).toEqual([{ id: "a", amount: 100 }]);
+  });
+
+  it("fills the oldest first", () => {
+    // The live table this was found on: an old sitting owing 252.74 that had
+    // expired, a new one owing 6.05, and 258.79 handed over for both.
+    expect(
+      shareOut(258.79, [{ id: "old", owed: 252.74 }, { id: "new", owed: 6.05 }]),
+    ).toEqual([{ id: "old", amount: 252.74 }, { id: "new", amount: 6.05 }]);
+  });
+
+  it("stops when the money runs out", () => {
+    expect(
+      shareOut(100, [{ id: "old", owed: 60 }, { id: "new", owed: 90 }]),
+    ).toEqual([{ id: "old", amount: 60 }, { id: "new", amount: 40 }]);
+  });
+
+  it("leaves a sitting that gets nothing out of it", () => {
+    // A payment of nothing is not a payment.
+    expect(
+      shareOut(60, [{ id: "old", owed: 60 }, { id: "new", owed: 90 }]),
+    ).toEqual([{ id: "old", amount: 60 }]);
+  });
+
+  it("puts the surplus on the first, where the tip is attributed", () => {
+    // 100 of food owed and 115 handed over: the extra 15 is the gratuity, and
+    // it belongs on the sitting whose order carries it.
+    expect(shareOut(115, [{ id: "a", owed: 100 }])).toEqual([{ id: "a", amount: 115 }]);
+  });
+
+  it("adds back up to what was collected", () => {
+    for (const [amount, owed] of [
+      [258.79, [252.74, 6.05]],
+      [10, [3.34, 3.33, 3.33]],
+      [99.99, [50, 49.99]],
+    ] as const) {
+      const shares = shareOut(amount, owed.map((o, i) => ({ id: String(i), owed: o })));
+      const sum = shares.reduce((s, x) => s + x.amount, 0);
+      expect(Math.abs(sum - amount)).toBeLessThan(0.005);
+    }
+  });
+
+  it("gives nothing away when there is nothing to pay for", () => {
+    expect(shareOut(50, [])).toEqual([]);
+    expect(shareOut(0, [{ id: "a", owed: 10 }])).toEqual([]);
   });
 });

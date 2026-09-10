@@ -12,8 +12,14 @@ import { newRef } from "@/lib/collection-ref";
 import CollectionAmount, { type Mode } from "./CollectionAmount";
 import type { Outstanding } from "@/lib/table-outstanding";
 
-/** The arithmetic half of an outstanding bill — the rows stay on the server. */
-type Balance = Omit<Outstanding, "orders">;
+/**
+ * The arithmetic half of an outstanding bill.
+ *
+ * The rows stay on the server, and so do the sitting ids: which sittings a
+ * table owes on is how the money is attributed, not something a screen has any
+ * use for.
+ */
+type Balance = Omit<Outstanding, "orders" | "sittings">;
 
 interface TableCalculatorProps {
   open: boolean;

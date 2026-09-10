@@ -267,6 +267,70 @@ try {
       : bad("a bill closed on a collection that covered part of it");
   }
 
+  // ── A table owing on two sittings ───────────────────────────────────────
+  //
+  // An old sitting expires with something still on it and the next party opens
+  // another. The waiter settles the table, which is both. Found on a live
+  // table: all of it was recorded against one sitting, leaving that one
+  // holding money it did not owe and the other marked paid with nothing
+  // behind it.
+  {
+    // Its own table. The cases above leave this one part-collected, and a
+    // third sitting in the mix measures something other than what is being
+    // asked here.
+    const { data: two } = await admin
+      .from("restaurant_tables").insert({ restaurant_id: home.id, label: `${MARK}-2` })
+      .select("id, label").maybeSingle();
+    const { data: stale } = await admin.from("table_sessions").insert({
+      restaurant_id: home.id, table_id: two.id,
+      closed_at: new Date().toISOString(), close_reason: "expired",
+    }).select("id").maybeSingle();
+    const { data: old } = await admin.from("orders").insert({
+      restaurant_id: home.id, table_id: two.id, table_label: two.label,
+      session_id: stale?.id ?? null, status: "received", paid: false,
+      subtotal: 40, service_fee: 0, tip: 0, tax_pct: 0, total: 40, currency: "MXN",
+      note: MARK,
+      items: [{ itemId: "x", name: "attack fixture", emoji: "x", price: 40, qty: 1, mods: {} }],
+    }).select("id").maybeSingle();
+    const { data: fresh } = await admin.from("table_sessions").insert({
+      restaurant_id: home.id, table_id: two.id,
+    }).select("id").maybeSingle();
+    const { data: recent } = await admin.from("orders").insert({
+      restaurant_id: home.id, table_id: two.id, table_label: two.label,
+      session_id: fresh?.id ?? null, status: "received", paid: false,
+      subtotal: 10, service_fee: 0, tip: 0, tax_pct: 0, total: 10, currency: "MXN",
+      note: MARK,
+      items: [{ itemId: "x", name: "attack fixture", emoji: "x", price: 10, qty: 1, mods: {} }],
+    }).select("id").maybeSingle();
+
+    // 50 of food across two sittings, and 5 of gratuity on top.
+    const res = await post("/api/table-payment/part",
+      { tableId: two.id, amount: 50, tip: 5, method: "cash", ref: `attack-two-${Date.now()}` },
+      who.waiter);
+
+    const money = async id => {
+      const { data } = await admin.from("payments").select("amount").eq("session_id", id);
+      return Number((data ?? []).reduce((s, p) => s + Number(p.amount), 0).toFixed(2));
+    };
+    const owed = async id => {
+      const { data } = await admin.from("orders").select("total").eq("session_id", id);
+      return Number((data ?? []).reduce((s, o) => s + Number(o.total), 0).toFixed(2));
+    };
+    const [oldGot, oldOwed, newGot, newOwed] = await Promise.all([
+      money(stale.id), owed(stale.id), money(fresh.id), owed(fresh.id),
+    ]);
+    // 40 of food plus the whole 5 of gratuity, which lands on the oldest order.
+    oldGot === oldOwed && newGot === newOwed && res.body.settled === true
+      ? ok("a collection is shared across the sittings it pays for")
+      : bad(`old owed ${oldOwed} got ${oldGot}, new owed ${newOwed} got ${newGot}`);
+
+    // Tidy: the money, then the orders, then the sittings and the table.
+    await admin.from("payments").delete().in("session_id", [stale.id, fresh.id]);
+    await admin.from("orders").delete().in("id", [old?.id, recent?.id].filter(Boolean));
+    await admin.from("table_sessions").delete().in("id", [stale.id, fresh.id]);
+    await admin.from("restaurant_tables").delete().eq("id", two.id);
+  }
+
   // ── A bill the waiter opened is not payable online ──────────────────────
   {
     await admin.from("table_sessions")

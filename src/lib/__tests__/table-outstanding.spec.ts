@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { creditFor } from "@/lib/table-outstanding";
 
-const paid = (amount: number, tip = 0) => ({ order_id: null, amount, tip });
+const paid = (amount: number, tip = 0) => ({ order_id: null, session: "s1", amount, tip });
 
 /**
  * How much of a sitting's money is still available to pay for what is left.
