@@ -152,8 +152,6 @@ export default function TableOrderScreen({
     }
   }
 
-  const table = tables.find(x => x.id === tableId);
-
   return (
     <ConfirmProvider>
       <div className="tt-dash">

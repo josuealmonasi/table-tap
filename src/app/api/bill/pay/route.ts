@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import Stripe from "stripe";
 import { apiError } from "@/lib/api-error";
 import { billWindowStart } from "@/lib/table-bill";
+import { staffOpenedBill } from "@/lib/table-session";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { orderFeeCents } from "@/lib/plan";
@@ -47,6 +48,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     };
   if (!restaurantId || !tableId || !Array.isArray(orderIds) || orderIds.length === 0) {
     return await apiError("apiErr.invalidRequest", 400);
+  }
+
+  // A bill a waiter opened is settled with the waiter. They are standing at
+  // the table with a machine and a running balance, and a card charged here at
+  // the same moment pays for food they are about to collect for — the table
+  // pays twice and only one of the two payments is anywhere anybody is looking.
+  if (await staffOpenedBill(restaurantId, tableId)) {
+    return await apiError("apiErr.waiterSettles", 409);
   }
 
   const db = createAdminClient();

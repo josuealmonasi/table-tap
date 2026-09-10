@@ -1065,6 +1065,10 @@ describe("money is rounded in one place", () => {
 describe("every route that settles an order records the payment", () => {
   const SETTLES = [
     ["src/app/api/table-payment/route.ts", "the till stopped recording what it took"],
+    // Every centavo here is recorded as it is collected; the pass that marks
+    // the orders paid at the end deliberately records nothing, because the
+    // money is already in the ledger under its own collection.
+    ["src/app/api/table-payment/part/route.ts", "a bill settled in parts records none of it"],
     ["src/lib/checkout-settle.ts", "a card payment is no longer written to the ledger"],
     ["src/app/api/pos/order/route.ts", "a counter sale is no longer written to the ledger"],
   ] as const;

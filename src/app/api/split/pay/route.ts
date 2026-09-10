@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { apiError } from "@/lib/api-error";
+import { staffOpenedBill } from "@/lib/table-session";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchTableBill } from "@/lib/bill-data";
@@ -35,6 +36,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     };
   if (!splitId || !sessionId || !diner || !restaurantId || !tableId) {
     return await apiError("apiErr.invalidRequest", 400);
+  }
+  // The same refusal the bill screen makes, made where it counts: a share
+  // charged here is money the waiter's running balance never sees.
+  if (await staffOpenedBill(restaurantId, tableId)) {
+    return await apiError("apiErr.waiterSettles", 409);
   }
 
   const db = createAdminClient();

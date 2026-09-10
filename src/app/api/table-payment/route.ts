@@ -5,7 +5,8 @@ import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
-import { recordPayments } from "@/lib/payments";
+import { recordPayment, recordPayments } from "@/lib/payments";
+import { tableOutstanding } from "@/lib/table-outstanding";
 
 export const runtime = "nodejs";
 
@@ -44,6 +45,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const db = createAdminClient();
 
+  // What this table has already handed over in parts, read before anything is
+  // marked paid. A bill the waiter collected MX$100 of ten minutes ago is
+  // MX$100 lighter than the orders on it say, and recording those orders at
+  // their full totals would put money in the day's takings that arrived once
+  // and was counted twice.
+  const already = tableId ? await tableOutstanding(actor.restaurantId, tableId) : null;
+
   // Scoped by the actor's restaurant, so a table id from elsewhere matches
   // nothing. Only what is genuinely outstanding is touched: an order already
   // paid must not be quietly rewritten.
@@ -66,16 +74,34 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!updated?.length) return await apiError("apiErr.nothingToSettle", 409);
 
   // The ledger, in the same breath as the boolean.
-  await recordPayments(
-    updated.map(o => ({
+  //
+  // Nothing collected in parts, which is the ordinary case: each order is
+  // recorded for what it came to. Otherwise only the remainder is, against the
+  // sitting — `owed` is what the table still owes for its food, and every
+  // centavo before it is already in the ledger under its own collection.
+  const partly = (already?.collected ?? 0) > 0;
+  const collectedNow = partly ? already!.owed : total(updated);
+
+  if (partly) {
+    await recordPayment({
       restaurantId: actor.restaurantId,
-      orderId: o.id,
-      sessionId: o.session_id,
-      amount: Number(o.total),
+      sessionId: updated[0].session_id,
+      amount: collectedNow,
       method: settlement as "card" | "cash",
       actorEmail: actor.email,
-    })),
-  );
+    });
+  } else {
+    await recordPayments(
+      updated.map(o => ({
+        restaurantId: actor.restaurantId,
+        orderId: o.id,
+        sessionId: o.session_id,
+        amount: Number(o.total),
+        method: settlement as "card" | "cash",
+        actorEmail: actor.email,
+      })),
+    );
+  }
 
   // Money moved without a card, so it is worth being able to ask about later.
   await logEvent({
@@ -86,7 +112,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     detail: logDetail({
       table: updated[0].table_label,
       orders: updated.length,
-      amount: updated.reduce((sum, o) => sum + Number(o.total), 0).toFixed(2),
+      amount: collectedNow.toFixed(2),
       method: settlement,
     }),
   });
@@ -105,4 +131,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .eq("status", "open");
 
   return NextResponse.json({ ok: true, orders: updated.length });
+}
+
+/** What a set of orders came to, gratuities included — they were collected too. */
+function total(orders: { total: number | string }[]): number {
+  return Number(orders.reduce((sum, o) => sum + Number(o.total), 0).toFixed(2));
 }

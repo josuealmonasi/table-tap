@@ -143,7 +143,10 @@ export async function POST(req: NextRequest) {
   // Joins the sitting already open at this table, or opens one. Two waiters
   // adding to the same table land on the same bill, which is what the diners
   // sitting there would expect.
-  const sessionId = await openSession(actor.restaurantId, table.id as string);
+  // Named, because opening the bill is what makes it the waiter's to settle:
+  // the diners can watch it and add to it, and pay the person in front of them
+  // rather than a card field on their phone.
+  const sessionId = await openSession(actor.restaurantId, table.id as string, actor.email);
 
   const { data: order, error } = await db
     .from("orders")

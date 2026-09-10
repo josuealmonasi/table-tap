@@ -13,10 +13,28 @@ import type { DashboardRole } from "@/lib/nav";
  * acts on carry nothing at all.
  */
 export interface BadgeCounts {
-  /** Orders the kitchen or the floor still has to move along. */
-  orders: number;
+  /** Tickets the kitchen has not finished: received and preparing. */
+  cooking: number;
+  /** Food on the pass, cooked, waiting for somebody to carry it out. */
+  ready: number;
   /** Requests only a manager or owner can decide. */
   approvals: number;
+}
+
+/**
+ * Which orders are this person's to move.
+ *
+ * The board's two jobs meet at `ready`: it is the end of the kitchen's and the
+ * start of the floor's. Counting both for everybody told a waiter a number
+ * they could do nothing about, and told the kitchen their own finished plate
+ * was still outstanding — while the one thing the waiter actually had to do,
+ * carry it out, was in neither number.
+ */
+function ordersFor(role: DashboardRole, counts: BadgeCounts): number {
+  if (role === "kitchen") return counts.cooking;
+  if (role === "waiter" || role === "cashier") return counts.ready;
+  // Owner and manager cover either job, and on a quiet night do both.
+  return counts.cooking + counts.ready;
 }
 
 export const BADGE_MAX = 99;
@@ -33,11 +51,10 @@ export function badgesFor(
 ): Record<string, number> {
   const out: Record<string, number> = {};
 
-  // Everybody who works a service sees what is still cooking or waiting to go
-  // out. The platform admin does not work one.
-  if (role !== "admin" && counts.orders > 0) {
-    out["/dashboard/orders"] = counts.orders;
-  }
+  // Everybody who works a service sees their own half of the board. The
+  // platform admin does not work one.
+  const orders = role === "admin" ? 0 : ordersFor(role, counts);
+  if (orders > 0) out["/dashboard/orders"] = orders;
 
   // Only the people who can answer them.
   if ((role === "owner" || role === "manager") && counts.approvals > 0) {

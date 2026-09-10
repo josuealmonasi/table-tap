@@ -19,8 +19,15 @@ export function useTableBill(
   tableId: string | null,
   /** True while the diner is looking at the bill, which is when it must be live. */
   watching = false,
-): { bill: TableBill | null; loading: boolean; reload: () => void } {
+): {
+  bill: TableBill | null;
+  loading: boolean;
+  reload: () => void;
+  /** A waiter opened this bill and is settling it in person. */
+  staffBill: boolean;
+} {
   const [orders, setOrders] = useState<Order[] | null>(null);
+  const [staffBill, setStaffBill] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const reload = useCallback(() => {
@@ -31,7 +38,10 @@ export function useTableBill(
     const mine = sitting?.tableId === tableId ? `&sessionId=${sitting.sessionId}` : "";
     fetch(`/api/bill?restaurantId=${restaurantId}&tableId=${tableId}${mine}`)
       .then(r => (r.ok ? r.json() : { orders: [] }))
-      .then(d => setOrders(d.orders ?? []))
+      .then(d => {
+        setOrders(d.orders ?? []);
+        setStaffBill(Boolean(d.staffBill));
+      })
       .catch(() => setOrders([]))
       .finally(() => setLoading(false));
   }, [restaurantId, tableId]);
@@ -63,5 +73,6 @@ export function useTableBill(
     bill: orders ? tableBill(orders, myOrderIds(restaurantId)) : null,
     loading,
     reload,
+    staffBill,
   };
 }

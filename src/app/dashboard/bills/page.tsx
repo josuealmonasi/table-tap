@@ -4,7 +4,7 @@ import { requireSettles } from "@/lib/page-guard";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import BillsPanel from "@/components/dashboard/BillsPanel";
 import UserLogs from "@/components/dashboard/staff/UserLogs";
-import { openBills, withSplits } from "@/lib/open-bills";
+import { openBills, withCollected, withSplits } from "@/lib/open-bills";
 import { currentUser } from "@/lib/current-user";
 import { startOfLocalDay } from "@/lib/day-window";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
@@ -100,21 +100,41 @@ export default async function BillsPage() {
     shares: number;
     bill_split_claims: { paid_at: string | null; amount: number }[] | null;
   };
-  const splits = ((liveSplits ?? []) as unknown as LiveSplit[]).map(s => {
-    const claims = s.bill_split_claims ?? [];
-    const settled = claims.filter(c => c.paid_at);
-    return {
-      session_id: s.session_id,
-      shares: s.shares,
-      paidShares: settled.length,
-      collected: settled.reduce((sum, c) => sum + Number(c.amount), 0),
-    };
-  });
+  const splits = ((liveSplits ?? []) as unknown as LiveSplit[]).map(s => ({
+    session_id: s.session_id,
+    shares: s.shares,
+    paidShares: (s.bill_split_claims ?? []).filter(c => c.paid_at).length,
+  }));
+
+  // What each of those sittings has already handed over, from the ledger: a
+  // share of a divided bill and a waiter's collection at the table are the
+  // same money as far as this board is concerned, and both leave every order
+  // reading as unpaid until the bill closes. `order_id is null` is what makes
+  // it the sitting's rather than one order's — an order-level payment left
+  // with the order it settled.
+  const sittings = [...new Set(sessionOf.values())];
+  const { data: parts } = sittings.length
+    ? await db
+        .from("payments")
+        .select("session_id, amount")
+        .eq("restaurant_id", r.id)
+        .in("session_id", sittings)
+        .is("order_id", null)
+    : { data: null };
+  const collected = new Map<string, number>();
+  for (const p of parts ?? []) {
+    const key = p.session_id as string;
+    collected.set(key, (collected.get(key) ?? 0) + Number(p.amount));
+  }
 
   return (
     <ConfirmProvider>
       <BillsPanel
-        bills={withSplits(openBills(rows as Order[]), splits, sessionOf)}
+        bills={withCollected(
+          withSplits(openBills(rows as Order[]), splits, sessionOf),
+          collected,
+          sessionOf,
+        )}
         requests={MANAGES(membership.role) ? (requests ?? []) : []}
         writeOffs={MANAGES(membership.role) ? (writeOffs ?? []) : []}
         currency={r.currency}

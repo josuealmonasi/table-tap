@@ -92,7 +92,7 @@ the simpler one.
 **Run the whole gate, every time:**
 
 ```bash
-pnpm test && pnpm api && pnpm rls && pnpm roles && pnpm smoke && pnpm layout && pnpm promises && pnpm money
+pnpm test && pnpm api && pnpm rls && pnpm roles && pnpm smoke && pnpm layout && pnpm promises && pnpm money && pnpm attack
 ```
 
 `pnpm money` reconciles the `payments` ledger against `orders.paid`. They are
@@ -116,6 +116,14 @@ almost every bug this app has had.
 and checks each one does its job — the other checks only ever proved that a
 route was *guarded*, not that it *worked*, and that gap is where the bugs came
 through. Any of them takes `:prod` to run against the deployed site.
+
+`pnpm attack` is the other half of that: what somebody who IS signed in can do
+that they should not. Another restaurant's table, a kitchen login collecting
+cash, the same collection sent twice, a tip with six noughts on it. Every case
+is judged on EFFECT — the ledger counted before and after with the secret key —
+because a write RLS filters to zero rows returns no error at all, and reading
+that as "allowed" once reported four tables as wide open that were all fine. It
+found two real money bugs the day it was written.
 
 If a page misbehaves and the source looks right, run `pnpm dev:fresh` before
 debugging: it stops the old server — including the `pnpm dev` parent that

@@ -10,6 +10,21 @@ import { createClient } from "@supabase/supabase-js";
 
 export const MARK = "apicheck";
 
+/**
+ * What the part-payment case collects, in one place.
+ *
+ * Small, so the bill it is taken from stays open for the cases after it, and
+ * an odd amount nobody would collect by hand, so teardown can find the line it
+ * wrote in the log and take that away with the money.
+ */
+export const PART_AMOUNT = 1.23;
+
+/** The gratuity that rides with it, so the tip path is exercised too. */
+export const PART_TIP = 0.45;
+
+/** What the ledger and the log both call that collection. */
+const PART_TOTAL = (PART_AMOUNT + PART_TIP).toFixed(2);
+
 export async function setup(env, base) {
   const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY);
   const ref = new URL(env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0];
@@ -82,6 +97,23 @@ export async function setup(env, base) {
 export async function teardown(fx) {
   const { admin, restaurant } = fx;
   await admin.from("dish_ratings").delete().in("order_id", [fx.paidOrder, fx.unpaidOrder]);
+  // A collection made in parts belongs to no order, so deleting the orders
+  // leaves it behind — on the table's own sitting, quietly making the table's
+  // bill a peso lighter every time the suite runs, until the table reads as
+  // settled and the case that collects has nothing to collect. It is found by
+  // the reference the test stamped on it.
+  //
+  // Its log line goes with it: the two are one record of one payment and
+  // `pnpm money` compares them, so removing the money and leaving the line
+  // says a waiter took cash the ledger never saw. Matched narrowly — only the
+  // calculator writes `collected`, and only this suite collects that amount
+  // from the demo restaurant. Nothing else is touched: every other payment the
+  // suite makes keeps both of its records, exactly as it always has.
+  await admin.from("payments")
+    .delete().eq("restaurant_id", restaurant.id).like("client_ref", `${MARK}%`);
+  await admin.from("user_logs").delete()
+    .eq("restaurant_id", restaurant.id).eq("entity", "bill").eq("action", "collected")
+    .like("detail", `%amount=${PART_TOTAL} method=cash%`);
   await admin.from("orders").delete().eq("note", MARK);
   await admin.from("coupons").delete().eq("restaurant_id", restaurant.id).like("code", "API-%");
   // The waiter request the test creates carries a table. The filter said

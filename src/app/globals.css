@@ -1940,6 +1940,20 @@ a.tt-btn {
   margin-top: 18px;
 }
 
+/* The waiter's calculator: what the table ordered, what is in, what is left. */
+.tt-calc-figures {
+  margin-bottom: 16px;
+}
+/* The three answers to "how much are they paying?", as one set of options.
+   Same pills as the tip chips, which is what they are — a row of choices — so
+   they inherit that shape rather than growing a second one beside it. */
+.tt-calc-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
 /* A waiter is coming: a settled state, not another thing to press. */
 .tt-bill-called {
   margin-top: 16px;
@@ -3895,11 +3909,20 @@ a.tt-btn {
   flex-wrap: wrap;
   gap: 8px 12px;
   background: var(--tt-white);
-  border-left: 4px solid var(--tt-gold);
   border-radius: 12px;
   padding: 10px 14px;
   font-size: 14px;
+  /* The shorthand FIRST. It was written under the left rail, which resets all
+     four sides — so the gold edge that says "somebody has their hand up" was
+     never drawn, on any chip, since the bar shipped. */
   border: 1px solid var(--tt-line);
+  border-left: 4px solid var(--tt-gold);
+}
+/* Cooked and waiting on the pass. A different edge from a raised hand: one is
+   a person asking and the other is a plate going cold, and a waiter reading
+   the bar at a glance has to tell them apart without reading it. */
+.tt-request-ready {
+  border-left-color: var(--tt-success);
 }
 /* The counterpart of the label rule on .tt-btn: the button here can still be
    squeezed narrower than its own label, and now that the label will not fold to

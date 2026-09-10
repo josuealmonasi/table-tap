@@ -194,17 +194,27 @@ export default function BillsPanel({
               <span className="tt-bill-who"> · {bill.customerName}</span>
             )}
           </strong>
-          {bill.split && (
-            /* Said on the row itself, not behind a tap: the number beside it is
-               what the table still owes, and a waiter about to take cash needs
-               to know part of it is already paid. */
+          {/* Said on the row itself, not behind a tap: the number beside it is
+              what the table's orders came to, and a waiter about to take cash
+              needs to know part of it is already in. A divided bill says how
+              far round the table it has got; a bill the waiter has been
+              collecting in parts just says how much. */}
+          {bill.split ? (
             <span className="tt-badge tt-bill-split">
               {t("dash.splitting", {
                 paid: bill.split.paidShares,
                 of: bill.split.shares,
-                amount: formatMoney(bill.split.collected, currency),
+                amount: formatMoney(bill.collected ?? 0, currency),
               })}
             </span>
+          ) : (
+            (bill.collected ?? 0) > 0 && (
+              <span className="tt-badge tt-bill-split">
+                {t("dash.partlyPaid", {
+                  amount: formatMoney(bill.collected ?? 0, currency),
+                })}
+              </span>
+            )
           )}
           <span className="tt-muted tt-bill-sub">
             {t(
@@ -410,6 +420,12 @@ export default function BillsPanel({
           canApprove={canApprove}
           onClose={() => setSettling(null)}
           onSettled={() => router.refresh()}
+          // The same promotion dialog the row opens, reached without leaving
+          // the table: one dialog at a time, so collecting steps aside for it.
+          onDiscount={() => {
+            setChosen(settling);
+            setSettling(null);
+          }}
         />
       )}
       {chosen && (

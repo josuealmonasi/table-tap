@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { fetchTableBill } from "@/lib/bill-data";
+import { staffOpenedBill } from "@/lib/table-session";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +23,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const orders = await fetchTableBill(restaurantId, tableId, "diner", sessionId);
-    return NextResponse.json({ orders });
+    // `staffBill` is what the sheet needs to stop offering a card: a waiter
+    // opened this bill and is settling it in person. The routes that charge
+    // refuse it as well — this only keeps the screen from promising something
+    // the system will turn down.
+    const [orders, staffBill] = await Promise.all([
+      fetchTableBill(restaurantId, tableId, "diner", sessionId),
+      staffOpenedBill(restaurantId, tableId),
+    ]);
+    return NextResponse.json({ orders, staffBill });
   } catch {
     return await apiError("apiErr.ordersLoad", 500);
   }

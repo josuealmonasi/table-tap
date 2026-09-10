@@ -59,8 +59,13 @@ export default function UserLogs({ restaurantId, currency }: UserLogsProps) {
     if (fields.amount) parts.push(formatMoney(Number(fields.amount), currency));
     if (fields.method) parts.push(t(`dash.pay${fields.method}`));
     if (fields.order) parts.push(`#${fields.order}`);
+    // What a part-payment left behind, so the line says how much of the bill
+    // this was rather than just how much changed hands.
+    if (fields.left) {
+      parts.push(t("dash.logLeft", { amount: formatMoney(Number(fields.left), currency) }));
+    }
     for (const [key, value] of Object.entries(fields)) {
-      if (!["table", "code", "orders", "amount", "method", "order"].includes(key)) {
+      if (!["table", "code", "orders", "amount", "method", "order", "left"].includes(key)) {
         parts.push(`${key}: ${value}`);
       }
     }

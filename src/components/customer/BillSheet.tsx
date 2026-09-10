@@ -36,6 +36,16 @@ interface BillSheetProps {
   /** The sitting this phone is bound to; without one there is no table to
    *  divide a bill with. */
   sessionId?: string | null;
+  /**
+   * A waiter opened this bill and is settling it in person.
+   *
+   * The diners can watch what has been ordered and add to it; the money goes
+   * to the person standing in front of them. So no card field and no dividing
+   * it here — the waiter has a calculator that does the same job, and the
+   * routes refuse a charge anyway. Offering a button the system turns down is
+   * worse than not offering it.
+   */
+  staffBill?: boolean;
 }
 
 /** One dish on the bill, laid out like a cart line but not editable. */
@@ -169,6 +179,7 @@ export default function BillSheet({
   tableId,
   tableLabel,
   photoOf,
+  staffBill = false,
 }: BillSheetProps) {
   const t = useT();
   const currency = restaurant.currency;
@@ -337,8 +348,11 @@ export default function BillSheet({
           />
 
           {/* Dividing it evenly is a decision about the whole bill, so it is
-              asked before the smaller question of whose dishes to pay for. */}
-          <SplitBillCard
+              asked before the smaller question of whose dishes to pay for.
+              Not on a bill the waiter is settling: they are standing there
+              with a calculator that divides it, and two of us collecting the
+              same bill is how a table pays twice. */}
+          {!staffBill && <SplitBillCard
             split={split}
             diner={diner}
             busy={splitBusy || busy}
@@ -348,7 +362,7 @@ export default function BillSheet({
             join={join}
             cancel={cancelSplit}
             onPay={payShare}
-          />
+          />}
 
           {/* Paying for the table or only for yourself changes what the totals
               below are counting, so it sits above them. */}
@@ -374,7 +388,7 @@ export default function BillSheet({
           {/* Everything below settles the WHOLE bill, which is not what this
               phone owes any more once the table has divided it. Two ways to
               pay, disagreeing about the amount, is how somebody pays twice. */}
-          {!splitLocked && !alreadyDiscounted && (
+          {!splitLocked && !alreadyDiscounted && !staffBill && (
             <div className="tt-coupon-row">
               <CouponBox
                 restaurantId={restaurant.id}
@@ -386,7 +400,11 @@ export default function BillSheet({
             </div>
           )}
 
-          {!splitLocked && (
+          {/* Neither the code nor the tip does anything on a bill the waiter
+              is collecting: both are theirs to take at the table, on the same
+              screen they take the money on. A field that changes no number is
+              a promise the system will not keep. */}
+          {!splitLocked && !staffBill && (
           <div style={{ marginTop: 16 }}>
             <TipPicker
               currency={currency}
@@ -427,22 +445,32 @@ export default function BillSheet({
             </div>
           ) : (
             <div className="tt-bill-actions">
+              {/* A bill the waiter opened is settled with the waiter. Said
+                  plainly, with the one button that does anything, rather than
+                  a card field that would be refused after they had typed
+                  their number in. */}
+              {staffBill ? (
+                <p className="tt-muted tt-subline" style={{ fontSize: 13, marginTop: 0 }}>
+                  {t("bill.waiterSettles")}
+                </p>
+              ) : (
+                <button
+                  className="tt-btn tt-btn-primary tt-btn-lg"
+                  style={{ width: "100%" }}
+                  disabled={busy}
+                  onClick={payOnline}
+                >
+                  {/* The pair of buttons is a choice between two ways to
+                      settle, so each one names its way: online, or with whoever
+                      is serving. The amount is on the total line directly
+                      above, and repeating it here made the buttons read as
+                      "pay" versus something else. */}
+                  {busy ? t("cart.redirecting") : t("bill.payNow")}
+                </button>
+              )}
               <button
-                className="tt-btn tt-btn-primary tt-btn-lg"
-                style={{ width: "100%" }}
-                disabled={busy}
-                onClick={payOnline}
-              >
-                {/* The pair of buttons is a choice between two ways to
-                    settle, so each one names its way: online, or with whoever
-                    is serving. The amount is on the total line directly
-                    above, and repeating it here made the buttons read as
-                    "pay" versus something else. */}
-                {busy ? t("cart.redirecting") : t("bill.payNow")}
-              </button>
-              <button
-                className="tt-btn tt-btn-ghost tt-btn-lg"
-                style={{ width: "100%", marginTop: 8 }}
+                className={`tt-btn tt-btn-lg ${staffBill ? "tt-btn-primary" : "tt-btn-ghost"}`}
+                style={{ width: "100%", marginTop: staffBill ? 0 : 8 }}
                 disabled={busy}
                 onClick={payAtTable}
               >

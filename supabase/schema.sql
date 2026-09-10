@@ -1659,6 +1659,16 @@ create table if not exists table_sessions (
   -- outlived the longest sitting anybody has.
   close_reason  text check (close_reason in ('paid', 'settled', 'written_off', 'expired'))
 );
+
+-- Who opened this sitting: a member of staff, by email, or nobody.
+--
+-- A waiter who seats a party and takes their order owns the bill. The diners
+-- can scan the table, see what has been ordered and add to it, but the money
+-- is settled with the person standing in front of them — so the bill screen
+-- offers to call them rather than a card field, and the routes that charge a
+-- card refuse. Two people collecting the same bill through different doors is
+-- how a table pays twice.
+alter table table_sessions add column if not exists opened_by text;
 -- One open sitting per table, enforced by the database rather than by whoever
 -- got there first: two diners ordering at the same moment must land in the
 -- same session or they cannot see each other's food on the bill.
@@ -1685,10 +1695,17 @@ create index if not exists orders_session_idx on orders(session_id);
 -- cannot touch this table, and the decision has to be atomic. The unique index
 -- above is what makes the race safe — the loser of an insert re-reads the
 -- winner's row instead of failing.
+-- The three-argument version, replaced by the one below. Named exactly, so
+-- re-running this file drops nothing that is still wanted.
+drop function if exists public.open_table_session(uuid, uuid, int);
+
 create or replace function public.open_table_session(
   p_restaurant uuid,
   p_table uuid,
-  p_max_hours int
+  p_max_hours int,
+  -- Set only when this call CREATES the sitting. A waiter adding a round to a
+  -- table the diners opened themselves has not taken their bill off them.
+  p_opened_by text default null
 ) returns uuid language plpgsql security definer set search_path = public as $$
 declare v_id uuid;
 begin
@@ -1709,8 +1726,8 @@ begin
    limit 1;
 
   if v_id is null then
-    insert into table_sessions (restaurant_id, table_id)
-    values (p_restaurant, p_table)
+    insert into table_sessions (restaurant_id, table_id, opened_by)
+    values (p_restaurant, p_table, p_opened_by)
     on conflict do nothing
     returning id into v_id;
 
@@ -1724,9 +1741,9 @@ begin
 
   return v_id;
 end; $$;
-revoke all on function public.open_table_session(uuid, uuid, int)
+revoke all on function public.open_table_session(uuid, uuid, int, text)
   from public, anon, authenticated;
-grant execute on function public.open_table_session(uuid, uuid, int) to service_role;
+grant execute on function public.open_table_session(uuid, uuid, int, text) to service_role;
 
 -- Closes a sitting once nothing on it is owed. Called after every way money
 -- stops being outstanding: a card, cash at the table, or a debt written off.
@@ -2077,6 +2094,19 @@ create index if not exists payments_restaurant_idx
 create index if not exists payments_order_idx on payments(order_id);
 create index if not exists payments_session_idx on payments(session_id);
 
+-- How much of this payment was a gratuity.
+--
+-- Attribution is unchanged: the tip lands on the order, accumulating, exactly
+-- as settling a whole table already does, and the balance a waiter collects
+-- against is simply what the orders come to less what has been paid — a tip is
+-- on both sides of that and never moves it.
+--
+-- This is for the takings. A cashier counting a drawer and an owner reading
+-- the day want the gratuities separated from the food, and `amount` alone
+-- cannot say which part of MX$115 was which.
+alter table payments add column if not exists tip numeric not null default 0
+  check (tip >= 0);
+
 -- One Stripe payment settles one order, once.
 --
 -- Stripe delivers a webhook again whenever it is not certain the first one
@@ -2093,6 +2123,24 @@ create index if not exists payments_session_idx on payments(session_id);
 create unique index if not exists payments_one_per_intent
   on payments (order_id, stripe_payment_intent)
   where order_id is not null and stripe_payment_intent is not null;
+
+-- One tap on a waiter's phone collects one payment, once.
+--
+-- The other half of the same problem, for money nobody's card is involved in.
+-- A waiter settling a bill in parts is standing on a restaurant floor with a
+-- phone: the button is tapped twice because the first tap seemed to do
+-- nothing, or the request is retried when the signal comes back. Either way a
+-- second MX$100 lands in the ledger, the bill reads as covered, and the table
+-- walks out owing money nobody can see any more.
+--
+-- The client stamps each collection with a reference of its own and reuses it
+-- for every retry of that one collection, so the database refuses the copy.
+-- Partial, because every payment the app has recorded until now has no
+-- reference at all and they must all stay allowed.
+alter table payments add column if not exists client_ref text;
+create unique index if not exists payments_one_per_ref
+  on payments (restaurant_id, client_ref)
+  where client_ref is not null;
 
 alter table payments enable row level security;
 
@@ -2133,7 +2181,19 @@ select o.restaurant_id, o.id, o.session_id, o.total,
   from orders o
  where o.paid
    and o.total > 0
-   and not exists (select 1 from payments p where p.order_id = o.id);
+   and not exists (select 1 from payments p where p.order_id = o.id)
+   -- An order settled as part of a TABLE has no payment of its own on purpose:
+   -- a share of a divided bill, or a waiter collecting the bill a hundred pesos
+   -- at a time, is money against the sitting. Inventing one here counts the
+   -- same pesos a second time — and this file runs on every deploy, so it would
+   -- do it to every such table on the next migration. It cost MX$98.78 on the
+   -- first table ever settled in parts, in development, where it was cheap.
+   and not exists (
+     select 1 from payments p
+      where p.order_id is null
+        and p.session_id is not null
+        and p.session_id = o.session_id
+   );
 
 -- ── Dividing a bill ─────────────────────────────────────────────────────────
 -- A table agreeing to pay the same amount each.

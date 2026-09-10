@@ -2,6 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { actingFrontOfHouse } from "@/lib/api-guard";
 import { fetchCounterBill, fetchTableBill } from "@/lib/bill-data";
+import { tableOutstanding } from "@/lib/table-outstanding";
+import { unpaidOrders } from "@/lib/table-bill";
+import { billTotal } from "@/lib/table-balance";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +20,11 @@ export const dynamic = "force-dynamic";
  *
  * Front of house only, and scoped to the caller's own restaurant, so the
  * table id is never enough on its own.
+ *
+ * `outstanding` comes back with it: what the table ordered, what has already
+ * been collected in parts, and what is left. A bill settled a hundred pesos at
+ * a time no longer adds up to the sum of its orders, and a dialog that worked
+ * that sum out for itself would ask for money already in the till.
  */
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const actor = await actingFrontOfHouse();
@@ -30,10 +38,32 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // A general-QR order hangs off no table, so it is asked for by itself. It is
     // scoped to the caller's restaurant just like the table: another business's
     // id finds nothing.
-    const orders = tableId
-      ? await fetchTableBill(actor.restaurantId, tableId, "staff")
-      : await fetchCounterBill(actor.restaurantId, orderId!);
-    return NextResponse.json({ orders });
+    if (tableId) {
+      const [orders, outstanding] = await Promise.all([
+        fetchTableBill(actor.restaurantId, tableId, "staff"),
+        tableOutstanding(actor.restaurantId, tableId),
+      ]);
+      // The rows themselves are already in `orders`, in the shape the bill
+      // screen wants; only the arithmetic goes back a second time.
+      return NextResponse.json({
+        orders,
+        outstanding: {
+          ordered: outstanding.ordered,
+          collected: outstanding.collected,
+          tips: outstanding.tips,
+          owed: outstanding.owed,
+        },
+      });
+    }
+
+    // A counter order is one order, collected on its own: nothing can have been
+    // taken against it in parts, so what is owed is simply what it came to.
+    const orders = await fetchCounterBill(actor.restaurantId, orderId!);
+    const ordered = billTotal(unpaidOrders(orders));
+    return NextResponse.json({
+      orders,
+      outstanding: { ordered, collected: 0, tips: 0, owed: ordered },
+    });
   } catch {
     return await apiError("apiErr.ordersLoad", 500);
   }
