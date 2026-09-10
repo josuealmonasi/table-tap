@@ -451,6 +451,16 @@ a.tt-btn {
   margin: 12px 0;
 }
 
+/* Whose food this is, above the totals that count it.
+   Space on BOTH sides, because what follows it varies: the coupon box, the tip
+   chips, or — on a bill the waiter is settling, where neither is offered — the
+   totals card itself, which carries no top margin of its own and sat flush
+   against these. A control row that depends on what comes after it is a row
+   that is right until something is hidden. */
+.tt-bill-scope {
+  margin: 14px 0 12px;
+}
+
 .tt-linkbtn {
   background: none;
   border: none;
