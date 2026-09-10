@@ -26,26 +26,63 @@ console.log(`\nMoney — ${prod ? "production" : "development"}\n`);
 
 const { data: orders, error: oErr } = await db
   .from("orders")
-  .select("id, restaurant_id, total, paid, written_off, status");
+  .select("id, restaurant_id, total, paid, written_off, status, session_id");
 if (oErr) { console.log(`  cannot read orders: ${oErr.message}`); process.exit(1); }
 
 const { data: payments, error: pErr } = await db
   .from("payments")
-  .select("id, order_id, amount");
+  .select("id, order_id, session_id, amount");
 if (pErr) { console.log(`  cannot read payments: ${pErr.message}`); process.exit(1); }
 
 const paidFor = new Map();
+/**
+ * Money that belongs to a sitting rather than to any one order.
+ *
+ * A share of a divided bill is the obvious case — a third of MX$100 across
+ * orders of 60 and 40 is an amount that belongs to neither — and a waiter
+ * taking part of a table's bill is the same thing. The orders it settles are
+ * marked paid together when the sitting is covered, and none of them carries a
+ * payment of its own.
+ *
+ * This used to be skipped outright, which meant the check below saw those
+ * orders as settled with no money behind them. It never fired, because no
+ * table had ever finished dividing a bill; the first one to do it would have
+ * failed the money gate for doing nothing wrong.
+ */
+const paidForSitting = new Map();
 for (const p of payments) {
-  if (!p.order_id) continue; // a share of a divided bill belongs to a sitting
-  paidFor.set(p.order_id, (paidFor.get(p.order_id) ?? 0) + Number(p.amount));
+  if (p.order_id) {
+    paidFor.set(p.order_id, (paidFor.get(p.order_id) ?? 0) + Number(p.amount));
+  } else if (p.session_id) {
+    paidForSitting.set(p.session_id, (paidForSitting.get(p.session_id) ?? 0) + Number(p.amount));
+  }
 }
 
-// 1. Every settled order has money behind it.
+// 1. Every settled order has money behind it — its own, or its sitting's.
 const settled = orders.filter(o => o.paid && !o.written_off && Number(o.total) > 0);
-const unbacked = settled.filter(o => !paidFor.has(o.id));
+const backed = o => paidFor.has(o.id) || (o.session_id && paidForSitting.has(o.session_id));
+const unbacked = settled.filter(o => !backed(o));
 unbacked.length === 0
   ? ok(`every settled order has a payment (${settled.length} checked)`)
   : bad(`${unbacked.length} settled order(s) with no payment: ${unbacked.slice(0, 3).map(o => o.id.slice(0, 8)).join(", ")}`);
+
+// 1b. And a sitting paid that way was paid in full: the orders it covers add
+// up to no more than the money against it. Per-order attribution cannot say
+// this, which is exactly why it has to be said here.
+const sittingOwed = new Map();
+for (const o of settled) {
+  if (!o.session_id || paidFor.has(o.id)) continue;
+  sittingOwed.set(o.session_id, (sittingOwed.get(o.session_id) ?? 0) + Number(o.total));
+}
+const shortSittings = [...sittingOwed.entries()].filter(
+  ([id, owed]) => (paidForSitting.get(id) ?? 0) + CENT < owed,
+);
+shortSittings.length === 0
+  ? ok(`every sitting settled as a whole is covered (${sittingOwed.size} checked)`)
+  : bad(
+      `${shortSittings.length} sitting(s) marked paid for more than was collected: ` +
+        shortSittings.slice(0, 3).map(([id, owed]) => `${id.slice(0, 8)} owed ${owed.toFixed(2)} got ${(paidForSitting.get(id) ?? 0).toFixed(2)}`).join("; "),
+    );
 
 // 2. And the right amount of it.
 const wrong = settled.filter(o => paidFor.has(o.id) && Math.abs(paidFor.get(o.id) - Number(o.total)) > CENT);

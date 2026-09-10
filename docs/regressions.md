@@ -480,6 +480,22 @@ passed; only opening the page in a browser showed it. `NAV_FEATURES` is read off
 the items now, so adding a tiered area is one edit rather than two, and a test
 fails if the two ever disagree.
 
+**The money gate would have failed the first table to divide its bill.** A share
+of a divided bill belongs to no single order — a third of MX$100 across orders of
+60 and 40 is an amount that belongs to neither — so the split records it against
+the sitting, and marks the orders paid together when the pot is full. `money`
+skipped payments with no `order_id` outright and then reported those orders as
+settled with no money behind them. It never fired because no split has ever
+completed; the first table to finish one would have failed the gate for doing
+exactly what the design intends. Reproduced by building the shape a completed
+split leaves behind.
+
+The check now follows the model instead of fighting it: an order is backed by
+its own payment OR by its sitting's, and a new check says the thing per-order
+attribution never could — that a sitting settled as a whole collected at least
+what its orders came to. Proved both ways: 50 + 50 against 100 passes, 50 + 30
+names the sitting and the shortfall.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`
