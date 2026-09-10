@@ -417,6 +417,23 @@ restaurant's plan permits; "50 tables" is enough to read a competitor's tier off
 the answer. Revoked, and the trigger still enforces — proved by overfilling a
 carta restaurant afterwards.
 
+**A clean checkout failed its own money gate.** `pnpm db:mock` seeded sixty
+days of takings and left the payments to the backfill in `schema.sql` — which
+names nobody, correctly, because it exists for orders settled before the ledger
+did and that history is genuinely unrecoverable. But the seeder keeps MAKING
+new history, and the backfill anonymised it, so `pnpm money` reported "cash
+payment(s) with nobody named" on a freshly seeded database. Intermittently, too:
+the check exempts everything before the first payment that does name someone, so
+whether it fired depended on where the random dates fell. A gate that fails on a
+clean checkout is a gate people learn to ignore — which is the one thing the
+money gate cannot afford.
+
+The seeder writes the ledger itself now, with a real cashier or waiter on every
+cash payment, and writes the matching `bill/paid` log beside it so the corte and
+the ledger are one fact recorded twice rather than two guesses. One hand-written
+demo log went with it: it claimed MX$412.00 of cash that no payment had ever
+backed. Proved by reseeding three times and reconciling on each.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`
