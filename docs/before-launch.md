@@ -95,6 +95,18 @@ storage, the money paths, injection, redirects, logging, headers and
 dependencies. Six findings, all fixed and guarded, written up in
 `docs/regressions.md`.
 
+A second deep sweep on 2026-09-10 went after concurrency, the security-definer
+functions and hostile input. It found three more (a tip that could make a sale
+cheaper, a NaN that crashed the money route, and a cross-tenant plan lookup) and
+confirmed sound: Realtime enforces RLS for signed-in users, all 19 SECURITY
+DEFINER functions pin `search_path`, `reserve_stock` locks its rows in a
+deterministic order, `redeem_coupon` increments atomically, and the two-person
+rule on discounts holds. One thing it noted and did not fix: an anonymous
+listener on Realtime receives **empty-payload** events for `orders`, so it
+learns that an order happened somewhere on the platform without learning
+anything about it — a timing side channel with no contents and no tenant
+identity.
+
 Two things it deliberately did NOT fix:
 
 - **A real Content-Security-Policy.** Only `frame-ancestors` is set. The

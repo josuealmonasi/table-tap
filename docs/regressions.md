@@ -393,6 +393,47 @@ returns no error, so "did it error?" reported four tables as wide open that
 were all fine; and an owner reading a profile that was not their staff's turned
 out to be reading their own. Both dissolved on measuring what actually changed.
 
+**A tip could make a sale cheaper.** `tipFor` multiplied the subtotal by the
+percentage it was given and clamped nothing. The diner's checkout was safe by
+accident of a different guard — it allow-lists 0/10/15/20 — but the till passed
+the request's number straight through, so `tipPct: -50` charged less than the
+food costs. The part that makes it worth more than a shrug: **the drawer still
+reconciles afterwards.** The order's own total was computed with the same
+negative number, so `orders.total` and `payments.amount` agree and `pnpm money`
+sees nothing wrong. A cashier undercharging a friend leaves no trace anywhere.
+Clamped in `tipFor` rather than at the caller, because the caller is exactly
+what was inconsistent — and `tipAmount` now rejects NaN and Infinity too.
+
+**NaN survives a clamp.** `Math.max(1, NaN)` is NaN and so is the `min`, so a
+cart line with `qty: "abc"` reached the insert as NaN and came back as a 500
+from Postgres — an unhandled crash on the route that takes money rather than a
+refusal. `clampQty` reads a line that is not a number as one.
+
+**A grant nobody needed answered a question nobody should ask.** `plan_ceiling`
+was executable by `authenticated`, and nothing in the app calls it from a
+browser — the trigger that uses it is SECURITY DEFINER and runs as its owner.
+What it did allow was a kitchen hand at one restaurant asking what ANOTHER
+restaurant's plan permits; "50 tables" is enough to read a competitor's tier off
+the answer. Revoked, and the trigger still enforces — proved by overfilling a
+carta restaurant afterwards.
+
+**A clean checkout failed its own money gate.** `pnpm db:mock` seeded sixty
+days of takings and left the payments to the backfill in `schema.sql` — which
+names nobody, correctly, because it exists for orders settled before the ledger
+did and that history is genuinely unrecoverable. But the seeder keeps MAKING
+new history, and the backfill anonymised it, so `pnpm money` reported "cash
+payment(s) with nobody named" on a freshly seeded database. Intermittently, too:
+the check exempts everything before the first payment that does name someone, so
+whether it fired depended on where the random dates fell. A gate that fails on a
+clean checkout is a gate people learn to ignore — which is the one thing the
+money gate cannot afford.
+
+The seeder writes the ledger itself now, with a real cashier or waiter on every
+cash payment, and writes the matching `bill/paid` log beside it so the corte and
+the ledger are one fact recorded twice rather than two guesses. One hand-written
+demo log went with it: it claimed MX$412.00 of cash that no payment had ever
+backed. Proved by reseeding three times and reconciling on each.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`

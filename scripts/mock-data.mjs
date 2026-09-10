@@ -391,6 +391,65 @@ export async function seedMock(pg) {
   }
   await bulkInsert(pg, "orders", orderCols, orderRows);
 
+  // ── The ledger, with somebody's name on the cash ───────────────────────
+  //
+  // Written here rather than left to the backfill in schema.sql. That backfill
+  // exists for orders settled before the ledger did — real history, where who
+  // took the cash is genuinely unrecoverable — and it names nobody, correctly.
+  //
+  // The trouble is that this seeder keeps MAKING new history, and the backfill
+  // then anonymises it: a freshly seeded dev database failed `pnpm money` with
+  // "cash payment(s) with nobody named", and did so intermittently, because it
+  // depended on where the random dates fell relative to the first payment that
+  // did name someone. A gate that fails on a clean checkout teaches people to
+  // ignore the gate.
+  //
+  // So the demo says what the app requires: cash was handed to a person. The
+  // backfill skips these, because it only inserts where none exists.
+  const takers = DEMO_TEAM.filter(m => m.role === "cashier" || m.role === "waiter").map(m => m.email);
+  const { rows: settled } = await pg.query(
+    `select id, restaurant_id, session_id, total, pay_method, created_at
+       from orders where restaurant_id = $1 and paid and total > 0`,
+    [rid],
+  );
+  if (settled.length > 0) {
+    await bulkInsert(
+      pg,
+      "payments",
+      ["restaurant_id", "order_id", "session_id", "amount", "method", "actor_email", "created_at"],
+      settled.map((o, i) => {
+        const cash = o.pay_method === "cash";
+        return [
+          o.restaurant_id, o.id, o.session_id, o.total, cash ? "cash" : "card",
+          // Card is taken by the diner's own phone; nobody is holding it.
+          // Chosen by position rather than at random, so the log written below
+          // can name the same person without a second roll of the dice.
+          cash ? takers[i % takers.length] : null,
+          o.created_at,
+        ];
+      }),
+    );
+
+    // The corte is built from the activity log, and the ledger from payments.
+    // `pnpm money` compares them, so the demo has to write both or it reports a
+    // drift that only exists in the seed data.
+    const cashPaid = settled.filter(o => o.pay_method === "cash");
+    if (cashPaid.length > 0) {
+      const takerOf = new Map(
+        settled.map((o, i) => [o.id, o.pay_method === "cash" ? takers[i % takers.length] : null]),
+      );
+      await bulkInsert(
+        pg,
+        "user_logs",
+        ["restaurant_id", "actor_email", "entity", "action", "detail", "created_at"],
+        cashPaid.map(o => [
+          rid, takerOf.get(o.id), "bill", "paid",
+          `code=ORD-${o.id.replace(/-/g, "").slice(0, 4).toUpperCase()} amount=${Number(o.total).toFixed(2)} method=cash`,
+          o.created_at,
+        ]),
+      );
+    }
+  }
 
   // ── Sittings: the table as the floor lives it ──────────────────────────
   // Every historical order belongs to a sitting that has closed; a couple are
@@ -647,7 +706,6 @@ export async function seedMock(pg) {
   await bulkInsert(pg, "user_logs",
     ["restaurant_id", "actor_email", "entity", "action", "detail", "created_at"],
     [
-      [rid, DEMO_TEAM[0].email, "bill", "paid", `table=${openTables[0].label} orders=2 amount=412.00 method=cash`, new Date(Date.now() - 864e5).toISOString()],
       [rid, DEMO_TEAM[0].email, "bill", "written_off", `table=${walkoutTable.label} amount=${walkoutSub.toFixed(2)} reason=walkout`, new Date(Date.now() - 3 * 864e5).toISOString()],
       [rid, DEMO_TEAM[1].email, "bill", "requested", `table=${asking.table.label} reason=comp`, new Date(Date.now() - 36e5).toISOString()],
       [rid, DEMO_TEAM[1].email, "discount", "requested", `code=VIP-15 amount=48.50 table=${waiting.table.label}`, new Date(Date.now() - 18e5).toISOString()],
