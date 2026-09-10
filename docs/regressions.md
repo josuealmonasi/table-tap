@@ -376,6 +376,23 @@ build variable would have to be guessed right for an environment this can never
 be tested in, and guessing it wrong sets `Secure` on a cookie served over http,
 which the browser silently drops — and then nobody can log in at all.
 
+**A sweep that finds nothing because there is nothing to find.** The
+cross-tenant check added after the security review walked every table as every
+role and reported six clean rows — while passing vacuously on twelve of
+twenty-one tables, `orders` and `payments` among them, because the other demo
+restaurants have no rows at all. A green tick for a question never asked. It
+was caught by planting a real leak and watching the sweep miss it. It plants
+its own neighbour fixture now, names every table it could not reach, and fails
+outright when one of the four that matter has nothing to attack. In production
+it plants nothing — a probe order there is somebody's real takings — and says
+so instead.
+
+**Measure the effect, not the absence of a complaint.** Twice in one review a
+probe reported a leak that was not one. A write RLS filters to zero rows
+returns no error, so "did it error?" reported four tables as wide open that
+were all fine; and an owner reading a profile that was not their staff's turned
+out to be reading their own. Both dissolved on measuring what actually changed.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`
