@@ -1013,6 +1013,32 @@ describe("a browser key cannot write what it must not set", () => {
   });
 });
 
+/**
+ * A probe is not a script.
+ *
+ * Throwaway files written to answer one question — audit these grants, log in
+ * once, run this SQL — get an underscore prefix and are meant to be deleted the
+ * moment they have answered it. Three of them reached main anyway, across three
+ * different pull requests, because `git add -A` does not know the difference.
+ *
+ * They are dead code at best. At worst they are the careless version of the
+ * real thing: the ones removed here read env files by hand, hardcoded a demo
+ * password, and opened a database connection with none of the care the checked-in
+ * scripts take. Left in `scripts/`, they read as examples to copy.
+ */
+describe("no throwaway probe reaches the repository", () => {
+  it("has no underscore-prefixed script committed", () => {
+    const stray = fs
+      .readdirSync("scripts")
+      .filter(f => f.startsWith("_"))
+      .map(f => `scripts/${f}`);
+    expect(
+      stray,
+      `these look like one-off probes — delete them, or give them a real name and a place in package.json:\n${stray.join("\n")}`,
+    ).toEqual([]);
+  });
+});
+
 describe("money is rounded in one place", () => {
   it("has no second copy of round2", () => {
     const copies = walkAll("src")
