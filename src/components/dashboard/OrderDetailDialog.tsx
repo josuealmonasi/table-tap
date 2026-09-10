@@ -5,6 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { printableReceipt } from "@/lib/print-document";
+import { printWhenReady } from "@/lib/print-window";
 import { formatMoney } from "@/lib/format";
 import { orderCode, type Order } from "@/lib/types";
 import { statusMeta } from "@/lib/order-status";
@@ -78,6 +79,7 @@ export default function OrderDetailDialog({
       w.document.write(printableReceipt(data.html ?? "", orderCode(order.id)));
       w.document.close();
       w.focus();
+      printWhenReady(w);
     } catch {
       toast(t("done.networkError"), "error");
     } finally {

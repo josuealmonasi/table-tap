@@ -348,6 +348,14 @@ The table must already exist. A waiter picks it and never invents one, so every
 order can be found afterwards by the label the restaurant already uses — on the
 board, on the bill, and in the history search.
 
+**Or they scan it.** A waiter in their first week has not learned thirty table
+names, and the one the app calls "Patio 3" may have nothing on it saying so —
+scanning the code stuck to the table is how they say "this table" without
+knowing what anybody calls it. The list is still there and still works. A code
+from another venue decodes perfectly well, so the restaurant comes back with
+the table and is checked before anything is selected; the route refuses it as
+well.
+
 On `servicio` and above. Deliberately the entry paid tier rather than higher:
 `servicio` is the tier named for service and already carries dine-in and
 settling at the end, and `carta` has no tables at all.
@@ -418,6 +426,12 @@ Ready food sits in the same bar as a raised hand, **one chip per trip** rather
 than per ticket and longest wait first — a waiter walks to a table, and three
 dishes for table four is one journey. Handing them over closes every ticket on
 that trip through the board's own move, so it queues offline like any other.
+
+**Waiters only see the chips.** The pass put that food there, so a chip telling
+the kitchen their own plate is ready is one they learn to ignore — and then
+they read past the table asking for a waiter two chips down. The same is true
+of anyone else not carrying plates. Everybody still has the Ready column and
+its Complete button; what is waiter-only is the queue of journeys.
 
 No new column and no new kind of notification: `ready` already meant this, and
 the bar was already how the floor is told something is waiting.
@@ -490,6 +504,36 @@ status it began at, and the server applies it only if nothing has happened
 since — stale work never overwrites live work.
 
 Available on every plan.
+
+## What the browser is allowed to do
+
+A real Content-Security-Policy, written against what the app actually fetches.
+The shape of the app made a strict one affordable: scripts are Next's own from
+our origin, `next/font` self-hosts the faces, Stripe Checkout is a full-page
+redirect rather than an embedded frame — `@stripe/stripe-js` is never imported
+— and the only other host the browser talks to is Supabase.
+
+So it is nonce-based, which means it is written in the middleware rather than
+in `next.config.ts`: a nonce that is not new on every request is a password an
+attacker can read off the page. Setting it on the REQUEST is what lets Next
+stamp the same value on its own bootstrap; setting it on the response is what
+makes the browser enforce it. `'strict-dynamic'` then trusts that script and
+what it loads, and nothing else. No inline script is allowed anywhere; inline
+STYLE is, and has to be, because the app styles elements with React's `style`
+attribute and a nonce cannot apply to an attribute.
+
+The directive that earns the most is `connect-src`. A script that somehow ran
+can reach us and our database and nowhere else — so it has no address to send
+anybody's bill to. `base-uri 'none'` is the quiet one: a `<base>` somebody
+injected rewrites every relative URL on the page, including the ones that post
+money.
+
+**Two things it broke, both worth having found.** The print windows said
+`<body onload="window.print()">`, which is an inline handler — the opener does
+it now, waiting for the same moment, because printing before the stylesheet
+applies puts an 80mm ticket on a Letter page. And `Permissions-Policy` said
+`camera=()`, an EMPTY list, which refuses our own page as well: the
+scan-to-collect button shipped and could never open a lens. It is `(self)`.
 
 ## What is checked, and how
 

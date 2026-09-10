@@ -27,10 +27,12 @@ describe("printableReceipt", () => {
     expect(printableReceipt(receipt, "x")).toContain(receipt);
   });
 
-  it("prints itself once the styles have been parsed", () => {
-    // `onload` rather than a print() call from the opener: printing before the
-    // stylesheet applies would put an 80mm ticket on a Letter page.
-    expect(printableReceipt(receipt, "x")).toContain('onload="window.print()"');
+  it("carries no inline event handler for the policy to refuse", () => {
+    // It used to print itself with `<body onload="window.print()">`, which the
+    // Content-Security-Policy blocks. `printWhenReady` does it from the
+    // opener and waits for the same moment — printing before the stylesheet
+    // applies puts an 80mm ticket on a Letter page.
+    expect(printableReceipt(receipt, "x")).not.toMatch(/\son[a-z]+=/i);
   });
 
   it("cannot have markup smuggled through the title", () => {

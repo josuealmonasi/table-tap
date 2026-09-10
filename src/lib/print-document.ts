@@ -42,7 +42,7 @@ export function printableReceipt(receiptHtml: string, title: string): string {
   }
 </style>
 </head>
-<body onload="window.print()">
+<body>
 ${receiptHtml}
 </body>
 </html>`;

@@ -25,6 +25,15 @@ interface OrdersBoardProps {
   canMove: boolean;
   /** Taking cash and writing debts off is the floor's job, not the kitchen's. */
   canSettle: boolean;
+  /**
+   * Whether this person is the one who carries plates out.
+   *
+   * Narrower than `canSettle` on purpose. The ready chips are a queue of
+   * journeys to make, and a queue of somebody else's journeys on a screen you
+   * are working is a screen you start reading past — which is how the table
+   * asking for a waiter, two chips down, gets read past too.
+   */
+  isWaiter: boolean;
   /** Owner or manager: may cancel a bill outright rather than ask. */
   canApprove: boolean;
   /** Kitchen doesn't get the daily takings stat. */
@@ -54,6 +63,7 @@ export default function OrdersBoard({
   canCancel,
   canMove,
   canSettle,
+  isWaiter,
   canApprove,
   showRevenue,
   revenueBase,
@@ -143,14 +153,13 @@ export default function OrdersBoard({
           initialRequests={initialRequests}
           currency={restaurant.currency}
           onSettled={() => router.refresh()}
-          // Only for whoever carries the plate. The pass put it there; a chip
-          // telling the kitchen their own food is ready is a chip they learn
-          // to ignore, and then they ignore the table asking for a waiter too.
-          ready={canSettle ? readyToDeliver(live) : []}
+          // Only for whoever carries the plate. The pass put it there, so a
+          // chip telling the kitchen their own food is ready is one they learn
+          // to ignore — and then they read past the table asking for a waiter
+          // two chips down. The same is true of anyone else not on the floor.
+          ready={isWaiter ? readyToDeliver(live) : []}
           onDelivered={
-            canSettle
-              ? ids => ids.forEach(id => updateStatus(id, "completed"))
-              : undefined
+            isWaiter ? ids => ids.forEach(id => updateStatus(id, "completed")) : undefined
           }
         />
 

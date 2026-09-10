@@ -100,6 +100,7 @@ export default async function OrdersPage() {
         canCancel={MANAGES(membership.role)}
         canMove={MOVES_ORDERS(membership.role)}
         canSettle={SETTLES(membership.role)}
+        isWaiter={membership.role === "waiter"}
         canApprove={MANAGES(membership.role)}
         showRevenue={showRevenue}
         revenueBase={revenueBase}

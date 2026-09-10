@@ -821,7 +821,11 @@ a.tt-btn {
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
-  padding-top: 14px;
+  /* The rule is 2px of near-black and the heaviest thing on the pad, so it
+     needs air on both sides or it reads as underlining the field above and
+     crowding the total below. It had 14px under it and nothing over it. */
+  margin-top: 20px;
+  padding-top: 18px;
   margin-bottom: 16px;
   border-top: 2px solid var(--tt-ink);
   font-size: 15px;
@@ -852,6 +856,24 @@ a.tt-btn {
 .tt-pos-cart .tt-field:first-of-type {
   margin-top: 0;
 }
+/* The table, and the camera that names it without anybody typing.
+   `min-width: 0` on the select because a flex child will not shrink below its
+   own content otherwise, and a long label — "Terraza junto a la ventana" —
+   would push the scan button off the side of the pad. */
+.tt-waiter-table {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.tt-waiter-table > select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tt-waiter-table > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .tt-pos-charge {
   display: flex;
   flex-direction: column;
@@ -910,13 +932,13 @@ a.tt-btn {
   flex: 1;
   min-width: 0;
 }
-.tt-pos-ticket {
-  width: min(360px, 100%);
-  margin: auto;
-  padding: 32px 24px 28px;
+/* The confirmation, inside a dialog. It used to be a full-bleed sheet of its
+   own — right for choosing modifiers, wrong for four lines saying it worked —
+   so the box, the width and the ground now come from `Modal` and what is left
+   is the one thing that is particular to it: everything centred. */
+.tt-pos-ticket-body {
   text-align: center;
-  background: var(--tt-white);
-  border-radius: 12px;
+  padding: 8px 0 4px;
 }
 /* Said once, plainly: it worked, this is the number, this is what they paid. */
 .tt-pos-ticket-mark {
