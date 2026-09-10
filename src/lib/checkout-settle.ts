@@ -4,6 +4,7 @@ import { recordPayment, recordPayments } from "@/lib/payments";
 import { releaseStock } from "@/lib/stock-service";
 import type { OrderLineItem } from "@/lib/types";
 import type Stripe from "stripe";
+import { round2 } from "@/lib/money";
 
 /**
  * What a completed or abandoned Stripe Checkout means for the money.
@@ -79,14 +80,32 @@ async function settleSplitShare(session: Stripe.Checkout.Session): Promise<void>
       .select("share_no");
 
     if (claimed?.length) {
+      // Stripe charged the share AND the gratuity on it. Recording only the
+      // share said a smaller number arrived than did: the tip reached the
+      // restaurant's account and appeared in the app's takings nowhere at all,
+      // which is the one direction a ledger must never be wrong in.
+      const tip = Math.max(0, Number(session.metadata?.settle_tip ?? 0));
       await recordPayment({
         restaurantId: split.restaurant_id as string,
         sessionId: split.session_id as string,
-        amount: shareAmount,
+        amount: shareAmount + tip,
+        tip,
         method: "card",
         stripePaymentIntent:
           typeof session.payment_intent === "string" ? session.payment_intent : null,
       });
+
+      // Onto the oldest order the split covers, the way settling a whole table
+      // and collecting one in parts both do it. `total` and `tip` rise together
+      // so a running balance still reads the same food as owed.
+      if (tip > 0) await addTipToSitting(split.session_id as string, tip);
+
+      // Our cut, on the same order. It rides on the first share to be paid —
+      // one bill divided four ways is still one bill — and it is what the
+      // monthly ceiling is summed from, so a share that never recorded it let
+      // us take more this month than the ceiling allows.
+      const shareFee = Number(session.metadata?.settle_fee ?? 0);
+      if (shareFee > 0) await chargeFeeOnSitting(split.session_id as string, shareFee);
 
       // Anything they ordered after the freeze is theirs, and settles now.
       const ownIds = (session.metadata?.settle_order_ids ?? "")
@@ -135,6 +154,52 @@ async function settleSplitShare(session: Stripe.Checkout.Session): Promise<void>
       }
     }
   }
+}
+
+/**
+ * The oldest order on a sitting, which is the one that carries what belongs to
+ * the table rather than to any single dish: the gratuity, and our fee.
+ *
+ * Settling a whole table puts both on the first of the orders it settled. A
+ * divided bill has no such list — the shares belong to the sitting — so it is
+ * the same rule stated the only way it can be here.
+ */
+async function firstOnSitting(sessionId: string): Promise<{ id: string; tip: number; total: number } | null> {
+  const { data } = await createAdminClient()
+    .from("orders")
+    .select("id, tip, total")
+    .eq("session_id", sessionId)
+    .neq("status", "cancelled")
+    .neq("status", "pending_payment")
+    .eq("written_off", false)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return null;
+  return { id: data.id as string, tip: Number(data.tip ?? 0), total: Number(data.total ?? 0) };
+}
+
+/** A gratuity collected against a sitting, attributed the way every other is. */
+async function addTipToSitting(sessionId: string, tip: number): Promise<void> {
+  const first = await firstOnSitting(sessionId);
+  if (!first) return;
+  await createAdminClient()
+    .from("orders")
+    .update({ tip: round2(first.tip + tip), total: round2(first.total + tip) })
+    .eq("id", first.id);
+}
+
+/** Our cut of a divided bill, recorded once the money is real. */
+async function chargeFeeOnSitting(sessionId: string, fee: number): Promise<void> {
+  const first = await firstOnSitting(sessionId);
+  if (!first) return;
+  // Only if nothing has been recorded yet: the fee rides on the first share to
+  // be paid, and the shares after it must not each add another.
+  await createAdminClient()
+    .from("orders")
+    .update({ platform_fee: fee })
+    .eq("id", first.id)
+    .or("platform_fee.is.null,platform_fee.eq.0");
 }
 
 /**

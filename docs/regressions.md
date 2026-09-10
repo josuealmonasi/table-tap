@@ -496,6 +496,55 @@ attribution never could — that a sitting settled as a whole collected at least
 what its orders came to. Proved both ways: 50 + 50 against 100 passes, 50 + 30
 names the sitting and the shortfall.
 
+## A gratuity charged and never written down
+
+`/api/split/pay` stamps `settle_tip` on the Stripe session, Stripe charges the
+share plus the tip, and the money lands in the restaurant's account. Then
+`settleSplitShare` recorded the share alone. The tip appeared in the app
+nowhere: not in `payments`, not on `orders.tip`, not in the day's takings. Our
+own `settle_fee` went the same way, which is what the monthly fee ceiling is
+summed from — so a divided bill could let us take more in a month than the
+ceiling allows.
+
+It survived because the key was not unread. `settleBill` reads `settle_tip`,
+so anything looking for an orphaned metadata key found it. The other settle
+path simply never asked.
+
+`invariants.spec.ts` now checks each checkout route against the ONE function
+that settles what it sent: `split/pay` against `settleSplitShare`, `bill/pay`
+against `settleBill`, `checkout` against `settleOrder`. Proved by putting the
+bug back and watching it name the route, the key and the function.
+
+## Money on a sitting, spent twice
+
+A bill collected in parts records the money against the sitting rather than any
+one order. The balance then subtracted every payment a sitting had ever
+carried, including the ones that had already closed the orders they paid for —
+so a table that paid MX$200 and then ordered MX$60 more read as owing nothing.
+
+Found by `pnpm attack`, which asks what a signed-in person can do that they
+should not and judges every case on effect. What settled an order is now
+deducted from it, and only the surplus pays for what is left. `creditFor` is
+pure and has the arithmetic under test.
+
+The same run found `staffOpenedBill` asking about the sitting open right now
+rather than the sittings the routes would actually charge for — so a waiter's
+bill whose sitting had closed with something still owed became payable online
+again.
+
+## A backfill that would have doubled every divided bill
+
+`supabase/schema.sql` ends with a backfill inserting one payment for every paid
+order that has none — which is exactly the shape of an order settled as part of
+a TABLE. A share of a divided bill has been that shape since splits shipped.
+It runs on every deploy, so the next production migration would have recorded a
+second payment for every such order. It did exactly that in development:
+MX$98.78 against a sitting that had already paid MX$98.78.
+
+Production had no completed split, so nothing there was affected. `pnpm money`
+now fails on a sitting holding MORE money than it owed — the direction nothing
+checked, because it is the one that flatters the takings.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`
@@ -506,7 +555,8 @@ names the sitting and the shortfall.
 5. If it is money, name every route that touches it and check each one
 6. If it changes what we collect, charge, or promise — update the legal text and
    regenerate the PDFs (`node scripts/legal-pdf.mjs`)
-7. `pnpm prod:check` and `pnpm smoke:prod` after the merge
+7. `pnpm attack` — what a signed-in person can do that they should not
+8. `pnpm prod:check` and `pnpm smoke:prod` after the merge
 
 ## When you find the next one
 
