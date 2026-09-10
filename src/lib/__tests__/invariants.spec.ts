@@ -1052,6 +1052,72 @@ describe("money is rounded in one place", () => {
 });
 
 /**
+ * Nothing is stamped on a Stripe session that its own webhook never reads.
+ *
+ * The metadata on a checkout session is the only thing that survives the trip
+ * to Stripe and back: whatever the route writes there is all the webhook will
+ * ever know about what the diner was charged for. A key written and never read
+ * is a fact the app threw away — and one of them was a gratuity. A share of a
+ * divided bill carried `settle_tip`, Stripe charged it, the restaurant
+ * received it, and the ledger recorded the food alone. It stayed that way
+ * because the key WAS read, just by the other settle path.
+ *
+ * So each route is checked against the one function that settles what it sent,
+ * and the source is read rather than the running app, because a webhook is not
+ * something a test can ring.
+ */
+describe("every fact sent to Stripe is read back", () => {
+  const PAIRS = [
+    ["src/app/api/split/pay/route.ts", "settleSplitShare"],
+    ["src/app/api/bill/pay/route.ts", "settleBill"],
+    ["src/app/api/checkout/route.ts", "settleOrder"],
+  ] as const;
+
+  /** Keys of every `metadata: { ... }` object in a file, nesting and all. */
+  function keysWritten(file: string): string[] {
+    const source = read(file);
+    const keys = new Set<string>();
+    for (const at of [...source.matchAll(/metadata:\s*\{/g)]) {
+      let depth = 1;
+      let i = (at.index ?? 0) + at[0].length;
+      const from = i;
+      while (i < source.length && depth > 0) {
+        if (source[i] === "{") depth++;
+        else if (source[i] === "}") depth--;
+        i++;
+      }
+      for (const pair of source.slice(from, i).matchAll(/(?:^|[{,])\s*([a-z_]+):/g)) {
+        keys.add(pair[1]);
+      }
+    }
+    return [...keys];
+  }
+
+  /** One function's body, by name, up to the line that closes it. */
+  function bodyOf(source: string, name: string): string {
+    const at = source.indexOf(`function ${name}(`);
+    expect(at, `checkout-settle no longer has ${name}`).toBeGreaterThan(-1);
+    const end = source.indexOf("\n}\n", at);
+    return source.slice(at, end === -1 ? source.length : end);
+  }
+
+  it("is read by the function that settles it", () => {
+    const settle = read("src/lib/checkout-settle.ts");
+    const orphans: string[] = [];
+    for (const [route, fn] of PAIRS) {
+      const body = bodyOf(settle, fn);
+      for (const key of keysWritten(route)) {
+        if (!body.includes(key)) orphans.push(`${route} writes ${key}, ${fn} never reads it`);
+      }
+    }
+    expect(
+      orphans,
+      `a checkout session carries something its own webhook throws away:\n${orphans.join("\n")}`,
+    ).toEqual([]);
+  });
+});
+
+/**
  * Money that arrives is written down.
  *
  * `orders.paid` and the `payments` ledger are two records of one fact, which is
