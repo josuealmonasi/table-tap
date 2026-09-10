@@ -1334,8 +1334,23 @@ returns int language sql stable security definer set search_path = public as $$
     join plan_limits l on l.plan = r.plan
    where r.id = p_restaurant_id;
 $$;
-revoke all on function public.plan_ceiling(uuid, text) from public, anon;
-grant execute on function public.plan_ceiling(uuid, text) to authenticated, service_role;
+-- Nobody with a browser key, in either hand.
+--
+-- `anon` was already refused; `authenticated` was not, and it had no reason to
+-- be allowed: nothing in the app calls this from a browser. What it did allow
+-- was a kitchen hand at one restaurant asking what ANOTHER restaurant's plan
+-- permits — "50 tables" is enough to read a competitor's tier off the answer.
+--
+-- The trigger that uses it is SECURITY DEFINER and runs as its owner, so it
+-- keeps working with nobody else holding execute.
+revoke all on function public.plan_ceiling(uuid, text) from public, anon, authenticated;
+grant execute on function public.plan_ceiling(uuid, text) to service_role;
+
+-- The trigger functions are not an API. PostgREST will not expose one anyway —
+-- it has no trigger context to call it with — but the grant said otherwise, and
+-- said it inconsistently: every other trigger function here is service_role
+-- only.
+revoke all on function public.enforce_plan_limit() from public, anon, authenticated;
 
 -- One guard for all three, told by its trigger argument which thing it is
 -- counting. The message is a parseable sentinel rather than a sentence:

@@ -12,7 +12,14 @@ import type { MenuItem, Modifier, OrderExtra, OrderLineItem } from "@/lib/types"
  * ticket reading "100000×" against a bill for ninety-nine.
  */
 function clampQty(qty: number): number {
-  return Math.min(MAX_LINE_QTY, Math.max(1, Math.floor(qty)));
+  // NaN survives both clamps: `Math.max(1, NaN)` is NaN, and so is the `min`.
+  // A quantity of "abc" therefore reached the insert as NaN and came back as a
+  // 500 from Postgres — an unhandled crash on the route that takes money,
+  // rather than a refusal. One line of the cart is not a number; the honest
+  // reading of that is one.
+  const n = Math.floor(Number(qty));
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(MAX_LINE_QTY, Math.max(1, n));
 }
 
 /**

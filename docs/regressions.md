@@ -393,6 +393,30 @@ returns no error, so "did it error?" reported four tables as wide open that
 were all fine; and an owner reading a profile that was not their staff's turned
 out to be reading their own. Both dissolved on measuring what actually changed.
 
+**A tip could make a sale cheaper.** `tipFor` multiplied the subtotal by the
+percentage it was given and clamped nothing. The diner's checkout was safe by
+accident of a different guard — it allow-lists 0/10/15/20 — but the till passed
+the request's number straight through, so `tipPct: -50` charged less than the
+food costs. The part that makes it worth more than a shrug: **the drawer still
+reconciles afterwards.** The order's own total was computed with the same
+negative number, so `orders.total` and `payments.amount` agree and `pnpm money`
+sees nothing wrong. A cashier undercharging a friend leaves no trace anywhere.
+Clamped in `tipFor` rather than at the caller, because the caller is exactly
+what was inconsistent — and `tipAmount` now rejects NaN and Infinity too.
+
+**NaN survives a clamp.** `Math.max(1, NaN)` is NaN and so is the `min`, so a
+cart line with `qty: "abc"` reached the insert as NaN and came back as a 500
+from Postgres — an unhandled crash on the route that takes money rather than a
+refusal. `clampQty` reads a line that is not a number as one.
+
+**A grant nobody needed answered a question nobody should ask.** `plan_ceiling`
+was executable by `authenticated`, and nothing in the app calls it from a
+browser — the trigger that uses it is SECURITY DEFINER and runs as its owner.
+What it did allow was a kitchen hand at one restaurant asking what ANOTHER
+restaurant's plan permits; "50 tables" is enough to read a competitor's tier off
+the answer. Revoked, and the trigger still enforces — proved by overfilling a
+carta restaurant afterwards.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`
