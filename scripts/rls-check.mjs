@@ -351,6 +351,47 @@ if (!signIn.error && theirs) {
   else bad(`anon cannot read the menu's own columns (${tzErr?.message ?? "no timezone"})`);
 }
 
+// ── The kitchen cooks; it does not count the drawer ────────────────────────
+//
+// `payments` was readable by the whole team, the pass included. That was
+// invisible while every payment was anonymous — once the ledger carried real
+// amounts and the name of whoever took the cash, it meant a kitchen hand could
+// read the restaurant's takings and see what each person on the floor had
+// collected.
+{
+  const kitchen = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  );
+  const { error: inErr } = await kitchen.auth.signInWithPassword({
+    email: "demo-kitchen@tabletap.dev",
+    password: "demo123",
+  });
+  if (inErr) {
+    bad("cannot sign in as the kitchen — the takings check did not run");
+  } else {
+    const seen = await kitchen.from("payments").select("id").limit(1);
+    (seen.error || (seen.data ?? []).length === 0)
+      ? ok("the kitchen cannot read the takings")
+      : bad("the kitchen reads payments — it can see what the floor collected");
+
+    // And the floor still can, or the corte stops working for the people who
+    // actually count the drawer.
+    const floor = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    );
+    await floor.auth.signInWithPassword({
+      email: "demo-cashier@tabletap.dev",
+      password: "demo123",
+    });
+    const paid = await floor.from("payments").select("id").limit(1);
+    (!paid.error && (paid.data ?? []).length > 0)
+      ? ok("a cashier still reads the takings they took")
+      : bad("a cashier cannot read payments — the corte will not build");
+  }
+}
+
 // ── Every table, every role, measured by effect ────────────────────────────
 //
 // The checks above name the leaks somebody thought of. This one names none: it

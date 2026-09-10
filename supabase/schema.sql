@@ -2083,8 +2083,25 @@ alter table payments enable row level security;
 -- both built from this. Nobody writes from a browser — money is recorded by
 -- the routes that took it, with the secret key.
 drop policy if exists "team reads payments" on payments;
-create policy "team reads payments"
-  on payments for select using (works_at(restaurant_id));
+-- Everyone who settles a bill, which is everyone except the kitchen.
+--
+-- It said `works_at` — the whole team, the pass included. That was invisible
+-- while every payment was anonymous and the corte could not be computed from
+-- them; once the ledger carried real amounts and the name of whoever took the
+-- cash, it meant a kitchen hand could read the restaurant's entire takings and
+-- see what each person on the floor had collected. The kitchen cooks; it does
+-- not count the drawer.
+--
+-- `SETTLES` in the app is `role !== 'kitchen'`, and this is that rule written
+-- where it is actually enforced.
+-- Both names dropped: this file re-runs on every deploy, and dropping only the
+-- name being replaced leaves the new one to collide with itself the second
+-- time through.
+drop policy if exists "team reads payments" on payments;
+drop policy if exists "the floor reads payments" on payments;
+create policy "the floor reads payments"
+  on payments for select
+  using (has_role(restaurant_id, array['manager', 'waiter', 'cashier']));
 
 revoke all on payments from anon;
 grant select on payments to authenticated;

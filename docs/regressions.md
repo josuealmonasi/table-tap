@@ -447,6 +447,29 @@ the app reads is null in every row, or when a shape the app depends on is
 missing entirely. Run it against production too: that is where the drift is
 least visible and most expensive.
 
+**The kitchen could count the drawer.** `payments` was readable by
+`works_at(restaurant_id)` — the whole team, the pass included. That was
+invisible for as long as every seeded payment was anonymous and the corte could
+not be computed from them at all; the moment the ledger carried real amounts and
+the name of whoever took the cash, it meant a kitchen hand could read the
+restaurant's entire takings and see what each person on the floor had collected.
+Nothing kitchen-facing reads payments — both screens that do are behind
+`requireSettles` and read with the secret key — so narrowing the policy to
+manager, waiter and cashier costs nothing.
+
+Worth recording how it was found: not by reading the policy, which had been read
+before and looked fine, but by re-running the checks after the demo data
+changed. A permission is only as visible as the data behind it.
+
+**A rename that only drops the old name breaks the file.** The same change
+replaced `"team reads payments"` with `"the floor reads payments"` and dropped
+only the former, so `db:create` succeeded once and failed on every subsequent
+run with "policy already exists" — which would have broken the next production
+migration. `schema.sql` re-runs on every deploy; a policy rename has to drop
+BOTH names. It hid a second fault too: the regression plant appeared to pass
+because the schema apply had silently failed, so the guard was never exercised.
+Verify the apply, then plant.
+
 ## Before merging anything large
 
 1. `npx tsc --noEmit && pnpm lint && pnpm test`
