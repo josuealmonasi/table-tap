@@ -19,6 +19,7 @@ export const en = {
       deleted: "removed a login",
     },
     bill: {
+      collected: "took part of a table's bill",
       paid: "took payment for a table",
       "written_off": "wrote off a table's bill",
       requested: "asked to cancel a table's bill",
@@ -1254,6 +1255,7 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
     activityHint: "Payments, cancellations, discounts, settings and logins — newest first",
     activityCount: "{n} entries",
     logOrders: "{n} order(s)",
+    logLeft: "{amount} left",
     paycash: "cash",
     paycard: "card",
     activitySearch: "Search who, what or when…",

@@ -13,7 +13,7 @@ import nextConfig from "../../../next.config";
  * does.
  */
 describe("security headers", () => {
-  async function headersFor(path: string): Promise<Map<string, string>> {
+  async function headersFor(): Promise<Map<string, string>> {
     const rules = await nextConfig.headers!();
     const out = new Map<string, string>();
     for (const rule of rules) {
@@ -26,18 +26,18 @@ describe("security headers", () => {
   }
 
   it("refuses to be framed, by both the old header and the modern one", async () => {
-    const h = await headersFor("/dashboard");
+    const h = await headersFor();
     expect(h.get("x-frame-options")).toBe("DENY");
     expect(h.get("content-security-policy")).toContain("frame-ancestors 'none'");
   });
 
   it("serves a file as what it says it is, never as what the bytes look like", async () => {
-    expect((await headersFor("/")).get("x-content-type-options")).toBe("nosniff");
+    expect((await headersFor()).get("x-content-type-options")).toBe("nosniff");
   });
 
   it("does not hand an order's URL to another site", async () => {
     // An order URL names an order. Off-site requests get the origin only.
-    expect((await headersFor("/order/x")).get("referrer-policy")).toBe(
+    expect((await headersFor()).get("referrer-policy")).toBe(
       "strict-origin-when-cross-origin",
     );
   });
@@ -46,14 +46,14 @@ describe("security headers", () => {
     // Checkout is a full-page redirect today, so denying `payment` would
     // change nothing. The day somebody puts Apple Pay on our own page, a
     // header nobody remembers writing is a bad way to find out.
-    expect((await headersFor("/")).get("permissions-policy")).not.toContain("payment");
+    expect((await headersFor()).get("permissions-policy")).not.toContain("payment");
   });
 
   it("claims no Content-Security-Policy beyond framing", async () => {
     // A real CSP has to be tested against Stripe, Supabase and the fonts. A
     // half-written one either blocks checkout or lulls somebody into thinking
     // the app has one.
-    const csp = (await headersFor("/")).get("content-security-policy") ?? "";
+    const csp = (await headersFor()).get("content-security-policy") ?? "";
     expect(csp.split(";").filter(Boolean)).toHaveLength(1);
   });
 });

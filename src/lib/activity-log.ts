@@ -31,6 +31,8 @@ export type LogAction =
   | "updated"
   | "deleted"
   | "paid"
+  /** Part of a bill, when the rest is still owed. */
+  | "collected"
   | "written_off"
   | "discounted"
   | "requested"

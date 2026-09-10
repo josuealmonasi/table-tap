@@ -9,7 +9,7 @@
 // and with no connected account their correct answer is a specific refusal
 // (409, 400) — that is working. What is never right is a 500.
 // ============================================================================
-import { MARK } from "./api-fixtures.mjs";
+import { MARK, PART_AMOUNT, PART_TIP } from "./api-fixtures.mjs";
 
 /** Creating a coupon answers `{ ok: true }`, so the id is looked up where it lives. */
 async function pendingWriteOff(fx) {
@@ -72,6 +72,10 @@ async function couponId(fx) {
 
 export function cases(fx) {
   const { restaurant, table, dish, paidOrder, unpaidOrder, tableOrder, menu } = fx;
+  // One reference per run, shared by the two cases below: the first collection
+  // and the retry of that same collection. Fresh each run so a row a previous
+  // run somehow left behind cannot make the first call look like the second.
+  const partRef = `${MARK}-part-${Date.now()}`;
   const r = restaurant.id;
 
   return [
@@ -275,6 +279,28 @@ export function cases(fx) {
       body: async f => ({ requestId: await pendingDiscount(f), approve: true }),
       // 400 with no request pending, 409 if it was already decided. Never a 500.
       expect: [200, 400, 409] },
+    // The calculator: a waiter collects part of a table's bill. A little of
+    // it, so the bill stays open for the cases below.
+    { name: "POST /api/table-payment/part", as: "waiter", method: "POST",
+      path: "/api/table-payment/part",
+      body: { tableId: table.id, amount: PART_AMOUNT, tip: PART_TIP, method: "cash", ref: partRef },
+      expect: [200],
+      // The gratuity is collected but never counts towards the food: a table
+      // that tipped must not look nearer to settled than it is.
+      check: d =>
+        (d.collected >= PART_AMOUNT && d.tips >= PART_TIP && d.owed > 0 && d.settled === false) ||
+        `collected ${d.collected}, tips ${d.tips}, owed ${d.owed}` },
+    // The same collection again — a button tapped twice on a phone that seemed
+    // not to respond. It must land in the ledger once.
+    { name: "POST /api/table-payment/part (the same tap twice)", as: "waiter", method: "POST",
+      path: "/api/table-payment/part",
+      body: { tableId: table.id, amount: PART_AMOUNT, tip: PART_TIP, method: "cash", ref: partRef },
+      expect: [200],
+      check: d => d.duplicate === true || "the same collection was recorded twice" },
+    { name: "POST /api/table-payment/part (kitchen refused)", as: "kitchen", method: "POST",
+      path: "/api/table-payment/part",
+      body: { tableId: table.id, amount: PART_AMOUNT, method: "cash", ref: `${partRef}-k` },
+      expect: [403] },
     { name: "POST /api/bill/write-off (waiter asks)", as: "waiter", method: "POST",
       path: "/api/bill/write-off", body: { tableId: table.id, reason: "walkout", note: MARK },
       expect: [200], check: d => d.pending === true || "a waiter's request should stay pending" },

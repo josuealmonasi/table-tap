@@ -21,6 +21,7 @@ export const es: Messages = {
       deleted: "eliminó un acceso",
     },
     bill: {
+      collected: "cobró parte de la cuenta de una mesa",
       paid: "cobró una mesa",
       "written_off": "canceló la deuda de una mesa",
       requested: "pidió cancelar la cuenta de una mesa",
@@ -1249,6 +1250,7 @@ badgesHint: "Muestra cuántas cosas esperan acción en cada sección. Aplica a t
     activityHint: "Cobros, cancelaciones, descuentos, ajustes y accesos — lo más reciente primero",
     activityCount: "{n} registros",
     logOrders: "{n} pedido(s)",
+    logLeft: "faltan {amount}",
     paycash: "efectivo",
     paycard: "tarjeta",
     activitySearch: "Busca quién, qué o cuándo…",

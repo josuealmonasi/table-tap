@@ -73,13 +73,23 @@ export interface TableBill {
 }
 
 /**
+ * The three fields that decide whether an order is still owed for.
+ *
+ * Generic over the row rather than fixed to a full `Order`, so a query that
+ * selected only the columns it needs is filtered by the same rule as the bill
+ * screen instead of copying the rule out — which is how the two come to
+ * disagree about what a table owes.
+ */
+type OrderState = Pick<Order, "paid" | "written_off" | "status">;
+
+/**
  * Orders still owed for.
  *
  * Cancelled ones were never served. Written-off ones were served and never
  * paid for, but the restaurant has already given up on them — showing either
  * on a bill would ask somebody to pay for food nobody is charging for.
  */
-export function unpaidOrders(orders: Order[]): Order[] {
+export function unpaidOrders<T extends OrderState>(orders: T[]): T[] {
   return orders.filter(o => !o.paid && !o.written_off && o.status !== "cancelled");
 }
 
@@ -90,7 +100,7 @@ export function unpaidOrders(orders: Order[]): Order[] {
  * was served and nobody charged for it, and putting it beside what was paid
  * would say money came in that did not.
  */
-export function paidOrders(orders: Order[]): Order[] {
+export function paidOrders<T extends OrderState>(orders: T[]): T[] {
   return orders.filter(o => o.paid && !o.written_off && o.status !== "cancelled");
 }
 

@@ -2077,6 +2077,17 @@ create index if not exists payments_restaurant_idx
 create index if not exists payments_order_idx on payments(order_id);
 create index if not exists payments_session_idx on payments(session_id);
 
+-- How much of this payment was a gratuity.
+--
+-- Attribution is unchanged: the tip lands on the order, accumulating, exactly
+-- as settling a whole table already does. This is arithmetic, not attribution.
+-- A table's bill closes when the FOOD is covered, and without knowing which
+-- part of MX$115 was the tip, a run of partial payments cannot tell how much of
+-- the food is still owed — MX$115 against a MX$200 bill would read as MX$115 of
+-- food and the table would appear to owe MX$85 when it owes MX$100.
+alter table payments add column if not exists tip numeric not null default 0
+  check (tip >= 0);
+
 -- One Stripe payment settles one order, once.
 --
 -- Stripe delivers a webhook again whenever it is not certain the first one
@@ -2093,6 +2104,24 @@ create index if not exists payments_session_idx on payments(session_id);
 create unique index if not exists payments_one_per_intent
   on payments (order_id, stripe_payment_intent)
   where order_id is not null and stripe_payment_intent is not null;
+
+-- One tap on a waiter's phone collects one payment, once.
+--
+-- The other half of the same problem, for money nobody's card is involved in.
+-- A waiter settling a bill in parts is standing on a restaurant floor with a
+-- phone: the button is tapped twice because the first tap seemed to do
+-- nothing, or the request is retried when the signal comes back. Either way a
+-- second MX$100 lands in the ledger, the bill reads as covered, and the table
+-- walks out owing money nobody can see any more.
+--
+-- The client stamps each collection with a reference of its own and reuses it
+-- for every retry of that one collection, so the database refuses the copy.
+-- Partial, because every payment the app has recorded until now has no
+-- reference at all and they must all stay allowed.
+alter table payments add column if not exists client_ref text;
+create unique index if not exists payments_one_per_ref
+  on payments (restaurant_id, client_ref)
+  where client_ref is not null;
 
 alter table payments enable row level security;
 

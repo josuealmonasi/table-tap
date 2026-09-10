@@ -132,7 +132,11 @@ if (!era) {
     .from("user_logs")
     .select("actor_email, detail, created_at")
     .eq("entity", "bill")
-    .eq("action", "paid")
+    // Both, because a bill settled in parts writes one line per collection:
+    // `collected` while something is still owed, `paid` for the one that
+    // closes it. Counting only the last would say the waiter's drawer holds
+    // one payment where it holds four.
+    .in("action", ["paid", "collected"])
     .gte("created_at", era);
   if (lErr) { console.log(`  cannot read user_logs: ${lErr.message}`); process.exit(1); }
 
