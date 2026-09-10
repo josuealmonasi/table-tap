@@ -639,7 +639,8 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
       staff: "Your {plan} plan doesn't include staff logins. Upgrade to add them.",
     },
     needs: {
-      pos: "The counter till comes with {plan}.",
+      waiterService: "Taking orders at the table comes with {plan}.",
+    pos: "The counter till comes with {plan}.",
       deferredPayment: "Paying at the end or at the counter comes with {plan}. On the free plan the card is taken when they order.",
       dineIn: "Tables and table service come with {plan}.",
       promotions: "Promotions come with {plan}.",
@@ -824,6 +825,8 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     menusEmpty: "No menus yet",
     menuPaused: "Paused",
     waiting: "{n} waiting",
+    tableOrder: "Take an order",
+    tableOrderDesc: "Take the order at the table; the bill is settled at the end.",
     pos: "Till",
     posDesc: "Charge at the counter and send the order to the kitchen",
     orders: "Orders",
@@ -874,6 +877,19 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     counterFor: "Counter · {name}",
     handedOver: "Handed over at the counter:",
     note: "Note",
+  },
+
+  // The waiter's order pad.
+  waiter: {
+    title: "Take an order",
+    order: "Order",
+    table: "Table",
+    pickTable: "Choose the table…",
+    send: "Send to the kitchen",
+    paysLater: "The bill is settled at the end. Nothing is charged here.",
+    sentTitle: "WITH THE KITCHEN",
+    sentHint: "The table's bill stays open.",
+    next: "Another order",
   },
 
   pos: {

@@ -14,6 +14,7 @@ import Footer from "@/components/layout/Footer";
 import { ToastProvider } from "@/components/ui/Toast";
 import { LocaleProvider } from "@/lib/i18n/context";
 import { getLocale } from "@/lib/i18n/server";
+import { NAV_FEATURES } from "@/lib/nav";
 import { getPlan } from "@/lib/plan-server";
 import { can, type PlanFeature } from "@/lib/plan";
 
@@ -42,7 +43,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Which areas this tier includes at all. Read once here so the drawer, the
   // section bar and the home tiles cannot disagree about what exists.
   const plan = membership ? await getPlan(membership.restaurant.id) : null;
-  const features: PlanFeature[] = plan && can(plan.limits, "pos") ? ["pos"] : [];
+  // Derived, not listed. This named "pos" and nothing else, so the next tiered
+  // area added to the nav was filtered out of it by a line that had no idea the
+  // area existed — the link simply never appeared, on a plan that includes it.
+  const features: PlanFeature[] = plan
+    ? NAV_FEATURES.filter(f => can(plan.limits, f))
+    : [];
 
   return (
     <html lang={locale} className={archivo.variable}>

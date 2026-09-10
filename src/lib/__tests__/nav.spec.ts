@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { navItemsFor, type DashboardRole } from "@/lib/nav";
+import { navItemsFor, type DashboardRole, NAV_FEATURES, NAV_ITEMS } from "@/lib/nav";
 
 const hrefs = (role: DashboardRole) => navItemsFor(role).map(i => i.href);
 
@@ -19,8 +19,15 @@ describe("navItemsFor", () => {
     expect(hrefs("kitchen")).toEqual(["/dashboard/orders"]);
   });
 
-  it("a waiter also gets open bills — they can ask for a discount on one", () => {
-    expect(hrefs("waiter")).toEqual(["/dashboard/orders", "/dashboard/bills"]);
+  it("a waiter gets the board, open bills, and their own order screen", () => {
+    // Bills because they can ask for a discount on one; the order screen
+    // because taking the order at the table is the waiter's whole job, and
+    // until it existed they had to borrow a diner's phone to start one.
+    expect(hrefs("waiter")).toEqual([
+      "/dashboard/orders",
+      "/dashboard/table-order",
+      "/dashboard/bills",
+    ]);
   });
 
   it("admin gets only the admin area", () => {
@@ -57,5 +64,24 @@ describe("an area the tier does not include", () => {
   it("gives it to an owner and a manager, who work every station", () => {
     expect(hrefs("owner")).toContain("/dashboard/pos");
     expect(hrefs("manager")).toContain("/dashboard/pos");
+  });
+});
+
+/**
+ * The features the nav gates on are read off the nav, not listed beside it.
+ *
+ * The root layout used to build that list by hand — it named "pos" and nothing
+ * else — so the next tiered area added to the nav was filtered straight back
+ * out of it by a line that had no idea the area existed. The link simply never
+ * appeared, on a plan that included it, and nothing failed.
+ */
+describe("the features the nav gates on", () => {
+  it("names every feature any nav item asks for", () => {
+    const asked = [...new Set(NAV_ITEMS.map(i => i.feature).filter(Boolean))];
+    expect([...NAV_FEATURES].sort()).toEqual([...asked].sort());
+  });
+
+  it("is not empty, or every tiered area would vanish", () => {
+    expect(NAV_FEATURES.length).toBeGreaterThan(1);
   });
 });

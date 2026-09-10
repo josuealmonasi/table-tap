@@ -14,6 +14,7 @@ export const CREW = [
       "/dashboard",
       "/dashboard/main-menu",
       "/dashboard/orders",
+      "/dashboard/table-order",
       "/dashboard/bills",
       "/dashboard/tables",
       "/dashboard/analytics",
@@ -41,7 +42,7 @@ export const CREW = [
       "/dashboard/profile",
     ],
   },
-  { role: "waiter", email: "demo-waiter@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/bills", "/dashboard/profile"] },
+  { role: "waiter", email: "demo-waiter@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/table-order", "/dashboard/bills", "/dashboard/profile"] },
   { role: "cashier", email: "demo-cashier@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/bills", "/dashboard/pos", "/dashboard/profile"] },
   { role: "kitchen", email: "demo-kitchen@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/profile"] },
   // The platform admin runs the whole business from one screen and was in no

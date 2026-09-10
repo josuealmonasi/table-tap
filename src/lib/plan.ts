@@ -43,6 +43,7 @@ export interface PlanLimits {
   /** Counting stock, and the low-stock warnings that come with it. Paid only. */
   allows_inventory?: boolean;
   allows_pos?: boolean;
+  allows_waiter_service?: boolean;
   allows_staff_discounts: boolean;
   analytics_days: number;
   log_days: number;
@@ -59,10 +60,12 @@ export type PlanFeature =
   | "menuSchedules"
   | "deferredPayment"
   | "inventory"
-  | "pos";
+  | "pos"
+  | "waiterService";
 
 const FEATURE_COLUMN: Record<PlanFeature, keyof PlanLimits> = {
   dineIn: "allows_dine_in",
+  waiterService: "allows_waiter_service",
   promotions: "allows_promotions",
   coupons: "allows_coupons",
   staffDiscounts: "allows_staff_discounts",

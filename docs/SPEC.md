@@ -319,6 +319,36 @@ recorded exactly as any other: declining the ticket does not decline the
 accounting, and the restaurant's obligation to issue a fiscal receipt to
 anybody who asks is unchanged.
 
+## The waiter takes the order
+
+The oldest act in the trade, and the one thing the app could not do: somebody
+walks to a table and writes down what the people sitting at it want. Everything
+around it already existed — the bill, the split, the discount that needs a
+manager, taking cash at the table — and none of it was reachable, because an
+order had to start on a diner's phone. A restaurant that runs on waiters needed
+a second system for the first step, and given the choice between two systems and
+one, nobody picks two.
+
+`/dashboard/table-order` is the waiter's pad. The same menu the till shows,
+sold-out dishes included and marked, taken through the same dish screen a diner
+uses — the modifiers, the extras, this item's own special request — because a
+waiter is writing down the same order, and asking it a second way is how one
+dish ends up with "less onion" and another in the same round has nowhere to say
+"extra onion".
+
+It sends the order to the kitchen **owing**. Nothing is charged: the table
+settles at the end, which is what the bill screen has always been for. Two
+orders at one table join one sitting, so what the diners see on the bill is
+what they ate together.
+
+The table must already exist. A waiter picks it and never invents one, so every
+order can be found afterwards by the label the restaurant already uses — on the
+board, on the bill, and in the history search.
+
+On `servicio` and above. Deliberately the entry paid tier rather than higher:
+`servicio` is the tier named for service and already carries dine-in and
+settling at the end, and `carta` has no tables at all.
+
 ## Paper for an order that already exists
 
 The order dialog prints, and the same dialog opens from the board and from the

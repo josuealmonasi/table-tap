@@ -1260,6 +1260,23 @@ alter table plan_limits add column if not exists allows_pos
   boolean not null default false;
 update plan_limits set allows_pos = true where plan in ('servicio', 'casa', 'grupo');
 
+-- The waiter's own order screen: a table is seated, and the person standing at
+-- it takes what they want.
+--
+-- This is the feature that decides whether a full-service restaurant can run on
+-- us at all. Without it they need a second system for the oldest act in the
+-- trade — somebody walks to a table and writes down an order — and given the
+-- choice between two systems and one, nobody picks two.
+--
+-- On `servicio` and above, and deliberately at the ENTRY paid tier rather than
+-- higher up. `servicio` is the tier named for service; it already carries
+-- dine-in and settling at the end, which is exactly this. And `carta` has no
+-- tables at all, so the gate would be meaningless there even if we wanted it.
+alter table plan_limits add column if not exists allows_waiter_service
+  boolean not null default false;
+update plan_limits set allows_waiter_service = true
+ where plan in ('servicio', 'casa', 'grupo');
+
 alter table plan_limits enable row level security;
 
 -- Every signed-in user may read the tiers: the plan screen shows what the next
