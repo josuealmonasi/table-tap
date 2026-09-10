@@ -125,6 +125,17 @@ Two things it deliberately did NOT fix:
   proved in them; the rest is defence in depth on a working defence, and worth
   doing deliberately rather than in the middle of a review.
 
+## Keeping the demo honest
+
+`pnpm seed:shape` (and `seed:shape:prod`) asks whether the seeded data still
+looks like the app: every column the app reads filled in at least one row, cash
+naming who took it, a menu that closes, a dish that counts stock, a bundle to
+price. It exists because the seeder drifts silently — the schema moves and
+`mock-data.mjs` does not, and the first thing to notice is a gate failing on a
+clean checkout.
+
+Worth running after any schema change that adds a column the app reasons about.
+
 ## Still a decision, not a task
 
 - **Loyalty** is parked pending the identity question: what a returning diner

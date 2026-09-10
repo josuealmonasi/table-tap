@@ -24,7 +24,7 @@ import { chromium } from "playwright";
 import { createClient } from "@supabase/supabase-js";
 import { CREW } from "./layout-paths.mjs";
 import { AUDIT, STATES } from "./promise-cases.mjs";
-import { requireServer } from "./preflight.mjs";
+import { requireServer, warm } from "./preflight.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -50,6 +50,20 @@ const { data: restaurant } = await admin
   .from("restaurants").select("id").eq("name", "Demo Bistro").maybeSingle();
 const { data: table } = await admin
   .from("restaurant_tables").select("id").eq("restaurant_id", restaurant.id).limit(1).maybeSingle();
+
+// Compile every route this sweep opens, before it opens any of them. In
+// development Next builds a route the first time anything asks for it, and a
+// cold one can take longer than Playwright will wait — the sweep then reports a
+// perfectly good screen as unreachable. Three gate runs and one wrong diagnosis
+// went that way before this existed.
+if (!prod) {
+  await warm(BASE, [
+    ...CREW.flatMap(r => r.pages ?? []),
+    ...STATES.flatMap(c => (c.path ? [c.path] : [])),
+    `/r/${restaurant.id}`,
+    `/r/${restaurant.id}/t/${table.id}`,
+  ]);
+}
 
 const browser = await chromium.launch();
 console.log(`\nPromises — ${prod ? "production" : "development"}\n`);

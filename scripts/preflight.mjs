@@ -29,6 +29,31 @@ export async function requireServer(base, prod) {
 }
 
 /**
+ * Compile the routes a sweep is about to open, before it opens them.
+ *
+ * In development Next compiles a route the first time anything asks for it,
+ * and a cold route can take well over the 30 seconds Playwright allows a
+ * `goto`. The sweep then reports the page as unreachable — which reads as a
+ * broken screen and is nothing of the sort. It has cost three full gate runs
+ * and one wrong diagnosis.
+ *
+ * A plain fetch is enough to make Next build the route; nothing here cares
+ * about the response. Failures are ignored on purpose: a path that 404s or
+ * redirects still gets compiled, and whether it ANSWERS is the sweep's
+ * question to ask, not this one's.
+ */
+export async function warm(base, paths) {
+  const unique = [...new Set(paths)].filter(Boolean);
+  for (const path of unique) {
+    try {
+      await fetch(base + path, { signal: AbortSignal.timeout(90_000) });
+    } catch {
+      // Cold, slow, missing or refused — the sweep will say so properly.
+    }
+  }
+}
+
+/**
  * A fetch that does not mistake a downed server for a failed test.
  *
  * The dev one drops mid-run — it bloats over the hours, and sometimes a
