@@ -52,3 +52,21 @@ export function orderCodeRange(query: string): { from: string; to: string } | nu
 export function tableLabelQuery(query: string): string {
   return query.trim().replace(/^(mesa|table)\s+/i, "");
 }
+
+/**
+ * A search term, safe to put inside a PostgREST `or()` filter.
+ *
+ * `or()` takes ONE raw string and splits it on commas, so a diner called
+ * "Perez, Juan" would not merely fail to be found — the half after the comma
+ * would be read as another condition, and `x,customer_name.not.is.null` would
+ * be read as a filter somebody typed into a search box.
+ *
+ * Wrapping the value in double quotes is what the grammar provides for, so the
+ * only characters that still need escaping are the quote itself and the
+ * backslash that escapes it. Verified against a real database with a name
+ * carrying a comma (found), one carrying quotes (found), and two injected
+ * conditions (matched nothing, which is the point).
+ */
+export function filterValue(query: string): string {
+  return `"${query.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}

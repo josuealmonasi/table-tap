@@ -2534,6 +2534,18 @@ a.tt-btn {
 .tt-order-card-open:hover {
   border-color: color-mix(in srgb, var(--tt-accent) 35%, var(--tt-line));
 }
+/* The two print buttons under an order's detail. Side by side where there is
+   room, stacked on a phone — a button's content sets its min-width, and
+   "Imprimir en cocina" does not shrink to half of 320px. */
+.tt-order-print {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.tt-order-print .tt-btn {
+  flex: 1 1 150px;
+}
 .tt-order-detail-line {
   display: flex;
   gap: 12px;

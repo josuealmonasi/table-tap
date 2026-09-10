@@ -319,6 +319,39 @@ recorded exactly as any other: declining the ticket does not decline the
 accounting, and the restaurant's obligation to issue a fiscal receipt to
 anybody who asks is unchanged.
 
+## Paper for an order that already exists
+
+The order dialog prints, and the same dialog opens from the board and from the
+history — so a ticket can be asked for whatever column the order is in, and long
+after it was served.
+
+Two different pieces of paper. **In the kitchen** puts it back on the
+restaurant's printer, for a ticket that jammed or one the pass never saw because
+the printer was off when it was placed. **The ticket** is the customer's
+receipt, printed through the browser — the same document the till prints and the
+same one an email carries, so a reprint cannot say something different from the
+original.
+
+Asking again is not the same as asking twice by accident. `print_jobs_once` is
+unique on `(order_id, kind)` precisely so a repeated trigger cannot put one
+ticket on the paper twice, which means a reprint cannot insert a second row: it
+re-arms the existing one, unclaimed and unprinted, back in the queue.
+
+A restaurant with no printer address is told so rather than having a job queued
+for a machine that will never ask for it.
+
+## A name is a way to find an order
+
+The history searches the code, the table, and now the name a diner gave at the
+counter — the three things anybody remembers about an order and the only ones
+the person searching can see.
+
+The term is quoted before it reaches PostgREST. `or()` takes ONE raw filter
+string and splits it on commas, so a diner called "Perez, Juan" would not merely
+fail to be found: the half after the comma would be read as another condition,
+and anything shaped like `x,customer_name.not.is.null` would be a filter
+somebody typed into a search box.
+
 ## The connection is a requirement
 
 TableTap runs online, and the terms say so rather than implying it. Without a

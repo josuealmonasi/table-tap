@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { orderCodeRange, tableLabelQuery } from "@/lib/order-code";
+import { filterValue, orderCodeRange, tableLabelQuery } from "@/lib/order-code";
 import type { Order } from "@/lib/types";
 
 /** Ten reads as a list; more than that and the page is a wall again. */
@@ -49,12 +49,22 @@ export function useOrderHistory(restaurantId: string) {
 
       if (debounced) {
         // A code is a prefix of the id, so it becomes a range on the primary
-        // key. Anything else is matched against the table it was served to,
-        // which is the other thing anyone remembers about an order.
+        // key. Anything else is matched against the table it was served to and
+        // the name the diner gave — the two other things anyone remembers
+        // about an order, and the only two the person searching can see.
+        //
+        // `or()` takes one raw filter string and splits it on commas, so the
+        // term is quoted before it goes anywhere near it. Without that, a diner
+        // called "Perez, Juan" would not merely fail to be found: the half
+        // after the comma would be read as another condition.
         const code = orderCodeRange(debounced);
-        request = code
-          ? request.gte("id", code.from).lte("id", code.to)
-          : request.ilike("table_label", `%${tableLabelQuery(debounced)}%`);
+        if (code) {
+          request = request.gte("id", code.from).lte("id", code.to);
+        } else {
+          const table = filterValue(`%${tableLabelQuery(debounced)}%`);
+          const name = filterValue(`%${debounced}%`);
+          request = request.or(`table_label.ilike.${table},customer_name.ilike.${name}`);
+        }
       }
 
       const { data, count } = await request
