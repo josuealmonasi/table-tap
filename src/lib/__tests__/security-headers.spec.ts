@@ -78,6 +78,7 @@ describe("security headers", () => {
 describe("the content security policy", () => {
   const live = contentSecurityPolicy("abc123", false);
   const dev = contentSecurityPolicy("abc123", true);
+  const preview = contentSecurityPolicy("abc123", false, true);
 
   it("trusts the nonce it was given, and what that script loads", () => {
     expect(live).toContain("'nonce-abc123'");
@@ -141,6 +142,15 @@ describe("the content security policy", () => {
   it("upgrades http in production and leaves the dev server alone", () => {
     expect(live).toContain("upgrade-insecure-requests");
     expect(dev).not.toContain("upgrade-insecure-requests");
+  });
+
+  it("lets a preview keep the toolbar its pull requests are commented on", () => {
+    // A preview is a real production build, so it gets none of the
+    // development allowances — only this, and only there.
+    expect(preview).toContain("https://vercel.live");
+    expect(preview).not.toContain("unsafe-eval");
+    expect(live).not.toContain("vercel.live");
+    expect(dev).not.toContain("vercel.live");
   });
 });
 

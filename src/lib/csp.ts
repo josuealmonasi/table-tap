@@ -30,11 +30,19 @@ const LOOPBACK = [
 ].join(" ");
 
 /**
- * @param nonce a fresh value per request; Next stamps it on its own scripts
- * @param dev   the development server, which needs `eval` and a websocket for
- *              hot reload and serves over plain http
+ * Vercel's preview toolbar, which is how this repo's pull requests are
+ * commented on. It is a real production build, so it needs none of the
+ * development allowances — only its own host, and only on a preview.
  */
-export function contentSecurityPolicy(nonce: string, dev: boolean): string {
+const PREVIEW_TOOLBAR = "https://vercel.live";
+
+/**
+ * @param nonce   a fresh value per request; Next stamps it on its own scripts
+ * @param dev     the development server, which needs `eval` and a websocket
+ *                for hot reload and serves over plain http
+ * @param preview a deployment for a pull request, where the toolbar lives
+ */
+export function contentSecurityPolicy(nonce: string, dev: boolean, preview = false): string {
   const directives: string[] = [
     "default-src 'self'",
 
@@ -46,7 +54,9 @@ export function contentSecurityPolicy(nonce: string, dev: boolean): string {
     //
     // `unsafe-eval` in development only. The hot reloader needs it; production
     // does not, and a policy that carries it in production is not a policy.
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}${
+      preview ? " " + PREVIEW_TOOLBAR : ""
+    }`,
 
     // Inline styles are unavoidable and, unlike scripts, cheap: the app styles
     // elements with React's `style` attribute throughout, and a nonce cannot
@@ -62,7 +72,9 @@ export function contentSecurityPolicy(nonce: string, dev: boolean): string {
     // In development the loopback address is spelled both ways — hot reload
     // uses one and an editor's console bridge the other — and a host in a
     // policy is matched literally, so `localhost` does not cover `127.0.0.1`.
-    `connect-src 'self' ${SUPABASE} ${SUPABASE_SOCKET}${dev ? " " + LOOPBACK : ""}`,
+    `connect-src 'self' ${SUPABASE} ${SUPABASE_SOCKET}${dev ? " " + LOOPBACK : ""}${
+      preview ? " " + PREVIEW_TOOLBAR + " wss://ws-us3.pusher.com" : ""
+    }`,
 
     "media-src 'self' blob:",
     // The kitchen board's offline worker.
@@ -73,7 +85,7 @@ export function contentSecurityPolicy(nonce: string, dev: boolean): string {
     // and writes off tables; a page that can frame it can put its own buttons
     // over ours and let a signed-in manager click them.
     "object-src 'none'",
-    "frame-src 'none'",
+    `frame-src ${preview ? PREVIEW_TOOLBAR : "'none'"}`,
     "frame-ancestors 'none'",
 
     // A `<base>` somebody injected rewrites every relative URL on the page,

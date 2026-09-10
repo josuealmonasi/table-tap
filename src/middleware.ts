@@ -15,7 +15,14 @@ type CookiesToSet = { name: string; value: string; options: CookieOptions }[];
  */
 export async function middleware(request: NextRequest) {
   const nonce = btoa(crypto.randomUUID());
-  const csp = contentSecurityPolicy(nonce, process.env.NODE_ENV !== "production");
+  const csp = contentSecurityPolicy(
+    nonce,
+    process.env.NODE_ENV !== "production",
+    // A pull request's deployment. A real production build, so it needs none
+    // of the development allowances — only the toolbar this repo's previews
+    // are commented on, which the policy would otherwise silently refuse.
+    process.env.VERCEL_ENV === "preview",
+  );
 
   // Built fresh each time rather than snapshotted: Supabase refreshes the
   // session by writing cookies onto the REQUEST, and a response made from a
