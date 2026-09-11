@@ -1,9 +1,11 @@
 # 🌸 TableTap
 
-QR-code table ordering for restaurants. A customer scans the QR at their table,
-browses the menu, customises and pays (card / Apple Pay / Google Pay via Stripe),
-and the order lands live on the restaurant dashboard. Status updates flow back to
-the customer's phone in real time.
+Table service for restaurants, from either side. A diner scans the QR at their
+table, browses the menu, customises and pays (card / Apple Pay / Google Pay via
+Stripe) — or a waiter takes the order on their own phone, carries the plates out
+and collects the bill in cash, by card, in equal parts or a hundred pesos at a
+time. There is a counter till for walk-ins, a kitchen board that keeps working
+when the wifi does not, and tickets on paper for the pass.
 
 Built with **Next.js (App Router) · Supabase · Stripe**.
 
@@ -16,21 +18,25 @@ data model, security, and the open decisions to make next.
 
 ```
 supabase/{schema,seed,drop,purge}.sql     ← DDL + seed + reset SQL (run via pnpm db:*)
-scripts/db.mjs                            ← db runner (create/seed/reset/drop/purge, dev|prod)
+scripts/                                  ← the gates: api, rls, roles, smoke, layout,
+                                            promises, money, attack, dialogs (pnpm <name>)
 src/lib/supabase/{client,server,admin}.ts ← 3 Supabase clients (publishable + secret)
-src/lib/stripe.ts                         ← server Stripe instance
-src/lib/types.ts                          ← shared types
-src/middleware.ts                         ← refreshes auth sessions
-src/app/page.tsx                          ← landing
-src/app/login/, src/app/signup/           ← restaurant email+password auth
-src/app/api/signup/                       ← creates user + restaurant
-src/app/r/[restaurantId]/t/[tableId]/     ← customer menu + ordering (QR target)
+src/lib/csp.ts                            ← what the browser may load and talk to
+src/middleware.ts                         ← refreshes auth sessions, writes the policy
+src/lib/legal/                            ← the terms and the aviso, and the PDFs built
+                                            from them (node scripts/legal-pdf.mjs)
+src/app/r/[restaurantId]/t/[tableId]/     ← the diner's menu and bill (QR target)
 src/app/order/[orderId]/                  ← live order tracking
-src/app/dashboard/                        ← restaurant dashboard home (login required)
-src/app/dashboard/menu/                   ← menu manager (sections, products, add-ons)
-src/app/api/checkout/                     ← creates order + Stripe Checkout session
-src/app/api/webhooks/stripe/              ← marks order paid → 'received'
-src/app/api/orders/                       ← status updates (owner only)
+src/app/dashboard/orders/                 ← the kitchen board, and what is ready to carry
+src/app/dashboard/table-order/            ← the waiter's pad
+src/app/dashboard/bills/                  ← open bills, collecting, the calculator
+src/app/dashboard/pos/                    ← the counter till
+src/app/dashboard/[menu]/                 ← menus, sections, products, extras
+src/app/dashboard/{tables,promotions,analytics,settings,staff,plan,admin}/
+src/app/api/checkout/                     ← prices a cart and opens Stripe Checkout
+src/app/api/webhooks/stripe{,/connect}/   ← the only place a payment is believed
+src/app/api/table-{order,bill,payment}/   ← what the waiter takes and collects
+src/app/api/print/cloudprnt/[token]/      ← what a kitchen printer asks for
 src/app/globals.css                       ← design system
 ```
 
@@ -144,12 +150,21 @@ any CVC.
    `.env.production.local` (paste the **secret** values here directly — they live
    only in Vercel, never in chat or git).
 4. Deploy. You'll get a URL like `https://tabletap.vercel.app`.
-5. **Add the production webhook:** Stripe dashboard → Developers → Webhooks →
-   **Add endpoint** → URL = `https://YOUR-APP.vercel.app/api/webhooks/stripe`,
-   event = `checkout.session.completed`. Copy the new `whsec_...` into Vercel's
-   `STRIPE_WEBHOOK_SECRET` and redeploy.
+5. **Add BOTH production webhooks.** There are two Stripe accounts in play, so
+   there are two endpoints, each with its own signing secret:
 
-That's it — you're live.
+   | endpoint | register as | events |
+   | --- | --- | --- |
+   | `/api/webhooks/stripe` | events on **your** account | `customer.subscription.*` |
+   | `/api/webhooks/stripe/connect` | events on **connected accounts** | `checkout.session.completed`, `checkout.session.expired` |
+
+   Their secrets go into Vercel as `STRIPE_WEBHOOK_SECRET` and
+   `STRIPE_WEBHOOK_SECRET_CONNECT`. The wrong one fails every event with a 400
+   that looks like a delivery problem. Until they exist a card payment never
+   marks its order paid — `pnpm money:prod` is the check that catches it.
+
+See [`docs/before-launch.md`](docs/before-launch.md) for the rest of what only
+the business can supply: live keys, a mail provider, and the legal identity.
 
 ---
 
@@ -164,23 +179,34 @@ That's it — you're live.
   can track their order without logging in.
 - Dashboard writes require a logged-in owner; RLS ties each restaurant to its
   `owner_id`.
+- Every response carries a **Content-Security-Policy with a per-request nonce**
+  (`src/lib/csp.ts`): no inline script anywhere, and `connect-src` limited to us
+  and Supabase, so a script that somehow ran has nowhere to send a bill.
+- `pnpm rls` attacks all 21 tenant tables as all six roles, and `pnpm attack`
+  asks what a signed-in person can do that they should not — judged on whether
+  a peso moved, never on the absence of an error.
 
 ---
 
-## Roadmap (not yet built)
+## Not yet built
 
-- PayPal (add as a Stripe payment method or separate SDK)
-- Menu management UI (CRUD) — schema + RLS already support it
-- QR code generation + printable PDFs per table
-- Analytics dashboard
-- Multi-restaurant SaaS onboarding
+- **Push notifications** — the sending half is inert until a VAPID key pair
+  exists in Vercel.
+- **Menu import from a photo or a PDF** — needs an Anthropic key and costs real
+  money per import, which is why it is gated to Casa and above.
+- **One login across several restaurants** — what the Grupo tier is waiting on.
+  Grupo is priced per location, never as a flat bundle.
+- **PayPal**, as a Stripe payment method or its own SDK.
 
 ---
 
-## A note on the customer/dashboard sync demo
+## Where the rest is written down
 
-In the earlier prototype the order status auto-advanced on a timer so you could see
-the flow. In this real version, status changes happen when **kitchen staff tap the
-buttons** on the dashboard — and the customer's tracking screen updates instantly via
-Supabase realtime. To demo: open the customer URL and the dashboard side by side,
-place an order, then advance it from the dashboard.
+- [`docs/SPEC.md`](docs/SPEC.md) — what the app is: the flows, the money, the
+  roles, and why each decision went the way it did.
+- [`docs/regressions.md`](docs/regressions.md) — every bug that has actually
+  shipped here, and what now catches each one automatically.
+- [`docs/before-launch.md`](docs/before-launch.md) — the things outside the code
+  that only the business can supply, and what each one breaks while it is missing.
+- [`CLAUDE.md`](CLAUDE.md) — how code is written here, and the gate to run
+  before shipping anything.
