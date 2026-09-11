@@ -5,11 +5,13 @@ only the business can supply. Each one fails **silently** — the app builds,
 deploys and passes every check without them, and the failure only shows up as
 money that never arrives or an email nobody receives.
 
-Last verified against production on 8 September 2026.
+Last verified against production on 10 September 2026: still test keys, still
+zero webhook endpoints against four connected accounts, still no mail provider.
 
 ## 1. The Stripe webhooks — money is not being recorded without them
 
-**Checked: zero endpoints registered, against four connected accounts.**
+**Checked 10 September 2026: zero endpoints registered, against four connected
+accounts.**
 
 The code is ready (two routes, one signing secret each). Until the endpoints
 exist, a card payment never marks its order paid, and abandoned split shares
