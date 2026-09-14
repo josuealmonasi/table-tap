@@ -425,6 +425,27 @@ insert into storage.buckets (id, name, public)
 values ('menu', 'menu', true)
 on conflict (id) do nothing;
 
+-- What may be put in it, and how big.
+--
+-- The bucket had neither: any type, any size. Writes are manager-scoped, so
+-- this was never a way in — but a public bucket with no allowlist serves
+-- whatever is put there from the project's own domain, and an SVG or an HTML
+-- file is a page, not a picture. Unbounded size is the other half: nothing
+-- stopped one upload from costing more than a year of the plan.
+--
+-- `image/webp` alone, because that is the only thing the app uploads: the
+-- picker accepts jpeg, png and webp, and `resizeToSpec` converts every one of
+-- them before it goes anywhere near storage. 5 MB is `COVER.maxBytes`, the
+-- ceiling the app already states for a SOURCE file — a resized webp is a
+-- fraction of it, so this is headroom rather than a limit anyone will meet.
+--
+-- Written every time rather than on insert: the bucket already exists in every
+-- environment, so `on conflict do nothing` above would never have applied it.
+update storage.buckets
+   set file_size_limit = 5 * 1024 * 1024,
+       allowed_mime_types = array['image/webp']
+ where id = 'menu';
+
 -- Reads the restaurant id out of an object path, or null when the path is not
 -- shaped like one. Kept as a function because a bare `::uuid` cast raises on
 -- anything else, and a policy that can raise is a policy that can be tripped

@@ -496,5 +496,104 @@ if (!signIn.error && theirs) {
   if (fixture) await fixture.remove();
 }
 
+// ── The other door: realtime ────────────────────────────────────────────────
+//
+// Everything above asks PostgREST. The kitchen board does not — it subscribes,
+// and `orders` and `service_requests` are in the realtime publication. A row
+// arriving down a socket has bypassed every check in this file if RLS does not
+// reach that far, and nothing here had ever asked whether it does.
+//
+// Judged the only way a negative is worth anything: the channel is first shown
+// to be live by receiving an event it IS entitled to, and only then asked for
+// one it is not. Without that, "no payload arrived" and "realtime is off" look
+// exactly alike — which is how this check would come to pass while proving
+// nothing.
+if (!prod) {
+  console.log("\n  Realtime\n");
+
+  const { data: rs2 } = await admin.from("restaurants").select("id, name");
+  const mine = rs2.find(r => r.name === "Demo Bistro") ?? rs2[0];
+  const theirs = rs2.find(r => r.id !== mine.id);
+  const PROBE = "rls realtime probe";
+
+  const listen = async (client, restaurantId) => {
+    const seen = [];
+    const channel = client
+      .channel(`rls-${restaurantId}-${Date.now()}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "orders", filter: `restaurant_id=eq.${restaurantId}` },
+        payload => seen.push(payload.new?.id ?? payload.old?.id),
+      );
+    const status = await new Promise(resolve => {
+      channel.subscribe(st => {
+        if (["SUBSCRIBED", "CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(st)) resolve(st);
+      });
+      setTimeout(() => resolve("NO_STATUS"), 20000);
+    });
+    return { seen, status };
+  };
+
+  const plant = async restaurantId => {
+    const { data } = await admin.from("orders").insert({
+      restaurant_id: restaurantId, status: "received", paid: true, subtotal: 1,
+      service_fee: 0, tip: 0, tax_pct: 0, total: 1, currency: "MXN", note: PROBE,
+      items: [{ itemId: "x", name: PROBE, emoji: "x", price: 1, qty: 1, mods: {} }],
+    }).select("id").maybeSingle();
+    return data?.id ?? null;
+  };
+
+  const kitchen = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  );
+  const { error: signInError } = await kitchen.auth.signInWithPassword({
+    email: "demo-kitchen@tabletap.dev",
+    password: "demo123",
+  });
+
+  if (signInError) {
+    bad(`cannot sign in as the kitchen — realtime went unchecked: ${signInError.message}`);
+  } else if (!theirs) {
+    bad("only one restaurant exists — the realtime check cannot run");
+  } else {
+    // 1. Live? Its own restaurant's ticket must arrive, or nothing below means
+    //    anything.
+    const own = await listen(kitchen, mine.id);
+    const ownId = await plant(mine.id);
+    await new Promise(r => setTimeout(r, 12000));
+    await kitchen.removeAllChannels();
+
+    if (own.seen.length === 0) {
+      bad(`realtime delivered nothing for the kitchen's own restaurant (${own.status}) — the check below would prove nothing`);
+    } else {
+      ok("realtime reaches the board it belongs to");
+
+      // 2. And now somebody else's, asked for by id — as staff elsewhere, and
+      //    as nobody at all.
+      const anon = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+      );
+      const [asStaff, asAnon] = await Promise.all([listen(kitchen, theirs.id), listen(anon, theirs.id)]);
+      const theirId = await plant(theirs.id);
+      await new Promise(r => setTimeout(r, 12000));
+      await Promise.all([kitchen.removeAllChannels(), anon.removeAllChannels()]);
+
+      asStaff.seen.length === 0
+        ? ok("a kitchen elsewhere hears nothing of another restaurant's orders")
+        : bad(`realtime handed ${asStaff.seen.length} of another restaurant's orders to a signed-in kitchen`);
+      asAnon.seen.length === 0
+        ? ok("nobody at all hears them either")
+        : bad(`realtime handed ${asAnon.seen.length} of another restaurant's orders to an anonymous listener`);
+
+      if (theirId) await admin.from("orders").delete().eq("id", theirId);
+    }
+    if (ownId) await admin.from("orders").delete().eq("id", ownId);
+  }
+  // Whatever happened above, nothing of this is left behind.
+  await admin.from("orders").delete().eq("note", PROBE);
+}
+
 console.log(failed === 0 ? "\nNothing is exposed.\n" : `\n${failed} PROBLEM(S) — fix before shipping.\n`);
 process.exit(failed === 0 ? 0 : 1);
