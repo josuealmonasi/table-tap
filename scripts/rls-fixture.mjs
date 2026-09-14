@@ -87,6 +87,22 @@ export async function plantNeighbour(admin, restaurantId) {
   await keep("iconGroup", "icon_groups", {
     restaurant_id: restaurantId, variant: "product", name: "rls fixture",
   });
+  // The three the sweep kept reporting as "no fixture, so not attacked". What
+  // a seed happens to have left in a neighbour's tables is not something a
+  // security check may depend on: the run that finds nothing to attack is the
+  // one that passes without asking anything.
+  await keep("coupon", "coupons", {
+    restaurant_id: restaurantId, code: "RLS-FIXTURE", kind: "fixed", value: 1,
+  });
+  await keep("promotion", "promotions", {
+    restaurant_id: restaurantId, name: "rls fixture", kind: "bogo",
+    buy_qty: 2, pay_qty: 1, active: false,
+  });
+  await keep("log", "user_logs", {
+    restaurant_id: restaurantId, actor_email: "rls@fixture.invalid",
+    entity: "staff", action: "created", target_email: "rls@fixture.invalid",
+    target_role: "waiter",
+  });
   await keep("notification", "notifications", {
     restaurant_id: restaurantId, kind: "low_stock", data: { note: "rls fixture" },
   });
@@ -96,8 +112,9 @@ export async function plantNeighbour(admin, restaurantId) {
     /** Children first, so nothing is left holding a reference. */
     remove: async () => {
       const order = [
-        "split", "sitting", "request", "notification", "iconGroup",
-        "writeOff", "discount", "redemption", "rating", "print_job", "payment", "order",
+        "split", "sitting", "request", "notification", "iconGroup", "log",
+        "writeOff", "discount", "redemption", "promotion", "coupon",
+        "rating", "print_job", "payment", "order",
       ];
       for (const name of order) {
         const row = planted[name];
