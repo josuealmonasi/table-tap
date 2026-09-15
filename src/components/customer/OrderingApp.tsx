@@ -34,6 +34,7 @@ import { useReceiptOffer } from "@/hooks/useReceiptOffer";
 import { useSitting } from "@/hooks/useSitting";
 import { formatMoney } from "@/lib/format";
 import { recallSitting, rememberSitting } from "@/lib/table-binding";
+import { dinerToken } from "@/lib/diner-token";
 import BillSheet from "./BillSheet";
 import ReceiptPrompt from "./ReceiptPrompt";
 import TrackerOverlay from "./TrackerOverlay";
@@ -108,7 +109,7 @@ export default function OrderingApp({
   // What the table still owes. Only meaningful at a table: a fast-food QR pays
   // as it orders, so there is never an open bill.
   const [billOpen, setBillOpen] = useState(false);
-  const { bill, reload: reloadBill, staffBill } = useTableBill(
+  const { bill, reload: reloadBill, staffBill, party } = useTableBill(
     restaurant.id,
     table?.id ?? null,
     billOpen,
@@ -450,6 +451,11 @@ export default function OrderingApp({
           tipAmount: tipCustom ?? undefined,
           couponCode: coupon?.code,
           payLater,
+          // Which phone ordered. It is how many devices have ordered on the
+          // sitting that decides how many ways the bill can be divided — a
+          // share belongs to a device, and a share nobody can claim stops the
+          // whole table paying.
+          diner: dinerToken(restaurant.id) || undefined,
         }),
       });
       const data = await res.json();
@@ -698,6 +704,7 @@ export default function OrderingApp({
             tableLabel={table.label}
             sessionId={sittingSessionId}
             staffBill={staffBill}
+            party={party}
           />
         )}
         {/* Not dismissible into ordering: the point is that a second bill does

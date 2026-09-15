@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
       tipAmount: rawTipAmount,
       couponCode,
       payLater,
+      diner,
     } = body as {
       restaurantId: string;
       tableId: string | null;
@@ -85,6 +86,15 @@ export async function POST(req: NextRequest) {
       couponCode?: string;
       /** Dine-in: send the food now and settle at the end. */
       payLater?: boolean;
+      /**
+       * The throwaway id this phone gave itself for the evening.
+       *
+       * Stored on the order so a table can be divided between the people who
+       * actually ate: the number of devices that have ordered on the sitting
+       * is the most ways its bill can go. Absent from a waiter's order, and
+       * from a phone with storage switched off.
+       */
+      diner?: string;
     };
 
     // Tips: either a preset percentage (recomputed from the verified subtotal)
@@ -355,6 +365,9 @@ export async function POST(req: NextRequest) {
         table_id: tableId,
         table_label: tableLabel,
         session_id: sessionId,
+        // Which phone this was. Bounded because it comes from the client and
+        // is written with the secret key; anything longer is not one of ours.
+        diner: typeof diner === "string" && diner.length > 0 && diner.length <= 64 ? diner : null,
         // A deferred order skips the payment gate and goes straight to the
         // pass: the kitchen starts cooking, `paid` stays false, and the table
         // settles at the end. `pending_payment` is what hides an order from the

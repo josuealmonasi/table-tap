@@ -3,6 +3,7 @@ import { apiError } from "@/lib/api-error";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { fetchTableBill } from "@/lib/bill-data";
 import { staffOpenedBill } from "@/lib/table-session";
+import { tableParty } from "@/lib/table-party-server";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,10 @@ export const dynamic = "force-dynamic";
 // What the table still owes. The bill screen polls this while the diners are
 // sitting there, so it is throttled: it reads with the secret key, and a table
 // id is the only thing standing between a caller and somebody's order history.
+//
+// `party` comes back with it: how many devices have ordered on this table,
+// which is the most ways its bill can be divided. The device tokens themselves
+// never leave the server — only the count does.
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const restaurantId = req.nextUrl.searchParams.get("restaurantId");
   const tableId = req.nextUrl.searchParams.get("tableId");
@@ -27,11 +32,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // opened this bill and is settling it in person. The routes that charge
     // refuse it as well — this only keeps the screen from promising something
     // the system will turn down.
-    const [orders, staffBill] = await Promise.all([
+    const [orders, staffBill, party] = await Promise.all([
       fetchTableBill(restaurantId, tableId, "diner", sessionId),
       staffOpenedBill(restaurantId, tableId),
+      tableParty(restaurantId, tableId),
     ]);
-    return NextResponse.json({ orders, staffBill });
+    return NextResponse.json({ orders, staffBill, party });
   } catch {
     return await apiError("apiErr.ordersLoad", 500);
   }

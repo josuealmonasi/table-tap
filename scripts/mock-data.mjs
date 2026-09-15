@@ -502,7 +502,11 @@ export async function seedMock(pg) {
       "insert into table_sessions (restaurant_id, table_id) values ($1, $2) returning id",
       [rid, t.id],
     );
-    for (let k = 0; k < randInt(1, 3); k++) {
+    // Each round came from a different phone at the table. The demo shows a
+    // bill mid-split, and a bill can only be divided between the devices that
+    // ordered on it — one phone's three rounds is one person, not three.
+    const rounds = randInt(2, 3);
+    for (let k = 0; k < rounds; k++) {
       const lines = buildLines(products);
       const subtotal = round2(
         lines.reduce((sum, l) => sum + (l.price + l.extras.reduce((x, e) => x + e.price, 0)) * l.qty, 0),
@@ -512,12 +516,13 @@ export async function seedMock(pg) {
         rows: [o],
       } = await pg.query(
         `insert into orders (restaurant_id, table_id, table_label, session_id, status, subtotal,
-           service_fee, tip, total, currency, items, paid, created_at)
-         values ($1,$2,$3,$4,'ready',$5,$6,0,$7,'MXN',$8,false,$9) returning id`,
+           service_fee, tip, total, currency, items, paid, created_at, diner)
+         values ($1,$2,$3,$4,'ready',$5,$6,0,$7,'MXN',$8,false,$9,$10) returning id`,
         [
           rid, t.id, t.label, session.id, subtotal, serviceFee,
           round2(subtotal + serviceFee), JSON.stringify(lines),
           new Date(Date.now() - randInt(15, 120) * 60000).toISOString(),
+          `demo-phone-${k + 1}`,
         ],
       );
       openBills.push({ orderId: o.id, table: t, sessionId: session.id });
@@ -698,6 +703,7 @@ export async function seedMock(pg) {
       [sp.id],
     );
   }
+
 
   const waiting = openBills[0];
   await pg.query(

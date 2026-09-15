@@ -126,6 +126,27 @@ export const STATES = [
     keeps: /pagar en la mesa|pay at the table/i,
   },
   {
+    // The other half of Mesa 10: one phone had ordered, and the bill offered to
+    // divide it between up to twenty. The diner chose twelve, eleven of those
+    // shares belonged to nobody, and until the proposal was called off the bill
+    // could not be paid by anyone at all.
+    //
+    // Cards are switched ON for this one, so what is measured is the split and
+    // not the refusal the case above checks.
+    name: "a table of one · the bill",
+    as: "bill",
+    apply: (admin, c) =>
+      admin.from("restaurants")
+        .update({ stripe_account_id: "acct_promise_audit", stripe_charges_enabled: true })
+        .eq("id", c.restaurantId),
+    open: /ver mi cuenta|view my bill/i,
+    says: /total/i,
+    // No way in to dividing it, because there is nobody to divide it with.
+    offers: /dividir|split/i,
+    // And the bill itself is still perfectly payable.
+    keeps: /pago en l|pay online|pagar en la mesa|pay at the table/i,
+  },
+  {
     name: "counter order ready",
     as: "tracker",
     // Placed from the general QR, so nobody is carrying it anywhere. The

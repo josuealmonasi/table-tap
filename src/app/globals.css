@@ -6439,7 +6439,16 @@ a.tt-user-plan:hover {
 
 /* ── Dividing the bill ─────────────────────────────────────────────────────
    A decision the table makes out loud, so it reads as one block rather than a
-   row of controls: the question, what it would cost each, and the answer. */
+   row of controls: the question, what it would cost each, and the answer.
+
+   Until somebody asks for it, it is one link and nothing else. It used to open
+   as a bordered card with a heading and a dropdown, above everything — so the
+   first thing on the screen of someone who came to pay was a question about
+   splitting they had not asked. Same weight as the coupon link below it, which
+   is the other thing on this screen that most people do not want. */
+.tt-split-ask {
+  margin: 14px 0 2px;
+}
 .tt-split {
   display: flex;
   flex-direction: column;
@@ -6459,13 +6468,13 @@ a.tt-user-plan:hover {
   margin-top: 6px;
   flex-wrap: wrap;
 }
-/* The count is a small field beside a wide button: it is one digit, and the
-   button is the thing being decided. */
-.tt-split-people {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  width: 96px;
+/* The count is a small field beside a wide button: it is one or two digits,
+   and the button is the thing being decided. The question sits on its own line
+   above them — sharing the row, it was either wrapped onto two lines or wide
+   enough to push the end of the button's own amount off the card. */
+.tt-split-count {
+  width: 84px;
+  flex: none;
 }
 .tt-split-row .tt-btn {
   flex: 1;

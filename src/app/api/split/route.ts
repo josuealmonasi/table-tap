@@ -4,6 +4,8 @@ import { staffOpenedBill } from "@/lib/table-session";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { currentSplit } from "@/lib/split-service";
+import { MAX_SHARES } from "@/lib/split-shares";
+import { tableParty } from "@/lib/table-party-server";
 import { fetchTableBill } from "@/lib/bill-data";
 import { tableBill } from "@/lib/table-bill";
 
@@ -50,9 +52,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!sessionId || !diner || !restaurantId || !tableId) {
     return await apiError("apiErr.invalidRequest", 400);
   }
-  if (!Number.isInteger(shares) || (shares as number) < 2 || (shares as number) > 20) {
+  if (!Number.isInteger(shares) || (shares as number) < 2 || (shares as number) > MAX_SHARES) {
     return await apiError("apiErr.splitPeople", 400);
   }
+
   // Nothing to divide: the waiter who opened this bill is the one collecting
   // it, and they have a calculator that does the same job at the table.
   if (await staffOpenedBill(restaurantId, tableId)) {
@@ -70,6 +73,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .maybeSingle();
   if (!sitting || sitting.closed_at || sitting.restaurant_id !== restaurantId || sitting.table_id !== tableId) {
     return await apiError("apiErr.sessionGone", 409);
+  }
+
+  // Never more shares than there are people eating. A share is claimed by the
+  // device that ordered, so one nobody can claim freezes the bill for
+  // everybody: the diner who proposed twelve, alone at Mesa 10, could not pay
+  // at all until the proposal was called off. The screen caps the dropdown;
+  // this is the rule, because a dropdown is not a guard.
+  const party = await tableParty(restaurantId, tableId);
+  if (party < 2 || (shares as number) > party) {
+    return await apiError("apiErr.splitTooMany", 409, { n: party });
   }
 
   // Nothing to divide is not a split, it is a bill that is already settled.

@@ -76,6 +76,15 @@ off and reads the orders back, and fails if any of them is still on the board.
 When a flag means "this is over", find every screen that asks "is this still
 happening" and make sure it is asking the same question.
 
+**A fixture that picks a row by sorting picks a different row every reseed.**
+`pnpm api` chose the alphabetically-first available dish to order with. After a
+reseed that dish was on the demo's "Weekend Brunch" menu, which serves Saturday
+and Sunday mornings — so every route that orders food answered "no longer
+available" and the suite failed on a Tuesday for a reason that had nothing to do
+with the code. It now picks from a menu that is active AND unscheduled, and
+throws rather than continuing if there is none. When a fixture asks the database
+to choose, make it state every condition it is relying on.
+
 **Ask what the key is keyed by.**
 The tracker offered a diner the order they had placed at a different table,
 because the memory was keyed per restaurant when the thing it described was per
