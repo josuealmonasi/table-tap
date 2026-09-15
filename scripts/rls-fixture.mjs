@@ -103,6 +103,11 @@ export async function plantNeighbour(admin, restaurantId) {
     entity: "staff", action: "created", target_email: "rls@fixture.invalid",
     target_role: "waiter",
   });
+  // A colleague of theirs. Nothing signs in as this row; it exists so that
+  // "cannot read their staff" is a question rather than an empty table.
+  await keep("colleague", "staff", {
+    restaurant_id: restaurantId, email: "rls@fixture.invalid", role: "waiter",
+  });
   await keep("notification", "notifications", {
     restaurant_id: restaurantId, kind: "low_stock", data: { note: "rls fixture" },
   });
@@ -112,7 +117,7 @@ export async function plantNeighbour(admin, restaurantId) {
     /** Children first, so nothing is left holding a reference. */
     remove: async () => {
       const order = [
-        "split", "sitting", "request", "notification", "iconGroup", "log",
+        "split", "sitting", "request", "notification", "iconGroup", "log", "colleague",
         "writeOff", "discount", "redemption", "promotion", "coupon",
         "rating", "print_job", "payment", "order",
       ];
