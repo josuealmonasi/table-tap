@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
+import ScanToCollect from "@/components/dashboard/ScanToCollect";
 import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
 import { CheckIcon } from "@/components/ui/icons";
@@ -302,6 +303,17 @@ export default function PosScreen({
           <h1 className="tt-serif" style={{ margin: 0 }}>
             {t("pos.title")}
           </h1>
+          {/* The queue, not the till's own sale.
+              Somebody who ordered from their phone arrives holding a code that
+              says "the counter scans this and charges it". Until now the
+              cashier had to leave the till, open Cuentas abiertas and find
+              them — with a person waiting. The camera is here too now; the
+              list over there is untouched and still works.
+
+              It collects nowhere near here: the code names a bill, and the
+              bill is settled on the screen that settles bills. One way for
+              money to be taken, not two that have to agree. */}
+          <ScanToCollect onFound={id => router.push(`/dashboard/bills?order=${id}`)} />
         </header>
 
         {closedNow && <p className="tt-offline-banner">{t("pos.closedNow")}</p>}
