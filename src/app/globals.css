@@ -563,6 +563,13 @@ a.tt-btn {
 .tt-bill-find .tt-bill-search {
   flex: 1 1 220px;
   min-width: 0;
+  /* Inside this row the spacing belongs to the row, not to the pill. */
+  margin: 0;
+}
+/* …and the row carries it, so the list below is clear of the controls whether
+   they wrapped onto two lines or one. */
+.tt-bill-find {
+  margin-bottom: 12px;
 }
 
 .tt-scan-view {
@@ -813,15 +820,31 @@ a.tt-btn {
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
+/* The till's cart, and the waiter's.
+   Laid out by the panel rather than by each child's own margin. Every block in
+   here used to space itself against whatever it expected to find underneath,
+   and the table picker expected nothing: its `margin-top` gave it room above
+   and none below, so the first dish sat flush against the dropdown. A gap on
+   the container is one rule that cannot be wrong about a neighbour it has not
+   met — an empty cart, a hidden total, a picker that only some screens show. */
 .tt-pos-cart {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   padding: 16px;
   background: var(--tt-white);
   border: 1px solid var(--tt-line);
   border-radius: 12px;
 }
+/* Headings and paragraphs bring their own margins, which would add to the gap
+   and space this panel unevenly against itself. */
+.tt-pos-cart > h3,
+.tt-pos-cart > p {
+  margin: 0;
+}
 .tt-pos-lines {
   list-style: none;
-  margin: 0 0 4px;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -832,11 +855,12 @@ a.tt-btn {
   align-items: baseline;
   gap: 12px;
   /* The rule is 2px of near-black and the heaviest thing on the pad, so it
-     needs air on both sides or it reads as underlining the field above and
-     crowding the total below. It had 14px under it and nothing over it. */
-  margin-top: 20px;
+     needs MORE air than the panel's own 14px gap or it reads as underlining
+     the block above and crowding the total below. These are what it wants on
+     top of that gap, not instead of it: 14 + 6 above, 14 + 2 below. */
+  margin-top: 6px;
   padding-top: 18px;
-  margin-bottom: 16px;
+  margin-bottom: 2px;
   border-top: 2px solid var(--tt-ink);
   font-size: 15px;
 }
@@ -859,13 +883,7 @@ a.tt-btn {
 /* Fields need air between them: `.tt-field` spaces a label from its own input
    and nothing separated one group from the next, so each label sat on the box
    above it. */
-.tt-pos-cart .tt-field + .tt-field,
-.tt-pos-cart .tt-field {
-  margin-top: 14px;
-}
-.tt-pos-cart .tt-field:first-of-type {
-  margin-top: 0;
-}
+/* Spacing is the panel's, above — nothing in here sets its own any more. */
 /* The table, and the camera that names it without anybody typing.
    `min-width: 0` on the select because a flex child will not shrink below its
    own content otherwise, and a long label — "Terraza junto a la ventana" —
@@ -888,7 +906,6 @@ a.tt-btn {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 16px;
 }
 .tt-pos-charge .tt-btn {
   min-width: 0;
@@ -1818,12 +1835,18 @@ a.tt-btn {
   min-width: 0;
 }
 
+/* A search pill, with air on BOTH sides.
+   It spaced itself upward only, so whatever it filtered began flush against
+   it: on Analytics the first history row touched the box, and on Bills the
+   list was 6px away at phone width. A row that spaces itself in one direction
+   is right until something appears on the other. */
 .tt-bill-search {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 0 12px;
   margin-top: 12px;
+  margin-bottom: 12px;
   border: 1px solid var(--tt-line);
   border-radius: 999px;
   background: var(--tt-white);
@@ -1841,7 +1864,7 @@ a.tt-btn {
 }
 
 .tt-bill-list {
-  margin-top: 6px;
+  margin-top: 0;
 }
 /* On a wide screen the bills are cards in a three-up grid, not a list running
    the width of the page: a manager scanning for "table four" reads a short
