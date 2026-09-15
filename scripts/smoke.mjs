@@ -59,11 +59,27 @@ const { data: table } = await admin
   .limit(1)
   .maybeSingle();
 
+// An order to deep-link at. The till scans a diner's code and hands off to
+// /dashboard/bills?order=<id> rather than collecting money itself, so that
+// destination has to survive being handed an id — including one for a bill
+// that is no longer there, which is what a re-scanned receipt is.
+const { data: someOrder } = await admin
+  .from("orders")
+  .select("id")
+  .eq("restaurant_id", restaurant?.id ?? "")
+  .order("created_at", { ascending: false })
+  .limit(1)
+  .maybeSingle();
+
 const PAGES = [
   "/dashboard",
   "/dashboard/orders",
   "/dashboard/tables",
   "/dashboard/bills",
+  someOrder ? `/dashboard/bills?order=${someOrder.id}` : null,
+  // A code for a bill somebody already settled: the page must still render and
+  // say so, not fall over on the way to explaining itself.
+  "/dashboard/bills?order=00000000-0000-4000-8000-000000000000",
   "/dashboard/promotions",
   "/dashboard/analytics",
   "/dashboard/settings",
