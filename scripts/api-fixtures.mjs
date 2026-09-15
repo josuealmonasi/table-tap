@@ -49,15 +49,26 @@ export async function setup(env, base) {
     .from("restaurants").select("*").eq("name", "Demo Bistro").maybeSingle();
   const { data: tables } = await admin
     .from("restaurant_tables").select("id, label").eq("restaurant_id", restaurant.id);
+  // A menu that is serving RIGHT NOW: active, and on no schedule. The demo has
+  // a "Weekend Brunch" menu that only serves Saturday and Sunday mornings, and
+  // whichever dish sorts first happened to be on it — so every route that
+  // orders food answered "no longer available" and the suite failed on a
+  // Tuesday for a reason that had nothing to do with the code. Which dish that
+  // was depended on the last reseed, so it came and went.
+  const { data: menu } = await admin
+    .from("menus").select("id").eq("restaurant_id", restaurant.id)
+    .eq("active", true).is("schedule", null)
+    .order("sort_order").limit(1).maybeSingle();
+  if (!menu) throw new Error("no unscheduled active menu to order from");
   const { data: dish } = await admin
     .from("menu_items").select("id, name, price, emoji")
     .eq("restaurant_id", restaurant.id).eq("available", true).eq("is_addon", false)
+    .eq("menu_id", menu.id)
     // Ordered, so every run uses the same dish. Unordered with limit(1),
     // Postgres returns whichever row it likes and the suite quietly changes
     // what it is testing between runs.
     .order("name").limit(1).maybeSingle();
-  const { data: menu } = await admin
-    .from("menus").select("id").eq("restaurant_id", restaurant.id).limit(1).maybeSingle();
+  if (!dish) throw new Error("no available dish on the serving menu");
 
   // One paid order and one unpaid, ours, so the demo's are left alone.
   const line = { itemId: dish.id, name: dish.name, emoji: dish.emoji ?? "🍽️", price: Number(dish.price), qty: 1, mods: {} };

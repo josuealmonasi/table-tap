@@ -1710,6 +1710,25 @@ alter table orders add column if not exists session_id uuid
   references table_sessions(id) on delete set null;
 create index if not exists orders_session_idx on orders(session_id);
 
+-- Which phone placed this order.
+--
+-- The throwaway token a diner's device gives itself for the evening — the same
+-- one that holds a seat in a divided bill. It says which device, and nothing
+-- else: no name, no account, nothing that outlives the meal, and useless at any
+-- other table.
+--
+-- It is here so a table can be divided between the people who are actually
+-- eating. One diner alone was offered a split between 2 and 20, proposed twelve
+-- ways, and then could not pay at all until the proposal was called off:
+-- eleven of those shares belonged to nobody, and a share nobody claims freezes
+-- the bill for everybody. Counting the devices that have ordered on the sitting
+-- is what makes the offer honest.
+--
+-- Null for an order a waiter typed in, and for a phone with storage switched
+-- off. Those still ate: see `diningOn` in src/lib/table-party.ts.
+alter table orders add column if not exists diner text;
+
+
 -- Opens the table's sitting, or joins the one already open.
 --
 -- Security definer for the same reason redeem_coupon is: the customer's key

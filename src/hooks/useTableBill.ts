@@ -25,9 +25,13 @@ export function useTableBill(
   reload: () => void;
   /** A waiter opened this bill and is settling it in person. */
   staffBill: boolean;
+  /** How many devices have ordered on this table — the most ways its bill
+   *  can be divided. */
+  party: number;
 } {
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [staffBill, setStaffBill] = useState(false);
+  const [party, setParty] = useState(0);
   const [loading, setLoading] = useState(false);
 
   const reload = useCallback(() => {
@@ -41,6 +45,7 @@ export function useTableBill(
       .then(d => {
         setOrders(d.orders ?? []);
         setStaffBill(Boolean(d.staffBill));
+        setParty(Number(d.party) || 0);
       })
       .catch(() => setOrders([]))
       .finally(() => setLoading(false));
@@ -74,5 +79,6 @@ export function useTableBill(
     loading,
     reload,
     staffBill,
+    party,
   };
 }

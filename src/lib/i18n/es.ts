@@ -858,6 +858,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     soon: "Pronto",
   },
   split: {
+    ask: "¿Dividir la cuenta?",
     title: "Dividir la cuenta",
     hint: "En partes iguales. Sólo funciona si todos en la mesa aceptan.",
     people: "¿Cuántos son?",
@@ -1012,6 +1013,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     loginAttach: "No se pudo adjuntar el nuevo acceso.",
     loginCreate: "No se pudo crear el acceso.",
     splitPeople: "Dinos entre cuántas personas se divide.",
+    splitTooMany: "Sólo {n} celular(es) pidieron en esta mesa, así que no se puede dividir entre más.",
     splitNotReady: "Todavía falta gente por aceptar la división.",
     splitNotYours: "No tienes una parte en esta división.",
     splitAlreadyPaid: "Tu parte ya está pagada.",

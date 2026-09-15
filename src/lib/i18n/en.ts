@@ -864,6 +864,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     soon: "Soon",
   },
   split: {
+    ask: "Split the bill?",
     title: "Split the bill",
     hint: "Evenly. It only works if everyone at the table agrees.",
     people: "How many of you?",
@@ -1018,6 +1019,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     loginAttach: "Could not attach the new login.",
     loginCreate: "Could not create the login.",
     splitPeople: "Tell us how many people are sharing.",
+    splitTooMany: "Only {n} phone(s) have ordered at this table, so it can't be divided between more.",
     splitNotReady: "Not everyone has agreed to the split yet.",
     splitNotYours: "You do not have a share in this split.",
     splitAlreadyPaid: "Your share is already paid.",

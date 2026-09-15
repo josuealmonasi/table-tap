@@ -47,6 +47,13 @@ interface BillSheetProps {
    * worse than not offering it.
    */
   staffBill?: boolean;
+  /**
+   * How many devices have ordered on this table.
+   *
+   * The ceiling on dividing the bill. Nothing else on this screen uses it —
+   * what somebody pays is always summed from the orders.
+   */
+  party?: number;
 }
 
 /** One dish on the bill, laid out like a cart line but not editable. */
@@ -181,6 +188,7 @@ export default function BillSheet({
   tableLabel,
   photoOf,
   staffBill = false,
+  party = 0,
 }: BillSheetProps) {
   const t = useT();
   const currency = restaurant.currency;
@@ -392,6 +400,7 @@ export default function BillSheet({
             busy={splitBusy || busy}
             currency={currency}
             outstanding={bill.total}
+            party={party}
             propose={propose}
             join={join}
             cancel={cancelSplit}
