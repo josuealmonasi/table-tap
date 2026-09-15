@@ -93,13 +93,18 @@ question it existed to ask. They now switch cards on for the length of the
 case and put them back. Before believing a green check, ask what the FIRST
 refusal on that path is and whether the case gets past it.
 
-**A socket is a second connection, and it does not know who you are.**
-`pnpm rls` signed the kitchen in and subscribed to its own restaurant's orders.
-About one run in three the channel reported SUBSCRIBED and then delivered
-nothing — the token had not reached the socket before it connected, so RLS saw
-an anonymous reader. It looked exactly like a broken app and was never one.
-`realtime.setAuth(session.access_token)` before subscribing, which is what
-`useLiveOrders` has always done. Five runs, 77 checks each, no flake.
+**SUBSCRIBED is the client saying it asked, not the server saying it is wired
+up.** `pnpm rls` subscribed the kitchen to its own restaurant's orders, planted
+one, and waited. Every so often the channel reported SUBSCRIBED and delivered
+nothing, and the check — correctly — refused to build the cross-tenant
+assertions on a socket it could not prove was live. It looked exactly like a
+broken app and was never one. The first ticket can fall into the gap between
+the two; a second one a breath later cannot fall into the same gap, so the
+liveness step plants twice before giving up. (The missing `realtime.setAuth` was
+the first suspect and is now stated outright, matching `useLiveOrders` — but
+removing it does not reproduce the failure, so it was not the cause.) Proved
+both ways: green over a dozen runs, and still red when pointed at a
+subscription nothing can ever deliver to.
 
 **Ask what the key is keyed by.**
 The tracker offered a diner the order they had placed at a different table,
