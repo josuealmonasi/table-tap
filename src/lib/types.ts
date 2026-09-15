@@ -110,6 +110,14 @@ export type Restaurant = {
    */
   allow_pay_later?: boolean;
   /**
+   * May a table divide its own bill?
+   *
+   * On by default. It gates the OFFER, not the maths: with no Stripe account
+   * the shares cannot be charged to a card, so they are a division the table
+   * shows the waiter, who collects each one on the calculator.
+   */
+  split_enabled?: boolean;
+  /**
    * Whether the restaurant can take cards right now.
    *
    * Derived on the server from their Stripe account: the diner does not read

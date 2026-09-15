@@ -55,6 +55,18 @@ alter table restaurants add column if not exists allow_pay_later boolean not nul
 -- anyone it gets in the way of.
 alter table restaurants add column if not exists deals_tab_enabled boolean not null default true;
 
+-- May a table divide its own bill?
+--
+-- On by default, because it is what a table of friends expects. Off is for the
+-- places where it gets in the way: a bar running one tab, a set menu, anywhere
+-- the floor would rather do the arithmetic itself.
+--
+-- It gates the OFFER, not the maths. With no Stripe account the shares cannot
+-- be charged to a card, so they are a division the table shows the waiter, who
+-- collects each one on the calculator — which is most of what a table actually
+-- does with a bill.
+alter table restaurants add column if not exists split_enabled boolean not null default true;
+
 
 -- The hottest lookup in the app: getMembership asks "which restaurant does this
 -- user own?" on every request, and has_role() asks it again inside every RLS
@@ -610,7 +622,7 @@ revoke all on coupons, coupon_redemptions from anon;
 -- America/Mexico_City sin decir nada: hoy no se nota porque todos los
 -- restaurantes están ahí, y el día que entre uno en Cancún o Tijuana sus
 -- horarios de menú abrirían a la hora equivocada.
-grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, timezone, deals_tab_enabled) on restaurants to anon;
+grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, timezone, deals_tab_enabled, split_enabled) on restaurants to anon;
 
 -- And `authenticated` sees exactly the same, not the whole table. The revoke
 -- comes first on purpose: granting columns does NOT remove a grant already
@@ -628,7 +640,7 @@ revoke select on restaurants from authenticated;
 --
 -- The private columns are read with the service key now, and always scoped to
 -- the restaurant of whoever is asking (see getMembership).
-grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, timezone, deals_tab_enabled) on restaurants to authenticated;
+grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, timezone, deals_tab_enabled, split_enabled) on restaurants to authenticated;
 
 -- authenticated (logged-in staff) keeps the DML its dashboard needs — those
 -- writes are gated by the RLS policies below. But it never needs the

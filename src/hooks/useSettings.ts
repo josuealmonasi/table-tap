@@ -25,6 +25,7 @@ export type SettingsInput = Pick<
   | "allow_pay_later"
   | "badges_enabled"
   | "deals_tab_enabled"
+  | "split_enabled"
   | "low_stock_alerts_enabled"
   | "low_stock_threshold"
   | "auto_print_kitchen"

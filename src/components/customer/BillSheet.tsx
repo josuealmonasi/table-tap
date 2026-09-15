@@ -211,7 +211,11 @@ export default function BillSheet({
   // card refuses without a connected Stripe account, so a screen that offers
   // one is a screen promising a refusal — which is what Mesa 10 got, dressed
   // up as a network error.
-  const pay = { cardsEnabled: Boolean(restaurant.cards_enabled), staffBill };
+  const pay = {
+    cardsEnabled: Boolean(restaurant.cards_enabled),
+    staffBill,
+    splitAllowed: restaurant.split_enabled !== false,
+  };
   const can = billActions(pay);
   const noCard = billHintKey(pay);
 
@@ -425,6 +429,7 @@ export default function BillSheet({
             currency={currency}
             outstanding={bill.total}
             party={party}
+            cardsEnabled={Boolean(restaurant.cards_enabled)}
             propose={propose}
             join={join}
             cancel={cancelSplit}

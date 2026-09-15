@@ -36,8 +36,14 @@ export async function plantNeighbour(admin, restaurantId) {
   });
 
   if (orderId) {
+    // Named, like every real cash payment: `pnpm money` fails a cash row with
+    // nobody behind it, and a run of this killed part-way through left one
+    // planted — so a perfectly healthy ledger reported a missing cashier, in
+    // the other gate, hours later. A fixture should never be able to look like
+    // the bug a different check is watching for.
     await keep("payment", "payments", {
       restaurant_id: restaurantId, order_id: orderId, amount: 11.5, method: "cash",
+      actor_email: "rls-fixture@tabletap.dev",
     });
     await keep("print_job", "print_jobs", {
       restaurant_id: restaurantId, order_id: orderId, kind: "kitchen",

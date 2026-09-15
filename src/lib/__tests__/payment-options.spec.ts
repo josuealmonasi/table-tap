@@ -108,6 +108,7 @@ describe("orders paused", () => {
 const billCtx = (over: Partial<BillContext> = {}): BillContext => ({
   cardsEnabled: true,
   staffBill: false,
+  splitAllowed: true,
   ...over,
 });
 
@@ -131,11 +132,25 @@ describe("what a bill that already exists can be settled with", () => {
     expect(o.extras).toBe(false);
   });
 
-  it("does not let a bill be divided that no share could pay", () => {
-    // The same table divided it twelve ways first. A share is charged through
-    // /api/split/pay, which refuses for exactly the same reason — so twelve
-    // people agreed to pay an amount none of them could be charged.
-    expect(billActions(billCtx({ cardsEnabled: false })).split).toBe(false);
+  it("still divides a bill nobody can pay by card", () => {
+    // Dividing is not only a way of charging a card. With no Stripe account
+    // the shares are the division the table shows the waiter, who collects
+    // each one on the calculator — which is most of what a table does with a
+    // bill. Gated on the owner's switch, not on the card reader.
+    expect(billActions(billCtx({ cardsEnabled: false })).split).toBe(true);
+    expect(billActions(billCtx({ cardsEnabled: false })).payOnline).toBe(false);
+  });
+
+  it("does not divide it when the owner has switched that off", () => {
+    // A bar on one tab, a set menu, anywhere the floor would rather do the
+    // arithmetic itself.
+    expect(billActions(billCtx({ splitAllowed: false })).split).toBe(false);
+    // And the rest of the bill is untouched by that switch.
+    expect(billActions(billCtx({ splitAllowed: false })).payOnline).toBe(true);
+  });
+
+  it("treats a missing switch as on, for restaurants that predate it", () => {
+    expect(billActions({ cardsEnabled: true, staffBill: false }).split).toBe(true);
   });
 
   it("always leaves the waiter, who needs nothing but a floor", () => {
@@ -152,8 +167,10 @@ describe("what a bill that already exists can be settled with", () => {
 
   it("keeps a waiter's bill the waiter's, card reader or not", () => {
     // Two people collecting one bill through different doors is how a table
-    // pays twice, and the routes refuse it from their side too.
+    // pays twice, and the routes refuse it from their side too. Dividing it
+    // included: the waiter has a calculator that does the same job.
     const o = billActions(billCtx({ staffBill: true }));
     expect(o).toMatchObject({ payOnline: false, split: false, extras: false });
+    expect(billActions(billCtx({ staffBill: true, splitAllowed: true })).split).toBe(false);
   });
 });

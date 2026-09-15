@@ -6447,7 +6447,30 @@ a.tt-user-plan:hover {
    splitting they had not asked. Same weight as the coupon link below it, which
    is the other thing on this screen that most people do not want. */
 .tt-split-ask {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 14px 0 2px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+/* Inside the open card it is the heading, so it carries no margin of its own. */
+.tt-split .tt-split-ask {
+  margin: 0;
+}
+.tt-split-ask input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--tt-accent);
+}
+/* What each person owes, when there is no card to charge it to: the number IS
+   the answer, so it is sized like one rather than tucked beside a button. */
+.tt-split-each {
+  font-size: 17px;
+  white-space: nowrap;
 }
 .tt-split {
   display: flex;
