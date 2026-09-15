@@ -23,6 +23,15 @@ interface SplitBillCardProps {
    * table of whom ten ordered is a bill that divides ten ways, not nineteen.
    */
   party: number;
+  /**
+   * Can a share be charged to a card here?
+   *
+   * Without it the shares are not a payment at all — they are the division the
+   * table shows the waiter, who collects each one on the calculator. So no
+   * proposing, no joining, no freezing: just the arithmetic, which is the part
+   * the table actually wanted.
+   */
+  cardsEnabled: boolean;
   propose: (shares: number) => Promise<void>;
   join: () => Promise<void>;
   cancel: () => Promise<void>;
@@ -52,6 +61,7 @@ export default function SplitBillCard({
   currency,
   outstanding,
   party,
+  cardsEnabled,
   propose,
   join,
   cancel,
@@ -79,21 +89,30 @@ export default function SplitBillCard({
     // person who came here to pay it.
     if (choices.length === 0) return null;
 
-    if (!asking) {
-      return (
-        <div className="tt-split-ask">
-          <button type="button" className="tt-linkbtn" onClick={() => setAsking(true)}>
-            {t("split.ask")}
-          </button>
-        </div>
-      );
-    }
-
     const shares = Math.min(people, choices[choices.length - 1]);
+
+    // A question, asked once, with nothing behind it until they say yes.
+    // Most people are not splitting anything, and the first thing on the
+    // screen of somebody who came to pay should not be a decision about it.
+    const ask = (
+      <label className="tt-split-ask">
+        <input
+          type="checkbox"
+          checked={asking}
+          onChange={e => setAsking(e.target.checked)}
+        />
+        <span>{t("split.ask")}</span>
+      </label>
+    );
+
+    if (!asking) return ask;
+
     return (
       <div className="tt-split">
-        <strong>{t("split.title")}</strong>
-        <span className="tt-muted tt-split-hint">{t("split.hint")}</span>
+        {ask}
+        <span className="tt-muted tt-split-hint">
+          {cardsEnabled ? t("split.hint") : t("split.hintCash")}
+        </span>
         {/* The question above, the answer and the button on one row beneath
             it. Inside the label they competed for the same 375px: wide enough
             for "¿Cuántos son?" left the button too narrow and it lost the end
@@ -112,14 +131,24 @@ export default function SplitBillCard({
               <option key={n} value={n}>{n}</option>
             ))}
           </select>
-          <button
-            type="button"
-            className="tt-btn tt-btn-primary"
-            disabled={busy}
-            onClick={() => propose(shares)}
-          >
-            {t("split.propose", { each: formatMoney(outstanding / shares, currency) })}
-          </button>
+          {/* With no card account there is nothing to agree to: every share
+              is settled with the person standing at the table, so the number
+              IS the answer and a button that froze it would only stop the
+              table changing its mind. */}
+          {cardsEnabled ? (
+            <button
+              type="button"
+              className="tt-btn tt-btn-primary"
+              disabled={busy}
+              onClick={() => propose(shares)}
+            >
+              {t("split.propose", { each: formatMoney(outstanding / shares, currency) })}
+            </button>
+          ) : (
+            <strong className="tt-split-each">
+              {t("split.each", { amount: formatMoney(outstanding / shares, currency) })}
+            </strong>
+          )}
         </div>
       </div>
     );

@@ -62,6 +62,7 @@ export default function SettingsForm({
   // Ordering (owner + manager) — instant-save.
   const [acceptingOrders, setAcceptingOrders] = useState(restaurant.accepting_orders);
   const [payLater, setPayLater] = useState(Boolean(restaurant.allow_pay_later));
+  const [splitting, setSplitting] = useState(restaurant.split_enabled !== false);
   const [dealsTab, setDealsTab] = useState(restaurant.deals_tab_enabled !== false);
 
   // Recomputed on the fly: if they switch it off with no Stripe, the warning
@@ -133,6 +134,14 @@ export default function SettingsForm({
   async function togglePayLater(next: boolean): Promise<void> {
     setPayLater(next);
     if (!(await save({ allow_pay_later: next }))) setPayLater(!next);
+  }
+
+  // On by default: a table of friends expects to be able to halve a bill. Off
+  // is for the places where it gets in the way — a bar on one tab, a set menu,
+  // anywhere the floor would rather do the arithmetic itself.
+  async function toggleSplitting(next: boolean): Promise<void> {
+    setSplitting(next);
+    if (!(await save({ split_enabled: next }))) setSplitting(!next);
   }
 
   return (
@@ -459,6 +468,30 @@ export default function SettingsForm({
                 </span>
               </label>
             )}
+
+            {/* Not gated on Stripe, because dividing a bill is not only a way
+                of charging one. With no card account the shares are the
+                division the table shows the waiter, who collects each of them
+                on the calculator — which is most of what a table does with a
+                bill anyway. */}
+            <label className="tt-settings-toggle" style={{ marginTop: 10 }}>
+              <span>
+                <strong>{t("dash.splitTitle")}</strong>
+                <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
+                  {t("dash.splitHint")}
+                </span>
+              </span>
+              <span className="tt-switch">
+                <input
+                  type="checkbox"
+                  aria-label={t("dash.splitTitle")}
+                  checked={splitting}
+                  disabled={saving}
+                  onChange={e => toggleSplitting(e.target.checked)}
+                />
+                <span className="tt-switch-track" />
+              </span>
+            </label>
 
             {/* What the owner had no way of knowing from here: with no Stripe
                 account connected, online payment cannot be painted on any

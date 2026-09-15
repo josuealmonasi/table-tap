@@ -112,12 +112,22 @@ export interface BillContext {
   cardsEnabled: boolean;
   /** A waiter opened this bill and is collecting it in person. */
   staffBill: boolean;
+  /** The owner's switch: may a table divide its own bill? Default on. */
+  splitAllowed?: boolean;
 }
 
 export interface BillActions {
   /** Settle it by card, here, now. */
   payOnline: boolean;
-  /** Divide it evenly between phones. Every share is paid by card. */
+  /**
+   * Divide it evenly between the people who ordered.
+   *
+   * Not the same question as paying by card. With Stripe connected each share
+   * is charged to its own phone; without it the shares are a division the
+   * table shows the waiter, who collects each one on the calculator — which is
+   * most of what a table actually does with a bill. What it always needs is
+   * the owner's switch, and somebody to divide it with.
+   */
   split: boolean;
   /** A tip and a coupon, which only ever change what a card is charged. */
   extras: boolean;
@@ -137,9 +147,17 @@ export interface BillActions {
  */
 export function billActions(ctx: BillContext): BillActions {
   // A waiter standing at the table with a running balance collects the whole
-  // bill: a card charged here at the same moment is a table paying twice.
+  // bill: a card charged here at the same moment is a table paying twice. That
+  // covers dividing it too — two people collecting one bill through different
+  // doors is the same mistake either way.
   const byCard = ctx.cardsEnabled && !ctx.staffBill;
-  return { payOnline: byCard, split: byCard, extras: byCard, callWaiter: true };
+  return {
+    payOnline: byCard,
+    // Dividing it needs the owner's switch, not a card reader.
+    split: ctx.splitAllowed !== false && !ctx.staffBill,
+    extras: byCard,
+    callWaiter: true,
+  };
 }
 
 /**

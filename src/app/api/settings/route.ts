@@ -28,6 +28,7 @@ const OWNER_FIELDS = new Set([
   "allow_pay_later",
   "badges_enabled",
   "deals_tab_enabled",
+  "split_enabled",
   "low_stock_alerts_enabled",
   "low_stock_threshold",
   "auto_print_kitchen",
@@ -42,6 +43,9 @@ const MANAGER_FIELDS = new Set([
   "accepting_orders",
   "badges_enabled",
   "deals_tab_enabled",
+  // How a table settles up is the floor's business, and the manager is who the
+  // floor asks when a party wants it turned off for the night.
+  "split_enabled",
   // A manager runs the floor, and the kitchen printer is floor equipment.
   "auto_print_kitchen",
 ]);
