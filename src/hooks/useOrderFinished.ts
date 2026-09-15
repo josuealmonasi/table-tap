@@ -42,7 +42,12 @@ export function useFinishedOrders(orderIds: string[]): string[] {
             const res = await fetch(`/api/order-status?id=${id}`);
             // A 404 is an order that was deleted; the next pass will say so.
             if (!res.ok) return null;
-            const order = (await res.json()) as { status?: string };
+            const order = (await res.json()) as { status?: string; written_off?: boolean };
+            // Written off is finished too, and it is the one the kitchen never
+            // marks: the floor cancels a table's debt, the orders keep
+            // whatever stage they were at, and this phone went on offering to
+            // follow three of them on a table that had been cleared.
+            if (order.written_off) return id;
             return order.status && DONE.includes(order.status) ? id : null;
           } catch {
             // No network: try again on the next pass.

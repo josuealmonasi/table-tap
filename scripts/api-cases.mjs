@@ -71,7 +71,7 @@ async function couponId(fx) {
 }
 
 export function cases(fx) {
-  const { restaurant, table, dish, paidOrder, unpaidOrder, tableOrder, menu } = fx;
+  const { restaurant, table, dish, paidOrder, unpaidOrder, tableOrder, walkoutOrder, menu } = fx;
   // One reference per run, shared by the two cases below: the first collection
   // and the retry of that same collection. Fresh each run so a row a previous
   // run somehow left behind cannot make the first call look like the second.
@@ -307,6 +307,28 @@ export function cases(fx) {
     { name: "POST /api/bill/write-off/approve", as: "manager", method: "POST",
       path: "/api/bill/write-off/approve", body: async f => ({ id: await pendingWriteOff(f), approve: false }),
       expect: [200, 400, 404] },
+    // A manager cancels what the table owes, and the table is CLEAR after it:
+    // not just unpaid-and-written-off in the ledger, but off the kitchen board
+    // and off the diner's phone. It used to leave every order at "received",
+    // so the pass still had tickets for a table that had gone and the menu
+    // still offered "follow your order ORD-09BB" three times over — on a table
+    // the floor had just cleared for the next party.
+    { name: "POST /api/bill/write-off (manager clears the table)", as: "manager", method: "POST",
+      path: "/api/bill/write-off",
+      body: { orderIds: [walkoutOrder], reason: "walkout", note: MARK },
+      expect: [200],
+      check: async (d, fx) => {
+        if (d.pending) return "a manager's write-off should not need approving";
+        const { data: o } = await fx.admin
+          .from("orders").select("status, written_off").eq("id", walkoutOrder).single();
+        if (!o?.written_off) return "the order was not written off";
+        // Off the kitchen board and off the diner's phone, not merely marked in
+        // the ledger. It used to stay at "preparing": the pass still had a
+        // ticket for a table that had gone, and the menu still offered "follow
+        // your order" on a table the floor had cleared for the next party.
+        return ["completed", "cancelled"].includes(o.status)
+          || `written off but still live on the board as "${o.status}"`;
+      } },
     { name: "POST /api/orders/cancel", as: "owner", method: "POST", path: "/api/orders/cancel",
       body: { id: tableOrder }, expect: [200] },
     { name: "POST /api/bill/pay (online)", as: "diner", method: "POST", path: "/api/bill/pay",

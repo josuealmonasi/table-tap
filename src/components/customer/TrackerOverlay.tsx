@@ -16,6 +16,16 @@ const TERMINAL: OrderStatus[] = ["completed", "cancelled"];
 const POLL_MS = 5000;
 
 /**
+ * Nothing more is going to happen to this order.
+ *
+ * A written-off one belongs here whatever stage it is at: the floor cancelled
+ * the table's debt, and polling on for a change the kitchen will never make
+ * leaves the diner watching a dish that is not being cooked.
+ */
+const over = (order: TrackedOrder): boolean =>
+  order.written_off === true || TERMINAL.includes(order.status);
+
+/**
  * The live order status, over the menu it came from.
  *
  * It is layered rather than routed to: a diner watching their food cook has
@@ -58,7 +68,7 @@ export default function TrackerOverlay({
 
     if (!order) void read();
     const timer = setInterval(() => {
-      if (!order || !TERMINAL.includes(order.status)) void read();
+      if (!order || !over(order)) void read();
     }, POLL_MS);
 
     return () => {
@@ -77,7 +87,7 @@ export default function TrackerOverlay({
   const asked = useRef(false);
   useEffect(() => {
     if (!order || asked.current) return;
-    if (!TERMINAL.includes(order.status) || order.status === "cancelled") return;
+    if (!over(order) || order.status === "cancelled" || order.written_off) return;
     asked.current = true; // once per order, not on every poll heartbeat
     void (async () => {
       try {
@@ -103,7 +113,7 @@ export default function TrackerOverlay({
     if (!order) return;
     // Keyed by the table the order was placed at, so it is offered back only
     // at that table.
-    if (TERMINAL.includes(order.status)) forgetOrder(order.restaurant_id, order.table_id);
+    if (over(order)) forgetOrder(order.restaurant_id, order.table_id);
     else rememberRecentOrder(order.restaurant_id, order.id, order.table_id);
   }, [order]);
 
