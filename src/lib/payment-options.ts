@@ -93,3 +93,62 @@ export function ownerWarningKey(ctx: PaymentContext): string | null {
   if (!ctx.allowDeferred) return "dash.noPaymentAtAll";
   return "dash.noCardsConnected";
 }
+
+/**
+ * The same question for a bill that already exists.
+ *
+ * The cart asks how to pay for food about to be cooked; this asks how to pay
+ * for food already eaten, and the answer is not the same shape. There is no
+ * "order and leave it open" here — the bill IS the open one — but there are
+ * two things the cart never has: dividing it between phones, and calling
+ * somebody over to take it in person.
+ *
+ * Separate from `paymentOptions` rather than folded into it because every
+ * field would have been wrong for one of the two callers, and a flag nobody
+ * reads is how the two screens drift apart again.
+ */
+export interface BillContext {
+  /** A Stripe account is connected and cleared to take charges. */
+  cardsEnabled: boolean;
+  /** A waiter opened this bill and is collecting it in person. */
+  staffBill: boolean;
+}
+
+export interface BillActions {
+  /** Settle it by card, here, now. */
+  payOnline: boolean;
+  /** Divide it evenly between phones. Every share is paid by card. */
+  split: boolean;
+  /** A tip and a coupon, which only ever change what a card is charged. */
+  extras: boolean;
+  /** Call somebody over to take cash or run their own terminal. Always there. */
+  callWaiter: boolean;
+}
+
+/**
+ * A bill screen with no card behind it is the bug from Mesa 10: the diner was
+ * offered "pay now", the route answered 409 because the restaurant has no
+ * Stripe account, and the screen told them it was a network problem and to try
+ * again. They divided the bill twelve ways first — a division that could not
+ * have been paid either, because a share is charged through the same route.
+ *
+ * So all three go together. What survives is calling the waiter, which needs
+ * nothing but a floor.
+ */
+export function billActions(ctx: BillContext): BillActions {
+  // A waiter standing at the table with a running balance collects the whole
+  // bill: a card charged here at the same moment is a table paying twice.
+  const byCard = ctx.cardsEnabled && !ctx.staffBill;
+  return { payOnline: byCard, split: byCard, extras: byCard, callWaiter: true };
+}
+
+/**
+ * What to say where the card button would have been — `null` when it is there.
+ *
+ * Saying nothing is what made the first version of this a silent dead end: the
+ * button simply was not drawn, and the diner was left looking for it.
+ */
+export function billHintKey(ctx: BillContext): string | null {
+  if (billActions(ctx).payOnline) return null;
+  return ctx.staffBill ? "bill.waiterSettles" : "bill.cashOnly";
+}
