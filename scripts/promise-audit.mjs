@@ -124,6 +124,8 @@ async function restore() {
     accepting_orders: full.accepting_orders,
     plan: full.plan,
     plan_status: full.plan_status,
+    stripe_account_id: full.stripe_account_id,
+    stripe_charges_enabled: full.stripe_charges_enabled,
   }).eq("id", restaurant.id);
   for (const m of menuRows ?? []) await admin.from("menus").update({ active: m.active }).eq("id", m.id);
 }
@@ -148,6 +150,53 @@ async function withCounterOrder(run) {
   }
 }
 
+/**
+ * A throwaway unpaid order on a table the diners own, so there is a bill to
+ * open — and it is THEIR bill.
+ *
+ * The table is chosen rather than taken: the demo seats a waiter at one, and a
+ * bill a waiter opened says so instead of whatever the case came to look at.
+ * That is not a finding, it is the wrong table — so the run picks one nobody
+ * is sitting at, and says so loudly if there is none rather than measuring the
+ * wrong screen.
+ */
+async function withTableBill(run) {
+  const MARK = "promise-audit-bill";
+  const { data: dish } = await admin.from("menu_items")
+    .select("id, name, emoji, price").eq("restaurant_id", restaurant.id)
+    .eq("is_addon", false).eq("available", true).limit(1).single();
+  const { data: tables } = await admin.from("restaurant_tables")
+    .select("id, label").eq("restaurant_id", restaurant.id).order("label");
+  const { data: seated } = await admin.from("table_sessions")
+    .select("table_id").eq("restaurant_id", restaurant.id).is("closed_at", null);
+  const taken = new Set((seated ?? []).map(s => s.table_id));
+  const free = (tables ?? []).find(t => !taken.has(t.id));
+  if (!free) {
+    bad("no card reader · the bill — every table is seated, so nothing was checked");
+    return;
+  }
+  // With a sitting, because a diner is only ever shown the orders on the
+  // table's OPEN one — a loose order on an empty table is invisible to them,
+  // and the sweep saw a menu with no bill button on it.
+  const { data: sitting } = await admin.from("table_sessions")
+    .insert({ restaurant_id: restaurant.id, table_id: free.id })
+    .select("id").single();
+  await admin.from("orders").insert({
+    restaurant_id: restaurant.id, table_id: free.id, table_label: free.label,
+    session_id: sitting.id,
+    currency: restaurant.currency ?? "MXN",
+    items: [{ itemId: dish.id, name: dish.name, emoji: dish.emoji ?? "\u{1F37D}", price: Number(dish.price), qty: 1, mods: {} }],
+    subtotal: Number(dish.price), total: Number(dish.price), discount: 0,
+    service_fee: 0, tip: 0, tax_pct: 0, status: "received", paid: false, note: MARK,
+  });
+  try {
+    return await run(free);
+  } finally {
+    await admin.from("orders").delete().eq("note", MARK);
+    await admin.from("table_sessions").delete().eq("id", sitting.id);
+  }
+}
+
 console.log("\n  states\n");
 for (const state of STATES) {
   await state.apply?.(admin, ctx);
@@ -157,17 +206,37 @@ for (const state of STATES) {
   if (state.as === "owner") cookies.push(await cookieFor(CREW[0].email));
   await context.addCookies(cookies);
 
+  // A button's text, matched against what is actually on screen.
+  const visible = (tab, re) => tab.evaluate(
+    `[...document.querySelectorAll("button")].filter(b => b.offsetParent && ${re}.test(b.innerText)).length`);
+
   const visit = async path => {
     const tab = await context.newPage();
     try {
       await tab.goto(BASE + path, { waitUntil: "networkidle" });
       await tab.waitForTimeout(1700);
+
+      // Some of these live behind a button. Opening it here rather than
+      // assuming the page shows everything: the bill is a dialog, and a dialog
+      // is exactly where nobody looks until a diner is sitting in front of it.
+      if (state.open) {
+        if (await visible(tab, state.open) === 0) {
+          bad(`${state.name} — nothing on the page opens it, so nothing was checked`);
+          await tab.close();
+          return;
+        }
+        await tab.evaluate(
+          `[...document.querySelectorAll("button")].find(b => b.offsetParent && ${state.open}.test(b.innerText)).click()`);
+        await tab.waitForTimeout(1200);
+      }
+
       const text = await tab.evaluate("document.body.innerText");
-      const offered = state.offers
-        ? await tab.evaluate(
-            `[...document.querySelectorAll("button")].some(b => b.offsetParent && ${state.offers}.test(b.innerText))`)
-        : false;
+      const offered = state.offers ? await visible(tab, state.offers) > 0 : false;
+      // What must survive. Without it, a screen that hid everything — the
+      // refused control and the working one together — would pass for honest.
+      const kept = state.keeps ? await visible(tab, state.keeps) > 0 : true;
       if (offered) bad(`${state.name} — offers a control the system refuses`);
+      else if (!kept) bad(`${state.name} — took away the one thing that still works`);
       else if (state.says.test(text)) ok(`${state.name} — the screen says so`);
       else bad(`${state.name} — the screen shows nothing and explains nothing`);
     } catch (e) {
@@ -178,7 +247,9 @@ for (const state of STATES) {
 
   try {
     if (state.as === "tracker") await withCounterOrder(id => visit(`/order/${id}`));
-    else await visit(state.path ?? `/r/${restaurant.id}/t/${table.id}`);
+    else if (state.as === "bill") {
+      await withTableBill(free => visit(`/r/${restaurant.id}/t/${free.id}`));
+    } else await visit(state.path ?? `/r/${restaurant.id}/t/${table.id}`);
   } finally {
     await context.close();
     await restore();

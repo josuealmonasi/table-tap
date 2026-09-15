@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  billActions,
+  billHintKey,
   canOrder,
   ownerWarningKey,
   paymentHintKey,
   paymentOptions,
+  type BillContext,
   type PaymentContext,
 } from "@/lib/payment-options";
 
@@ -99,5 +102,58 @@ describe("orders paused", () => {
   it("goes back to normal the moment orders are switched on", () => {
     const o = paymentOptions(ctx({ cardsEnabled: true, allowDeferred: true }));
     expect(paymentHintKey(o, true)).toBe("cart.payNowHint");
+  });
+});
+
+const billCtx = (over: Partial<BillContext> = {}): BillContext => ({
+  cardsEnabled: true,
+  staffBill: false,
+  ...over,
+});
+
+describe("what a bill that already exists can be settled with", () => {
+  it("offers all of it when there is a card reader behind the screen", () => {
+    expect(billActions(billCtx())).toEqual({
+      payOnline: true,
+      split: true,
+      extras: true,
+      callWaiter: true,
+    });
+    expect(billHintKey(billCtx())).toBeNull();
+  });
+
+  it("offers nothing by card when the restaurant has no Stripe account", () => {
+    // Mesa 10, in production. The screen offered "pay now", /api/bill/pay
+    // answered 409 "this restaurant cannot take cards yet", and the diner was
+    // told it was a network problem and to try again.
+    const o = billActions(billCtx({ cardsEnabled: false }));
+    expect(o.payOnline).toBe(false);
+    expect(o.extras).toBe(false);
+  });
+
+  it("does not let a bill be divided that no share could pay", () => {
+    // The same table divided it twelve ways first. A share is charged through
+    // /api/split/pay, which refuses for exactly the same reason — so twelve
+    // people agreed to pay an amount none of them could be charged.
+    expect(billActions(billCtx({ cardsEnabled: false })).split).toBe(false);
+  });
+
+  it("always leaves the waiter, who needs nothing but a floor", () => {
+    expect(billActions(billCtx({ cardsEnabled: false })).callWaiter).toBe(true);
+    expect(billActions(billCtx({ staffBill: true })).callWaiter).toBe(true);
+  });
+
+  it("says why the card button is missing, rather than just not drawing it", () => {
+    // Two different reasons, and they send the diner to do different things:
+    // one waits for the waiter already on their way, the other calls them.
+    expect(billHintKey(billCtx({ cardsEnabled: false }))).toBe("bill.cashOnly");
+    expect(billHintKey(billCtx({ staffBill: true }))).toBe("bill.waiterSettles");
+  });
+
+  it("keeps a waiter's bill the waiter's, card reader or not", () => {
+    // Two people collecting one bill through different doors is how a table
+    // pays twice, and the routes refuse it from their side too.
+    const o = billActions(billCtx({ staffBill: true }));
+    expect(o).toMatchObject({ payOnline: false, split: false, extras: false });
   });
 });

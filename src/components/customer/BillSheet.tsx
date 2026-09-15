@@ -21,6 +21,7 @@ import OrderTotals from "./OrderTotals";
 import TipPicker from "./TipPicker";
 import type { Restaurant } from "@/lib/types";
 import { round2 } from "@/lib/money";
+import { billActions, billHintKey } from "@/lib/payment-options";
 import SplitBillCard from "@/components/customer/SplitBillCard";
 import { useSplit } from "@/hooks/useSplit";
 
@@ -188,21 +189,30 @@ export default function BillSheet({
   const [called, setCalled] = useState(false);
   const [scope, setScope] = useState<"all" | "mine">("all");
 
-  // Only while the sheet is open: a bill nobody is looking at does not need
-  // asking about every five seconds.
+  // What this bill can actually be settled with. Every route that charges a
+  // card refuses without a connected Stripe account, so a screen that offers
+  // one is a screen promising a refusal — which is what Mesa 10 got, dressed
+  // up as a network error.
+  const pay = { cardsEnabled: Boolean(restaurant.cards_enabled), staffBill };
+  const can = billActions(pay);
+  const noCard = billHintKey(pay);
+
+  // Only while the sheet is open, and only while dividing it leads anywhere:
+  // a bill nobody is looking at does not need asking about every five
+  // seconds, and one that cannot be paid by card cannot be paid by share.
   const {
     split, diner, busy: splitBusy, propose, join, cancel: cancelSplit,
   } = useSplit(
     restaurant.id,
     tableId,
     sessionId,
-    open,
+    open && can.split,
     bill.mine.orders.filter(o => !o.paid).map(o => o.id),
   );
 
   // Once it has frozen and this phone holds a seat, the split card is how they
   // pay. Everything that settles the whole bill is put away.
-  const splitLocked = split?.status === "locked" && Boolean(split.mine);
+  const splitLocked = can.split && split?.status === "locked" && Boolean(split.mine);
 
   /** Their share, plus anything they ordered since it froze. */
   async function payShare(): Promise<void> {
@@ -224,13 +234,19 @@ export default function BillSheet({
         tipPct,
       }),
     });
-      const data = (await res.json().catch(() => ({}))) as { url?: string };
+      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
       // Only a redirect leaves this screen. Anything else has to say so: a pay
       // button that silently does nothing is a button somebody taps again, and
       // this one opens a Stripe session each time.
+      //
+      // And it says what the SERVER said. Every refusal here already carries a
+      // sentence in the diner's language — the share is not frozen yet, the
+      // waiter is collecting, the restaurant takes no cards — and reporting
+      // all of them as "network error, try again" sent a table of twelve to
+      // press the same button again.
       if (data.url) window.location.href = data.url;
       else {
-        toast(t("done.networkError"), "error");
+        toast(data.error ?? t("done.networkError"), "error");
         setBusy(false);
       }
     } catch {
@@ -277,7 +293,7 @@ export default function BillSheet({
           tipAmount: tipCustom ?? undefined,
         }),
       });
-      const data = await res.json();
+      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
       if (data.url) {
         // Stripe sends them back to the menu, where the bill is already gone —
         // so what they just paid for is noted here, while it is still known,
@@ -286,7 +302,7 @@ export default function BillSheet({
         window.location.href = data.url;
       }
       else {
-        toast(t("done.networkError"), "error");
+        toast(data.error ?? t("done.networkError"), "error");
         setBusy(false);
       }
     } catch {
@@ -302,15 +318,30 @@ export default function BillSheet({
     setCoupon(null);
   }
 
+  /**
+   * Ask for somebody to come and take the money.
+   *
+   * The answer is read. It used to be thrown away, and "a waiter is on the
+   * way" was shown whatever came back — a rate limit, a table that no longer
+   * exists, a server that was down. Telling a table somebody is coming when
+   * nobody has been told is the worst version of this screen's one job.
+   */
   async function payAtTable(): Promise<void> {
     setBusy(true);
     try {
-      await fetch("/api/service-requests", {
+      const res = await fetch("/api/service-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ restaurantId: restaurant.id, tableId, kind: "pay" }),
       });
-      setCalled(true);
+      if (res.ok) {
+        setCalled(true);
+        return;
+      }
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      toast(data.error ?? t("done.networkError"), "error");
+    } catch {
+      toast(t("done.networkError"), "error");
     } finally {
       setBusy(false);
     }
@@ -351,8 +382,11 @@ export default function BillSheet({
               asked before the smaller question of whose dishes to pay for.
               Not on a bill the waiter is settling: they are standing there
               with a calculator that divides it, and two of us collecting the
-              same bill is how a table pays twice. */}
-          {!staffBill && <SplitBillCard
+              same bill is how a table pays twice. And not without a card
+              reader behind it: a share is charged through the same route as
+              the whole bill, so dividing one twelve ways with no Stripe
+              account produces twelve people who cannot pay. */}
+          {can.split && <SplitBillCard
             split={split}
             diner={diner}
             busy={splitBusy || busy}
@@ -388,7 +422,7 @@ export default function BillSheet({
           {/* Everything below settles the WHOLE bill, which is not what this
               phone owes any more once the table has divided it. Two ways to
               pay, disagreeing about the amount, is how somebody pays twice. */}
-          {!splitLocked && !alreadyDiscounted && !staffBill && (
+          {!splitLocked && !alreadyDiscounted && can.extras && (
             <div className="tt-coupon-row">
               <CouponBox
                 restaurantId={restaurant.id}
@@ -400,11 +434,12 @@ export default function BillSheet({
             </div>
           )}
 
-          {/* Neither the code nor the tip does anything on a bill the waiter
-              is collecting: both are theirs to take at the table, on the same
-              screen they take the money on. A field that changes no number is
-              a promise the system will not keep. */}
-          {!splitLocked && !staffBill && (
+          {/* Neither the code nor the tip does anything on a bill somebody
+              is collecting in person: both are theirs to take at the table, on
+              the same screen they take the money on. A field that changes no
+              number is a promise the system will not keep — and with no card
+              behind the bill at all, neither of them changes anything. */}
+          {!splitLocked && can.extras && (
           <div style={{ marginTop: 16 }}>
             <TipPicker
               currency={currency}
@@ -445,13 +480,14 @@ export default function BillSheet({
             </div>
           ) : (
             <div className="tt-bill-actions">
-              {/* A bill the waiter opened is settled with the waiter. Said
+              {/* A bill somebody else is collecting is settled with them. Said
                   plainly, with the one button that does anything, rather than
                   a card field that would be refused after they had typed
-                  their number in. */}
-              {staffBill ? (
+                  their number in — and said at all, because a card button
+                  that is simply missing leaves them looking for it. */}
+              {noCard ? (
                 <p className="tt-muted tt-subline" style={{ fontSize: 13, marginTop: 0 }}>
-                  {t("bill.waiterSettles")}
+                  {t(noCard)}
                 </p>
               ) : (
                 <button
@@ -469,8 +505,8 @@ export default function BillSheet({
                 </button>
               )}
               <button
-                className={`tt-btn tt-btn-lg ${staffBill ? "tt-btn-primary" : "tt-btn-ghost"}`}
-                style={{ width: "100%", marginTop: staffBill ? 0 : 8 }}
+                className={`tt-btn tt-btn-lg ${noCard ? "tt-btn-primary" : "tt-btn-ghost"}`}
+                style={{ width: "100%", marginTop: noCard ? 0 : 8 }}
                 disabled={busy}
                 onClick={payAtTable}
               >

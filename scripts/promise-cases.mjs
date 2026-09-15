@@ -60,8 +60,11 @@ export const AUDIT = `(() => {
  * demo's full data can still be a blank page or a dead button once a switch
  * moves, and nothing swept those.
  *
- * `says` is what the screen MUST contain; `offers` is a control it must NOT.
- * Each case changes one thing — the runner puts everything back afterwards.
+ * `says` is what the screen MUST contain; `offers` is a control it must NOT;
+ * `keeps` is one that must still be there, so a screen cannot pass by hiding
+ * everything. `open` is a button to press first, for a promise made inside a
+ * dialog. Each case changes one thing — the runner puts everything back
+ * afterwards.
  */
 export const STATES = [
   {
@@ -98,6 +101,29 @@ export const STATES = [
     apply: (admin, c) => admin.from("restaurants").update({ plan: "carta", plan_status: "active" }).eq("id", c.restaurantId),
     says: /viene[n]? con|comes with/i,
     offers: /agregar mesa|add table/i,
+  },
+  {
+    // Mesa 10, in production, on a bill twelve people had agreed to divide.
+    // The screen offered "pago en línea"; /api/bill/pay answered 409 because
+    // the restaurant has no Stripe account; the diner was shown "network
+    // error — try again" and pressed it again.
+    //
+    // `as: "bill"` plants something owed on the table and opens the bill,
+    // because that is where this promise is made. No other case had ever
+    // opened a dialog, which is why the sweep walked past it for months.
+    name: "no card reader · the bill",
+    as: "bill",
+    apply: (admin, c) =>
+      admin.from("restaurants")
+        .update({ stripe_account_id: null, stripe_charges_enabled: false })
+        .eq("id", c.restaurantId),
+    open: /ver mi cuenta|view my bill/i,
+    says: /no cobra con tarjeta|can't take cards/i,
+    // The card button, and dividing it — a share is charged through the same
+    // route, so twelve agreed shares would have been twelve refusals.
+    offers: /pago en l|pay online|dividir|split/i,
+    // And the one that needs nothing but a floor has to still be there.
+    keeps: /pagar en la mesa|pay at the table/i,
   },
   {
     name: "counter order ready",
