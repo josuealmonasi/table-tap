@@ -61,7 +61,10 @@ table holds its own, and where there is no table the counter does.
 
 Where the plan allows it, food can leave **before** it is paid for: at a table
 the bill stays open and a waiter settles it; on the general QR the diner pays at
-the till. Then the money path is `/api/table-payment` or `/api/bill/pay`.
+the till. Then the money path is one of four: `/api/bill/pay` for the diner's
+card, `/api/split/pay` for one share of a divided bill, `/api/table-payment`
+for a waiter settling the whole table, and `/api/table-payment/part` for the
+calculator taking a piece of it.
 
 ## Order status
 
@@ -72,6 +75,13 @@ pending_payment ──(webhook: paid)──▶ received ──▶ preparing ─�
 
 `pending_payment` never reaches the board. An order that is delivered before it
 is paid rides the same track and carries its debt on the bills screen instead.
+
+A write-off is not a third terminal state: it forces the order to `completed`
+from wherever the kitchen left it, and leaves an already-`cancelled` row alone.
+`/api/order-status` carries `written_off`, and the diner's tracker treats it as
+finished whatever the stage says — it stops polling for a change nobody is going
+to make, withdraws the "follow your order" button, and does not ask them to rate
+dishes on a bill the restaurant has just cancelled.
 
 ## Money
 
@@ -90,19 +100,81 @@ is paid rides the same track and carries its debt on the bills screen instead.
   reason: a code with two uses left must not be spent three times.
 - **Discounts and write-offs** are requests a waiter raises and a manager
   approves — `discount_requests`, `write_off_requests` — so the person who gives
-  money away is never the person who asks.
-- **A table can divide its bill evenly.** It stays a proposal until every
-  person has joined, and the last one to join **freezes** it: the table divides
-  what it owed at that instant, the odd cent goes to whoever asked (MX$10
-  between three is 3.34 / 3.33 / 3.33), and anything ordered afterwards belongs
-  to whoever ordered it. Freezing is what lets a table keep ordering while the
-  others are paying, which is money that would otherwise be turned away. Food
-  and the service charge are divided; the tip is each person's own. A share is
-  money against the *sitting* rather than any order, so the floor's bill screen
-  says how much of it is already in — a waiter taking cash for a table that has
-  half-paid by card is how the same money gets collected twice. A waiter
-  collecting the bill in parts puts money there the same way, and the board
-  reads both from the ledger rather than from the split's own claims.
+  money away is never the person who asks. A write-off also FINISHES the orders
+  it cancels: `completed`, not `cancelled`, because the food went out and the
+  kitchen spent it — that is the whole reason it is a write-off and not a
+  refund, and `/api/orders/cancel` is the only path allowed to set `cancelled`
+  because that one refunds the card first. Without it the ledger was right and
+  every screen showing live work was wrong: the pass kept tickets for a table
+  that had gone, and the diner's phone kept offering to follow an order on a
+  table the floor had cleared for the next party.
+- **A table can divide its bill evenly**, where the restaurant leaves the
+  switch on. `restaurants.split_enabled` defaults to true and either the owner
+  or a manager can turn it off from Settings — a bar running one tab, a set
+  menu, anywhere the floor would rather do the arithmetic itself. It gates the
+  *offer* and nothing else: `/api/split` never reads it, which is a deliberate
+  exception to this document's own rule that a screen hiding a button is not a
+  guard. Nothing is at risk if somebody posts past it, because what a share
+  costs is summed from the orders either way.
+- **Only between the people who are actually eating.** The ceiling is the
+  number of DEVICES that have ordered on the table — `orders.diner`, counted by
+  `diningOn` — never the number of chairs, and never more than 20, which is
+  what the `shares` column allows. Orders a waiter typed in carry no device and
+  count as one party between them rather than one each. Under two devices the
+  offer is not made at all: not a disabled control, not an explanation,
+  nothing. `/api/split` refuses `party < 2` or `shares > party` with 409
+  independently, because a dropdown is not a guard. One diner alone was offered
+  a split between 2 and 20, chose twelve, and could not pay at all until the
+  proposal was called off: eleven of those shares belonged to nobody, and a
+  share nobody claims freezes the bill for everybody.
+- **Dividing it does not need a card reader.** With Stripe connected the
+  proposal goes round the table and each share is charged to its own phone.
+  Without it there is no proposing and no freezing — just "MX$34.10 cada uno",
+  the division the table shows the waiter, who collects each share on the
+  calculator. That is most of what a table actually does with a bill, and the
+  card gate belongs on *paying*, not on *dividing*.
+- **It freezes when the agreed number of seats is claimed** — which can be
+  fewer than the people at the table. Three phones order, two of them halve it,
+  and it locks with the third outside; that phone is told its food is inside
+  those shares and there is nothing for it to pay. The table divides what it
+  owed at that instant, the odd cent goes to whoever asked (MX$10 between three
+  is 3.34 / 3.33 / 3.33), and anything ordered afterwards belongs to whoever
+  ordered it. Freezing is what lets a table keep ordering while the others are
+  paying, which is money that would otherwise be turned away. A proposal nobody
+  finishes expires after 30 minutes and the next read cancels it, so one person
+  in the bathroom cannot leave the rest unable to pay; any diner may call a
+  proposal off, and nobody may once it has frozen.
+- **A frozen split closes the other doors to the same money.** `/api/bill/pay`
+  answers 409 while any sitting behind the table's unpaid orders holds a locked
+  split, and `/api/bill` returns `dividing` so that even a phone which scanned
+  without ordering — and therefore knows no sitting — learns of it and puts its
+  own card button away. A phone that ordered and took no share could otherwise
+  pay for the lot while the halves were being collected: one dinner, charged
+  twice.
+- **And it ends the moment the money arrives another way.** `endSplitsFor`
+  closes every proposal or lock on a sitting when that sitting closes — paid,
+  settled or written off — and on every sitting a waiter's part-collection was
+  spread across. A share is the figure frozen at the lock and knows nothing of
+  what happened since: MX$200 halved, MX$120 taken in cash at the table, and
+  both halves still chargeable is MX$320 collected for a MX$200 dinner. Ended
+  rather than recalculated, because the diners agreed to divide *this* bill and
+  a different number is not what they agreed to. `/api/split/pay` refuses as
+  well once the sitting owes nothing.
+- **What is divided is the orders' totals.** An order's total is subtotal plus
+  service charge plus any tip committed when it was ordered, so a gratuity a
+  diner has already chosen is inside the pot the table splits. "The tip is each
+  person's own" is true of the one added when a share is *paid*: clamped to the
+  payable amount, recorded in `payments.tip`, and added to the oldest order on
+  the sitting.
+- **Our fee on a divided bill is the table's, not each person's.** It is
+  computed only when no share has yet been paid and rides on the first one, the
+  same way settling a whole table puts it on the first order. Charging it per
+  person would be a fee for the courtesy of splitting.
+- A share is money against the *sitting* rather than any order, so the floor's
+  bill screen says how much of it is already in — a waiter taking cash for a
+  table that has half-paid by card is how the same money gets collected twice.
+  A waiter collecting the bill in parts puts money there the same way, and the
+  board reads both from the ledger rather than from the split's own claims.
 - **`payments` is the ledger of money that arrived**, as opposed to
   `orders.paid`, which only says an order is settled. That boolean is enough
   while a payment always covers whole orders and stops being enough the moment a
@@ -134,7 +206,7 @@ is paid rides the same track and carries its debt on the bills screen instead.
 ## Data model
 
 `supabase/schema.sql` is one idempotent script; git history is the changelog.
-Twenty-six tables, in groups:
+Thirty tables, RLS on every one of them, in groups:
 
 - **The restaurant** — `restaurants`, `staff`, `profiles`, `platform_admins`,
   `plan_limits`, `user_logs`
@@ -142,6 +214,7 @@ Twenty-six tables, in groups:
   `dietary_tags`, `icon_groups`, `icon_group_items`
 - **Selling** — `orders`, `payments`, `table_sessions`, `restaurant_tables`,
   `service_requests`, `dish_ratings`, `bill_splits`, `bill_split_claims`
+- **Paper** — `print_jobs`
 - **Offers** — `promotions`, `promotion_items`, `coupons`, `coupon_redemptions`
 - **Money asked for** — `discount_requests`, `write_off_requests`
 - **Telling people** — `notifications`
@@ -150,40 +223,81 @@ Twenty-six tables, in groups:
 `orders` snapshots its line items as JSON at purchase time, so a menu edited
 tomorrow never rewrites what someone bought today.
 
+`orders.diner` is the throwaway token a phone gives itself for the evening —
+localStorage, per restaurant, bounded to 64 characters and rejected rather than
+truncated past that. It names a device and nothing else: no account, no person,
+nothing that outlives the meal. `/api/checkout` is its only writer, so an order
+the waiter's pad or the till typed in has none, and that is what makes them the
+single anonymous party when a table is divided. It is also the only identity
+anybody has at a table, which is what lets it hold a seat in a split.
+
 ## Security
 
 Assume the browser is hostile; it holds the publishable key and nothing else.
 
 - **RLS on every table**, and a policy is not optional: a table with RLS and no
-  policy denies everything, which is how `platform_admins` is protected.
-- **Column grants, not just row policies.** `restaurants` is publicly readable by
-  row — the menu hangs off a QR — so the private columns (owner, plan, billing
-  state, Stripe account) are granted explicitly and read only with the service
-  key. A row policy alone had leaked them to any signed-in account.
+  policy denies everything, which is how `platform_admins` is protected. Team
+  membership is not always the line, either — `payments` is read by
+  `has_role(restaurant_id, ['manager','waiter','cashier'])` rather than
+  `works_at`, so the kitchen cannot read the night's takings or see what each
+  person took.
+- **Column grants, not just row policies.** `restaurants` is publicly readable
+  by row — the menu hangs off a QR — so what is granted is an allowlist of the
+  PUBLIC columns, identical for `anon` and for `authenticated`. The private
+  ones (owner, plan and billing state, Stripe account and customer, the print
+  token) are in no grant at all; they are read with the service key. The order
+  matters and the script says so: the `revoke select ... from authenticated`
+  comes FIRST, because granting columns does not remove a table-wide grant
+  already held, and a row policy alone had leaked the lot to any signed-in
+  account.
 - **Writes that matter are server-only**, with the secret key, always scoped by
   the caller's restaurant. PostgREST returns no error when RLS filters a write to
   zero rows, so the routes check what actually changed.
-- **`security definer` functions** — `reserve_stock`, `release_stock`,
-  `redeem_coupon`, `rate_limit_hit`, `claim_founding_price`, `open_table_session`
-  — pin `search_path` and are executable by `service_role` alone. Postgres grants
-  EXECUTE to PUBLIC by default, so every one of them is revoked explicitly.
+- **`security definer` functions** — seventeen of them — all pin `search_path`,
+  and Postgres grants EXECUTE to PUBLIC by default, so every one is revoked
+  explicitly first. Most are then `service_role` alone: `reserve_stock`,
+  `release_stock`, `redeem_coupon`, `rate_limit_hit`, `claim_founding_price`,
+  `open_table_session`, `close_session_if_clear`, `join_bill_split`. Four are
+  deliberately granted to `anon` and `authenticated` — `owns_restaurant`,
+  `works_at`, `has_role` and `dish_rating_stats` — because the RLS policies
+  themselves call them, and a policy that cannot execute its own predicate
+  denies everybody.
 - **Capability tokens**: an order id is unguessable, and that is what lets a diner
   track without an account. Public routes that take one are rate-limited.
 - **No secret can reach a client component** — an invariant walks the real import
   graph, counting only imports that survive compilation.
+- **Realtime is the other door out of the database**, and the spec was silent on
+  it for a long time. Three tables are published: `orders`, `service_requests`
+  and `menu_items`. RLS applies on the socket exactly as it does on a read,
+  which is the whole reason the tills may subscribe to stock while the diner's
+  menu cannot — a staff read of `menu_items` is `works_at`, which does not move
+  when the stock does, while the diner's is `available AND menu active`, so a
+  dish selling out takes the row out of their reach and suppresses the very
+  event they would want. What realtime does NOT filter is columns: the payload
+  carries the whole row, so a table is only publishable when its row policy
+  alone is enough. `pnpm rls` asks the socket the same questions it asks
+  PostgREST.
+- **One public storage bucket**, `menu`. Reads are public by policy because the
+  pictures hang off a QR poster; writes are manager-scoped by path, the first
+  segment of the object name being the restaurant id that `storage_restaurant()`
+  reads back. The bucket itself is bounded — 5 MB, `image/webp` only — and that
+  bound is the Storage API's, not RLS's, so it holds against the service key
+  too.
 
 ## What exists
 
 Diner: menu with categories, search, dietary filters, combos and offers, item
 modifiers and extras, cart, coupons, tips, card payment, pay-at-the-end,
-pay-at-the-counter, live tracker with a QR staff can scan, receipts by email,
-dish ratings, ES/EN.
+pay-at-the-counter, dividing the bill with the rest of the table, live tracker
+with a QR staff can scan, receipts by email, dish ratings, ES/EN.
 
 Restaurant: multiple menus with schedules, full menu editing, dietary tags and
 icon groups, tables with printable QR codes, the orders board, open bills,
 discounts and write-offs with approval, promotions and coupons, inventory with
-low-stock alerts, analytics, corte de caja, staff and roles, plan and billing,
-Stripe onboarding, activity log, notifications bell.
+low-stock alerts and live counts on the selling screens, analytics, corte de
+caja, staff and roles, plan and billing, Stripe onboarding, activity log,
+notifications bell, and the switches that decide what the diner is offered —
+taking orders, pay-at-the-end, dividing the bill.
 
 Platform: sign-up, plans, founding prices, the admin console, legal documents
 generated as PDFs from the same source the app renders.
@@ -195,19 +309,27 @@ The gate, all of which must pass before anything ships:
 | command | what it proves |
 | --- | --- |
 | `pnpm test` | the pure logic, and the invariants that span files |
-| `pnpm api` | all 38 routes answer a legitimate request correctly |
-| `pnpm rls` | nothing is exposed: every browser-reachable read, as every role |
+| `pnpm api` | all 48 routes answer a legitimate request correctly |
+| `pnpm rls` | nothing is exposed, by read or by socket, as every role |
 | `pnpm roles` | each role reaches its own screens and no others |
 | `pnpm smoke` | every page renders |
 | `pnpm layout` | every screen reads at 390 / 820 / 1280 |
 | `pnpm promises` | no screen offers what the system will refuse |
+| `pnpm attack` | nobody signed in can move a peso they should not |
 | `pnpm dialogs` | every dialog, found by opening it rather than by listing it |
 | `pnpm money` | the ledger and the orders tell the same story |
+
+The table left `attack` out for a while and the prose below listed it, which is
+the same drift this document exists to prevent. `pnpm api` does not police its
+own list either — the invariant that fails when a route has no case lives in
+`pnpm test`.
 
 Two rules behind them, both learned the hard way. **A check only covers what is
 on its list** — invariants now fail when a route or screen exists that nothing
 checks. And **static guesses lie**: when the question is what a person actually
-gets, measure it in a browser.
+gets, measure it in a browser. `pnpm promises` learned the second one late: it
+swept whole pages for months without ever opening a DIALOG, which is where the
+bill lives, and three of its nine states now press a button first.
 
 `docs/regressions.md` is the list of bugs that have really shipped here and what
 now catches each one.
@@ -238,6 +360,24 @@ another on a QR. Stock is taken before any payment is recorded — if the last
 portion went while the cashier was ringing it up, the sale is refused and names
 what is short, rather than selling food the kitchen cannot make.
 
+**The tiles say how many are left**, on the till and on the waiter's pad alike
+— the two screens share the tag, the subscription and the sentence line for
+line. Only for the dishes that are counted: `stock` is null for most of them
+and a tag on those is a number nobody can act on, and a sold-out tile keeps its
+badge instead. It is a reading, not a promise — between seeing it and pressing
+it somebody else can take the last one, and `reserve_stock` is what settles
+that. Nothing trusts the number, which is what makes showing it safe.
+`useLiveStock` keeps it close: the same subscription shape as the orders board,
+pointed at `menu_items`, about two seconds from the shelf moving to the tile
+moving, and a refresh whenever the tab comes back into view.
+
+And the refusal names the figures, not just the dishes: "No alcanza: Calamari
+(sólo quedan 4); Ribeye (ya no queda)". `reserve_stock` has always returned how
+many are really left and both staff screens threw it away, so the answer to
+"how many can I have then?" was a walk to the kitchen. Zero gets its own words,
+because "ya no queda" is not "quedan 0". The diner's checkout already named its
+count, and still trims the cart to what is left rather than only saying so.
+
 Charging opens one modal: the tip, a name to call them by, a special request,
 and an address for the receipt. Filled in or left blank, one button sends it;
 clicking outside closes and changes nothing, because a stray click must never
@@ -257,6 +397,17 @@ The cashier may ask for a name (to call them) and an address (to send the
 receipt instead of printing). The address is used for that one message and
 never stored, exactly as the diner's own receipt works — the privacy notice
 makes that promise and the schema keeps it.
+
+**The till can also scan what the customer is holding.** Somebody who ordered
+from their phone arrives at the counter with a code that says, in our own words,
+that the counter scans it and charges it — and until recently the caja could
+not, so the cashier left the till, opened Cuentas abiertas and searched, with a
+person waiting. The same camera and the same reader now sit in the till's
+header, and Cuentas abiertas keeps its own: the list serves somebody who reads
+out their name, the camera serves the queue. It collects nowhere near the till.
+The code names a bill and the bill is settled on the screen that settles bills,
+through `/dashboard/bills?order=<id>` — one way for money to be taken, not a
+second one that has to agree with it.
 
 Owner, manager and cashier. Not the waiter: carrying a card machine to a table
 is settling a bill somebody else placed, which is a different act from ringing
@@ -332,9 +483,10 @@ order had to start on a diner's phone. A restaurant that runs on waiters needed
 a second system for the first step, and given the choice between two systems and
 one, nobody picks two.
 
-`/dashboard/table-order` is the waiter's pad. The same menu the till shows,
-sold-out dishes included and marked, taken through the same dish screen a diner
-uses — the modifiers, the extras, this item's own special request — because a
+`/dashboard/table-order` is the waiter's pad. The same menu the till shows —
+sold-out dishes included and marked, the counts on the tiles and the refusal
+that names them exactly as the counter has them — taken through the same dish
+screen a diner uses — the modifiers, the extras, this item's own special request — because a
 waiter is writing down the same order, and asking it a second way is how one
 dish ends up with "less onion" and another in the same round has nowhere to say
 "extra onion".
@@ -379,6 +531,16 @@ attribution settling a whole table already used — so it appears on both sides
 of that subtraction and never moves it. The bill closes when the balance reaches
 zero, and only then are the orders marked paid.
 
+That subtraction is done per SITTING and the table's figure is the sum, rather
+than a second calculation that can disagree with it. A table can owe on more
+than one — an old sitting expires with something still on it and the next party
+opens another — and a sitting that had already closed one bill read as owing
+nothing on the next, so a collection for it was recorded nowhere at all. Orders
+old enough to predate sittings have none, and while NO unpaid order has one the
+old single subtraction is what happens. Which sittings a table owes on never
+leaves the server: the calculator is handed the arithmetic and not the ids,
+because attribution is not something a screen has any use for.
+
 An early version counted the food by taking `tip` back off `total`. It cancelled
 the tips it had just added, and also cancelled a tip a diner had committed to
 when ordering and nobody had collected: a table owing MX$94.07 read as MX$93.17.
@@ -386,7 +548,12 @@ when ordering and nobody had collected: a table owing MX$94.07 read as MX$93.17.
 **Every collection is recorded as it is taken**, against the sitting rather than
 any one order — the money belongs to the table, and pinning it to a dish would
 say that dish was paid for. `payments.tip` says how much of each was a gratuity,
-which is what lets a corte separate the food from the tips.
+which is what lets a corte separate the food from the tips. When a collection
+covers more than one sitting it is shared out oldest first, the remainder
+landing on the first, and the gratuity rides with that first share. Settling a
+whole table is the other shape: on an untouched table it writes one row per
+order carrying its `order_id`, and only shares out against sittings when
+something had already been collected.
 
 **A tap is not a payment; a collection is.** `payments.client_ref` is unique per
 restaurant: the phone names each collection and reuses that name on every retry,
@@ -410,8 +577,20 @@ not taken it off them.
 The diners keep everything except the card. They see what has been ordered, they
 add to it, and the bill screen says who is collecting and offers to call them.
 The coupon box and the tip chips go with the card button, because neither
-changes a number the waiter's calculator will use. `/api/bill/pay`, `/api/split`
-and `/api/split/pay` refuse — a screen that hides a button is not a guard.
+changes a number the waiter's calculator will use, and dividing it goes too —
+the waiter has a calculator that does the same job. `/api/bill/pay`,
+`/api/split` and `/api/split/pay` refuse — a screen that hides a button is not
+a guard.
+
+There are three reasons the card button may be missing, and the screen says
+which: the restaurant takes no cards, a waiter opened this bill, or the table
+is dividing it. Two of them are decided by `billActions`; the third is the
+locked split, which the screen learns from `/api/bill` rather than from
+`/api/split`, because that one answers about a sitting and a phone that scanned
+without ordering has none. Whichever it is, calling somebody over survives —
+that needs nothing but a floor. Hiding it along with the card left a phone
+looking at a bill with nothing on the screen to press at all, which is a worse
+failure than the button it was hiding.
 
 Two people collecting the same bill through different doors is how a table pays
 twice.
@@ -554,9 +733,13 @@ tables as wide open that were all fine.
 
 Every check plants what it needs rather than depending on what the demo data
 happens to hold, and removes it afterwards. A check that finds nothing to
-attack passes without asking anything — the RLS sweep did exactly that on ten
+attack passes without asking anything — the RLS sweep did exactly that on twelve
 of twenty-one tables — and test litter comes back later disguised as a product
-bug.
+bug. Two money cases were written, passed on the day, and were asking nothing:
+no restaurant in the development database has a Stripe account, so the routes
+they probed refused them at the door long before the question they existed to
+ask. Before believing a green check, ask what the FIRST refusal on that path is
+and whether the case gets past it.
 
 ## Stack
 
