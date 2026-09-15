@@ -7,6 +7,7 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { recordPayment } from "@/lib/payments";
 import { closeSessionsFor, openSession } from "@/lib/table-session";
+import { endSplitsFor } from "@/lib/split-service";
 import { tableOutstanding, type Outstanding } from "@/lib/table-outstanding";
 import { applyPayment, shareOut } from "@/lib/table-balance";
 import { round2 } from "@/lib/money";
@@ -141,6 +142,21 @@ async function record(
   // money that has changed hands is recorded somewhere, always.
   const split = owedNow.length > 0 ? shareOut(taken.amount, owedNow) : [];
   const across = split.length > 0 ? split : [{ id: fallback, amount: taken.amount }];
+
+  // Money taken at the table ends any division of that bill.
+  //
+  // A share is the figure frozen when the table agreed, and nothing about it
+  // moves again: the sitting stays open after a PART of the bill is collected
+  // — `close_session_if_clear` only closes when the whole thing is covered —
+  // so every share stayed chargeable at its original amount. MX$200 halved,
+  // MX$120 handed over at the table, both halves still payable by card:
+  // MX$320 collected for a MX$200 dinner.
+  //
+  // Ended rather than recalculated. The diners agreed to divide THIS bill and
+  // a different number is not the thing they agreed to — their screens go back
+  // to the plain bill, showing what is actually left, with the person who just
+  // took the cash standing in front of them.
+  for (const share of across) await endSplitsFor(share.id);
 
   let wrote = false;
   for (const [n, share] of across.entries()) {

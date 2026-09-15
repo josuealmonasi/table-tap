@@ -441,6 +441,79 @@ try {
     await admin.from("restaurant_tables").delete().eq("id", spare.id);
   }
 
+  // ── Cash at the table ends the division of that bill ────────────────────
+  //
+  // A share is frozen when the table agrees and nothing about it moves again.
+  // A waiter then takes part of the bill in cash: the sitting stays open —
+  // `close_session_if_clear` only closes when the whole thing is covered — so
+  // the split stays locked and every share is still the figure it was. MX$200
+  // divided two ways, MX$120 taken at the table, both halves still chargeable:
+  // MX$320 collected for a MX$200 dinner.
+  {
+    const { data: spare } = await admin.from("restaurant_tables")
+      .insert({ restaurant_id: home.id, label: `${MARK}-part` }).select("id").maybeSingle();
+    const { data: sat } = await admin.from("table_sessions")
+      .insert({ restaurant_id: home.id, table_id: spare.id }).select("id").maybeSingle();
+    await admin.from("orders").insert({
+      restaurant_id: home.id, table_id: spare.id, table_label: `${MARK}-part`,
+      session_id: sat.id, items: [], subtotal: 200, total: 200, currency: "MXN",
+      status: "ready", paid: false, note: MARK,
+    });
+    const { data: frozen } = await admin.from("bill_splits").insert({
+      restaurant_id: home.id, session_id: sat.id, shares: 2, status: "locked",
+      amount: 200, proposed_by: "attack-a", locked_at: new Date().toISOString(),
+    }).select("id").maybeSingle();
+    await admin.from("bill_split_claims").insert([
+      { split_id: frozen.id, share_no: 0, diner: "attack-a", amount: 100 },
+      { split_id: frozen.id, share_no: 1, diner: "attack-b", amount: 100 },
+    ]);
+
+    // The waiter takes MX$120 of it at the table, through the calculator.
+    const took = await post("/api/table-payment/part",
+      { tableId: spare.id, amount: 120, method: "cash", ref: `${MARK}-part-${Date.now()}` },
+      who.waiter);
+
+    const { data: now } = await admin.from("bill_splits")
+      .select("status").eq("id", frozen.id).single();
+    took.status === 200 && now.status !== "locked"
+      ? ok("cash at the table ends the division of that bill")
+      : bad(`the waiter collected (${took.status}) and the split is still "${now.status}"`);
+
+    // And the share that outlived it cannot be charged. Cards on, or the route
+    // refuses at the door and this proves nothing.
+    const { data: was } = await admin.from("restaurants")
+      .select("stripe_account_id, stripe_charges_enabled").eq("id", home.id).single();
+    await admin.from("restaurants")
+      .update({ stripe_account_id: "acct_attack", stripe_charges_enabled: true })
+      .eq("id", home.id);
+    const before = await takings(home.id);
+    const res = await post("/api/split/pay", {
+      splitId: frozen.id, sessionId: sat.id, diner: "attack-b",
+      restaurantId: home.id, tableId: spare.id, ownOrderIds: [],
+    }, null);
+    const after = await takings(home.id);
+    await admin.from("restaurants").update({
+      stripe_account_id: was.stripe_account_id,
+      stripe_charges_enabled: was.stripe_charges_enabled,
+    }).eq("id", home.id);
+    // 409 is the refusal. Without it the route gets all the way to Stripe,
+    // which turns the made-up account down with a 502 — so the two answers
+    // tell the guard apart from the bug it is looking for.
+    res.status === 409 && !res.body.url && after.rows === before.rows
+      ? ok("and the share frozen before it cannot be charged")
+      : bad(`the share route answered ${res.status}${res.body.url ? " with a checkout url" : ""} after the waiter took the cash`);
+
+    await admin.from("payments").delete().eq("session_id", sat.id);
+    await admin.from("bill_split_claims").delete().eq("split_id", frozen.id);
+    await admin.from("bill_splits").delete().eq("id", frozen.id);
+    await admin.from("orders").delete().eq("session_id", sat.id);
+    await admin.from("table_sessions").delete().eq("id", sat.id);
+    await admin.from("restaurant_tables").delete().eq("id", spare.id);
+    await admin.from("user_logs").delete()
+      .eq("restaurant_id", home.id).eq("entity", "bill").eq("action", "collected")
+      .like("detail", `table=${MARK}-part%`);
+  }
+
   // ── A bill the waiter opened is not payable online ──────────────────────
   {
     await admin.from("table_sessions")
