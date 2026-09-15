@@ -28,10 +28,13 @@ export function useTableBill(
   /** How many devices have ordered on this table — the most ways its bill
    *  can be divided. */
   party: number;
+  /** The table has frozen a split: it settles through the shares now. */
+  dividing: boolean;
 } {
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [staffBill, setStaffBill] = useState(false);
   const [party, setParty] = useState(0);
+  const [dividing, setDividing] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const reload = useCallback(() => {
@@ -46,6 +49,7 @@ export function useTableBill(
         setOrders(d.orders ?? []);
         setStaffBill(Boolean(d.staffBill));
         setParty(Number(d.party) || 0);
+        setDividing(Boolean(d.dividing));
       })
       .catch(() => setOrders([]))
       .finally(() => setLoading(false));
@@ -80,5 +84,6 @@ export function useTableBill(
     reload,
     staffBill,
     party,
+    dividing,
   };
 }

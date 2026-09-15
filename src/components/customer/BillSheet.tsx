@@ -54,6 +54,15 @@ interface BillSheetProps {
    * what somebody pays is always summed from the orders.
    */
   party?: number;
+  /**
+   * The table has frozen a split, as the server sees it.
+   *
+   * Read from /api/bill rather than from the split hook, because that one
+   * answers about a SITTING and a phone only knows its sitting if it ordered
+   * from this device. One that scanned and did not order saw no split at all,
+   * and was offered the whole bill — which the route refused.
+   */
+  dividing?: boolean;
 }
 
 /** One dish on the bill, laid out like a cart line but not editable. */
@@ -189,6 +198,7 @@ export default function BillSheet({
   photoOf,
   staffBill = false,
   party = 0,
+  dividing = false,
 }: BillSheetProps) {
   const t = useT();
   const currency = restaurant.currency;
@@ -223,7 +233,18 @@ export default function BillSheet({
   // share. A phone that ordered and never joined still had the button: three
   // ordered, two of them halved it, and the third could pay for the lot while
   // the two halves were being collected. One dinner, charged twice.
-  const splitLocked = can.split && split?.status === "locked";
+  const splitLocked = can.split && (dividing || split?.status === "locked");
+  /**
+   * Is calling somebody over the only thing left on this screen?
+   *
+   * Either because the restaurant takes no cards, or because a waiter opened
+   * the bill, or because the table has frozen a split and pays through the
+   * shares. In all three the waiter button stands alone, so it is the primary
+   * one — and it is ALWAYS here. Gated behind the split it left a phone with
+   * no share looking at a bill and no way to do anything about it, not even
+   * ask for help, which is worse than the button it was hiding.
+   */
+  const alone = Boolean(noCard) || splitLocked;
 
   /** Their share, plus anything they ordered since it froze. */
   async function payShare(): Promise<void> {
@@ -467,6 +488,10 @@ export default function BillSheet({
           </div>
           )}
 
+          {/* Calling somebody over always works, so the button at the bottom is
+              always offered. What is gated is the rest: a frozen split settles
+              through the shares, and a total with a card button under it is a
+              second way to pay the same food. */}
           {!splitLocked && (
           <>
           <OrderTotals
@@ -482,6 +507,8 @@ export default function BillSheet({
             taxBreakdown={Boolean(restaurant.tax_show_breakdown)}
             currency={currency}
           />
+          </>
+          )}
 
           {called ? (
             <div className="tt-bill-called" role="status">
@@ -497,9 +524,12 @@ export default function BillSheet({
                   a card field that would be refused after they had typed
                   their number in — and said at all, because a card button
                   that is simply missing leaves them looking for it. */}
-              {noCard ? (
+              {alone ? (
                 <p className="tt-muted tt-subline" style={{ fontSize: 13, marginTop: 0 }}>
-                  {t(noCard)}
+                  {/* Why there is no card button. Three reasons reach here and
+                      they send the diner to do different things: pay their
+                      share, wait for the waiter already coming, or call one. */}
+                  {t(splitLocked ? "bill.dividing" : (noCard as string))}
                 </p>
               ) : (
                 <button
@@ -517,16 +547,14 @@ export default function BillSheet({
                 </button>
               )}
               <button
-                className={`tt-btn tt-btn-lg ${noCard ? "tt-btn-primary" : "tt-btn-ghost"}`}
-                style={{ width: "100%", marginTop: noCard ? 0 : 8 }}
+                className={`tt-btn tt-btn-lg ${alone ? "tt-btn-primary" : "tt-btn-ghost"}`}
+                style={{ width: "100%", marginTop: alone ? 0 : 8 }}
                 disabled={busy}
                 onClick={payAtTable}
               >
                 {busy ? t("bill.calling") : t("bill.payAtTable")}
               </button>
             </div>
-          )}
-          </>
           )}
         </>
       )}

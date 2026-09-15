@@ -147,6 +147,26 @@ export const STATES = [
     keeps: /pago en l|pay online|pagar en la mesa|pay at the table/i,
   },
   {
+    // The table froze a split between two of them; this phone ordered and took
+    // no share. Hiding the whole-bill button here was right — paying it charges
+    // for food the shares already cover — but hiding the waiter with it left
+    // them looking at a bill with nothing on the screen to press at all, not
+    // even a way to ask for help. A dead end is not better than a wrong button.
+    name: "a frozen split, no share · the bill",
+    as: "bill",
+    frozen: true,
+    apply: (admin, c) =>
+      admin.from("restaurants")
+        .update({ stripe_account_id: "acct_promise_audit", stripe_charges_enabled: true })
+        .eq("id", c.restaurantId),
+    open: /ver mi cuenta|view my bill/i,
+    says: /dividi|divided/i,
+    // No second way to pay the same food.
+    offers: /pago en l|pay online/i,
+    // But somebody can always be called over.
+    keeps: /pagar en la mesa|pay at the table/i,
+  },
+  {
     name: "counter order ready",
     as: "tracker",
     // Placed from the general QR, so nobody is carrying it anywhere. The

@@ -160,7 +160,7 @@ async function withCounterOrder(run) {
  * is sitting at, and says so loudly if there is none rather than measuring the
  * wrong screen.
  */
-async function withTableBill(run) {
+async function withTableBill(run, frozen = false) {
   const MARK = "promise-audit-bill";
   const { data: dish } = await admin.from("menu_items")
     .select("id, name, emoji, price").eq("restaurant_id", restaurant.id)
@@ -189,9 +189,29 @@ async function withTableBill(run) {
     subtotal: Number(dish.price), total: Number(dish.price), discount: 0,
     service_fee: 0, tip: 0, tax_pct: 0, status: "received", paid: false, note: MARK,
   });
+  // Some cases need the table mid-split, frozen, with this phone holding no
+  // share in it — which is what a third diner sees when two of them halved it.
+  let split = null;
+  if (frozen) {
+    const { data: made } = await admin.from("bill_splits").insert({
+      restaurant_id: restaurant.id, session_id: sitting.id, shares: 2,
+      status: "locked", amount: Number(dish.price), proposed_by: "promise-a",
+      locked_at: new Date().toISOString(),
+    }).select("id").single();
+    split = made.id;
+    await admin.from("bill_split_claims").insert([
+      { split_id: split, share_no: 0, diner: "promise-a", amount: Number(dish.price) / 2 },
+      { split_id: split, share_no: 1, diner: "promise-b", amount: Number(dish.price) / 2 },
+    ]);
+  }
+
   try {
     return await run(free);
   } finally {
+    if (split) {
+      await admin.from("bill_split_claims").delete().eq("split_id", split);
+      await admin.from("bill_splits").delete().eq("id", split);
+    }
     await admin.from("orders").delete().eq("note", MARK);
     await admin.from("table_sessions").delete().eq("id", sitting.id);
   }
@@ -248,7 +268,7 @@ for (const state of STATES) {
   try {
     if (state.as === "tracker") await withCounterOrder(id => visit(`/order/${id}`));
     else if (state.as === "bill") {
-      await withTableBill(free => visit(`/r/${restaurant.id}/t/${free.id}`));
+      await withTableBill(free => visit(`/r/${restaurant.id}/t/${free.id}`), state.frozen);
     } else await visit(state.path ?? `/r/${restaurant.id}/t/${table.id}`);
   } finally {
     await context.close();

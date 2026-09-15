@@ -597,11 +597,11 @@ if (!prod) {
     password: "demo123",
   });
   // The socket is a separate connection with its own idea of who is asking,
-  // and orders belong to the team under RLS: subscribed without the token it
-  // reports SUBSCRIBED and then delivers nothing at all. The app does exactly
-  // this in useLiveOrders — relying on the client to carry the session across
-  // on its own made this check fail about one run in three, always looking
-  // like a broken app and never being one.
+  // and orders belong to the team under RLS. The client usually carries the
+  // session across on its own — removing this line does not reproduce the
+  // failure — but "usually" is what this check kept tripping over, and the app
+  // states it outright in useLiveOrders. Stated here too, with the retry below
+  // for the race that is actually left.
   if (kitchenAuth?.session) kitchen.realtime.setAuth(kitchenAuth.session.access_token);
 
   if (signInError) {
@@ -612,12 +612,22 @@ if (!prod) {
     // 1. Live? Its own restaurant's ticket must arrive, or nothing below means
     //    anything.
     const own = await listen(kitchen, mine.id);
+    // Planted twice if the first one does not arrive. SUBSCRIBED is the client
+    // saying it asked, not the server saying it is wired up, and the gap
+    // between the two is real — a first ticket can fall into it. A second one
+    // a breath later cannot fall into the same gap, so one delivery out of two
+    // proves the socket is live while a dead subscription still fails both.
     const ownId = await plant(mine.id);
-    await settle(own.seen, 1, 25000);
+    await settle(own.seen, 1, 20000);
+    if (own.seen.length === 0) {
+      // Cleaned by note with the rest of them, below.
+      await plant(mine.id);
+      await settle(own.seen, 1, 20000);
+    }
     await kitchen.removeAllChannels();
 
     if (own.seen.length === 0) {
-      bad(`realtime delivered nothing for the kitchen's own restaurant (${own.status}) — the check below would prove nothing`);
+      bad(`realtime delivered nothing for the kitchen's own restaurant after two tickets (${own.status}) — the check below would prove nothing`);
     } else {
       ok("realtime reaches the board it belongs to");
 
