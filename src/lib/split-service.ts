@@ -29,6 +29,65 @@ export interface SplitState {
   ownSince: number;
 }
 
+/**
+ * Is this table in the middle of dividing its bill?
+ *
+ * The question every route that settles a WHOLE bill has to ask, for the same
+ * reason it asks about a waiter: two ways of paying, disagreeing about the
+ * amount, is how a table pays twice.
+ *
+ * Three phones ordered; two of them agreed to halve it and it froze. The third
+ * never joined, so its screen never hid the whole-bill button — and nothing on
+ * the server refused it. Both halves paid, and the whole bill paid: one dinner,
+ * charged twice.
+ *
+ * Asked of the sittings the table's UNPAID orders belong to, which is exactly
+ * the set those routes would charge for — the same shape as `staffOpenedBill`,
+ * and for the same reason: the sitting that is open right now is too narrow.
+ */
+export async function splitInProgress(
+  restaurantId: string,
+  tableId: string,
+): Promise<boolean> {
+  const db = createAdminClient();
+  const { data: owed } = await db
+    .from("orders")
+    .select("session_id")
+    .eq("restaurant_id", restaurantId)
+    .eq("table_id", tableId)
+    .eq("paid", false)
+    .eq("written_off", false)
+    .neq("status", "pending_payment")
+    .neq("status", "cancelled");
+
+  const sessions = [...new Set((owed ?? []).map(o => o.session_id).filter(Boolean))] as string[];
+  if (sessions.length === 0) return false;
+
+  const { count } = await db
+    .from("bill_splits")
+    .select("id", { count: "exact", head: true })
+    .eq("restaurant_id", restaurantId)
+    .in("session_id", sessions)
+    .eq("status", "locked");
+  return (count ?? 0) > 0;
+}
+
+/**
+ * Closes any live division of this sitting's bill.
+ *
+ * Called when the money stops being outstanding some other way — the waiter
+ * took cash, the floor wrote it off. A split left locked over a bill that is
+ * already gone is a charge waiting to happen: `/api/split/pay` bills the share
+ * frozen at the lock, and it has no idea the table has settled.
+ */
+export async function endSplitsFor(sessionId: string): Promise<void> {
+  await createAdminClient()
+    .from("bill_splits")
+    .update({ status: "done" })
+    .eq("session_id", sessionId)
+    .in("status", ["proposed", "locked"]);
+}
+
 /** The live proposal or lock for a sitting, if there is one. */
 export async function currentSplit(
   sessionId: string,

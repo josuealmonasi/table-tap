@@ -5,6 +5,7 @@ import { staffOpenedBill } from "@/lib/table-session";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchTableBill } from "@/lib/bill-data";
+import { tableBill } from "@/lib/table-bill";
 import { getPlan } from "@/lib/plan-server";
 import { orderFeeCents } from "@/lib/plan";
 import { feesTakenThisMonth } from "@/lib/fee-month";
@@ -86,6 +87,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const payable = round2(Number(claim.amount) + ownTotal);
   if (payable <= 0) return await apiError("apiErr.billSettled", 409);
+
+  // The share is the amount frozen when the table agreed, and it has no idea
+  // what has happened since. If the bill has been settled another way — a
+  // waiter took cash, the floor wrote it off — charging it takes money for
+  // food nobody owes for any more.
+  if (tableBill(orders, []).total <= 0) return await apiError("apiErr.billSettled", 409);
 
   const pct = Math.min(100, Math.max(0, Number(tipPct) || 0));
   const asked = tipAmount != null ? Number(tipAmount) : (payable * pct) / 100;

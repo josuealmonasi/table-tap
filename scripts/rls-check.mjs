@@ -592,10 +592,17 @@ if (!prod) {
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   );
-  const { error: signInError } = await kitchen.auth.signInWithPassword({
+  const { data: kitchenAuth, error: signInError } = await kitchen.auth.signInWithPassword({
     email: "demo-kitchen@tabletap.dev",
     password: "demo123",
   });
+  // The socket is a separate connection with its own idea of who is asking,
+  // and orders belong to the team under RLS: subscribed without the token it
+  // reports SUBSCRIBED and then delivers nothing at all. The app does exactly
+  // this in useLiveOrders — relying on the client to carry the session across
+  // on its own made this check fail about one run in three, always looking
+  // like a broken app and never being one.
+  if (kitchenAuth?.session) kitchen.realtime.setAuth(kitchenAuth.session.access_token);
 
   if (signInError) {
     bad(`cannot sign in as the kitchen — realtime went unchecked: ${signInError.message}`);
@@ -616,6 +623,7 @@ if (!prod) {
 
       // 2. And now somebody else's, asked for by id — as staff elsewhere, and
       //    as nobody at all.
+      // Nobody at all: no token on this one, deliberately.
       const anon = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL,
         process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,

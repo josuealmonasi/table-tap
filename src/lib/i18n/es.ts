@@ -872,6 +872,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     yourShare: "Te toca",
     plusYours: "+ {amount} que pediste después",
     payShare: "Pagar {amount}",
+    othersPaying: "La mesa dividió esta cuenta en {n}. Tu consumo ya va en esas partes — no tienes nada que pagar aquí.",
     paid: "Tu parte ya está pagada",
   },
   offline: {
@@ -1021,6 +1022,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     splitFull: "Esa división ya se cerró.",
     splitLocked: "La cuenta ya se dividió: no se puede cancelar.",
     nothingToSplit: "No hay nada pendiente que dividir.",
+    splitInProgress: "La mesa está dividiendo esta cuenta. Paga tu parte, o pídeles que la cancelen.",
     sessionGone: "Esta mesa ya se cerró.",
     ownerCap: "Un restaurante puede tener como máximo {n} dueños.",
     foundedRestaurant: "Este usuario fundó «{name}»: elimina primero ese restaurante.",

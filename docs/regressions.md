@@ -85,6 +85,22 @@ with the code. It now picks from a menu that is active AND unscheduled, and
 throws rather than continuing if there is none. When a fixture asks the database
 to choose, make it state every condition it is relying on.
 
+**A check run against a switched-off feature asks nothing.**
+Two attack cases about dividing a bill passed the day they were written, with
+the bug still in the code: no restaurant in the dev database has a Stripe
+account, so `/api/bill/pay` refused at the door and the case never reached the
+question it existed to ask. They now switch cards on for the length of the
+case and put them back. Before believing a green check, ask what the FIRST
+refusal on that path is and whether the case gets past it.
+
+**A socket is a second connection, and it does not know who you are.**
+`pnpm rls` signed the kitchen in and subscribed to its own restaurant's orders.
+About one run in three the channel reported SUBSCRIBED and then delivered
+nothing — the token had not reached the socket before it connected, so RLS saw
+an anonymous reader. It looked exactly like a broken app and was never one.
+`realtime.setAuth(session.access_token)` before subscribing, which is what
+`useLiveOrders` has always done. Five runs, 77 checks each, no flake.
+
 **Ask what the key is keyed by.**
 The tracker offered a diner the order they had placed at a different table,
 because the memory was keyed per restaurant when the thing it described was per
