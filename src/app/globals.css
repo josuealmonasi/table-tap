@@ -790,6 +790,33 @@ a.tt-btn {
 .tt-pos-tile:hover:not(:disabled) {
   border-color: var(--tt-accent);
 }
+/* The price, and — where a dish is counted — how many are left, on one line at
+   the foot of the tile. `margin-top: auto` pins it to the bottom so tiles of
+   different name lengths still line their numbers up with each other. */
+.tt-pos-tile-foot {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  margin-top: auto;
+}
+/* A reading, not a promise — so it is quiet. Somebody else can take the last
+   one between seeing this and pressing the tile, and the database settles
+   that; this is here so nobody builds an order of ten against a shelf of
+   four. */
+.tt-stock-tag {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tt-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Down to the last few: the one case where it should catch the eye. Not the
+   danger colour — nothing is wrong, there is simply not much left. */
+.tt-stock-tag-low {
+  color: var(--tt-accent);
+}
 /* Run out, and still on the till: the cashier has to be able to say so. Faded
    the same amount a sold-out cart line is, and not pressable. */
 .tt-pos-tile-out {

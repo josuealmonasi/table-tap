@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
+import { shortMessage } from "@/lib/stock-message";
 import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
 import { priceCart, type CartPromo } from "@/lib/pricing";
@@ -16,6 +17,8 @@ import QrScanner from "@/components/dashboard/QrScanner";
 import { tableFromScan } from "@/lib/scan-target";
 import { DietaryTagsProvider } from "@/components/DietaryTagsContext";
 import type { CartItem } from "@/hooks/useCart";
+import StockTag from "@/components/dashboard/StockTag";
+import { useLiveStock } from "@/hooks/useLiveStock";
 import type { Combo } from "@/lib/promotions";
 import type { StoredDietaryTag } from "@/lib/dietary";
 import type { Category, MenuItem, Restaurant } from "@/lib/types";
@@ -64,6 +67,8 @@ export default function TableOrderScreen({
   const t = useT();
   const toast = useToast();
   const router = useRouter();
+  // The counter sells the same dishes; the counts here follow the kitchen.
+  useLiveStock(restaurant.id);
 
   const [tableId, setTableId] = useState("");
   const [lines, setLines] = useState<CartItem[]>([]);
@@ -145,8 +150,10 @@ export default function TableOrderScreen({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (data.code === "outOfStock") {
-          const names = (data.short ?? []).map((s: { name: string }) => s.name).join(", ");
-          toast(t("pos.outOfStock", { names }), "error");
+          // With the numbers in it. The refusal has always known how many are
+          // left and every screen dropped them, so the answer to "how many can
+          // I have then?" was a trip to the kitchen.
+          toast(shortMessage(data.short ?? [], t), "error");
         } else {
           toast(data.error ?? t("done.networkError"), "error");
         }
@@ -242,7 +249,11 @@ export default function TableOrderScreen({
                           {dish.emoji} {dish.name}
                         </span>
                         {dish.available ? (
-                          <span className="tt-pos-tile-price">{money(Number(dish.price))}</span>
+                          <span className="tt-pos-tile-foot">
+                            <span className="tt-pos-tile-price">{money(Number(dish.price))}</span>
+                            {/* Only where there is a limit to know about. */}
+                            <StockTag left={dish.stock} />
+                          </span>
                         ) : (
                           <span className="tt-badge tt-pos-tile-out-tag">{t("cart.soldOut")}</span>
                         )}
