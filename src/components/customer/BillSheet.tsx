@@ -218,9 +218,12 @@ export default function BillSheet({
     bill.mine.orders.filter(o => !o.paid).map(o => o.id),
   );
 
-  // Once it has frozen and this phone holds a seat, the split card is how they
-  // pay. Everything that settles the whole bill is put away.
-  const splitLocked = can.split && split?.status === "locked" && Boolean(split.mine);
+  // Once it has frozen, the split card is how this table pays. Everything that
+  // settles the WHOLE bill is put away — whether or not this phone took a
+  // share. A phone that ordered and never joined still had the button: three
+  // ordered, two of them halved it, and the third could pay for the lot while
+  // the two halves were being collected. One dinner, charged twice.
+  const splitLocked = can.split && split?.status === "locked";
 
   /** Their share, plus anything they ordered since it froze. */
   async function payShare(): Promise<void> {

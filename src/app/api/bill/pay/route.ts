@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { apiError } from "@/lib/api-error";
 import { billWindowStart } from "@/lib/table-bill";
 import { staffOpenedBill } from "@/lib/table-session";
+import { splitInProgress } from "@/lib/split-service";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { orderFeeCents } from "@/lib/plan";
@@ -56,6 +57,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // pays twice and only one of the two payments is anywhere anybody is looking.
   if (await staffOpenedBill(restaurantId, tableId)) {
     return await apiError("apiErr.waiterSettles", 409);
+  }
+
+  // And the same refusal for a table dividing it between themselves. A phone
+  // that ordered but never took a share still saw this button — three ordered,
+  // two halved it — and paying here charges for food the shares are already
+  // being collected for. The screen hides it; this is what makes it true.
+  if (await splitInProgress(restaurantId, tableId)) {
+    return await apiError("apiErr.splitInProgress", 409);
   }
 
   const db = createAdminClient();

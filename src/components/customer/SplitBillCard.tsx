@@ -155,6 +155,25 @@ export default function SplitBillCard({
     );
   }
 
+  // ── Frozen, and this phone is not in it
+  //
+  // Reachable whenever fewer shares were agreed than there are people who
+  // ordered: three ordered, two of them halved it. The card used to fall
+  // through to "somebody asked — join?", offering a seat at a table that is
+  // full and frozen, and the bill screen behind it still offered to pay the
+  // whole thing. Their food is inside the frozen shares; there is nothing here
+  // for them to do.
+  if (split.status === "locked") {
+    return (
+      <div className="tt-split">
+        <strong>{t("split.title")}</strong>
+        <span className="tt-muted tt-split-hint">
+          {t("split.othersPaying", { n: split.shares })}
+        </span>
+      </div>
+    );
+  }
+
   // ── Somebody asked; we are waiting on the rest
   const iAsked = split.proposedBy === diner;
   return (

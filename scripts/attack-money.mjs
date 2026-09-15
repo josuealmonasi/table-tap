@@ -331,6 +331,116 @@ try {
     await admin.from("restaurant_tables").delete().eq("id", two.id);
   }
 
+  // ── A table dividing its bill is not payable whole ──────────────────────
+  //
+  // Three phones ordered; two of them agreed to halve it and the split froze.
+  // The third never joined, so its screen never hid the whole-bill button —
+  // and nothing on the server refused it. Both halves get paid AND the whole
+  // bill gets paid: the table is charged twice for one dinner.
+  {
+    await admin.from("table_sessions").update({ opened_by: null }).eq("id", sitting.id);
+    const { data: owed } = await admin
+      .from("orders").select("id, total").eq("session_id", sitting.id).eq("paid", false);
+    const whole = Number((owed ?? []).reduce((s, o) => s + Number(o.total), 0).toFixed(2));
+
+    const { data: made } = await admin.from("bill_splits").insert({
+      restaurant_id: home.id, session_id: sitting.id, shares: 2,
+      status: "locked", amount: whole, proposed_by: "attack-a",
+      locked_at: new Date().toISOString(),
+    }).select("id").maybeSingle();
+    await admin.from("bill_split_claims").insert([
+      { split_id: made.id, share_no: 0, diner: "attack-a", amount: whole / 2 },
+      { split_id: made.id, share_no: 1, diner: "attack-b", amount: whole / 2 },
+    ]);
+
+    // Cards ON for this one. With no Stripe account the route refuses every
+    // caller at the door, and this case would have passed without ever
+    // reaching the question it exists to ask.
+    const { data: was } = await admin.from("restaurants")
+      .select("stripe_account_id, stripe_charges_enabled").eq("id", home.id).single();
+    await admin.from("restaurants")
+      .update({ stripe_account_id: "acct_attack", stripe_charges_enabled: true })
+      .eq("id", home.id);
+
+    const before = await takings(home.id);
+    const res = await post("/api/bill/pay", {
+      restaurantId: home.id, tableId: table.id, orderIds: (owed ?? []).map(o => o.id),
+    }, null);
+    const after = await takings(home.id);
+    // 409 and no url. Without the guard it gets past this point and asks
+    // Stripe, which refuses the made-up account with a 502 — so the two
+    // answers tell the check apart from the bug it is looking for.
+    res.status === 409 && !res.body.url && after.rows === before.rows
+      ? ok("a diner cannot pay the whole bill while the table is dividing it")
+      : bad(`the online bill route answered ${res.status}${res.body.url ? " with a checkout url" : ""} on a locked split`);
+
+    await admin.from("restaurants").update({
+      stripe_account_id: was.stripe_account_id,
+      stripe_charges_enabled: was.stripe_charges_enabled,
+    }).eq("id", home.id);
+    await admin.from("bill_split_claims").delete().eq("split_id", made.id);
+    await admin.from("bill_splits").delete().eq("id", made.id);
+  }
+
+  // ── A share cannot be paid into a bill that has already been settled ────
+  //
+  // The share is the amount frozen when the table agreed, and nothing about it
+  // knows what has happened since. A waiter takes the cash, the sitting closes
+  // — and a diner who had not got round to their share could still be charged
+  // for it. Their money, for food nobody owes for any more.
+  {
+    const { data: spare } = await admin.from("restaurant_tables")
+      .insert({ restaurant_id: home.id, label: `${MARK}-settled` }).select("id").maybeSingle();
+    const { data: sat } = await admin.from("table_sessions")
+      .insert({ restaurant_id: home.id, table_id: spare.id }).select("id").maybeSingle();
+    // Already paid for: the bill is gone, the sitting is closed.
+    await admin.from("orders").insert({
+      restaurant_id: home.id, table_id: spare.id, table_label: `${MARK}-settled`,
+      session_id: sat.id, items: [], subtotal: 80, total: 80, currency: "MXN",
+      status: "completed", paid: true, note: MARK,
+    });
+    await admin.from("table_sessions")
+      .update({ closed_at: new Date().toISOString(), close_reason: "settled" }).eq("id", sat.id);
+
+    const { data: stale } = await admin.from("bill_splits").insert({
+      restaurant_id: home.id, session_id: sat.id, shares: 2, status: "locked",
+      amount: 80, proposed_by: "attack-a", locked_at: new Date().toISOString(),
+    }).select("id").maybeSingle();
+    await admin.from("bill_split_claims").insert([
+      { split_id: stale.id, share_no: 0, diner: "attack-a", amount: 40, paid_at: new Date().toISOString() },
+      { split_id: stale.id, share_no: 1, diner: "attack-b", amount: 40 },
+    ]);
+
+    // Cards ON, for the same reason as the case above: with no Stripe account
+    // the route refuses everyone at the door and this would pass without ever
+    // asking its question.
+    const { data: was } = await admin.from("restaurants")
+      .select("stripe_account_id, stripe_charges_enabled").eq("id", home.id).single();
+    await admin.from("restaurants")
+      .update({ stripe_account_id: "acct_attack", stripe_charges_enabled: true })
+      .eq("id", home.id);
+
+    const before = await takings(home.id);
+    const res = await post("/api/split/pay", {
+      splitId: stale.id, sessionId: sat.id, diner: "attack-b",
+      restaurantId: home.id, tableId: spare.id, ownOrderIds: [],
+    }, null);
+    const after = await takings(home.id);
+    await admin.from("restaurants").update({
+      stripe_account_id: was.stripe_account_id,
+      stripe_charges_enabled: was.stripe_charges_enabled,
+    }).eq("id", home.id);
+    res.status === 409 && !res.body.url && after.rows === before.rows
+      ? ok("a share cannot be charged for a bill that is already settled")
+      : bad(`the share route answered ${res.status}${res.body.url ? " with a checkout url" : ""} on a settled bill`);
+
+    await admin.from("bill_split_claims").delete().eq("split_id", stale.id);
+    await admin.from("bill_splits").delete().eq("id", stale.id);
+    await admin.from("orders").delete().eq("session_id", sat.id);
+    await admin.from("table_sessions").delete().eq("id", sat.id);
+    await admin.from("restaurant_tables").delete().eq("id", spare.id);
+  }
+
   // ── A bill the waiter opened is not payable online ──────────────────────
   {
     await admin.from("table_sessions")

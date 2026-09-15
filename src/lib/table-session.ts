@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { endSplitsFor } from "@/lib/split-service";
 import { OPEN_BILL_HOURS } from "@/lib/table-bill";
 
 /**
@@ -155,10 +156,16 @@ export async function closeSessionIfClear(
   reason: "paid" | "settled" | "written_off",
 ): Promise<void> {
   if (!sessionId) return;
-  await createAdminClient().rpc("close_session_if_clear", {
-    p_session: sessionId,
-    p_reason: reason,
-  });
+  const db = createAdminClient();
+  await db.rpc("close_session_if_clear", { p_session: sessionId, p_reason: reason });
+
+  // If that closed it, nothing is owed on this sitting any more — so a
+  // division of it is over too, however it was going. Left locked, the shares
+  // stay chargeable: `/api/split/pay` bills the amount frozen at the lock and
+  // has no idea the waiter has already taken the cash.
+  const { data: after } = await db
+    .from("table_sessions").select("closed_at").eq("id", sessionId).maybeSingle();
+  if (after?.closed_at) await endSplitsFor(sessionId);
 }
 
 /** Closes whatever sittings the given orders belonged to, if they are clear. */

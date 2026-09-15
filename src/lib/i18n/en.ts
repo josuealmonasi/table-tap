@@ -878,6 +878,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     yourShare: "Your share",
     plusYours: "+ {amount} you ordered after",
     payShare: "Pay {amount}",
+    othersPaying: "The table divided this bill {n} ways. What you ordered is inside those shares — there is nothing for you to pay here.",
     paid: "Your share is paid",
   },
   offline: {
@@ -1027,6 +1028,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     splitFull: "That split is already closed.",
     splitLocked: "The bill is already divided and cannot be called off.",
     nothingToSplit: "There is nothing outstanding to divide.",
+    splitInProgress: "The table is dividing this bill. Pay your share, or ask them to call it off.",
     sessionGone: "This table has already been closed.",
     ownerCap: "A restaurant can have at most {n} owners.",
     foundedRestaurant: "This user founded \"{name}\" — delete that restaurant first.",
