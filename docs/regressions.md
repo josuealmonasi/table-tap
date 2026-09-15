@@ -66,6 +66,16 @@ Dev is not a scratch pad. Resetting dev and re-seeding only production left
 `demo@tabletap.dev` with no restaurant, and the next person to sign in lost a
 morning to a bug that was not in the code. `pnpm prod:check` now covers both.
 
+**A record that ends a bill has to end the work too.**
+Cancelling what a table owed set `written_off` and stopped there, leaving every
+order at `received`. The ledger was right and every screen that shows live work
+was wrong: the kitchen still had tickets for a table that had gone, and the
+diner's phone still offered "follow your order ORD-09BB" three times over on a
+table the floor had cleared for the next party. `pnpm api` now writes a table
+off and reads the orders back, and fails if any of them is still on the board.
+When a flag means "this is over", find every screen that asks "is this still
+happening" and make sure it is asking the same question.
+
 **Ask what the key is keyed by.**
 The tracker offered a diner the order they had placed at a different table,
 because the memory was keyed per restaurant when the thing it described was per

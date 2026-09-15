@@ -78,7 +78,10 @@ try {
     if (c.check && res.status === 200) {
       let data;
       try { data = JSON.parse(text); } catch { data = {}; }
-      const verdict = c.check(data);
+      // The fixture goes with it, so a case can check what the route DID and
+      // not only what it said: a write-off answers `{ ok: true }` either way,
+      // and what matters is the state it left the orders in.
+      const verdict = await c.check(data, fx);
       if (verdict !== true) {
         bad(`${c.name} — answered 200 but ${verdict}`);
         continue;

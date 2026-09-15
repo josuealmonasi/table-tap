@@ -21,10 +21,14 @@ export type TrackedOrder = Pick<
   // Their own name, when they gave one at the counter. They should be able to
   // check what the cashier is about to call out.
   | "customer_name"
+  // The floor cancelled this table's debt. For the diner that is the end of
+  // it, whatever stage the kitchen last left it at — and the phone has to be
+  // told, or it goes on offering to follow an order nobody is cooking.
+  | "written_off"
 >;
 
 const TRACKER_COLUMNS =
-  "id, restaurant_id, table_id, table_label, status, items, total, currency, paid, customer_name";
+  "id, restaurant_id, table_id, table_label, status, items, total, currency, paid, customer_name, written_off";
 
 // UUIDs only — avoids sending malformed ids to Postgres' uuid column.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

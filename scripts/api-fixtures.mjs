@@ -90,6 +90,14 @@ export async function setup(env, base) {
     unpaidOrder: await make({ paid: false }),
     // A bill with a table: discounts and cancellations are asked for by table.
     tableOrder: await make({ paid: false, table_id: tables[0].id, table_label: tables[0].label }),
+    // A table of its own to walk out on, so writing it off does not take the
+    // one the other cases are still working on — and so the case that checks
+    // the table is CLEAR afterwards always has something to clear.
+    walkoutTable: tables[1],
+    walkoutOrder: await make({
+      paid: false, status: "preparing",
+      table_id: tables[1].id, table_label: tables[1].label,
+    }),
   };
 }
 
