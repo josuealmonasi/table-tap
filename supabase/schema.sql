@@ -566,6 +566,16 @@ do $$ begin
 exception when duplicate_object then null;
 end $$;
 
+-- The tills read a stock count off every tile, and two people sell at once. RLS
+-- still decides who hears this: staff read `menu_items` under `works_at`, which
+-- does not move when the stock does, while the diner's policy is `available and
+-- menu active` — so a dish selling out takes the row out of their reach and the
+-- event with it. That is why the customer's menu polls and the till listens.
+do $$ begin
+  alter publication supabase_realtime add table menu_items;
+exception when duplicate_object then null;
+end $$;
+
 -- ============================================================================
 -- Row Level Security
 -- ============================================================================

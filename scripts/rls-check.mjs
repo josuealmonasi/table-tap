@@ -543,13 +543,13 @@ if (!prod) {
   const theirs = rs2.find(r => r.id !== mine.id);
   const PROBE = "rls realtime probe";
 
-  const listen = async (client, restaurantId) => {
+  const listen = async (client, restaurantId, table = "orders") => {
     const seen = [];
     const channel = client
-      .channel(`rls-${restaurantId}-${Date.now()}`)
+      .channel(`rls-${table}-${restaurantId}-${Date.now()}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "orders", filter: `restaurant_id=eq.${restaurantId}` },
+        { event: "*", schema: "public", table, filter: `restaurant_id=eq.${restaurantId}` },
         payload => seen.push(payload.new?.id ?? payload.old?.id),
       );
     const status = await new Promise(resolve => {
@@ -654,6 +654,68 @@ if (!prod) {
         : bad(`realtime handed ${asAnon.seen.length} of another restaurant's orders to an anonymous listener`);
 
       if (theirId) await admin.from("orders").delete().eq("id", theirId);
+
+      // The tills read a stock count off every tile and follow it live, so
+      // `menu_items` is published now.
+      //
+      // A diner hearing about the public menu is NOT the thing to worry about:
+      // anon already reads those rows, `stock` included, by plain select and on
+      // purpose — the checkout tells them "sólo quedan 5" the moment they ask
+      // for six. (I built this check the other way round first, called that a
+      // leak, and was about to rip the feature out over it.) What has to hold
+      // is the same thing as everywhere else: the row belongs to one
+      // restaurant, and nobody else's staff hear it.
+      const { data: dish } = await admin
+        .from("menu_items").select("id, stock").eq("restaurant_id", mine.id)
+        .eq("is_addon", false).order("name").limit(1).maybeSingle();
+      if (!dish) {
+        bad("no dish to change — the stock subscription went unchecked");
+      } else {
+        const ours = await listen(kitchen, mine.id, "menu_items");
+        const bump = async n =>
+          admin.from("menu_items").update({ stock: (Number(dish.stock) || 0) + n }).eq("id", dish.id);
+        await bump(1);
+        await settle(ours.seen, 1, 20000);
+        if (ours.seen.length === 0) { await bump(2); await settle(ours.seen, 1, 20000); }
+        await kitchen.removeAllChannels();
+        ours.seen.length > 0
+          ? ok("a stock change reaches the till it belongs to")
+          : bad(`the till hears nothing when the stock moves (${ours.status}) — the tiles would go stale`);
+
+        // And the line that actually matters: a dish the neighbour has TAKEN
+        // OFF their menu.
+        //
+        // Their live menu is public — anyone can scan a QR and read it, stock
+        // included, and a plain select proves foreign staff may already do
+        // exactly that. So hearing those changes is not a finding, and an
+        // earlier version of this check called it one. What is private is a
+        // dish they have hidden: `available = false` puts it out of reach of a
+        // plain select from elsewhere, and realtime has to agree.
+        const { data: theirDish } = await admin
+          .from("menu_items").select("id, stock, available").eq("restaurant_id", theirs.id)
+          .eq("is_addon", false).eq("available", true).order("name").limit(1).maybeSingle();
+        if (!theirDish) {
+          bad("the neighbour has no dish to hide — realtime went half-checked");
+        } else {
+          // Hidden BEFORE anybody listens, so the hiding itself is not the
+          // event being measured.
+          await admin.from("menu_items").update({ available: false }).eq("id", theirDish.id);
+          const nosy = await listen(kitchen, theirs.id, "menu_items");
+          await admin.from("menu_items")
+            .update({ stock: (Number(theirDish.stock) || 0) + 1 }).eq("id", theirDish.id);
+          await settle(nosy.seen, 1, 12000);
+          await kitchen.removeAllChannels();
+          await admin.from("menu_items")
+            .update({ stock: theirDish.stock, available: theirDish.available })
+            .eq("id", theirDish.id);
+          nosy.seen.length === 0
+            ? ok("and a dish another restaurant has hidden stays hidden on the socket")
+            : bad(`realtime handed ${nosy.seen.length} change(s) to a dish another restaurant had taken off its menu`);
+        }
+
+        // Put the shelf back exactly as it was.
+        await admin.from("menu_items").update({ stock: dish.stock }).eq("id", dish.id);
+      }
     }
     if (ownId) await admin.from("orders").delete().eq("id", ownId);
   }
