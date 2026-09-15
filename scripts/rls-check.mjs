@@ -93,21 +93,52 @@ for (const [fn, args] of [
 
 // ── 3. One restaurant reaching another ─────────────────────────────────────
 console.log("\nA signed-in restaurant reaching another's data");
-const { data: restaurants } = await admin.from("restaurants").select("id, name, owner_id").limit(3);
-const mine = restaurants?.[0];
-const theirs = restaurants?.find(r => r.id !== mine?.id);
+// The pair is CHOSEN, not whatever the database hands back first.
+//
+// It used to take `restaurants[0]` from an unordered `limit(3)` and sign in
+// with one hardcoded password. The row that came back first was a seeded
+// restaurant with a null `owner_id`, so there was no owner to be, and the
+// whole section below — eight cross-tenant reads and a write — printed
+// SKIPPED and ran none of it. Every run, on every machine, for as long as
+// that row happened to sort first.
+const { data: restaurants } = await admin.from("restaurants").select("id, name, owner_id");
+const { data: users } = await admin.auth.admin.listUsers({ perPage: 200 });
 
 const asUser = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 );
-const { data: users } = await admin.auth.admin.listUsers({ perPage: 200 });
-const owner = users?.users?.find(u => u.id === mine?.owner_id);
-const signIn = owner
-  ? await asUser.auth.signInWithPassword({ email: owner.email, password: "test123" })
-  : { error: new Error("no owner") };
-if (signIn.error) {
-  console.log(`  SKIPPED  could not sign in as ${owner?.email ?? "an owner"} (${signIn.error.message})`);
+
+// Whoever can actually be signed in as. Both passwords, because the demo
+// restaurant and the test ones do not share one.
+let mine = null;
+let signIn = { error: new Error("no restaurant has an owner who can sign in") };
+for (const r of restaurants ?? []) {
+  const owner = users?.users?.find(u => u.id === r.owner_id);
+  if (!owner?.email) continue;
+  for (const password of ["demo123", "test123"]) {
+    const attempt = await asUser.auth.signInWithPassword({ email: owner.email, password });
+    if (!attempt.error) { mine = r; signIn = attempt; break; }
+  }
+  if (mine) break;
+}
+const theirs = restaurants?.find(r => r.id !== mine?.id);
+
+// The victim needs something worth stealing.
+//
+// Every read below was passing because the restaurant next door happened to
+// be empty — eight tables, eight green ticks, nothing asked. Planted here,
+// attacked by this section AND by the every-table sweep further down, and
+// removed at the end whatever happens in between.
+const fixture = !prod && theirs ? await plantNeighbour(admin, theirs.id) : null;
+if (!prod && theirs && !fixture?.planted.order) {
+  bad("could not plant anything in the restaurant next door — the reads below prove nothing");
+}
+
+if (signIn.error || !mine || !theirs) {
+  // Loud, never skipped: a security section that does not run has to look
+  // like a failure, or it reads as a pass forever.
+  bad(`the cross-tenant checks did not run — ${signIn.error?.message ?? "no second restaurant"}`);
 } else {
   for (const table of ["orders", "table_sessions", "write_off_requests", "discount_requests", "coupons", "user_logs", "staff", "icon_groups"]) {
     verdict(
@@ -438,12 +469,9 @@ if (!signIn.error && theirs) {
   // their takings and in the corte. The sweep runs with whatever real data
   // production happens to hold, and says plainly what it therefore could not
   // reach.
-  let fixture = null;
-  if (!prod && others.length > 0) {
-    fixture = await plantNeighbour(admin, others[0]);
-    if (!fixture.planted.order || !fixture.planted.payment) {
-      bad("could not plant a neighbour's order — orders/payments went unchecked");
-    }
+  // Already planted, above, into the restaurant this sweep also attacks.
+  if (!prod && !fixture?.planted.payment) {
+    bad("no neighbour's payment was planted — orders/payments went unchecked");
   }
 
   // Which tables this sweep could actually bite on, so a silent gap is visible.
@@ -493,7 +521,6 @@ if (!signIn.error && theirs) {
     }
   }
 
-  if (fixture) await fixture.remove();
 }
 
 // ── The other door: realtime ────────────────────────────────────────────────
@@ -534,6 +561,24 @@ if (!prod) {
     return { seen, status };
   };
 
+  /**
+   * Wait for what should arrive, not for a fixed number of seconds.
+   *
+   * A sleep long enough to be reliable is a sleep that makes the whole gate
+   * slow, and one short enough to be quick fails on a slow afternoon — this
+   * check reported a leak-free app as broken exactly once that way, which is
+   * how a gate teaches people to ignore it. So: return the moment the event
+   * lands, and only give up at the deadline.
+   */
+  const settle = async (seen, want, ms) => {
+    const until = Date.now() + ms;
+    while (Date.now() < until && seen.length < want) await new Promise(r => setTimeout(r, 250));
+    // A breath after the last one, so a SECOND payload that should not exist
+    // still has time to show up and be counted.
+    await new Promise(r => setTimeout(r, 750));
+    return seen.length;
+  };
+
   const plant = async restaurantId => {
     const { data } = await admin.from("orders").insert({
       restaurant_id: restaurantId, status: "received", paid: true, subtotal: 1,
@@ -561,7 +606,7 @@ if (!prod) {
     //    anything.
     const own = await listen(kitchen, mine.id);
     const ownId = await plant(mine.id);
-    await new Promise(r => setTimeout(r, 12000));
+    await settle(own.seen, 1, 25000);
     await kitchen.removeAllChannels();
 
     if (own.seen.length === 0) {
@@ -577,7 +622,10 @@ if (!prod) {
       );
       const [asStaff, asAnon] = await Promise.all([listen(kitchen, theirs.id), listen(anon, theirs.id)]);
       const theirId = await plant(theirs.id);
-      await new Promise(r => setTimeout(r, 12000));
+      // Nothing SHOULD arrive here, so there is nothing to wait for: this is
+      // the one place a fixed wait is right, and it is as long as the wait
+      // above took to deliver, so a slow socket cannot pass for a safe one.
+      await settle(asStaff.seen, 1, 12000);
       await Promise.all([kitchen.removeAllChannels(), anon.removeAllChannels()]);
 
       asStaff.seen.length === 0
@@ -594,6 +642,8 @@ if (!prod) {
   // Whatever happened above, nothing of this is left behind.
   await admin.from("orders").delete().eq("note", PROBE);
 }
+
+if (fixture) await fixture.remove();
 
 console.log(failed === 0 ? "\nNothing is exposed.\n" : `\n${failed} PROBLEM(S) — fix before shipping.\n`);
 process.exit(failed === 0 ? 0 : 1);
