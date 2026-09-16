@@ -58,6 +58,22 @@ for (const p of payments) {
   }
 }
 
+// 0. Every payment belongs to something.
+//
+// The reconciliation below sorts payments into two buckets — attached to an
+// order, or attached to a sitting — and a row with NEITHER fell between them
+// and was counted by nothing. Money in the ledger attributable to no order and
+// no table is exactly what this check exists to find, and it was the one shape
+// it could not see. `payments.order_id` is `on delete set null`, so deleting an
+// order is all it takes to make one.
+const orphans = payments.filter(p => !p.order_id && !p.session_id);
+orphans.length === 0
+  ? ok(`every payment belongs to an order or a sitting (${payments.length} checked)`)
+  : bad(
+      `${orphans.length} payment(s) attached to nothing — ` +
+        orphans.slice(0, 3).map(p => `${p.id.slice(0, 8)} ${p.amount}`).join(", "),
+    );
+
 // 1. Every settled order has money behind it — its own, or its sitting's.
 const settled = orders.filter(o => o.paid && !o.written_off && Number(o.total) > 0);
 const backed = o => paidFor.has(o.id) || (o.session_id && paidForSitting.has(o.session_id));
