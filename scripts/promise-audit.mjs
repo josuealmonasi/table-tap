@@ -247,7 +247,22 @@ for (const state of STATES) {
         }
         await tab.evaluate(
           `[...document.querySelectorAll("button")].find(b => b.offsetParent && ${state.open}.test(b.innerText)).click()`);
-        await tab.waitForTimeout(1200);
+
+        // Wait for what opened, not for a number of milliseconds. A dialog
+        // that takes 1.3s on a slow compile made this case report the screen
+        // as having hidden its own working button — a red gate over nothing,
+        // which is how a gate teaches people to ignore it.
+        const deadline = Date.now() + 8000;
+        while (Date.now() < deadline) {
+          const ready = state.keeps
+            ? (await visible(tab, state.keeps)) > 0
+            : (await tab.evaluate(`document.querySelectorAll("dialog[open],[role=dialog]").length`)) > 0;
+          if (ready) break;
+          await tab.waitForTimeout(250);
+        }
+        // A breath, so a control that renders just after its neighbour is
+        // still counted by `offers`.
+        await tab.waitForTimeout(600);
       }
 
       const text = await tab.evaluate("document.body.innerText");

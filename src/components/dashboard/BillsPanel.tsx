@@ -48,6 +48,8 @@ export default function BillsPanel({
   canApprove,
   restaurantId,
   canSettle,
+  canCollectInParts,
+  canDiscount,
   askedToPay,
   children,
 }: {
@@ -59,6 +61,12 @@ export default function BillsPanel({
   restaurantId: string;
   /** Front of house can take the money; the kitchen cannot. */
   canSettle: boolean;
+  /** The plan carries waiter service — without it /api/table-payment/part
+   *  answers 403 and the calculator is a door into a refusal. */
+  canCollectInParts: boolean;
+  /** The plan carries staff discounts — without it /api/bill/discount
+   *  answers 403, however willingly the picker fills itself. */
+  canDiscount: boolean;
   /** Tables that asked for the bill and are waiting for somebody to come. */
   askedToPay: string[];
   /** The activity log, for whoever may see it. */
@@ -418,6 +426,8 @@ export default function BillsPanel({
           }
           currency={currency}
           canApprove={canApprove}
+          canCollectInParts={canCollectInParts}
+          canDiscount={canDiscount}
           onClose={() => setSettling(null)}
           onSettled={() => router.refresh()}
           // The same promotion dialog the row opens, reached without leaving

@@ -167,6 +167,27 @@ export const STATES = [
     keeps: /pagar en la mesa|pay at the table/i,
   },
   {
+    // The plan-gated money controls. `pnpm promises` had two free-plan states
+    // and both were about screens the plan hides entirely; these are the
+    // harder shape — a screen the plan KEEPS, carrying buttons it does not.
+    // `/api/table-payment/part` refuses without waiter service and
+    // `/api/bill/discount` without staff discounts, and the bills screen
+    // offered both regardless. On `servicio` — a PAYING tier — the calculator
+    // filled a discount picker from an endpoint that is not plan-gated and
+    // then answered 409 to the code the waiter had just chosen out loud.
+    name: "free plan · collecting a bill",
+    as: "owner",
+    path: "/dashboard/bills",
+    apply: (admin, c) =>
+      admin.from("restaurants").update({ plan: "carta", plan_status: "active" }).eq("id", c.restaurantId),
+    open: /^\s*(Cobrar|Collect)\s*$/i,
+    says: /cuenta|bill/i,
+    // The calculator's door, which the route refuses on this plan.
+    offers: /cobrar por partes|collect in parts/i,
+    // Settling in full still works and must stay.
+    keeps: /pagó en efectivo|paid cash/i,
+  },
+  {
     name: "counter order ready",
     as: "tracker",
     // Placed from the general QR, so nobody is carrying it anywhere. The
