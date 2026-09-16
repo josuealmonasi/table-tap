@@ -28,6 +28,12 @@ interface SettleTableDialogProps {
   canApprove: boolean;
   /** Opens the promotion dialog on this bill, where the screen has one. */
   onDiscount?: () => void;
+  /** The plan carries waiter service. Without it /api/table-payment/part
+   *  answers 403, so the door to the calculator is not offered. */
+  canCollectInParts?: boolean;
+  /** The plan carries staff discounts. Without it /api/bill/discount
+   *  answers 403. */
+  canDiscount?: boolean;
 }
 
 /**
@@ -49,6 +55,8 @@ export default function SettleTableDialog({
   onSettled,
   canApprove,
   onDiscount,
+  canCollectInParts = true,
+  canDiscount = true,
 }: SettleTableDialogProps) {
   const t = useT();
   const toast = useToast();
@@ -172,7 +180,11 @@ export default function SettleTableDialog({
             {/* Tables only: a counter order is one person at a till paying
                 for one thing, and offering to divide it is offering something
                 nobody standing there has ever asked for. */}
-            {tableId && (
+            {/* And only where the plan carries it: `/api/table-payment/part`
+                refuses without waiter service, so on `carta` this button
+                opened a calculator that answered 403 to whatever the waiter
+                typed — with the customer's cash already on the table. */}
+            {tableId && canCollectInParts && (
               <button
                 className="tt-btn tt-btn-ghost tt-btn-lg"
                 style={{ width: "100%", marginTop: 8 }}
@@ -212,7 +224,7 @@ export default function SettleTableDialog({
           tableLabel={tableLabel}
           currency={currency}
           onCollected={onSettled}
-          onDiscount={onDiscount}
+          onDiscount={canDiscount ? onDiscount : undefined}
         />
       )}
       {bill && (

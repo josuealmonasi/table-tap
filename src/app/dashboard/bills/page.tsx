@@ -1,5 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MANAGES, OWNS, SETTLES } from "@/lib/membership";
+import { getPlan } from "@/lib/plan-server";
+import { can } from "@/lib/plan";
 import { requireSettles } from "@/lib/page-guard";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import BillsPanel from "@/components/dashboard/BillsPanel";
@@ -25,6 +27,7 @@ export const dynamic = "force-dynamic";
 export default async function BillsPage() {
   const membership = await requireSettles();
   const r = membership.restaurant;
+  const plan = await getPlan(r.id);
 
   // Read with the secret key: orders are unreadable to anyone but the team's
   // own policies, and this page needs every table's, not just one's.
@@ -127,6 +130,11 @@ export default async function BillsPage() {
     collected.set(key, (collected.get(key) ?? 0) + Number(p.amount));
   }
 
+  // `canCollectInParts` and `canDiscount` are what the ROUTES will actually
+  // accept. Both refuse on a plan without the feature, and this screen offered
+  // them anyway: on `servicio` — a paying tier — the calculator opened a
+  // discount picker, filled it from an endpoint that is NOT plan-gated, and
+  // the apply came back 409. The waiter chose a code in front of the customer.
   return (
     <ConfirmProvider>
       <BillsPanel
@@ -141,6 +149,8 @@ export default async function BillsPage() {
         canApprove={MANAGES(membership.role)}
         restaurantId={r.id}
         canSettle={SETTLES(membership.role)}
+        canCollectInParts={Boolean(plan && can(plan.limits, "waiterService"))}
+        canDiscount={Boolean(plan && can(plan.limits, "staffDiscounts"))}
         askedToPay={(asking ?? []).map(a => a.table_id).filter(Boolean) as string[]}
       >
         {/* Owner only, because that is all the database will hand over: the
