@@ -88,6 +88,16 @@ export async function setup(env, base) {
     .eq("restaurant_id", restaurant.id).is("closed_at", null)
     .limit(1).maybeSingle();
 
+  // The newest bill line the log already held, so teardown removes only the
+  // ones this run writes. Settling a table logs `paid` with no order code in
+  // it, which no `like` filter can tell from a real one — and the payment was
+  // being cleaned up while its log line stayed, which made the NEXT run of
+  // `pnpm money` report a cashier's drawer disagreeing with the ledger.
+  const { data: lastLog } = await admin
+    .from("user_logs").select("created_at")
+    .eq("restaurant_id", restaurant.id).eq("entity", "bill")
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+
   // How many service requests there were BEFORE, so only ours get deleted.
   const { count: serviceRequestBefore } = await admin
     .from("service_requests").select("*", { count: "exact", head: true })
@@ -95,6 +105,7 @@ export async function setup(env, base) {
 
   return {
     admin, base, who, restaurant, dish, menu, serviceRequestBefore,
+    billLogBefore: lastLog?.created_at ?? null,
     table: tables[0],
     sessionId: session?.id ?? null,
     paidOrder: await make({ paid: true }),
@@ -130,9 +141,28 @@ export async function teardown(fx) {
   // suite makes keeps both of its records, exactly as it always has.
   await admin.from("payments")
     .delete().eq("restaurant_id", restaurant.id).like("client_ref", `${MARK}%`);
+  // And the ones written with no reference of their own. Settling a table by
+  // card or cash records against the ORDER and names no collection, so the
+  // filter above never saw them — the order was then deleted below,
+  // `payments.order_id` is `on delete set null`, and every run left one more
+  // payment in the ledger belonging to nothing at all. They were invisible to
+  // `pnpm money` too, which is the half that mattered: it sorts payments into
+  // attached-to-an-order and attached-to-a-sitting, and a row with neither
+  // fell between the two.
+  const settledHere = [fx.paidOrder, fx.unpaidOrder, fx.tableOrder, fx.walkoutOrder].filter(Boolean);
+  if (settledHere.length) await admin.from("payments").delete().in("order_id", settledHere);
   await admin.from("user_logs").delete()
     .eq("restaurant_id", restaurant.id).eq("entity", "bill").eq("action", "collected")
     .like("detail", `%amount=${PART_TOTAL} method=cash%`);
+  // Every bill line this run wrote, by when rather than by what it says. The
+  // ledger and the log are two records of one night and `pnpm money` compares
+  // them per person and method, so removing one without the other leaves the
+  // gate failing on the next run over money that was never real.
+  if (fx.billLogBefore) {
+    await admin.from("user_logs").delete()
+      .eq("restaurant_id", restaurant.id).eq("entity", "bill")
+      .gt("created_at", fx.billLogBefore);
+  }
   await admin.from("orders").delete().eq("note", MARK);
   await admin.from("coupons").delete().eq("restaurant_id", restaurant.id).like("code", "API-%");
   // The waiter request the test creates carries a table. The filter said
