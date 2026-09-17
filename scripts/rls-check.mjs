@@ -665,9 +665,21 @@ if (!prod) {
       // leak, and was about to rip the feature out over it.) What has to hold
       // is the same thing as everywhere else: the row belongs to one
       // restaurant, and nobody else's staff hear it.
-      const { data: dish } = await admin
-        .from("menu_items").select("id, stock").eq("restaurant_id", mine.id)
-        .eq("is_addon", false).order("name").limit(1).maybeSingle();
+      // A dish the kitchen can actually READ, or the socket is right to stay
+      // silent and this check is measuring nothing. `menu_items` has a public
+      // policy — available, on an active menu — and a team policy that stops
+      // at manager, so a kitchen login sees a sold-out dish through neither.
+      // The alphabetically first one was Apple Pie with `available = false`,
+      // and the check spent three runs reporting a working socket as broken.
+      const { data: liveMenu } = await admin
+        .from("menus").select("id").eq("restaurant_id", mine.id)
+        .eq("active", true).is("schedule", null).order("sort_order").limit(1).maybeSingle();
+      const { data: dish } = liveMenu
+        ? await admin
+            .from("menu_items").select("id, stock").eq("restaurant_id", mine.id)
+            .eq("menu_id", liveMenu.id).eq("is_addon", false).eq("available", true)
+            .order("name").limit(1).maybeSingle()
+        : { data: null };
       if (!dish) {
         bad("no dish to change — the stock subscription went unchecked");
       } else {

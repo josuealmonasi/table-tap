@@ -1143,7 +1143,15 @@ describe("every route that settles an order records the payment", () => {
     for (const [file, complaint] of SETTLES) {
       const lines = read(file).split("\n").filter(l => !l.trimStart().startsWith("import"));
       const marksPaid = lines.filter(l => /paid:\s*true/.test(l)).length;
-      const records = lines.filter(l => /\brecordPayments?\s*\(/.test(l)).length;
+      // `recordPayment`, or the SQL that does the same job under a lock. The
+      // calculator moved to `collect_on_sitting` so that reading the balance,
+      // capping against it and inserting happen atomically — two waiters on
+      // one table had been taking MX$400 for a MX$200 bill. It is still a
+      // route that settles orders and still has to record the money; this
+      // invariant just had to learn the second spelling.
+      const records = lines.filter(
+        l => /\brecordPayments?\s*\(/.test(l) || /collect_on_sitting/.test(l),
+      ).length;
       expect(marksPaid, `${file}: nothing marks an order paid any more`).toBeGreaterThan(0);
       expect(records, `${file}: ${complaint}`).toBeGreaterThan(0);
     }

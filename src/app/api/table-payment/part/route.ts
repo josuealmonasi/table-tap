@@ -68,7 +68,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const sessionId = await sittingFor(actor, body.tableId, before);
   if (!sessionId) return await apiError("apiErr.nothingToSettle", 409);
 
-  const { wrote, refused } = await record(actor, before, sessionId, taken, method!, ref);
+  const { wrote, refused, covered, landed } = await record(actor, before, sessionId, taken, method!, ref);
 
   // `wrote` is false when nothing new reached the ledger. That has two causes
   // and they are not the same thing:
@@ -84,7 +84,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Either way the tip and the log line are skipped, because both belong to
   // the collection that did land, and everything after still runs: the first
   // attempt may have been cut off before it closed the bill.
-  if (wrote && taken.tip > 0) await addTip(actor.restaurantId, before, taken.tip);
+  // The gratuity follows the food it thanks somebody for, so it is clamped to
+  // what actually landed rather than to what was typed: a colleague collecting
+  // the same table first leaves less room than this request read.
+  const tipLanded = Math.min(taken.tip, landed);
+  if (wrote && tipLanded > 0) await addTip(actor.restaurantId, before, tipLanded);
 
   const after = await tableOutstanding(actor.restaurantId, body.tableId);
   const settled = after.owed <= 0 && (await closeBill(actor, body.tableId, method!));
@@ -97,15 +101,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       action: settled ? "paid" : "collected",
       detail: logDetail({
         table: before.orders[0]?.table_label,
-        amount: taken.amount.toFixed(2),
+        // What went into the ledger, not what was asked for. The two differ
+        // when somebody else was collecting on the same table at the same
+        // moment, and the log is the record a cashier signs for.
+        amount: landed.toFixed(2),
         method,
         left: settled ? null : after.owed.toFixed(2),
       }),
     });
   }
 
-  // Nothing landed and it was not a duplicate: say so rather than dressing a
-  // failure up as a collection that already happened.
+  // Nothing landed because the bill was already covered — a colleague
+  // collecting the same table a moment sooner. The same answer this route
+  // gives when it reads a settled bill up front, because it is the same fact,
+  // learned later.
+  if (covered && !wrote && !refused) {
+    return await apiError("apiErr.nothingToSettle", 409);
+  }
+
+  // Nothing landed and it was neither a duplicate nor a covered bill: say so
+  // rather than dressing a failure up as a collection that already happened.
   if (!wrote && !refused) return await apiError("apiErr.generic", 500);
 
   return NextResponse.json({
@@ -129,10 +144,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
  * Each row carries its own reference, so the guard against a double tap still
  * refuses the whole collection rather than half of it.
  *
- * @returns `wrote` — something new reached the ledger — and `refused`, which
- * says a row was turned down as a copy of one already there. Both false means
- * the insert failed outright and the money is nowhere, which is a different
- * answer from "already recorded" and must not be reported as one.
+ * @returns `wrote` — something new reached the ledger — `refused`, which says a
+ * row was turned down as a copy of one already there, and `landed`, the amount
+ * that ACTUALLY went down. Both flags false means the insert failed outright
+ * and the money is nowhere, which is a different answer from "already
+ * recorded" and must not be reported as one.
+ *
+ * `landed` can be less than what was asked for: the sitting is re-read under a
+ * lock and the share capped against what is genuinely still owed, so a waiter
+ * typing MX$200 while a colleague takes MX$150 of it records the MX$50 that is
+ * really left rather than a second MX$200.
  */
 async function record(
   actor: Actor,
@@ -141,7 +162,7 @@ async function record(
   taken: { amount: number; tip: number },
   method: "cash" | "card",
   ref: string,
-): Promise<{ wrote: boolean; refused: boolean }> {
+): Promise<{ wrote: boolean; refused: boolean; covered: boolean; landed: number }> {
   // The first sitting is credited with the gratuity it is ABOUT to receive:
   // `addTip` puts it on the oldest order a moment from now, and splitting the
   // money against totals that do not include it yet spills the tip into the
@@ -157,25 +178,41 @@ async function record(
   const split = owedNow.length > 0 ? shareOut(taken.amount, owedNow) : [];
   const across = split.length > 0 ? split : [{ id: fallback, amount: taken.amount }];
 
+  // Each share goes down under a lock on its own sitting, where what is owed
+  // is read live. The balance this request started from is already stale by
+  // now if anybody else is collecting on the same table — which is how two
+  // waiters took MX$400 for a MX$200 dinner.
+  const db = createAdminClient();
   let wrote = false;
   let refused = false;
+  let covered = false;
+  let landedTotal = 0;
   for (const [n, share] of across.entries()) {
-    const landed = await recordPayment({
-      restaurantId: actor.restaurantId,
+    const { data } = await db.rpc("collect_on_sitting", {
       // The sitting, not an order: this money belongs to the table, and
       // pinning it to one of the orders would say that dish was paid for when
       // what was handed over covers a share of all of them.
-      sessionId: share.id,
-      amount: share.amount,
+      p_restaurant: actor.restaurantId,
+      p_session: share.id,
+      p_amount: share.amount,
       // The gratuity rides with the first share, which is the oldest sitting —
       // the same one whose order `addTip` puts it on.
-      tip: n === 0 ? taken.tip : 0,
-      method,
-      actorEmail: actor.email,
-      clientRef: n === 0 ? ref : `${ref}#${n}`,
+      p_tip: n === 0 ? taken.tip : 0,
+      p_method: method,
+      p_actor: actor.email,
+      p_ref: n === 0 ? ref : `${ref}#${n}`,
     });
-    if (landed === "written") wrote = true;
-    else if (landed === "duplicate") refused = true;
+    const outcome = (data as { taken?: number; outcome?: string } | null) ?? {};
+    if (outcome.outcome === "written") {
+      wrote = true;
+      landedTotal = round2(landedTotal + Number(outcome.taken ?? 0));
+    } else if (outcome.outcome === "duplicate") {
+      refused = true;
+    } else if (outcome.outcome === "covered") {
+      // Somebody else was collecting on this table and got there first. Not an
+      // error and not a duplicate — there is simply nothing left to take.
+      covered = true;
+    }
   }
 
   // Money taken at the table ends any division of that bill — AFTER the money
@@ -202,7 +239,7 @@ async function record(
     for (const share of across) await endSplitsFor(share.id);
   }
 
-  return { wrote, refused };
+  return { wrote, refused, covered, landed: landedTotal };
 }
 
 /** What the calculator needs back: the numbers, not the rows or the sittings. */
