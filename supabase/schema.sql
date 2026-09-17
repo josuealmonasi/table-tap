@@ -2384,6 +2384,116 @@ revoke all on function public.join_bill_split(uuid, text, numeric) from public, 
 grant execute on function public.join_bill_split(uuid, text, numeric) to service_role;
 
 
+-- ── Collecting part of a bill, atomically ───────────────────────────────────
+--
+-- Two waiters collecting the same table at the same second took MX$400 for a
+-- MX$200 dinner. The route read what was owed, capped the amount against it,
+-- and inserted — three steps with nothing holding the table still between the
+-- first and the last, so both requests read MX$200 owing and both recorded it.
+-- Five at once took MX$800. `client_ref` never caught it: that guards one
+-- collection retried, and this is two collections that genuinely differ.
+--
+-- So the read, the cap and the insert happen here, under a lock on the sitting.
+-- The lock is transaction-scoped and a function call is its own transaction, so
+-- it is held exactly as long as the decision takes.
+--
+-- The cap is not an error. A waiter who types MX$200 while a colleague is
+-- taking MX$150 of it should record the MX$50 that is genuinely left, and the
+-- caller is told what actually landed so the receipt, the tip and the log line
+-- all describe the same money.
+create or replace function public.collect_on_sitting(
+  p_restaurant uuid,
+  p_session    uuid,
+  p_amount     numeric,
+  p_tip        numeric,
+  p_method     text,
+  p_actor      text,
+  p_ref        text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_owed  numeric;
+  v_paid  numeric;
+  v_spent numeric;
+  v_room  numeric;
+  v_take  numeric;
+begin
+  -- One collection at a time per sitting. Everything below reads live.
+  perform pg_advisory_xact_lock(hashtextextended(p_session::text, 0));
+
+  select coalesce(sum(total), 0) into v_owed
+    from orders
+   where session_id = p_session
+     and paid = false
+     and written_off = false
+     and status <> 'cancelled'
+     and status <> 'pending_payment';
+
+  -- Money already against this sitting that belongs to no single order, which
+  -- is what a collection in parts and a divided bill both write.
+  select coalesce(sum(amount), 0) into v_paid
+    from payments
+   where session_id = p_session
+     and order_id is null;
+
+  -- What that money has already been spent on. A collection settles the orders
+  -- it covers and those orders STAY on the sitting, so counting the sitting's
+  -- whole history of payments against whatever is unpaid now spends the same
+  -- pesos twice — a table that paid MX$200 and then ordered MX$60 more read as
+  -- owing nothing. Mirrors `creditFor` in table-outstanding.ts, which is the
+  -- one place this rule is supposed to live; the two must agree.
+  select coalesce(sum(greatest(o.total - coalesce(own.paid, 0), 0)), 0) into v_spent
+    from orders o
+    left join (
+      select order_id, sum(amount) as paid
+        from payments
+       where order_id is not null
+       group by order_id
+    ) own on own.order_id = o.id
+   where o.session_id = p_session
+     and o.paid = true
+     and o.written_off = false
+     and o.status <> 'cancelled'
+     and o.status <> 'pending_payment';
+
+  v_room := round(v_owed - greatest(v_paid - v_spent, 0), 2);
+  if v_room <= 0 then
+    return jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'covered');
+  end if;
+
+  -- The ceiling is what is owed PLUS the gratuity this payment carries.
+  --
+  -- `payments.amount` is inclusive of its tip, and the order does not carry
+  -- that tip yet — `addTip` puts it on the oldest order a moment after this
+  -- returns. Capping against the food alone therefore truncates the tip off
+  -- the share that carries it, which is the same food-versus-total confusion
+  -- that once read a table owing MX$94.07 as MX$93.17. The caller pads the
+  -- first sitting by the same amount before sharing out, for the same reason.
+  v_take := least(round(p_amount, 2), round(v_room + coalesce(p_tip, 0), 2));
+  if v_take <= 0 then
+    return jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'covered');
+  end if;
+
+  begin
+    insert into payments (restaurant_id, session_id, amount, tip, method, actor_email, client_ref)
+    values (p_restaurant, p_session, v_take, coalesce(p_tip, 0), p_method, p_actor, p_ref);
+  exception when unique_violation then
+    -- The same collection arriving twice. The money is already in, once.
+    return jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'duplicate');
+  end;
+
+  return jsonb_build_object('taken', v_take, 'tip', coalesce(p_tip, 0), 'outcome', 'written');
+end;
+$$;
+revoke all on function public.collect_on_sitting(uuid, uuid, numeric, numeric, text, text, text)
+  from public, anon, authenticated;
+grant execute on function public.collect_on_sitting(uuid, uuid, numeric, numeric, text, text, text)
+  to service_role;
+
 -- ── Printing ────────────────────────────────────────────────────────────────
 -- Tickets on paper: the receipt handed across the counter, and the order that
 -- lands on the pass.

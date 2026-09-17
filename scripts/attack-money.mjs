@@ -514,6 +514,55 @@ try {
       .like("detail", `table=${MARK}-part%`);
   }
 
+  // ── Two waiters, one table, the same instant ────────────────────────────
+  //
+  // The calculator read what was owed, capped the amount against that, and
+  // inserted — three steps with nothing holding the table still between the
+  // first and the last. Two requests both read MX$200 owing and both recorded
+  // it: MX$400 taken for a MX$200 dinner. Five at once took MX$800.
+  //
+  // `client_ref` never caught it and was never going to: that guards ONE
+  // collection retried, and these are collections that genuinely differ.
+  {
+    const { data: spare } = await admin.from("restaurant_tables")
+      .insert({ restaurant_id: home.id, label: `${MARK}-race` }).select("id, label").maybeSingle();
+    const { data: sat } = await admin.from("table_sessions")
+      .insert({ restaurant_id: home.id, table_id: spare.id }).select("id").maybeSingle();
+    await admin.from("orders").insert({
+      restaurant_id: home.id, table_id: spare.id, table_label: spare.label,
+      session_id: sat.id, items: [], subtotal: 200, total: 200, currency: "MXN",
+      status: "ready", paid: false, note: MARK,
+    });
+
+    // Five at once, each asking for the whole bill, each with its own
+    // reference so the duplicate guard cannot be what saves us.
+    const shots = await Promise.all([...Array(5)].map((_, i) =>
+      post("/api/table-payment/part",
+        { tableId: spare.id, amount: 200, method: "cash", ref: `${MARK}-race-${i}` },
+        who.waiter)));
+
+    const { data: rows } = await admin.from("payments").select("amount").eq("session_id", sat.id);
+    const got = Number((rows ?? []).reduce((sum, p) => sum + Number(p.amount), 0).toFixed(2));
+    const ok200 = shots.filter(s => s.status === 200).length;
+
+    got <= 200
+      ? ok(`five collections at once take no more than the bill (MX$${got} of MX$200)`)
+      : bad(`MX$${got} collected on a MX$200 bill by ${ok200} simultaneous requests`);
+
+    // And the losers are told they lost, rather than handed a server error.
+    shots.every(s => [200, 409].includes(s.status))
+      ? ok("and the ones that lost the race are told the bill is covered")
+      : bad(`a lost race answered ${shots.map(s => s.status).join("/")} — 500 is not an answer`);
+
+    await admin.from("payments").delete().eq("session_id", sat.id);
+    await admin.from("orders").delete().eq("session_id", sat.id);
+    await admin.from("table_sessions").delete().eq("id", sat.id);
+    await admin.from("restaurant_tables").delete().eq("id", spare.id);
+    await admin.from("user_logs").delete()
+      .eq("restaurant_id", home.id).eq("entity", "bill")
+      .like("detail", `table=${MARK}-race%`);
+  }
+
   // ── A bill the waiter opened is not payable online ──────────────────────
   {
     await admin.from("table_sessions")
