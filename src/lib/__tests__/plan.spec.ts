@@ -13,7 +13,14 @@ import {
   type PlanLimits,
 } from "@/lib/plan";
 
-/** The seeded catalog, trimmed to what these tests ask about. */
+/**
+ * The seeded catalog, trimmed to what these tests ask about.
+ *
+ * A second copy of what `plan_limits` holds, which is two places that have to
+ * agree — so when the seed moves, this moves with it. `fee_cap` is carried
+ * here because the ceiling is the half of the price that bites: uncapped, the
+ * FREE tier was the most expensive plan we sold.
+ */
 const CATALOG: PlanLimits[] = [
   {
     plan: "carta",
@@ -30,6 +37,7 @@ const CATALOG: PlanLimits[] = [
     allows_staff_discounts: false,
     analytics_days: 1,
     log_days: 1,
+    fee_cap: 699,
   },
   {
     plan: "servicio",
@@ -201,6 +209,25 @@ describe("the monthly ceiling on our own fee", () => {
 
   it("keeps charging where a tier has no ceiling", () => {
     expect(orderFeeCents({ ...servicio, fee_cap: null }, table, 999_999)).toBe(150);
+  });
+
+  it("never lets the free tier outprice a paid one", () => {
+    // Carta was uncapped at MX$3 an order, which made the FREE tier the most
+    // expensive plan we sold: a thousand orders billed MX$3,000, against a
+    // Servicio ceiling of MX$1,749 and a Casa ceiling of MX$2,399. The
+    // restaurant paying it had thirty dishes and no tables. A free tier that
+    // punishes the restaurants doing well on it loses them instead of
+    // converting them, so its ceiling is one Servicio subscription: past that
+    // they are paying Servicio money and should simply be sold Servicio.
+    const month = (limits: PlanLimits, orders: number): number => {
+      let taken = 0;
+      for (let i = 0; i < orders; i++) taken += orderFeeCents(limits, 30_000, taken);
+      return taken;
+    };
+    const busy = 1000;
+    expect(month(carta, busy)).toBeLessThanOrEqual(69_900);
+    // And below what a Servicio restaurant pays all in, at the same volume.
+    expect(month(carta, busy)).toBeLessThan(69_900 + month(servicio, busy));
   });
 });
 

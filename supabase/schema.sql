@@ -1552,8 +1552,15 @@ alter table plan_limits add column if not exists fee_cap numeric;
 -- ever outgrew Servicio and the ladder had no rungs. A café is under 15; a
 -- restaurant is 20–40 and lands on Casa; past 50 is more than one dining room,
 -- which is the Grupo conversation.
+-- Carta is capped at one Servicio subscription, and that number is the whole
+-- argument. Uncapped at MX$3 a pedido the free tier was the most expensive
+-- plan we sold: 1,000 orders billed MX$3,000 — more than Casa, more than
+-- Servicio's ceiling, and the restaurant paying it had thirty dishes and no
+-- tables. A free tier that punishes the restaurants doing well on it does not
+-- convert them, it loses them. Past MX$699 they are paying Servicio money, so
+-- the honest thing is to stop charging and let the ladder make the argument.
 update plan_limits set
-  list_price = 0,    fee_cap = null                   where plan = 'carta';
+  list_price = 0,    fee_cap = 699                    where plan = 'carta';
 update plan_limits set
   max_tables = 15,   list_price = 899,  fee_cap = 1050 where plan = 'servicio';
 update plan_limits set
