@@ -68,14 +68,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const sessionId = await sittingFor(actor, body.tableId, before);
   if (!sessionId) return await apiError("apiErr.nothingToSettle", 409);
 
-  const wrote = await record(actor, before, sessionId, taken, method!, ref);
+  const { wrote, refused } = await record(actor, before, sessionId, taken, method!, ref);
 
-  // `wrote` is false when the database refused this as a copy of a collection
-  // already recorded — a button tapped twice, or a request retried when the
-  // signal came back. The money is in the ledger once, which is right: the tip
-  // must not land a second time and neither must the log line. Everything
-  // after that still runs, because the first attempt may have been cut off
-  // before it closed the bill.
+  // `wrote` is false when nothing new reached the ledger. That has two causes
+  // and they are not the same thing:
+  //
+  //   `refused` — the database turned it down as a copy of a collection
+  //   already recorded: a button tapped twice, or a request retried when the
+  //   signal came back. The money IS in the ledger, once, which is right.
+  //
+  //   neither — the insert failed for some other reason and the money is
+  //   nowhere. Reporting that as `duplicate` told a waiter holding the cash
+  //   that it was already recorded, which is the one thing it must never say.
+  //
+  // Either way the tip and the log line are skipped, because both belong to
+  // the collection that did land, and everything after still runs: the first
+  // attempt may have been cut off before it closed the bill.
   if (wrote && taken.tip > 0) await addTip(actor.restaurantId, before, taken.tip);
 
   const after = await tableOutstanding(actor.restaurantId, body.tableId);
@@ -96,10 +104,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
   }
 
+  // Nothing landed and it was not a duplicate: say so rather than dressing a
+  // failure up as a collection that already happened.
+  if (!wrote && !refused) return await apiError("apiErr.generic", 500);
+
   return NextResponse.json({
     ok: true,
     settled,
-    duplicate: !wrote,
+    duplicate: refused,
     ...summary(after),
   });
 }
@@ -117,8 +129,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
  * Each row carries its own reference, so the guard against a double tap still
  * refuses the whole collection rather than half of it.
  *
- * @returns whether anything was written. False for a copy the database
- * refused, which the caller must know about: the tip must not land twice.
+ * @returns `wrote` — something new reached the ledger — and `refused`, which
+ * says a row was turned down as a copy of one already there. Both false means
+ * the insert failed outright and the money is nowhere, which is a different
+ * answer from "already recorded" and must not be reported as one.
  */
 async function record(
   actor: Actor,
@@ -127,7 +141,7 @@ async function record(
   taken: { amount: number; tip: number },
   method: "cash" | "card",
   ref: string,
-): Promise<boolean> {
+): Promise<{ wrote: boolean; refused: boolean }> {
   // The first sitting is credited with the gratuity it is ABOUT to receive:
   // `addTip` puts it on the oldest order a moment from now, and splitting the
   // money against totals that do not include it yet spills the tip into the
@@ -143,22 +157,8 @@ async function record(
   const split = owedNow.length > 0 ? shareOut(taken.amount, owedNow) : [];
   const across = split.length > 0 ? split : [{ id: fallback, amount: taken.amount }];
 
-  // Money taken at the table ends any division of that bill.
-  //
-  // A share is the figure frozen when the table agreed, and nothing about it
-  // moves again: the sitting stays open after a PART of the bill is collected
-  // — `close_session_if_clear` only closes when the whole thing is covered —
-  // so every share stayed chargeable at its original amount. MX$200 halved,
-  // MX$120 handed over at the table, both halves still payable by card:
-  // MX$320 collected for a MX$200 dinner.
-  //
-  // Ended rather than recalculated. The diners agreed to divide THIS bill and
-  // a different number is not the thing they agreed to — their screens go back
-  // to the plain bill, showing what is actually left, with the person who just
-  // took the cash standing in front of them.
-  for (const share of across) await endSplitsFor(share.id);
-
   let wrote = false;
+  let refused = false;
   for (const [n, share] of across.entries()) {
     const landed = await recordPayment({
       restaurantId: actor.restaurantId,
@@ -174,9 +174,35 @@ async function record(
       actorEmail: actor.email,
       clientRef: n === 0 ? ref : `${ref}#${n}`,
     });
-    wrote = wrote || landed;
+    if (landed === "written") wrote = true;
+    else if (landed === "duplicate") refused = true;
   }
-  return wrote;
+
+  // Money taken at the table ends any division of that bill — AFTER the money
+  // is down, not before.
+  //
+  // A share is the figure frozen when the table agreed, and nothing about it
+  // moves again: the sitting stays open after a PART of the bill is collected
+  // — `close_session_if_clear` only closes when the whole thing is covered —
+  // so every share stayed chargeable at its original amount. MX$200 halved,
+  // MX$120 handed over at the table, both halves still payable by card:
+  // MX$320 collected for a MX$200 dinner.
+  //
+  // Ended rather than recalculated. The diners agreed to divide THIS bill and
+  // a different number is not the thing they agreed to — their screens go back
+  // to the plain bill, showing what is actually left, with the person who just
+  // took the cash standing in front of them.
+  //
+  // It ran first, which made it an irreversible change ahead of the thing it
+  // is supposed to follow: an insert that failed for any reason other than a
+  // duplicate left the table's split ended and no money recorded. A retry is
+  // the exception and still ends it, because on a retry the first attempt
+  // already collected.
+  if (wrote || refused) {
+    for (const share of across) await endSplitsFor(share.id);
+  }
+
+  return { wrote, refused };
 }
 
 /** What the calculator needs back: the numbers, not the rows or the sittings. */
