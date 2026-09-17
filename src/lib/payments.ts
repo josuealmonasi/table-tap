@@ -48,13 +48,18 @@ export interface PaymentRecord {
  * diner pay twice. A miss shows up in `pnpm money` instead, where it can be
  * looked at without anyone's card being charged again.
  *
- * @returns whether a row was actually written. False for a duplicate the
- * database refused, which a caller doing anything else with the payment — a
- * tip that accumulates onto an order, say — has to know about, or the retry
- * that recorded nothing still moves the money a second time.
+ * @returns which of three things happened. `"written"` is the new money;
+ * `"duplicate"` is a row the database turned down because this collection is
+ * already in the ledger, which a caller doing anything else with the payment —
+ * a tip that accumulates onto an order, say — has to know about or the retry
+ * moves the money a second time; `"failed"` is neither, and means the money is
+ * NOWHERE. The last two were one answer for a long time, so a failed insert
+ * was reported to a waiter holding cash as "already recorded".
  */
-export async function recordPayment(payment: PaymentRecord): Promise<boolean> {
-  if (!(payment.amount > 0)) return false;
+export async function recordPayment(
+  payment: PaymentRecord,
+): Promise<"written" | "duplicate" | "failed"> {
+  if (!(payment.amount > 0)) return "failed";
 
   const { error } = await createAdminClient().from("payments").insert({
     restaurant_id: payment.restaurantId,
@@ -75,10 +80,12 @@ export async function recordPayment(payment: PaymentRecord): Promise<boolean> {
   // otherwise insert. The money is already in the ledger, so there is nothing
   // to do and nothing to report.
   if (error && error.code !== "23505") {
-    // Loud in the platform logs, silent to the caller, on purpose.
+    // Loud in the platform logs, and now also said out loud to the caller:
+    // silence here is what let a failure pass for a collection already made.
     console.error("payment not recorded:", payment.orderId, error.message);
+    return "failed";
   }
-  return !error;
+  return error ? "duplicate" : "written";
 }
 
 /** Several at once — settling a table pays off every order it owed. */
