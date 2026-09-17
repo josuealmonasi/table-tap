@@ -514,6 +514,66 @@ try {
       .like("detail", `table=${MARK}-part%`);
   }
 
+  // ── Six people going for the last portion at once ───────────────────────
+  //
+  // `reserve_stock` takes `for update` on the rows it is about to spend, which
+  // is the right shape — but "the right shape" is what the collection path
+  // looked like too, and that one sold MX$400 of a MX$200 bill. Overselling
+  // food is the same failure wearing a different hat: somebody is promised a
+  // dish the kitchen cannot make, and the floor finds out in front of them.
+  //
+  // This one passed the day it was written, which is worth saying plainly: it
+  // is here to keep an answer that is already right.
+  {
+    const { data: liveMenu } = await admin.from("menus").select("id")
+      .eq("restaurant_id", home.id).eq("active", true).is("schedule", null)
+      .order("sort_order").limit(1).maybeSingle();
+    const { data: dish } = liveMenu
+      ? await admin.from("menu_items")
+          .select("id, name, price, emoji, stock, available")
+          .eq("restaurant_id", home.id).eq("menu_id", liveMenu.id)
+          .eq("is_addon", false).eq("available", true).order("name").limit(1).maybeSingle()
+      : { data: null };
+
+    if (!dish) {
+      bad("no dish on a serving menu — the last-portion race went unchecked");
+    } else {
+      const { data: spare } = await admin.from("restaurant_tables")
+        .insert({ restaurant_id: home.id, label: `${MARK}-stock` }).select("id").maybeSingle();
+      await admin.from("menu_items")
+        .update({ stock: 1, available: true, stock_auto_off: false }).eq("id", dish.id);
+
+      const line = {
+        itemId: dish.id, name: dish.name, emoji: dish.emoji ?? "\u{1F37D}",
+        price: Number(dish.price), qty: 1, mods: {},
+      };
+      const shots = await Promise.all([...Array(6)].map(() =>
+        post("/api/table-order", { tableId: spare.id, items: [line] }, who.waiter)));
+
+      const { data: after } = await admin.from("menu_items")
+        .select("stock, available").eq("id", dish.id).single();
+      const sold = shots.filter(s => s.status === 200).length;
+
+      sold <= 1 && Number(after.stock) >= 0
+        ? ok("six at once for the last portion sell it once")
+        : bad(`${sold} sales of one portion, stock left at ${after.stock}`);
+
+      // And the dish takes itself off the menu rather than sitting there at zero.
+      Number(after.stock) === 0 && after.available === false
+        ? ok("and the dish comes off the menu when it runs out")
+        : bad(`stock ${after.stock} but available=${after.available}`);
+
+      await admin.from("orders").delete().eq("table_id", spare.id);
+      await admin.from("table_sessions").delete().eq("table_id", spare.id);
+      await admin.from("restaurant_tables").delete().eq("id", spare.id);
+      await admin.from("menu_items").update({
+        stock: dish.stock, available: dish.available, stock_auto_off: false,
+      }).eq("id", dish.id);
+      await admin.from("notifications")
+        .delete().eq("restaurant_id", home.id).eq("kind", "out_of_stock");
+    }
+  }
+
   // ── Two waiters, one table, the same instant ────────────────────────────
   //
   // The calculator read what was owed, capped the amount against that, and
