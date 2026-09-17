@@ -6,8 +6,16 @@
  * produce. Bump it only when the terms change in a way that matters — every
  * bump asks every restaurant again, and asking for consent to a typo fix
  * teaches people to click through without reading.
+ *
+ * The other half of that rule is the one that actually went wrong: the text
+ * moved twice — the camera clause, then the device identifier — and this line
+ * did not, so every restaurant stayed on their old acceptance and was never
+ * shown either. A version nobody bumps is a consent record that describes a
+ * document the person never saw. `legal.spec.ts` now holds a fingerprint of
+ * the text and fails when the two drift apart, so the decision to bump or not
+ * is made deliberately rather than forgotten.
  */
-export const TERMS_VERSION = "2026-09-10";
+export const TERMS_VERSION = "2026-09-16";
 
 /**
  * Where the documents live.
