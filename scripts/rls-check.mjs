@@ -694,6 +694,23 @@ if (!prod) {
           ? ok("a stock change reaches the till it belongs to")
           : bad(`the till hears nothing when the stock moves (${ours.status}) — the tiles would go stale`);
 
+        // And the event that matters most: the dish running out. It leaves the
+        // public policy the moment `available` goes false, so before the team
+        // had a read of its own a cashier heard nothing — not the sell-out and
+        // not even the decrements — and the tile sat there saying "quedan 1"
+        // for a dish that had gone. The kitchen is not a manager either, which
+        // is the point of asking as the kitchen.
+        const soldOut = await listen(kitchen, mine.id, "menu_items");
+        await admin.from("menu_items")
+          .update({ stock: 0, available: false, stock_auto_off: true }).eq("id", dish.id);
+        await settle(soldOut.seen, 1, 15000);
+        await kitchen.removeAllChannels();
+        await admin.from("menu_items")
+          .update({ stock: dish.stock, available: true, stock_auto_off: false }).eq("id", dish.id);
+        soldOut.seen.length > 0
+          ? ok("and the till hears a dish run out, which is when it matters")
+          : bad(`the sell-out never reached the till (${soldOut.status}) — the tile keeps offering it`);
+
         // And the line that actually matters: a dish the neighbour has TAKEN
         // OFF their menu.
         //

@@ -680,6 +680,24 @@ create policy "public read available menu"
   on menu_items for select
   using (available and exists (select 1 from menus m where m.id = menu_id and m.active));
 
+-- And the team reads its own menu in full, sold-out dishes included.
+--
+-- The tills show every dish with the ones that have run out marked AGOTADO,
+-- which the server has always fetched with the secret key. Realtime cannot: it
+-- evaluates the subscriber's OWN read, so a cashier — who is not a manager and
+-- so matched only the public policy above — heard nothing on the socket at all.
+-- Not the decrements, and not the sell-out, which is the one event the tile
+-- most needs: the count sat there reading "quedan 1" for a dish that had gone.
+--
+-- Nothing new reaches anybody. Every staff screen already renders these rows;
+-- this makes the read direct instead of borrowed, which is what the socket
+-- needs. `works_at` is the restaurant's own people and nobody else's, so the
+-- cross-tenant answer does not move — `pnpm rls` checks that both ways.
+drop policy if exists "team reads menu items" on menu_items;
+create policy "team reads menu items"
+  on menu_items for select
+  using (works_at(restaurant_id));
+
 drop policy if exists "public read item addons" on item_addons;
 create policy "public read item addons"
   on item_addons for select using (true);
