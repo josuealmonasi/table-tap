@@ -88,15 +88,21 @@ export async function setup(env, base) {
     .eq("restaurant_id", restaurant.id).is("closed_at", null)
     .limit(1).maybeSingle();
 
-  // The newest bill line the log already held, so teardown removes only the
+  // Which bill lines the log ALREADY held, by id, so teardown removes only the
   // ones this run writes. Settling a table logs `paid` with no order code in
   // it, which no `like` filter can tell from a real one — and the payment was
   // being cleaned up while its log line stayed, which made the NEXT run of
   // `pnpm money` report a cashier's drawer disagreeing with the ledger.
-  const { data: lastLog } = await admin
-    .from("user_logs").select("created_at")
-    .eq("restaurant_id", restaurant.id).eq("entity", "bill")
-    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  //
+  // By id and not by timestamp. The first version of this took the newest
+  // `created_at` and deleted anything after it, which quietly deleted nothing
+  // at all: the demo seeder spreads its history across days and some of it is
+  // dated in the FUTURE, so "newer than the newest" excluded the very rows it
+  // was written to catch. A high-water mark only works on data that arrives in
+  // order, and seeded data does not.
+  const { data: logsBefore } = await admin
+    .from("user_logs").select("id")
+    .eq("restaurant_id", restaurant.id).eq("entity", "bill");
 
   // How many service requests there were BEFORE, so only ours get deleted.
   const { count: serviceRequestBefore } = await admin
@@ -105,7 +111,7 @@ export async function setup(env, base) {
 
   return {
     admin, base, who, restaurant, dish, menu, serviceRequestBefore,
-    billLogBefore: lastLog?.created_at ?? null,
+    billLogsBefore: (logsBefore ?? []).map(l => l.id),
     table: tables[0],
     sessionId: session?.id ?? null,
     paidOrder: await make({ paid: true }),
@@ -154,14 +160,18 @@ export async function teardown(fx) {
   await admin.from("user_logs").delete()
     .eq("restaurant_id", restaurant.id).eq("entity", "bill").eq("action", "collected")
     .like("detail", `%amount=${PART_TOTAL} method=cash%`);
-  // Every bill line this run wrote, by when rather than by what it says. The
-  // ledger and the log are two records of one night and `pnpm money` compares
-  // them per person and method, so removing one without the other leaves the
-  // gate failing on the next run over money that was never real.
-  if (fx.billLogBefore) {
-    await admin.from("user_logs").delete()
-      .eq("restaurant_id", restaurant.id).eq("entity", "bill")
-      .gt("created_at", fx.billLogBefore);
+  // Every bill line this run wrote: the ones that are there now and were not
+  // there at setup. The ledger and the log are two records of one night and
+  // `pnpm money` compares them per person and method, so removing one without
+  // the other leaves the gate failing on the next run over money that was
+  // never real.
+  if (fx.billLogsBefore) {
+    const kept = new Set(fx.billLogsBefore);
+    const { data: logsNow } = await admin
+      .from("user_logs").select("id")
+      .eq("restaurant_id", restaurant.id).eq("entity", "bill");
+    const ours = (logsNow ?? []).map(l => l.id).filter(id => !kept.has(id));
+    if (ours.length) await admin.from("user_logs").delete().in("id", ours);
   }
   await admin.from("orders").delete().eq("note", MARK);
   await admin.from("coupons").delete().eq("restaurant_id", restaurant.id).like("code", "API-%");
