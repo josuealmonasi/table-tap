@@ -166,4 +166,22 @@ describe("the shipped framework is a patched one", () => {
     expect(maj).toBeGreaterThanOrEqual(15);
     if (maj === 15 && min === 5) expect(patch).toBeGreaterThanOrEqual(24);
   });
+
+  it("holds the image decoder above its own advisories", () => {
+    // Twice now the worst finding has been the image optimiser: first Next's
+    // own AVIF path, then the library underneath it. sharp 0.34.x carries CVEs
+    // in libvips and libheif, and Next asks for `^0.34.3 || ^0.35.4` — so an
+    // install is free to pick the vulnerable half unless something says not
+    // to. `next/image` runs this on menu photography a restaurant uploads.
+    //
+    // Checked in pnpm-workspace.yaml and not package.json, because pnpm 11
+    // stopped reading `pnpm.overrides` from package.json and says so only in a
+    // warning that is easy to miss — the first version of this fix sat in the
+    // wrong file and changed nothing.
+    const workspace = fs.readFileSync("pnpm-workspace.yaml", "utf8");
+    const pinned = workspace.match(/^\s*sharp:\s*"\^?([\d.]+)"/m)?.[1];
+    expect(pinned, "no sharp override in pnpm-workspace.yaml").toBeTruthy();
+    const [maj, min, patch] = String(pinned).split(".").map(Number);
+    expect(maj > 0 || min > 35 || (min === 35 && patch >= 4)).toBe(true);
+  });
 });
