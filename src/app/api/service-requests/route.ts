@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 
@@ -14,12 +15,18 @@ export async function POST(req: NextRequest) {
     return await apiError("apiErr.tooManyWait", 429);
   }
 
-  const { restaurantId, tableId, kind } = await req.json();
+  const body = await jsonBody<{
+    restaurantId?: string;
+    tableId?: string;
+    kind?: string;
+  }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { restaurantId, tableId, kind } = body;
 
   // 'pay' means a table wants to settle in person; the waiter takes cash or a
   // card and marks the orders paid.
   const KINDS = ["waiter", "bill", "pay"];
-  if (!restaurantId || !tableId || !KINDS.includes(kind)) {
+  if (!restaurantId || !tableId || !kind || !KINDS.includes(kind)) {
     return await apiError("apiErr.invalidRequest", 400);
   }
 

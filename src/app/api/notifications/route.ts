@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { actingManager } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -54,10 +55,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
-  const { id, all } = (await req.json().catch(() => ({}))) as {
+  const body = await jsonBody<{
     id?: string;
     all?: boolean;
-  };
+  }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { id, all } = body;
   if (!id && all !== true) return await apiError("apiErr.badRequest", 400);
 
   let query = createAdminClient()

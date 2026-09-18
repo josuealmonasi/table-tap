@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { currentPrice } from "@/lib/founding";
 import { foundersTaken } from "@/lib/plan-server";
 import { actingOwner } from "@/lib/api-guard";
@@ -20,7 +21,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingOwner();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
-  const body = (await req.json()) as { plan?: unknown };
+  const body = await jsonBody<{ plan?: unknown }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
   const plan = readPlanName(body.plan);
   if (!plan || !isSelfServe(plan)) return await apiError("apiErr.pickPlan", 400);
 

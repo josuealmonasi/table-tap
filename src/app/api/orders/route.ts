@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MOVES_ORDERS } from "@/lib/membership";
@@ -10,12 +11,14 @@ export const runtime = "nodejs";
 // PATCH /api/orders  — update an order's status. Owner-only (RLS enforced
 // because we use the user-scoped server client, not the admin client).
 export async function PATCH(req: NextRequest) {
-  const { id, status, from } = await req.json();
+  const body = await jsonBody<{ id?: string; status?: string; from?: string }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { id, status, from } = body;
 
   // "cancelled" is deliberately NOT here: cancelling must go through
   // /api/orders/cancel so a paid order is always refunded first.
   const allowed = ["received", "preparing", "ready", "completed"];
-  if (!id || !allowed.includes(status)) {
+  if (!id || !status || !allowed.includes(status)) {
     return await apiError("apiErr.invalidRequest", 400);
   }
 

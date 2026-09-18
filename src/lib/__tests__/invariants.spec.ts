@@ -1168,3 +1168,29 @@ describe("every route that settles an order records the payment", () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * Every route reads its body through `jsonBody`.
+ *
+ * `await req.json()` throws on anything that is not JSON and hands back a
+ * perfectly good `null` for the body `null`, which then throws again the moment
+ * somebody destructures it. Twenty-seven routes answered 500 to a truncated
+ * upload, an empty POST or the four characters `null` — several of them
+ * reachable with no login at all: calling a waiter, rating a dish, checking a
+ * coupon, signing up.
+ *
+ * `.catch(() => ({}))` was the older attempt and covers only half of it: the
+ * parse error, not the body that parses into something with no fields.
+ */
+describe("no route parses a body by hand", () => {
+  it("reads every request body through jsonBody", () => {
+    const raw = walkAll("src/app/api")
+      .filter(f => f.endsWith("route.ts"))
+      .filter(f => /await req\.json\(\)/.test(read(f)));
+    expect(
+      raw,
+      `These parse a body directly, so malformed input reaches them as an exception.\n` +
+        `Use \`jsonBody\` and answer 400:\n${raw.join("\n")}`,
+    ).toEqual([]);
+  });
+});

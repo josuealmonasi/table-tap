@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { actingManager } from "@/lib/api-guard";
@@ -83,7 +84,8 @@ export async function POST(req: NextRequest) {
   const blocked = await planBlocks(actor.restaurantId, "coupons");
   if (blocked) return blocked;
 
-  const body = (await req.json()) as Record<string, unknown>;
+  const body = await jsonBody<Record<string, unknown>>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
   const code = normalizeCoupon(String(body.code ?? ""));
   if (!isValidCouponFormat(code)) {
     return await apiError("apiErr.couponShape", 400);
@@ -128,7 +130,8 @@ export async function PATCH(req: NextRequest) {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
-  const body = (await req.json()) as Record<string, unknown>;
+  const body = await jsonBody<Record<string, unknown>>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
   const id = String(body.id ?? "");
   if (!id) return await apiError("apiErr.invalidRequest", 400);
 
@@ -185,7 +188,9 @@ export async function DELETE(req: NextRequest) {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
-  const { id } = await req.json();
+  const body = await jsonBody<Record<string, unknown>>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { id } = body;
   if (!id) return await apiError("apiErr.invalidRequest", 400);
 
   const { error } = await createAdminClient()

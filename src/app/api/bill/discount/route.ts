@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { actingFrontOfHouse } from "@/lib/api-guard";
 import { SERVES } from "@/lib/membership";
 import { planBlocks } from "@/lib/plan-guard";
@@ -41,11 +42,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const blocked = await planBlocks(actor.restaurantId, "staffDiscounts");
   if (blocked) return blocked;
 
-  const { tableId, orderId, code } = (await req.json()) as {
+  const body = await jsonBody<{
     tableId?: string;
     orderId?: string;
     code?: string;
-  };
+  }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { tableId, orderId, code } = body;
   if ((!tableId && !orderId) || typeof code !== "string" || !code.trim()) {
     return await apiError("apiErr.invalidRequest", 400);
   }

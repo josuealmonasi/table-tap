@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { currentSplit, writeShares } from "@/lib/split-service";
@@ -23,9 +24,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
 
-  const { splitId, sessionId, diner, restaurantId, tableId } = (await req.json()) as {
+  const body = await jsonBody<{
     splitId?: string; sessionId?: string; diner?: string; restaurantId?: string; tableId?: string;
-  };
+  }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { splitId, sessionId, diner, restaurantId, tableId } = body;
   if (!splitId || !sessionId || !diner || !restaurantId || !tableId) {
     return await apiError("apiErr.invalidRequest", 400);
   }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { TERMS_VERSION } from "@/lib/legal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
@@ -29,7 +30,14 @@ export async function POST(req: NextRequest) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
 
-  const { restaurantName, email, password, acceptedTerms } = await req.json();
+  const body = await jsonBody<{
+    restaurantName?: string;
+    email?: string;
+    password?: string;
+    acceptedTerms?: boolean;
+  }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { restaurantName, email, password, acceptedTerms } = body;
 
   // Checked on the server too. The box in the browser is the honest place to
   // ask; this is the place that makes the answer mean something.

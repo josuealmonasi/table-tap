@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { isAllowedTimeZone } from "@/lib/timezones";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
@@ -65,7 +66,8 @@ export async function POST(req: NextRequest) {
   const frozen = await frozenBlocks(actor.restaurantId);
   if (frozen) return frozen;
 
-  const body = (await req.json()) as Record<string, unknown>;
+  const body = await jsonBody<Record<string, unknown>>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
   const allowed = actor.role === "owner" ? OWNER_FIELDS : MANAGER_FIELDS;
 
   const update: Record<string, unknown> = {};
