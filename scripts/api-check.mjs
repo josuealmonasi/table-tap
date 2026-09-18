@@ -42,8 +42,12 @@ try {
 
     let res, text;
     try {
+      // A path may be a function for the same reason a body may: some of what
+      // a case has to address is only known once the fixture exists — a
+      // printer's token, the id of the job it was handed.
+      const path = typeof c.path === "function" ? await c.path(fx, saved) : c.path;
       res = await retryFetch(
-        BASE + c.path,
+        BASE + path,
         {
           method: c.method,
           headers,

@@ -18,6 +18,7 @@
 // Reused by scripts/db.mjs for `pnpm db:mock` and `pnpm db:dropmock`.
 // ============================================================================
 
+import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { populateMenu } from "./menu-catalog.mjs";
 import { bulkInsert, randInt, sample, shuffle } from "./menu-catalog.mjs";
@@ -179,15 +180,26 @@ export async function seedMock(pg) {
   const {
     rows: [rest],
   } = await pg.query(
+    // A printer, for the same reason as `allow_pay_later` below: the CloudPRNT
+    // endpoint is the one route in the app with no api case at all, and it
+    // could not have one — the seed configured no printer, so there was no
+    // token to call it with and nothing queued for it to hand over. It is an
+    // UNAUTHENTICATED url that returns kitchen tickets, which is the last
+    // route that should go unchecked.
+    //
+    // Fresh random bytes every seed, never a constant: `db:mock --prod` exists,
+    // and a known credential written into a repository is a different bug from
+    // the one being fixed.
+    //
     // `allow_pay_later` on, and not as a decoration. Nobody has ever connected
     // a Stripe account in development, so /api/checkout — the route that takes
     // the diner's money — refused every probe at the door and reported a clean
     // pass having run none of its own code. Paying at the counter walks the
     // same path (verify the cart, price it, write the order) and needs no
     // Stripe at all, so with this on the route can finally be exercised.
-    `insert into restaurants (name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, owner_id, plan, allow_pay_later)
-     values ($1, 'Fresh plates, fast service', '🍽️', 'MXN', 10, true, true, $2, 'casa', true) returning id`,
-    [DEMO_RESTAURANT, ownerId],
+    `insert into restaurants (name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, owner_id, plan, allow_pay_later, print_token, auto_print_kitchen)
+     values ($1, 'Fresh plates, fast service', '🍽️', 'MXN', 10, true, true, $2, 'casa', true, $3, true) returning id`,
+    [DEMO_RESTAURANT, ownerId, randomBytes(32).toString("base64url")],
   );
   const rid = rest.id;
 
