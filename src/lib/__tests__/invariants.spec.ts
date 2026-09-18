@@ -1194,3 +1194,33 @@ describe("no route parses a body by hand", () => {
     ).toEqual([]);
   });
 });
+
+describe("a refusal always carries a sentence", () => {
+  it("never answers a bare rejection object", () => {
+    // `/api/table-order` returned `{ rejection }` — a shape with no `error`
+    // field. The waiter's screen falls back to "network error" when there is
+    // no message, so a sold-out dish read as a dead connection: the waiter
+    // retried instead of telling the table. Every refusal a screen shows has
+    // to arrive as words.
+    const bare = walkAll("src/app/api")
+      .filter(f => f.endsWith("route.ts"))
+      .filter(f => /json\(\s*\{\s*rejection\b/.test(read(f)));
+    expect(
+      bare,
+      `These answer with a rejection the client cannot render, so it shows a\n` +
+        `network error instead. Translate it with \`rejectionMessage\`:\n${bare.join("\n")}`,
+    ).toEqual([]);
+  });
+
+  it("wires every CartRejection kind to a message", () => {
+    // The mapping is exhaustive by type, but a new kind added with a `return`
+    // in the wrong place would silently fall through to the extras sentence.
+    const kinds = [...read("src/lib/verify-cart.ts").matchAll(/\{ kind: "(\w+)"/g)].map(m => m[1]);
+    const wiring = read("src/lib/cart-rejection.ts");
+    const unwired = [...new Set(kinds)].filter(k => !wiring.includes(`"${k}"`));
+    expect(
+      unwired,
+      `These rejection kinds have no branch in rejectionMessage:\n${unwired.join("\n")}`,
+    ).toEqual([]);
+  });
+});

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { rejectionMessage } from "@/lib/cart-rejection";
 import { jsonBody } from "@/lib/json-body";
 import { actingStaff } from "@/lib/api-guard";
 import { TAKES_COUNTER_ORDERS } from "@/lib/membership";
@@ -7,7 +8,7 @@ import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { capName, capNote } from "@/lib/notes";
 import { priceCart } from "@/lib/pricing";
-import { referencedItemIds, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
+import { cartReferences, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
 import { fetchPromotions } from "@/lib/promotions-data";
 import { toCartPromos } from "@/lib/promotions";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
@@ -143,7 +144,12 @@ export async function POST(req: NextRequest) {
   // fetches, from the same function, because verifyCart prices only what it is
   // handed and a missing extra reads to it as one that has vanished.
   const promotions = await fetchPromotions(supabase, actor.restaurantId);
-  const referencedIds = referencedItemIds(items, promotions);
+  const refs = cartReferences(items, promotions);
+  if (!refs.ok) {
+    const { key, vars } = rejectionMessage(refs.rejection);
+    return await apiError(key, 400, vars);
+  }
+  const referencedIds = refs.ids;
   const { data: dbItems } = await supabase
     .from("menu_items")
     .select("id, name, price, emoji, available, discount_pct, modifiers, category_id, skips_kitchen")
@@ -158,19 +164,8 @@ export async function POST(req: NextRequest) {
     isOnOpenMenu: onOpenMenu,
   });
   if (!result.ok) {
-    const r = result.rejection;
-    if (r.kind === "unavailable") {
-      return await apiError(r.name ? "apiErr.itemGone" : "apiErr.itemGoneUnnamed", 400, {
-        name: r.name ?? "",
-      });
-    }
-    if (r.kind === "missingModifiers") {
-      return await apiError("apiErr.chooseFirst", 400, {
-        options: r.unanswered.join(", "),
-        name: r.forName,
-      });
-    }
-    return await apiError("apiErr.verifyItems", 400);
+    const { key, vars } = rejectionMessage(result.rejection);
+    return await apiError(key, 400, vars);
   }
   const verified = result.lines;
 

@@ -8,8 +8,9 @@ import { getLocale } from "@/lib/i18n/server";
  * API routes used to return English sentences, which the dashboard then put
  * straight into a toast — so a Spanish owner got "Enter the combo price." no
  * matter what the interface was set to. The locale is already available on the
- * server (cookie first, then Accept-Language), so the message is resolved here
- * rather than shipping a code the client has to know how to render.
+ * server (the saved choice, else Spanish — `getLocale` ignores Accept-Language
+ * on purpose), so the message is resolved here rather than shipping a code the
+ * client has to know how to render.
  *
  * @param key    an i18n key, e.g. "apiErr.comboPrice"
  * @param status HTTP status, defaulting to 400 — these are mostly validation

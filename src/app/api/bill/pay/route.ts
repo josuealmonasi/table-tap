@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import Stripe from "stripe";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
-import { billWindowStart } from "@/lib/table-bill";
+import { billWindowStart, MAX_BILL_ORDERS } from "@/lib/table-bill";
 import { staffOpenedBill } from "@/lib/table-session";
 import { splitInProgress } from "@/lib/split-service";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
@@ -52,6 +52,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!restaurantId || !tableId || !Array.isArray(orderIds) || orderIds.length === 0) {
     return await apiError("apiErr.invalidRequest", 400);
   }
+  // A table does not run up two hundred open orders, and the lookup below puts
+  // every id in a URL: a thousand of them is already a Bad Request, five
+  // thousand a 414 from the proxy. Unchecked, that failure read as an empty
+  // result and the diner was told their bill was settled when it is not.
+  if (orderIds.length > MAX_BILL_ORDERS) {
+    return await apiError("apiErr.invalidRequest", 400);
+  }
 
   // A bill a waiter opened is settled with the waiter. They are standing at
   // the table with a machine and a running balance, and a card charged here at
@@ -85,7 +92,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // nothing. Already-paid and cancelled rows are excluded here rather than
   // filtered afterwards: paying twice for the same food is the failure that
   // matters most.
-  const { data: rows } = await db
+  const { data: rows, error: rowsError } = await db
     .from("orders")
     .select("id, total, currency, items, paid, status, coupon_code")
     .eq("restaurant_id", restaurantId)
@@ -97,6 +104,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .neq("status", "pending_payment")
     .neq("status", "cancelled")
     .in("id", orderIds);
+
+  // A read that failed is not a bill that is paid. Told apart, because the
+  // wrong one of the two sends somebody away from the table owing money.
+  if (rowsError) return await apiError("apiErr.verifyOrders", 503);
 
   const orders = (rows ?? []) as (Pick<Order, "id" | "total" | "items"> & {
     coupon_code: string | null;

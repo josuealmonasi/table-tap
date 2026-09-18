@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { rejectionMessage } from "@/lib/cart-rejection";
 import { jsonBody } from "@/lib/json-body";
 import { actingStaff } from "@/lib/api-guard";
 import { TAKES_TABLE_ORDERS } from "@/lib/membership";
@@ -7,7 +8,7 @@ import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { capNote } from "@/lib/notes";
 import { priceCart } from "@/lib/pricing";
-import { referencedItemIds, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
+import { cartReferences, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
 import { fetchPromotions } from "@/lib/promotions-data";
 import { toCartPromos } from "@/lib/promotions";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
@@ -104,7 +105,12 @@ export async function POST(req: NextRequest) {
   };
 
   const promotions = await fetchPromotions(db, actor.restaurantId);
-  const referencedIds = referencedItemIds(items, promotions);
+  const refs = cartReferences(items, promotions);
+  if (!refs.ok) {
+    const { key, vars } = rejectionMessage(refs.rejection);
+    return await apiError(key, 400, vars);
+  }
+  const referencedIds = refs.ids;
   const { data: dbItems } = await db
     .from("menu_items")
     .select("id, name, price, emoji, available, discount_pct, modifiers, category_id, skips_kitchen, menu_id")
@@ -119,7 +125,8 @@ export async function POST(req: NextRequest) {
     isOnOpenMenu,
   });
   if (!result.ok) {
-    return NextResponse.json({ rejection: result.rejection }, { status: 400 });
+    const { key, vars } = rejectionMessage(result.rejection);
+    return await apiError(key, 400, vars);
   }
   const verified = result.lines;
 
