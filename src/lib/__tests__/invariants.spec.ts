@@ -1300,3 +1300,27 @@ describe("no screen offers a refund the till cannot give", () => {
     ).toBe(true);
   });
 });
+
+describe("one order, one code", () => {
+  it("builds the ORD- code in exactly one place", () => {
+    // There were two. `orderCode` in types.ts strips the dashes before taking
+    // four characters; `shortCode` in open-bills.ts did not. For a uuid they
+    // agree — 200,000 random ones, no difference — so nothing was ever wrong
+    // on screen. But a cashier searching for a bill types the code the
+    // customer reads off their phone, and two functions that must agree are
+    // one edit away from not.
+    const builders = walkAll("src/lib")
+      .concat(walkAll("src/components"))
+      .filter(f => /\.tsx?$/.test(f) && !f.includes("__tests__"))
+      .filter(f => /["'`]ORD-|ORD-\$\{/.test(read(f)))
+      .filter(f => !f.endsWith("src/lib/types.ts"))
+      // order-code.ts reads a code back into the id range it covers — the
+      // inverse, not a second copy. That the two agree is asserted directly in
+      // order-code.spec.ts rather than by counting files.
+      .filter(f => !f.endsWith("src/lib/order-code.ts"));
+    expect(
+      builders,
+      `These build an order code of their own. There is one in \`types.ts\`:\n${builders.join("\n")}`,
+    ).toEqual([]);
+  });
+});

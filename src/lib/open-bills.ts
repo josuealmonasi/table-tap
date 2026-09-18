@@ -1,4 +1,4 @@
-import type { Order, OrderLineItem } from "@/lib/types";
+import { orderCode, type Order, type OrderLineItem } from "@/lib/types";
 import { unpaidOrders } from "@/lib/table-bill";
 import { round2 } from "@/lib/money";
 
@@ -106,7 +106,7 @@ export function openBills(orders: Order[]): OpenBill[] {
       key,
       tableId: order.table_id,
       tableLabel: order.table_label,
-      code: order.table_id ? null : shortCode(order.id),
+      code: order.table_id ? null : orderCode(order.id),
       customerName: order.customer_name ?? null,
       orderIds: [order.id],
       items: [...(order.items ?? [])],
@@ -132,10 +132,5 @@ export function matchesBill(bill: OpenBill, query: string): boolean {
     (bill.customerName ?? "").toLowerCase().includes(q) ||
     bill.items.some(i => i.name.toLowerCase().includes(q))
   );
-}
-
-/** The tail of an order id, as the customer's receipt shows it. */
-export function shortCode(orderId: string): string {
-  return `ORD-${orderId.slice(0, 4).toUpperCase()}`;
 }
 
