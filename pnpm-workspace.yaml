@@ -7,3 +7,33 @@ allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+
+# Next declares `sharp: "^0.34.3 || ^0.35.4"` as optional, and pnpm resolved the
+# older of the two — which carries CVEs in libvips and libheif. sharp is what
+# Next's image optimizer runs in PRODUCTION, on menu photography a restaurant
+# uploads, so this is the one advisory on the list that reaches a running
+# server. Next already supports the patched version; nothing else changes.
+overrides:
+  sharp: "^0.35.4"
+  # The Stripe SDK asks for `qs: ^6.11.0` and pnpm picked one with two open
+  # advisories. 6.16.0 is inside the range Stripe declares, so this raises it
+  # without touching the SDK. qs serialises our requests going OUT to Stripe
+  # rather than parsing anything a caller sends us, which is why this is
+  # tidiness rather than an emergency — but it is a production dependency.
+  qs: "^6.16.0"
+  # Next pins postcss to exactly 8.4.31, which carries an arbitrary file read
+  # and a path traversal in source-map handling. Both are BUILD-time: postcss
+  # processes our own stylesheets, so exploiting them means already being able
+  # to edit the repository. Raised anyway because it is a minor bump inside 8.x
+  # and it takes nanoid with it — postcss 8.5.23+ asks for the patched one.
+  # Verified by a real production build, not by the version number.
+  postcss: "^8.5.28"
+  # These two reach nothing that ships. Both arrive through eslint, which runs
+  # on a developer's machine and in CI and is in neither the production bundle
+  # nor the Next build. Raised inside their own major versions because a patch
+  # that costs nothing is still worth taking, and left scoped because there are
+  # two brace-expansion lines installed and forcing one across the other would
+  # break minimatch rather than fix it.
+  "brace-expansion@1": "^1.1.18"
+  "brace-expansion@>=3": "^5.0.9"
+  js-yaml: "^4.3.2"
