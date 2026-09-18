@@ -134,6 +134,34 @@ const cookieFor = async (email, password = "demo123") => {
 const browser = await chromium.launch();
 console.log(`\nLayout — ${prod ? "production" : "development"}\n`);
 
+/**
+ * Does the audit still find anything?
+ *
+ * The overlap check is the expensive one, so it is also the one most likely to
+ * be quietly broken by making it cheaper — and a check that finds nothing
+ * reports every page as fine. Two blocks are planted overlapping on a blank
+ * page before the run starts; if the audit shrugs at them, the whole gate is
+ * worthless and says so rather than printing a column of ok.
+ */
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const tab = await ctx.newPage();
+  await tab.setContent(`<!doctype html><body style="margin:0">
+    <div style="font:20px/1.2 sans-serif;color:#000;height:40px">PLANTED ALPHA TEXT</div>
+    <div style="font:20px/1.2 sans-serif;color:#000;height:40px;margin-top:-34px;margin-left:30px">PLANTED BETA TEXT</div>
+  </body>`);
+  const faults = await tab.evaluate(AUDIT);
+  const caught = faults.some(f => f.kind === "overlapping" && f.text.includes("PLANTED"));
+  await ctx.close();
+  if (!caught) {
+    console.log("  The audit no longer sees text painted over text.");
+    console.log("  Every ok below would be meaningless. Fix layout-audit.mjs first.\n");
+    await browser.close();
+    process.exit(1);
+  }
+  console.log("  ok       the audit still catches a planted overlap\n");
+}
+
 for (const size of SIZES) {
   console.log(`  ${size.name} (${size.width}px)\n`);
 

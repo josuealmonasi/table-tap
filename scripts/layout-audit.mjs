@@ -92,34 +92,68 @@ export const AUDIT = `(() => {
   }
 
   // 2. Text painted over text.
-  const leaves = all.filter(el => own(el).length > 1 && !floats(el));
-  for (let i = 0; i < leaves.length; i++) {
-    for (let j = i + 1; j < leaves.length; j++) {
-      const a = leaves[i], b = leaves[j];
-      if (a.contains(b) || b.contains(a)) continue;
-      // Line against line, not box against box.
-      //
-      // getBoundingClientRect on a wrapped inline element returns the UNION of its
-      // lines: "· 39 min ago" split across two gave a box spanning edge to edge
-      // that crossed everything beside it, and the check accused text of
-      // overlapping that reads perfectly on screen. Per-line rectangles are what
-      // actually gets painted.
-      let w = 0, h = 0;
-      for (const x of a.getClientRects()) {
-        for (const y of b.getClientRects()) {
-          const dw = Math.min(x.right, y.right) - Math.max(x.left, y.left);
-          const dh = Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top);
-          if (dw > w && dh > 0) { w = dw; h = dh; }
-          else if (dh > h && dw > 0) h = dh;
-        }
+  //
+  // Every pair used to be compared, which is fine on a settings page and fatal
+  // on the orders board: 20,000 elements is 200 million pairs, each one asking
+  // for client rects and forcing a layout. The run did not fail — it hung, for
+  // fourteen minutes, and the path silently went unchecked while sitting in
+  // the list as though it were covered.
+  //
+  // Two boxes can only overlap if they overlap VERTICALLY, so the page is cut
+  // into horizontal bands and only elements sharing a band are compared. An
+  // element spanning several bands is filed in each, so no pair is lost; a
+  // pair filed together twice is compared once.
+  const BAND = 240;
+  const leaves = all
+    .filter(el => own(el).length > 1 && !floats(el))
+    .map((el, i) => ({ el, i, text: own(el), rects: [...el.getClientRects()] }))
+    .filter(l => l.rects.length > 0);
+
+  const bands = new Map();
+  for (const l of leaves) {
+    for (const r of l.rects) {
+      for (let b = Math.floor(r.top / BAND); b <= Math.floor(r.bottom / BAND); b++) {
+        let bucket = bands.get(b);
+        if (!bucket) bands.set(b, (bucket = new Set()));
+        bucket.add(l);
       }
-      // 4px of overlap is a hairline; 8 is two words sharing the same pixels.
-      if (w > 8 && h > 8) {
-        faults.push({
-          kind: "overlapping",
-          text: own(a).slice(0, 28) + " ⟂ " + own(b).slice(0, 28),
-          w: Math.round(w),
-        });
+    }
+  }
+
+  const compared = new Set();
+  for (const bucket of bands.values()) {
+    const here = [...bucket];
+    for (let i = 0; i < here.length; i++) {
+      for (let j = i + 1; j < here.length; j++) {
+        const a = here[i], b = here[j];
+        const key = a.i < b.i ? a.i + "|" + b.i : b.i + "|" + a.i;
+        if (compared.has(key)) continue;
+        compared.add(key);
+        if (a.el.contains(b.el) || b.el.contains(a.el)) continue;
+        // Line against line, not box against box.
+        //
+        // getBoundingClientRect on a wrapped inline element returns the UNION of its
+        // lines: "· 39 min ago" split across two gave a box spanning edge to edge
+        // that crossed everything beside it, and the check accused text of
+        // overlapping that reads perfectly on screen. Per-line rectangles are what
+        // actually gets painted.
+        let w = 0, h = 0;
+        for (const x of a.rects) {
+          for (const y of b.rects) {
+            const dw = Math.min(x.right, y.right) - Math.max(x.left, y.left);
+            const dh = Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top);
+            if (dw > w && dh > 0) { w = dw; h = dh; }
+            else if (dh > h && dw > 0) h = dh;
+          }
+        }
+        // 4px of overlap is a hairline; 8 is two words sharing the same pixels.
+        if (w > 8 && h > 8) {
+          faults.push({
+            kind: "overlapping",
+            text: a.text.slice(0, 28) + " ⟂ " + b.text.slice(0, 28),
+            w: Math.round(w),
+          });
+        }
       }
     }
   }

@@ -129,8 +129,21 @@ for (const width of WIDTHS) {
           if (!(await isOpen(tab))) return "nothing opened";
 
           opened++;
-          const faults = await tab.evaluate(AUDIT).catch(() => []);
           const where = `${who.role} · ${path} → «${label}»`;
+          // An audit that throws used to become an empty list, and an empty
+          // list prints ok — so the one dialog heavy enough to break the check
+          // was the one reported as flawless. A check that cannot run is not a
+          // check that passed.
+          let faults;
+          try {
+            faults = await tab.evaluate(AUDIT);
+          } catch (e) {
+            failed++;
+            console.log(`    BAD      ${where}: the audit could not run — ${e.message.split("\n")[0]}`);
+            await tab.keyboard.press("Escape");
+            await tab.waitForTimeout(350);
+            return "done";
+          }
           faults.length ? bad(where, faults) : ok(where);
 
           await tab.keyboard.press("Escape");
