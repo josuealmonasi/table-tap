@@ -42,10 +42,17 @@ async function staffId(fx) {
   return data?.id ?? "";
 }
 
-/** Any order of this restaurant's — the print route only needs one to exist. */
+/**
+ * Any order of this restaurant's — the print route only needs one to exist.
+ *
+ * Remembered on the fixture, because a reprint queues a job against an order
+ * the seed made: deleting the orders this run created leaves that job sitting
+ * in the queue, and teardown has no other way to find it.
+ */
 async function anyOrderId(fx) {
   const { data } = await fx.admin
     .from("orders").select("id").eq("restaurant_id", fx.restaurant.id).limit(1).maybeSingle();
+  if (data?.id) (fx.printedOrders ??= []).push(data.id);
   return data?.id ?? "";
 }
 
@@ -126,8 +133,30 @@ export function cases(fx) {
       // MX$10, and the cheapest dish on the demo menu is MX$6.50. At qty 1
       // this case was testing Stripe's floor rather than our checkout, and
       // whether it passed depended on which dish the fixture happened to pick.
-      body: { restaurantId: r, tableId: null, items: [{ itemId: dish.id, name: dish.name,
-        price: Number(dish.price), qty: 3, emoji: "🍽️", mods: {} }] }, expect: [200, 409] },
+      body: { restaurantId: r, tableId: null, note: MARK, items: [{ itemId: dish.id,
+        name: dish.name, price: Number(dish.price), qty: 3, emoji: "🍽️", mods: {} }] },
+      expect: [200, 409] },
+    // And one that cannot pass by being refused at the door.
+    //
+    // The case above accepts 200 OR 409, because with no Stripe account the
+    // healthy answer really is 409 — which means it has never once exercised
+    // the route's own code. Paying at the counter walks the same path and
+    // needs no Stripe, so this is the first case that fails if verifying,
+    // pricing or writing the order breaks.
+    { name: "POST /api/checkout (pay at the counter)", as: "diner", method: "POST",
+      path: "/api/checkout",
+      body: { restaurantId: r, tableId: null, payLater: true, note: MARK,
+        items: [{ itemId: dish.id, name: dish.name, price: Number(dish.price), qty: 3,
+          emoji: "🍽️", mods: {} }] },
+      expect: [200] },
+    // Stripe Checkout takes 100 line items and this route makes one per line
+    // plus the service charge and the tip, so the cart stops at 98.
+    { name: "POST /api/checkout (more lines than Stripe would take)", as: "diner",
+      method: "POST", path: "/api/checkout",
+      body: { restaurantId: r, tableId: null, payLater: true, note: MARK,
+        items: Array.from({ length: 99 }, () => ({ itemId: dish.id, name: dish.name,
+          price: Number(dish.price), qty: 1, emoji: "🍽️", mods: {} })) },
+      expect: [400] },
     { name: "POST /api/receipt", as: "diner", method: "POST", path: "/api/receipt",
       body: { orderId: paidOrder, email: "nobody@tabletap.dev" }, expect: [200, 400, 409, 503] },
 
@@ -188,9 +217,12 @@ export function cases(fx) {
     { name: "GET  /api/print/cloudprnt (wrong address)", as: "diner", method: "GET",
       path: "/api/print/cloudprnt/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", expect: [404] },
     // A waiter takes an order at a table. Unpaid: the table settles at the end.
+    // `note: MARK` is not decoration: teardown deletes orders by that note, so a
+    // case that places one without it leaves it behind for good. This one did,
+    // every run, and the kitchen ticket with it.
     { name: "POST /api/table-order", as: "waiter", method: "POST", path: "/api/table-order",
-      body: { tableId: table.id, items: [{ itemId: dish.id, name: dish.name, emoji: dish.emoji,
-        price: Number(dish.price), qty: 1, mods: {} }] },
+      body: { tableId: table.id, note: MARK, items: [{ itemId: dish.id, name: dish.name,
+        emoji: dish.emoji, price: Number(dish.price), qty: 1, mods: {} }] },
       expect: [200, 403],
       // 403 when the tier does not carry it; 200 says it landed owing.
       check: d => !d.orderId || Number(d.total) > 0 || "created an order that owes nothing" },

@@ -100,9 +100,14 @@ export async function setup(env, base) {
   // dated in the FUTURE, so "newer than the newest" excluded the very rows it
   // was written to catch. A high-water mark only works on data that arrives in
   // order, and seeded data does not.
+  // Every entity, not only `bill`. The bill lines had to be cleaned because
+  // `pnpm money` compares them against the ledger, so their absence failed the
+  // next run loudly — and that loudness is the only reason they were the ones
+  // being cleaned. Every other line the gate writes (a coupon minted, a dish
+  // edited, an invitation sent) stayed, seven a run, quietly filling the
+  // owner's activity log with a test account's work.
   const { data: logsBefore } = await admin
-    .from("user_logs").select("id")
-    .eq("restaurant_id", restaurant.id).eq("entity", "bill");
+    .from("user_logs").select("id").eq("restaurant_id", restaurant.id);
 
   // How many service requests there were BEFORE, so only ours get deleted.
   const { count: serviceRequestBefore } = await admin
@@ -160,20 +165,26 @@ export async function teardown(fx) {
   await admin.from("user_logs").delete()
     .eq("restaurant_id", restaurant.id).eq("entity", "bill").eq("action", "collected")
     .like("detail", `%amount=${PART_TOTAL} method=cash%`);
-  // Every bill line this run wrote: the ones that are there now and were not
-  // there at setup. The ledger and the log are two records of one night and
-  // `pnpm money` compares them per person and method, so removing one without
-  // the other leaves the gate failing on the next run over money that was
-  // never real.
+  // Every line this run wrote: the ones that are there now and were not there
+  // at setup. The ledger and the log are two records of one night and
+  // `pnpm money` compares them per person and method, so removing a payment
+  // without its line leaves the gate failing on the next run over money that
+  // was never real.
   if (fx.billLogsBefore) {
     const kept = new Set(fx.billLogsBefore);
     const { data: logsNow } = await admin
-      .from("user_logs").select("id")
-      .eq("restaurant_id", restaurant.id).eq("entity", "bill");
+      .from("user_logs").select("id").eq("restaurant_id", restaurant.id);
     const ours = (logsNow ?? []).map(l => l.id).filter(id => !kept.has(id));
     if (ours.length) await admin.from("user_logs").delete().in("id", ours);
   }
   await admin.from("orders").delete().eq("note", MARK);
+  // Reprints queue a job against a SEEDED order, so deleting our orders does
+  // not take them with it. Bounded by the unique index on (order_id, kind) —
+  // which is why the count stopped at one and looked like it was not leaking —
+  // but a gate that leaves a ticket in the print queue is not a clean slate.
+  if (fx.printedOrders?.length) {
+    await admin.from("print_jobs").delete().in("order_id", fx.printedOrders);
+  }
   await admin.from("coupons").delete().eq("restaurant_id", restaurant.id).like("code", "API-%");
   // The waiter request the test creates carries a table. The filter said
   // `table_id is null` and deleted nothing: an open row was left on Table 1
