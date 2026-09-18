@@ -26,6 +26,7 @@ import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { fetchPromotions } from "@/lib/promotions-data";
 import { toCartPromos } from "@/lib/promotions";
 import { cartReferences, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
+import { MAX_CARD_CART_LINES, stripeProductName } from "@/lib/stripe-limits";
 import { rejectionMessage } from "@/lib/cart-rejection";
 import { raiseStockNotifications, releaseStock, reserveStock } from "@/lib/stock-service";
 import type { OrderLineItem } from "@/lib/types";
@@ -206,7 +207,9 @@ export async function POST(req: NextRequest) {
     // IMPORTANT: never trust client prices. Re-fetch every referenced item
     // (products AND extras) plus every combo component, so the verification
     // below can price them from the DB and check they're all still orderable.
-    const refs = cartReferences(items, promotions);
+    // Stripe Checkout takes 100 line items and this builds one per line,
+    // plus the service charge and the tip.
+    const refs = cartReferences(items, promotions, MAX_CARD_CART_LINES);
     if (!refs.ok) {
       const { key, vars } = rejectionMessage(refs.rejection);
       return await cartError(key, vars, 400, {});
@@ -227,6 +230,7 @@ export async function POST(req: NextRequest) {
       promotions,
       dbItems: dbItems as VerifiableItem[],
       isOnOpenMenu: onOpenMenu,
+      maxLines: MAX_CARD_CART_LINES,
     });
     if (!result.ok) {
       const r = result.rejection;
@@ -452,7 +456,7 @@ export async function POST(req: NextRequest) {
             currency: cur,
             unit_amount: Math.round(unitAmount * 100),
             product_data: {
-              name: `${v.emoji ? `${v.emoji} ` : ""}${v.name}`,
+              name: stripeProductName(`${v.emoji ? `${v.emoji} ` : ""}${v.name}`),
               ...(description ? { description } : {}),
             },
           },

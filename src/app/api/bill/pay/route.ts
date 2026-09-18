@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { billWindowStart, MAX_BILL_ORDERS } from "@/lib/table-bill";
+import { packOrderIds, stripeProductName } from "@/lib/stripe-limits";
 import { staffOpenedBill } from "@/lib/table-session";
 import { splitInProgress } from "@/lib/split-service";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
@@ -189,7 +190,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               // One line: the diner is settling a bill, not re-picking dishes,
               // and the itemised list is on the screen they came from.
               product_data: {
-                name: `${restaurant.name} — ${orders.length} ${orders.length === 1 ? "order" : "orders"}`,
+                name: stripeProductName(
+                  `${restaurant.name} — ${orders.length} ${orders.length === 1 ? "order" : "orders"}`,
+                ),
               },
             },
           },
@@ -197,7 +200,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // The webhook marks exactly these rows paid. It is the only thing that
         // does: a returning browser proves nothing about whether money moved.
         metadata: {
-          settle_order_ids: orders.map(o => o.id).join(","),
+          // Split across keys: one value stops at 500 characters, which is
+          // fourteen order ids — a table of twelve on its second round.
+          ...packOrderIds(orders.map(o => o.id)),
           // Recorded so the takings show what was actually collected. It lands
           // on one of the settled orders rather than being split across them:
           // a tip is for the table's service, not attributable to a dish.

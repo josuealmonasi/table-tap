@@ -109,11 +109,14 @@ export const MAX_CART_REFS = 500;
 export function cartReferences(
   items: OrderLineItem[],
   promotions: PromotionWithItems[],
+  // The diner's checkout passes a lower one: it turns every line into a Stripe
+  // line item, and Stripe takes a hundred of those.
+  maxLines: number = MAX_CART_LINES,
 ):
   | { ok: true; ids: string[] }
   | { ok: false; rejection: CartRejection } {
-  if (items.length > MAX_CART_LINES) {
-    return { ok: false, rejection: { kind: "tooManyLines", limit: MAX_CART_LINES } };
+  if (items.length > maxLines) {
+    return { ok: false, rejection: { kind: "tooManyLines", limit: maxLines } };
   }
   const ids = referencedItemIds(items, promotions);
   if (ids.length > MAX_CART_REFS) {
@@ -131,6 +134,8 @@ export interface VerifyCartInput {
   dbItems: VerifiableItem[];
   /** Whether a category sits on a menu that is serving right now. */
   isOnOpenMenu: (categoryId: string | null) => boolean;
+  /** Defaults to `MAX_CART_LINES`; the card path has a lower one. */
+  maxLines?: number;
 }
 
 export type VerifyCartResult =
@@ -175,8 +180,9 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
 
   // Before anything is priced or looked up: the work below is per line, and
   // the point of the cap is not to do it ten thousand times.
-  if (items.length > MAX_CART_LINES) {
-    return { ok: false, rejection: { kind: "tooManyLines", limit: MAX_CART_LINES } };
+  const maxLines = input.maxLines ?? MAX_CART_LINES;
+  if (items.length > maxLines) {
+    return { ok: false, rejection: { kind: "tooManyLines", limit: maxLines } };
   }
   const priceMap = new Map(dbItems.map(d => [d.id, d]));
   const lines: OrderLineItem[] = [];

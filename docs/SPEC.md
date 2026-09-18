@@ -192,6 +192,19 @@ dishes on a bill the restaurant has just cancelled.
   so `/api/webhooks/stripe` takes our own account's events and
   `/api/webhooks/stripe/connect` takes the restaurants'. One secret each: an
   endpoint that tries several can no longer say which account sent it.
+- **Stripe's limits are hard, and an ordinary busy table reaches them.** Three
+  of them, each one refusing the whole request rather than degrading: a
+  metadata value stops at 500 characters, which is fourteen order ids, so the
+  list of orders a payment settles is written across as many keys as it needs
+  (`packOrderIds`, first key keeping its old name so sessions created before
+  that shipped still settle); Checkout takes 100 line items and the diner's
+  cart makes one per line plus the service charge and the tip, so the card
+  path caps the cart at 98 where the waiter's and the till's cap at 200; and a
+  product name stops at 250, which a dish name written straight from the
+  browser under RLS can exceed. Every one of them failed the same way — the
+  API rejects it, the route's catch says "checkout failed", and tapping again
+  does the same thing. No money was ever at risk; the bill simply could not be
+  paid by card.
 - **Corte de caja**: the day's takings by whoever took them, laid out as a sum,
   and the till each of them can count on their own. Both read `payments`, where
   an amount is a number the database checked. They used to be parsed out of the

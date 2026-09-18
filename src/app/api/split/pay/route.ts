@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { packOrderIds, stripeProductName } from "@/lib/stripe-limits";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { staffOpenedBill } from "@/lib/table-session";
@@ -130,7 +131,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             price_data: {
               currency: restaurant.currency.toLowerCase(),
               unit_amount: cents,
-              product_data: { name: `${restaurant.name} — 1/${split.shares}` },
+              product_data: { name: stripeProductName(`${restaurant.name} — 1/${split.shares}`) },
             },
           },
         ],
@@ -139,7 +140,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           split_id: splitId,
           split_share: String(claim.share_no),
           split_amount: String(claim.amount),
-          settle_order_ids: own.map(o => o.id).join(","),
+          ...packOrderIds(own.map(o => o.id)),
           settle_tip: String(tip),
           settle_fee: String(appFee / 100),
         },
