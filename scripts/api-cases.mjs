@@ -122,10 +122,36 @@ export function cases(fx) {
       body: { splitId: "00000000-0000-0000-0000-000000000000", sessionId: fx.sessionId ?? "",
               diner: "apicheck", restaurantId: r, tableId: table.id },
       expect: [409] },
-    { name: "POST /api/split/pay (no such split)", as: "diner", method: "POST", path: "/api/split/pay",
+    // These three need a card reader, and saying so is the point.
+    //
+    // /api/split/pay turns everybody away when the restaurant has none — 65%
+    // of the route sits behind that one line — and it says so with a 409. The
+    // case that used to live here expected 409 for "no such split" and was
+    // being handed "this restaurant cannot take cards" instead: a green tick
+    // for a refusal it never reached. `arrange` lends the reader for the
+    // request and takes it back afterwards, so the refusals below are the
+    // route's own.
+    { name: "POST /api/split/pay (no card reader)", as: "diner", method: "POST",
+      path: "/api/split/pay",
       body: { splitId: "00000000-0000-0000-0000-000000000000", sessionId: fx.sessionId ?? "",
               diner: "apicheck", restaurantId: r, tableId: table.id },
-      expect: [409] },
+      expect: [409], expectError: /tarjeta|card payments/i },
+    { name: "POST /api/split/pay (no such split)", as: "diner", method: "POST",
+      path: "/api/split/pay", arrange: f => f.withCardReader(),
+      body: { splitId: "00000000-0000-0000-0000-000000000000", sessionId: fx.sessionId ?? "",
+              diner: "apicheck", restaurantId: r, tableId: table.id },
+      expect: [409], expectError: /falta gente|agreed to the split/i },
+    { name: "POST /api/split/pay (a share that is not yours)", as: "diner", method: "POST",
+      path: "/api/split/pay", arrange: f => f.withCardReader(),
+      body: async f => ({ splitId: f.lockedSplitId, sessionId: f.splitSessionId,
+        diner: "nobody-here", restaurantId: r, tableId: f.splitTableId }),
+      // 403: the split is real and locked, and this device has no claim on it.
+      expect: [403], expectError: /no tienes una parte|do not have a share/i },
+    { name: "POST /api/split/pay (a share already paid)", as: "diner", method: "POST",
+      path: "/api/split/pay", arrange: f => f.withCardReader(),
+      body: async f => ({ splitId: f.lockedSplitId, sessionId: f.splitSessionId,
+        diner: `${MARK}-paid`, restaurantId: r, tableId: f.splitTableId }),
+      expect: [409], expectError: /ya está pagada|already paid/i },
     { name: "POST /api/checkout (card)", as: "diner", method: "POST", path: "/api/checkout",
       // With no Stripe account connected the healthy answer is 409, not a 500.
       //
