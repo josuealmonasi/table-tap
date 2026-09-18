@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { staffOpenedBill } from "@/lib/table-session";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -46,9 +47,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
 
-  const { sessionId, diner, restaurantId, tableId, shares } = (await req.json()) as {
+  const body = await jsonBody<{
     sessionId?: string; diner?: string; restaurantId?: string; tableId?: string; shares?: number;
-  };
+  }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { sessionId, diner, restaurantId, tableId, shares } = body;
   if (!sessionId || !diner || !restaurantId || !tableId) {
     return await apiError("apiErr.invalidRequest", 400);
   }
@@ -108,9 +111,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
 /** Calling it off — the proposer, or anybody at the table who will not join. */
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
-  const { splitId, sessionId, diner, restaurantId, tableId } = (await req.json()) as {
+  const body = await jsonBody<{
     splitId?: string; sessionId?: string; diner?: string; restaurantId?: string; tableId?: string;
-  };
+  }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { splitId, sessionId, diner, restaurantId, tableId } = body;
   if (!splitId || !sessionId || !diner || !restaurantId || !tableId) {
     return await apiError("apiErr.invalidRequest", 400);
   }

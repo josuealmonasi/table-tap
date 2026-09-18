@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -12,7 +13,9 @@ export async function DELETE(req: NextRequest) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
 
-  const { id } = await req.json();
+  const body = await jsonBody<Record<string, unknown>>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { id } = body;
   if (!id) return await apiError("apiErr.invalidRequest", 400);
 
   const db = createAdminClient();

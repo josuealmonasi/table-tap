@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { closeSessionsFor } from "@/lib/table-session";
 import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -32,11 +33,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
-  const { tableId, orderId, settlement } = (await req.json()) as {
+  const body = await jsonBody<{
     tableId?: string;
     orderId?: string;
     settlement?: Settlement;
-  };
+  }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { tableId, orderId, settlement } = body;
   // A table or a counter order, never both and never neither: if both arrived
   // we would have to decide which wins, and guessing which to charge is the
   // last thing an endpoint marking money as received should do.

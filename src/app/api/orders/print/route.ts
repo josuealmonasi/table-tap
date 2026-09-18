@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { actingStaff } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildReceipt } from "@/lib/receipt";
@@ -30,10 +31,12 @@ export async function POST(req: NextRequest) {
   const actor = await actingStaff();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
-  const { orderId, to } = (await req.json().catch(() => ({}))) as {
+  const body = await jsonBody<{
     orderId?: string;
     to?: "kitchen" | "receipt";
-  };
+  }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { orderId, to } = body;
   if (!orderId || (to !== "kitchen" && to !== "receipt")) {
     return await apiError("apiErr.invalidRequest", 400);
   }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
@@ -14,7 +15,9 @@ export const runtime = "nodejs";
 // paid. Owner-only. This is the ONLY path that may set status "cancelled",
 // so an order can never be cancelled without its refund.
 export async function POST(req: NextRequest) {
-  const { id } = await req.json();
+  const body = await jsonBody<Record<string, unknown>>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { id } = body;
   if (!id) return await apiError("apiErr.invalidRequest", 400);
 
   // Refunds move money, so only the owner or a manager may cancel.

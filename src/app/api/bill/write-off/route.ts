@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
@@ -32,12 +33,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
-  const { tableId, orderIds, reason, note } = (await req.json().catch(() => ({}))) as {
+  const body = await jsonBody<{
     tableId?: string;
     orderIds?: string[];
     reason?: string;
     note?: string;
-  };
+  }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { tableId, orderIds, reason, note } = body;
   // A table, or a named set of orders — a counter bill has no table to point
   // at, and it is just as capable of walking out the door.
   const ids = (orderIds ?? []).filter(v => typeof v === "string").slice(0, 100);

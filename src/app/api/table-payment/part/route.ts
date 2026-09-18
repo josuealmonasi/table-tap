@@ -1,11 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { actingFrontOfHouse, type Actor } from "@/lib/api-guard";
 import { planBlocks } from "@/lib/plan-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
-import { recordPayment } from "@/lib/payments";
 import { closeSessionsFor, openSession } from "@/lib/table-session";
 import { endSplitsFor } from "@/lib/split-service";
 import { tableOutstanding, type Outstanding } from "@/lib/table-outstanding";
@@ -41,13 +41,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const blocked = await planBlocks(actor.restaurantId, "waiterService");
   if (blocked) return blocked;
 
-  const body = (await req.json()) as {
+  const body = await jsonBody<{
     tableId?: string;
     amount?: number;
     tip?: number;
     method?: "cash" | "card";
     ref?: string;
-  };
+  }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
   const method = body.method;
   // `ref` is the caller's name for THIS collection, reused on every retry of
   // it. Without one, a button tapped twice on a phone with a bad signal is two

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { actingStaff } from "@/lib/api-guard";
 import { TAKES_COUNTER_ORDERS } from "@/lib/membership";
 import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
   const blocked = await planBlocks(actor.restaurantId, "pos");
   if (blocked) return blocked;
 
-  const body = (await req.json().catch(() => ({}))) as {
+  const body = await jsonBody<{
     posRef?: string;
     items?: OrderLineItem[];
     method?: "cash" | "card";
@@ -67,7 +68,8 @@ export async function POST(req: NextRequest) {
     tipAmount?: number;
     /** The customer declined the ticket: build nothing. */
     noReceipt?: boolean;
-  };
+  }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { posRef, items, method } = body;
 
   if (!posRef || !Array.isArray(items) || items.length === 0) {

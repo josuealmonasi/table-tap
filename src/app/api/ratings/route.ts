@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import {
@@ -28,12 +29,8 @@ export async function POST(req: NextRequest) {
     return await apiError("apiErr.tooManyRequests", 429);
   }
 
-  let body: { restaurantId?: string; ratings?: SubmittedRating[] };
-  try {
-    body = await req.json();
-  } catch {
-    return await apiError("apiErr.badRequest", 400);
-  }
+  const body = await jsonBody<{ restaurantId?: string; ratings?: SubmittedRating[] }>(req);
+  if (!body) return await apiError("apiErr.badRequest", 400);
 
   const { restaurantId, ratings } = body;
   if (!restaurantId || !Array.isArray(ratings) || ratings.length === 0) {

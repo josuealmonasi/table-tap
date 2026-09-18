@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonBody } from "@/lib/json-body";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { isValidCouponFormat, normalizeCoupon } from "@/lib/coupons";
 import { couponProblem, findCoupon } from "@/lib/coupon-service";
@@ -16,7 +17,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ valid: false, reason: "tooMany" }, { status: 429 });
   }
 
-  const { restaurantId, code, subtotal } = await req.json();
+  const body = await jsonBody<{
+    restaurantId?: string;
+    code?: string;
+    subtotal?: number;
+  }>(req);
+  if (!body) return NextResponse.json({ ok: false }, { status: 400 });
+  const { restaurantId, code, subtotal } = body;
   if (!restaurantId || typeof code !== "string") {
     return NextResponse.json({ valid: false, reason: "notFound" }, { status: 400 });
   }

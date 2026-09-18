@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { actingOwner } from "@/lib/api-guard";
 import { frozenBlocks, seatBlocks } from "@/lib/plan-guard";
@@ -32,12 +33,14 @@ async function ownerSlotFree(restaurantId: string): Promise<boolean> {
 // kitchen). We email them an invite link to set their own password, so the
 // owner never handles someone else's credentials.
 export async function POST(req: NextRequest) {
-  const { email, role } = await req.json();
+  const body = await jsonBody<{ email?: string; role?: string }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { email, role } = body;
 
   if (typeof email !== "string" || !/^\S+@\S+\.\S+$/.test(email)) {
     return await apiError("apiErr.email", 400);
   }
-  if (!ROLES.includes(role)) {
+  if (!role || !ROLES.includes(role)) {
     return await apiError("apiErr.pickRole", 400);
   }
 
@@ -101,8 +104,10 @@ export async function POST(req: NextRequest) {
 
 // PATCH /api/staff — an owner changes a member's role.
 export async function PATCH(req: NextRequest) {
-  const { id, role } = await req.json();
-  if (!id || !ROLES.includes(role)) {
+  const body = await jsonBody<{ id?: string; role?: string }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { id, role } = body;
+  if (!id || !role || !ROLES.includes(role)) {
     return await apiError("apiErr.invalidRequest", 400);
   }
 
@@ -134,7 +139,9 @@ export async function PATCH(req: NextRequest) {
 // DELETE /api/staff — an owner removes a login entirely (the staff row
 // cascades away with the auth user).
 export async function DELETE(req: NextRequest) {
-  const { id } = await req.json();
+  const body = await jsonBody<{ id?: string }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { id } = body;
   if (!id) return await apiError("apiErr.invalidRequest", 400);
 
   const actor = await actingOwner();

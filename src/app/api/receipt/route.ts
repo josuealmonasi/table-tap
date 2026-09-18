@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { messagesFor, translate } from "@/lib/i18n";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
@@ -39,11 +40,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.tooManyRequests", 429);
   }
 
-  const { orderId, orderIds, email } = (await req.json().catch(() => ({}))) as {
+  const body = await jsonBody<{
     orderId?: string;
     orderIds?: string[];
     email?: string;
-  };
+  }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { orderId, orderIds, email } = body;
   // One ticket, or every ticket a table settled together. Capped: a table
   // settles a handful of orders, and an uncapped list is a way to make one
   // request read the whole table and build an enormous email.

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { actingManager } from "@/lib/api-guard";
 import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
@@ -73,7 +74,8 @@ export async function POST(req: NextRequest) {
   const blocked = await planBlocks(restaurantId, "promotions");
   if (blocked) return blocked;
 
-  const body = (await req.json()) as Body;
+  const body = await jsonBody<Body>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
   const bad = validate(body);
   if (bad) return await apiError(bad.key);
 
@@ -140,7 +142,8 @@ export async function PATCH(req: NextRequest) {
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const restaurantId = actor.restaurantId;
 
-  const body = (await req.json()) as Body & { id?: string; active?: boolean };
+  const body = await jsonBody<Body & { id?: string; active?: boolean }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
   if (!body.id) return await apiError("apiErr.invalidRequest", 400);
 
   const db = createAdminClient();
@@ -227,7 +230,9 @@ export async function DELETE(req: NextRequest) {
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const restaurantId = actor.restaurantId;
 
-  const { id } = await req.json();
+  const body = await jsonBody<Record<string, unknown>>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { id } = body;
   if (!id) return await apiError("apiErr.invalidRequest", 400);
 
   const { error } = await createAdminClient()

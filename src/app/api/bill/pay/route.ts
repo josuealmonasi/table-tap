@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import Stripe from "stripe";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { billWindowStart } from "@/lib/table-bill";
 import { staffOpenedBill } from "@/lib/table-session";
 import { splitInProgress } from "@/lib/split-service";
@@ -38,15 +39,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
 
-  const { restaurantId, tableId, orderIds, tipPct, tipAmount, couponCode } =
-    (await req.json()) as {
-      restaurantId?: string;
-      tableId?: string;
-      orderIds?: string[];
-      tipPct?: number;
-      tipAmount?: number;
-      couponCode?: string;
-    };
+  const body = await jsonBody<{
+    restaurantId?: string;
+    tableId?: string;
+    orderIds?: string[];
+    tipPct?: number;
+    tipAmount?: number;
+    couponCode?: string;
+  }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { restaurantId, tableId, orderIds, tipPct, tipAmount, couponCode } = body;
   if (!restaurantId || !tableId || !Array.isArray(orderIds) || orderIds.length === 0) {
     return await apiError("apiErr.invalidRequest", 400);
   }

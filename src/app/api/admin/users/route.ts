@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { passwordTooShort } from "@/lib/password";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -19,14 +20,22 @@ export async function POST(req: NextRequest) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
 
-  const { email, password, role, restaurantId, restaurantName } = await req.json();
+  const body = await jsonBody<{
+    email?: string;
+    password?: string;
+    role?: string;
+    restaurantId?: string;
+    restaurantName?: string;
+  }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { email, password, role, restaurantId, restaurantName } = body;
   if (typeof email !== "string" || !/^\S+@\S+\.\S+$/.test(email)) {
     return await apiError("apiErr.email", 400);
   }
-  if (passwordTooShort(password)) {
+  if (passwordTooShort(password ?? "")) {
     return await apiError("apiErr.password8", 400);
   }
-  if (!ROLES.includes(role)) {
+  if (!ROLES.includes(role ?? "")) {
     return await apiError("apiErr.pickRole", 400);
   }
   if (
@@ -78,7 +87,7 @@ export async function POST(req: NextRequest) {
     } else if (role === "owner" && !restaurantId) {
       const { error } = await db
         .from("restaurants")
-        .insert({ name: restaurantName.trim(), owner_id: created.user.id });
+        .insert({ name: (restaurantName ?? "").trim(), owner_id: created.user.id });
       if (error) throw error;
     } else {
       const { error } = await db.from("staff").insert({
@@ -88,7 +97,7 @@ export async function POST(req: NextRequest) {
         role,
       });
       if (error) throw error;
-      await logUserChange(restaurantId, admin.email, "created", role, email);
+      await logUserChange(restaurantId ?? "", admin.email, "created", role ?? "", email);
     }
   } catch {
     await db.auth.admin.deleteUser(created.user.id); // roll back the login
@@ -105,7 +114,15 @@ export async function PATCH(req: NextRequest) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
 
-  const { userId, fullName, email, password, role } = await req.json();
+  const body = await jsonBody<{
+    userId?: string;
+    fullName?: string;
+    email?: string;
+    password?: string;
+    role?: string;
+  }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { userId, fullName, email, password, role } = body;
   if (!userId) return await apiError("apiErr.invalidRequest", 400);
   if (email !== undefined && !/^\S+@\S+\.\S+$/.test(email)) {
     return await apiError("apiErr.email", 400);
@@ -196,7 +213,9 @@ export async function DELETE(req: NextRequest) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
 
-  const { userId } = await req.json();
+  const body = await jsonBody<{ userId?: string }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { userId } = body;
   // Shape-checked before it reaches Postgres: a malformed id threw inside the
   // uuid comparison and the route answered 500 with an empty body, which tells
   // the admin screen nothing it can show.

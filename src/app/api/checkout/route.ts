@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { tableOf } from "@/lib/table-guard";
 import { openSession } from "@/lib/table-session";
 import { capName, capNote } from "@/lib/notes";
@@ -60,7 +61,8 @@ export async function POST(req: NextRequest) {
       return await apiError("apiErr.tooManyAttempts", 429);
     }
 
-    const body = await req.json();
+    const body = await jsonBody<Record<string, unknown>>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
     const {
       restaurantId,
       tableId,

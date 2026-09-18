@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
 import { actingOwner } from "@/lib/api-guard";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -23,7 +24,9 @@ export async function POST(req: Request): Promise<NextResponse> {
   const actor = await actingOwner();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
-  const { resume } = (await req.json().catch(() => ({}))) as { resume?: boolean };
+  const body = await jsonBody<{ resume?: boolean }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const { resume } = body;
 
   const db = createAdminClient();
   const { data } = await db
