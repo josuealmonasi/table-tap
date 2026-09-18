@@ -356,16 +356,29 @@ export function cases(fx) {
       expect: [200] },
 
     // ── the bill: discount, cancel, collect ──────────────────────────────
+    // This asked for API-002, which has never existed anywhere. API-001 does,
+    // briefly — the gate mints it, switches it off and deletes it, all before
+    // this runs. So the waiter was told "no encontramos ese cupón", and the
+    // chain behind it died quietly: no discount request was ever left, so the
+    // manager's approval had nothing to approve and answered 400 for four
+    // statuses' worth of permission.
     { name: "POST /api/bill/discount (waiter asks)", as: "waiter", method: "POST",
-      path: "/api/bill/discount", body: { tableId: table.id, code: "API-002" },
-      // With no valid coupon the correct refusal is 400; with one, the waiter
-      // leaves a request. What it must not do is blow up.
-      expect: [200, 400, 403, 404] },
+      path: "/api/bill/discount",
+      body: async f => ({ tableId: f.discountTableId, code: f.discountCode }),
+      expect: [200] },
     { name: "POST /api/bill/discount/approve", as: "manager", method: "POST",
       path: "/api/bill/discount/approve",
       body: async f => ({ requestId: await pendingDiscount(f), approve: true }),
-      // 400 with no request pending, 409 if it was already decided. Never a 500.
-      expect: [200, 400, 409] },
+      // There is a request pending now, so this approves one — and a 200 that
+      // took nothing off the bill is the failure this gate exists to catch.
+      expect: [200],
+      check: async (_d, f) => {
+        const { data } = await f.admin
+          .from("orders").select("discount, coupon_code").eq("id", f.discountOrder).maybeSingle();
+        return Number(data?.discount) > 0
+          ? true
+          : `approved, and the order still shows a discount of ${data?.discount}`;
+      } },
     // The calculator: a waiter collects part of a table's bill. A little of
     // it, so the bill stays open for the cases below.
     { name: "POST /api/table-payment/part", as: "waiter", method: "POST",
@@ -391,9 +404,27 @@ export function cases(fx) {
     { name: "POST /api/bill/write-off (waiter asks)", as: "waiter", method: "POST",
       path: "/api/bill/write-off", body: { tableId: table.id, reason: "walkout", note: MARK },
       expect: [200], check: d => d.pending === true || "a waiter's request should stay pending" },
-    { name: "POST /api/bill/write-off/approve", as: "manager", method: "POST",
-      path: "/api/bill/write-off/approve", body: async f => ({ id: await pendingWriteOff(f), approve: false }),
-      expect: [200, 400, 404] },
+    // The route reads `requestId`. This sent `id`, so it was refused on the
+    // missing field every single run — the one path that decides whether a
+    // restaurant absorbs a walkout had never executed.
+    { name: "POST /api/bill/write-off/approve (refused)", as: "manager", method: "POST",
+      path: "/api/bill/write-off/approve",
+      // The id is remembered on the fixture so the check asks about the one
+      // that was actually decided. "Is anything still pending?" is a different
+      // question, and the answer is yes whenever another case has left one.
+      body: async f => {
+        f.decidedWriteOff = await pendingWriteOff(f);
+        return { requestId: f.decidedWriteOff, approve: false };
+      },
+      expect: [200],
+      check: async (_d, f) => {
+        if (!f.decidedWriteOff) return "there was no request to decide";
+        const { data } = await f.admin
+          .from("write_off_requests").select("status").eq("id", f.decidedWriteOff).maybeSingle();
+        return data && data.status !== "pending"
+          ? true
+          : `decided, and it is still "${data?.status ?? "gone"}"`;
+      } },
     // A manager cancels what the table owes, and the table is CLEAR after it:
     // not just unpaid-and-written-off in the ledger, but off the kitchen board
     // and off the diner's phone. It used to leave every order at "received",

@@ -96,6 +96,13 @@ export async function setup(env, base) {
   const { data: sessionsBefore } = await admin
     .from("table_sessions").select("id").eq("restaurant_id", restaurant.id);
 
+  // Same for the manager's queues: the walkout and discount requests that were
+  // already waiting are the demo's, and must still be waiting afterwards.
+  const { data: writeOffsBefore } = await admin
+    .from("write_off_requests").select("id").eq("restaurant_id", restaurant.id);
+  const { data: discountsBefore } = await admin
+    .from("discount_requests").select("id").eq("restaurant_id", restaurant.id);
+
   // Which bill lines the log ALREADY held, by id, so teardown removes only the
   // ones this run writes. Settling a table logs `paid` with no order code in
   // it, which no `like` filter can tell from a real one — and the payment was
@@ -170,6 +177,33 @@ export async function setup(env, base) {
     session_id: billSession.id,
   });
 
+  // A bill for the waiter to ask a discount on, and a coupon that is still
+  // there when they ask. The gate mints API-001 and then switches it off and
+  // deletes it, all before the discount cases run — so the code they asked for
+  // was gone, and had never been the same code anyway. Its own table, because
+  // approving a discount changes what a bill owes and the settling cases below
+  // need theirs untouched.
+  const { data: discountTable } = await admin
+    .from("restaurant_tables")
+    .insert({ restaurant_id: restaurant.id, label: `${MARK}-discount` })
+    .select("id, label").single();
+  const { data: discountSession } = await admin
+    .from("table_sessions")
+    .insert({ restaurant_id: restaurant.id, table_id: discountTable.id })
+    .select("id").single();
+  const discountOrder = await make({
+    paid: false, table_id: discountTable.id, table_label: discountTable.label,
+    session_id: discountSession.id,
+  });
+  // `API-` so the existing teardown sweeps it.
+  const { data: discountCoupon } = await admin
+    .from("coupons")
+    .insert({
+      restaurant_id: restaurant.id, code: "API-003", kind: "percent",
+      value: 10, active: true,
+    })
+    .select("code").single();
+
   // A table mid-division, on a table of its own so the cases that settle the
   // others cannot disturb it. Locked, because /api/split/pay refuses anything
   // else — and with two claims: one nobody has paid, and one already paid, so
@@ -236,12 +270,17 @@ export async function setup(env, base) {
     withCardReader,
     billTableId: billTable.id,
     billOrder,
+    discountTableId: discountTable.id,
+    discountOrder,
+    discountCode: discountCoupon?.code ?? "API-003",
     lockedSplitId: lockedSplit?.id ?? null,
     splitSessionId: splitSession?.id ?? null,
     splitTableId: splitTable.id,
     printJobId: printJob?.id ?? null,
     billLogsBefore: (logsBefore ?? []).map(l => l.id),
     sessionsBefore: (sessionsBefore ?? []).map(x => x.id),
+    writeOffsBefore: (writeOffsBefore ?? []).map(x => x.id),
+    discountsBefore: (discountsBefore ?? []).map(x => x.id),
     table: tables[0],
     sessionId: session?.id ?? null,
     paidOrder: await make({ paid: true }),
@@ -311,6 +350,22 @@ export async function teardown(fx) {
   if (fx.splitSessionId) await admin.from("table_sessions").delete().eq("id", fx.splitSessionId);
   if (fx.splitTableId) await admin.from("restaurant_tables").delete().eq("id", fx.splitTableId);
   if (fx.billTableId) await admin.from("restaurant_tables").delete().eq("id", fx.billTableId);
+  if (fx.discountTableId) await admin.from("restaurant_tables").delete().eq("id", fx.discountTableId);
+  // The requests a run leaves behind. Neither table was ever swept, so every
+  // run added a pending walkout and a pending discount to the manager's queue
+  // — and the first sweep I wrote for it deleted the seeded ones too, which is
+  // worse than the leak. By id, like the log: only what was not there before.
+  for (const [table, before] of [
+    ["write_off_requests", fx.writeOffsBefore],
+    ["discount_requests", fx.discountsBefore],
+  ]) {
+    if (!before) continue;
+    const kept = new Set(before);
+    const { data: now } = await admin
+      .from(table).select("id").eq("restaurant_id", restaurant.id);
+    const ours = (now ?? []).map(x => x.id).filter(id => !kept.has(id));
+    if (ours.length) await admin.from(table).delete().in("id", ours);
+  }
   await admin.from("orders").delete().eq("note", MARK);
   // And any sitting this run opened that has nothing left in it. Only the ones
   // that were not there at setup, and only when empty: a sitting with orders on
