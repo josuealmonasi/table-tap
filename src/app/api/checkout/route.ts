@@ -428,6 +428,21 @@ export async function POST(req: NextRequest) {
     // Nothing to charge now: the order is with the kitchen and the table owes
     // for it. The bill screen picks it up from here.
     if (deferred) {
+      // Write the redemption down before returning. This return sits well
+      // above the one place that logged it, so a coupon spent on a pay-later
+      // order counted against its limit — `uses_count` is incremented either
+      // way — and then appeared in no record of what was given away. The
+      // money was right and the paperwork was missing.
+      if (coupon) {
+        await logRedemption({
+          restaurantId,
+          couponId: coupon.id,
+          orderId: order.id,
+          code: coupon.code,
+          amount: pricing.couponDiscount,
+          settled: true,
+        });
+      }
       return NextResponse.json({ orderId: order.id, deferred: true, sessionId });
     }
 
