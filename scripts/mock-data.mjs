@@ -179,8 +179,14 @@ export async function seedMock(pg) {
   const {
     rows: [rest],
   } = await pg.query(
-    `insert into restaurants (name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, owner_id, plan)
-     values ($1, 'Fresh plates, fast service', '🍽️', 'MXN', 10, true, true, $2, 'casa') returning id`,
+    // `allow_pay_later` on, and not as a decoration. Nobody has ever connected
+    // a Stripe account in development, so /api/checkout — the route that takes
+    // the diner's money — refused every probe at the door and reported a clean
+    // pass having run none of its own code. Paying at the counter walks the
+    // same path (verify the cart, price it, write the order) and needs no
+    // Stripe at all, so with this on the route can finally be exercised.
+    `insert into restaurants (name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, owner_id, plan, allow_pay_later)
+     values ($1, 'Fresh plates, fast service', '🍽️', 'MXN', 10, true, true, $2, 'casa', true) returning id`,
     [DEMO_RESTAURANT, ownerId],
   );
   const rid = rest.id;
