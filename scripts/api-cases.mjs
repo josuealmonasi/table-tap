@@ -392,6 +392,24 @@ export function cases(fx) {
       } },
     { name: "POST /api/orders/cancel", as: "owner", method: "POST", path: "/api/orders/cancel",
       body: { id: tableOrder }, expect: [200] },
+    // Cash is not a card that has not settled yet. Treating it as one made a
+    // cash sale impossible to cancel — the owner was told "payment is still
+    // settling, try again" for ever, on an order the board kept showing, while
+    // the screen offered to refund it.
+    { name: "POST /api/orders/cancel (paid in cash)", as: "owner", method: "POST",
+      path: "/api/orders/cancel", body: async f => ({ id: f.cashPaidOrder }), expect: [200],
+      check: async (_d, f) => {
+        const { data: o } = await f.admin
+          .from("orders").select("status").eq("id", f.cashPaidOrder).maybeSingle();
+        if (o?.status !== "cancelled") return `answered 200 and left it "${o?.status}"`;
+        // The money genuinely arrived, so the payment stays. The ledger expects
+        // exactly this: its check for money against an unsettled order skips
+        // cancelled ones on purpose.
+        const { count } = await f.admin
+          .from("payments").select("id", { count: "exact", head: true })
+          .eq("order_id", f.cashPaidOrder);
+        return count > 0 ? true : "the cancel took the cash payment off the ledger with it";
+      } },
     { name: "POST /api/bill/pay (online)", as: "diner", method: "POST", path: "/api/bill/pay",
       body: { restaurantId: r, tableId: table.id }, expect: [200, 400, 409] },
 

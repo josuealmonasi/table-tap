@@ -1061,6 +1061,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     orderData: "Missing order data",
     cancelStatus: "Only new or preparing orders can be cancelled.",
     settling: "Payment is still settling — try again in a moment.",
+    cashNoRefund: "This order was paid in cash, so there is nothing to refund through the app. Give the cash back at the till — voiding a cash sale is not something this screen can do yet.",
     refundFailed: "Refund failed — the order was NOT cancelled. Try again.",
     orderCancel: "Could not cancel the order.",
     // Shown to a diner at checkout when the menu moved under them.
@@ -1385,6 +1386,10 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
     refundMsg: "The customer will be refunded {amount}.",
     unpaidCancelMsg: "This order hasn't been paid — it will just be cancelled.",
     cancelRefund: "Cancel & refund",
+    /** Cash is in the drawer: the app cannot move it, a person has to. */
+    cashCancelMsg: "This was paid {amount} in cash. The app cannot give that back — hand it over at the till first, then cancel here.",
+    cancelCashOrder: "Cancel & hand back the cash",
+    cancelledCash: "Order cancelled — give the cash back if you have not already",
     cancelOrder: "Cancel order",
     cancelledRefunded: "Order cancelled and refunded",
     cancelledToast: "Order cancelled",

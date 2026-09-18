@@ -1274,3 +1274,29 @@ describe("Stripe's limits are respected where we build its payloads", () => {
     ).toEqual([]);
   });
 });
+
+describe("no screen offers a refund the till cannot give", () => {
+  it("branches on how it was paid before promising money back", () => {
+    // The cancel dialog said "Cancel & refund MX$100" for any paid order. On a
+    // sale somebody paid in notes there is nothing to refund through Stripe,
+    // and the route answered "payment is still settling — try again", which
+    // would never once become true. The screen promised and the server
+    // refused, which is this app's oldest bug shape.
+    //
+    // The two places that must agree: the route tells cash apart from a card
+    // whose webhook has not landed, and the screen has to make the same
+    // distinction before it words the offer.
+    const board = read("src/components/dashboard/OrdersBoard.tsx");
+    const offersRefund = board.includes("orders.refundMsg") || board.includes("orders.cancelRefund");
+    expect(
+      !offersRefund || /pay_method\s*===\s*"cash"/.test(board),
+      "OrdersBoard offers a refund without checking pay_method — a cash sale cannot be refunded by an app",
+    ).toBe(true);
+
+    const route = read("src/app/api/orders/cancel/route.ts");
+    expect(
+      /pay_method\s*===\s*"cash"/.test(route),
+      "the cancel route no longer tells cash apart from a card whose webhook has not landed",
+    ).toBe(true);
+  });
+});
