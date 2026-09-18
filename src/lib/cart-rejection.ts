@@ -23,6 +23,8 @@ export function rejectionMessage(r: CartRejection): {
         : { key: "apiErr.itemGoneUnnamed", vars: {} };
     case "tooManyLines":
       return { key: "apiErr.tooManyLines", vars: { n: r.limit } };
+    case "tooManyRefs":
+      return { key: "apiErr.tooManyProducts", vars: { n: r.limit } };
     case "missingModifiers":
       return {
         key: "apiErr.chooseFirst",

@@ -56,6 +56,8 @@ export type CartRejection =
   | { kind: "unavailable"; name: string; itemId: string }
   /** More lines than any real order has. See `MAX_CART_LINES`. */
   | { kind: "tooManyLines"; limit: number }
+  /** More distinct products than the lookup can ask about. See `MAX_CART_REFS`. */
+  | { kind: "tooManyRefs"; limit: number }
   /** A required option group was never answered. */
   | { kind: "missingModifiers"; unanswered: string[]; forName: string; itemId: string }
   /** Extras vanished; the customer is asked to confirm before paying. */
@@ -84,6 +86,40 @@ export function referencedItemIds(
       ...comboComponents,
     ]),
   ];
+}
+
+/**
+ * More distinct products than a lookup can ask about in one go.
+ *
+ * PostgREST sends `.in(...)` as a URL, and a filter naming a thousand ids is
+ * already a Bad Request — five thousand is a 414 from the proxy. The row fetch
+ * then comes back empty and the cart is refused for the wrong reason: "could
+ * not verify the items", when what happened is that we never managed to ask.
+ */
+export const MAX_CART_REFS = 500;
+
+/**
+ * The menu rows a cart refers to, or why it is too big to look up.
+ *
+ * The size of a cart has to be judged BEFORE the rows are fetched, because the
+ * fetch is the thing the size breaks. `verifyCart` caps the lines too, but it
+ * runs on the rows — by then the query has already been sent, and a cart of
+ * two hundred lines carrying ten extras each is two thousand ids in a URL.
+ */
+export function cartReferences(
+  items: OrderLineItem[],
+  promotions: PromotionWithItems[],
+):
+  | { ok: true; ids: string[] }
+  | { ok: false; rejection: CartRejection } {
+  if (items.length > MAX_CART_LINES) {
+    return { ok: false, rejection: { kind: "tooManyLines", limit: MAX_CART_LINES } };
+  }
+  const ids = referencedItemIds(items, promotions);
+  if (ids.length > MAX_CART_REFS) {
+    return { ok: false, rejection: { kind: "tooManyRefs", limit: MAX_CART_REFS } };
+  }
+  return { ok: true, ids };
 }
 
 export interface VerifyCartInput {

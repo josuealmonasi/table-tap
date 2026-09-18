@@ -1030,6 +1030,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     splitTooMany: "Only {n} phone(s) have ordered at this table, so it can't be divided between more.",
     tooManyLines: "That order has too many lines (the most is {n}). Split it into two.",
     extrasGone: "These extras are no longer available: {names}. Remove them and try again.",
+    tooManyProducts: "That order names too many different products (the most is {n}). Split it into two.",
     splitNotReady: "Not everyone has agreed to the split yet.",
     splitNotYours: "You do not have a share in this split.",
     splitAlreadyPaid: "Your share is already paid.",

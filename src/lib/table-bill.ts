@@ -2,6 +2,17 @@ import type { Order, OrderLineItem } from "@/lib/types";
 import { round2 } from "@/lib/money";
 
 /**
+ * The most open orders one bill can name.
+ *
+ * A table of twelve ordering three rounds is nowhere near this. The number is
+ * here because the routes that settle a bill put every id in a `.in(...)`
+ * filter, which PostgREST sends as a URL — a thousand ids is a Bad Request and
+ * five thousand a 414, and a lookup that never ran looks exactly like a bill
+ * with nothing left on it.
+ */
+export const MAX_BILL_ORDERS = 200;
+
+/**
  * What a dine-in table still owes.
  *
  * A bill is the unpaid orders on a table, whoever placed them — that is what a

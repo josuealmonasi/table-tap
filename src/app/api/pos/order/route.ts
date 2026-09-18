@@ -8,7 +8,7 @@ import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { capName, capNote } from "@/lib/notes";
 import { priceCart } from "@/lib/pricing";
-import { referencedItemIds, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
+import { cartReferences, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
 import { fetchPromotions } from "@/lib/promotions-data";
 import { toCartPromos } from "@/lib/promotions";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
@@ -144,7 +144,12 @@ export async function POST(req: NextRequest) {
   // fetches, from the same function, because verifyCart prices only what it is
   // handed and a missing extra reads to it as one that has vanished.
   const promotions = await fetchPromotions(supabase, actor.restaurantId);
-  const referencedIds = referencedItemIds(items, promotions);
+  const refs = cartReferences(items, promotions);
+  if (!refs.ok) {
+    const { key, vars } = rejectionMessage(refs.rejection);
+    return await apiError(key, 400, vars);
+  }
+  const referencedIds = refs.ids;
   const { data: dbItems } = await supabase
     .from("menu_items")
     .select("id, name, price, emoji, available, discount_pct, modifiers, category_id, skips_kitchen")
