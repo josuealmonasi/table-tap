@@ -162,6 +162,55 @@ export function cases(fx) {
       body: { restaurantId: r, tableId: null, note: MARK, items: [{ itemId: dish.id,
         name: dish.name, price: Number(dish.price), qty: 3, emoji: "🍽️", mods: {} }] },
       expect: [200, 409] },
+    // And the card path itself, which the case above has never reached: with
+    // no connected account it is turned away at the door, so the line items,
+    // the name trimming and the cart cap that #333 added have never been built
+    // for a real session. A fake account gets all the way to Stripe and fails
+    // there, and failing THERE is the assertion.
+    { name: "POST /api/checkout (card, reaches Stripe)", as: "diner", method: "POST",
+      path: "/api/checkout", arrange: f => f.withCardReader(),
+      body: { restaurantId: r, tableId: null, note: MARK, items: [{ itemId: dish.id,
+        name: dish.name, price: Number(dish.price), qty: 3, emoji: "🍽️", mods: {} }] },
+      expect: [500], expectError: /pago falló|payment failed/i },
+    // A charge that fails must give the coupon use back. It is reserved before
+    // Stripe is called — so a coupon on its last use cannot be spent twice by
+    // two diners at once — and a reservation nobody releases burns that use
+    // for a sale which never happened, quietly, on the one coupon a restaurant
+    // printed a hundred of.
+    { name: "POST /api/checkout (a failed charge gives back what it reserved)", as: "diner",
+      method: "POST", path: "/api/checkout",
+      // Both switches, and both undone afterwards. `undoClaim` releases the
+      // coupon AND the stock, and until now only the coupon half was watched —
+      // a charge that never happened quietly emptying the shelf would have
+      // gone unnoticed.
+      arrange: async f => {
+        const putReaderBack = await f.withCardReader();
+        const putStockBack = await f.withStock(20);
+        return async () => { await putStockBack(); await putReaderBack(); };
+      },
+      body: async f => {
+        const { data } = await f.admin
+          .from("coupons").select("uses_count").eq("id", f.cardCouponId).maybeSingle();
+        f.couponUsesBefore = data?.uses_count ?? 0;
+        return {
+          restaurantId: r, tableId: null, note: MARK, couponCode: f.cardCouponCode,
+          items: [{ itemId: dish.id, name: dish.name, price: Number(dish.price),
+                    qty: 5, emoji: "🍽️", mods: {} }],
+        };
+      },
+      expect: [500], expectError: /pago falló|payment failed/i,
+      effect: async f => {
+        const { data } = await f.admin
+          .from("coupons").select("uses_count").eq("id", f.cardCouponId).maybeSingle();
+        if (data?.uses_count !== f.couponUsesBefore) {
+          return `the coupon went from ${f.couponUsesBefore} uses to ${data?.uses_count} on a sale that never happened`;
+        }
+        const { data: item } = await f.admin
+          .from("menu_items").select("stock").eq("id", f.dish.id).maybeSingle();
+        return item?.stock === 20
+          ? true
+          : `the shelf went from 20 to ${item?.stock} on a sale that never happened`;
+      } },
     // And one that cannot pass by being refused at the door.
     //
     // The case above accepts 200 OR 409, because with no Stripe account the
