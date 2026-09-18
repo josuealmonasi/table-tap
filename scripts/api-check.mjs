@@ -40,6 +40,21 @@ try {
     const headers = { "Content-Type": "application/json" };
     if (c.as !== "diner") headers.cookie = fx.who[c.as];
 
+    // Some refusals only exist on the far side of a switch. `/api/split/pay`
+    // turns everybody away when the restaurant has no card reader, and no
+    // seeded restaurant has one — so its case for "no such split" was being
+    // answered "this restaurant cannot take cards", passed on the status code
+    // alone, and had never once tested the thing it is named after.
+    //
+    // `arrange` puts the switch where the case needs it and hands back the
+    // undo, which runs whatever the case does — including throwing.
+    let restore = null;
+    if (c.arrange) restore = await c.arrange(fx);
+
+    // `continue` runs a `finally` on its way out, which is what makes this
+    // safe: every way this loop body ends — a refusal, a bad status, a thrown
+    // request — puts the switch back before the next case runs.
+    try {
     let res, text;
     try {
       // A path may be a function for the same reason a body may: some of what
@@ -77,6 +92,23 @@ try {
       continue;
     }
 
+    // A refusal has to be the RIGHT refusal.
+    //
+    // Several routes answer 409 for more than one reason, so a case that only
+    // checks the status can be satisfied by a refusal it never meant to test.
+    // Three of `/api/split/pay`'s own cases were: "no such split" and "a share
+    // already paid" both passed while being handed "this restaurant cannot
+    // take cards", because that is a 409 too. Matching the sentence is what
+    // tells them apart.
+    if (c.expectError) {
+      let message = "";
+      try { message = JSON.parse(text).error ?? ""; } catch { message = text; }
+      if (!c.expectError.test(message)) {
+        bad(`${c.name} — ${res.status} with the wrong refusal: ${JSON.stringify(message.slice(0, 70))}`);
+        continue;
+      }
+    }
+
     // The right status with the wrong body is still a failure: that is how an
     // endpoint returning 200 and `saved: 0` got through.
     if (c.check && res.status === 200) {
@@ -104,6 +136,9 @@ try {
       try { Object.assign(saved, c.save(JSON.parse(text))); } catch { /* sin cuerpo */ }
     }
     ok(`${c.name}${c.expect.length > 1 ? ` (${res.status})` : ""}`);
+    } finally {
+      if (restore) await restore();
+    }
   }
 } finally {
   await teardown(fx);

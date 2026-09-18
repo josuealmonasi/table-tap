@@ -88,6 +88,14 @@ export async function setup(env, base) {
     .eq("restaurant_id", restaurant.id).is("closed_at", null)
     .limit(1).maybeSingle();
 
+  // Every sitting this restaurant already had, by id. The waiter's case places
+  // an order at a table, which opens one — and deleting the order afterwards
+  // leaves the sitting behind, empty, for good. It looked like it was not
+  // leaking because only one sitting may be open per table, so the next run
+  // reused the one the last run abandoned rather than adding another.
+  const { data: sessionsBefore } = await admin
+    .from("table_sessions").select("id").eq("restaurant_id", restaurant.id);
+
   // Which bill lines the log ALREADY held, by id, so teardown removes only the
   // ones this run writes. Settling a table logs `paid` with no order code in
   // it, which no `like` filter can tell from a real one — and the payment was
@@ -113,6 +121,66 @@ export async function setup(env, base) {
   const { count: serviceRequestBefore } = await admin
     .from("service_requests").select("*", { count: "exact", head: true })
     .eq("restaurant_id", restaurant.id).eq("status", "open");
+
+  /**
+   * Lend the restaurant a card reader for one case, and take it back after.
+   *
+   * Nothing in development has a connected Stripe account, so every route that
+   * asks for one turns the caller away before running a line of its own logic
+   * — and answers 409 doing it, which is the same status several of those
+   * routes use for their real refusals. That is how `/api/split/pay`'s case
+   * for "no such split" spent its life being answered "this restaurant cannot
+   * take cards" and passing.
+   *
+   * The account id is a fake and the charge will fail at Stripe, which is
+   * fine: everything worth testing on these routes happens before they get
+   * that far.
+   */
+  const withCardReader = async () => {
+    const { data: was } = await admin
+      .from("restaurants").select("stripe_account_id, stripe_charges_enabled")
+      .eq("id", restaurant.id).maybeSingle();
+    await admin.from("restaurants")
+      .update({ stripe_account_id: "acct_api_check", stripe_charges_enabled: true })
+      .eq("id", restaurant.id);
+    return async () => {
+      await admin.from("restaurants").update({
+        stripe_account_id: was?.stripe_account_id ?? null,
+        stripe_charges_enabled: was?.stripe_charges_enabled ?? false,
+      }).eq("id", restaurant.id);
+    };
+  };
+
+  // A table mid-division, on a table of its own so the cases that settle the
+  // others cannot disturb it. Locked, because /api/split/pay refuses anything
+  // else — and with two claims: one nobody has paid, and one already paid, so
+  // both of that route's refusals have something real to refuse.
+  // Its own table, not a seeded one: only one sitting may be open per table,
+  // and the demo's tables already have theirs. Borrowing one would either
+  // collide with that index or close a sitting the other cases are using.
+  const { data: splitTable } = await admin
+    .from("restaurant_tables")
+    .insert({ restaurant_id: restaurant.id, label: `${MARK}-split` })
+    .select("id").single();
+  const { data: splitSession } = await admin
+    .from("table_sessions")
+    .insert({ restaurant_id: restaurant.id, table_id: splitTable.id })
+    .select("id").single();
+  const { data: lockedSplit } = await admin
+    .from("bill_splits")
+    .insert({
+      restaurant_id: restaurant.id, session_id: splitSession.id, shares: 2,
+      amount: 2 * line.price, status: "locked", proposed_by: MARK,
+      locked_at: new Date(Date.now() - 60_000).toISOString(),
+    })
+    .select("id").single();
+  await admin.from("bill_split_claims").insert([
+    { split_id: lockedSplit.id, share_no: 1, diner: `${MARK}-unpaid`, amount: line.price },
+    {
+      split_id: lockedSplit.id, share_no: 2, diner: `${MARK}-paid`,
+      amount: line.price, paid_at: new Date().toISOString(),
+    },
+  ]);
 
   // A sale somebody paid for in notes. Cancelling one used to be impossible:
   // the route looked for a Stripe payment intent, never found one, and told
@@ -146,8 +214,13 @@ export async function setup(env, base) {
     },
     printableOrder,
     cashPaidOrder,
+    withCardReader,
+    lockedSplitId: lockedSplit?.id ?? null,
+    splitSessionId: splitSession?.id ?? null,
+    splitTableId: splitTable.id,
     printJobId: printJob?.id ?? null,
     billLogsBefore: (logsBefore ?? []).map(l => l.id),
+    sessionsBefore: (sessionsBefore ?? []).map(x => x.id),
     table: tables[0],
     sessionId: session?.id ?? null,
     paidOrder: await make({ paid: true }),
@@ -210,7 +283,27 @@ export async function teardown(fx) {
     const ours = (logsNow ?? []).map(l => l.id).filter(id => !kept.has(id));
     if (ours.length) await admin.from("user_logs").delete().in("id", ours);
   }
+  // The split goes before the sitting it hangs off: claims cascade from the
+  // split, the split cascades from the session, but the session itself is ours
+  // and nothing else removes it.
+  if (fx.lockedSplitId) await admin.from("bill_splits").delete().eq("id", fx.lockedSplitId);
+  if (fx.splitSessionId) await admin.from("table_sessions").delete().eq("id", fx.splitSessionId);
+  if (fx.splitTableId) await admin.from("restaurant_tables").delete().eq("id", fx.splitTableId);
   await admin.from("orders").delete().eq("note", MARK);
+  // And any sitting this run opened that has nothing left in it. Only the ones
+  // that were not there at setup, and only when empty: a sitting with orders on
+  // it belongs to the demo's history, not to us.
+  if (fx.sessionsBefore) {
+    const kept = new Set(fx.sessionsBefore);
+    const { data: now } = await admin
+      .from("table_sessions").select("id").eq("restaurant_id", restaurant.id);
+    for (const row of now ?? []) {
+      if (kept.has(row.id)) continue;
+      const { count } = await admin
+        .from("orders").select("id", { count: "exact", head: true }).eq("session_id", row.id);
+      if (!count) await admin.from("table_sessions").delete().eq("id", row.id);
+    }
+  }
   // Reprints queue a job against a SEEDED order, so deleting our orders does
   // not take them with it. Bounded by the unique index on (order_id, kind) —
   // which is why the count stopped at one and looked like it was not leaking —
