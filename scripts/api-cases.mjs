@@ -216,6 +216,35 @@ export function cases(fx) {
       check: d => d.jobReady === false || "a wrong address was offered a job" },
     { name: "GET  /api/print/cloudprnt (wrong address)", as: "diner", method: "GET",
       path: "/api/print/cloudprnt/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", expect: [404] },
+    { name: "DELETE /api/print/cloudprnt (wrong address)", as: "diner", method: "DELETE",
+      path: "/api/print/cloudprnt/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", expect: [404] },
+    // And the other half, which nothing checked: that a RIGHT address works.
+    // Both cases above are satisfied by a route that refuses everyone, and for
+    // a while that is exactly what any change to this file would have produced
+    // without a word — the seed configured no printer, so there was no token
+    // to call it with.
+    { name: "POST /api/print/cloudprnt (the printer's own address)", as: "diner",
+      method: "POST", path: async f => `/api/print/cloudprnt/${await f.printToken()}`, expect: [200],
+      check: d => d.jobReady === true || "a real printer with a ticket waiting was told the counter was quiet" },
+    { name: "GET  /api/print/cloudprnt (collects its ticket)", as: "diner", method: "GET",
+      path: async f => `/api/print/cloudprnt/${await f.printToken()}`, expect: [200],
+      // Plain text, not JSON: this is what comes out on paper.
+      checkText: t => (t.includes(MARK) || t.length > 20) || `the paper came out empty: ${JSON.stringify(t.slice(0, 40))}`,
+      // A kitchen ticket is dishes. A printer is not a login, and money has no
+      // business on a roll of paper in a corridor.
+      },
+    { name: "GET  /api/print/cloudprnt (no money on the paper)", as: "diner", method: "GET",
+      path: async f => `/api/print/cloudprnt/${await f.printToken()}`, expect: [200],
+      checkText: t => !/MX\$|tarjeta|\bcard\b|total:/i.test(t) || "the kitchen ticket carries money" },
+    { name: "DELETE /api/print/cloudprnt (closes the job it was handed)", as: "diner",
+      method: "DELETE",
+      path: async f => `/api/print/cloudprnt/${await f.printToken()}?token=${f.printJobId}`,
+      expect: [200],
+      check: async (_d, f) => {
+        const { data } = await f.admin
+          .from("print_jobs").select("printed_at").eq("id", f.printJobId).maybeSingle();
+        return data?.printed_at ? true : "the ticket came out and the job stayed open — it would reprint for ever";
+      } },
     // A waiter takes an order at a table. Unpaid: the table settles at the end.
     // `note: MARK` is not decoration: teardown deletes orders by that note, so a
     // case that places one without it leaves it behind for good. This one did,

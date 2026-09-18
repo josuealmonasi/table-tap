@@ -114,8 +114,27 @@ export async function setup(env, base) {
     .from("service_requests").select("*", { count: "exact", head: true })
     .eq("restaurant_id", restaurant.id).eq("status", "open");
 
+  // A ticket of our own for the printer to collect, so the cases below do not
+  // race the seed's or swallow one a real screen queued. Queued by the trigger
+  // on `status = 'received'`, not inserted here — inserting it collides with
+  // that trigger on the unique (order_id, kind).
+  const printableOrder = await make({ paid: false, status: "received" });
+  const { data: printJob } = await admin
+    .from("print_jobs").select("id").eq("order_id", printableOrder).maybeSingle();
+
   return {
     admin, base, who, restaurant, dish, menu, serviceRequestBefore,
+    // Read when a case asks, never snapshotted: an earlier case MINTS a new
+    // token (`POST /api/print/token`), so a value captured at setup is stale
+    // by the time the printer's own cases run — and a stale token is refused,
+    // which looks exactly like the route being broken.
+    printToken: async () => {
+      const { data } = await admin
+        .from("restaurants").select("print_token").eq("id", restaurant.id).maybeSingle();
+      return data?.print_token ?? "";
+    },
+    printableOrder,
+    printJobId: printJob?.id ?? null,
     billLogsBefore: (logsBefore ?? []).map(l => l.id),
     table: tables[0],
     sessionId: session?.id ?? null,
