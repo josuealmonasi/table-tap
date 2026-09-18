@@ -100,10 +100,18 @@ export async function releaseCoupon(couponId: string): Promise<void> {
 }
 
 /**
- * Records a RESERVED use against an order. `confirmed_at` stays null until the
- * Stripe webhook reports the order paid — so an abandoned checkout leaves an
- * unconfirmed row that the expiry handler removes, rather than a phantom
- * redemption in the owner's records.
+ * Records a use against an order.
+ *
+ * `confirmed_at` stays null until the Stripe webhook reports the order paid —
+ * so an abandoned checkout leaves an unconfirmed row that the expiry handler
+ * removes, rather than a phantom redemption in the owner's records.
+ *
+ * `settled` writes it confirmed instead, for an order that has no Stripe
+ * session to wait on. A table paying at the end is the case: the discount is
+ * committed the moment the order is placed, the kitchen is already cooking it,
+ * and there is no in-flight state that could be abandoned. Left unconfirmed it
+ * would sit that way for ever, because the till collects it in cash and the
+ * webhook that confirms is one it never reaches.
  */
 export async function logRedemption(params: {
   restaurantId: string;
@@ -111,6 +119,7 @@ export async function logRedemption(params: {
   orderId: string;
   code: string;
   amount: number;
+  settled?: boolean;
 }): Promise<void> {
   await createAdminClient().from("coupon_redemptions").insert({
     restaurant_id: params.restaurantId,
@@ -118,5 +127,6 @@ export async function logRedemption(params: {
     order_id: params.orderId,
     code: params.code,
     amount: params.amount,
+    confirmed_at: params.settled ? new Date().toISOString() : null,
   });
 }

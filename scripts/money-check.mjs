@@ -225,6 +225,47 @@ if (!era) {
       );
 }
 
+// ── Every discount given away is written down ──────────────────────────────
+//
+// `coupons.uses_count` is what enforces the limit, and it is incremented by
+// `redeem_coupon` on every path — so a coupon can never be overspent. The
+// redemption row is the other record: which order got the discount, and for
+// how much. A pay-later checkout counted the use and wrote no row, because the
+// deferred path returns well above the one place that logged it. The money was
+// right and the paperwork was missing, which is the kind of gap nobody finds
+// until an owner asks where MX$19.50 went.
+{
+  const { data: discounted, error: dErr } = await db
+    .from("orders").select("id, coupon_code, discount").not("coupon_code", "is", null);
+  const { data: redemptions, error: rErr } = await db
+    .from("coupon_redemptions").select("order_id, amount");
+
+  if (dErr || rErr) {
+    bad(`cannot read the coupon records: ${(dErr ?? rErr).message}`);
+  } else {
+    const byOrder = new Map((redemptions ?? []).map(r => [r.order_id, r]));
+    const unwritten = [];
+    const disagreeing = [];
+    for (const o of discounted ?? []) {
+      const row = byOrder.get(o.id);
+      if (!row) unwritten.push(o);
+      else if (Math.abs(Number(row.amount) - Number(o.discount)) > CENT) disagreeing.push(o);
+    }
+    if (unwritten.length === 0 && disagreeing.length === 0) {
+      ok(`every discount given is written down (${(discounted ?? []).length} coupon order(s))`);
+    } else {
+      if (unwritten.length) {
+        bad(`${unwritten.length} order(s) took a coupon with no redemption recorded: ` +
+          unwritten.slice(0, 3).map(o => `${o.coupon_code} on ${o.id.slice(0, 8)} (MX$${o.discount})`).join("; "));
+      }
+      if (disagreeing.length) {
+        bad(`${disagreeing.length} redemption(s) record a different amount than the order: ` +
+          disagreeing.slice(0, 3).map(o => `${o.id.slice(0, 8)} (order MX$${o.discount})`).join("; "));
+      }
+    }
+  }
+}
+
 console.log(
   failed === 0
     ? `\nThe ledger, the orders and the drawer agree. ${payments.length} payment(s).\n`
