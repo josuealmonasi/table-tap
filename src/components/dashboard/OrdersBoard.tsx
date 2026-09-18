@@ -98,20 +98,41 @@ export default function OrdersBoard({
   const revenue = +(revenueBase + liveToday).toFixed(2);
 
   async function handleCancel(order: Order): Promise<void> {
+    // Cash cannot be refunded by an app. Offering "Cancel & refund MX$100" on a
+    // sale somebody paid in notes promises what nothing here can do — the money
+    // is in a drawer, and only a person can take it out again.
+    const cash = order.paid && order.pay_method === "cash";
+    const amount = formatMoney(order.total, restaurant.currency);
     const ok = await confirm({
       title: t("orders.cancelConfirm", { code: orderCode(order.id) }),
-      message: order.paid
-        ? t("orders.refundMsg", {
-            amount: formatMoney(order.total, restaurant.currency),
-          })
-        : t("orders.unpaidCancelMsg"),
-      confirmLabel: t(order.paid ? "orders.cancelRefund" : "orders.cancelOrder"),
+      message: cash
+        ? t("orders.cashCancelMsg", { amount })
+        : order.paid
+          ? t("orders.refundMsg", { amount })
+          : t("orders.unpaidCancelMsg"),
+      confirmLabel: t(
+        cash
+          ? "orders.cancelCashOrder"
+          : order.paid
+            ? "orders.cancelRefund"
+            : "orders.cancelOrder",
+      ),
       danger: true,
     });
     if (!ok) return;
     const error = await cancelOrder(order.id);
     if (error) toast(error, "error");
-    else toast(t(order.paid ? "orders.cancelledRefunded" : "orders.cancelledToast"));
+    else {
+      toast(
+        t(
+          cash
+            ? "orders.cancelledCash"
+            : order.paid
+              ? "orders.cancelledRefunded"
+              : "orders.cancelledToast",
+        ),
+      );
+    }
   }
 
   return (

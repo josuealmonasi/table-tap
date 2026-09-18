@@ -1056,6 +1056,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     orderData: "Faltan datos del pedido",
     cancelStatus: "Solo se pueden cancelar pedidos nuevos o en preparación.",
     settling: "El pago aún se está procesando — inténtalo en un momento.",
+    cashNoRefund: "Este pedido se pagó en efectivo, así que no hay nada que reembolsar por la app. Devuelve el efectivo en la caja — cancelar una venta en efectivo todavía no se puede hacer desde esta pantalla.",
     refundFailed: "El reembolso falló — el pedido NO se canceló. Inténtalo de nuevo.",
     orderCancel: "No se pudo cancelar el pedido.",
     // Se le muestra al comensal cuando el menú cambió mientras ordenaba.
@@ -1374,6 +1375,9 @@ badgesHint: "Muestra cuántas cosas esperan acción en cada sección. Aplica a t
     refundMsg: "Se reembolsará {amount} al cliente.",
     unpaidCancelMsg: "Este pedido no se ha pagado — solo se cancelará.",
     cancelRefund: "Cancelar y reembolsar",
+    cashCancelMsg: "Esto se pagó {amount} en efectivo. La app no puede devolverlo — entrégalo en la caja primero y luego cancela aquí.",
+    cancelCashOrder: "Cancelar y devolver el efectivo",
+    cancelledCash: "Pedido cancelado — devuelve el efectivo si aún no lo has hecho",
     cancelOrder: "Cancelar pedido",
     cancelledRefunded: "Pedido cancelado y reembolsado",
     cancelledToast: "Pedido cancelado",

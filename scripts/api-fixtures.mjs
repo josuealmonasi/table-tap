@@ -114,6 +114,17 @@ export async function setup(env, base) {
     .from("service_requests").select("*", { count: "exact", head: true })
     .eq("restaurant_id", restaurant.id).eq("status", "open");
 
+  // A sale somebody paid for in notes. Cancelling one used to be impossible:
+  // the route looked for a Stripe payment intent, never found one, and told
+  // the owner the payment was "still settling — try again", for ever.
+  const cashPaidOrder = await make({ paid: true, pay_method: "cash", status: "received" });
+  // With the money actually on the ledger, so the case can check that
+  // cancelling does not take it off: the cash arrived, and it stays arrived.
+  await admin.from("payments").insert({
+    restaurant_id: restaurant.id, order_id: cashPaidOrder, amount: line.price,
+    method: "cash", actor_email: "demo@tabletap.dev", client_ref: `${MARK}-cash-${cashPaidOrder}`,
+  });
+
   // A ticket of our own for the printer to collect, so the cases below do not
   // race the seed's or swallow one a real screen queued. Queued by the trigger
   // on `status = 'received'`, not inserted here — inserting it collides with
@@ -134,6 +145,7 @@ export async function setup(env, base) {
       return data?.print_token ?? "";
     },
     printableOrder,
+    cashPaidOrder,
     printJobId: printJob?.id ?? null,
     billLogsBefore: (logsBefore ?? []).map(l => l.id),
     table: tables[0],
@@ -179,7 +191,9 @@ export async function teardown(fx) {
   // `pnpm money` too, which is the half that mattered: it sorts payments into
   // attached-to-an-order and attached-to-a-sitting, and a row with neither
   // fell between the two.
-  const settledHere = [fx.paidOrder, fx.unpaidOrder, fx.tableOrder, fx.walkoutOrder].filter(Boolean);
+  const settledHere = [
+    fx.paidOrder, fx.unpaidOrder, fx.tableOrder, fx.walkoutOrder, fx.cashPaidOrder,
+  ].filter(Boolean);
   if (settledHere.length) await admin.from("payments").delete().in("order_id", settledHere);
   await admin.from("user_logs").delete()
     .eq("restaurant_id", restaurant.id).eq("entity", "bill").eq("action", "collected")

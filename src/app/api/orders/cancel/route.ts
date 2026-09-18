@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient();
   const { data: order } = await admin
     .from("orders")
-    .select("id, status, paid, stripe_payment_intent, stripe_refund_id, items")
+    .select("id, status, paid, pay_method, stripe_payment_intent, stripe_refund_id, items")
     .eq("id", id)
     .eq("restaurant_id", actor.restaurantId)
     .maybeSingle();
@@ -44,10 +44,23 @@ export async function POST(req: NextRequest) {
 
   // Paid orders must be refunded before they can be cancelled.
   let refundId: string | null = order.stripe_refund_id;
-  if (order.paid && !refundId) {
+  // Cash is not a card that has not settled yet, and treating it as one made a
+  // cash sale impossible to cancel: no payment intent ever arrives, so the
+  // owner was told "payment is still settling — try again" for ever, on an
+  // order the board would go on showing. The screen meanwhile offered to
+  // refund the amount, which is the app's own worst habit — promising what it
+  // then refuses.
+  //
+  // Nothing has to be reversed here. The money genuinely arrived and the
+  // payment row stays, which is a state the ledger already expects: its check
+  // for money against an unsettled order excludes cancelled ones on purpose.
+  // What the app cannot do is take notes out of the drawer, so it says so and
+  // leaves that to the person standing at the till.
+  const paidInCash = order.pay_method === "cash";
+  if (order.paid && !refundId && !paidInCash) {
     if (!order.stripe_payment_intent) {
-      // Paid but the webhook hasn't recorded the payment yet — don't cancel
-      // silently without a refund.
+      // A card whose webhook has not landed yet — genuinely a moment away, and
+      // retrying genuinely helps. Don't cancel silently without a refund.
       return await apiError("apiErr.settling", 409);
     }
     // The payment lives on the restaurant's own Stripe account — both ways of
