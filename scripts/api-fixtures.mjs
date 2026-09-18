@@ -151,6 +151,25 @@ export async function setup(env, base) {
     };
   };
 
+  // A table with an unpaid bill and nothing else going on, for the cases that
+  // settle one online. It cannot share a table with the others: an earlier
+  // case opens a staff bill on the demo's first table, and /api/bill/pay
+  // refuses a table the waiter is already settling — which is correct, and
+  // which made the first version of these cases fail with "Tu mesero está
+  // cobrando esta mesa" instead of reaching the route.
+  const { data: billTable } = await admin
+    .from("restaurant_tables")
+    .insert({ restaurant_id: restaurant.id, label: `${MARK}-bill` })
+    .select("id, label").single();
+  const { data: billSession } = await admin
+    .from("table_sessions")
+    .insert({ restaurant_id: restaurant.id, table_id: billTable.id })
+    .select("id").single();
+  const billOrder = await make({
+    paid: false, table_id: billTable.id, table_label: billTable.label,
+    session_id: billSession.id,
+  });
+
   // A table mid-division, on a table of its own so the cases that settle the
   // others cannot disturb it. Locked, because /api/split/pay refuses anything
   // else — and with two claims: one nobody has paid, and one already paid, so
@@ -215,6 +234,8 @@ export async function setup(env, base) {
     printableOrder,
     cashPaidOrder,
     withCardReader,
+    billTableId: billTable.id,
+    billOrder,
     lockedSplitId: lockedSplit?.id ?? null,
     splitSessionId: splitSession?.id ?? null,
     splitTableId: splitTable.id,
@@ -289,6 +310,7 @@ export async function teardown(fx) {
   if (fx.lockedSplitId) await admin.from("bill_splits").delete().eq("id", fx.lockedSplitId);
   if (fx.splitSessionId) await admin.from("table_sessions").delete().eq("id", fx.splitSessionId);
   if (fx.splitTableId) await admin.from("restaurant_tables").delete().eq("id", fx.splitTableId);
+  if (fx.billTableId) await admin.from("restaurant_tables").delete().eq("id", fx.billTableId);
   await admin.from("orders").delete().eq("note", MARK);
   // And any sitting this run opened that has nothing left in it. Only the ones
   // that were not there at setup, and only when empty: a sitting with orders on

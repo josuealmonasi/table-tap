@@ -436,8 +436,42 @@ export function cases(fx) {
           .eq("order_id", f.cashPaidOrder);
         return count > 0 ? true : "the cancel took the cash payment off the ledger with it";
       } },
-    { name: "POST /api/bill/pay (online)", as: "diner", method: "POST", path: "/api/bill/pay",
-      body: { restaurantId: r, tableId: table.id }, expect: [200, 400, 409] },
+    // This case sent no orderIds, so it was refused at the body check and never
+    // reached a line of the route — while `expect: [200, 400, 409]` accepted
+    // that refusal, the no-card-reader one, and a success, all as a pass. It is
+    // the route from the Mesa 10 bill: twelve people, "Error de red", and the
+    // diner pressing pay again.
+    { name: "POST /api/bill/pay (nothing to settle)", as: "diner", method: "POST",
+      path: "/api/bill/pay", body: { restaurantId: r, tableId: table.id },
+      expect: [400], expectError: /inválida|invalid/i },
+    { name: "POST /api/bill/pay (no card reader)", as: "diner", method: "POST",
+      path: "/api/bill/pay",
+      body: async f => ({ restaurantId: r, tableId: f.billTableId, orderIds: [f.billOrder] }),
+      expect: [409], expectError: /tarjeta|card payments/i },
+    // The whole route, as far as Stripe. A fake account answers 502, and that
+    // is the assertion: everything before it ran — the waiter and split
+    // guards, the orders query scoped by restaurant AND table, the coupon
+    // rules, the order-count cap and the metadata packing that #333 changed.
+    { name: "POST /api/bill/pay (reaches Stripe with a real bill)", as: "diner",
+      method: "POST", path: "/api/bill/pay", arrange: f => f.withCardReader(),
+      body: async f => ({ restaurantId: r, tableId: f.billTableId, orderIds: [f.billOrder] }),
+      expect: [502], expectError: /cobro|checkout|pago/i },
+    { name: "POST /api/bill/pay (more orders than one bill can name)", as: "diner",
+      method: "POST", path: "/api/bill/pay", arrange: f => f.withCardReader(),
+      body: async f => ({
+        restaurantId: r, tableId: f.billTableId,
+        orderIds: Array.from({ length: 201 }, () => f.billOrder),
+      }),
+      expect: [400], expectError: /inválida|invalid/i },
+    { name: "POST /api/bill/pay (another restaurant's table)", as: "diner",
+      method: "POST", path: "/api/bill/pay", arrange: f => f.withCardReader(),
+      body: async f => ({
+        restaurantId: r, tableId: "00000000-0000-0000-0000-000000000000",
+        orderIds: [f.billOrder],
+      }),
+      // Scoped by restaurant AND table, so an id from elsewhere matches
+      // nothing and the bill reads as settled rather than as somebody else's.
+      expect: [409], expectError: /pagada|settled/i },
 
     // ── promotions: the rest of their life ───────────────────────────────
     { name: "PATCH /api/promotions (switch off)", as: "manager", method: "PATCH", path: "/api/promotions",
