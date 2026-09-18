@@ -26,6 +26,7 @@ import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { fetchPromotions } from "@/lib/promotions-data";
 import { toCartPromos } from "@/lib/promotions";
 import { referencedItemIds, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
+import { rejectionMessage } from "@/lib/cart-rejection";
 import { raiseStockNotifications, releaseStock, reserveStock } from "@/lib/stock-service";
 import type { OrderLineItem } from "@/lib/types";
 
@@ -224,26 +225,23 @@ export async function POST(req: NextRequest) {
     });
     if (!result.ok) {
       const r = result.rejection;
-      if (r.kind === "unavailable") {
-        // Without a name — an id that was never on this menu — the sentence has
-        // to stand on its own rather than naming a blank.
-        const key = r.name ? "apiErr.itemGone" : "apiErr.itemGoneUnnamed";
-        return await cartError(key, { name: r.name }, 400, {
-          unavailableItemId: r.itemId,
-        });
-      }
-      if (r.kind === "missingModifiers") {
-        return await cartError(
-          "apiErr.chooseFirst",
-          { options: r.unanswered.join(", "), name: r.forName },
-          400,
-          { missingModifiers: r.unanswered, unansweredItemId: r.itemId },
+      // Vanished extras are the one refusal the cart can act on by itself: it
+      // drops those lines and asks again, so it gets the ids rather than a
+      // sentence. The wording of the rest lives in `rejectionMessage`.
+      if (r.kind === "removedExtras") {
+        return NextResponse.json(
+          { removedExtraIds: r.ids, removedExtraNames: r.names },
+          { status: 409 },
         );
       }
-      return NextResponse.json(
-        { removedExtraIds: r.ids, removedExtraNames: r.names },
-        { status: 409 },
-      );
+      const { key, vars } = rejectionMessage(r);
+      const extra =
+        r.kind === "unavailable"
+          ? { unavailableItemId: r.itemId }
+          : r.kind === "missingModifiers"
+            ? { missingModifiers: r.unanswered, unansweredItemId: r.itemId }
+            : {};
+      return await cartError(key, vars, 400, extra);
     }
     const verified = result.lines;
 

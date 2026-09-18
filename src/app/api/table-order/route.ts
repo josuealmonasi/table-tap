@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { rejectionMessage } from "@/lib/cart-rejection";
 import { jsonBody } from "@/lib/json-body";
 import { actingStaff } from "@/lib/api-guard";
 import { TAKES_TABLE_ORDERS } from "@/lib/membership";
@@ -119,7 +120,8 @@ export async function POST(req: NextRequest) {
     isOnOpenMenu,
   });
   if (!result.ok) {
-    return NextResponse.json({ rejection: result.rejection }, { status: 400 });
+    const { key, vars } = rejectionMessage(result.rejection);
+    return await apiError(key, 400, vars);
   }
   const verified = result.lines;
 

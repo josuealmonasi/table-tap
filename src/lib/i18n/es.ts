@@ -1022,6 +1022,8 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     loginCreate: "No se pudo crear el acceso.",
     splitPeople: "Dinos entre cuántas personas se divide.",
     splitTooMany: "Sólo {n} celular(es) pidieron en esta mesa, así que no se puede dividir entre más.",
+    tooManyLines: "Ese pedido trae demasiadas líneas (el máximo es {n}). Divídelo en dos.",
+    extrasGone: "Estos extras ya no están disponibles: {names}. Quítalos e inténtalo de nuevo.",
     splitNotReady: "Todavía falta gente por aceptar la división.",
     splitNotYours: "No tienes una parte en esta división.",
     splitAlreadyPaid: "Tu parte ya está pagada.",

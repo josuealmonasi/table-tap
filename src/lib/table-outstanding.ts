@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { unpaidOrders } from "@/lib/table-bill";
-import { billTotal, stillOwed, type Owes } from "@/lib/table-balance";
+import { billTotal, type Owes } from "@/lib/table-balance";
 import { round2 } from "@/lib/money";
 import type { Order } from "@/lib/types";
 

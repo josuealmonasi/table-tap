@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { verifyCart, type VerifiableItem } from "@/lib/verify-cart";
+import { MAX_CART_LINES, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
+import { DISH_NAME_MAX } from "@/lib/notes";
 import type { PromotionWithItems } from "@/lib/promotions";
 import type { OrderLineItem } from "@/lib/types";
 
@@ -189,5 +190,64 @@ describe("verifyCart — combos are priced by the promotion, not the cart", () =
     );
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.lines[0].extras?.[0].price).toBe(45);
+  });
+});
+
+describe("an order has a ceiling", () => {
+  it("refuses more lines than any real order carries", () => {
+    // Nothing capped this. One request built an order of ten thousand lines:
+    // MX$115,500 on the board as a single card, three and a half seconds of
+    // server time, and a kitchen ticket queued for a thermal printer that
+    // would still be spooling at closing time. No screen can produce it — the
+    // cap belongs on the route, because the route is what somebody can call.
+    const result = run(
+      Array.from({ length: MAX_CART_LINES + 1 }, () => line()),
+      [item()],
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.rejection).toEqual({ kind: "tooManyLines", limit: MAX_CART_LINES });
+    }
+  });
+
+  it("counts the lines before it prices any of them", () => {
+    // With no rows at all, a cart under the cap fails on the DISH being
+    // unknown. Over the cap it fails on the count instead — which is the proof
+    // the guard runs first and the per-line work never happens.
+    const over = run(Array.from({ length: MAX_CART_LINES + 1 }, () => line()), []);
+    expect(over.ok).toBe(false);
+    if (!over.ok) expect(over.rejection.kind).toBe("tooManyLines");
+
+    const under = run([line()], []);
+    expect(under.ok).toBe(false);
+    if (!under.ok) expect(under.rejection.kind).toBe("unavailable");
+  });
+
+  it("lets a long table through", () => {
+    // Fifty lines is a real party of twelve, and must still be priced.
+    const result = run(Array.from({ length: 50 }, () => line()), [item()]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.lines).toHaveLength(50);
+  });
+});
+
+describe("a refusal quotes the cart, so it trims it", () => {
+  it("caps the name it reads back when the dish is gone", () => {
+    // The name comes from the request when no row has it, and a forged payload
+    // sent a megabyte of it — which came back as a megabyte of error for a
+    // toast to render.
+    const result = run([line({ itemId: "ghost", name: "A".repeat(5000) })], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok && result.rejection.kind === "unavailable") {
+      expect(result.rejection.name).toHaveLength(DISH_NAME_MAX);
+    }
+  });
+
+  it("still names a dish nobody would call long", () => {
+    const result = run([line({ itemId: "ghost", name: "Enchiladas suizas" })], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok && result.rejection.kind === "unavailable") {
+      expect(result.rejection.name).toBe("Enchiladas suizas");
+    }
   });
 });

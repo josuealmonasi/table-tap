@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { rejectionMessage } from "@/lib/cart-rejection";
 import { jsonBody } from "@/lib/json-body";
 import { actingStaff } from "@/lib/api-guard";
 import { TAKES_COUNTER_ORDERS } from "@/lib/membership";
@@ -158,19 +159,8 @@ export async function POST(req: NextRequest) {
     isOnOpenMenu: onOpenMenu,
   });
   if (!result.ok) {
-    const r = result.rejection;
-    if (r.kind === "unavailable") {
-      return await apiError(r.name ? "apiErr.itemGone" : "apiErr.itemGoneUnnamed", 400, {
-        name: r.name ?? "",
-      });
-    }
-    if (r.kind === "missingModifiers") {
-      return await apiError("apiErr.chooseFirst", 400, {
-        options: r.unanswered.join(", "),
-        name: r.forName,
-      });
-    }
-    return await apiError("apiErr.verifyItems", 400);
+    const { key, vars } = rejectionMessage(result.rejection);
+    return await apiError(key, 400, vars);
   }
   const verified = result.lines;
 

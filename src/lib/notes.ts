@@ -26,3 +26,20 @@ export function capName(name: string | null | undefined): string | undefined {
   const text = (name ?? "").replace(/\s+/g, " ").trim();
   return text ? text.slice(0, NAME_MAX) : undefined;
 }
+
+/** Long enough for the wordiest dish on a real menu, and no longer. */
+export const DISH_NAME_MAX = 80;
+
+/**
+ * A dish name out of a request, trimmed before anyone is shown it.
+ *
+ * When a cart names an id the menu no longer has, there is no row to take the
+ * name from, so the refusal falls back to the one the cart sent. That string
+ * is the caller's: a forged payload with a one-megabyte name came back as a
+ * one-megabyte error, which the screen then tried to fit in a toast. React
+ * escapes it, so it was never a script — it was simply unreadable, and free
+ * for anyone holding a login to send.
+ */
+export function capDishName(name: string | null | undefined): string {
+  return (name ?? "").replace(/\s+/g, " ").trim().slice(0, DISH_NAME_MAX);
+}
