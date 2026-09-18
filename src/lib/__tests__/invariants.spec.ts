@@ -1224,3 +1224,53 @@ describe("a refusal always carries a sentence", () => {
     ).toEqual([]);
   });
 });
+
+describe("Stripe's limits are respected where we build its payloads", () => {
+  it("never joins an unbounded list into one metadata value", () => {
+    // A metadata value stops at 500 characters, which is fourteen order ids.
+    // `settle_order_ids: ids.join(",")` fitted a table of thirteen and made
+    // the fourteenth unable to pay by card at all.
+    const offenders = walkAll("src/app/api")
+      .filter(f => f.endsWith("route.ts"))
+      .filter(f => /settle_order_ids:\s*[^\n]*\.join\(/.test(read(f)));
+    expect(
+      offenders,
+      `These build a metadata value by joining a list, which Stripe refuses\n` +
+        `past 500 characters. Use \`packOrderIds\`:\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
+
+  it("caps the card cart below Stripe's line-item ceiling", () => {
+    // Checkout emits one line item per cart line plus the service charge and
+    // the tip, and Stripe Checkout takes 100 of them.
+    const checkout = read("src/app/api/checkout/route.ts");
+    expect(
+      checkout.includes("MAX_CARD_CART_LINES"),
+      "checkout must cap the cart at the card path's own limit, not the general one",
+    ).toBe(true);
+  });
+
+  it("trims the Stripe product names that carry a value from the database", () => {
+    // Dish names and restaurant names are written from the browser under RLS
+    // with no column cap, and Stripe refuses a product name over 250. The
+    // fixed labels beside them — "Tip", "Service charge (10%)" — are bounded
+    // by the code that writes them and are deliberately not the subject here.
+// Two ways this regex lied before it worked. `[^}\n]` and not `[^}]`,
+    // because a class that allows newlines walks off the end of the line and
+    // finds a `${}` several lines below. And the "not already wrapped" test
+    // covers the whole rest of the line: put after `\\s*`, it is checked at a
+    // position `\\s*` can reach by matching nothing, so it passed on the space
+    // and the call it was meant to exclude sailed through. Both versions
+    // accused two call sites that were already correct.
+    const risky =
+      /\bname:(?![^\n]*stripeProductName)[^\n]*\$\{[^}\n]*\b(?:restaurant\.name|v\.name)\b/;
+    const offenders = walkAll("src/app/api")
+      .filter(f => f.endsWith("route.ts"))
+      .filter(f => risky.test(read(f)));
+    expect(
+      offenders,
+      `These interpolate a name out of the database into a Stripe product name\n` +
+        `without trimming it to 250 characters:\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
+});

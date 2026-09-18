@@ -1,5 +1,6 @@
 import { closeSessionsFor } from "@/lib/table-session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { unpackOrderIds } from "@/lib/stripe-limits";
 import { recordPayment, recordPayments } from "@/lib/payments";
 import { releaseStock } from "@/lib/stock-service";
 import type { OrderLineItem } from "@/lib/types";
@@ -108,10 +109,7 @@ async function settleSplitShare(session: Stripe.Checkout.Session): Promise<void>
       if (shareFee > 0) await chargeFeeOnSitting(split.session_id as string, shareFee);
 
       // Anything they ordered after the freeze is theirs, and settles now.
-      const ownIds = (session.metadata?.settle_order_ids ?? "")
-        .split(",")
-        .map(x => x.trim())
-        .filter(Boolean);
+      const ownIds = unpackOrderIds(session.metadata);
       if (ownIds.length > 0) {
         const { data: own } = await db
           .from("orders")
@@ -206,10 +204,10 @@ async function chargeFeeOnSitting(sessionId: string, fee: number): Promise<void>
  * A whole table settled in one payment: several orders, one card.
  */
 async function settleBill(session: Stripe.Checkout.Session): Promise<void> {
-  const settleIds = (session.metadata?.settle_order_ids ?? "")
-    .split(",")
-    .map(id => id.trim())
-    .filter(Boolean);
+  // Across every key the ids were written to, first key first. A session
+  // created before the split shipped carries them all in the first one, and
+  // reads back the same way.
+  const settleIds = unpackOrderIds(session.metadata);
   const db = createAdminClient();
   const { data: settled } = await db
     .from("orders")
@@ -342,7 +340,7 @@ async function settleOrder(session: Stripe.Checkout.Session): Promise<void> {
 export async function abandonCheckout(session: Stripe.Checkout.Session): Promise<void> {
   // A bill that was never paid: the orders are real food already eaten, so
   // only the coupon reservation goes back — the rows stay on the table.
-  const settled = (session.metadata?.settle_order_ids ?? "").split(",")[0]?.trim();
+  const settled = unpackOrderIds(session.metadata)[0];
   if (settled) {
     await releaseReservation(settled);
     return;
