@@ -177,6 +177,41 @@ export async function setup(env, base) {
     session_id: billSession.id,
   });
 
+  // Somebody on the payroll for the staff routes to act on.
+  //
+  // Changing a role and removing a member are the two routes that decide who
+  // may do what, and neither had ever run: their cases look the member up by
+  // the email the INVITE case uses, and inviting needs SMTP that development
+  // does not have. So the id was always empty, both routes refused on the
+  // missing field, and `expect: [200, 400, 404]` called it a pass.
+  //
+  // Made directly rather than by invitation, because the invitation is the
+  // part that cannot work here. `staff.user_id` is not null and points at
+  // auth.users, so there has to be a real login behind it.
+  const staffEmail = `${MARK}-crew@tabletap.dev`;
+  let staffUserId = null;
+  {
+    const { data: existing } = await admin.auth.admin.listUsers({ perPage: 200 });
+    staffUserId = (existing?.users ?? []).find(u => u.email === staffEmail)?.id ?? null;
+    if (!staffUserId) {
+      const { data: made } = await admin.auth.admin.createUser({
+        email: staffEmail, password: "demo123", email_confirm: true,
+      });
+      staffUserId = made?.user?.id ?? null;
+    }
+  }
+  let crewId = null;
+  if (staffUserId) {
+    const { data: crew } = await admin
+      .from("staff")
+      .insert({
+        restaurant_id: restaurant.id, user_id: staffUserId,
+        email: staffEmail, role: "kitchen",
+      })
+      .select("id").single();
+    crewId = crew?.id ?? null;
+  }
+
   // A bill for the waiter to ask a discount on, and a coupon that is still
   // there when they ask. The gate mints API-001 and then switches it off and
   // deletes it, all before the discount cases run — so the code they asked for
@@ -268,6 +303,8 @@ export async function setup(env, base) {
     printableOrder,
     cashPaidOrder,
     withCardReader,
+    crewId,
+    staffUserId,
     billTableId: billTable.id,
     billOrder,
     discountTableId: discountTable.id,
@@ -351,6 +388,10 @@ export async function teardown(fx) {
   if (fx.splitTableId) await admin.from("restaurant_tables").delete().eq("id", fx.splitTableId);
   if (fx.billTableId) await admin.from("restaurant_tables").delete().eq("id", fx.billTableId);
   if (fx.discountTableId) await admin.from("restaurant_tables").delete().eq("id", fx.discountTableId);
+  // The member and the login behind them. The DELETE case may already have
+  // taken the row, which is the point of it — the login is ours either way.
+  if (fx.crewId) await admin.from("staff").delete().eq("id", fx.crewId);
+  if (fx.staffUserId) await admin.auth.admin.deleteUser(fx.staffUserId).catch(() => {});
   // The requests a run leaves behind. Neither table was ever swept, so every
   // run added a pending walkout and a pending discount to the manager's queue
   // — and the first sweep I wrote for it deleted the seeded ones too, which is
