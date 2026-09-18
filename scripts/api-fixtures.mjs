@@ -239,6 +239,34 @@ export async function setup(env, base) {
     })
     .select("code").single();
 
+  /**
+   * Put a countable number of one dish on the shelf, and take it off after.
+   *
+   * Nothing in the demo menu has stock, so the whole reserve-and-release path
+   * is unreachable: a checkout that fails after reserving must put the count
+   * back, and a charge that never happened must not quietly empty the shelf.
+   * `undoClaim` does both — coupon and stock — and only the coupon half was
+   * ever watched.
+   */
+  const withStock = async (count = 20) => {
+    const { data: was } = await admin
+      .from("menu_items").select("stock").eq("id", dish.id).maybeSingle();
+    await admin.from("menu_items").update({ stock: count }).eq("id", dish.id);
+    return async () => {
+      await admin.from("menu_items").update({ stock: was?.stock ?? null }).eq("id", dish.id);
+    };
+  };
+
+  // A coupon of its own for the card path, so counting its uses cannot be
+  // confused by the discount flow spending the other one.
+  const { data: cardCoupon } = await admin
+    .from("coupons")
+    .insert({
+      restaurant_id: restaurant.id, code: "API-004", kind: "percent",
+      value: 10, active: true,
+    })
+    .select("id, code").single();
+
   // A table mid-division, on a table of its own so the cases that settle the
   // others cannot disturb it. Locked, because /api/split/pay refuses anything
   // else — and with two claims: one nobody has paid, and one already paid, so
@@ -303,6 +331,7 @@ export async function setup(env, base) {
     printableOrder,
     cashPaidOrder,
     withCardReader,
+    withStock,
     crewId,
     staffUserId,
     billTableId: billTable.id,
@@ -310,6 +339,8 @@ export async function setup(env, base) {
     discountTableId: discountTable.id,
     discountOrder,
     discountCode: discountCoupon?.code ?? "API-003",
+    cardCouponId: cardCoupon?.id ?? null,
+    cardCouponCode: cardCoupon?.code ?? "API-004",
     lockedSplitId: lockedSplit?.id ?? null,
     splitSessionId: splitSession?.id ?? null,
     splitTableId: splitTable.id,

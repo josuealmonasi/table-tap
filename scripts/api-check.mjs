@@ -109,6 +109,20 @@ try {
       }
     }
 
+    // What the route DID, whatever it answered.
+    //
+    // `check` below only runs on a 200, which is right for reading a body but
+    // useless for a refusal: a case asserting that a failed charge gives a
+    // coupon use back expects 500, so its check never ran and the assertion
+    // was decorative. This one runs for any status the case allows.
+    if (c.effect) {
+      const verdict = await c.effect(fx, res.status);
+      if (verdict !== true) {
+        bad(`${c.name} — ${res.status}, and ${verdict}`);
+        continue;
+      }
+    }
+
     // The right status with the wrong body is still a failure: that is how an
     // endpoint returning 200 and `saved: 0` got through.
     if (c.check && res.status === 200) {
