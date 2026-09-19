@@ -11,8 +11,65 @@
 // probe order there shows up in their takings and in their corte.
 // ============================================================================
 
+/** The line every fixture order carries, and the name on its cash payment. */
+const MARK = "rls fixture";
+const ACTOR = "rls-fixture@tabletap.dev";
+
+/**
+ * Anything a previous run left behind, before this one plants more.
+ *
+ * `remove()` runs at the end, which is fine until a run does not reach the
+ * end. This one crashed mid-sweep and left its cash payment on the ledger —
+ * and `pnpm money` then failed, correctly, on a cashier with no corte line
+ * behind MX$11.50, four gates and an hour later. The comment beside the
+ * payment already warned that this happens; nothing stopped it happening.
+ *
+ * Everything the fixture plants hangs off its order, which is recognisable by
+ * the line it carries. Taking the order first would orphan the rest, so the
+ * children go in the same order `remove()` uses.
+ */
+async function sweepLeftovers(admin) {
+  // Matched in JavaScript, not in the query. A `contains` on a jsonb array
+  // wants the value as JSON text and answers "invalid input syntax for type
+  // json" when handed a JS array — quietly, as an error object nobody was
+  // reading, which is how the first version of this swept nothing and said so
+  // by saying nothing. The neighbour has a handful of orders; reading them is
+  // cheaper than being clever.
+  // Not scoped to THIS run's neighbour. Which restaurant is the neighbour
+  // depends on what the seed produced, so a leftover can belong to a different
+  // one than the run now cleaning up — and scoping the sweep to the current
+  // one is exactly why the first attempt removed the stray payment and left
+  // its order standing, paid, with nothing behind it.
+  const { data: theirs } = await admin.from("orders").select("id, items");
+  const ids = (theirs ?? [])
+    .filter(o => (o.items ?? []).some(line => line?.name === MARK))
+    .map(o => o.id);
+
+  if (ids.length > 0) {
+    for (const table of ["dish_ratings", "coupon_redemptions", "print_jobs", "payments"]) {
+      await admin.from(table).delete().in("order_id", ids);
+    }
+    await admin.from("orders").delete().in("id", ids);
+  }
+
+  // And a payment that outlived its order: `payments.order_id` is
+  // `on delete set null`, so a run that got as far as the order and no
+  // further leaves money on the ledger with nothing to trace it back to.
+  const { data: orphans } = await admin
+    .from("payments").select("id").eq("actor_email", ACTOR);
+  if (orphans?.length) {
+    await admin.from("payments").delete().in("id", orphans.map(p => p.id));
+  }
+
+  return ids.length + (orphans?.length ?? 0);
+}
+
 /** One row in each tenant-scoped table, belonging to the neighbour. */
 export async function plantNeighbour(admin, restaurantId) {
+  const swept = await sweepLeftovers(admin);
+  if (swept > 0) {
+    console.log(`  (cleared ${swept} row set(s) a previous run left behind)`);
+  }
   const planted = {};
   const keep = async (name, table, row) => {
     const { data, error } = await admin.from(table).insert(row).select("id").maybeSingle();
@@ -43,7 +100,7 @@ export async function plantNeighbour(admin, restaurantId) {
     // the bug a different check is watching for.
     await keep("payment", "payments", {
       restaurant_id: restaurantId, order_id: orderId, amount: 11.5, method: "cash",
-      actor_email: "rls-fixture@tabletap.dev",
+      actor_email: ACTOR,
     });
     await keep("print_job", "print_jobs", {
       restaurant_id: restaurantId, order_id: orderId, kind: "kitchen",
