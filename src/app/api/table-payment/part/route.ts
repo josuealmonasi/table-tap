@@ -61,8 +61,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const before = await tableOutstanding(actor.restaurantId, body.tableId);
   if (before.owed <= 0) return await apiError("apiErr.nothingToSettle", 409);
 
-  // Capped at what is owed: a waiter typing 1000 for 100 must not leave a bill
-  // owing minus MX$900. The tip is not capped — it is the diner's own.
+  // Both are capped, and by different things. The amount is capped at what is
+  // owed, so a waiter typing 1000 for 100 does not leave a bill owing minus
+  // MX$900. The tip is capped at the amount actually being collected — the
+  // ceiling every other tip in the app has, because a mistyped MX$50 gratuity
+  // on a MX$20 collection is cash somebody has to explain at the end of the
+  // night.
+  //
+  // This comment used to say the tip was not capped. It has been capped since
+  // `applyPayment` was written, and the line below is the one that does it —
+  // so a diner settling the last MX$10 of a table and leaving MX$60 for the
+  // staff is recorded as tipping MX$10, and the rest belongs on the whole-table
+  // settle instead, where the ceiling is the whole bill.
   const taken = applyPayment(before.owed, Number(body.amount), Number(body.tip));
   if (taken.amount <= 0) return await apiError("apiErr.invalidRequest", 400);
 
