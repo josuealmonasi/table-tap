@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import ts from "typescript";
 import path from "node:path";
+import { en } from "@/lib/i18n/en";
 
 /**
  * Rules that span more than one file, with nothing else to enforce them.
@@ -1321,6 +1322,49 @@ describe("one order, one code", () => {
     expect(
       builders,
       `These build an order code of their own. There is one in \`types.ts\`:\n${builders.join("\n")}`,
+    ).toEqual([]);
+  });
+});
+
+describe("every key a person is shown has words behind it", () => {
+  it("resolves every i18n key written as a literal", () => {
+    // `translate` takes `key: string`, so TypeScript never sees these. A miss
+    // returns the key itself — deliberately, so a gap shows rather than
+    // crashing — which means a typo reaches a customer as the text
+    // "apiErr.tooManyLines" and nothing in the build says a word.
+    //
+    // The nested SHAPE of the two dictionaries is type-checked (es.ts is typed
+    // as Messages, so a missing or extra key is a compile error). What is not
+    // checked is whether the string somebody passes matches any of it.
+    const resolve = (key: string): unknown =>
+      key.split(".").reduce<unknown>(
+        (o, k) => (o && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined),
+        en as unknown,
+      );
+
+    const missing: string[] = [];
+    const files = walkAll("src").filter(
+      f => /\.tsx?$/.test(f) && !f.includes("__tests__") && !f.includes("/i18n/"),
+    );
+    for (const file of files) {
+      const src = read(file);
+      const patterns = [
+        /\bt\(\s*["']([a-zA-Z][\w.]*\.[\w.]+)["']/g,
+        /translate\(\s*\w+\s*,\s*["']([a-zA-Z][\w.]*\.[\w.]+)["']/g,
+        /apiError\(\s*["']([a-zA-Z][\w.]*\.[\w.]+)["']/g,
+        // Keys that travel as data rather than as an argument — the timezone
+        // list hands one to the settings dropdown for every zone it offers.
+        /labelKey:\s*["']([a-zA-Z][\w.]*\.[\w.]+)["']/g,
+      ];
+      for (const pattern of patterns) {
+        for (const m of src.matchAll(pattern)) {
+          if (typeof resolve(m[1]) !== "string") missing.push(`${file}: ${m[1]}`);
+        }
+      }
+    }
+    expect(
+      missing,
+      `These keys have no words behind them, so a person reads the key:\n${missing.join("\n")}`,
     ).toEqual([]);
   });
 });
