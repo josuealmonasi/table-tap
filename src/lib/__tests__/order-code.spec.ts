@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { orderCode } from "@/lib/types";
-import { orderCodeRange, tableLabelQuery } from "@/lib/order-code";
+import { filterValue, orderCodeRange, tableLabelQuery } from "@/lib/order-code";
+import { randomUUID } from "node:crypto";
 
 describe("finding an order by its code", () => {
   it("covers the id the code was made from", () => {
@@ -65,5 +66,49 @@ describe("looking an order up by its table", () => {
   it("keeps a name that merely starts with those letters", () => {
     // "Mesanine" is a room, not "mesa" plus a number.
     expect(tableLabelQuery("Mesanine")).toBe("Mesanine");
+  });
+});
+
+/**
+ * The two halves, asserted against each other rather than one id at a time.
+ *
+ * `orderCode` writes the code on the ticket and `orderCodeRange` reads it back
+ * into the ids it covers. They live in different files, and a cashier types
+ * what the customer reads off their phone — a search that cannot find it sends
+ * somebody to look through the pass by hand.
+ */
+describe("a code finds the order it names, for any order", () => {
+  it("round-trips twenty thousand ids", () => {
+    const misses: string[] = [];
+    for (let i = 0; i < 20_000; i++) {
+      const id = randomUUID();
+      const range = orderCodeRange(orderCode(id));
+      if (!range) {
+        misses.push(`${id} → ${orderCode(id)} → not recognised as a code`);
+      } else if (!(id >= range.from && id <= range.to)) {
+        misses.push(`${id} → ${orderCode(id)} → [${range.from}, ${range.to}]`);
+      }
+    }
+    expect(misses.slice(0, 3)).toEqual([]);
+  });
+});
+
+/**
+ * `or()` takes ONE raw string and splits it on commas, so a diner called
+ * "Perez, Juan" would not merely fail to be found — the half after the comma
+ * would be read as another condition.
+ */
+describe("a search term cannot become a filter", () => {
+  it("quotes it, and escapes the quote and the backslash", () => {
+    expect(filterValue("Perez, Juan")).toBe('"Perez, Juan"');
+    expect(filterValue('say "hi"')).toBe('"say \\"hi\\""');
+    expect(filterValue("back\\slash")).toBe('"back\\\\slash"');
+  });
+
+  it("leaves an injected condition inside the quotes, where it is just text", () => {
+    const evil = "x,customer_name.not.is.null";
+    const wrapped = filterValue(evil);
+    expect(wrapped.startsWith('"') && wrapped.endsWith('"')).toBe(true);
+    expect(wrapped.slice(1, -1)).toBe(evil);
   });
 });

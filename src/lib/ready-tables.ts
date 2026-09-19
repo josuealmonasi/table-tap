@@ -1,5 +1,4 @@
-import type { Order } from "@/lib/types";
-import { shortCode } from "@/lib/open-bills";
+import { orderCode, type Order } from "@/lib/types";
 
 /**
  * Food that is cooked and still on the pass.
@@ -58,7 +57,7 @@ export function readyToDeliver(orders: Order[]): ReadyTable[] {
     tables.set(key, {
       key,
       label: order.table_label,
-      code: order.table_id ? null : shortCode(order.id),
+      code: order.table_id ? null : orderCode(order.id),
       customerName: order.customer_name ?? null,
       orderIds: [order.id],
       dishes: dishesIn(order),
