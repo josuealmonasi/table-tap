@@ -197,8 +197,13 @@ export async function seedMock(pg) {
     // pass having run none of its own code. Paying at the counter walks the
     // same path (verify the cart, price it, write the order) and needs no
     // Stripe at all, so with this on the route can finally be exercised.
-    `insert into restaurants (name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, owner_id, plan, allow_pay_later, print_token, auto_print_kitchen)
-     values ($1, 'Fresh plates, fast service', '🍽️', 'MXN', 10, true, true, $2, 'casa', true, $3, true) returning id`,
+    // `plan_status` is spelled out because its column default is 'trialing'
+    // and `trial_ends_at` has no default at all — so an insert that mentions
+    // neither lands on a trial with no end, which never expires and shows the
+    // owner "Prueba · quedan 0 días" for ever. The demo restaurant is meant to
+    // look like somebody's real subscribed business.
+    `insert into restaurants (name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, owner_id, plan, plan_status, allow_pay_later, print_token, auto_print_kitchen)
+     values ($1, 'Fresh plates, fast service', '🍽️', 'MXN', 10, true, true, $2, 'casa', 'active', true, $3, true) returning id`,
     [DEMO_RESTAURANT, ownerId, randomBytes(32).toString("base64url")],
   );
   const rid = rest.id;
