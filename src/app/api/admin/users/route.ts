@@ -85,9 +85,22 @@ export async function POST(req: NextRequest) {
         .insert({ user_id: created.user.id, email });
       if (error) throw error;
     } else if (role === "owner" && !restaurantId) {
-      const { error } = await db
-        .from("restaurants")
-        .insert({ name: (restaurantName ?? "").trim(), owner_id: created.user.id });
+      // The tier and its state, spelled out. `plan_status` defaults to
+      // 'trialing' and `trial_ends_at` to nothing, so an insert that mentions
+      // neither starts a trial that cannot end — `expired(null)` is false, so
+      // `getPlan` never settles it — and the owner's plan screen reads
+      // "Prueba · quedan 0 días" for ever, on a plan that is not a trial.
+      //
+      // Nothing was being given away: `plan` defaults to 'carta', the free
+      // tier, so the limits were already right. It was the status that lied.
+      // A restaurant opened from the admin screen starts on the free tier,
+      // active; the thirty-day trial belongs to somebody signing themselves up.
+      const { error } = await db.from("restaurants").insert({
+        name: (restaurantName ?? "").trim(),
+        owner_id: created.user.id,
+        plan: "carta",
+        plan_status: "active",
+      });
       if (error) throw error;
     } else {
       const { error } = await db.from("staff").insert({

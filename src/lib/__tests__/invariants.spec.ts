@@ -1368,3 +1368,61 @@ describe("every key a person is shown has words behind it", () => {
     ).toEqual([]);
   });
 });
+
+describe("a trial has an end", () => {
+  it("never starts one without saying when it stops", () => {
+    // `plan_status` defaults to 'trialing' and `trial_ends_at` defaults to
+    // nothing, so an insert that mentions neither creates a trial that cannot
+    // expire: `expired(null)` is false, `getPlan` never settles it, and the
+    // owner reads "Prueba · quedan 0 días" for ever on a plan that is not a
+    // trial. /api/admin/users did exactly that.
+    //
+    // Read out of the INSERT, not out of the file. The first version of this
+    // searched the whole source for the word `plan_status`, which meant the
+    // comment explaining the fix satisfied it — I reverted the fix and the
+    // guard stayed green.
+    const payloadOf = (src: string): string[] => {
+      const out: string[] = [];
+      for (const m of src.matchAll(/from\(["']restaurants["']\)\s*\.insert\(/g)) {
+        // Walk the braces so a nested object does not end the payload early.
+        let depth = 0;
+        let started = false;
+        let text = "";
+        for (let i = m.index! + m[0].length; i < src.length; i++) {
+          const ch = src[i];
+          if (ch === "{") { depth++; started = true; }
+          if (started) text += ch;
+          if (ch === "}") { depth--; if (depth === 0) break; }
+        }
+        out.push(text);
+      }
+      for (const m of src.matchAll(/insert into restaurants\s*\(([^)]*)\)/gi)) out.push(m[1]);
+      return out;
+    };
+
+    // Settled in a second statement is still settled. The seed builds a
+    // restaurant on the top tier so the demo data fits under the limits, then
+    // downgrades it — which is also what a real downgrade looks like.
+    const settlesLater = (src: string): boolean =>
+      /update\s+restaurants[\s\S]{0,200}?\bplan_status\b/i.test(src) ||
+      /\.update\(\s*\{[^}]*\bplan_status\b/.test(src);
+
+    const offenders: string[] = [];
+    for (const file of walkAll("src").concat(walkAll("scripts"))) {
+      if (!/\.(ts|tsx|mjs)$/.test(file) || file.includes("__tests__")) continue;
+      const src = read(file);
+      if (settlesLater(src)) continue;
+      for (const payload of payloadOf(src)) {
+        const setsStatus = /\bplan_status\b/.test(payload);
+        const setsEnd = /\btrial_ends_at\b/.test(payload);
+        const startsTrial = /["']trialing["']/.test(payload);
+        if (!setsStatus) offenders.push(`${file} — creates a restaurant with no plan_status`);
+        else if (startsTrial && !setsEnd) offenders.push(`${file} — starts a trial with no end date`);
+      }
+    }
+    expect(
+      offenders,
+      `These create a restaurant without settling what plan it is on:\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
+});
