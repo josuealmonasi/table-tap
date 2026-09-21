@@ -53,8 +53,15 @@ export function isAllowedTimeZone(zone: string): boolean {
 
 /**
  * The zone's current offset, e.g. "GMT-6". Shown beside the city so two zones
- * an hour apart are told apart without knowing the geography — and it follows
- * daylight saving, which is the whole reason Cancún and Mérida differ.
+ * an hour apart are told apart without knowing the geography, and worked out
+ * at the moment it is asked so it follows daylight saving where there is any:
+ * Tijuana and the four US zones move their clocks, Phoenix does not.
+ *
+ * NOT the reason Cancún and Mérida differ, which this comment used to claim.
+ * Mexico stopped changing its clocks in 2022, so both are fixed — Cancún on
+ * GMT-5 all year and Mérida on GMT-6 all year. They are an hour apart in
+ * January as much as in July, which is exactly why a restaurant in one must
+ * not be offered only the other.
  */
 export function offsetLabel(zone: string, at: Date = new Date()): string {
   try {
