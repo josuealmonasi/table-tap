@@ -225,6 +225,66 @@ if (!era) {
       );
 }
 
+// ── Every sale handed back is written down ─────────────────────────────────
+//
+// A cancelled sale keeps its payment — the money really did arrive — and the
+// handback is a line in the activity log naming who TOOK it, which is what the
+// corte subtracts from that person's drawer. Before those lines carried an
+// amount, a cash sale cancelled and handed back left the corte expecting the
+// cash, and an honest waiter read as short by exactly that much. The ledger and
+// the collection log both still said +100, so the drawer check above agreed
+// with itself and could not see it.
+//
+// So: a paid order cancelled from REFUND_ERA on must have refund lines that add
+// up to its payments. Cancels before it were logged without an amount and
+// cannot be reconciled after the fact; like the drawer's era, that history is
+// left alone rather than guessed at.
+const REFUND_ERA = "2026-09-22T00:00:00Z";
+{
+  const { data: cancelLogs, error: gErr } = await db
+    .from("user_logs").select("restaurant_id, action, detail")
+    .eq("entity", "order").in("action", ["refunded", "cancelled"]).gte("created_at", REFUND_ERA);
+
+  if (gErr) {
+    bad(`cannot read the cancel log: ${gErr.message}`);
+  } else {
+    const unwritten = [];
+    const disagreeing = [];
+    let checked = 0;
+    for (const o of orders.filter(o => o.status === "cancelled" && o.paid)) {
+      const code = o.id.slice(0, 8);
+      const mine = cancelLogs.filter(
+        l => l.restaurant_id === o.restaurant_id && (l.detail ?? "").split(" ").includes(`order=${code}`),
+      );
+      // Cancelled before the era, or seeded straight into the table: nothing
+      // after REFUND_ERA says it was cancelled, so there is nothing to hold it to.
+      if (mine.length === 0) continue;
+      checked++;
+      const refunds = mine.filter(l => l.action === "refunded");
+      const handedBack = refunds.reduce((sum, l) => {
+        const m = /(?:^| )amount=([\d.]+)/.exec(l.detail ?? "");
+        return sum + (m ? Number(m[1]) : 0);
+      }, 0);
+      // A sitting-paid order has no payment of its own; its handback is its total.
+      const arrived = paidFor.get(o.id) ?? Number(o.total);
+      if (refunds.length === 0) unwritten.push(`${code} (MX$${arrived.toFixed(2)})`);
+      else if (Math.abs(handedBack - arrived) > CENT) {
+        disagreeing.push(`${code}: paid MX$${arrived.toFixed(2)}, handed back MX$${handedBack.toFixed(2)}`);
+      }
+    }
+    if (unwritten.length === 0 && disagreeing.length === 0) {
+      ok(`every sale handed back is written down (${checked} since ${REFUND_ERA.slice(0, 10)})`);
+    } else {
+      if (unwritten.length) {
+        bad(`${unwritten.length} paid order(s) cancelled with no handback written down: ${unwritten.slice(0, 3).join("; ")}`);
+      }
+      if (disagreeing.length) {
+        bad(`${disagreeing.length} handback(s) that do not match what was paid: ${disagreeing.slice(0, 3).join("; ")}`);
+      }
+    }
+  }
+}
+
 // ── Every discount given away is written down ──────────────────────────────
 //
 // `coupons.uses_count` is what enforces the limit, and it is incremented by

@@ -1426,3 +1426,23 @@ describe("a trial has an end", () => {
     ).toEqual([]);
   });
 });
+
+describe("a sale is handed back once", () => {
+  it("cancels conditionally, so of two racing cancels only one writes a handback", () => {
+    // The handback line is money: the corte takes it out of the drawer of
+    // whoever took the cash. Two cancels racing on an unconditional write both
+    // succeed, both log, and the sale leaves the drawer twice — while the
+    // stock it held goes back on the shelf twice.
+    const src = read("src/app/api/orders/cancel/route.ts");
+    const at = src.indexOf('.update({ status: "cancelled"');
+    expect(at, "the cancel route no longer sets the status where this looks").toBeGreaterThan(-1);
+    const write = src.slice(at, src.indexOf(";", at));
+    expect(write, "the cancel write is not conditional on the status it read").toMatch(/\.in\("status"|\.eq\("status"/);
+    expect(write, "the cancel write does not say whether it moved a row").toMatch(/\.select\(/);
+
+    const refused = src.slice(at).search(/if \(!\w+\?\.length\) return/);
+    const handback = src.indexOf('action: "refunded"');
+    expect(refused, "nothing refuses the cancel that lost the race").toBeGreaterThan(-1);
+    expect(handback, "the handback is written before the race is settled").toBeGreaterThan(at + refused);
+  });
+});

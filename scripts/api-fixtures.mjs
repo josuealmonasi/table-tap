@@ -309,6 +309,12 @@ export async function setup(env, base) {
     method: "cash", actor_email: "demo@tabletap.dev", client_ref: `${MARK}-cash-${cashPaidOrder}`,
   });
 
+  // A sale settled with no payment of its own — the way an order ends up when
+  // its table is collected in parts and the last part closes the bill. The
+  // money is on the sitting, spread over whoever collected it, so its handback
+  // has no one drawer to leave and must not pretend to.
+  const sittingPaidOrder = await make({ paid: true, pay_method: "cash", status: "received" });
+
   // A ticket of our own for the printer to collect, so the cases below do not
   // race the seed's or swallow one a real screen queued. Queued by the trigger
   // on `status = 'received'`, not inserted here — inserting it collides with
@@ -330,6 +336,7 @@ export async function setup(env, base) {
     },
     printableOrder,
     cashPaidOrder,
+    sittingPaidOrder,
     withCardReader,
     withStock,
     crewId,

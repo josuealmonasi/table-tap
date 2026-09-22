@@ -537,10 +537,35 @@ export function cases(fx) {
         // The money genuinely arrived, so the payment stays. The ledger expects
         // exactly this: its check for money against an unsettled order skips
         // cancelled ones on purpose.
-        const { count } = await f.admin
-          .from("payments").select("id", { count: "exact", head: true })
-          .eq("order_id", f.cashPaidOrder);
-        return count > 0 ? true : "the cancel took the cash payment off the ledger with it";
+        const { data: paid } = await f.admin
+          .from("payments").select("amount").eq("order_id", f.cashPaidOrder);
+        if (!paid?.length) return "the cancel took the cash payment off the ledger with it";
+        // …and so the handback has to be written down, against whoever took
+        // the cash. Without it the corte still expects the notes in that
+        // person's drawer, and an honest waiter reads as short by the sale.
+        const { data: lines } = await f.admin
+          .from("user_logs").select("detail")
+          .eq("entity", "order").eq("action", "refunded")
+          .like("detail", `%order=${f.cashPaidOrder.slice(0, 8)}%`);
+        const line = lines?.[0]?.detail ?? "";
+        if (!line) return "cancelled a cash sale and wrote no handback: the corte still expects the cash";
+        const want = `amount=${Number(paid[0].amount).toFixed(2)} method=cash collector=demo@tabletap.dev`;
+        return line.includes(want) || `the handback reads "${line}", not "${want}"`;
+      } },
+    { name: "POST /api/orders/cancel (paid with its table, in cash)", as: "owner", method: "POST",
+      path: "/api/orders/cancel", body: async f => ({ id: f.sittingPaidOrder }), expect: [200],
+      check: async (_d, f) => {
+        const { data: o } = await f.admin
+          .from("orders").select("total").eq("id", f.sittingPaidOrder).maybeSingle();
+        const { data: lines } = await f.admin
+          .from("user_logs").select("detail")
+          .eq("entity", "order").eq("action", "refunded")
+          .like("detail", `%order=${f.sittingPaidOrder.slice(0, 8)}%`);
+        const line = lines?.[0]?.detail ?? "";
+        if (!line) return "cancelled a paid order and wrote no handback";
+        const want = `amount=${Number(o?.total).toFixed(2)} method=cash`;
+        if (!line.endsWith(want)) return `the handback reads "${line}", not "…${want}"`;
+        return !line.includes("collector=") || `named a drawer for money no drawer took: "${line}"`;
       } },
     // This case sent no orderIds, so it was refused at the body check and never
     // reached a line of the route — while `expect: [200, 400, 409]` accepted

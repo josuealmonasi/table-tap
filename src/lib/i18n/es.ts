@@ -309,6 +309,7 @@ myBill: "Ver mi cuenta",
     online: "Pagado en línea",
     writtenOff: "Cancelado",
     discounted: "Descuentos",
+    refunded: "Devuelto",
     signature: "Firma de quien entrega y de quien recibe:",
   },
   till: {
