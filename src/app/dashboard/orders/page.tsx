@@ -8,6 +8,7 @@ import type { Order, ServiceRequest } from "@/lib/types";
 import { currentUser } from "@/lib/current-user";
 import { startOfLocalDay } from "@/lib/day-window";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
+import { LIVE_FLOW } from "@/lib/order-flow";
 
 export const dynamic = "force-dynamic";
 
@@ -46,14 +47,17 @@ export default async function OrdersPage() {
   // three round trips with the kitchen waiting in front of the screen.
   // The day's till figure is still skipped when the viewer cannot see it.
   const [ordersRes, requestsRes, todayRes] = await Promise.all([
-    // Seed the board with recent paid orders (unpaid/pending ones never show).
+    // Every order still on the board, however many came after it. This was
+    // the newest 100 of ANY status, filtered to the live ones afterwards — so
+    // after a busy stretch an order the kitchen had not started was simply not
+    // loaded, while the Pedidos badge, which counts by status, went on
+    // counting it. History pages through the rest on its own.
     supabase
       .from("orders")
       .select("*")
       .eq("restaurant_id", r.id)
-      .neq("status", "pending_payment")
-      .order("created_at", { ascending: false })
-      .limit(100),
+      .in("status", LIVE_FLOW)
+      .order("created_at", { ascending: false }),
     supabase
       .from("service_requests")
       .select("*")
@@ -62,7 +66,7 @@ export default async function OrdersPage() {
       .gte("created_at", shiftStart.toISOString())
       .order("created_at", { ascending: false }),
     // Today's takings, computed server-side over ALL of today's orders (the
-    // board only loads the latest 100, so summing those undercounts a busy day).
+    // board loads only the live ones, so summing those undercounts any day).
     showRevenue
       ? supabase
           .from("orders")

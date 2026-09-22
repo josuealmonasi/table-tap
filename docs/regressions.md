@@ -29,6 +29,7 @@ us, and what now catches each one.
 | A cancelled sale leaves the drawer of whoever took it, once | The corte counted an honest waiter MX$100 short for handing a cancelled cash sale back |
 | Every sign-in a gate makes has its error read | A failed sign-in turned nine of a manager's screens into oks nobody had seen |
 | The cancel dialog words its offer from the plan the cancel follows | A POS card sale, a table settled by card, and a table's online bill could never be cancelled — "still settling", for ever |
+| The live board is seeded by status, with no row limit | An order the kitchen had not started fell off the board after 100 newer ones, while the badge still counted it |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -769,6 +770,16 @@ each payment for its own amount, and the rest is worded as what a person has to
 give back. Restaurants have Express dashboards, which cannot refund, so the copy
 does not send them to Stripe. Watched failing with the plan blind to a
 payment's own intent, and with the old refusal put back.
+
+## Off the board, still on the badge
+
+The orders board loaded the newest 100 orders of every status and kept the live
+ones. After a busy stretch — 100 newer orders is one lunch — an order the kitchen
+had not started was not loaded at all, and a reload took it off the screen,
+while the Pedidos badge, which counts by status, still counted it. Two places
+defining "live" differently: a status on one side, a recency window on the
+other. Reproduced with one order older than dev's newest 100 (board: none of it;
+database: one), and fixed by seeding the board with `LIVE_FLOW` itself.
 
 ## The decoder under the optimiser
 
