@@ -19,12 +19,28 @@ us, and what now catches each one.
 | Anything marking an order paid or written off closes the sitting | A sitting that never closes holds the table and the diner forever |
 | Every API route has a guard or a rate limit | `order-status` was public and unlimited from the day it was written |
 | Nobody hands `paymentOptions` a hardcoded `atTable` | The cart passed `true` always, so paying at the till could never be offered |
+| No route parses a request body by hand | Malformed JSON reached a money route as an exception and came back a 500 |
+| A refusal always carries a sentence, and every `CartRejection` has one | `/api/table-order` answered `{ rejection }`, which the waiter's screen read as "network error" |
+| Stripe payloads stay inside Stripe's limits | A table of fourteen could not pay by card: `settle_order_ids` passed 500 characters |
+| No screen offers a refund the till cannot give | A cash sale offered "Cancelar y reembolsar" and the route refused it for ever |
+| One function builds the code printed on a ticket | `orderCode` and `shortCode` agreed only because every id is a uuid |
+| Every i18n key written as a literal resolves | `translate` returns the key itself on a miss, and TypeScript never sees the string |
+| A restaurant row is never created on a trial with no end | The admin screen opened accounts on a trial `getPlan` could never settle |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
 had drifted, which is why `db:reset` failed on production.
 
 `src/lib/__tests__/i18n-parity.spec.ts` keeps both catalogues complete.
+
+`src/lib/__tests__/security-headers.spec.ts` holds a version floor for Next
+**and** for sharp. The sharp one reads `pnpm-workspace.yaml`, because pnpm 11
+ignores `pnpm.overrides` in `package.json` and says so only in a warning.
+
+`src/lib/__tests__/stripe-limits.spec.ts` pins the three Stripe ceilings a busy
+table reaches — 500 characters per metadata value, 100 line items, 250
+characters per product name — and proves the old single-key metadata really did
+overflow, so the rest of the file cannot pass on a broken version.
 
 `pnpm smoke` signs in for real and loads **every** dashboard page plus a
 customer menu, failing on an error boundary, a bounce to login, or a page with
@@ -47,6 +63,32 @@ hydration and white-screens. It looks exactly like a code bug and is not one.
 If a page breaks and the source looks right, `rm -rf .next` and restart before
 debugging anything. `pnpm smoke` against a freshly started server is the only
 verification that means anything.
+
+**Read the exit code, never the tail.**
+`pnpm money 2>&1 | tail -2` hands back tail's status, not the gate's. For part of
+one night `pnpm money` was failing and was reported green every time, because
+the last two lines of a failing run look like noise to somebody hunting for the
+word "agree". Run each gate to a log and print `$?`; open the log only when it
+is not zero. Grepping for the success string is the same mistake — a crash and
+a pass both lack a failure line.
+
+**A check nobody has watched go red is not a check.**
+Break the thing it guards, run it, see it fail with a reason, put it back.
+This audit found the harness passing for the wrong reason over and over: the
+layout gate reached 33 of 228 paths and hung on the rest; `pnpm dialogs` printed
+`ok` when its audit threw; three `/api/split/pay` cases passed on "this
+restaurant cannot take cards", which is also a 409; an invariant was satisfied
+by the comment explaining the fix. Every one of them was green. None of them
+had been seen to fail.
+
+**The seed decides what can be tested.**
+A restaurant flag left at its default removes a whole feature from every gate,
+and the gates still print `ok`. `/api/checkout` refused every probe at the door
+because no seeded restaurant had Stripe or pay-later; the CloudPRNT endpoint had
+no case at all because no printer was seeded; 65% of `/api/split/pay` had never
+run. When a probe returns the same refusal for different inputs, the inputs
+never reached the logic. `arrange` in the api gate lends a card reader for one
+case; the seed now enables pay-later and a printer.
 
 **Look at it. In a browser. Actually rendered.**
 Measuring is not looking. The menus dropdown reported a sensible rectangle from
@@ -608,18 +650,122 @@ the document carries no inline handler at all.
 The other two print windows had always done it this way. Two ways of doing one
 thing, and the policy only broke the older one.
 
+## Two waiters, one table, MX$400 for a MX$200 dinner
+
+Two waiters collecting the same table at the same moment each read the balance
+before the other had written, so both collections landed in full. Invisible from
+an owner account: it takes two logins at once. `collect_on_sitting` holds a
+transaction-scoped advisory lock on the sitting, so reading what is owed and
+writing what was taken are one step. `pnpm attack` fires five collections at
+once and asserts no more than the bill lands, and that the losers are told the
+bill is covered.
+
+## Garbage in, five hundred out
+
+A body that was not JSON — or was `null`, an array, a bare string — reached
+routes that called `req.json()` and destructured it, and came back a 500. On a
+money route that is an unhandled exception in the path that takes payment.
+`jsonBody` returns an object or nothing, and the invariant fails any route that
+parses a body by hand.
+
+## An order with no ceiling
+
+Nothing capped a cart. One request built a ten-thousand-line order: MX$115,500 on
+the board as a single card, 3.9 seconds of server time, a kitchen ticket queued
+for a printer that would still be spooling at closing. The first cap sat after
+the query it was meant to protect — two hundred lines with ten extras each is two
+thousand ids in a PostgREST `.in()` filter, which is a Bad Request at a thousand
+and a 414 at five. `cartReferences` measures a cart before its rows are fetched.
+
+## A refusal that read as a dead connection
+
+`/api/table-order` answered `{ rejection }` with no `error` field, and the
+waiter's screen falls back to "Error de red" when there is no message. A
+sold-out dish read as a lost signal, so the waiter retried instead of telling the
+table. The same toast that started the investigation, on a path nobody had
+traced. Every refusal's wording now lives in `rejectionMessage`.
+
+## A failed read taken for a paid bill
+
+`/api/bill/pay` did not check its orders query for an error. A lookup that broke
+returned no rows, which the route reads as nothing left to settle — so the diner
+was told their bill was paid. A read that failed now answers 503, and the id
+list that broke it is capped at `MAX_BILL_ORDERS`.
+
+## Fourteen orders, one card, no way to pay
+
+`settle_order_ids` was a comma-joined list of uuids, and a Stripe metadata value
+stops at 500 characters: thirteen orders fit, the fourteenth did not. Over the
+limit Stripe refuses the whole session, the route says "checkout failed", and
+tapping again does the same. Two more ceilings with the same shape — 100 line
+items per Checkout Session, so the card cart caps at 98, and 250 characters per
+product name, which a dish name typed in the browser can pass. The list is spread
+across keys now, and the first keeps its old name so sessions created before the
+fix still settle.
+
+## A discount given and never written down
+
+`/api/checkout` returns for a pay-later order before the one call that logs a
+coupon redemption. The limit held — `redeem_coupon` had counted the use — and the
+order carried its discount, but nothing recorded which order got how much.
+`pnpm money` now requires a redemption for every order carrying a coupon, for the
+same amount, and was watched failing with one removed.
+
+## A refund the till cannot give
+
+A cash-paid order could never be cancelled. The route looked for a Stripe payment
+intent, never found one, and answered "payment still settling, try again" for
+ever, while the dialog offered to refund the amount. Cash is told apart from a
+card whose webhook has not landed now, and the payment stays on the ledger, which
+`money-check` already expects of a cancelled order. There is still no way to
+REVERSE a cash payment — `payments.amount` must be above zero — so handing the
+money back is left to a person.
+
+## The decoder under the optimiser
+
+The second time the image optimiser was the worst finding in a security pass.
+`sharp` 0.34.5 shipped with CVEs in libvips and libheif, and `next/image` runs it
+on menu photography a restaurant uploads. Next accepts `^0.34.3 || ^0.35.4` and
+pnpm had picked the vulnerable half. Found by `pnpm audit`, fixed by an override,
+proved on production by an image coming back as WebP. Of the other twenty-four
+advisories, sorting by where the code runs showed only `qs` also reached a
+server.
+
+## A trial that never ends
+
+`plan_status` defaults to 'trialing' and `trial_ends_at` to nothing, so an insert
+that names neither starts a trial `getPlan` can never settle. The admin screen
+opened accounts that way, and the owner read "Prueba · quedan 0 días" for ever.
+`plan` defaults to carta, so nothing was given away — it was the status that
+lied. The invariant that guards it passed with the fix reverted, twice, before it
+read the insert itself rather than the file around it.
+
 ## Before merging anything large
 
+Every step by its exit code. Chain them with `&&`, or run each to a log and read
+`$?` — never judge one by the last lines it printed.
+
 1. `npx tsc --noEmit && pnpm lint && pnpm test`
-2. `pnpm smoke` — every page still renders for a signed-in user
-2b. `pnpm layout` — every page can still be *read*, at 390px and 1280px
-3. `pnpm db:reset` on dev — proves the schema still builds from nothing
-4. Open the thing you changed in a browser, at 1280px and at 390px, in Spanish
-5. If it is money, name every route that touches it and check each one
-6. If it changes what we collect, charge, or promise — update the legal text and
-   regenerate the PDFs (`node scripts/legal-pdf.mjs`)
-7. `pnpm attack` — what a signed-in person can do that they should not
-8. `pnpm prod:check` and `pnpm smoke:prod` after the merge
+2. `pnpm api` — every route does its job, not only refuses the wrong caller
+3. `pnpm smoke` — every page still renders for a signed-in user
+4. `pnpm layout` — every page can still be *read*, at 390px, 820px and 1280px
+5. `pnpm promises` — no screen offers what the system then refuses
+6. `pnpm dialogs` if you touched a dialog, a shared component or the stylesheet
+7. `pnpm money` — the ledger, the orders and the drawer still agree
+8. `pnpm attack` — what a signed-in person can do that they should not
+9. `pnpm rls` and `pnpm roles` if you touched a table, a policy or a guard
+10. `pnpm db:reset` on dev — proves the schema still builds from nothing
+11. `pnpm audit --audit-level=high` if a dependency moved, and sort what it finds
+    by where the code runs: production, build, or nothing that ships
+12. Open the thing you changed in a browser, at 1280px and at 390px, in Spanish
+13. If it is money, name every route that touches it and check each one
+14. If it changes what we collect, charge, or promise — update the legal text and
+    regenerate the PDFs (`node scripts/legal-pdf.mjs`)
+15. `pnpm prod:check` and `pnpm smoke:prod` after the merge
+
+Anything a gate creates, it deletes. Count the rows in the tables it touches
+before and after a run, and run it three times: a leak capped by a unique index
+or a one-open-sitting rule looks stable at one.
 
 ## When you find the next one
 
