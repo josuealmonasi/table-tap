@@ -1446,3 +1446,26 @@ describe("a sale is handed back once", () => {
     expect(handback, "the handback is written before the race is settled").toBeGreaterThan(at + refused);
   });
 });
+
+describe("a gate that cannot sign in says so", () => {
+  it("reads the error of every sign-in a script makes", () => {
+    // A sign-in that fails and is not read leaves the script signed out, and
+    // a signed-out check passes for the wrong reason: the login screen has
+    // nothing to overlap, and an anonymous key cannot read the columns a staff
+    // account is being tested against. A network blip turned nine of a
+    // manager's screens into oks nobody had seen.
+    const offenders: string[] = [];
+    for (const file of fs.readdirSync("scripts").filter(f => f.endsWith(".mjs"))) {
+      const src = read(`scripts/${file}`);
+      for (const m of src.matchAll(/signInWithPassword\(/g)) {
+        const start = src.lastIndexOf("\n", m.index!) + 1;
+        const statement = src.slice(start, m.index!);
+        const after = src.slice(m.index!, m.index! + 250);
+        const line = src.slice(0, m.index!).split("\n").length;
+        if (!/=\s*await\s+[\w.]+$/.test(statement)) offenders.push(`scripts/${file}:${line} — result thrown away`);
+        else if (!/err/i.test(statement + after)) offenders.push(`scripts/${file}:${line} — error never read`);
+      }
+    }
+    expect(offenders, `These sign-ins can fail silently:\n${offenders.join("\n")}`).toEqual([]);
+  });
+});

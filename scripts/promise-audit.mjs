@@ -40,9 +40,14 @@ const ok = m => console.log(`    ok       ${m}`);
 const bad = m => { failed++; console.log(`    GAP      ${m}`); };
 
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
-const cookieFor = async email => {
+// A sign-in that fails must stop the sweep. It used to go on with a cookie
+// holding the word "null": every page redirected to the login screen, the
+// login screen offers nothing to search, and nine of a manager's screens
+// printed ok without one of them being seen. It took a network blip to show.
+const cookieFor = async (email, password = "demo123") => {
   const auth = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-  const { data } = await auth.auth.signInWithPassword({ email, password: "demo123" });
+  const { data, error } = await auth.auth.signInWithPassword({ email, password });
+  if (error || !data?.session) throw new Error(`could not sign in as ${email}: ${error?.message ?? "no session"}`);
   return { name: `sb-${ref}-auth-token`, value: `base64-${Buffer.from(JSON.stringify(data.session)).toString("base64")}`, url: BASE };
 };
 
@@ -70,8 +75,16 @@ console.log(`\nPromises — ${prod ? "production" : "development"}\n`);
 
 for (const who of CREW) {
   console.log(`  ${who.role}\n`);
+  // The platform admin's password is not the demo one. This used to sign in
+  // with demo123 regardless, fail, and check the admin screen signed out on
+  // every run there has been — reported ok each time.
+  const password = who.passwordEnv ? process.env[who.passwordEnv] : undefined;
+  if (who.passwordEnv && !password) {
+    console.log(`    –        ${who.passwordEnv} is not set — skipped\n`);
+    continue;
+  }
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  await ctx.addCookies([await cookieFor(who.email), { name: "tt-locale", value: "es", url: BASE }]);
+  await ctx.addCookies([await cookieFor(who.email, password), { name: "tt-locale", value: "es", url: BASE }]);
   for (const path of who.pages) {
     const tab = await ctx.newPage();
     try {
