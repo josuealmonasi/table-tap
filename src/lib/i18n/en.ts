@@ -1398,6 +1398,7 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
     statusReady: "Ready",
     statusCompleted: "Completed",
     statusCancelled: "Cancelled",
+    statusAwaitingPayment: "Awaiting payment",
     startPreparing: "Start Preparing",
     markReady: "Mark Ready",
     complete: "Complete",
