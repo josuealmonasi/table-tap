@@ -93,6 +93,15 @@ dishes on a bill the restaurant has just cancelled.
   dine-in, menu schedules, deferred payment, promotions, coupons, staff
   discounts, inventory, the counter till, waiter service.
   `can(limits, feature)` is the only way to ask.
+- **Trials.** Signing up opens thirty days of `servicio` with `plan_status`
+  'trialing' and a `trial_ends_at`. Nothing runs at night to end it: `getPlan`
+  drops a lapsed trial to `carta` the first time anybody asks, and changes the
+  ROW rather than only its answer, because the database triggers that enforce
+  the limits read `restaurants.plan`. The two columns go together —
+  `plan_status` defaults to 'trialing' and `trial_ends_at` to nothing, so an
+  insert naming neither is a trial that can never end. A restaurant opened from
+  the admin screen starts on `carta`, active. The invariant "a trial has an end"
+  reads every insert into `restaurants`.
 - **Founding price**: the first restaurants on a paid tier keep the price they
   came in at. `claim_founding_price` serialises the assignment with an advisory
   lock so two simultaneous subscribers cannot take the same place.
@@ -104,7 +113,14 @@ dishes on a bill the restaurant has just cancelled.
   it cancels: `completed`, not `cancelled`, because the food went out and the
   kitchen spent it — that is the whole reason it is a write-off and not a
   refund, and `/api/orders/cancel` is the only path allowed to set `cancelled`
-  because that one refunds the card first. Without it the ledger was right and
+  because that one refunds a card payment first. A sale paid in CASH cancels
+  without any refund — there is nothing for Stripe to give back, and the app
+  cannot take notes out of a drawer — so the dialog asks for the cash to be
+  handed back at the till, and the payment stays on the ledger, where
+  `pnpm money` already expects it of a cancelled order. There is no way to
+  reverse a cash payment yet: `payments.amount` must be above zero. A card
+  whose webhook has not landed is still refused, because there retrying does
+  help. Without the write-off rule the ledger was right and
   every screen showing live work was wrong: the pass kept tickets for a table
   that had gone, and the diner's phone kept offering to follow an order on a
   table the floor had cleared for the next party.
