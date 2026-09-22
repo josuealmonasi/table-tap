@@ -314,6 +314,7 @@ myBill: "View my bill",
     online: "Paid online",
     writtenOff: "Written off",
     discounted: "Discounts",
+    refunded: "Handed back",
     signature: "Signed by the person handing over and the person receiving:",
   },
   till: {

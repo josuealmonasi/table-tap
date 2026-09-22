@@ -26,6 +26,7 @@ us, and what now catches each one.
 | One function builds the code printed on a ticket | `orderCode` and `shortCode` agreed only because every id is a uuid |
 | Every i18n key written as a literal resolves | `translate` returns the key itself on a miss, and TypeScript never sees the string |
 | A restaurant row is never created on a trial with no end | The admin screen opened accounts on a trial `getPlan` could never settle |
+| A cancelled sale leaves the drawer of whoever took it, once | The corte counted an honest waiter MX$100 short for handing a cancelled cash sale back |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -720,6 +721,22 @@ card whose webhook has not landed now, and the payment stays on the ledger, whic
 `money-check` already expects of a cancelled order. There is still no way to
 REVERSE a cash payment — `payments.amount` must be above zero — so handing the
 money back is left to a person.
+
+## An honest waiter counted short
+
+The fix above made a cash sale cancellable, and so made this reachable. The cash
+arrived, the payment stayed, and the cancel wrote only `order=…` — so the corte
+went on expecting MX$100 in the drawer of the waiter who had just handed it
+back, and called them short by exactly that. A card refund stayed in the card
+total the same way. `pnpm money` was blind to it: the ledger and the collection
+log both said the money came in, which it had, so the drawer check agreed with
+itself. The cancel now writes one `refunded` line per payment it reverses, with
+the amount and the person who took it; the corte subtracts it from their line,
+and `pnpm money` requires the lines to add up to the payments. The same pass
+found two cancels racing both succeed — a second handback, and the stock put
+back twice — so the write is conditional on the status it read. Reproduced
+through the route and the screen before and after: MX$100 expected, then MX$0
+and "Handed back MX$100"; a double click answered 200 and 409.
 
 ## The decoder under the optimiser
 

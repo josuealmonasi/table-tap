@@ -117,10 +117,14 @@ dishes on a bill the restaurant has just cancelled.
   without any refund — there is nothing for Stripe to give back, and the app
   cannot take notes out of a drawer — so the dialog asks for the cash to be
   handed back at the till, and the payment stays on the ledger, where
-  `pnpm money` already expects it of a cancelled order. There is no way to
-  reverse a cash payment yet: `payments.amount` must be above zero. A card
-  whose webhook has not landed is still refused, because there retrying does
-  help. Without the write-off rule the ledger was right and
+  `pnpm money` already expects it of a cancelled order. `payments.amount` must
+  be above zero, so the handback is not a negative payment: every paid cancel,
+  cash or card, writes one `refunded` line per payment it reverses —
+  `order=… amount=… method=… collector=…` — naming who TOOK the money, and the
+  corte takes it out of that person's drawer. The write that moves the order to
+  `cancelled` is conditional on the status it read, so of two cancels racing
+  only one writes a handback or puts stock back. A card whose webhook has not
+  landed is still refused, because there retrying does help. Without the write-off rule the ledger was right and
   every screen showing live work was wrong: the pass kept tickets for a table
   that had gone, and the diner's phone kept offering to follow an order on a
   table the floor had cleared for the next party.
@@ -228,7 +232,16 @@ dishes on a bill the restaurant has just cancelled.
   cashier signs for a substring — and the ledger and the log, two records of one
   night, had nothing comparing them. `pnpm money` now reconciles them per person
   and method. Money given up (write-offs, discounts) still comes from the log,
-  because money that never arrived cannot be in a payments table. Card paid
+  because money that never arrived cannot be in a payments table. Money handed
+  back (a cancelled sale) comes from the log too: it DID arrive, so it stays in
+  `payments`, and the `refunded` line subtracts it from the drawer of the
+  person it names — on the day it was handed back, which is when it left the
+  drawer — and shows the sum as "Handed back". Without that, a waiter who gave
+  a cancelled cash sale back read as short by exactly its amount, and
+  `pnpm money` could not see it: the ledger and the collection log both still
+  said the money came in, which it had. `pnpm money` now also requires every
+  paid order cancelled from 2026-09-22 to have handback lines adding up to its
+  payments; cancels before then were logged without an amount. Card paid
   online is reported apart from every drawer: it is real, and nobody was
   standing there to put it in one.
 

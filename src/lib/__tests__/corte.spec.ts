@@ -68,3 +68,91 @@ describe("closing the register", () => {
     expect(corteFrom([])).toEqual(EMPTY_CORTE);
   });
 });
+
+/**
+ * Money handed back. Unlike a write-off, this DID arrive — it sat in one
+ * person's drawer — and then left it. A cash sale cancelled after #337 kept its
+ * payment and logged nothing the corte could read, so the corte went on
+ * expecting the cash and called the waiter who handed it back short by exactly
+ * that amount.
+ */
+const handedBack = (collector: string | null, amount: number, method: string) => ({
+  action: "refunded",
+  detail: `order=abc12345 amount=${amount} method=${method}${collector ? ` collector=${collector}` : ""}`,
+});
+
+describe("money handed back after it arrived", () => {
+  it("comes out of the drawer of whoever took it, not whoever cancelled", () => {
+    const corte = corteFrom(
+      [took("ana@x.dev", 100, "cash"), took("ana@x.dev", 40, "cash"), took("beto@x.dev", 30, "cash")],
+      [handedBack("ana@x.dev", 100, "cash")],
+    );
+    const ana = corte.people.find(p => p.actor === "ana@x.dev")!;
+    const beto = corte.people.find(p => p.actor === "beto@x.dev")!;
+    // Ana took 140 and handed 100 back: her drawer should hold 40.
+    expect(ana.cash).toBe(40);
+    expect(ana.total).toBe(40);
+    // Beto is untouched.
+    expect(beto.cash).toBe(30);
+    // And it is said out loud, so the drawer and the screen agree for a reason.
+    expect(corte.refunded).toBe(100);
+  });
+
+  it("takes a card refund off the card column, which does not have to match a drawer", () => {
+    const corte = corteFrom(
+      [took("ana@x.dev", 60, "cash"), took("ana@x.dev", 80, "card")],
+      [handedBack("ana@x.dev", 80, "card")],
+    );
+    const ana = corte.people[0];
+    expect(ana.card).toBe(0);
+    expect(ana.cash).toBe(60);
+  });
+
+  it("does not count the refund as a payment somebody took", () => {
+    const corte = corteFrom([took("ana@x.dev", 100, "cash")], [handedBack("ana@x.dev", 100, "cash")]);
+    expect(corte.people[0].count).toBe(1);
+  });
+
+  it("takes a refund of an online payment off the online total, not a drawer", () => {
+    // Nobody was holding a till when the diner paid, so nobody's drawer
+    // changes when it goes back.
+    const corte = corteFrom(
+      [{ actor_email: null, amount: 90, method: "card" }, took("ana@x.dev", 50, "cash")],
+      [handedBack(null, 90, "card")],
+    );
+    expect(corte.online).toBe(0);
+    expect(corte.people[0].cash).toBe(50);
+  });
+
+  it("keeps the totals equal to the drawers summed", () => {
+    const corte = corteFrom(
+      [took("ana@x.dev", 100, "cash"), took("beto@x.dev", 70, "cash")],
+      [handedBack("ana@x.dev", 25, "cash")],
+    );
+    const summed = corte.people.reduce((n, p) => n + p.cash, 0);
+    expect(corte.totals.cash).toBe(summed);
+    expect(corte.totals.cash).toBe(145);
+  });
+
+  it("shows a refund of last night's sale in this morning's drawer", () => {
+    // Rung up at 23:50, cancelled at 09:00. The payment is in yesterday's
+    // window and the handback is in today's, so today Beto has taken nothing
+    // and given MX$60 back — and his drawer really does hold MX$60 less than
+    // today's takings say. Hiding him would hide exactly that.
+    const corte = corteFrom([took("ana@x.dev", 100, "cash")], [handedBack("beto@x.dev", 60, "cash")]);
+    const beto = corte.people.find(p => p.actor === "beto@x.dev")!;
+    expect(beto).toBeDefined();
+    expect(beto.cash).toBe(-60);
+    expect(beto.count).toBe(0);
+    expect(corte.totals.cash).toBe(40);
+  });
+
+  it("ignores a refund line it cannot read rather than guessing", () => {
+    const corte = corteFrom(
+      [took("ana@x.dev", 100, "cash")],
+      [{ action: "refunded", detail: "order=abc12345" }],
+    );
+    expect(corte.people[0].cash).toBe(100);
+    expect(corte.refunded).toBe(0);
+  });
+});

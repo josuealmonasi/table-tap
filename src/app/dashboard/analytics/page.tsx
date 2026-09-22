@@ -65,7 +65,9 @@ export default async function AnalyticsPage({
       .from("user_logs")
       .select("action, detail")
       .eq("restaurant_id", membership.restaurant.id)
-      .in("action", ["written_off", "discounted"])
+      // "refunded" is money handed back after it arrived. It comes out of the
+      // drawer of whoever took it, which is why the corte needs to see it.
+      .in("action", ["written_off", "discounted", "refunded"])
       .gte("created_at", since),
   ]);
 

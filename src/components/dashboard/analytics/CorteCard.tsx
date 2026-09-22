@@ -61,7 +61,11 @@ export default function CorteCard({
           ? `${escapeHtml(t("corte.online"))}: ${money(corte.online)} &nbsp;·&nbsp; `
           : "") +
         `${escapeHtml(t("corte.writtenOff"))}: ${money(corte.writtenOff)}` +
-        ` &nbsp;·&nbsp; ${escapeHtml(t("corte.discounted"))}: ${money(corte.discounted)}</p>` +
+        ` &nbsp;·&nbsp; ${escapeHtml(t("corte.discounted"))}: ${money(corte.discounted)}` +
+        (corte.refunded > 0
+          ? ` &nbsp;·&nbsp; ${escapeHtml(t("corte.refunded"))}: ${money(corte.refunded)}`
+          : "") +
+        `</p>` +
         `<p style="margin-top:44px;font-size:13px;color:#70707a">${escapeHtml(t("corte.signature"))}</p>` +
         `<div style="margin-top:34px;border-top:1px solid #111113;width:260px"></div>` +
         `</body>`,
@@ -147,6 +151,14 @@ export default function CorteCard({
             <span className="tt-muted">
               {t("corte.discounted")} <strong>{money(corte.discounted)}</strong>
             </span>
+            {/* Money that DID arrive and was given back. Already taken out of
+                the drawer of whoever took it — shown here so a line that reads
+                lower than its payments reads lower for a reason. */}
+            {corte.refunded > 0 && (
+              <span className="tt-muted">
+                {t("corte.refunded")} <strong>{money(corte.refunded)}</strong>
+              </span>
+            )}
           </div>
         </>
       )}
