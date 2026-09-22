@@ -1277,28 +1277,32 @@ describe("Stripe's limits are respected where we build its payloads", () => {
 });
 
 describe("no screen offers a refund the till cannot give", () => {
-  it("branches on how it was paid before promising money back", () => {
+  it("words the offer from the plan the cancel itself will follow", () => {
     // The cancel dialog said "Cancel & refund MX$100" for any paid order. On a
-    // sale somebody paid in notes there is nothing to refund through Stripe,
-    // and the route answered "payment is still settling — try again", which
-    // would never once become true. The screen promised and the server
-    // refused, which is this app's oldest bug shape.
+    // cash sale, a card charged on the restaurant's own terminal, or an order
+    // of a table's bill paid online in one go, the route could not refund it
+    // and answered "payment is still settling — try again", which would never
+    // once become true. The screen promised and the server refused, which is
+    // this app's oldest bug shape.
     //
-    // The two places that must agree: the route tells cash apart from a card
-    // whose webhook has not landed, and the screen has to make the same
-    // distinction before it words the offer.
+    // Two places guessing from `pay_method` agreed only about cash. Now there
+    // is one place: the route's GET and POST both read the plan through
+    // `readCancel`, and the board words its offer from what the GET answers.
     const board = read("src/components/dashboard/OrdersBoard.tsx");
-    const offersRefund = board.includes("orders.refundMsg") || board.includes("orders.cancelRefund");
-    expect(
-      !offersRefund || /pay_method\s*===\s*"cash"/.test(board),
-      "OrdersBoard offers a refund without checking pay_method — a cash sale cannot be refunded by an app",
-    ).toBe(true);
+    const cancel = board.slice(board.indexOf("async function handleCancel"));
+    // Code only: the comment explaining why it must not read pay_method names it.
+    const code = (src: string) => src.replace(/\/\/.*$/gm, "");
+    const handler = code(cancel.slice(0, cancel.indexOf("\n  }\n") + 4));
+    expect(handler, "the dialog no longer asks the server what the cancel will do").toMatch(/cancelPlanFor\(/);
+    expect(handler, "the dialog no longer words its offer from that answer").toMatch(/cancelWording\(/);
+    expect(handler, "the dialog guesses from pay_method again").not.toMatch(/pay_method/);
 
     const route = read("src/app/api/orders/cancel/route.ts");
-    expect(
-      /pay_method\s*===\s*"cash"/.test(route),
-      "the cancel route no longer tells cash apart from a card whose webhook has not landed",
-    ).toBe(true);
+    const get = route.slice(route.indexOf("export async function GET"), route.indexOf("export async function POST"));
+    const post = code(route.slice(route.indexOf("export async function POST")));
+    expect(get, "GET does not read the plan the POST follows").toMatch(/readCancel\(/);
+    expect(post, "POST does not follow the plan the GET described").toMatch(/readCancel\(/);
+    expect(post, "POST decides for itself how the money came in").not.toMatch(/pay_method/);
   });
 });
 

@@ -315,6 +315,24 @@ export async function setup(env, base) {
   // has no one drawer to leave and must not pretend to.
   const sittingPaidOrder = await make({ paid: true, pay_method: "cash", status: "received" });
 
+  // Card that never touched Stripe: rung up at the POS on the restaurant's own
+  // terminal. Cancelling one answered "payment still settling" for ever,
+  // because the route treated every card without an intent as one on its way.
+  const posCardOrder = await make({ paid: true, pay_method: "card", status: "received" });
+  await admin.from("payments").insert({
+    restaurant_id: restaurant.id, order_id: posCardOrder, amount: line.price,
+    method: "card", actor_email: "demo-cashier@tabletap.dev", client_ref: `${MARK}-pos-${posCardOrder}`,
+  });
+
+  // One order of a table's bill paid online in one go: the intent is on the
+  // order's payment, never on the order. The route looked only at the order.
+  const tableBillOrder = await make({ paid: true, pay_method: "card", status: "received" });
+  await admin.from("payments").insert({
+    restaurant_id: restaurant.id, order_id: tableBillOrder, amount: line.price, method: "card",
+    stripe_payment_intent: `pi_${MARK}_${tableBillOrder.slice(0, 8)}`,
+    client_ref: `${MARK}-bill-${tableBillOrder}`,
+  });
+
   // A ticket of our own for the printer to collect, so the cases below do not
   // race the seed's or swallow one a real screen queued. Queued by the trigger
   // on `status = 'received'`, not inserted here — inserting it collides with
@@ -337,6 +355,9 @@ export async function setup(env, base) {
     printableOrder,
     cashPaidOrder,
     sittingPaidOrder,
+    posCardOrder,
+    linePrice: Number(line.price),
+    tableBillOrder,
     withCardReader,
     withStock,
     crewId,

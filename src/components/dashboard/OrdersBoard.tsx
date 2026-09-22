@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import ServiceRequestsBar from "./ServiceRequestsBar";
 import { readyToDeliver } from "@/lib/ready-tables";
 import { EmptyIcon } from "@/components/ui/icons";
+import { cancelWording } from "@/lib/cancel-wording";
 
 interface OrdersBoardProps {
   restaurant: Restaurant;
@@ -71,7 +72,7 @@ export default function OrdersBoard({
 }: OrdersBoardProps) {
   const router = useRouter();
   const t = useT();
-  const { orders, updateStatus, cancelOrder, online, pending } = useRestaurantOrders(
+  const { orders, updateStatus, cancelOrder, cancelPlanFor, online, pending } = useRestaurantOrders(
     restaurant.id,
     initialOrders,
   );
@@ -98,41 +99,25 @@ export default function OrdersBoard({
   const revenue = +(revenueBase + liveToday).toFixed(2);
 
   async function handleCancel(order: Order): Promise<void> {
-    // Cash cannot be refunded by an app. Offering "Cancel & refund MX$100" on a
-    // sale somebody paid in notes promises what nothing here can do — the money
-    // is in a drawer, and only a person can take it out again.
-    const cash = order.paid && order.pay_method === "cash";
-    const amount = formatMoney(order.total, restaurant.currency);
+    // Worded from what the server says the cancel will do, never from
+    // `pay_method`. Cash, a charge on the restaurant's own terminal and a share
+    // of a table's bill cannot be refunded by an app; guessing offered "Cancel
+    // & refund" on all of them, and the cancel then refused, for ever.
+    const plan = await cancelPlanFor(order.id);
+    if (typeof plan === "string") {
+      toast(plan, "error");
+      return;
+    }
+    const words = cancelWording(plan, n => formatMoney(n, restaurant.currency), t);
     const ok = await confirm({
       title: t("orders.cancelConfirm", { code: orderCode(order.id) }),
-      message: cash
-        ? t("orders.cashCancelMsg", { amount })
-        : order.paid
-          ? t("orders.refundMsg", { amount })
-          : t("orders.unpaidCancelMsg"),
-      confirmLabel: t(
-        cash
-          ? "orders.cancelCashOrder"
-          : order.paid
-            ? "orders.cancelRefund"
-            : "orders.cancelOrder",
-      ),
+      message: words.message,
+      confirmLabel: t(words.confirmKey),
       danger: true,
     });
     if (!ok) return;
     const error = await cancelOrder(order.id);
-    if (error) toast(error, "error");
-    else {
-      toast(
-        t(
-          cash
-            ? "orders.cancelledCash"
-            : order.paid
-              ? "orders.cancelledRefunded"
-              : "orders.cancelledToast",
-        ),
-      );
-    }
+    toast(error ?? words.done, error ? "error" : undefined);
   }
 
   return (
