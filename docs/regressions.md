@@ -27,6 +27,7 @@ us, and what now catches each one.
 | Every i18n key written as a literal resolves | `translate` returns the key itself on a miss, and TypeScript never sees the string |
 | A restaurant row is never created on a trial with no end | The admin screen opened accounts on a trial `getPlan` could never settle |
 | A cancelled sale leaves the drawer of whoever took it, once | The corte counted an honest waiter MX$100 short for handing a cancelled cash sale back |
+| Every sign-in a gate makes has its error read | A failed sign-in turned nine of a manager's screens into oks nobody had seen |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -737,6 +738,21 @@ found two cancels racing both succeed — a second handback, and the stock put
 back twice — so the write is conditional on the status it read. Reproduced
 through the route and the screen before and after: MX$100 expected, then MX$0
 and "Handed back MX$100"; a double click answered 200 and 409.
+
+## Nine oks for screens nobody saw
+
+Supabase timed out for a moment during `pnpm promises`, and the manager's
+sign-in failed. The script did not look: it built a cookie out of the word
+"null", every page redirected to the login screen, the login screen offers
+nothing to search, and nine screens printed ok. The run only went red for an
+unrelated reason. `pnpm layout` had the same shape, and in `pnpm rls` a failed
+kitchen sign-in left an anonymous key checking whether "staff" could read the
+Stripe columns — which it cannot either, so the check passed for the wrong
+reason. Every script sign-in now reads its error, and an invariant fails on one
+that does not; each gate was watched failing with the password wrong. The first
+run with the fix found one more: `pnpm promises` had signed in as the platform
+admin with the demo password on every run there had been, failed, and checked
+the admin screen signed out — ok, each time.
 
 ## The decoder under the optimiser
 

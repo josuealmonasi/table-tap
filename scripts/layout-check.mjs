@@ -121,9 +121,12 @@ async function look(tab, where) {
   else bad(where, faults);
 }
 
+// A failed sign-in stops the run rather than measuring the login screen once
+// for every page the role was meant to see — which reads as ok, every time.
 const cookieFor = async (email, password = "demo123") => {
   const auth = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-  const { data } = await auth.auth.signInWithPassword({ email, password });
+  const { data, error } = await auth.auth.signInWithPassword({ email, password });
+  if (error || !data?.session) throw new Error(`could not sign in as ${email}: ${error?.message ?? "no session"}`);
   return {
     name: `sb-${ref}-auth-token`,
     value: `base64-${Buffer.from(JSON.stringify(data.session)).toString("base64")}`,

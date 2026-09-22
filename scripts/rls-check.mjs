@@ -366,12 +366,20 @@ if (!signIn.error && theirs) {
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   );
-  await staff.auth.signInWithPassword({ email: "demo-kitchen@tabletap.dev", password: "demo123" });
-
-  for (const col of ["owner_id", "stripe_account_id", "stripe_customer_id", "plan_status"]) {
-    const { data, error } = await staff.from("restaurants").select(col).limit(1);
-    if (error || !data?.length) ok(`staff cannot read restaurants.${col}`);
-    else bad(`staff read restaurants.${col} across every tenant`);
+  // Checked, because every assertion below passes just as well signed out: an
+  // anonymous key cannot read these columns either, so a failed sign-in
+  // printed four oks about a staff account that never took part.
+  const { error: staffErr } = await staff.auth.signInWithPassword({
+    email: "demo-kitchen@tabletap.dev", password: "demo123",
+  });
+  if (staffErr) {
+    bad(`cannot sign in as the kitchen — the staff column checks went unchecked (${staffErr.message})`);
+  } else {
+    for (const col of ["owner_id", "stripe_account_id", "stripe_customer_id", "plan_status"]) {
+      const { data, error } = await staff.from("restaurants").select(col).limit(1);
+      if (error || !data?.length) ok(`staff cannot read restaurants.${col}`);
+      else bad(`staff read restaurants.${col} across every tenant`);
+    }
   }
 
   // And what is genuinely public stays public, timezone included: without it the
@@ -413,12 +421,13 @@ if (!signIn.error && theirs) {
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     );
-    await floor.auth.signInWithPassword({
+    const { error: floorErr } = await floor.auth.signInWithPassword({
       email: "demo-cashier@tabletap.dev",
       password: "demo123",
     });
     const paid = await floor.from("payments").select("id").limit(1);
-    (!paid.error && (paid.data ?? []).length > 0)
+    if (floorErr) bad(`cannot sign in as the cashier — whether they read payments went unchecked (${floorErr.message})`);
+    else (!paid.error && (paid.data ?? []).length > 0)
       ? ok("a cashier still reads the takings they took")
       : bad("a cashier cannot read payments — the corte will not build");
   }
