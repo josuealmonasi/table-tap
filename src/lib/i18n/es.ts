@@ -1386,6 +1386,7 @@ badgesHint: "Muestra cuántas cosas esperan acción en cada sección. Aplica a t
     statusReady: "Listo",
     statusCompleted: "Completado",
     statusCancelled: "Cancelado",
+    statusAwaitingPayment: "Esperando el pago",
     startPreparing: "Empezar a preparar",
     markReady: "Marcar listo",
     complete: "Completar",
