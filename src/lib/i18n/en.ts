@@ -1061,7 +1061,6 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     orderCreate: "Could not create order",
     orderData: "Missing order data",
     cancelStatus: "Only new or preparing orders can be cancelled.",
-    settling: "Payment is still settling — try again in a moment.",
     cashNoRefund: "This order was paid in cash, so there is nothing to refund through the app. Give the cash back at the till — voiding a cash sale is not something this screen can do yet.",
     refundFailed: "Refund failed — the order was NOT cancelled. Try again.",
     orderCancel: "Could not cancel the order.",
@@ -1391,6 +1390,12 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
     cashCancelMsg: "This was paid {amount} in cash. The app cannot give that back — hand it over at the till first, then cancel here.",
     cancelCashOrder: "Cancel & hand back the cash",
     cancelledCash: "Order cancelled — give the cash back if you have not already",
+    /** Card taken on the restaurant's own terminal: nothing here can reverse it. */
+    terminalCancelMsg: "{amount} was paid by card on your own terminal. The app cannot reverse that charge — void it on the terminal.",
+    /** Paid as a share of the table's bill: no one card or drawer is this order's. */
+    withTableCancelMsg: "{amount} was paid as part of the table's bill, so no single card or drawer is this order's. Give it back to the table yourself.",
+    cancelHandBack: "Cancel & give it back",
+    cancelledHandBack: "Order cancelled — give back {amount} if you have not already",
     cancelOrder: "Cancel order",
     cancelledRefunded: "Order cancelled and refunded",
     cancelledToast: "Order cancelled",

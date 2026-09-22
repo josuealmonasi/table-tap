@@ -7,6 +7,7 @@ import { useOnline } from "@/hooks/useOnline";
 import { enqueue, readQueue, writeQueue, type QueuedMove } from "@/lib/offline-queue";
 import { useT } from "@/lib/i18n/context";
 import type { Order, OrderStatus } from "@/lib/types";
+import type { CancelSummary } from "@/lib/cancel-plan";
 
 /** Short, gentle ping so kitchen staff notice a new order without looking. */
 function playPing() {
@@ -148,6 +149,23 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
   }
 
   /**
+   * What cancelling would give back, and who would give it — asked before the
+   * dialog opens, so its offer is the server's own. Returns an error message
+   * instead when it cannot be told: offering a refund on a guess is how the
+   * dialog promised money back that the cancel then refused to give.
+   */
+  async function cancelPlanFor(id: string): Promise<CancelSummary | string> {
+    try {
+      const res = await fetch(`/api/orders/cancel?id=${encodeURIComponent(id)}`);
+      const data = await res.json();
+      return res.ok ? (data as CancelSummary) : (data.error ?? t("apiErr.orderCancel"));
+    } catch {
+      markOffline();
+      return t("offline.blocked");
+    }
+  }
+
+  /**
    * Cancels (and refunds, if paid) an order. NOT optimistic — money moves, so
    * we wait for the server. Returns an error message to show, or null on success.
    */
@@ -171,5 +189,5 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
     }
   }
 
-  return { orders, updateStatus, cancelOrder, online, pending: pending.length };
+  return { orders, updateStatus, cancelOrder, cancelPlanFor, online, pending: pending.length };
 }

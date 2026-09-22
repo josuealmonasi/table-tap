@@ -113,18 +113,27 @@ dishes on a bill the restaurant has just cancelled.
   it cancels: `completed`, not `cancelled`, because the food went out and the
   kitchen spent it — that is the whole reason it is a write-off and not a
   refund, and `/api/orders/cancel` is the only path allowed to set `cancelled`
-  because that one refunds a card payment first. A sale paid in CASH cancels
-  without any refund — there is nothing for Stripe to give back, and the app
-  cannot take notes out of a drawer — so the dialog asks for the cash to be
-  handed back at the till, and the payment stays on the ledger, where
-  `pnpm money` already expects it of a cancelled order. `payments.amount` must
-  be above zero, so the handback is not a negative payment: every paid cancel,
-  cash or card, writes one `refunded` line per payment it reverses —
-  `order=… amount=… method=… collector=…` — naming who TOOK the money, and the
-  corte takes it out of that person's drawer. The write that moves the order to
-  `cancelled` is conditional on the status it read, so of two cancels racing
-  only one writes a handback or puts stock back. A card whose webhook has not
-  landed is still refused, because there retrying does help. Without the write-off rule the ledger was right and
+  because that one refunds what came through Stripe first. What a cancel gives
+  back is decided once, by `cancelPlan` (`src/lib/cancel-plan.ts`), from the
+  ledger rather than `pay_method`: each payment with a payment intent is
+  refunded through Stripe for that payment's own amount — so one order of a
+  table's bill paid online gets back its share, not the whole charge — and
+  everything else is handed back by a person: cash from the drawer of whoever
+  took it, a card charged on the restaurant's own terminal voided there, or,
+  for an order with no payment of its own (paid as part of its table), its
+  total. The dialog asks `GET /api/orders/cancel?id=…` first and words its
+  offer from the same plan, so it cannot promise a refund the cancel will not
+  make; it used to promise one for every paid card order, and the route
+  answered "payment still settling" for ever to a POS card sale, a table
+  settled by card at its terminal, and a table's bill paid online in one go.
+  The payment stays on the ledger, where `pnpm money` already expects it of a
+  cancelled order. `payments.amount` must be above zero, so the handback is
+  not a negative payment: every paid cancel writes one `refunded` line per
+  amount given back — `order=… amount=… method=… collector=…` — naming who TOOK
+  the money, and the corte takes it out of that person's drawer, or off the
+  online total when nobody did. The write that moves the order to `cancelled`
+  is conditional on the status it read, so of two cancels racing only one
+  writes a handback or puts stock back. Without the write-off rule the ledger was right and
   every screen showing live work was wrong: the pass kept tickets for a table
   that had gone, and the diner's phone kept offering to follow an order on a
   table the floor had cleared for the next party.

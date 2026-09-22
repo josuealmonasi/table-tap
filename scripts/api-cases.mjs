@@ -528,6 +528,9 @@ export function cases(fx) {
     // cash sale impossible to cancel — the owner was told "payment is still
     // settling, try again" for ever, on an order the board kept showing, while
     // the screen offered to refund it.
+    { name: "GET  /api/orders/cancel (cash: a person gives it back)", as: "owner", method: "GET",
+      path: f => `/api/orders/cancel?id=${f.cashPaidOrder}`, expect: [200],
+      check: (d, f) => (d.cash === f.linePrice && d.refund === 0) || `answered ${JSON.stringify(d)}` },
     { name: "POST /api/orders/cancel (paid in cash)", as: "owner", method: "POST",
       path: "/api/orders/cancel", body: async f => ({ id: f.cashPaidOrder }), expect: [200],
       check: async (_d, f) => {
@@ -551,6 +554,45 @@ export function cases(fx) {
         if (!line) return "cancelled a cash sale and wrote no handback: the corte still expects the cash";
         const want = `amount=${Number(paid[0].amount).toFixed(2)} method=cash collector=demo@tabletap.dev`;
         return line.includes(want) || `the handback reads "${line}", not "${want}"`;
+      } },
+    // What the dialog asks before it words its offer. Each answer is the one
+    // the POST below then acts on — the two read the same plan.
+    { name: "GET  /api/orders/cancel (paid with its table: no one drawer)", as: "owner", method: "GET",
+      path: f => `/api/orders/cancel?id=${f.sittingPaidOrder}`, expect: [200],
+      check: (d, f) => (d.withTable === f.linePrice && d.cash === 0) || `answered ${JSON.stringify(d)}` },
+    { name: "GET  /api/orders/cancel (POS card: the terminal, not Stripe)", as: "owner", method: "GET",
+      path: f => `/api/orders/cancel?id=${f.posCardOrder}`, expect: [200],
+      check: (d, f) => (d.terminal === f.linePrice && d.refund === 0) || `answered ${JSON.stringify(d)}` },
+    { name: "GET  /api/orders/cancel (a table's online bill: Stripe)", as: "owner", method: "GET",
+      path: f => `/api/orders/cancel?id=${f.tableBillOrder}`, expect: [200],
+      check: (d, f) => (d.refund === f.linePrice && d.terminal === 0) || `answered ${JSON.stringify(d)}` },
+    { name: "GET  /api/orders/cancel (waiter refused)", as: "waiter", method: "GET",
+      path: f => `/api/orders/cancel?id=${f.posCardOrder}`, expect: [403] },
+    // Card on the restaurant's own terminal. This answered "payment still
+    // settling — try again" for ever, while the dialog promised a refund.
+    { name: "POST /api/orders/cancel (POS card sale)", as: "owner", method: "POST",
+      path: "/api/orders/cancel", body: async f => ({ id: f.posCardOrder }), expect: [200],
+      check: async (_d, f) => {
+        const { data: lines } = await f.admin
+          .from("user_logs").select("detail")
+          .eq("entity", "order").eq("action", "refunded")
+          .like("detail", `%order=${f.posCardOrder.slice(0, 8)}%`);
+        const line = lines?.[0]?.detail ?? "";
+        const want = `amount=${f.linePrice.toFixed(2)} method=card collector=demo-cashier@tabletap.dev`;
+        return line.includes(want) || `the handback reads "${line}", not "${want}"`;
+      } },
+    // One order of a table's online bill: refunded through Stripe, for its own
+    // share, from the intent on its payment. The fake account makes Stripe
+    // refuse, and that is the assertion — the route reached Stripe instead of
+    // answering "still settling", and a refund that failed left the order up.
+    { name: "POST /api/orders/cancel (a table's online bill reaches Stripe)", as: "owner", method: "POST",
+      path: "/api/orders/cancel", arrange: f => f.withCardReader(),
+      body: async f => ({ id: f.tableBillOrder }),
+      expect: [502], expectError: /reembolso falló|refund failed/i,
+      effect: async f => {
+        const { data: o } = await f.admin
+          .from("orders").select("status").eq("id", f.tableBillOrder).maybeSingle();
+        return o?.status === "received" || `a refund that failed still moved the order to "${o?.status}"`;
       } },
     { name: "POST /api/orders/cancel (paid with its table, in cash)", as: "owner", method: "POST",
       path: "/api/orders/cancel", body: async f => ({ id: f.sittingPaidOrder }), expect: [200],

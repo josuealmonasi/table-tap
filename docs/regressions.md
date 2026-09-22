@@ -28,6 +28,7 @@ us, and what now catches each one.
 | A restaurant row is never created on a trial with no end | The admin screen opened accounts on a trial `getPlan` could never settle |
 | A cancelled sale leaves the drawer of whoever took it, once | The corte counted an honest waiter MX$100 short for handing a cancelled cash sale back |
 | Every sign-in a gate makes has its error read | A failed sign-in turned nine of a manager's screens into oks nobody had seen |
+| The cancel dialog words its offer from the plan the cancel follows | A POS card sale, a table settled by card, and a table's online bill could never be cancelled — "still settling", for ever |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -753,6 +754,21 @@ that does not; each gate was watched failing with the password wrong. The first
 run with the fix found one more: `pnpm promises` had signed in as the platform
 admin with the demo password on every run there had been, failed, and checked
 the admin screen signed out — ok, each time.
+## Still settling, for ever
+
+The fix for cash told cash apart from a card whose webhook had not landed. Every
+other card with no payment intent on the ORDER stayed on the wrong side of that
+line: a card sale rung up at the POS, a table settled by card at its terminal,
+and — the common one — any order of a table whose bill was paid online in one
+go, because `settleBill` stamps the intent on each order's payment and never on
+the order. All were answered "payment still settling, try again" for ever,
+while the dialog promised "the customer will be refunded". Reproduced on dev
+before the fix. What a cancel gives back is now one function reading the
+ledger, used by the route and by a GET the dialog asks first; Stripe refunds
+each payment for its own amount, and the rest is worded as what a person has to
+give back. Restaurants have Express dashboards, which cannot refund, so the copy
+does not send them to Stripe. Watched failing with the plan blind to a
+payment's own intent, and with the old refusal put back.
 
 ## The decoder under the optimiser
 
