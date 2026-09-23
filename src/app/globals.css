@@ -4346,7 +4346,6 @@ a.tt-btn {
   border: 1px solid rgba(200, 90, 40, 0.25);
 }
 
-/* "You have an order in progress" link on the menu — tappable, accent-filled. */
 /* The visit card, from the menu: quieter than "follow your order", which is
    about food on its way, and one line on a phone so it costs the menu little. */
 .tt-loyalty-entry {
@@ -4363,13 +4362,18 @@ a.tt-btn {
   text-align: left;
   cursor: pointer;
   background: var(--tt-accent-wash);
-  color: var(--tt-accent-ink);
+  color: var(--tt-header-ink);
   border: 1px solid color-mix(in srgb, var(--tt-accent) 25%, transparent);
+}
+.tt-loyalty-entry > svg {
+  flex-shrink: 0;
+  color: var(--tt-accent);
 }
 .tt-loyalty-entry-text {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+/* "You have an order in progress" link on the menu — tappable, accent-filled. */
 .tt-track-banner {
   display: block;
   width: 100%;
