@@ -107,11 +107,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // still one bill, and charging the restaurant four times for the courtesy of
   // splitting it would be a fee for using the feature. It rides on the first
   // share to be paid, the same way settling a table puts it on the first order.
-  const { count: alreadyPaid } = await db
+  const { count: alreadyPaid, error: paidError } = await db
     .from("bill_split_claims")
     .select("share_no", { count: "exact", head: true })
     .eq("split_id", splitId)
     .not("paid_at", "is", null);
+  // Unread is not "nobody has paid yet": that answer puts our fee on a second
+  // share and charges the restaurant for the table twice.
+  if (paidError) return await apiError("apiErr.verifyOrders", 503);
   const feePlan = await getPlan(restaurantId);
   const takenThisMonth = feePlan?.limits.fee_cap ? await feesTakenThisMonth(restaurantId) : 0;
   const appFee =
