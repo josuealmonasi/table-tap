@@ -865,8 +865,12 @@ and that the diner can delete it; the terms say the reward is the restaurant's
 to honour, including after a pause or a change of plan. Terms version
 2026-09-22, and the PDFs regenerated from the same text.
 
-Analytics for the card (members, visits, return rate, rewards) is the last
-step still to come.
+**Analytics** shows the card over the same period as the charts, for a
+restaurant that runs one: cards made, visits stamped, cards that came back
+(stamped on two or more days in the period — the thing the card exists to
+cause), rewards spent, and the stamps each person gave, most first, which is
+where a stamp with nothing sold behind it would show. Counted by
+`loyaltyStats()` from the rows, read with the secret key like the corte.
 
 ## What is checked, and how
 

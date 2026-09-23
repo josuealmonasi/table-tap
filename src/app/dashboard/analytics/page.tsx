@@ -8,6 +8,10 @@ import {
 } from "@/lib/analytics";
 import AnalyticsView, { type RatedDish } from "@/components/dashboard/analytics/AnalyticsView";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getPlan } from "@/lib/plan-server";
+import { can } from "@/lib/plan";
+import { programOf } from "@/lib/loyalty/server";
+import { readLoyaltyStats } from "@/lib/loyalty/analytics-read";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { startOfLocalDay } from "@/lib/day-window";
 import { corteFrom, EMPTY_CORTE, type CorteAdjustment, type CortePayment } from "@/lib/corte";
@@ -114,6 +118,15 @@ export default async function AnalyticsPage({
     .sort((a, b) => b!.count - a!.count)
     .slice(0, 12) as RatedDish[];
 
+  // The visit card over the same period as the charts, for a restaurant that
+  // runs one. Read with the secret key, like the corte: none of it is readable
+  // from a browser, and this page is already manager-gated.
+  const plan = await getPlan(membership.restaurant.id);
+  const loyalty =
+    plan && can(plan.limits, "loyalty") && (await programOf(membership.restaurant.id))
+      ? await readLoyaltyStats(admin, membership.restaurant.id, start, end)
+      : null;
+
   return (
     <AnalyticsView
       data={data}
@@ -124,6 +137,7 @@ export default async function AnalyticsPage({
       corte={corte}
       restaurantName={membership.restaurant.name}
       dayLabel={dayLabel}
+      loyalty={loyalty}
     />
   );
 }
