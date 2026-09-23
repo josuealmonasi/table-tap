@@ -3697,14 +3697,18 @@ a.tt-btn {
 }
 
 /* analytics: stat tiles */
+/* `minmax(0, 1fr)`, not `1fr`: a plain `1fr` column will not shrink below its
+   content, so a month's takings — "MX$1,497.71" in 24px bold — widened its
+   column past half a phone and pushed the page 21px off the side. Seen only
+   on the longer periods, which is why "today" never showed it. */
 .tt-analytics-tiles {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 @media (max-width: 640px) {
   .tt-analytics-tiles {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 .tt-analytics-tile {
@@ -3715,10 +3719,18 @@ a.tt-btn {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+  /* The figure is sized by its tile, not the screen: full size on a desk,
+     just small enough to fit on a phone. */
+  container-type: inline-size;
 }
+/* A month's takings fit their tile whole: 24px where there is room, down to
+   14px on a narrow one — wrapping, mid-number, only past that. */
 .tt-analytics-tile strong {
-  font-size: 24px;
+  font-size: clamp(14px, 14cqi, 24px);
   line-height: 1.1;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
 }
 .tt-analytics-tile span {
   color: var(--tt-muted);
@@ -3760,6 +3772,23 @@ a.tt-btn {
   font-size: 11px;
   color: var(--tt-muted);
   white-space: nowrap;
+}
+/* The day chart's labels live under the bars rather than inside them, so a
+   label can span several bars: the bars keep the chart's height to
+   themselves, and the row below matches their gap so each label sits under
+   the bar it starts at. */
+.tt-bars-days {
+  height: 140px;
+}
+.tt-bar-labels {
+  display: grid;
+  column-gap: 6px;
+  margin-top: 6px;
+}
+.tt-bar-labels .tt-bar-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: clip;
 }
 
 /* analytics: top-products table */

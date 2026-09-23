@@ -80,6 +80,8 @@ export function computeAnalytics(
   period: Period,
   timeZone: string,
   now = new Date(),
+  /** The reader's language: the day labels are words, and "Tue" on a Spanish page is not one. */
+  locale: string = "es",
 ): Analytics {
   const revenue = orders.reduce((s, o) => s + Number(o.total), 0);
   const tips = orders.reduce((s, o) => s + Number(o.tip), 0);
@@ -92,7 +94,10 @@ export function computeAnalytics(
   const { start, end } = periodRange(period, now, timeZone);
   const days: DayBar[] = [];
   const dayIndex = new Map<string, number>();
-  const label = new Intl.DateTimeFormat([], {
+  // In the reader's language, not the machine's: `[]` meant whatever the
+  // server was set to, and Vercel's English put "25 Tue" on every Spanish
+  // owner's chart.
+  const label = new Intl.DateTimeFormat(locale === "es" ? "es-MX" : "en-US", {
     timeZone,
     weekday: "short",
     day: "2-digit",

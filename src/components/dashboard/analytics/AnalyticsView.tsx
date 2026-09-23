@@ -55,6 +55,8 @@ export default function AnalyticsView({
 }: AnalyticsViewProps) {
   const t = useT();
   const maxDay = Math.max(1, ...data.byDay.map(d => d.revenue));
+  // One label per this many days: seven or so, whatever the period.
+  const dayStep = Math.max(1, Math.ceil(data.byDay.length / 7));
   const maxHour = Math.max(1, ...data.byHour.map(h => h.count));
   const money = (n: number) => formatMoney(n, currency);
 
@@ -115,23 +117,44 @@ export default function AnalyticsView({
                 {t("analytics.noSales")}
               </p>
             ) : (
-              <div className="tt-bars">
-                {data.byDay.map((d, i) => (
-                  <div
-                    key={i}
-                    className="tt-bar-col"
-                    title={`${d.label}: ${money(d.revenue)}`}
-                  >
-                    <div className="tt-bar-track">
-                      <div
-                        className="tt-bar-fill"
-                        style={{ height: `${Math.round((d.revenue / maxDay) * 100)}%` }}
-                      />
+              <>
+                <div className="tt-bars tt-bars-days">
+                  {data.byDay.map((d, i) => (
+                    <div
+                      key={i}
+                      className="tt-bar-col"
+                      title={`${d.label}: ${money(d.revenue)}`}
+                    >
+                      <div className="tt-bar-track">
+                        <div
+                          className="tt-bar-fill"
+                          style={{ height: `${Math.round((d.revenue / maxDay) * 100)}%` }}
+                        />
+                      </div>
                     </div>
-                    <span className="tt-bar-label">{d.label}</span>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+                {/* The days under the bars, in their own row: about seven of
+                    them, each as wide as the bars it names. Inside thirty
+                    bars on a phone every label was 5px wide and none could be
+                    read; a week still gets one under every bar. */}
+                <div
+                  className="tt-bar-labels"
+                  style={{ gridTemplateColumns: `repeat(${data.byDay.length}, minmax(0, 1fr))` }}
+                >
+                  {data.byDay.map((d, i) =>
+                    i % dayStep === 0 ? (
+                      <span
+                        key={i}
+                        className="tt-bar-label"
+                        style={{ gridColumn: `${i + 1} / span ${Math.min(dayStep, data.byDay.length - i)}` }}
+                      >
+                        {d.label}
+                      </span>
+                    ) : null,
+                  )}
+                </div>
+              </>
             )}
           </div>
         )}

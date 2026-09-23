@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getLocale } from "@/lib/i18n/server";
 import { requireManager } from "@/lib/page-guard";
 import {
   computeAnalytics,
@@ -42,7 +43,7 @@ export default async function AnalyticsPage({
     .gte("created_at", start.toISOString())
     .lt("created_at", end.toISOString());
 
-  const data = computeAnalytics((rows as AnalyticsOrder[]) ?? [], period, timeZone);
+  const data = computeAnalytics((rows as AnalyticsOrder[]) ?? [], period, timeZone, new Date(), await getLocale());
 
   // The register close is always TODAY, whatever period the charts are showing.
   // A corte is the thing somebody signs at the end of a shift; a corte "for the

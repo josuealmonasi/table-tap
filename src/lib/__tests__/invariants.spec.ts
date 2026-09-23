@@ -1542,3 +1542,17 @@ describe("the stamp button and the stamp are one decision", () => {
     }
   });
 });
+
+describe("a date reads in the reader's language, not the machine's", () => {
+  it("never formats a date with the server's default locale", () => {
+    // `new Intl.DateTimeFormat([])` and a bare `toLocaleDateString()` answer in
+    // whatever language the machine was set to — English on the host — so a
+    // Spanish owner's analytics said "25 Tue". Prices were fixed the same way.
+    const offenders: string[] = [];
+    for (const file of walkAll("src").filter(f => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__"))) {
+      const src = read(file);
+      if (/Intl\.DateTimeFormat\(\s*\[\s*\]/.test(src) || /toLocale(Date)?String\(\s*\)/.test(src)) offenders.push(file);
+    }
+    expect(offenders, `dates in the machine's language:\n${offenders.join("\n")}`).toEqual([]);
+  });
+});
