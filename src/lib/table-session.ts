@@ -122,7 +122,7 @@ export async function staffOpenedBill(
   tableId: string,
 ): Promise<boolean> {
   const db = createAdminClient();
-  const { data: owed } = await db
+  const { data: owed, error: owedError } = await db
     .from("orders")
     .select("session_id")
     .eq("restaurant_id", restaurantId)
@@ -131,16 +131,20 @@ export async function staffOpenedBill(
     .eq("written_off", false)
     .neq("status", "pending_payment")
     .neq("status", "cancelled");
+  // Thrown, never "no": this is the guard that stops a card being charged
+  // while a waiter collects the same food, and a failed read answered false.
+  if (owedError) throw new Error(`Could not read the table's orders: ${owedError.message}`);
 
   const sessions = [...new Set((owed ?? []).map(o => o.session_id).filter(Boolean))] as string[];
   if (sessions.length === 0) return false;
 
-  const { count } = await db
+  const { count, error: countError } = await db
     .from("table_sessions")
     .select("id", { count: "exact", head: true })
     .eq("restaurant_id", restaurantId)
     .in("id", sessions)
     .not("opened_by", "is", null);
+  if (countError) throw new Error(`Could not read the table's sittings: ${countError.message}`);
   return (count ?? 0) > 0;
 }
 

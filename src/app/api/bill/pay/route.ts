@@ -65,17 +65,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // the table with a machine and a running balance, and a card charged here at
   // the same moment pays for food they are about to collect for — the table
   // pays twice and only one of the two payments is anywhere anybody is looking.
-  if (await staffOpenedBill(restaurantId, tableId)) {
-    return await apiError("apiErr.waiterSettles", 409);
-  }
+  //
+  // Neither guard may answer "no" because it could not read: that is the one
+  // answer that lets the charge through. A failed read refuses, like the
+  // orders read below.
+  const waiterSettles = await staffOpenedBill(restaurantId, tableId).catch(() => null);
+  if (waiterSettles === null) return await apiError("apiErr.verifyOrders", 503);
+  if (waiterSettles) return await apiError("apiErr.waiterSettles", 409);
 
   // And the same refusal for a table dividing it between themselves. A phone
   // that ordered but never took a share still saw this button — three ordered,
   // two halved it — and paying here charges for food the shares are already
   // being collected for. The screen hides it; this is what makes it true.
-  if (await splitInProgress(restaurantId, tableId)) {
-    return await apiError("apiErr.splitInProgress", 409);
-  }
+  const dividing = await splitInProgress(restaurantId, tableId).catch(() => null);
+  if (dividing === null) return await apiError("apiErr.verifyOrders", 503);
+  if (dividing) return await apiError("apiErr.splitInProgress", 409);
 
   const db = createAdminClient();
 

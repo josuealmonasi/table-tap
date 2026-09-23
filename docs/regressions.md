@@ -976,6 +976,16 @@ promoción coincide" (no promotion matches) when the list had not loaded at all.
 An invariant now forbids a made-up answer anywhere in `src`, whether a
 `r.ok ? r.json() : {…}` fallback or a `catch` that empties the state.
 
+The server had its own copy. `staffOpenedBill` refuses a card payment while a
+waiter collects the same food, and `splitInProgress` refuses the whole bill
+while its shares are being collected. Both dropped the error of their reads, so
+a failed read answered "no", the one answer that lets the charge through, even
+though the orders read a few lines below them in the same route already refused
+on failure. Both throw now, every caller refuses with that route's own 503, and
+an invariant counts each guard's reads against its error checks. `/api/session`
+answered `{ open: false }` when its reads failed, which a fixed client still
+takes as "forget this table", and now it answers 500.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read

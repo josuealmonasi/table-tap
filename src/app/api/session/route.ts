@@ -27,19 +27,24 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   const db = createAdminClient();
-  const { data: session } = await db
+  const { data: session, error: sessionError } = await db
     .from("table_sessions")
     .select("id, table_id, closed_at, restaurant_id")
     .eq("id", id)
     .maybeSingle();
+  // A read that failed is not a sitting that closed. It answered
+  // `{ open: false }`, and closed is what makes the phone forget its table.
+  if (sessionError) return await apiError("apiErr.ordersLoad", 500);
 
   // A sitting that closed leaves nothing behind: the diner is free.
   if (!session || session.closed_at) return NextResponse.json({ open: false });
 
-  const { data: rows } = await db
+  const { data: rows, error: ordersError } = await db
     .from("orders")
     .select("id, total, paid, written_off, status")
     .eq("session_id", id);
+  // Nor is it a bill paid up: no rows read is not nothing owed.
+  if (ordersError) return await apiError("apiErr.ordersLoad", 500);
 
   const owing = unpaidOrders((rows ?? []) as Order[]);
   const owed = Math.round(owing.reduce((sum, o) => sum + Number(o.total), 0) * 100) / 100;

@@ -43,9 +43,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   // The same refusal the bill screen makes, made where it counts: a share
   // charged here is money the waiter's running balance never sees.
-  if (await staffOpenedBill(restaurantId, tableId)) {
-    return await apiError("apiErr.waiterSettles", 409);
-  }
+  // A guard that cannot read refuses: a failed read is not leave to charge.
+  const waiterSettles = await staffOpenedBill(restaurantId, tableId).catch(() => null);
+  if (waiterSettles === null) return await apiError("apiErr.verifyOrders", 503);
+  if (waiterSettles) return await apiError("apiErr.waiterSettles", 409);
 
   const db = createAdminClient();
 

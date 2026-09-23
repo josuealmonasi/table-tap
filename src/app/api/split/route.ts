@@ -61,9 +61,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // Nothing to divide: the waiter who opened this bill is the one collecting
   // it, and they have a calculator that does the same job at the table.
-  if (await staffOpenedBill(restaurantId, tableId)) {
-    return await apiError("apiErr.waiterSettles", 409);
-  }
+  const waiterSettles = await staffOpenedBill(restaurantId, tableId).catch(() => null);
+  if (waiterSettles === null) return await apiError("apiErr.verifyOrders", 503);
+  if (waiterSettles) return await apiError("apiErr.waiterSettles", 409);
 
   const db = createAdminClient();
 

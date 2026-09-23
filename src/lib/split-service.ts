@@ -50,7 +50,7 @@ export async function splitInProgress(
   tableId: string,
 ): Promise<boolean> {
   const db = createAdminClient();
-  const { data: owed } = await db
+  const { data: owed, error: owedError } = await db
     .from("orders")
     .select("session_id")
     .eq("restaurant_id", restaurantId)
@@ -59,16 +59,20 @@ export async function splitInProgress(
     .eq("written_off", false)
     .neq("status", "pending_payment")
     .neq("status", "cancelled");
+  // Thrown, never "no": paying the whole bill is refused while shares of it
+  // are being collected, and a failed read answered "no split".
+  if (owedError) throw new Error(`Could not read the table's orders: ${owedError.message}`);
 
   const sessions = [...new Set((owed ?? []).map(o => o.session_id).filter(Boolean))] as string[];
   if (sessions.length === 0) return false;
 
-  const { count } = await db
+  const { count, error: countError } = await db
     .from("bill_splits")
     .select("id", { count: "exact", head: true })
     .eq("restaurant_id", restaurantId)
     .in("session_id", sessions)
     .eq("status", "locked");
+  if (countError) throw new Error(`Could not read the table's splits: ${countError.message}`);
   return (count ?? 0) > 0;
 }
 

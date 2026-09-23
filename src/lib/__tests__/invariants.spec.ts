@@ -1615,3 +1615,41 @@ describe("a failed read is never an answer", () => {
     expect(offenders, `a failed read shown as an answer:\n${offenders.join("\n")}`).toEqual([]);
   });
 });
+
+describe("a guard on money fails closed", () => {
+  // `staffOpenedBill` refuses a card while a waiter collects the same food,
+  // `splitInProgress` refuses the whole bill while its shares are collected.
+  // Both read the database and dropped the error, so a failed read answered
+  // "no" — the one answer that lets the charge through.
+  const GUARDS: [string, string][] = [
+    ["src/lib/table-session.ts", "staffOpenedBill"],
+    ["src/lib/split-service.ts", "splitInProgress"],
+  ];
+
+  it("checks the error of every read a guard makes", () => {
+    const offenders: string[] = [];
+    for (const [file, name] of GUARDS) {
+      const src = read(file);
+      const start = src.indexOf(`export async function ${name}(`);
+      expect(start, `${name} not found in ${file} — the scan broke`).toBeGreaterThan(-1);
+      const body = src.slice(start, src.indexOf("\n}\n", start));
+      const queries = (body.match(/await db\b/g) ?? []).length;
+      const checked = (body.match(/if \(\w*[eE]rror\) throw/g) ?? []).length;
+      if (queries === 0 || checked < queries) offenders.push(`${name}: ${queries} read(s), ${checked} checked`);
+    }
+    expect(offenders, `a money guard that can answer "no" by failing:\n${offenders.join("\n")}`).toEqual([]);
+  });
+
+  it("refuses at every call site where the guard cannot answer", () => {
+    // A throw outside the route's try is a bare 500 with no sentence; each
+    // caller turns it into the same refusal the orders read gives.
+    const offenders: string[] = [];
+    for (const file of walkAll("src/app/api").filter(f => f.endsWith("route.ts"))) {
+      const code = read(file).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+      for (const [, name] of GUARDS) {
+        if (new RegExp(`if \\(await ${name}\\(`).test(code)) offenders.push(`${file}: ${name}`);
+      }
+    }
+    expect(offenders, `a guard whose failure becomes a bare 500:\n${offenders.join("\n")}`).toEqual([]);
+  });
+});
