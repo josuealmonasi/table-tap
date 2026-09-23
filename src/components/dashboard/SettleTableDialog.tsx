@@ -61,6 +61,11 @@ export default function SettleTableDialog({
   const t = useT();
   const toast = useToast();
   const [orders, setOrders] = useState<Order[] | null>(null);
+  // The bill could not be read. Never the same answer as a table that owes
+  // nothing: a failed read used to become an empty bill, and the waiter was
+  // told "this table owes nothing" by a server that had not said anything.
+  const [unread, setUnread] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
   // The calculator, for a table paying a bit at a time.
@@ -68,13 +73,21 @@ export default function SettleTableDialog({
 
   useEffect(() => {
     if (!open) return;
+    let live = true;
     setOrders(null);
+    setUnread(false);
     // The staff view: everything the table owes, not just this service.
     fetch(tableId ? `/api/table-bill?tableId=${tableId}` : `/api/table-bill?orderId=${orderId}`)
-      .then(r => (r.ok ? r.json() : { orders: [] }))
-      .then(d => setOrders(d.orders ?? []))
-      .catch(() => setOrders([]));
-  }, [open, restaurantId, tableId, orderId]);
+      .then(async r => {
+        if (!r.ok) throw new Error(String(r.status));
+        const d = await r.json();
+        if (live) setOrders(d.orders ?? []);
+      })
+      .catch(() => live && setUnread(true));
+    return () => {
+      live = false;
+    };
+  }, [open, restaurantId, tableId, orderId, attempt]);
 
   // The waiter is settling the whole table, so nothing here is "mine".
   const bill = orders ? tableBill(orders, []) : null;
@@ -152,7 +165,18 @@ export default function SettleTableDialog({
         {t(tableId ? "settle.title" : "settle.titleToGo", { label: tableLabel })}
       </h3>
 
-      {!bill ? (
+      {unread ? (
+        <>
+          <p className="tt-field-error" role="alert">{t("settle.loadFailed")}</p>
+          <button
+            className="tt-btn tt-btn-primary tt-btn-lg"
+            style={{ width: "100%" }}
+            onClick={() => setAttempt(n => n + 1)}
+          >
+            {t("settle.retry")}
+          </button>
+        </>
+      ) : !bill ? (
         <p className="tt-muted">{t("common.loading")}</p>
       ) : bill.settled ? (
         <p className="tt-muted">{t("settle.nothing")}</p>

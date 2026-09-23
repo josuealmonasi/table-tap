@@ -1592,3 +1592,26 @@ describe("the sweeps open the narrowest phone people carry", () => {
     expect(Math.min(...dialogs), "pnpm dialogs never opens a 360px phone").toBe(360);
   });
 });
+
+describe("a failed read is never an answer", () => {
+  it("never stands a made-up answer in for a response that failed", () => {
+    // An empty bill is a settled bill, a closed sitting is a forgotten one, and
+    // no badges means nothing is waiting. `r.ok ? r.json() : { orders: [] }`
+    // told a diner who owed that they had paid, and asked if they wanted the
+    // receipt; the waiter's copy said "this table owes nothing"; `{ open:
+    // false }` made a phone forget the table it still owed at; `{ badges: {} }`
+    // told a waiter nobody was calling. A failed read keeps what was known,
+    // or says it failed.
+    let reads = 0;
+    const offenders: string[] = [];
+    for (const file of walkAll("src").filter(f => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__") && !f.includes("/app/api/"))) {
+      const code = read(file).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+      reads += (code.match(/\.ok\b/g) ?? []).length;
+      const madeUp = /\.ok\s*\?\s*(await\s+)?\w+\.json\(\)\s*:\s*[{[]/.test(code);
+      const emptied = /catch\(\s*\(\)\s*=>\s*set\w+\(\s*(\[\s*\]|\{\s*\}|null|false|0)\s*\)/.test(code);
+      if (madeUp || emptied) offenders.push(file);
+    }
+    expect(reads, "no response was ever checked — the scan broke").toBeGreaterThan(10);
+    expect(offenders, `a failed read shown as an answer:\n${offenders.join("\n")}`).toEqual([]);
+  });
+});

@@ -63,8 +63,9 @@ export const AUDIT = `(() => {
  * `says` is what the screen MUST contain; `offers` is a control it must NOT;
  * `keeps` is one that must still be there, so a screen cannot pass by hiding
  * everything. `open` is a button to press first, for a promise made inside a
- * dialog. Each case changes one thing — the runner puts everything back
- * afterwards.
+ * dialog. `refuse` answers a route with a 429, as a busy server does: from
+ * the start, or `afterOpen` so that it is the next read that fails. Each case
+ * changes one thing — the runner puts everything back afterwards.
  */
 export const STATES = [
   // The visit card's scanner, shown only where a stamp would be taken. The
@@ -238,6 +239,39 @@ export const STATES = [
     offers: /cobrar por partes|collect in parts/i,
     // Settling in full still works and must stay.
     keeps: /pagó en efectivo|paid cash/i,
+  },
+  {
+    // A bill that could not be read is not a paid one. A refused poll used to
+    // come back as `{ orders: [] }`, and an empty bill is a settled bill: it
+    // hid the bill under a diner who owed it, and asked whether they wanted a
+    // receipt for paying it. One 429 from a busy Wi-Fi was enough.
+    name: "the bill cannot be read · the diner",
+    as: "bill",
+    apply: (admin, c) =>
+      admin.from("restaurants")
+        .update({ stripe_account_id: "acct_promise_audit", stripe_charges_enabled: true })
+        .eq("id", c.restaurantId),
+    open: /ver mi cuenta|view my bill/i,
+    // The bill polls every ten seconds while it is open.
+    refuse: { url: "**/api/bill?*", afterOpen: true, wait: 11_500 },
+    says: /total/i,
+    // Nothing that belongs to a bill already paid.
+    offers: /enviar recibo|send receipt|crear mi tarjeta|create my card/i,
+    keeps: /pagar en la mesa|pay at the table/i,
+  },
+  {
+    // The waiter's side of the same thing: a read that failed said "Esta mesa
+    // no debe nada", and the table could have walked out on a waiter who
+    // believed it.
+    name: "the bill cannot be read · the waiter",
+    as: "owner",
+    path: "/dashboard/bills",
+    refuse: { url: "**/api/table-bill?*" },
+    open: /^\s*(Cobrar|Collect)\s*$/i,
+    says: /no se pudo cargar la cuenta|couldn't load this table's bill/i,
+    // Nothing to collect against a number nobody has.
+    offers: /pagó en efectivo|paid cash/i,
+    keeps: /intentar de nuevo|try again/i,
   },
   {
     name: "counter order ready",
