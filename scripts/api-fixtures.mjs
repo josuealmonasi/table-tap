@@ -49,10 +49,41 @@ export async function setup(env, base) {
     .from("restaurants").select("*").eq("name", "Demo Bistro").maybeSingle();
   const { data: tables } = await admin
     .from("restaurant_tables").select("id, label").eq("restaurant_id", restaurant.id);
-  // One of the demo's visit cards, for the rewards lookup. Read, never made:
-  // the lookup changes nothing, so there is nothing to put back.
-  const { data: loyaltyCard } = await admin
-    .from("loyalty_cards").select("code").eq("restaurant_id", restaurant.id).limit(1).maybeSingle();
+  // The demo's visit cards: one for the rewards lookup, one on its way that
+  // has no visit today, and one whose reward is ready. The stamp and redeem
+  // cases write visits and a redemption against them, so what the demo had is
+  // remembered here and put back by teardown — goals included, because a
+  // redemption moves a card to the program's current goal.
+  const { data: loyaltyCards } = await admin
+    .from("loyalty_cards").select("id, code, goal").eq("restaurant_id", restaurant.id);
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: restaurant.timezone ?? "America/Mexico_City",
+  }).format(new Date());
+  const cardStates = [];
+  for (const c of loyaltyCards ?? []) {
+    const [{ data: progress }, { count: todays }] = await Promise.all([
+      admin.rpc("loyalty_progress", { p_card: c.id }),
+      admin.from("loyalty_visits").select("id", { count: "exact", head: true })
+        .eq("card_id", c.id).eq("visit_day", today),
+    ]);
+    cardStates.push({ ...c, progress: Number(progress), stampedToday: (todays ?? 0) > 0 });
+  }
+  const loyaltyCard = cardStates[0] ?? null;
+  const stampable = cardStates.find(c => c.progress < c.goal - 1 && !c.stampedToday) ?? null;
+  const readyCard = cardStates.find(c => c.progress >= c.goal) ?? null;
+  const [{ data: visitsBefore }, { data: redemptionsBefore }] = await Promise.all([
+    admin.from("loyalty_visits").select("id").eq("restaurant_id", restaurant.id),
+    admin.from("loyalty_redemptions").select("id").eq("restaurant_id", restaurant.id),
+  ]);
+  // Switch the program off for one request, and back as it was.
+  const withLoyaltyOff = async () => {
+    const { data: was } = await admin
+      .from("loyalty_programs").select("active").eq("restaurant_id", restaurant.id).maybeSingle();
+    await admin.from("loyalty_programs").update({ active: false }).eq("restaurant_id", restaurant.id);
+    return async () => {
+      await admin.from("loyalty_programs").update({ active: was?.active ?? true }).eq("restaurant_id", restaurant.id);
+    };
+  };
   // A menu that is serving RIGHT NOW: active, and on no schedule. The demo has
   // a "Weekend Brunch" menu that only serves Saturday and Sunday mornings, and
   // whichever dish sorts first happened to be on it — so every route that
@@ -384,6 +415,14 @@ export async function setup(env, base) {
     table: tables[0],
     sessionId: session?.id ?? null,
     loyaltyCode: loyaltyCard?.code ?? null,
+    stampableCode: stampable?.code ?? null,
+    readyCode: readyCard?.code ?? null,
+    withLoyaltyOff,
+    loyaltyBefore: {
+      visits: (visitsBefore ?? []).map(v => v.id),
+      redemptions: (redemptionsBefore ?? []).map(r => r.id),
+      goals: cardStates.map(c => ({ id: c.id, goal: c.goal })),
+    },
     paidOrder: await make({ paid: true }),
     unpaidOrder: await make({ paid: false }),
     // A bill with a table: discounts and cancellations are asked for by table.
@@ -402,6 +441,24 @@ export async function setup(env, base) {
 /** Everything marked goes, whatever happened to the tests. */
 export async function teardown(fx) {
   const { admin, restaurant } = fx;
+  // The visits and the redemption the loyalty cases made, and the goals the
+  // redemption moved, back to what the demo had. Its log lines go with the
+  // rest of this run's, below.
+  if (fx.loyaltyBefore) {
+    const keptVisits = new Set(fx.loyaltyBefore.visits);
+    const keptRedemptions = new Set(fx.loyaltyBefore.redemptions);
+    const [{ data: visitsNow }, { data: redemptionsNow }] = await Promise.all([
+      admin.from("loyalty_visits").select("id").eq("restaurant_id", restaurant.id),
+      admin.from("loyalty_redemptions").select("id").eq("restaurant_id", restaurant.id),
+    ]);
+    const newVisits = (visitsNow ?? []).map(v => v.id).filter(id => !keptVisits.has(id));
+    const newRedemptions = (redemptionsNow ?? []).map(r => r.id).filter(id => !keptRedemptions.has(id));
+    if (newVisits.length) await admin.from("loyalty_visits").delete().in("id", newVisits);
+    if (newRedemptions.length) await admin.from("loyalty_redemptions").delete().in("id", newRedemptions);
+    for (const { id, goal } of fx.loyaltyBefore.goals) {
+      await admin.from("loyalty_cards").update({ goal }).eq("id", id);
+    }
+  }
   await admin.from("dish_ratings").delete().in("order_id", [fx.paidOrder, fx.unpaidOrder]);
   // A collection made in parts belongs to no order, so deleting the orders
   // leaves it behind — on the table's own sitting, quietly making the table's

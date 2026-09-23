@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MANAGES, OWNS, SETTLES } from "@/lib/membership";
 import { getPlan } from "@/lib/plan-server";
+import { loyaltyOn } from "@/lib/loyalty/server";
 import { can } from "@/lib/plan";
 import { requireSettles } from "@/lib/page-guard";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
@@ -152,6 +153,7 @@ export default async function BillsPage() {
         canCollectInParts={Boolean(plan && can(plan.limits, "waiterService"))}
         canDiscount={Boolean(plan && can(plan.limits, "staffDiscounts"))}
         askedToPay={(asking ?? []).map(a => a.table_id).filter(Boolean) as string[]}
+        loyalty={await loyaltyOn(r.id, plan?.limits ?? null)}
       >
         {/* Owner only, because that is all the database will hand over: the
             policy on `user_logs` is `owns_restaurant`. Showing it to a manager

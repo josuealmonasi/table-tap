@@ -19,6 +19,7 @@
 // Nothing it creates is left behind.
 // ============================================================================
 import { createClient } from "@supabase/supabase-js";
+import { attackLoyalty } from "./attack-loyalty.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(prod ? ".env.production.local" : ".env.development.local");
@@ -649,6 +650,12 @@ try {
       ? ok("and nobody can divide it on their phone either")
       : bad(`the split route answered ${split.status} and left ${count} split(s)`);
   }
+
+  // ── The visit card ─────────────────────────────────────────────────────
+  // Not money in the till, but a free meal is: another restaurant's card, the
+  // kitchen, and two people at once, each judged by the rows that changed.
+  console.log("\n  The visit card\n");
+  await attackLoyalty({ admin, post, who, home, ok, bad });
 } finally {
   // Everything, in the order that leaves nothing holding a reference. The
   // ledger first: `payments.order_id` is `on delete set null`, so removing the

@@ -1,9 +1,11 @@
 // ============================================================================
 // The one sentence about what a card needs next.
 //
-// The diner's rewards page and the staff scanner both say it, and they must
-// say the same thing: a diner told "1 more visit" at the table and "ready" on
-// their phone has been told two different things by one system.
+// The diner's rewards page and the staff scanner both count down with it, and
+// they must count the same: a diner told "1 more visit" at the table and
+// "ready" on their phone has been told two different things by one system.
+// Once a card is ready the two part ways on purpose — the diner is told to
+// show their card, the staff are handed the button that redeems it.
 // ============================================================================
 import type { Standing } from "@/lib/loyalty/standing";
 

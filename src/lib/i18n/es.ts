@@ -14,6 +14,11 @@ export const es: Messages = {
       promotion: "Promoción",
       settings: "Ajustes",
       menu: "Menú",
+      loyalty: "Tarjeta de visitas",
+    },
+    loyalty: {
+      stamped: "selló una tarjeta de visitas",
+      redeemed: "canjeó la recompensa de una tarjeta",
     },
     staff: {
       created: "agregó un acceso",
@@ -1068,6 +1073,9 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     // Último recurso cuando una petición falla sin cuerpo legible — una
     // conexión caída, o un 500 que devolvió una página de error en HTML.
     generic: "Algo salió mal.",
+    loyaltyOff: "La tarjeta de visitas está apagada en este restaurante.",
+    loyaltyNotHere: "Esa tarjeta no es de este restaurante.",
+    loyaltyNotReady: "A esta tarjeta todavía le faltan visitas.",
     notAccepting:
       "El restaurante no está recibiendo pedidos en este momento. Inténtalo más tarde.",
     checkoutFailed: "El pago falló",
@@ -1549,6 +1557,25 @@ votes: "Votos",
     redeemedTitle: "Recompensas canjeadas",
     noData: "Tu tarjeta no guarda tu nombre ni tus datos: solo su código y los días que visitaste.",
     another: "Consultar otra tarjeta",
+  },
+  loyalty: {
+    stampButton: "Sellar tarjeta",
+    title: "Tarjeta de visitas",
+    scanHint: "Apunta la cámara al QR de la tarjeta del cliente.",
+    noCamera: "No se abrió la cámara. Escribe el código impreso en la tarjeta.",
+    typeLabel: "O escribe el código",
+    stamp: "Sellar",
+    working: "Sellando…",
+    stamped: "Visita registrada",
+    already: "Esta tarjeta ya tiene la visita de hoy",
+    ready: "Recompensa lista",
+    redeem: "Canjear: {reward}",
+    redeemNoReward: "Canjear la recompensa",
+    redeeming: "Canjeando…",
+    redeemed: "Recompensa canjeada: {reward}",
+    redeemedNoReward: "Recompensa canjeada",
+    another: "Sellar otra tarjeta",
+    retry: "Intentar de nuevo",
   },
   footer: {
     privacy: "Privacidad",

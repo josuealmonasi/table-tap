@@ -12,6 +12,11 @@ export const en = {
       promotion: "Promotion",
       settings: "Settings",
       menu: "Menu",
+      loyalty: "Visit card",
+    },
+    loyalty: {
+      stamped: "stamped a visit card",
+      redeemed: "redeemed a visit card's reward",
     },
     staff: {
       created: "added a login",
@@ -1073,6 +1078,9 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     // Last resort when a request fails without a readable body — a dropped
     // connection, or a 500 that returned an HTML error page.
     generic: "Something went wrong.",
+    loyaltyOff: "The visit card is switched off for this restaurant.",
+    loyaltyNotHere: "That card isn't one of this restaurant's.",
+    loyaltyNotReady: "This card hasn't reached its goal yet.",
     notAccepting: "The restaurant isn't taking orders right now. Please try again later.",
     checkoutFailed: "Checkout failed",
     verifyItems: "Could not verify items",
@@ -1563,6 +1571,26 @@ votes: "Votes",
     redeemedTitle: "Rewards redeemed",
     noData: "Your card holds no name or personal details — only its code and the days you visited.",
     another: "Check another card",
+  },
+  /** The staff scanner that stamps a diner's visit card. */
+  loyalty: {
+    stampButton: "Stamp a card",
+    title: "Visit card",
+    scanHint: "Point the camera at the QR on the diner's card.",
+    noCamera: "The camera didn't open. Type the code printed on the card instead.",
+    typeLabel: "Or type the code",
+    stamp: "Stamp",
+    working: "Stamping…",
+    stamped: "Visit recorded",
+    already: "This card already has today's visit",
+    ready: "Reward ready",
+    redeem: "Redeem: {reward}",
+    redeemNoReward: "Redeem the reward",
+    redeeming: "Redeeming…",
+    redeemed: "Reward redeemed: {reward}",
+    redeemedNoReward: "Reward redeemed",
+    another: "Stamp another card",
+    retry: "Try again",
   },
   footer: {
     privacy: "Privacy",

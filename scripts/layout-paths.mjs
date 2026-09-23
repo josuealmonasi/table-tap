@@ -92,6 +92,8 @@ export const DIALOGS = {
   ],
   "/dashboard/bills": [
     { name: "settle", text: "Cobrar" },
+    // The visit card's scanner: camera, the typed code, and what the card says.
+    { name: "stamp a card", text: "Sellar tarjeta" },
     { name: "promotion on the bill", click: ".tt-bill-open-main" },
   ],
   "/dashboard/tables": [

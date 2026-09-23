@@ -12,6 +12,7 @@ import BillDiscountDialog from "./BillDiscountDialog";
 import SettleTableDialog from "./SettleTableDialog";
 import { BillIcon, SearchIcon, TableIcon } from "@/components/ui/icons";
 import ScanToCollect from "./ScanToCollect";
+import StampCard from "./loyalty/StampCard";
 import { useLiveOrders } from "@/hooks/useLiveOrders";
 
 export interface DiscountRequest {
@@ -51,6 +52,7 @@ export default function BillsPanel({
   canCollectInParts,
   canDiscount,
   askedToPay,
+  loyalty = false,
   children,
 }: {
   bills: OpenBill[];
@@ -69,6 +71,8 @@ export default function BillsPanel({
   canDiscount: boolean;
   /** Tables that asked for the bill and are waiting for somebody to come. */
   askedToPay: string[];
+  /** The restaurant takes visit-card stamps right now: plan and program both. */
+  loyalty?: boolean;
   /** The activity log, for whoever may see it. */
   children?: React.ReactNode;
 }) {
@@ -386,6 +390,7 @@ export default function BillsPanel({
               />
             </div>
             <ScanToCollect onFound={openScanned} />
+            {loyalty && canSettle && <StampCard />}
           </div>
 
           {shown.length === 0 ? (

@@ -67,6 +67,34 @@ export const AUDIT = `(() => {
  * afterwards.
  */
 export const STATES = [
+  // The visit card's scanner, shown only where a stamp would be taken. The
+  // first case is the control: with the program on the button is there, so
+  // the two after it cannot pass merely because it never renders at all.
+  {
+    name: "visit card on · bills",
+    as: "owner",
+    path: "/dashboard/bills",
+    says: /cuentas|bills/i,
+    keeps: /sellar tarjeta|stamp a card/i,
+  },
+  {
+    name: "visit card switched off · bills",
+    as: "owner",
+    path: "/dashboard/bills",
+    apply: (admin, c) => admin.from("loyalty_programs").update({ active: false }).eq("restaurant_id", c.restaurantId),
+    says: /cuentas|bills/i,
+    offers: /sellar tarjeta|stamp a card/i,
+    keeps: /^\s*(escanear|scan)\s*$/i,
+  },
+  {
+    name: "a plan without the visit card · bills",
+    as: "owner",
+    path: "/dashboard/bills",
+    apply: (admin, c) => admin.from("restaurants").update({ plan: "servicio", plan_status: "active" }).eq("id", c.restaurantId),
+    says: /cuentas|bills/i,
+    offers: /sellar tarjeta|stamp a card/i,
+    keeps: /^\s*(escanear|scan)\s*$/i,
+  },
   {
     name: "orders paused",
     as: "diner",

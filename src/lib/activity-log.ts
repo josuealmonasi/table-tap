@@ -23,7 +23,9 @@ export type LogEntity =
   | "coupon"
   | "promotion"
   | "settings"
-  | "menu";
+  | "menu"
+  /** A diner's visit card: stamped, or its reward spent. */
+  | "loyalty";
 
 /** What happened to it. Deliberately plain words: this list is read by owners. */
 export type LogAction =
@@ -41,7 +43,9 @@ export type LogAction =
   | "cancelled"
   | "refunded"
   | "paused"
-  | "resumed";
+  | "resumed"
+  | "stamped"
+  | "redeemed";
 
 export interface LogEvent {
   restaurantId: string;
