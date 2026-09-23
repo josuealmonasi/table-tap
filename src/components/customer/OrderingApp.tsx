@@ -668,6 +668,7 @@ export default function OrderingApp({
         <MenuScreen
           restaurant={restaurant}
           table={table}
+          loyalty={loyalty}
           trackIds={trackIds}
           categories={categories}
           items={items}

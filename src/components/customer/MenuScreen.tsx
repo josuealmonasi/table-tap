@@ -17,6 +17,8 @@ import ComboCard from "./ComboCard";
 import MenuItemRow from "./MenuItemRow";
 import CartBar from "./CartBar";
 import ServiceButtons from "./ServiceButtons";
+import LoyaltyMenuEntry from "./LoyaltyMenuEntry";
+import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
 import LanguageToggle from "./LanguageToggle";
 import {
   CouponIcon,
@@ -49,6 +51,7 @@ export default function MenuScreen({
   onOpenCart,
   notice,
   billDue = false,
+  loyalty = null,
   onOpenBill,
   trackIds,
   onTrack,
@@ -69,6 +72,8 @@ export default function MenuScreen({
   onOpenCart: () => void;
   /** The table has unpaid orders, so the bill is worth offering. */
   billDue?: boolean;
+  /** The restaurant runs the visit card: the menu offers it, any time. */
+  loyalty?: LoyaltyOfferInfo | null;
   /** Something to say under the banners — the visit card, just after paying. */
   notice?: React.ReactNode;
   onOpenBill?: () => void;
@@ -302,6 +307,7 @@ export default function MenuScreen({
               )}
             </div>
           )}
+          {loyalty && <LoyaltyMenuEntry offer={loyalty} />}
           {/* One banner per order still in the kitchen. A counter has no table
               to hang a running tab on, so remembering a drink after ordering
               food makes a SECOND order — and both deserve watching. With more

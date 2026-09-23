@@ -1651,6 +1651,11 @@ votes: "Votes",
     stampHere: "Stamp a visit",
   },
   /** The visit card offered to a diner after paying, and the card itself. */
+  loyaltyMenu: {
+    entry: "Visit card",
+    mine: "My visit card",
+    reward: "{goal} visits = {reward}",
+  },
   loyaltyOffer: {
     title: "Collect visits at {name}",
     body: "{goal} visits = {reward}. Your card is an image you keep on your phone — no sign-up, no name, no email.",
