@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { useQrCamera } from "@/hooks/useQrCamera";
+import { ScanIcon } from "@/components/ui/icons";
 import { codeFromScan, formatCode, normalizeCode } from "@/lib/loyalty/code";
 import CardLookupResult, { type LookedUp } from "./CardLookupResult";
 
@@ -88,14 +89,17 @@ export default function CardLookup({ active, reward }: CardLookupProps) {
         </button>
       </form>
       <div className="tt-loyalty-actions">
+        {/* Outlined, not ghost: on its own a ghost button is loose text, and
+            this is the quick way in — the one the page did not have. */}
         <button
           type="button"
-          className="tt-btn tt-btn-ghost tt-btn-sm"
+          className="tt-btn tt-btn-outline tt-btn-sm"
           onClick={() => {
             setProblem(null);
             setScanning(s => !s);
           }}
         >
+          <ScanIcon size={16} weight="bold" />
           {scanning ? t("loyaltyAdmin.closeCamera") : t("loyaltyAdmin.scan")}
         </button>
       </div>

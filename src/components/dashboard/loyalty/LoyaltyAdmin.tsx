@@ -35,9 +35,13 @@ export default function LoyaltyAdmin({ program, preview }: LoyaltyAdminProps) {
             {program.active && <StampCard buttonClass="tt-btn tt-btn-primary tt-btn-sm" />}
           </header>
           <ProgramStatus active={program.active} />
+          {/* The program on one side; on the other what the team does every day
+              — find a card, by camera or code — and the card a diner gets. On
+              a phone the lookup comes before the tall picture, not after it. */}
           <div className="tt-cols">
+            <ProgramForm program={program} />
             <div className="tt-loyalty-col">
-              <ProgramForm program={program} />
+              <CardLookup active={program.active} reward={program.reward} />
               {preview && (
                 <section className="tt-section">
                   <div className="tt-section-head">
@@ -50,7 +54,6 @@ export default function LoyaltyAdmin({ program, preview }: LoyaltyAdminProps) {
                 </section>
               )}
             </div>
-            <CardLookup active={program.active} reward={program.reward} />
           </div>
         </div>
       </div>
