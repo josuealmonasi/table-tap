@@ -102,8 +102,11 @@ against an order nobody settled, means one of them is lying.
 `pnpm dialogs` is the slow one, so it is not on that line — run it whenever you
 touch a dialog, a shared component or the stylesheet. It clicks every visible
 button on every screen as every role and measures whatever opens, so it needs
-no list of dialogs and cannot fall behind one. `pnpm layout` measures a curated
-list of nine; the app has thirty-one overlays, and a dialog is exactly where a
+no list of dialogs and cannot fall behind one. Every write those clicks send is
+answered in the browser and never reaches the server, and the demo data is
+fingerprinted before and after — a sweep that completed the board's orders once
+left every later `pnpm layout` with no order to open. `pnpm layout` measures a
+curated list of nine; the app has thirty-one overlays, and a dialog is exactly where a
 layout fault hides, because nobody sees it until a waiter opens one mid-service.
 
 `pnpm promises` opens every screen as every role and flips the switches that

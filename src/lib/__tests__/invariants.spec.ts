@@ -1488,3 +1488,25 @@ describe("the board loads what the badge counts", () => {
     expect(query, "a row limit decides which live orders the kitchen sees").not.toMatch(/\.limit\(/);
   });
 });
+
+describe("a sweep that clicks everything changes nothing", () => {
+  it("holds back every write the dialogs sweep sends, and checks nothing moved", () => {
+    // One run completed every live order on the demo board, reordered menus,
+    // duplicated dishes and approved a write-off — and the next `pnpm layout`
+    // found no order to open and skipped the order dialog without failing.
+    const sweep = read("scripts/dialog-check.mjs");
+    expect(sweep, "the dialogs sweep no longer holds back its writes").toMatch(/await holdWrites\(ctx, held\)/);
+    expect(sweep, "the dialogs sweep no longer compares the data before and after").toMatch(/changedParts\(before,/);
+  });
+
+  it("seeds every account on the terms the app enforces", () => {
+    // A copy "kept in step by hand" fell a month behind: every seeded account
+    // opened on the terms modal, and a sweep that may not write measured every
+    // owner screen from underneath it.
+    const copies = fs.readdirSync("scripts")
+      .filter(f => f.endsWith(".mjs") && /TERMS_VERSION\s*=\s*["']\d/.test(read(`scripts/${f}`)));
+    expect(copies, "a script keeps its own terms version").toEqual([]);
+    expect(read("scripts/mock-data.mjs"), "the demo restaurant is seeded with no terms accepted")
+      .toMatch(/terms_version, terms_accepted_at, terms_accepted_email/);
+  });
+});

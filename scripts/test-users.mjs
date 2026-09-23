@@ -1,9 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { populateMenu } from "./menu-catalog.mjs";
-
-// Kept in step with src/lib/legal.ts by hand — a seeded demo account that has
-// never accepted the terms greets whoever opens it with a modal.
-const TERMS_VERSION = "2026-08-18";
+// A seeded account that has not accepted the current terms greets whoever
+// opens it with a modal, so the version comes from where the app defines it.
+import { TERMS_VERSION } from "./terms-version.mjs";
 
 // Convenience logins created by `pnpm db:seed` / `pnpm db:reset` on BOTH
 // environments (this is a test prod — a reset orphans the surviving auth
@@ -194,16 +193,21 @@ export async function seedTestUsers(pgClient) {
     // so an account that somebody clicked around in goes back to being the
     // thing it is for. A lapsed trial is recorded as a real one whose date has
     // passed, so the app settles it on the next request the way it would in
-    // life rather than being handed the answer.
+    // life rather than being handed the answer. The current terms too: set only
+    // on creation, an account seeded before they changed kept the old version
+    // and opened on the terms modal for good.
     await pgClient.query(
       `update restaurants
-          set plan = $1, plan_status = $2, trial_ends_at = $3
+          set plan = $1, plan_status = $2, trial_ends_at = $3,
+              terms_version = $5,
+              terms_accepted_at = case when terms_version = $5 then terms_accepted_at else now() end
         where id = $4`,
       [
         user.plan ?? "casa",
         user.lapsedTrial ? "trialing" : "active",
         user.lapsedTrial ? new Date(Date.now() - 86400000).toISOString() : null,
         rid,
+        TERMS_VERSION,
       ],
     );
 

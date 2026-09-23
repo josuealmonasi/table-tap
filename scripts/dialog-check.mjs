@@ -14,6 +14,7 @@ import { createClient } from "@supabase/supabase-js";
 import { join } from "node:path";
 import { AUDIT } from "./layout-audit.mjs";
 import { CREW } from "./layout-paths.mjs";
+import { changedParts, fingerprint, holdWrites } from "./hold-writes.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -28,6 +29,13 @@ const auth = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 );
+
+// What the sweep is about to click through, fingerprinted with the secret key
+// so it can be compared once the sweep is over. See hold-writes.mjs.
+const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
+const DEMO = "Demo Bistro";
+const before = await fingerprint(admin, DEMO);
+const held = [];
 
 let failed = 0;
 let opened = 0;
@@ -106,6 +114,7 @@ for (const width of WIDTHS) {
     }
     const ctx = await browser.newContext({ viewport: { width, height: 900 }, locale: "es-MX" });
     ctx.setDefaultTimeout(30000);
+    await holdWrites(ctx, held);
     await ctx.addCookies([await cookieFor(who.email, password)]);
     const tab = await ctx.newPage();
     defuse(tab);
@@ -167,6 +176,15 @@ for (const width of WIDTHS) {
   }
 }
 await browser.close();
+
+// Held back is fine — that is a button doing its job with nobody listening. A
+// change that got through anyway is not: it is the seed another gate reads.
+console.log(`\n  ${held.length} write(s) held back in the browser.`);
+const moved = changedParts(before, await fingerprint(admin, DEMO));
+if (moved.length) {
+  failed++;
+  console.log(`  BAD      the sweep changed ${DEMO}'s data anyway: ${moved.join(", ")}`);
+}
 
 console.log(
   failed === 0

@@ -367,7 +367,7 @@ The gate, all of which must pass before anything ships:
 | `pnpm layout` | every screen reads at 390 / 820 / 1280 |
 | `pnpm promises` | no screen offers what the system will refuse |
 | `pnpm attack` | nobody signed in can move a peso they should not |
-| `pnpm dialogs` | every dialog, found by opening it rather than by listing it |
+| `pnpm dialogs` | every dialog, found by opening it rather than by listing it — with every write held back in the browser, and the demo data compared before and after |
 | `pnpm money` | the ledger and the orders tell the same story |
 
 The table left `attack` out for a while and the prose below listed it, which is
