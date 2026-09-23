@@ -47,6 +47,7 @@ us, and what now catches each one.
 | A polled route is sized for the room behind one address | The tracker's 120 a minute was thirty diners on the menu; one table of six dividing its bill ran out the split's 60 |
 | A request that says it worked reads its answer | "Llamar al mesero" said "¡En camino!" for a minute whatever came back, a refusal or no connection |
 | A refused move is not a dropped connection | A 403 from an expired sign-in was held as "saved, will be sent" and retried on every reconnect |
+| An order that could not be read is not a missing one | A failed read of an order was null, and the tracker answered a diner who had just ordered with "not found" |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -1066,6 +1067,18 @@ and every reconnect sent it again and was refused again, so the banner never
 cleared. A refusal now puts the ticket back and shows the server's reason. The
 flush drops a queued move the server refused, says how many, and keeps only
 the ones a failing server may still take. An invariant holds both.
+
+## Not found, because not read
+
+`fetchTrackedOrder` read one order with `.single()` and dropped the error, so a
+read that failed came back as `null`, the same answer as an id that matches
+nothing. The tracker page turned that into "not found" for a diner who had just
+ordered and paid, and `/api/order-status` answered 404, which the menu's
+"track my order" takes as "that order was deleted". It reads with
+`maybeSingle()` and throws on a real error now. The page falls through to the
+app's "no order was lost, try again" screen, and both routes answer 500, which
+every poller treats as "keep what you knew". An invariant keeps the throw in
+the reader and forbids a route caller that lets it become a 404.
 
 ## Before merging anything large
 

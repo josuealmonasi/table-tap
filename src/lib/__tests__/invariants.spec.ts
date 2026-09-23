@@ -1753,3 +1753,22 @@ describe("a refused move is not a dropped connection", () => {
     expect(src, "a refused queued move is kept and retried for ever").toMatch(/res\.status >= 500\) stuck\.push/);
   });
 });
+
+describe("an order that could not be read is not a missing one", () => {
+  it("throws from the tracker's reader when the read fails", () => {
+    // `.single()` with the error dropped made a failed read null, and the
+    // tracker page answered a diner who had just ordered with "not found".
+    const src = read("src/lib/order-tracking.ts");
+    const start = src.indexOf("export async function fetchTrackedOrder(");
+    expect(start, "fetchTrackedOrder not found — the scan broke").toBeGreaterThan(-1);
+    const body = src.slice(start, src.indexOf("\n}\n", start));
+    expect(body, "a failed read of an order still reads as a missing order").toMatch(/if \(error\) throw/);
+  });
+
+  it("answers every route caller's failed read with a 500, never a 404", () => {
+    const offenders = walkAll("src/app/api")
+      .filter(f => f.endsWith("route.ts"))
+      .filter(f => /await fetchTrackedOrder\([^)]*\);/.test(read(f)));
+    expect(offenders, `a failed read that becomes "not found":\n${offenders.join("\n")}`).toEqual([]);
+  });
+});
