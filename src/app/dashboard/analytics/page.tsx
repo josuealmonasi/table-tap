@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/i18n/server";
+import { dateLocale } from "@/lib/format";
 import { requireManager } from "@/lib/page-guard";
 import {
   computeAnalytics,
@@ -50,7 +51,8 @@ export default async function AnalyticsPage({
     "the period's sales",
   );
 
-  const data = computeAnalytics((rows as AnalyticsOrder[]) ?? [], period, timeZone, new Date(), await getLocale());
+  const locale = await getLocale();
+  const data = computeAnalytics((rows as AnalyticsOrder[]) ?? [], period, timeZone, new Date(), locale);
 
   // The register close is always TODAY, whatever period the charts are showing.
   // A corte is the thing somebody signs at the end of a shift; a corte "for the
@@ -88,7 +90,9 @@ export default async function AnalyticsPage({
   const corte = paidRows
     ? corteFrom(paidRows as CortePayment[], (givenUp ?? []) as CorteAdjustment[])
     : EMPTY_CORTE;
-  const dayLabel = new Intl.DateTimeFormat("es-MX", {
+  // In the owner's language: the day is words, and "martes 23 de septiembre"
+  // above an English corte is a Spanish sentence on an English page.
+  const dayLabel = new Intl.DateTimeFormat(dateLocale(locale), {
     timeZone,
     weekday: "long",
     day: "numeric",

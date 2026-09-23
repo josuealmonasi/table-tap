@@ -1589,6 +1589,25 @@ describe("a date on screen is in the app's language", () => {
     }
     expect(offenders, `dates in the browser's language:\n${offenders.join("\n")}`).toEqual([]);
   });
+
+  it("never names a day or a month in a language picked in the code", () => {
+    // `DateTimeFormat("es-MX", { weekday, month })` wrote the corte's day in
+    // Spanish above an English page. A format with words takes the app's
+    // language; a hard-coded one is only for figures (the kitchen ticket's
+    // time) or for taking a date apart (`en-US`/`en-CA` in day-window).
+    const offenders: string[] = [];
+    for (const file of walkAll("src").filter(f => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__"))) {
+      const code = read(file).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+      for (const m of code.matchAll(/DateTimeFormat\(\s*["'][a-z]{2}(?:-[A-Z]{2})?["']\s*,\s*\{([^}]*)\}/g)) {
+        // `formatToParts` takes the date apart to compute with it; nothing it
+        // produces is shown, so its language is the code's to choose.
+        const after = code.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 24);
+        if (/^\s*\)\s*\.formatToParts\(/.test(after)) continue;
+        if (/\b(weekday|month|era|dayPeriod)\s*:\s*["'](long|short|narrow)["']/.test(m[1])) offenders.push(file);
+      }
+    }
+    expect(offenders, `a day or month in a fixed language:\n${offenders.join("\n")}`).toEqual([]);
+  });
 });
 
 describe("the sweeps open the narrowest phone people carry", () => {
