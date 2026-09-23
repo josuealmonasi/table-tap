@@ -245,8 +245,14 @@ async function settleBill(session: Stripe.Checkout.Session): Promise<void> {
   // The tip was collected against the table, not a dish, so it is recorded
   // on the first of the settled orders. The takings then match what Stripe
   // actually took, which is the number that has to be right.
+  //
+  // Only by the delivery that settled the bill. It is added to what is there,
+  // so it is the one write here a repeated delivery does not leave as it was:
+  // every copy of the event raised the order's tip and total again, while the
+  // payment itself was recorded once. The split and the single order already
+  // hang everything on the rows their own update returned.
   const tip = Number(session.metadata?.settle_tip ?? 0);
-  if (tip > 0) {
+  if (tip > 0 && (settled?.length ?? 0) > 0) {
     const { data: first } = await db
       .from("orders")
       .select("id, tip, total")

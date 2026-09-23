@@ -976,6 +976,22 @@ describe("a repeated webhook cannot record the same money twice", () => {
   it("treats a refused duplicate as already recorded, not as a failure", () => {
     expect(read("src/lib/payments.ts")).toMatch(/error\.code !== "23505"/);
   });
+
+  it("adds a tip only on the delivery that settled the bill", () => {
+    // A tip is ADDED to the order's tip and total, so it is the write a
+    // repeated delivery does not leave as it was. The whole-table settle added
+    // it on every copy of the event: the payment was recorded once, and the
+    // order's total and tip went up each time Stripe sent it again.
+    const start = settle.indexOf("async function settleBill(");
+    expect(start, "settleBill not found — has the file moved?").toBeGreaterThan(-1);
+    const body = settle.slice(start, settle.indexOf("\n}\n", start));
+    const tipWrites = [...body.matchAll(/if \(tip > 0([^)]*)\)/g)].map(m => m[1]);
+    expect(tipWrites.length, "settleBill no longer records a tip — the scan broke").toBeGreaterThan(0);
+    expect(
+      tipWrites.filter(guard => !/settled/.test(guard)),
+      "a tip added whether or not this delivery settled anything",
+    ).toEqual([]);
+  });
 });
 
 /**

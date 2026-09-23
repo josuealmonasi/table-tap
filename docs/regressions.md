@@ -43,6 +43,7 @@ us, and what now catches each one.
 | Seeded visits are dated by the restaurant's calendar, never today | The demo's seed filled today's slot after 6 p.m. in Mexico City, and a first scan said "already stamped" |
 | Both browser sweeps open a 360px phone | The menu editor's product row spilled 28px past its box at 360 and ran off a 320px phone; Analytics broke "Cheesecake" in half. 390 read clean |
 | A failed read is never an answer | One refused bill poll told a diner who owed that they had paid; the waiter was told the table owed nothing; a phone forgot the table it owed at; the badges said nobody was calling |
+| A tip is added only by the delivery that settled the bill | Every repeated delivery of a whole-table card payment raised the order's tip and total again |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -985,6 +986,20 @@ on failure. Both throw now, every caller refuses with that route's own 503, and
 an invariant counts each guard's reads against its error checks. `/api/session`
 answered `{ open: false }` when its reads failed, which a fixed client still
 takes as "forget this table", and now it answers 500.
+
+## The tip that arrived twice
+
+Stripe delivers an event at least once, and nothing here dedupes events, so
+every write in the settle path has to leave a repeated delivery as it found it.
+The whole-table settle marks orders paid with `.eq("paid", false)`, records
+payments only for the rows that update returned, and the ledger's unique index
+holds a second copy out. The tip does not work like that: it is added to the
+first order's tip and total, and it ran on every delivery, including one that
+settled nothing. The payment was recorded once, and the order's total and tip
+went up each time the event arrived again. The split and the single-order paths
+already hung everything on the rows their own update returned. The whole-table
+one does now, and the webhook invariant fails on a tip that is added without
+that guard.
 
 ## Before merging anything large
 
