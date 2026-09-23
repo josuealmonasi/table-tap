@@ -5,6 +5,8 @@ import { formatMoney } from "@/lib/format";
 import { PERIODS, type Analytics, type Period } from "@/lib/analytics";
 import { useT } from "@/lib/i18n/context";
 import CorteCard from "./CorteCard";
+import LoyaltyStatsCard from "./LoyaltyStatsCard";
+import type { LoyaltyStats } from "@/lib/loyalty/analytics";
 import type { Corte } from "@/lib/corte";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import OrderHistory from "@/components/dashboard/OrderHistory";
@@ -28,6 +30,8 @@ interface AnalyticsViewProps {
   corte: Corte;
   restaurantName: string;
   dayLabel: string;
+  /** The visit card over the same period, where the restaurant runs one. */
+  loyalty?: LoyaltyStats | null;
 }
 
 /** Read-only analytics dashboard: stat tiles, revenue-by-day, top items, hours. */
@@ -47,6 +51,7 @@ export default function AnalyticsView({
   corte,
   restaurantName,
   dayLabel,
+  loyalty = null,
 }: AnalyticsViewProps) {
   const t = useT();
   const maxDay = Math.max(1, ...data.byDay.map(d => d.revenue));
@@ -93,6 +98,8 @@ export default function AnalyticsView({
           restaurantName={restaurantName}
           day={dayLabel}
         />
+
+        {loyalty && <LoyaltyStatsCard stats={loyalty} />}
 
         {/* A one-day "by day" chart is just a single full-width bar — skip it
             for Today; the busiest-hours chart below covers today's shape. */}
