@@ -840,11 +840,17 @@ export async function seedMock(pg) {
   );
   if (printed.length > 0) {
     const now = new Date().toISOString();
-    await bulkInsert(
-      pg,
-      "print_jobs",
-      ["restaurant_id", "order_id", "kind", "claimed_at", "printed_at"],
-      [[rid, printed[0].id, "kitchen", now, now]],
+    // The restaurant prints kitchen tickets by itself, so if the newest order
+    // is one still waiting at the pass, the trigger has already queued its
+    // ticket — and inserting a second one failed the whole seed on the
+    // unique key, whenever the dice put a `received` order last. Mark that
+    // ticket printed instead of adding another.
+    await pg.query(
+      `insert into print_jobs (restaurant_id, order_id, kind, claimed_at, printed_at)
+       values ($1, $2, 'kitchen', $3, $3)
+       on conflict (order_id, kind) do update
+         set claimed_at = excluded.claimed_at, printed_at = excluded.printed_at`,
+      [rid, printed[0].id, now],
     );
   }
 
