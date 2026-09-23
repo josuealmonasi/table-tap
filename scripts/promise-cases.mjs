@@ -293,6 +293,19 @@ export const STATES = [
     keeps: /llamar al mesero|call waiter/i,
   },
   {
+    // The board held a move the server refused as though the connection had
+    // dropped: "saved, will be sent", the ticket moved on this screen only,
+    // and refused again on every reconnect. Refused as a busy server refuses,
+    // it must say why — which the offline path never did.
+    name: "a move the server refuses · the board",
+    as: "owner",
+    path: "/dashboard/orders",
+    refuse: { url: "**/api/orders" },
+    open: /^\s*(Empezar a preparar|Start preparing)\s*$/i,
+    says: /demasiadas solicitudes|too many requests/i,
+    keeps: /^\s*(Empezar a preparar|Start preparing)\s*$/i,
+  },
+  {
     name: "counter order ready",
     as: "tracker",
     // Placed from the general QR, so nobody is carrying it anywhere. The

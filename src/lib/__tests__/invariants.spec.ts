@@ -1739,3 +1739,17 @@ describe("a request whose answer nobody reads", () => {
     expect(stale, `excused but no longer discarding — drop the excuse:\n${stale.join("\n")}`).toEqual([]);
   });
 });
+
+describe("a refused move is not a dropped connection", () => {
+  it("queues a move for later only when the request never got an answer", () => {
+    // The board threw on any non-OK answer inside the same `try` that queues
+    // offline work, so a 403 from an expired sign-in was held as "saved, will
+    // be sent", the ticket shown moved on this screen only, and the move sent
+    // again and refused on every reconnect.
+    const src = read("src/hooks/useRestaurantOrders.ts").replace(/\/\/.*$/gm, "");
+    expect(src, "a refusal is thrown into the offline path").not.toMatch(/if \(!res\.ok\) throw/);
+    // And a queued move the server refused is dropped, not kept for ever;
+    // only a server that is failing is asked again.
+    expect(src, "a refused queued move is kept and retried for ever").toMatch(/res\.status >= 500\) stuck\.push/);
+  });
+});

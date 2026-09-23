@@ -1384,6 +1384,8 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
   },
   orders: {
     notPaid: "Unpaid",
+    moveRefused: "Couldn't move the order. It's back where it was.",
+    queuedRefused: "{n} change(s) saved without a connection could not be applied.",
     openDetail: "Open order {code}",
     historyCountOne: "1 order",
     historyCount: "{total} orders",
