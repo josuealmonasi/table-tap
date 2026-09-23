@@ -23,7 +23,7 @@ import { join } from "node:path";
 import { chromium } from "playwright";
 import { createClient } from "@supabase/supabase-js";
 import { CREW } from "./layout-paths.mjs";
-import { AUDIT, STATES } from "./promise-cases.mjs";
+import { AUDIT, REFUSAL, STATES } from "./promise-cases.mjs";
 import { requireServer, warm } from "./preflight.mjs";
 
 const prod = process.argv.includes("--prod");
@@ -250,7 +250,19 @@ for (const state of STATES) {
 
   const visit = async path => {
     const tab = await context.newPage();
+    // A route answered the way a busy server answers it. Counted: a screen that
+    // never asked would otherwise pass for one that survived the refusal.
+    let refused = 0;
+    const refuse = () => tab.route(state.refuse.url, route => {
+      refused++;
+      return route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({ error: REFUSAL.es }),
+      });
+    });
     try {
+      if (state.refuse && !state.refuse.afterOpen) await refuse();
       await tab.goto(BASE + path, { waitUntil: "networkidle" });
       // Wait for what the case is about, not for a number of milliseconds. A
       // fixed 1.7s was usually enough; on a slow compile the plan lock arrived
@@ -302,6 +314,18 @@ for (const state of STATES) {
         // A breath, so a control that renders just after its neighbour is
         // still counted by `offers`.
         await tab.waitForTimeout(600);
+      }
+
+      // Refused only once the screen is up, so it is the NEXT read that fails:
+      // what was already on screen is what is being tested.
+      if (state.refuse?.afterOpen) {
+        await refuse();
+        await tab.waitForTimeout(state.refuse.wait);
+      }
+      if (state.refuse && refused === 0) {
+        bad(`${state.name} — nothing asked for ${state.refuse.url}, so nothing was checked`);
+        await tab.close();
+        return;
       }
 
       const text = await tab.evaluate("document.body.innerText");

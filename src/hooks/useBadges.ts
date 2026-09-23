@@ -44,10 +44,12 @@ export function useBadges(): Record<string, number> {
             clearInterval(timer);
             return { badges: {} };
           }
-          return r.ok ? r.json() : { badges: {} };
+          // Anything else that is not an answer keeps the last counts: `{}` in
+          // its place told a waiter nothing was waiting for them.
+          return r.ok ? r.json() : null;
         })
-        .then((d: { badges?: Record<string, number> }) => {
-          if (active) setBadges(d.badges ?? {});
+        .then((d: { badges?: Record<string, number> } | null) => {
+          if (active && d) setBadges(d.badges ?? {});
         })
         .catch(() => {
           // A count we could not fetch is simply not shown.

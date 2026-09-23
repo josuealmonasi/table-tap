@@ -96,16 +96,26 @@ export default function BillDiscountDialog({
   // the start: a modal that grows under a finger already on its way down is
   // how somebody applies a promotion they never chose.
   const [loadingOptions, setLoadingOptions] = useState(true);
+  // The list could not be read. "Ninguna promoción coincide" in its place told
+  // the waiter there was nothing to offer; a code can still be typed.
+  const [optionsFailed, setOptionsFailed] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     setLoadingOptions(true);
+    setOptionsFailed(false);
     fetch(`/api/bill/discount/options?total=${bill.total}`)
-      .then(r => (r.ok ? r.json() : { options: [] }))
-      .then(d => setOptions(d.options ?? []))
-      .catch(() => setOptions([]))
+      .then(async r => {
+        if (!r.ok) throw new Error(String(r.status));
+        const d = await r.json();
+        setOptions(d.options ?? []);
+      })
+      .catch(() => {
+        setOptions([]);
+        setOptionsFailed(true);
+      })
       .finally(() => setLoadingOptions(false));
   }, [open, bill.total]);
 
@@ -276,7 +286,7 @@ export default function BillDiscountDialog({
                     className="tt-muted"
                     style={{ margin: 0, padding: "14px 12px", fontSize: 13 }}
                   >
-                    {t("dash.billCodeNone")}
+                    {t(optionsFailed ? "dash.billCodesFailed" : "dash.billCodeNone")}
                   </p>
                 )}
                 {shown.map((option, i) => (

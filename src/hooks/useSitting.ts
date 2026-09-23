@@ -31,9 +31,13 @@ export function useSitting(
     if (!sitting || sitting.tableId === tableId) return;
 
     let active = true;
+    // A refusal is not an answer. It used to stand in as `{ open: false }`,
+    // and "closed" is what makes this phone forget the table: one 429 threw
+    // away the note of a bill it still owed.
     fetch(`/api/session?id=${sitting.sessionId}`)
-      .then(r => (r.ok ? r.json() : { open: false }))
-      .then((d: { open: boolean; tableLabel?: string; owed?: number }) => {
+      .then(async r => {
+        if (!r.ok || !active) return;
+        const d = (await r.json()) as { open: boolean; tableLabel?: string; owed?: number };
         if (!active) return;
         if (!d.open) {
           forgetSitting(restaurantId); // settled or aged out: they are free

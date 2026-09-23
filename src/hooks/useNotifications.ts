@@ -39,8 +39,11 @@ export function useNotifications(enabled: boolean): NotificationsState {
   const read = useCallback(() => {
     if (!enabled) return;
     fetch("/api/notifications")
-      .then(r => (r.ok ? r.json() : { notifications: [], unread: 0 }))
-      .then((d: { notifications?: Notification[]; unread?: number }) => {
+      // A refusal keeps what the bell last knew, as the catch below already
+      // promised: an empty list in its place emptied the bell.
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: { notifications?: Notification[]; unread?: number } | null) => {
+        if (!d) return;
         setNotifications(d.notifications ?? []);
         setUnread(d.unread ?? 0);
       })

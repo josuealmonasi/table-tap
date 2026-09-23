@@ -42,6 +42,7 @@ us, and what now catches each one.
 | A gate waits for what it checks, not for a number of milliseconds | "free plan · promotions" failed on a slow compile and passed on the rerun |
 | Seeded visits are dated by the restaurant's calendar, never today | The demo's seed filled today's slot after 6 p.m. in Mexico City, and a first scan said "already stamped" |
 | Both browser sweeps open a 360px phone | The menu editor's product row spilled 28px past its box at 360 and ran off a 320px phone; Analytics broke "Cheesecake" in half. 390 read clean |
+| A failed read is never an answer | One refused bill poll told a diner who owed that they had paid; the waiter was told the table owed nothing; a phone forgot the table it owed at; the badges said nobody was calling |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -949,6 +950,41 @@ widest value. The ratings table's header had no rule at all and read as one
 more dish; both headers now share one. `pnpm layout` measures 360 as well as
 390, and `pnpm dialogs` measures 360 in place of 390, the harder of the two
 for the same rules.
+
+## A refusal read as a receipt
+
+Three readers of what a table owes turned a failed request into an answer.
+The diner's bill hook replaced a refused poll with `{ orders: [] }`, and an
+empty bill is a settled one: the bill vanished from under a diner who owed it,
+the settle detection saw it go from owing to nothing, and it asked whether they
+wanted a receipt for paying it, then offered them a visit card. The waiter's
+settle dialog did the same and said "Esta mesa no debe nada". The sitting hook
+took `{ open: false }`, and closed is what makes a phone forget its table.
+
+None of it needs an outage. Every public route is limited per address, and a
+restaurant's Wi-Fi is one address, so a busy room is enough. A failed read now
+keeps what was known, and the waiter is told the bill could not be loaded and
+offered a retry. `pnpm promises` refuses the diner's next poll with a 429 once
+the bill is open, and refuses the waiter's read outright, and checks the screen
+still tells the truth.
+
+Three more readers did the same with less at stake, and two of them said the
+opposite in their own comments. A refused badge poll became `{ badges: {} }`,
+which tells a waiter nobody is calling. The bell emptied, under a comment
+promising it "shows what it last knew". The promotions picker said "Ninguna
+promoción coincide" (no promotion matches) when the list had not loaded at all.
+An invariant now forbids a made-up answer anywhere in `src`, whether a
+`r.ok ? r.json() : {…}` fallback or a `catch` that empties the state.
+
+The server had its own copy. `staffOpenedBill` refuses a card payment while a
+waiter collects the same food, and `splitInProgress` refuses the whole bill
+while its shares are being collected. Both dropped the error of their reads, so
+a failed read answered "no", the one answer that lets the charge through, even
+though the orders read a few lines below them in the same route already refused
+on failure. Both throw now, every caller refuses with that route's own 503, and
+an invariant counts each guard's reads against its error checks. `/api/session`
+answered `{ open: false }` when its reads failed, which a fixed client still
+takes as "forget this table", and now it answers 500.
 
 ## Before merging anything large
 

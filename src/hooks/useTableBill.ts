@@ -43,15 +43,22 @@ export function useTableBill(
     // Our own sitting, so a bill we opened stays ours to settle.
     const sitting = recallSitting(restaurantId);
     const mine = sitting?.tableId === tableId ? `&sessionId=${sitting.sessionId}` : "";
+    // A bill that could not be read keeps what was last known. It used to
+    // become `{ orders: [] }`, and an empty bill is a settled one: one refused
+    // poll hid the bill under a diner who owed it and asked them if they
+    // wanted a receipt for paying it.
     fetch(`/api/bill?restaurantId=${restaurantId}&tableId=${tableId}${mine}`)
-      .then(r => (r.ok ? r.json() : { orders: [] }))
-      .then(d => {
+      .then(async r => {
+        if (!r.ok) return;
+        const d = await r.json();
         setOrders(d.orders ?? []);
         setStaffBill(Boolean(d.staffBill));
         setParty(Number(d.party) || 0);
         setDividing(Boolean(d.dividing));
       })
-      .catch(() => setOrders([]))
+      .catch(() => {
+        // Offline for a moment: the same, keep what we last knew.
+      })
       .finally(() => setLoading(false));
   }, [restaurantId, tableId]);
 
