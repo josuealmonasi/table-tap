@@ -366,7 +366,7 @@ The gate, all of which must pass before anything ships:
 | `pnpm rls` | nothing is exposed, by read or by socket, as every role |
 | `pnpm roles` | each role reaches its own screens and no others |
 | `pnpm smoke` | every page renders |
-| `pnpm layout` | every screen reads at 390 / 820 / 1280 |
+| `pnpm layout` | every screen reads at 360 / 390 / 820 / 1280 |
 | `pnpm promises` | no screen offers what the system will refuse |
 | `pnpm attack` | nobody signed in can move a peso they should not |
 | `pnpm dialogs` | every dialog, found by opening it rather than by listing it — with every write held back in the browser, and the demo data compared before and after |

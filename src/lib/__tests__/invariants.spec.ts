@@ -1572,3 +1572,23 @@ describe("a date on screen is in the app's language", () => {
     expect(offenders, `dates in the browser's language:\n${offenders.join("\n")}`).toEqual([]);
   });
 });
+
+describe("the sweeps open the narrowest phone people carry", () => {
+  it("measures every screen and every dialog at 360px", () => {
+    // 360 is the most common Android width, and neither sweep opened it: the
+    // menu editor's product row already spilled past its box there, and
+    // Analytics broke a dish name in half, while 390 read clean. Read from the
+    // code, so a comment naming 360 cannot pass for the width.
+    const widths = (file: string, list: RegExp, each: RegExp): number[] => {
+      const code = read(`scripts/${file}`).replace(/\/\/.*$/gm, "");
+      const body = code.match(list)?.[1] ?? "";
+      return [...body.matchAll(each)].map(m => Number(m[1]));
+    };
+    const layout = widths("layout-check.mjs", /const SIZES = \[([\s\S]*?)\];/, /width:\s*(\d+)/g);
+    const dialogs = widths("dialog-check.mjs", /const WIDTHS = \[([^\]]*)\]/, /(\d+)/g);
+    expect(layout.length, "layout-check.mjs: SIZES not found — the scan broke").toBeGreaterThan(2);
+    expect(dialogs.length, "dialog-check.mjs: WIDTHS not found — the scan broke").toBeGreaterThan(1);
+    expect(Math.min(...layout), "pnpm layout never opens a 360px phone").toBe(360);
+    expect(Math.min(...dialogs), "pnpm dialogs never opens a 360px phone").toBe(360);
+  });
+});
