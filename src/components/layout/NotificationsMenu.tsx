@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useT } from "@/lib/i18n/context";
+import { useLocale, useT } from "@/lib/i18n/context";
+import { dateLocale } from "@/lib/format";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import { NotificationsIcon } from "@/components/ui/icons";
 
@@ -18,6 +19,7 @@ import { NotificationsIcon } from "@/components/ui/icons";
  */
 export default function NotificationsMenu({ enabled }: { enabled: boolean }) {
   const t = useT();
+  const { locale } = useLocale();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { notifications, unread, markRead, markAllRead } = useNotifications(enabled);
@@ -101,7 +103,7 @@ export default function NotificationsMenu({ enabled }: { enabled: boolean }) {
                   >
                     <span className="tt-notif-text">{sentence(n)}</span>
                     <span className="tt-notif-when tt-muted">
-                      {new Date(n.created_at).toLocaleString([], {
+                      {new Date(n.created_at).toLocaleString(dateLocale(locale), {
                         day: "numeric",
                         month: "short",
                         hour: "2-digit",

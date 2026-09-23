@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
-import { useT } from "@/lib/i18n/context";
+import { useLocale, useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { printableReceipt } from "@/lib/print-document";
 import { printWhenReady } from "@/lib/print-window";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, dateLocale } from "@/lib/format";
 import { orderCode, type Order } from "@/lib/types";
 import { statusMeta } from "@/lib/order-status";
 import { itemSalePrice } from "@/lib/pricing";
@@ -37,6 +37,7 @@ export default function OrderDetailDialog({
   onClose: () => void;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   const toast = useToast();
   const [busy, setBusy] = useState<"kitchen" | "receipt" | null>(null);
   const placed = new Date(order.created_at);
@@ -108,7 +109,7 @@ export default function OrderDetailDialog({
         </button>
       </div>
       <p className="tt-muted" style={{ fontSize: 13, margin: "4px 0 14px" }}>
-        {placed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        {placed.toLocaleTimeString(dateLocale(locale), { hour: "2-digit", minute: "2-digit" })}
         {" · "}
         {t(statusMeta(order.status).labelKey)}
       </p>

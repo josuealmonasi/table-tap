@@ -38,6 +38,7 @@ us, and what now catches each one.
 | A grid column can shrink below its content | A month's takings pushed Analytics' tiles 21px off a phone, and the skeleton was a fixed guess |
 | A date is written in the reader's language, not the machine's | Every Spanish owner's chart said "25 Tue": `Intl.DateTimeFormat([])` answered in the host's English |
 | The fault that matters most is never cut from layout's list | Thirty squashed chart labels filled the list's twelve places, and "the page scrolls sideways" was cut off |
+| A date on screen is in the app's language, not the browser's | A Spanish owner on an English phone read English dates and times on eight screens |
 | Seeded visits are dated by the restaurant's calendar, never today | The demo's seed filled today's slot after 6 p.m. in Mexico City, and a first scan said "already stamped" |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
@@ -884,6 +885,19 @@ said "Tue": `new Intl.DateTimeFormat([])` formats in the machine's language, and
 the host's is English. The labels take the reader's language, the coupon list's
 dates did the same thing in the browser's language and are fixed too, and an
 invariant now refuses a date formatted in the machine's default.
+
+## Dates in the browser's language
+
+Eight screens — the order cards and their detail, the history, the activity
+log, the notifications, the plan and its documents, and the admin panel —
+formatted dates with `toLocaleString([])`, which answers in whatever language
+the browser is set to. A Spanish owner on an English phone read "Sep 22, 09:59
+PM" beside Spanish words, and the server rendering the same component could
+write it in a third language. They take the app's language now, through
+`dateLocale(locale)`, from the same cookie the server and the phone both read;
+checked with the app in Spanish on an English browser and the other way round,
+with no hydration warnings, and an invariant refuses `[]` or `undefined` as a
+date's locale — it named all eight on the old code.
 
 ## The decoder under the optimiser
 

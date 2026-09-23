@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, dateLocale } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -174,7 +174,7 @@ export default function CouponsPanel({
     // working" is almost always a schedule that hasn't started or has passed.
     // In the app's language, not the browser's: a Spanish owner on an English
     // phone read "9/30/2026" beside Spanish words.
-    const day = (iso: string) => new Date(iso).toLocaleDateString(locale === "es" ? "es-MX" : "en-US");
+    const day = (iso: string) => new Date(iso).toLocaleDateString(dateLocale(locale));
     if (c.starts_at && c.ends_at) {
       parts.push(t("coupons.between", { from: day(c.starts_at), to: day(c.ends_at) }));
     } else if (c.starts_at) {

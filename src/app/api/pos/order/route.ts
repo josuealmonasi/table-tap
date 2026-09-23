@@ -23,6 +23,7 @@ import { isValidEmail, normalizeEmail } from "@/lib/email";
 import { messagesFor, translate } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n/server";
 import type { OrderLineItem } from "@/lib/types";
+import { dateLocale } from "@/lib/format";
 
 export const runtime = "nodejs";
 
@@ -338,7 +339,7 @@ export async function POST(req: NextRequest) {
       {
         name: (restaurant as { name?: string }).name ?? "TableTap",
         timeZone: (restaurant.timezone as string | null) ?? DEFAULT_TIME_ZONE,
-        locale: locale === "es" ? "es-MX" : "en-US",
+        locale: dateLocale(locale),
       },
       (key, vars) => translate(messages, key, vars),
     );

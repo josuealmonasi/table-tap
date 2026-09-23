@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, dateLocale } from "@/lib/format";
 import { orderCode, type Order } from "@/lib/types";
 import { statusMeta } from "@/lib/order-status";
 import { useOrderHistory } from "@/hooks/useOrderHistory";
-import { useT } from "@/lib/i18n/context";
+import { useLocale, useT } from "@/lib/i18n/context";
 import { LogRowsSkeleton } from "@/components/ui/DashSkeletons";
 import { SearchIcon } from "@/components/ui/icons";
 import OrderDetailDialog from "./OrderDetailDialog";
@@ -33,6 +33,7 @@ export default function OrderHistory({
   currency: string;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   const { orders, loading, page, pages, total, setPage, query, setQuery } =
     useOrderHistory(restaurantId);
   const [open, setOpen] = useState<Order | null>(null);
@@ -103,7 +104,7 @@ export default function OrderHistory({
                 </span>
               )}
               <span className="tt-log-when">
-                {new Date(order.created_at).toLocaleString([], {
+                {new Date(order.created_at).toLocaleString(dateLocale(locale), {
                   day: "2-digit",
                   month: "short",
                   hour: "2-digit",

@@ -20,3 +20,14 @@ const MONEY_LOCALE = "en-US";
 export function formatMoney(amount: number, currency: string): string {
   return new Intl.NumberFormat(MONEY_LOCALE, { style: "currency", currency }).format(amount);
 }
+
+/**
+ * The locale a date or a time is written in: the reader's language, from the
+ * same cookie the server and the browser both read — never the machine's.
+ * `toLocaleString([])` answered in whatever language the browser (or the host)
+ * was set to, so a Spanish owner on an English phone read English dates beside
+ * Spanish words, and the server and the phone could render different text.
+ */
+export function dateLocale(locale: string): string {
+  return locale === "es" ? "es-MX" : "en-US";
+}
