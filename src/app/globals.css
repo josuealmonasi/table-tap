@@ -6596,3 +6596,109 @@ a.tt-user-plan:hover {
   color: var(--tt-ink);
   font-weight: 600;
 }
+
+/* ── /rewards: a diner's visit card, looked up by its code ─────────────────
+   One card, centred like the sign-in pages. The dots are the visits: filled in
+   the accent up to where the card stands, hairlines after — wrapping, so a
+   goal of twenty still fits a phone. */
+.tt-rewards-label {
+  display: block;
+  text-align: left;
+  margin: 16px 0 6px;
+}
+.tt-rewards-code {
+  text-align: center;
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+.tt-rewards {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.tt-rewards-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.tt-rewards-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  font-size: 34px;
+  background: var(--tt-surface);
+}
+.tt-rewards-name {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.tt-rewards-count {
+  margin: 6px 0 0;
+  font-weight: 700;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.tt-rewards-dots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 280px;
+}
+.tt-rewards-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--tt-line);
+  background: var(--tt-white);
+}
+.tt-rewards-dot-on {
+  border-color: var(--tt-accent);
+  background: var(--tt-accent);
+}
+.tt-rewards-ready {
+  margin: 4px 0 0;
+  font-weight: 700;
+  color: var(--tt-success);
+}
+.tt-rewards-next {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.tt-rewards-paused {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--tt-radius-sm);
+  background: var(--tt-warning-wash);
+  color: var(--tt-warning);
+  font-size: 13px;
+}
+.tt-rewards-meta {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+.tt-rewards-history {
+  width: 100%;
+  text-align: left;
+  border-top: 1px solid var(--tt-line);
+  padding-top: 12px;
+}
+.tt-rewards-history-title {
+  font-size: 14px;
+  margin: 0 0 6px;
+}
+.tt-rewards-history ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--tt-muted);
+}

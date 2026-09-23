@@ -803,10 +803,20 @@ Wallet object is one more way of drawing it: its serial is the card's id, its
 barcode is the same link, its progress is the same count. Nothing the scanner,
 the rewards page or the visits already earned depend on changes.
 
-Being built in steps: the data and its rules (this); the public `/rewards`
-page; the staff scanner that stamps and redeems; then, together, the owner's
+**`/rewards`** is where a diner checks a card: they type the printed code, or
+their camera opens the card's QR link with it filled in. It shows the visits,
+what is left and for what, the last visit and the rewards spent — what the card
+itself would show, never who stamped it or the card's row id. `GET
+/api/rewards` answers it, public and limited to ten looks a minute per address:
+a code is the only key a card has. The page is `noindex`, since a code in its
+address is the card. "What the card needs next" is one function, `nextStep()`,
+so this page and the staff scanner cannot word it differently.
+
+Being built in steps: the data and its rules; the `/rewards` page (these two);
+the staff scanner that stamps and redeems; then, together, the owner's
 settings, the offer after paying and the card download — the offer never exists
-before a card can be stamped. Until that last step nothing here is visible.
+before a card can be stamped. Until that last step no card can be made, so
+`/rewards` can only answer that it does not know the code.
 
 ## What is checked, and how
 

@@ -49,6 +49,10 @@ export async function setup(env, base) {
     .from("restaurants").select("*").eq("name", "Demo Bistro").maybeSingle();
   const { data: tables } = await admin
     .from("restaurant_tables").select("id, label").eq("restaurant_id", restaurant.id);
+  // One of the demo's visit cards, for the rewards lookup. Read, never made:
+  // the lookup changes nothing, so there is nothing to put back.
+  const { data: loyaltyCard } = await admin
+    .from("loyalty_cards").select("code").eq("restaurant_id", restaurant.id).limit(1).maybeSingle();
   // A menu that is serving RIGHT NOW: active, and on no schedule. The demo has
   // a "Weekend Brunch" menu that only serves Saturday and Sunday mornings, and
   // whichever dish sorts first happened to be on it — so every route that
@@ -379,6 +383,7 @@ export async function setup(env, base) {
     discountsBefore: (discountsBefore ?? []).map(x => x.id),
     table: tables[0],
     sessionId: session?.id ?? null,
+    loyaltyCode: loyaltyCard?.code ?? null,
     paidOrder: await make({ paid: true }),
     unpaidOrder: await make({ paid: false }),
     // A bill with a table: discounts and cancellations are asked for by table.
