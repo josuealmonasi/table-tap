@@ -72,6 +72,7 @@ export const PUBLIC = [
   "/reset-password",
   "/terminos",
   "/privacidad",
+  "/rewards",
 ];
 
 /**

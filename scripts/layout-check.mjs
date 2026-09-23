@@ -252,6 +252,33 @@ for (const size of SIZES) {
     }
     await tab.close();
   }
+
+  // The rewards page with a card on it, as a diner's camera opens it. A code
+  // cannot be known in advance, so it is read from the seed — one that has
+  // spent a reward, so the history is on the page too. None in development
+  // means the seed lost the feature, which is a fault; none in production just
+  // means nobody has a card yet, and is said rather than counted.
+  const { data: spent } = await admin
+    .from("loyalty_redemptions").select("card_id").limit(1).maybeSingle();
+  const { data: card } = spent
+    ? await admin.from("loyalty_cards").select("code").eq("id", spent.card_id).maybeSingle()
+    : { data: null };
+  if (!card) {
+    if (prod) console.log("    –        signed out · /rewards (a card): no card to show yet");
+    else { failed++; console.log("    BAD      signed out · /rewards (a card): the seed has no card with a reward spent"); }
+  } else {
+    const tab = await outside.newPage();
+    try {
+      await gotoOnce(tab, `${BASE}/rewards?c=${card.code}`, { waitUntil: "load", timeout: 60000 });
+      await tab.waitForSelector(".tt-rewards", { timeout: 30000 });
+      await settle(tab);
+      await look(tab, "signed out · /rewards (a card)");
+    } catch (e) {
+      failed++;
+      console.log(`    BAD      signed out · /rewards (a card): ${e.message.split("\n")[0]}`);
+    }
+    await tab.close();
+  }
   await outside.close();
 
   // ── The team ─────────────────────────────────────────────────────────────

@@ -103,6 +103,21 @@ export function cases(fx) {
       expect: [200], check: d => d.saved === 1 || `guardó ${d.saved}` },
     { name: "POST /api/coupons/validate", as: "diner", method: "POST", path: "/api/coupons/validate",
       body: { restaurantId: r, code: "API-001", subtotal: 100 }, expect: [200, 400, 404] },
+    // A diner checking their visit card by its code. What comes back is what
+    // the card itself would show — never who stamped it, never its row id.
+    { name: "GET  /api/rewards (a card)", as: "diner", method: "GET",
+      path: `/api/rewards?c=${fx.loyaltyCode ?? "no-card-in-the-seed"}`, expect: [200],
+      check: d => {
+        if (!d.standing || !(d.standing.goal > 0)) return `no standing in ${JSON.stringify(d).slice(0, 80)}`;
+        const said = JSON.stringify(d);
+        if (said.includes("@")) return "the lookup names the staff who stamped the card";
+        if (/[0-9a-f]{8}-[0-9a-f]{4}-/.test(said)) return "the lookup hands out a row id";
+        return true;
+      } },
+    { name: "GET  /api/rewards (no such card)", as: "diner", method: "GET",
+      path: "/api/rewards?c=0000-0000-0000", expect: [404], expectError: /encontramos|couldn't find/i },
+    { name: "GET  /api/rewards (not a code)", as: "diner", method: "GET",
+      path: "/api/rewards?c=abc", expect: [400], expectError: /no parece|doesn't look/i },
     { name: "GET  /api/order-qr", as: "diner", method: "GET",
       path: `/api/order-qr?id=${paidOrder}`, expect: [200],
       // A 200 with an empty body would be exactly the failure this file exists
