@@ -9,6 +9,8 @@ import type { QrGrid } from "@/lib/loyalty/qr-grid";
 interface CardDownloadProps {
   face: CardFace;
   qr: QrGrid;
+  /** The picture only: the owner seeing what a diner gets, not a diner saving it. */
+  preview?: boolean;
 }
 
 /**
@@ -18,7 +20,7 @@ interface CardDownloadProps {
  * every phone — on an iPhone it opens the picture, and pressing on it is how it
  * reaches Photos — so the picture is on the page to press on either way.
  */
-export default function CardDownload({ face, qr }: CardDownloadProps) {
+export default function CardDownload({ face, qr, preview = false }: CardDownloadProps) {
   const t = useT();
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -57,9 +59,26 @@ export default function CardDownload({ face, qr }: CardDownloadProps) {
       ) : (
         <div className="tt-card-image tt-card-image-empty" aria-hidden="true" />
       )}
-      <p className="tt-card-code">{face.printedCode}</p>
+      {preview ? null : <CardSaveControls url={url} failed={failed} fileName={fileName} code={face.printedCode} />}
+    </div>
+  );
+}
+
+interface CardSaveControlsProps {
+  url: string | null;
+  failed: boolean;
+  fileName: string;
+  code: string;
+}
+
+/** The printed code and the ways to keep the picture, for the diner. */
+function CardSaveControls({ url, failed, fileName, code }: CardSaveControlsProps) {
+  const t = useT();
+  return (
+    <>
+      <p className="tt-card-code">{code}</p>
       {failed ? (
-        <p className="tt-field-error" role="alert">{t("loyaltyOffer.drawFailed", { code: face.printedCode })}</p>
+        <p className="tt-field-error" role="alert">{t("loyaltyOffer.drawFailed", { code })}</p>
       ) : (
         <a
           className={`tt-btn tt-btn-primary${url ? "" : " tt-btn-disabled"}`}
@@ -71,6 +90,6 @@ export default function CardDownload({ face, qr }: CardDownloadProps) {
         </a>
       )}
       <p className="tt-muted" style={{ fontSize: 12, margin: 0 }}>{t("loyaltyOffer.iosHint")}</p>
-    </div>
+    </>
   );
 }

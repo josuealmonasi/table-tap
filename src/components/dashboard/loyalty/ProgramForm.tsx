@@ -87,6 +87,7 @@ export default function ProgramForm({ program }: ProgramFormProps) {
       />
       {!goalOk && <p className="tt-field-error">{t("apiErr.loyaltyGoal", { min: GOAL_MIN, max: GOAL_MAX })}</p>}
       <p className="tt-muted" style={{ fontSize: 12 }}>{t("loyaltyAdmin.goalHint")}</p>
+      <p className="tt-muted" style={{ fontSize: 12 }}>{t("loyaltyAdmin.roundHint")}</p>
 
       <label className="tt-mod-label tt-loyalty-field" htmlFor="loyalty-reward">{t("loyaltyAdmin.rewardLabel")}</label>
       <input

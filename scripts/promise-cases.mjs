@@ -111,6 +111,26 @@ export const STATES = [
     keeps: /^\s*(escanear|scan)\s*$/i,
   },
   {
+    // Its own page, switched on: it says so, and the scanner is there.
+    name: "visit card on · its page",
+    as: "owner",
+    path: "/dashboard/loyalty",
+    says: /está activa|is on/i,
+    keeps: /sellar tarjeta|stamp a card/i,
+  },
+  {
+    // Switched off, the page used to be a bare form: nothing said the card was
+    // off, so no offer for diners and no stamp for the team looked broken. It
+    // says so now, and offers no stamping the routes would refuse.
+    name: "visit card switched off · its page",
+    as: "owner",
+    path: "/dashboard/loyalty",
+    apply: (admin, c) => admin.from("loyalty_programs").update({ active: false }).eq("restaurant_id", c.restaurantId),
+    says: /está apagada|switched off/i,
+    offers: /sellar tarjeta|stamp a card|sellar visita|stamp a visit/i,
+    keeps: /^\s*(escanear|scan)\s*$/i,
+  },
+  {
     // Its own page names the plan that carries it, and offers nothing to save.
     name: "a plan without the visit card · its page",
     as: "owner",
