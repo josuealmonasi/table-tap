@@ -44,6 +44,7 @@ us, and what now catches each one.
 | Both browser sweeps open a 360px phone | The menu editor's product row spilled 28px past its box at 360 and ran off a 320px phone; Analytics broke "Cheesecake" in half. 390 read clean |
 | A failed read is never an answer | One refused bill poll told a diner who owed that they had paid; the waiter was told the table owed nothing; a phone forgot the table it owed at; the badges said nobody was calling |
 | A tip is added once, and the ledger records it | Every repeated delivery of a whole-table card payment raised the order's tip and total again; the payment row left the tip out |
+| A polled route is sized for the room behind one address | The tracker's 120 a minute was thirty diners on the menu; one table of six dividing its bill ran out the split's 60 |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -1009,6 +1010,25 @@ ledger short. The tip now goes on an order this delivery settled, and that
 order's payment carries it, the way a share of a divided bill always has. The
 webhook invariant holds all three: where the tip's order comes from, that the
 tip is written to it, and that its payment includes it.
+
+## One address, one room
+
+Every public route is limited per address, and the limits were sized for one
+phone. The tracker's route allowed 120 a minute, and its comment said that was
+"far above what a real diner's phone asks for", which was true of one phone. A
+restaurant's Wi-Fi puts the whole room behind a single public address. The open
+tracker asks every five seconds and the menu asks after each order it follows
+every fifteen, so thirty diners sitting on the menu with one order each used
+the whole 120 before anybody opened a tracker. The split was worse: 60 a
+minute, polled every five seconds by every phone in it, so one table of six
+dividing its bill on the Wi-Fi ran it out. The screens behind the address then
+stopped updating, and the bill's reader showed that as paid (see "A refusal read as a receipt").
+
+The poll intervals live in `src/lib/poll.ts` now, and the three polled routes
+size their limits from them with `forTheRoom()`: every phone of
+`PHONES_PER_ADDRESS` (30), doubled for the reloads a poll does not count. An
+invariant fails when a screen polls one of them at a literal interval or a
+route sizes its limit any other way.
 
 ## Before merging anything large
 

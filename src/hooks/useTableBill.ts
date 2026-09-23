@@ -5,6 +5,7 @@ import { myOrderIds } from "@/lib/my-orders";
 import { recallSitting } from "@/lib/table-binding";
 import { tableBill, type TableBill } from "@/lib/table-bill";
 import type { Order } from "@/lib/types";
+import { BILL_POLL_MS } from "@/lib/poll";
 
 /**
  * What the table owes, kept roughly current while the diners sit there.
@@ -72,9 +73,9 @@ export function useTableBill(
 
     // While the bill is open on screen, poll: a manager can apply a promotion
     // to it from their side, and the diner should watch the amount drop rather
-    // than be told about it. Ten seconds is well inside the endpoint's own
-    // limit and costs one small query per diner sitting on the screen.
-    const tick = watching ? setInterval(reload, 10_000) : null;
+    // than be told about it. The route's limit is sized from this interval,
+    // for every phone behind the room's address (see poll.ts).
+    const tick = watching ? setInterval(reload, BILL_POLL_MS) : null;
 
     return () => {
       document.removeEventListener("visibilitychange", onVisible);

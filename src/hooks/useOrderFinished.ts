@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ORDER_HEARTBEAT_MS } from "@/lib/poll";
 
-/** How often it asks. The open tracker goes faster; this is the background
- *  heartbeat, for the button sitting on the menu. */
-const EVERY_MS = 15_000;
 
 /** For the diner an order ends when it is handed over, or cancelled. */
 const DONE = ["completed", "cancelled"];
@@ -67,7 +65,9 @@ export function useFinishedOrders(orderIds: string[]): string[] {
     };
 
     tick();
-    const timer = setInterval(tick, EVERY_MS);
+    // The background heartbeat, for the button sitting on the menu; the open
+    // tracker goes faster.
+    const timer = setInterval(tick, ORDER_HEARTBEAT_MS);
     document.addEventListener("visibilitychange", tick);
     return () => {
       alive = false;

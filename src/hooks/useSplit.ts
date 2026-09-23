@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { dinerToken } from "@/lib/diner-token";
+import { SPLIT_POLL_MS } from "@/lib/poll";
 
 /** What the table is doing about its bill, from this phone's point of view. */
 export interface SplitState {
@@ -68,7 +69,7 @@ export function useSplit(
   useEffect(() => {
     if (!active) return;
     read();
-    const timer = setInterval(read, 5000);
+    const timer = setInterval(read, SPLIT_POLL_MS);
     return () => clearInterval(timer);
   }, [active, read]);
 

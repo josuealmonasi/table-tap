@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
-import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { clientIp, forTheRoom, isRateLimited } from "@/lib/rate-limit";
+import { BILL_POLL_MS, perMinute } from "@/lib/poll";
 import { fetchTableBill } from "@/lib/bill-data";
 import { staffOpenedBill } from "@/lib/table-session";
 import { tableParty } from "@/lib/table-party-server";
@@ -30,7 +31,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const sessionId = req.nextUrl.searchParams.get("sessionId");
   if (!restaurantId || !tableId) return await apiError("apiErr.missingId", 400);
 
-  if (await isRateLimited(`bill:${clientIp(req)}`, 60, 60)) {
+  // Polled while the bill is open, by every phone behind the room's address.
+  if (await isRateLimited(`bill:${clientIp(req)}`, forTheRoom(perMinute(BILL_POLL_MS)), 60)) {
     return await apiError("apiErr.tooManyRequests", 429);
   }
 

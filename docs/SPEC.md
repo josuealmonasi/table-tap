@@ -317,6 +317,12 @@ Assume the browser is hostile; it holds the publishable key and nothing else.
   denies everybody.
 - **Capability tokens**: an order id is unguessable, and that is what lets a diner
   track without an account. Public routes that take one are rate-limited.
+- **A limit is per address, and an address can be a whole room.** A
+  restaurant's Wi-Fi puts every diner behind one public address, so the routes
+  a diner's screen polls (`/api/order-status`, `/api/split`, `/api/bill`) are
+  sized for `PHONES_PER_ADDRESS` (30) phones, from the same intervals the
+  screens poll at (`src/lib/poll.ts`). An invariant keeps the poll and the limit
+  on one number.
 - **No secret can reach a client component** — an invariant walks the real import
   graph, counting only imports that survive compilation.
 - **Realtime is the other door out of the database**, and the spec was silent on
