@@ -324,14 +324,23 @@ for (const size of SIZES) {
         await look(tab, `${who.role} · ${path}`);
 
         for (const dialog of DIALOGS[path] ?? []) {
-          const clicked = dialog.text
-            ? await tapText(tab, dialog.text)
-            : await tap(tab, dialog.click);
+          const press = () => dialog.text ? tapText(tab, dialog.text) : tap(tab, dialog.click);
+          const isOpen = () => tab.evaluate(`!!document.querySelector(${JSON.stringify(dialog.shows ?? "[role=dialog]")})`);
+          let clicked = await press();
           await tab.waitForTimeout(900);
           // Having clicked does not mean anything opened. A silent no-op reads exactly
           // like an ok, and that is how a whole role went unchecked with nothing
           // saying so.
-          const open = await tab.evaluate(`!!document.querySelector(${JSON.stringify(dialog.shows ?? "[role=dialog]")})`);
+          let open = await isOpen();
+          // Once more, after a pause: a click that lands before the page is ready
+          // is the usual reason, and now that a dialog missing at one width fails
+          // the run, a slow page must not read as a broken one.
+          if (!clicked || !open) {
+            await tab.waitForTimeout(1500);
+            clicked = await press();
+            await tab.waitForTimeout(900);
+            open = await isOpen();
+          }
           noteDialog(`${who.role} · ${path} → ${dialog.name}`, size.width, clicked && open);
           if (!clicked || !open) {
             console.log(`    –        ${who.role} · ${path} → ${dialog.name}: did not open (no data)`);

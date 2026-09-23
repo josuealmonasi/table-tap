@@ -1120,6 +1120,10 @@ failure. Whatever the cause, a flaky run or a button the CSS hides at one
 breakpoint, a dialog that opens at some widths and not at others was measured
 at none of the widths where it mattered. The gate records which widths every
 dialog opened at, and fails on one that opened somewhere and not everywhere.
+A dialog that does not open is pressed once more after a pause before it is
+counted as missed: the first sabotaged run also caught the manager's order
+detail missing at 360 for no reason but a click that landed before the page
+was ready, and a red over timing is how a gate teaches people to ignore it.
 
 ## Before merging anything large
 
