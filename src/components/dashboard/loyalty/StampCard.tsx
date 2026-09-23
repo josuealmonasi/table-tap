@@ -42,7 +42,7 @@ export default function StampCard({ buttonClass = "tt-btn tt-btn-ghost tt-btn-sm
       else setOutcome({ kind, code, ...data });
     } catch {
       // Never queued: a stamp replayed on reconnect is a second visit.
-      setError(t("offline.blocked"));
+      setError(t("done.networkError"));
     } finally {
       setBusy(false);
     }

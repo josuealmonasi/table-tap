@@ -41,7 +41,7 @@ export default function CardLookup() {
         setError(data.error ?? t("apiErr.generic"));
       } else setCard(data as LookedUp);
     } catch {
-      setError(t("offline.blocked"));
+      setError(t("done.networkError"));
     } finally {
       setBusy(false);
     }
@@ -65,7 +65,7 @@ export default function CardLookup() {
       if (!res.ok) toast(data.error ?? t("apiErr.generic"), "error");
       else toast(t("loyaltyAdmin.undone"));
     } catch {
-      toast(t("offline.blocked"), "error");
+      toast(t("done.networkError"), "error");
     }
     await look(code);
   }

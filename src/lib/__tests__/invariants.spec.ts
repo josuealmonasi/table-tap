@@ -1811,3 +1811,21 @@ describe("a screen money is counted on reads or refuses", () => {
     expect(offenders, `a read whose failure is shown as nothing:\n${offenders.join("\n")}`).toEqual([]);
   });
 });
+
+describe("the offline refusal is only said where it is true", () => {
+  it("keeps \"you need a connection to take payment, cancel or approve\" to those", () => {
+    // It was used for any failed request on the visit card screens: a diner
+    // making a card offline was told they needed a connection to take a
+    // payment. A plain network error says what happened there.
+    const MONEY = [
+      "src/components/dashboard/SettleTableDialog.tsx",
+      "src/components/dashboard/TableCalculator.tsx",
+      "src/hooks/useRestaurantOrders.ts",
+    ];
+    const users = walkAll("src")
+      .filter(f => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__") && !f.includes("/i18n/"))
+      .filter(f => read(f).includes('t("offline.blocked")'));
+    expect(users.filter(f => !MONEY.includes(f)), "the payment-only offline line, said about something else").toEqual([]);
+    expect(users.length, "no screen says it any more — the scan broke").toBeGreaterThan(0);
+  });
+});

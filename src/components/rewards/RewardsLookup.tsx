@@ -51,7 +51,7 @@ export default function RewardsLookup({ initialCode = "" }: RewardsLookupProps) 
       setCode("");
       setNotice(t("loyaltyOffer.forgotten"));
     } catch {
-      setError(t("offline.blocked"));
+      setError(t("done.networkError"));
     }
   }
 
@@ -74,7 +74,7 @@ export default function RewardsLookup({ initialCode = "" }: RewardsLookupProps) 
           setCard(data as CardStanding);
         }
       } catch {
-        setError(t("offline.blocked"));
+        setError(t("done.networkError"));
       } finally {
         setBusy(false);
       }

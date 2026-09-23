@@ -50,7 +50,7 @@ export default function LoyaltyOffer({ offer }: LoyaltyOfferProps) {
       rememberCard(offer.restaurantId, data.code);
       setCard({ face: data.face, qr: data.qr });
     } catch {
-      setError(t("offline.blocked"));
+      setError(t("done.networkError"));
     } finally {
       setBusy(false);
     }
