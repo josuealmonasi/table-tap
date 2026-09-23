@@ -1098,6 +1098,18 @@ already used, and a failure renders the error screen, which says no order was
 lost and offers a retry. An invariant fails on a `{ data }` destructure on
 either screen.
 
+## A Spanish day above an English corte
+
+The dates PR made every date follow the app's language, and its invariant looked
+for the two ways a format picks the machine's or the browser's language. It did
+not look for a language written into the code. The corte on the analytics page
+formatted its day with `DateTimeFormat("es-MX", { weekday, month })`, so an
+owner reading the app in English saw "martes, 23 de septiembre de 2026" above
+an English corte. It takes `dateLocale(locale)` now. The invariant also fails on
+any format that names a day or a month in a fixed language, and lets through
+only what is never shown: the kitchen ticket's time in figures, and the
+`formatToParts` calls that take a date apart to compute with it.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read
