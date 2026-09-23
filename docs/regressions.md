@@ -1110,6 +1110,17 @@ any format that names a day or a month in a fixed language, and lets through
 only what is never shown: the kitchen ticket's time in figures, and the
 `formatToParts` calls that take a date apart to compute with it.
 
+## Opened three times, skipped the fourth
+
+`pnpm layout` clicks each team dialog and, when nothing opens, prints a dash
+and moves on. That is right for a role without the button. In one run the
+manager's five menu-editor dialogs opened at 360, 820 and 1280 and did not open
+at 390, and the gate still said "Everything reads", because a skip is not a
+failure. Whatever the cause, a flaky run or a button the CSS hides at one
+breakpoint, a dialog that opens at some widths and not at others was measured
+at none of the widths where it mattered. The gate records which widths every
+dialog opened at, and fails on one that opened somewhere and not everywhere.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read
