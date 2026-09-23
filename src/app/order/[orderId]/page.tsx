@@ -55,6 +55,7 @@ export default async function OrderPage({
       ratings={data.ratings}
       closedNow={data.closedNow}
       receipts={data.receipts}
+      loyalty={data.loyalty}
       trackOrder={order}
     />
   );

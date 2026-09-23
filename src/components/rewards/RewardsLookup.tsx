@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { formatCode, normalizeCode } from "@/lib/loyalty/code";
 import RewardsCard, { type CardStanding } from "./RewardsCard";
+import CardDownload from "@/components/loyalty/CardDownload";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 interface RewardsLookupProps {
   /** From the card's QR link, so the camera lands straight on the answer. */
@@ -24,6 +26,34 @@ export default function RewardsLookup({ initialCode = "" }: RewardsLookupProps) 
   const [card, setCard] = useState<CardStanding | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [saveAgain, setSaveAgain] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const confirm = useConfirm();
+
+  async function forget(): Promise<void> {
+    const normal = normalizeCode(code);
+    if (!normal) return;
+    const ok = await confirm({
+      title: t("loyaltyOffer.forgetTitle"),
+      message: t("loyaltyOffer.forgetBody"),
+      confirmLabel: t("loyaltyOffer.forget"),
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/rewards?c=${normal}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? t("apiErr.generic"));
+        return;
+      }
+      setCard(null);
+      setCode("");
+      setNotice(t("loyaltyOffer.forgotten"));
+    } catch {
+      setError(t("offline.blocked"));
+    }
+  }
 
   const look = useCallback(
     async (typed: string) => {
@@ -63,16 +93,29 @@ export default function RewardsLookup({ initialCode = "" }: RewardsLookupProps) 
         {card ? (
           <div className="tt-login-card">
             <RewardsCard card={card} locale={locale} />
+            {saveAgain ? (
+              <div style={{ marginTop: 16 }}>
+                <CardDownload face={card.face} qr={card.qr} />
+              </div>
+            ) : (
+              <button type="button" className="tt-btn tt-btn-ghost" style={{ marginTop: 16, width: "100%" }} onClick={() => setSaveAgain(true)}>
+                {t("loyaltyOffer.downloadAgain")}
+              </button>
+            )}
             <button
               type="button"
               className="tt-btn tt-btn-ghost"
-              style={{ marginTop: 20, width: "100%" }}
+              style={{ marginTop: 8, width: "100%" }}
               onClick={() => {
                 setCard(null);
                 setCode("");
+                setSaveAgain(false);
               }}
             >
               {t("rewards.another")}
+            </button>
+            <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm tt-rewards-forget" onClick={() => void forget()}>
+              {t("loyaltyOffer.forget")}
             </button>
           </div>
         ) : (
@@ -89,6 +132,7 @@ export default function RewardsLookup({ initialCode = "" }: RewardsLookupProps) 
             <p className="tt-muted" style={{ marginTop: 0 }}>
               {t("rewards.intro")}
             </p>
+            {notice && <p className="tt-rewards-notice" role="status">{notice}</p>}
             <label className="tt-mod-label tt-rewards-label" htmlFor="rewards-code">
               {t("rewards.codeLabel")}
             </label>

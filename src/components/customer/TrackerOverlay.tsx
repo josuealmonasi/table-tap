@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
 import type { OrderStatus } from "@/lib/types";
 import type { TrackedOrder } from "@/lib/order-tracking";
 import { useIsDesktop } from "@/hooks/useIsDesktop";
@@ -38,11 +39,14 @@ export default function TrackerOverlay({
   orderId,
   initialOrder = null,
   onClose,
+  loyalty = null,
 }: {
   orderId: string;
   /** Present when the server already loaded it — the post-payment landing. */
   initialOrder?: TrackedOrder | null;
   onClose: () => void;
+  /** The visit card, offered on the tracker once the order is paid. */
+  loyalty?: LoyaltyOfferInfo | null;
 }) {
   const t = useT();
   const isDesktop = useIsDesktop();
@@ -122,7 +126,7 @@ export default function TrackerOverlay({
   const content = (
     <div className="tt-track-shell">
       {order ? (
-        <TrackerBody order={order} onBack={onClose} />
+        <TrackerBody order={order} onBack={onClose} loyalty={loyalty} />
       ) : (
         <TrackerSkeleton />
       )}

@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { normalizeCode } from "@/lib/loyalty/code";
 import { standing } from "@/lib/loyalty/standing";
+import { cardFace } from "@/lib/loyalty/face";
+import { qrGrid } from "@/lib/loyalty/qr-grid";
 
 export const runtime = "nodejs";
 
@@ -51,7 +53,17 @@ export async function GET(req: NextRequest) {
     return await apiError("apiErr.generic", 500);
   }
 
+  // The card's own face, so a diner who lost the image can save it again from
+  // here — drawn from the same face as the first one, to the same QR.
+  const face = cardFace(
+    restaurant.data,
+    { reward: program.data?.reward ?? "" },
+    { code, goal: card.goal, progress: Number(progress.data ?? 0) },
+    req.nextUrl.origin,
+  );
   return NextResponse.json({
+    face,
+    qr: qrGrid(face.qrPayload),
     restaurant: restaurant.data,
     // Paused means no new visits, not that the card stopped meaning anything:
     // a reward already earned is still honoured.
@@ -62,4 +74,25 @@ export async function GET(req: NextRequest) {
     lastVisit: lastVisit.data?.visit_day ?? null,
     redeemed: (spent.data ?? []).map(r => ({ day: r.created_at.slice(0, 10), reward: r.reward })),
   });
+}
+
+// DELETE /api/rewards?c=… — the diner deletes their own card. The code is the
+// only key a card has, so whoever holds it may end it, the way they started
+// it; its visits and rewards go with it. It is the privacy notice's promise of
+// cancellation, kept without asking for a name the card never had.
+export async function DELETE(req: NextRequest) {
+  if (await isRateLimited(`rewards:${clientIp(req)}`, 10, 60)) {
+    return await apiError("apiErr.tooManyWait", 429);
+  }
+  const code = normalizeCode(req.nextUrl.searchParams.get("c") ?? "");
+  if (!code) return await apiError("rewards.invalid", 400);
+
+  const { data: gone, error } = await createAdminClient()
+    .from("loyalty_cards").delete().eq("code", code).select("id");
+  if (error) {
+    console.error("rewards: card delete failed:", error.message);
+    return await apiError("apiErr.generic", 500);
+  }
+  if (!gone?.length) return await apiError("rewards.notFound", 404);
+  return NextResponse.json({ ok: true });
 }

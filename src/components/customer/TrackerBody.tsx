@@ -5,6 +5,8 @@ import type { TrackedOrder } from "@/lib/order-tracking";
 import { useT } from "@/lib/i18n/context";
 import OrderStatusTimeline from "./OrderStatusTimeline";
 import TrackedItemsCard from "./TrackedItemsCard";
+import LoyaltyOffer from "./LoyaltyOffer";
+import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
 import {
   BackIcon,
   StatusPreparingIcon,
@@ -34,10 +36,13 @@ const HERO: Record<string, { headlineKey: string; Glyph: typeof StatusReadyIcon 
 export default function TrackerBody({
   order,
   onBack,
+  loyalty = null,
 }: {
   order: TrackedOrder;
   /** The way out, in the corner every other screen keeps it in. */
   onBack: () => void;
+  /** The visit card, offered once this order is paid. */
+  loyalty?: LoyaltyOfferInfo | null;
 }) {
   const t = useT();
   const status = toDisplayStatus(order.status);
@@ -79,6 +84,10 @@ export default function TrackerBody({
           currency={order.currency}
           paid={order.paid !== false}
         />
+
+        {/* Paid, and the restaurant runs a visit card: the moment to offer it,
+            however the money came — online, at the till or to the waiter. */}
+        {order.paid !== false && loyalty && <LoyaltyOffer offer={loyalty} />}
 
         {/* Only while there is something to collect. On a settled order there
             is nothing for anyone to scan, and a payment code on a paid bill

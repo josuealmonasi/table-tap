@@ -9,6 +9,8 @@ import { mailConfigured } from "@/lib/mail";
 import type { StoredDietaryTag } from "@/lib/dietary";
 import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
+import { loyaltyOn, programOf } from "@/lib/loyalty/server";
+import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
 
 /** Everything the customer ordering screens need for one restaurant. */
 export interface OrderingData {
@@ -33,6 +35,12 @@ export interface OrderingData {
   receipts: boolean;
   /** The restaurant's dietary tags — the list is theirs, not the code's. */
   dietaryTags: StoredDietaryTag[];
+  /**
+   * The visit card, when a diner may be offered one: the plan has it and the
+   * program is on. Null otherwise, so the menu never offers a card that staff
+   * could not stamp — the same rule the scanner is shown by.
+   */
+  loyalty: LoyaltyOfferInfo | null;
 }
 
 // Sentinel so an `.in("menu_id", [])` never matches (a restaurant with no active menus).
@@ -267,9 +275,18 @@ export async function loadOrderingData(
     restaurant.allow_pay_later = plan ? can(plan.limits, "deferredPayment") : false;
   }
 
+  // Asked the way the card route asks, so the menu never offers a card the
+  // route would then refuse to make.
+  const program = (await loyaltyOn(restaurantId, plan?.limits ?? null)) ? await programOf(restaurantId) : null;
+  const loyalty: LoyaltyOfferInfo | null =
+    restaurant && program?.active && program.reward
+      ? { restaurantId, restaurantName: restaurant.name, goal: program.goal, reward: program.reward }
+      : null;
+
   return {
     closedNow,
     receipts: mailConfigured(),
+    loyalty,
     dietaryTags: (dietaryRes.data as StoredDietaryTag[] | null) ?? [],
     restaurant,
     categories,
