@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, dateLocale } from "@/lib/format";
 import { backwardOptions } from "@/lib/order-flow";
 import { MoveToIcon } from "@/components/ui/icons";
 import { orderCode, type Order, type OrderStatus } from "@/lib/types";
 import OrderDetailDialog from "./OrderDetailDialog";
 import { STATUS_META, statusMeta } from "@/lib/order-status";
-import { useT } from "@/lib/i18n/context";
+import { useLocale, useT } from "@/lib/i18n/context";
 
 
 /** Map an order's current status to the button that advances it. */
@@ -46,6 +46,7 @@ export default function OrderCard({
   canMove = true,
 }: OrderCardProps) {
   const t = useT();
+  const { locale } = useLocale();
   const meta = statusMeta(order.status);
   const action = nextAction(order.status);
   // A waiter closes out a handed-over order and nothing else; the kitchen
@@ -66,7 +67,7 @@ export default function OrderCard({
     return () => document.removeEventListener("mousedown", onDown);
   }, [moveOpen]);
   const cancellable = order.status === "received" || order.status === "preparing";
-  const placedAt = new Date(order.created_at).toLocaleTimeString([], {
+  const placedAt = new Date(order.created_at).toLocaleTimeString(dateLocale(locale), {
     hour: "2-digit",
     minute: "2-digit",
   });

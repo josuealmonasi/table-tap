@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useUserLogs } from "@/hooks/useUserLogs";
-import { useT } from "@/lib/i18n/context";
-import { formatMoney } from "@/lib/format";
+import { useLocale, useT } from "@/lib/i18n/context";
+import { formatMoney, dateLocale } from "@/lib/format";
 import { LogRowsSkeleton } from "@/components/ui/DashSkeletons";
 import { MoveDownIcon, MoveUpIcon, SearchIcon } from "@/components/ui/icons";
 import { entitiesNamedBy, parseLogDetail } from "@/lib/log-detail";
@@ -24,6 +24,7 @@ interface UserLogsProps {
  */
 export default function UserLogs({ restaurantId, currency }: UserLogsProps) {
   const t = useT();
+  const { locale } = useLocale();
   // What is typed is compared against what the rows read, not against the
   // English name in the column.
   const [typed, setTyped] = useState("");
@@ -161,7 +162,7 @@ export default function UserLogs({ restaurantId, currency }: UserLogsProps) {
               {specifics(l) && <span className="tt-log-detail">{specifics(l)}</span>}
             </span>
             <span className="tt-log-when">
-              {new Date(l.created_at).toLocaleString([], {
+              {new Date(l.created_at).toLocaleString(dateLocale(locale), {
                 day: "2-digit",
                 month: "short",
                 hour: "2-digit",

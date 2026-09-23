@@ -9,6 +9,7 @@ import { mailConfigured, sendMail } from "@/lib/mail";
 import { buildReceipt } from "@/lib/receipt";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidEmail, normalizeEmail } from "@/lib/email";
+import { dateLocale } from "@/lib/format";
 
 export const runtime = "nodejs";
 
@@ -104,7 +105,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     {
       name: restaurant?.name ?? "TableTap",
       timeZone: restaurant?.timezone ?? DEFAULT_TIME_ZONE,
-      locale: locale === "es" ? "es-MX" : "en-US",
+      locale: dateLocale(locale),
     },
     t,
   );

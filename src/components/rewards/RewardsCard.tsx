@@ -5,6 +5,7 @@ import type { Standing } from "@/lib/loyalty/standing";
 import type { CardFace } from "@/lib/loyalty/face";
 import type { QrGrid } from "@/lib/loyalty/qr-grid";
 import { nextStep } from "@/lib/loyalty/next-step";
+import { dateLocale } from "@/lib/format";
 
 /** What /api/rewards answers: what the card itself would show, and no more. */
 export interface CardStanding {
@@ -26,7 +27,7 @@ interface RewardsCardProps {
 
 /** A calendar day, in the diner's language. The day is the restaurant's, so no zone shifts it. */
 function dayLabel(day: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale === "es" ? "es-MX" : "en-US", {
+  return new Intl.DateTimeFormat(dateLocale(locale), {
     day: "numeric",
     month: "long",
     year: "numeric",

@@ -1,7 +1,8 @@
 "use client";
 
 import { PRIVACY_PATH, TERMS_PATH } from "@/lib/legal";
-import { useT } from "@/lib/i18n/context";
+import { useLocale, useT } from "@/lib/i18n/context";
+import { dateLocale } from "@/lib/format";
 import { DownloadIcon } from "@/components/ui/icons";
 
 /**
@@ -22,6 +23,7 @@ export default function PlanDocuments({
   acceptedAt: string | null;
 }) {
   const t = useT();
+  const { locale } = useLocale();
 
   return (
     <div className="tt-section">
@@ -51,7 +53,7 @@ export default function PlanDocuments({
         <p className="tt-muted tt-doc-accepted">
           {t("plan.docsAccepted", {
             version: acceptedVersion,
-            date: new Date(acceptedAt).toLocaleDateString([], {
+            date: new Date(acceptedAt).toLocaleDateString(dateLocale(locale), {
               day: "numeric",
               month: "long",
               year: "numeric",

@@ -7,6 +7,7 @@ import {
   startOfNextLocalDay,
   subtractLocalDays,
 } from "@/lib/day-window";
+import { dateLocale } from "@/lib/format";
 
 export type Period = "today" | "7d" | "30d" | "month";
 
@@ -97,7 +98,7 @@ export function computeAnalytics(
   // In the reader's language, not the machine's: `[]` meant whatever the
   // server was set to, and Vercel's English put "25 Tue" on every Spanish
   // owner's chart.
-  const label = new Intl.DateTimeFormat(locale === "es" ? "es-MX" : "en-US", {
+  const label = new Intl.DateTimeFormat(dateLocale(locale), {
     timeZone,
     weekday: "short",
     day: "2-digit",

@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useAdminActions } from "@/hooks/useAdminActions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { useT } from "@/lib/i18n/context";
+import { useLocale, useT } from "@/lib/i18n/context";
+import { dateLocale } from "@/lib/format";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import AdminCreateUser from "./AdminCreateUser";
 import AdminEditUser from "./AdminEditUser";
@@ -52,6 +53,7 @@ export default function AdminPanel({
   restaurantOptions,
 }: AdminPanelProps) {
   const t = useT();
+  const { locale } = useLocale();
   const { busy, deleteUser, deleteRestaurant } = useAdminActions();
   const confirm = useConfirm();
   const [editing, setEditing] = useState<AdminUserRow | null>(null);
@@ -94,7 +96,7 @@ export default function AdminPanel({
                 </span>
                 <span>{r.team_count}</span>
                 <span className="tt-muted" style={{ fontSize: 12 }}>
-                  {new Date(r.created_at).toLocaleDateString([], {
+                  {new Date(r.created_at).toLocaleDateString(dateLocale(locale), {
                     day: "2-digit",
                     month: "short",
                   })}

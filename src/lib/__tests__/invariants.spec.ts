@@ -1556,3 +1556,19 @@ describe("a date reads in the reader's language, not the machine's", () => {
     expect(offenders, `dates in the machine's language:\n${offenders.join("\n")}`).toEqual([]);
   });
 });
+
+describe("a date on screen is in the app's language", () => {
+  it("never formats a date or a time in the browser's own language", () => {
+    // `toLocaleString([])` answers in whatever language the browser is set to,
+    // so a Spanish owner on an English phone read "Sep 23" beside Spanish
+    // words — and the server, rendering the same component, could write it in
+    // a third. `dateLocale(locale)` is the app's language, which both read.
+    const offenders: string[] = [];
+    for (const file of walkAll("src").filter(f => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__"))) {
+      // Code only: the comment that explains the rule quotes what it forbids.
+      const code = read(file).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+      if (/toLocale(Time|Date)?String\(\s*(\[\]|undefined)/.test(code)) offenders.push(file);
+    }
+    expect(offenders, `dates in the browser's language:\n${offenders.join("\n")}`).toEqual([]);
+  });
+});

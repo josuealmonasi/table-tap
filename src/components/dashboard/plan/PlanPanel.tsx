@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, dateLocale } from "@/lib/format";
 import { planLabel, trialDaysLeft, type PlanLimits, type PlanStatus } from "@/lib/plan";
 import type { RestaurantPlan } from "@/lib/plan-server";
-import { useT } from "@/lib/i18n/context";
+import { useLocale, useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import Breadcrumb from "@/components/layout/Breadcrumb";
@@ -53,6 +53,7 @@ export default function PlanPanel({
   // there is no subscription — during the free trial, for instance.
   const paidPrice = subscribedPrice ?? plan.limits.monthly_price;
   const t = useT();
+  const { locale } = useLocale();
   const toast = useToast();
   const confirm = useConfirm();
   const [opening, setOpening] = useState(false);
@@ -163,7 +164,7 @@ export default function PlanPanel({
           {plan.planEndsAt && (
             <p className="tt-plan-state tt-plan-state-warn">
               {t("plan.endsOn", {
-                date: new Date(plan.planEndsAt).toLocaleDateString([], {
+                date: new Date(plan.planEndsAt).toLocaleDateString(dateLocale(locale), {
                   day: "numeric",
                   month: "long",
                 }),
