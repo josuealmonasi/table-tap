@@ -977,20 +977,22 @@ describe("a repeated webhook cannot record the same money twice", () => {
     expect(read("src/lib/payments.ts")).toMatch(/error\.code !== "23505"/);
   });
 
-  it("adds a tip only on the delivery that settled the bill", () => {
+  it("adds a tip only on the delivery that settled the bill, and records it", () => {
     // A tip is ADDED to the order's tip and total, so it is the write a
-    // repeated delivery does not leave as it was. The whole-table settle added
-    // it on every copy of the event: the payment was recorded once, and the
-    // order's total and tip went up each time Stripe sent it again.
+    // repeated delivery does not leave as it was: the whole-table settle added
+    // it on every copy of the event. And its payment was written from the
+    // totals before the tip, so the ledger said MX$2.50 where Stripe took
+    // MX$7.50. The tip's order is one this delivery settled, and the payment
+    // for that order carries the tip.
     const start = settle.indexOf("async function settleBill(");
     expect(start, "settleBill not found — has the file moved?").toBeGreaterThan(-1);
     const body = settle.slice(start, settle.indexOf("\n}\n", start));
-    const tipWrites = [...body.matchAll(/if \(tip > 0([^)]*)\)/g)].map(m => m[1]);
-    expect(tipWrites.length, "settleBill no longer records a tip — the scan broke").toBeGreaterThan(0);
-    expect(
-      tipWrites.filter(guard => !/settled/.test(guard)),
-      "a tip added whether or not this delivery settled anything",
-    ).toEqual([]);
+    expect(body, "the tip's order is not taken from the rows this delivery settled")
+      .toMatch(/const tipOrder = [^;]*\bsettled\b/);
+    expect(body, "the tip is written to an order other than the one chosen from the settled rows")
+      .toMatch(/\.eq\("id", tipOrder\.id\)/);
+    expect(body, "the payment for the tip's order does not carry the tip")
+      .toMatch(/amount: Number\(o\.total\) \+ tipHere/);
   });
 });
 

@@ -43,7 +43,7 @@ us, and what now catches each one.
 | Seeded visits are dated by the restaurant's calendar, never today | The demo's seed filled today's slot after 6 p.m. in Mexico City, and a first scan said "already stamped" |
 | Both browser sweeps open a 360px phone | The menu editor's product row spilled 28px past its box at 360 and ran off a 320px phone; Analytics broke "Cheesecake" in half. 390 read clean |
 | A failed read is never an answer | One refused bill poll told a diner who owed that they had paid; the waiter was told the table owed nothing; a phone forgot the table it owed at; the badges said nobody was calling |
-| A tip is added only by the delivery that settled the bill | Every repeated delivery of a whole-table card payment raised the order's tip and total again |
+| A tip is added once, and the ledger records it | Every repeated delivery of a whole-table card payment raised the order's tip and total again; the payment row left the tip out |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -998,8 +998,17 @@ first order's tip and total, and it ran on every delivery, including one that
 settled nothing. The payment was recorded once, and the order's total and tip
 went up each time the event arrived again. The split and the single-order paths
 already hung everything on the rows their own update returned. The whole-table
-one does now, and the webhook invariant fails on a tip that is added without
-that guard.
+one does now.
+
+The probe that showed it showed a second thing: the payment row said MX$2.50
+for a bill Stripe charged MX$7.50. The ledger was written from the orders'
+totals before the tip was added to one of them, so a card tip on a whole table
+never reached the ledger, and `pnpm money` had never seen one because the seed
+has none. The first on production would have turned `money:prod` red with the
+ledger short. The tip now goes on an order this delivery settled, and that
+order's payment carries it, the way a share of a divided bill always has. The
+webhook invariant holds all three: where the tip's order comes from, that the
+tip is written to it, and that its payment includes it.
 
 ## Before merging anything large
 

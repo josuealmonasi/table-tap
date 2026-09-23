@@ -219,16 +219,33 @@ async function settleBill(session: Stripe.Checkout.Session): Promise<void> {
     .eq("paid", false)
     .select("id, total, session_id, restaurant_id");
 
+  // The tip was collected against the table, not a dish, so it rides on one
+  // order: the first of the settled ones, and only one THIS delivery settled.
+  // A tip is added to what is there, so it is the one write a repeated
+  // delivery does not leave as it was: every copy of the event raised the
+  // order's tip and total again. And its payment carries it. The ledger was
+  // written from the totals before the tip was added, so Stripe took MX$7.50
+  // and the ledger said MX$2.50 — the direction the split path already
+  // refuses to be wrong in, where the share and its tip land together.
+  const tip = Math.max(0, Number(session.metadata?.settle_tip ?? 0));
+  const tipOrder = tip > 0
+    ? ((settled ?? []).find(o => o.id === settleIds[0]) ?? settled?.[0] ?? null)
+    : null;
+
   await recordPayments(
-    (settled ?? []).map(o => ({
-      restaurantId: o.restaurant_id as string,
-      orderId: o.id as string,
-      sessionId: o.session_id as string | null,
-      amount: Number(o.total),
-      method: "card" as const,
-      stripePaymentIntent:
-        typeof session.payment_intent === "string" ? session.payment_intent : null,
-    })),
+    (settled ?? []).map(o => {
+      const tipHere = o.id === tipOrder?.id ? tip : 0;
+      return {
+        restaurantId: o.restaurant_id as string,
+        orderId: o.id as string,
+        sessionId: o.session_id as string | null,
+        amount: Number(o.total) + tipHere,
+        tip: tipHere,
+        method: "card" as const,
+        stripePaymentIntent:
+          typeof session.payment_intent === "string" ? session.payment_intent : null,
+      };
+    }),
   );
 
   // Paid in full is the ordinary way a table empties.
@@ -242,21 +259,13 @@ async function settleBill(session: Stripe.Checkout.Session): Promise<void> {
     await db.from("orders").update({ platform_fee: fee }).eq("id", settleIds[0]);
   }
 
-  // The tip was collected against the table, not a dish, so it is recorded
-  // on the first of the settled orders. The takings then match what Stripe
-  // actually took, which is the number that has to be right.
-  //
-  // Only by the delivery that settled the bill. It is added to what is there,
-  // so it is the one write here a repeated delivery does not leave as it was:
-  // every copy of the event raised the order's tip and total again, while the
-  // payment itself was recorded once. The split and the single order already
-  // hang everything on the rows their own update returned.
-  const tip = Number(session.metadata?.settle_tip ?? 0);
-  if (tip > 0 && (settled?.length ?? 0) > 0) {
+  // The same order the payment above carried the tip on, so the order's total
+  // and what the ledger says arrived for it stay one number.
+  if (tipOrder) {
     const { data: first } = await db
       .from("orders")
       .select("id, tip, total")
-      .eq("id", settleIds[0])
+      .eq("id", tipOrder.id)
       .single();
     if (first) {
       await db
