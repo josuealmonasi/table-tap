@@ -1792,13 +1792,15 @@ describe("an order that could not be read is not a missing one", () => {
   });
 });
 
-describe("a screen money is counted on reads or refuses", () => {
+describe("a dashboard page reads or refuses", () => {
   // The bills board and the analytics page (with the corte) destructured their
   // reads as `{ data }` and took a failure as empty: "no open tables", nothing
   // already collected so the whole bill looked owing again, a drawer holding
-  // nothing, a day with no sales. Each read is unwrapped now, and a failure
-  // renders the error screen that offers a retry.
-  const SCREENS = ["src/app/dashboard/bills/page.tsx", "src/app/dashboard/analytics/page.tsx"];
+  // nothing, a day with no sales. The rest of the dashboard did it too: every
+  // table free, a waiter's pad with no tables, a printer "never set up" that
+  // invited a new token, a menu that seemed deleted. Every page's reads are
+  // unwrapped, and a failure renders the error screen that offers a retry.
+  const SCREENS = walkAll("src/app/dashboard").filter(f => f.endsWith("/page.tsx"));
 
   it("takes no read's data without its error", () => {
     const offenders: string[] = [];

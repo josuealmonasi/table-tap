@@ -1,3 +1,4 @@
+import { unwrap } from "@/lib/ordering-data";
 import { redirect } from "next/navigation";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -17,10 +18,10 @@ export default async function AdminPage() {
 
   const db = createAdminClient();
   const [
-    { data: restaurants },
-    { data: staff },
-    { data: admins },
-    { data: profiles },
+    restaurantsRes,
+    staffRes,
+    adminsRes,
+    profilesRes,
     users,
   ] = await Promise.all([
     db
@@ -32,6 +33,15 @@ export default async function AdminPage() {
     db.from("profiles").select("user_id, full_name"),
     db.auth.admin.listUsers({ perPage: 1000 }),
   ]);
+
+  // Unwrapped, like every dashboard page: a failed read here showed no
+  // restaurants and no logins, or an admin as nobody in particular on the one
+  // page that manages logins. The error screen offers a retry instead.
+  const restaurants = unwrap(restaurantsRes, "the restaurants");
+  const staff = unwrap(staffRes, "the teams");
+  const admins = unwrap(adminsRes, "the platform admins");
+  const profiles = unwrap(profilesRes, "the names");
+  if (users.error) throw new Error(`Could not load the logins: ${users.error.message}`);
 
   const restaurantById = new Map((restaurants ?? []).map(r => [r.id, r]));
   const staffByUser = new Map((staff ?? []).map(s => [s.user_id, s]));
