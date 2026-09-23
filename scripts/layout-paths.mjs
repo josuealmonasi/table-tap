@@ -104,6 +104,10 @@ export const DIALOGS = {
     { name: "new add-on", text: "Agregar extra" },
     { name: "new icon group", text: "Agregar grupo" },
     { name: "new dietary tag", text: "Agregar etiqueta" },
+    // Not a dialog, so neither sweep could see it: renaming a menu happens in
+    // the breadcrumb, and at 390px it made the page scroll sideways. `shows`
+    // names what opens when it is not a [role=dialog].
+    { name: "rename the menu", click: ".tt-menu-switcher-edit", shows: ".tt-menu-switcher-rename" },
   ],
   "/dashboard/staff": [
     // The button says what it does — "Enviar invitación" — not "Agregar".
