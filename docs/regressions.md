@@ -33,6 +33,7 @@ us, and what now catches each one.
 | A sweep that clicks everything changes nothing | One `pnpm dialogs` run completed every live order, duplicated dishes and approved a write-off |
 | Every seed accepts the terms the app enforces | A hand-kept copy of the version fell a month behind, and every seeded account opened on the terms modal |
 | A state that is not a dialog can still be measured | Renaming a menu at 390px made the page scroll sideways, and neither sweep could see it |
+| `schema.sql` builds an empty database, top to bottom | A revoke above the table it named broke every reset from nothing for two weeks, unseen |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -818,6 +819,20 @@ opened something. The field now takes what the row can spare, the two buttons
 drop beneath it together on a phone, and `layout-paths` can name a state by what
 it `shows` — so the rename is measured at every width, and failed on the old
 code at 390px for the owner and the manager.
+
+## A schema that only rebuilt itself
+
+`schema.sql` is run against databases that already have everything, where a
+statement about a table created further down succeeds because the table is
+there from last time. Run against nothing, the whole script fails on it — and
+`pnpm db:reset` drops every table first, so a failure there leaves an empty
+database behind. Two statements did this for two weeks: a revoke on
+`plan_limits` four hundred lines above the table (#296, the security review),
+and a revoke on `enforce_plan_limit()` seven lines above the function. It was on
+the checklist — "`pnpm db:reset` on dev, proves the schema still builds from
+nothing" — and nobody had run it. Found by running it; dev was left with no
+tables until the fix. `schema-order.spec.ts` now fails on any table or function
+named before it is created, and named exactly those two on the old file.
 
 ## The decoder under the optimiser
 
