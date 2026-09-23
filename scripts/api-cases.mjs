@@ -209,6 +209,33 @@ export function cases(fx) {
     { name: "DELETE /api/loyalty/visit (today's stamp, taken back)", as: "manager", method: "DELETE",
       path: "/api/loyalty/visit", body: async f => ({ id: await f.visitOf(f.stampableCode, "today") }), expect: [200],
       check: async (_d, f) => (await f.visitOf(f.stampableCode, "today")) === null || "the visit is still there" },
+    // Today's stamp with a reward spent after it is part of that reward's
+    // record: taking it back left the card owing a visit, a count below zero.
+    { name: "DELETE /api/loyalty/visit (today's stamp, a reward spent after it)", as: "manager", method: "DELETE",
+      path: "/api/loyalty/visit",
+      arrange: async f => {
+        const rid = f.restaurant.id;
+        const today = new Intl.DateTimeFormat("en-CA", { timeZone: f.restaurant.timezone ?? "America/Mexico_City" }).format(new Date());
+        await f.admin.from("loyalty_cards").delete().eq("code", "SPNTXTEST000");
+        const { data: card } = await f.admin.from("loyalty_cards")
+          .insert({ restaurant_id: rid, code: "SPNTXTEST000", goal: 2 }).select("id").single();
+        await f.admin.from("loyalty_visits").insert({ card_id: card.id, restaurant_id: rid, visit_day: "2025-01-01", actor_email: "api@tabletap.dev" });
+        const { data: visit } = await f.admin.from("loyalty_visits").insert({
+          card_id: card.id, restaurant_id: rid, visit_day: today, actor_email: "api@tabletap.dev",
+          created_at: new Date(Date.now() - 60_000).toISOString(),
+        }).select("id").single();
+        await f.admin.from("loyalty_redemptions").insert({
+          card_id: card.id, restaurant_id: rid, visits_used: 2, reward: "api", actor_email: "api@tabletap.dev",
+        });
+        f.spentVisit = visit.id;
+        return () => f.admin.from("loyalty_cards").delete().eq("id", card.id);
+      },
+      body: f => ({ id: f.spentVisit }),
+      expect: [409], expectError: /no se puede quitar|can't be taken back/i,
+      check: async (_d, f) => {
+        const { count } = await f.admin.from("loyalty_visits").select("id", { count: "exact", head: true }).eq("id", f.spentVisit);
+        return count === 1 || "the stamp was taken back anyway";
+      } },
     { name: "POST /api/loyalty/program (a reward ladder)", as: "manager", method: "POST",
       path: "/api/loyalty/program", arrange: f => f.keepLoyaltyProgram(),
       body: { active: true, steps: [{ visits: 10, reward: "Free main" }, { visits: 3, reward: "Free coffee" }] }, expect: [200],

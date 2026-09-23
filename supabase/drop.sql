@@ -60,6 +60,7 @@ drop policy if exists "team manages its own menu images" on storage.objects;
 drop function if exists public.loyalty_redeem(uuid, text, text);
 drop function if exists public.loyalty_redeem(uuid, text, text, int);
 drop function if exists public.loyalty_stamp(uuid, text, text);
+drop function if exists public.loyalty_unstamp(uuid, uuid, date);
 drop function if exists public.loyalty_progress(uuid);
 drop function if exists public.loyalty_steps_ok(jsonb);
 drop function if exists public.claim_founding_price(uuid, int);

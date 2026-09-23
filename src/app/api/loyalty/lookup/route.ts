@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
   const program = await programOf(actor.restaurantId);
   const [state, visits, spent, restaurant] = await Promise.all([
     cardState(card, program?.reward ?? ""),
-    db.from("loyalty_visits").select("id, visit_day, actor_email").eq("card_id", card.id)
+    db.from("loyalty_visits").select("id, visit_day, actor_email, created_at").eq("card_id", card.id)
       .order("visit_day", { ascending: false }).limit(100),
     db.from("loyalty_redemptions").select("reward, actor_email, created_at").eq("card_id", card.id)
       .order("created_at", { ascending: false }).limit(50),
@@ -39,13 +39,23 @@ export async function GET(req: NextRequest) {
   ]);
   if (!state) return await apiError("apiErr.generic", 500);
   const today = localToday(restaurant.data?.timezone ?? null);
+  // The last reward spent: a visit before it is part of the record that reward
+  // was earned on, and `loyalty_unstamp()` refuses to take it back.
+  const lastSpent = Math.max(-Infinity, ...(spent.data ?? []).map(r => Date.parse(r.created_at)));
 
   return NextResponse.json({
     code,
     standing: standing(state.progress, state.ladder, state.done),
     since: card.created_at.slice(0, 10),
-    // Only today's may be undone: yesterday's visit is part of the record.
-    visits: (visits.data ?? []).map(v => ({ id: v.id, day: v.visit_day, by: v.actor_email, undoable: v.visit_day === today })),
+    // Only today's may be undone, and not once a reward was spent after it:
+    // either way the visit is part of the record. The same rule as
+    // `loyalty_unstamp()`, so the screen never offers an undo it refuses.
+    visits: (visits.data ?? []).map(v => ({
+      id: v.id,
+      day: v.visit_day,
+      by: v.actor_email,
+      undoable: v.visit_day === today && lastSpent < Date.parse(v.created_at),
+    })),
     redeemed: (spent.data ?? []).map(r => ({ day: r.created_at.slice(0, 10), reward: r.reward, by: r.actor_email })),
   });
 }

@@ -1177,6 +1177,17 @@ drew the table as two small pills where the page has a badge and a service
 row — so every table menu jumped as it loaded. It is measured equal now at all
 four widths, the visit card row included.
 
+## A stamp taken back after its reward
+
+Taking back a stamp checked one thing, that it was today's. A card that reached
+its goal with today's stamp, had its reward spent, and then had that stamp taken
+back was left at -1: it owed the restaurant a visit, and every screen showed it
+as nought, so the diner's next visit also read nought. The undo is now
+`loyalty_unstamp()`, which locks the card like the stamp and the redemption do
+and refuses a stamp that a reward was spent after. The lookup offers the undo
+only where that function would allow it, and an invariant keeps every write
+that moves a card's count inside a locked function.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read
