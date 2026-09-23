@@ -48,6 +48,7 @@ us, and what now catches each one.
 | A request that says it worked reads its answer | "Llamar al mesero" said "¡En camino!" for a minute whatever came back, a refusal or no connection |
 | A refused move is not a dropped connection | A 403 from an expired sign-in was held as "saved, will be sent" and retried on every reconnect |
 | An order that could not be read is not a missing one | A failed read of an order was null, and the tracker answered a diner who had just ordered with "not found" |
+| A screen money is counted on reads or refuses | A failed read on the bills board showed no open tables, or nothing already collected, so the whole bill looked owing again |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -1079,6 +1080,23 @@ ordered and paid, and `/api/order-status` answered 404, which the menu's
 app's "no order was lost, try again" screen, and both routes answer 500, which
 every poller treats as "keep what you knew". An invariant keeps the throw in
 the reader and forbids a route caller that lets it become a 404.
+
+## Nothing owed, nothing sold
+
+The bills board destructured seven reads as `{ data }` and took a failure as
+empty. A failed read of the open orders was "no open tables". A failed read of
+the payments against each sitting was "nothing collected yet", so a table
+halfway through paying looked as though it owed the whole bill, which the
+comment above that read names as the reason it exists: "the floor would see the
+whole amount still owing and could take it again". The frozen splits went the
+same way, and the settle route does not refuse a table that is dividing its
+bill. Analytics did it with the day's sales, the corte and the visit card
+numbers: an owner told they had sold nothing, and a drawer counted at zero.
+
+Every one of those reads goes through `unwrap()` now, the helper the menu pages
+already used, and a failure renders the error screen, which says no order was
+lost and offers a retry. An invariant fails on a `{ data }` destructure on
+either screen.
 
 ## Before merging anything large
 

@@ -9,6 +9,7 @@ import {
 } from "@/lib/analytics";
 import AnalyticsView, { type RatedDish } from "@/components/dashboard/analytics/AnalyticsView";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { unwrap } from "@/lib/ordering-data";
 import { getPlan } from "@/lib/plan-server";
 import { can } from "@/lib/plan";
 import { programOf } from "@/lib/loyalty/server";
@@ -34,14 +35,20 @@ export default async function AnalyticsPage({
   const timeZone = membership.restaurant.timezone ?? DEFAULT_TIME_ZONE;
   const { start, end } = periodRange(period, new Date(), timeZone);
 
-  const { data: rows } = await supabase
-    .from("orders")
-    .select("total, tip, created_at, items")
-    .eq("restaurant_id", membership.restaurant.id)
-    .eq("paid", true)
-    .neq("status", "cancelled")
-    .gte("created_at", start.toISOString())
-    .lt("created_at", end.toISOString());
+  // Unwrapped, like every read on this page: a failed read taken as empty
+  // told the owner they had sold nothing and the drawer held nothing. The error
+  // screen offers a retry instead, which is the honest answer.
+  const rows = unwrap(
+    await supabase
+      .from("orders")
+      .select("total, tip, created_at, items")
+      .eq("restaurant_id", membership.restaurant.id)
+      .eq("paid", true)
+      .neq("status", "cancelled")
+      .gte("created_at", start.toISOString())
+      .lt("created_at", end.toISOString()),
+    "the period's sales",
+  );
 
   const data = computeAnalytics((rows as AnalyticsOrder[]) ?? [], period, timeZone, new Date(), await getLocale());
 
@@ -60,7 +67,7 @@ export default async function AnalyticsPage({
   const admin = createAdminClient();
   const since = dayStart.toISOString();
 
-  const [{ data: paidRows }, { data: givenUp }] = await Promise.all([
+  const [paidRes, givenUpRes] = await Promise.all([
     admin
       .from("payments")
       .select("actor_email, amount, method")
@@ -76,6 +83,8 @@ export default async function AnalyticsPage({
       .gte("created_at", since),
   ]);
 
+  const paidRows = unwrap(paidRes, "today's takings");
+  const givenUp = unwrap(givenUpRes, "today's write-offs and discounts");
   const corte = paidRows
     ? corteFrom(paidRows as CortePayment[], (givenUp ?? []) as CorteAdjustment[])
     : EMPTY_CORTE;
@@ -89,13 +98,15 @@ export default async function AnalyticsPage({
 
   // What people thought of the dishes. The function aggregates per dish; the
   // names come from the menu, to avoid running the same query twice.
-  const [{ data: stats }, { data: dishes }] = await Promise.all([
+  const [statsRes, dishesRes] = await Promise.all([
     admin.rpc("dish_rating_stats", { p_restaurant_id: membership.restaurant.id }),
     admin
       .from("menu_items")
       .select("id, name, emoji")
       .eq("restaurant_id", membership.restaurant.id),
   ]);
+  const stats = unwrap(statsRes, "the dish ratings");
+  const dishes = unwrap(dishesRes, "the dishes");
   const nameOf = new Map(
     ((dishes ?? []) as { id: string; name: string; emoji: string | null }[]).map(d => [
       d.id,

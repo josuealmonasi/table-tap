@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { unwrap } from "@/lib/ordering-data";
 import { MANAGES, OWNS, SETTLES } from "@/lib/membership";
 import { getPlan } from "@/lib/plan-server";
 import { loyaltyOn } from "@/lib/loyalty/server";
@@ -33,7 +34,7 @@ export default async function BillsPage() {
   // Read with the secret key: orders are unreadable to anyone but the team's
   // own policies, and this page needs every table's, not just one's.
   const db = createAdminClient();
-  const [{ data: orders }, { data: requests }, { data: writeOffs }, { data: asking }] =
+  const [ordersRes, requestsRes, writeOffsRes, askingRes] =
     await Promise.all([
     db
       .from("orders")
@@ -66,6 +67,15 @@ export default async function BillsPage() {
       .in("kind", ["bill", "pay"])
       .eq("status", "open"),
   ]);
+  // Every read here throws when it fails, rather than being taken as empty.
+  // This is the screen money is collected from: an unread list of bills read
+  // as "no open tables", and an unread ledger as "nothing collected yet", so
+  // the whole amount looked owing and could be taken again. The error screen
+  // says no order was lost and offers a retry, which is the true answer.
+  const orders = unwrap(ordersRes, "the open bills");
+  const requests = unwrap(requestsRes, "the discount requests");
+  const writeOffs = unwrap(writeOffsRes, "the write-off requests");
+  const asking = unwrap(askingRes, "who asked for the bill");
 
   // Their own takings, read here with the secret key rather than by widening
   // any policy. `payments` is nobody's to read from a browser, and it stays
@@ -73,14 +83,17 @@ export default async function BillsPage() {
   // anybody else's collections and no new door was opened to get there.
   const me = await currentUser();
   const dayStart = startOfLocalDay(new Date(), r.timezone ?? DEFAULT_TIME_ZONE);
-  const { data: myPayments } = me?.email
-    ? await db
-        .from("payments")
-        .select("amount, method")
-        .eq("restaurant_id", r.id)
-        .eq("actor_email", me.email)
-        .gte("created_at", dayStart.toISOString())
-    : { data: null };
+  const myPayments = me?.email
+    ? unwrap(
+        await db
+          .from("payments")
+          .select("amount, method")
+          .eq("restaurant_id", r.id)
+          .eq("actor_email", me.email)
+          .gte("created_at", dayStart.toISOString()),
+        "your takings today",
+      )
+    : null;
   const till = myPayments ? tillFrom(myPayments) : EMPTY_TILL;
 
   // Tables part-way through dividing their bill, and what has already come in.
@@ -93,11 +106,14 @@ export default async function BillsPage() {
   const sessionOf = new Map(
     rows.filter(o => o.session_id).map(o => [o.id, o.session_id as string]),
   );
-  const { data: liveSplits } = await db
-    .from("bill_splits")
-    .select("id, session_id, shares, bill_split_claims(paid_at, amount)")
-    .eq("restaurant_id", r.id)
-    .eq("status", "locked");
+  const liveSplits = unwrap(
+    await db
+      .from("bill_splits")
+      .select("id, session_id, shares, bill_split_claims(paid_at, amount)")
+      .eq("restaurant_id", r.id)
+      .eq("status", "locked"),
+    "the bills being divided",
+  );
 
   type LiveSplit = {
     session_id: string;
@@ -117,14 +133,17 @@ export default async function BillsPage() {
   // it the sitting's rather than one order's — an order-level payment left
   // with the order it settled.
   const sittings = [...new Set(sessionOf.values())];
-  const { data: parts } = sittings.length
-    ? await db
-        .from("payments")
-        .select("session_id, amount")
-        .eq("restaurant_id", r.id)
-        .in("session_id", sittings)
-        .is("order_id", null)
-    : { data: null };
+  const parts = sittings.length
+    ? unwrap(
+        await db
+          .from("payments")
+          .select("session_id, amount")
+          .eq("restaurant_id", r.id)
+          .in("session_id", sittings)
+          .is("order_id", null),
+        "what the tables have already paid",
+      )
+    : null;
   const collected = new Map<string, number>();
   for (const p of parts ?? []) {
     const key = p.session_id as string;
