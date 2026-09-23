@@ -21,8 +21,7 @@ export default function LoyaltyLoading() {
         </header>
         <div className="tt-loyalty-skel-status" aria-hidden="true"><Skeleton height="100%" radius={12} /></div>
         <div className="tt-cols">
-          <div className="tt-loyalty-col" aria-hidden="true">
-          <div className="tt-section">
+          <div className="tt-section" aria-hidden="true">
             <div className="tt-section-head">
               <Skeleton width={160} height={26} />
             </div>
@@ -36,7 +35,7 @@ export default function LoyaltyLoading() {
             {gap(12)}
             <div className="tt-loyalty-skel-note"><Skeleton height="100%" /></div>
             {gap(12)}
-            <div className="tt-loyalty-skel-round"><Skeleton height="100%" /></div>
+            <div className="tt-loyalty-skel-note"><Skeleton height="100%" /></div>
             {gap(16)}
             <Skeleton width={90} height={15} />
             {gap(6)}
@@ -44,25 +43,26 @@ export default function LoyaltyLoading() {
             {gap(16)}
             <Skeleton width={96} height={40} radius={999} />
           </div>
-          <div className="tt-section">
-            <div className="tt-section-head">
-              <Skeleton width={200} height={26} />
+          <div className="tt-loyalty-col" aria-hidden="true">
+            <div className="tt-section">
+              <div className="tt-section-head">
+                <Skeleton width={180} height={26} />
+              </div>
+              <Skeleton height={46} />
+              {gap(10)}
+              <Skeleton width={110} height={34} radius={8} />
+              {gap(13)}
+              <div className="tt-loyalty-skel-note"><Skeleton height="100%" /></div>
+              {gap(13)}
             </div>
-            <div className="tt-loyalty-skel-note"><Skeleton height="100%" /></div>
-            {gap(13)}
-            <div className="tt-loyalty-skel-card"><Skeleton height="100%" radius={12} /></div>
-          </div>
-          </div>
-          <div className="tt-section" aria-hidden="true">
-            <div className="tt-section-head">
-              <Skeleton width={180} height={26} />
+            <div className="tt-section">
+              <div className="tt-section-head">
+                <Skeleton width={200} height={26} />
+              </div>
+              <div className="tt-loyalty-skel-preview-hint"><Skeleton height="100%" /></div>
+              {gap(13)}
+              <div className="tt-loyalty-skel-card"><Skeleton height="100%" radius={12} /></div>
             </div>
-            <Skeleton height={46} />
-            {gap(10)}
-            <Skeleton width={90} height={30} radius={999} />
-            {gap(13)}
-            <div className="tt-loyalty-skel-note"><Skeleton height="100%" /></div>
-            {gap(13)}
           </div>
         </div>
       </div>

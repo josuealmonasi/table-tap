@@ -6883,13 +6883,21 @@ a.tt-user-plan:hover {
 .tt-loyalty-skel-note {
   height: 42px;
 }
-/* Provisional until measured off the real page: the banner, the round note
-   and the card preview (240px wide at 1080:1350). */
+/* Measured off the real page: the banner is three lines on a phone and two
+   from 600px; the preview's hint two and one; the card picture 240px wide. */
 .tt-loyalty-skel-status {
-  height: 88px;
+  height: 87px;
 }
-.tt-loyalty-skel-round {
-  height: 42px;
+.tt-loyalty-skel-preview-hint {
+  height: 28px;
+}
+@media (min-width: 600px) {
+  .tt-loyalty-skel-status {
+    height: 59px;
+  }
+  .tt-loyalty-skel-preview-hint {
+    height: 14px;
+  }
 }
 .tt-loyalty-skel-card {
   width: 240px;
