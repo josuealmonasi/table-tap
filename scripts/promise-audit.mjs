@@ -23,7 +23,7 @@ import { join } from "node:path";
 import { chromium } from "playwright";
 import { createClient } from "@supabase/supabase-js";
 import { CREW } from "./layout-paths.mjs";
-import { AUDIT, STATES } from "./promise-cases.mjs";
+import { AUDIT, REFUSAL, STATES } from "./promise-cases.mjs";
 import { requireServer, warm } from "./preflight.mjs";
 
 const prod = process.argv.includes("--prod");
@@ -258,7 +258,7 @@ for (const state of STATES) {
       return route.fulfill({
         status: 429,
         contentType: "application/json",
-        body: JSON.stringify({ error: "Demasiadas solicitudes" }),
+        body: JSON.stringify({ error: REFUSAL.es }),
       });
     });
     try {

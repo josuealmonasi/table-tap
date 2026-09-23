@@ -67,6 +67,14 @@ export const AUDIT = `(() => {
  * the start, or `afterOpen` so that it is the next read that fails. Each case
  * changes one thing — the runner puts everything back afterwards.
  */
+/**
+ * What the server says when it refuses a request for being too many — the
+ * Spanish of `apiErr.tooManyRequests`, which is what a refused screen shows.
+ */
+export const REFUSAL = {
+  es: "Demasiadas solicitudes",
+};
+
 export const STATES = [
   // The visit card's scanner, shown only where a stamp would be taken. The
   // first case is the control: with the program on the button is there, so
