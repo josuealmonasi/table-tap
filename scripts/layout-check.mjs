@@ -66,6 +66,23 @@ const SIZES = [
 ];
 
 let failed = 0;
+
+/**
+ * Which widths each team dialog opened at, and which it did not.
+ *
+ * A dialog that does not open is skipped, not failed, and that is right for a
+ * role without the button. But one that opens at three widths and not at the
+ * fourth is not a role without the button: it is a flaky run, or a button the
+ * CSS hides at one breakpoint, and both passed. Five of the manager's menu
+ * dialogs did exactly that at 390 in one run and the gate said "Everything
+ * reads".
+ */
+const opened = new Map();
+const noteDialog = (key, width, didOpen) => {
+  const seen = opened.get(key) ?? { at: [], missed: [] };
+  (didOpen ? seen.at : seen.missed).push(width);
+  opened.set(key, seen);
+};
 const ok = m => console.log(`    ok       ${m}`);
 const bad = (where, faults) => {
   failed += faults.length;
@@ -307,14 +324,24 @@ for (const size of SIZES) {
         await look(tab, `${who.role} · ${path}`);
 
         for (const dialog of DIALOGS[path] ?? []) {
-          const clicked = dialog.text
-            ? await tapText(tab, dialog.text)
-            : await tap(tab, dialog.click);
+          const press = () => dialog.text ? tapText(tab, dialog.text) : tap(tab, dialog.click);
+          const isOpen = () => tab.evaluate(`!!document.querySelector(${JSON.stringify(dialog.shows ?? "[role=dialog]")})`);
+          let clicked = await press();
           await tab.waitForTimeout(900);
           // Having clicked does not mean anything opened. A silent no-op reads exactly
           // like an ok, and that is how a whole role went unchecked with nothing
           // saying so.
-          const open = await tab.evaluate(`!!document.querySelector(${JSON.stringify(dialog.shows ?? "[role=dialog]")})`);
+          let open = await isOpen();
+          // Once more, after a pause: a click that lands before the page is ready
+          // is the usual reason, and now that a dialog missing at one width fails
+          // the run, a slow page must not read as a broken one.
+          if (!clicked || !open) {
+            await tab.waitForTimeout(1500);
+            clicked = await press();
+            await tab.waitForTimeout(900);
+            open = await isOpen();
+          }
+          noteDialog(`${who.role} · ${path} → ${dialog.name}`, size.width, clicked && open);
           if (!clicked || !open) {
             console.log(`    –        ${who.role} · ${path} → ${dialog.name}: did not open (no data)`);
             continue;
@@ -335,5 +362,11 @@ for (const size of SIZES) {
 }
 
 await browser.close();
+for (const [key, seen] of opened) {
+  if (seen.at.length > 0 && seen.missed.length > 0) {
+    failed++;
+    console.log(`    BAD      ${key}: opened at ${seen.at.join("/")}px but not at ${seen.missed.join("/")}px`);
+  }
+}
 console.log(failed === 0 ? "Everything reads.\n" : `${failed} READABILITY PROBLEM(S).\n`);
 process.exit(failed === 0 ? 0 : 1);
