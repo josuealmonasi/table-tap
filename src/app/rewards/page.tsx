@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import RewardsLookup from "@/components/rewards/RewardsLookup";
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 
 export const dynamic = "force-dynamic";
 
@@ -16,5 +17,9 @@ export default async function RewardsPage({
   searchParams: Promise<{ c?: string }>;
 }) {
   const { c } = await searchParams;
-  return <RewardsLookup initialCode={typeof c === "string" ? c : ""} />;
+  return (
+    <ConfirmProvider>
+      <RewardsLookup initialCode={typeof c === "string" ? c : ""} />
+    </ConfirmProvider>
+  );
 }

@@ -837,11 +837,36 @@ up. A manager can take back a stamp given today, and nothing older: the record
 a reward was earned on is not rewritten after the fact. Saving, pausing and
 taking back a stamp all go in the activity log.
 
-Being built in steps: the data and its rules; the `/rewards` page; the staff
-scanner; the owner's page (these four); then the offer after paying and the
-card download, with the privacy notice that describes them. Until then no card
-can be made in production: an owner can switch the card on and staff can open
-the scanner, but there is nothing yet for a diner to be handed.
+**The offer.** Once a diner's order is paid — on the tracker, or on the menu
+at the moment the money is settled, by card or in cash to the waiter, the same
+moment the receipt is offered and never on top of it — a restaurant running the
+card offers "Junta visitas": the goal, the reward, and that the card is an
+image with no sign-up, no name and no email. "Crear mi tarjeta" makes one
+(`POST /api/loyalty/card`: public, five a minute per address, refused where
+`loyaltyOn()` says no — the menu asks the same function before offering it) and
+hands over the picture; "No volver a preguntar" and a card already made are
+both remembered in that browser (`tt-loyalty:<restaurant>`), so the offer is
+made once per phone and again only if the phone forgets.
+
+**The card** is drawn on the phone, not the server — 1080 × 1350, the
+restaurant's mark and name on the accent, the goal and the reward, the QR, the
+code in groups of four — because the phone has the emoji a restaurant uses as
+its mark and a server has no emoji font. The QR library stays on the server:
+`POST /api/loyalty/card` and `GET /api/rewards` send the QR as a grid of modules
+(`qrGrid()`) and the canvas paints the squares. `/rewards` can draw the card
+again for a diner who lost the picture, and delete it: the code is the card's
+only key, so whoever holds it may end it, visits and rewards with it — the
+privacy notice's promise of cancellation, kept without asking for a name the
+card never had.
+
+The privacy notice says what the card keeps (a random code, the days it was
+stamped and by whom, the rewards spent), what the phone keeps, for how long,
+and that the diner can delete it; the terms say the reward is the restaurant's
+to honour, including after a pause or a change of plan. Terms version
+2026-09-22, and the PDFs regenerated from the same text.
+
+Analytics for the card (members, visits, return rate, rewards) is the last
+step still to come.
 
 ## What is checked, and how
 

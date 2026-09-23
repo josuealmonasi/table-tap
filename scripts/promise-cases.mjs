@@ -77,6 +77,21 @@ export const STATES = [
     says: /cuentas|bills/i,
     keeps: /sellar tarjeta|stamp a card/i,
   },
+  // The diner's side: offered a card on a paid order only while the program
+  // runs. The control first, for the same reason as the scanner's.
+  {
+    name: "visit card on · a paid order",
+    as: "tracker",
+    says: /junta visitas|collect visits/i,
+    keeps: /crear mi tarjeta|get my card/i,
+  },
+  {
+    name: "visit card switched off · a paid order",
+    as: "tracker",
+    apply: (admin, c) => admin.from("loyalty_programs").update({ active: false }).eq("restaurant_id", c.restaurantId),
+    says: /listo|ready|recoger|collect/i,
+    offers: /crear mi tarjeta|get my card/i,
+  },
   {
     name: "visit card switched off · bills",
     as: "owner",

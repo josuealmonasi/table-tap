@@ -47,6 +47,7 @@ export default function MenuScreen({
   onSelectItem,
   onAddCombo,
   onOpenCart,
+  notice,
   billDue = false,
   onOpenBill,
   trackIds,
@@ -68,6 +69,8 @@ export default function MenuScreen({
   onOpenCart: () => void;
   /** The table has unpaid orders, so the bill is worth offering. */
   billDue?: boolean;
+  /** Something to say under the banners — the visit card, just after paying. */
+  notice?: React.ReactNode;
   onOpenBill?: () => void;
   /** An order this phone placed and can still watch — shows the track link. */
   /** Every order this phone can still watch here, newest first. */
@@ -323,6 +326,7 @@ export default function MenuScreen({
               {t("menu.closed")}
             </div>
           )}
+          {notice}
         </div>
       </div>
 

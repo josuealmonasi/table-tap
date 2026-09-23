@@ -49,14 +49,19 @@ export function useReceiptOffer(
   enabled: boolean,
   paidOrderId: string | null,
   bill: TableBill | null,
-): { offering: string[] | null; dismiss: () => void } {
+): { offering: string[] | null; dismiss: () => void; paidNow: boolean } {
   const [offering, setOffering] = useState<string[] | null>(null);
+  // That money was just settled, whether or not a receipt can be sent — the
+  // visit card is offered at the same moment, and receipts being switched off
+  // is no reason to miss it.
+  const [paidNow, setPaidNow] = useState(false);
   // The bill as it was while it was still owed: once it settles the orders are
   // gone from it, and those are exactly the ones the receipt is for.
   const owed = useRef<string[]>([]);
   const settled = useRef<boolean | null>(null);
 
   const offer = useCallback((ids: string[]) => {
+    if (ids.some(Boolean)) setPaidNow(true);
     if (!enabled) return;
     const fresh = ids.filter(id => id && !read(ASKED).includes(id));
     if (fresh.length === 0) return;
@@ -103,5 +108,5 @@ export function useReceiptOffer(
     if (was === false && owed.current.length > 0) offer(owed.current);
   }, [bill, offer]);
 
-  return { offering, dismiss: () => setOffering(null) };
+  return { offering, dismiss: () => setOffering(null), paidNow };
 }

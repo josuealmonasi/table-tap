@@ -71,6 +71,15 @@ export async function setup(env, base) {
   const loyaltyCard = cardStates[0] ?? null;
   const stampable = cardStates.find(c => c.progress < c.goal - 1 && !c.stampedToday) ?? null;
   const readyCard = cardStates.find(c => c.progress >= c.goal) ?? null;
+  // A card nobody holds, for the diner's "delete my card" to delete.
+  // (No I, L, O or U in a code: the table's check refuses them.)
+  const throwawayCode = "APXDEVETE000";
+  await admin.from("loyalty_cards").delete().eq("code", throwawayCode);
+  const { error: throwawayErr } = await admin
+    .from("loyalty_cards").insert({ restaurant_id: restaurant.id, code: throwawayCode, goal: 8 });
+  if (throwawayErr) throw new Error(`could not plant the card to delete: ${throwawayErr.message}`);
+  const { data: cardsBefore } = await admin
+    .from("loyalty_cards").select("id").eq("restaurant_id", restaurant.id).neq("code", throwawayCode);
   const [{ data: visitsBefore }, { data: redemptionsBefore }] = await Promise.all([
     admin.from("loyalty_visits").select("id").eq("restaurant_id", restaurant.id),
     admin.from("loyalty_redemptions").select("id").eq("restaurant_id", restaurant.id),
@@ -439,12 +448,14 @@ export async function setup(env, base) {
     readyCode: readyCard?.code ?? null,
     withLoyaltyOff,
     visitOf,
+    throwawayCode,
     keepLoyaltyProgram,
     programGoal,
     loyaltyBefore: {
       visits: (visitsBefore ?? []).map(v => v.id),
       redemptions: (redemptionsBefore ?? []).map(r => r.id),
       goals: cardStates.map(c => ({ id: c.id, goal: c.goal })),
+      cards: (cardsBefore ?? []).map(c => c.id),
     },
     paidOrder: await make({ paid: true }),
     unpaidOrder: await make({ paid: false }),
@@ -481,6 +492,11 @@ export async function teardown(fx) {
     for (const { id, goal } of fx.loyaltyBefore.goals) {
       await admin.from("loyalty_cards").update({ goal }).eq("id", id);
     }
+    // The cards the diner cases made, and the throwaway if it survived.
+    const keptCards = new Set(fx.loyaltyBefore.cards);
+    const { data: cardsNow } = await admin.from("loyalty_cards").select("id").eq("restaurant_id", restaurant.id);
+    const newCards = (cardsNow ?? []).map(c => c.id).filter(id => !keptCards.has(id));
+    if (newCards.length) await admin.from("loyalty_cards").delete().in("id", newCards);
   }
   await admin.from("dish_ratings").delete().in("order_id", [fx.paidOrder, fx.unpaidOrder]);
   // A collection made in parts belongs to no order, so deleting the orders

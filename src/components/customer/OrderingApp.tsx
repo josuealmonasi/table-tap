@@ -31,6 +31,8 @@ import { recallDinerName, rememberDinerName } from "@/lib/diner-name";
 import { useFinishedOrders } from "@/hooks/useOrderFinished";
 import { useTableBill } from "@/hooks/useTableBill";
 import { useReceiptOffer } from "@/hooks/useReceiptOffer";
+import LoyaltyOffer from "./LoyaltyOffer";
+import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
 import { useSitting } from "@/hooks/useSitting";
 import { formatMoney } from "@/lib/format";
 import { recallSitting, rememberSitting } from "@/lib/table-binding";
@@ -58,6 +60,7 @@ export default function OrderingApp({
   ratings = {},
   closedNow = false,
   receipts = false,
+  loyalty = null,
   trackOrder = null,
   dietaryTags = null,
 }: {
@@ -74,6 +77,8 @@ export default function OrderingApp({
   closedNow?: boolean;
   /** A receipt can be emailed — false when no mail provider is configured. */
   receipts?: boolean;
+  /** The visit card, when this restaurant offers one right now. */
+  loyalty?: LoyaltyOfferInfo | null;
   /** The restaurant's dietary tags. Without them the built-ins are shown. */
   dietaryTags?: StoredDietaryTag[] | null;
   /**
@@ -228,7 +233,7 @@ export default function OrderingApp({
 
   // "Want that by email?" — asked once, when the money is settled, whether
   // that happened by card or in cash at the table.
-  const { offering, dismiss: dismissReceipt } = useReceiptOffer(
+  const { offering, dismiss: dismissReceipt, paidNow } = useReceiptOffer(
     receipts,
     trackOrder?.id ?? null,
     bill,
@@ -677,6 +682,10 @@ export default function OrderingApp({
           onOpenCart={() => setScreen("cart")}
           onTrack={id => setTracking(id ?? trackIds[0] ?? null)}
           billDue={Boolean(table && bill && !bill.settled)}
+          // The visit card, offered once the money is settled — after the
+          // receipt question, never on top of it, and not behind the tracker,
+          // which offers it itself.
+          notice={loyalty && paidNow && !offering && !tracking ? <LoyaltyOffer offer={loyalty} /> : null}
           onOpenBill={() => {
             reloadBill();
             setBillOpen(true);
@@ -691,6 +700,7 @@ export default function OrderingApp({
             orderId={tracking}
             initialOrder={trackOrder?.id === tracking ? trackOrder : null}
             onClose={closeTracker}
+            loyalty={loyalty}
           />
         )}
         {table && bill && !bill.settled && (

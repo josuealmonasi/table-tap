@@ -2,10 +2,14 @@
 
 import { useT } from "@/lib/i18n/context";
 import type { Standing } from "@/lib/loyalty/standing";
+import type { CardFace } from "@/lib/loyalty/face";
+import type { QrGrid } from "@/lib/loyalty/qr-grid";
 import { nextStep } from "@/lib/loyalty/next-step";
 
 /** What /api/rewards answers: what the card itself would show, and no more. */
 export interface CardStanding {
+  face: CardFace;
+  qr: QrGrid;
   restaurant: { name: string; logo: string | null; logo_url: string | null };
   active: boolean;
   reward: string;

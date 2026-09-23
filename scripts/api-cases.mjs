@@ -144,6 +144,28 @@ export function cases(fx) {
     { name: "POST /api/loyalty/redeem (the same reward twice)", as: "waiter", method: "POST",
       path: "/api/loyalty/redeem", body: { code: fx.readyCode ?? "" },
       expect: [409], expectError: /faltan visitas|hasn't reached/i },
+    // ── the visit card a diner makes, keeps, and may delete ───────────────
+    { name: "POST /api/loyalty/card (a diner makes one)", as: "diner", method: "POST",
+      path: "/api/loyalty/card", body: { restaurantId: r }, expect: [200],
+      check: d => {
+        if (!/^[0-9A-HJKMNP-TV-Z]{12}$/.test(d.code ?? "")) return `no valid code in ${JSON.stringify(d).slice(0, 80)}`;
+        if (!d.face?.qrPayload?.endsWith(`/rewards?c=${d.code}`)) return "the QR does not point at the card's own page";
+        if (!(d.qr?.size > 0 && d.qr.bits.length === d.qr.size * d.qr.size)) return "the QR grid is not square";
+        return JSON.stringify(d).includes("@") ? "the new card names somebody" : true;
+      } },
+    { name: "POST /api/loyalty/card (the program switched off)", as: "diner", method: "POST",
+      path: "/api/loyalty/card", arrange: f => f.withLoyaltyOff(), body: { restaurantId: r },
+      expect: [409], expectError: /apagada|switched off/i },
+    { name: "POST /api/loyalty/card (not a restaurant)", as: "diner", method: "POST",
+      path: "/api/loyalty/card", body: { restaurantId: "not-an-id" }, expect: [400] },
+    { name: "DELETE /api/rewards (a diner deletes their card)", as: "diner", method: "DELETE",
+      path: `/api/rewards?c=${fx.throwawayCode}`, expect: [200],
+      check: async (_d, f) => {
+        const { count } = await f.admin.from("loyalty_cards").select("id", { count: "exact", head: true }).eq("code", f.throwawayCode);
+        return count === 0 || "the card is still there";
+      } },
+    { name: "DELETE /api/rewards (no such card)", as: "diner", method: "DELETE",
+      path: "/api/rewards?c=0000-0000-0000", expect: [404], expectError: /encontramos|couldn't find/i },
     // ── the visit card, run by the owner and the managers ─────────────────
     { name: "GET  /api/loyalty/lookup (a card, with who stamped it)", as: "manager", method: "GET",
       path: `/api/loyalty/lookup?c=${fx.stampableCode ?? "no-card-in-the-seed"}`, expect: [200],
