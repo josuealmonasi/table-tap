@@ -1772,3 +1772,23 @@ describe("an order that could not be read is not a missing one", () => {
     expect(offenders, `a failed read that becomes "not found":\n${offenders.join("\n")}`).toEqual([]);
   });
 });
+
+describe("a screen money is counted on reads or refuses", () => {
+  // The bills board and the analytics page (with the corte) destructured their
+  // reads as `{ data }` and took a failure as empty: "no open tables", nothing
+  // already collected so the whole bill looked owing again, a drawer holding
+  // nothing, a day with no sales. Each read is unwrapped now, and a failure
+  // renders the error screen that offers a retry.
+  const SCREENS = ["src/app/dashboard/bills/page.tsx", "src/app/dashboard/analytics/page.tsx"];
+
+  it("takes no read's data without its error", () => {
+    const offenders: string[] = [];
+    for (const file of SCREENS) {
+      const code = read(file).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+      for (const m of code.matchAll(/(?:const|let)\s+(?:\[\s*)?\{\s*data\b[^}]*\}(?:[^=]*\])?\s*=/g)) {
+        offenders.push(`${file}: ${m[0].replace(/\s+/g, " ")}`);
+      }
+    }
+    expect(offenders, `a read whose failure is shown as nothing:\n${offenders.join("\n")}`).toEqual([]);
+  });
+});
