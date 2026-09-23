@@ -1125,6 +1125,16 @@ counted as missed: the first sabotaged run also caught the manager's order
 detail missing at 360 for no reason but a click that landed before the page
 was ready, and a red over timing is how a gate teaches people to ignore it.
 
+## Offline, for a payment nobody was making
+
+`offline.blocked` says "Necesitas conexión para cobrar, cancelar o aprobar": the
+line for the three things that refuse to wait for a connection, because
+replaying them twice moves money twice. The visit card screens used it for any
+failed request, so a diner making a card with no signal was told they needed a
+connection to take a payment, and so was a waiter stamping a card. Those five
+places say "Error de red — inténtalo de nuevo" now, and an invariant keeps the
+payment line to the settle dialog, the calculator and the board's cancel.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read

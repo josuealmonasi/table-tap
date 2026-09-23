@@ -47,7 +47,7 @@ export default function ProgramForm({ program }: ProgramFormProps) {
       toast(t("loyaltyAdmin.saved"));
       router.refresh();
     } catch {
-      toast(t("offline.blocked"), "error");
+      toast(t("done.networkError"), "error");
     } finally {
       setSaving(false);
     }
