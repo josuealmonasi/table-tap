@@ -14,7 +14,12 @@ import fs from "node:fs";
  * writes to, which is the reminder to extend it.
  */
 const schema = fs.readFileSync("supabase/schema.sql", "utf8");
-const seeder = fs.readFileSync("scripts/mock-data.mjs", "utf8");
+// The seeder is split by subject — the visit card has its own file — so every
+// scripts/mock-*.mjs counts as the seeder.
+const seeder = fs.readdirSync("scripts")
+  .filter(f => /^mock-.*\.mjs$/.test(f))
+  .map(f => fs.readFileSync(`scripts/${f}`, "utf8"))
+  .join("\n");
 
 /** Tables that hold no restaurant data, so the demo has nothing to say about them. */
 const NOT_DEMO_DATA = new Set([

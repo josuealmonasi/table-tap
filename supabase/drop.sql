@@ -13,6 +13,10 @@
 -- Generated from the `create table if not exists` lines in schema.sql; when
 -- you add a table there, add it here.
 -- ============================================================================
+drop table if exists loyalty_redemptions cascade;
+drop table if exists loyalty_visits      cascade;
+drop table if exists loyalty_cards       cascade;
+drop table if exists loyalty_programs    cascade;
 drop table if exists print_jobs          cascade;
 drop table if exists bill_split_claims   cascade;
 drop table if exists bill_splits         cascade;
@@ -53,6 +57,9 @@ drop policy if exists "team manages its own menu images" on storage.objects;
 -- Policy and service functions (schema.sql recreates them). Dropped after the
 -- tables and the storage policies, because anything that mentions one of these
 -- holds it open.
+drop function if exists public.loyalty_redeem(uuid, text, text);
+drop function if exists public.loyalty_stamp(uuid, text, text);
+drop function if exists public.loyalty_progress(uuid);
 drop function if exists public.claim_founding_price(uuid, int);
 drop function if exists public.close_session_if_clear(uuid, text);
 drop function if exists public.collect_on_sitting(uuid, uuid, numeric, numeric, text, text, text) cascade;

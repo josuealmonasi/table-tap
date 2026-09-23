@@ -44,6 +44,8 @@ export interface PlanLimits {
   allows_inventory?: boolean;
   allows_pos?: boolean;
   allows_waiter_service?: boolean;
+  /** The visit card diners save and staff stamp. Casa and Grupo. */
+  allows_loyalty?: boolean;
   allows_staff_discounts: boolean;
   analytics_days: number;
   log_days: number;
@@ -61,7 +63,8 @@ export type PlanFeature =
   | "deferredPayment"
   | "inventory"
   | "pos"
-  | "waiterService";
+  | "waiterService"
+  | "loyalty";
 
 const FEATURE_COLUMN: Record<PlanFeature, keyof PlanLimits> = {
   dineIn: "allows_dine_in",
@@ -73,6 +76,7 @@ const FEATURE_COLUMN: Record<PlanFeature, keyof PlanLimits> = {
   deferredPayment: "allows_deferred_payment",
   inventory: "allows_inventory",
   pos: "allows_pos",
+  loyalty: "allows_loyalty",
 };
 
 /** Whether this tier includes a feature at all. */

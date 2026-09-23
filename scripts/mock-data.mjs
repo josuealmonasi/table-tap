@@ -22,6 +22,7 @@ import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { populateMenu } from "./menu-catalog.mjs";
 import { TERMS_VERSION } from "./terms-version.mjs";
+import { seedLoyalty } from "./mock-loyalty.mjs";
 import { bulkInsert, randInt, sample, shuffle } from "./menu-catalog.mjs";
 
 export const DEMO_RESTAURANT = "Demo Bistro";
@@ -846,6 +847,9 @@ export async function seedMock(pg) {
       [[rid, printed[0].id, "kitchen", now, now]],
     );
   }
+
+  // The visit card, with a card at every stage. Its own file, like the menu.
+  await seedLoyalty(pg, rid);
 
   return {
     restaurantId: rid,

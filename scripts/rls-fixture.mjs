@@ -14,6 +14,8 @@
 /** The line every fixture order carries, and the name on its cash payment. */
 const MARK = "rls fixture";
 const ACTOR = "rls-fixture@tabletap.dev";
+/** The fixture's loyalty card — a valid code nobody could be handed. */
+const CARD = "RSFXTEST0000";
 
 /**
  * Anything a previous run left behind, before this one plants more.
@@ -61,7 +63,17 @@ async function sweepLeftovers(admin) {
     await admin.from("payments").delete().in("id", orphans.map(p => p.id));
   }
 
-  return ids.length + (orphans?.length ?? 0);
+  // A loyalty card and program from a run that did not finish. The card's code
+  // is unique across every restaurant, so one left behind would stop the next
+  // run planting its own — and the sweep would report the loyalty tables as
+  // "not attacked" for a reason nobody could see. Deleting the card takes its
+  // visits and redemptions with it.
+  const { count: cards } = await admin
+    .from("loyalty_cards").delete({ count: "exact" }).eq("code", CARD);
+  const { count: programs } = await admin
+    .from("loyalty_programs").delete({ count: "exact" }).eq("reward", MARK);
+
+  return ids.length + (orphans?.length ?? 0) + (cards ?? 0) + (programs ?? 0);
 }
 
 /** One row in each tenant-scoped table, belonging to the neighbour. */
@@ -174,12 +186,30 @@ export async function plantNeighbour(admin, restaurantId) {
   await keep("notification", "notifications", {
     restaurant_id: restaurantId, kind: "low_stock", data: { note: "rls fixture" },
   });
+  // A loyalty card of theirs with a visit and a reward already spent. Anyone
+  // who could read it could read a diner's visits; anyone who could delete it
+  // could wipe a card somebody is halfway through.
+  await keep("loyaltyProgram", "loyalty_programs", {
+    restaurant_id: restaurantId, active: false, goal: 2, reward: MARK,
+  });
+  const { id: cardId } = await keep("loyaltyCard", "loyalty_cards", {
+    restaurant_id: restaurantId, code: CARD, goal: 2,
+  });
+  if (cardId) {
+    await keep("loyaltyVisit", "loyalty_visits", {
+      card_id: cardId, restaurant_id: restaurantId, visit_day: "2026-01-01", actor_email: ACTOR,
+    });
+    await keep("loyaltyRedemption", "loyalty_redemptions", {
+      card_id: cardId, restaurant_id: restaurantId, visits_used: 2, reward: MARK, actor_email: ACTOR,
+    });
+  }
 
   return {
     planted,
     /** Children first, so nothing is left holding a reference. */
     remove: async () => {
       const order = [
+        "loyaltyRedemption", "loyaltyVisit", "loyaltyCard", "loyaltyProgram",
         "split", "sitting", "request", "notification", "iconGroup", "log", "colleague",
         "writeOff", "discount", "redemption", "promotion", "coupon",
         "rating", "print_job", "payment", "order",
