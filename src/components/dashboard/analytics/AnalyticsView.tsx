@@ -171,7 +171,7 @@ export default function AnalyticsView({
             </p>
           ) : (
             <div className="tt-analytics-table">
-              <div className="tt-analytics-tr tt-staff-thead" aria-hidden="true">
+              <div className="tt-analytics-tr tt-analytics-th" aria-hidden="true">
                 <span>{t("analytics.product")}</span>
                 <span style={{ textAlign: "right" }}>{t("analytics.sold")}</span>
                 <span style={{ textAlign: "right" }}>{t("analytics.revenue")}</span>

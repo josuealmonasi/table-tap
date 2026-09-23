@@ -22,7 +22,10 @@ process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.d
 const BASE = prod
   ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
   : "http://localhost:3000";
-const WIDTHS = [390, 1280];
+// The narrow end of the phone band, not the iPhone: no breakpoint falls
+// between 360 and 390, so 360 is the same rules with 30px less room, and the
+// harder of the two. `pnpm layout` still measures 390.
+const WIDTHS = [360, 1280];
 
 const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0];
 const auth = createClient(

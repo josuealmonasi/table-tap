@@ -41,6 +41,7 @@ us, and what now catches each one.
 | A date on screen is in the app's language, not the browser's | A Spanish owner on an English phone read English dates and times on eight screens |
 | A gate waits for what it checks, not for a number of milliseconds | "free plan · promotions" failed on a slow compile and passed on the rerun |
 | Seeded visits are dated by the restaurant's calendar, never today | The demo's seed filled today's slot after 6 p.m. in Mexico City, and a first scan said "already stamped" |
+| Both browser sweeps open a 360px phone | The menu editor's product row spilled 28px past its box at 360 and ran off a 320px phone; Analytics broke "Cheesecake" in half. 390 read clean |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -932,6 +933,23 @@ opened accounts that way, and the owner read "Prueba · quedan 0 días" for ever
 lied. The invariant that guards it passed with the fix reverted, twice, before it
 read the insert itself rather than the file around it.
 
+## Measured at 390, carried at 360
+
+Every sweep opened phones at 390px, the iPhone, and 360 is the most common
+Android width. No breakpoint falls between them, so a 360 phone gets the same
+rules with 30px less room, and two screens did not have the room. The menu
+editor's product row (price, switch and four buttons) could not shrink: at 360
+it already ran 28px past its own box, hidden by the card's padding, and at 320
+it pushed the whole page 30px sideways. Now its actions wrap under the price
+only when there is no room, and nothing moves at 390. Analytics' top-products
+table kept a fixed 70px for two digits and 110px for a 73px amount, which left
+the dish names 78px, so "Cheesecake" broke mid-word. The table owns its columns
+now, every row is a subgrid of it, and the number columns are as wide as their
+widest value. The ratings table's header had no rule at all and read as one
+more dish; both headers now share one. `pnpm layout` measures 360 as well as
+390, and `pnpm dialogs` measures 360 in place of 390, the harder of the two
+for the same rules.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read
@@ -940,7 +958,7 @@ Every step by its exit code. Chain them with `&&`, or run each to a log and read
 1. `npx tsc --noEmit && pnpm lint && pnpm test`
 2. `pnpm api` — every route does its job, not only refuses the wrong caller
 3. `pnpm smoke` — every page still renders for a signed-in user
-4. `pnpm layout` — every page can still be *read*, at 390px, 820px and 1280px
+4. `pnpm layout` — every page can still be *read*, at 360px, 390px, 820px and 1280px
 5. `pnpm promises` — no screen offers what the system then refuses
 6. `pnpm dialogs` if you touched a dialog, a shared component or the stylesheet
 7. `pnpm money` — the ledger, the orders and the drawer still agree

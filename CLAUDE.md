@@ -138,13 +138,13 @@ Anything a script creates, it deletes. Test litter comes back disguised as a
 product bug: a leftover service request once looked like a layout fault, and an
 order seeded with a fake item id looked like a broken ratings system.
 
-**Run `pnpm layout`.** It opens every screen in a real browser at 390px, 820px
-and 1280px and fails if text is squashed to nothing, painted on top of other
+**Run `pnpm layout`.** It opens every screen in a real browser at 360px, 390px,
+820px and 1280px and fails if text is squashed to nothing, painted on top of other
 text, or running off the side of the page. Tests prove a component exists; this
 is the only thing that proves a person can read it. A CSS change is not done
 until this passes and you have looked at a screenshot of what you changed.
 
-The middle width is the tablet band. The CSS pivots at 1025px, so everything
+The 820px width is the tablet band. The CSS pivots at 1025px, so everything
 from 768 to 1024 — every iPad in portrait, and the base iPad in landscape —
 gets the non-desktop layout stretched to its widest, which is where the
 restaurant's own screens run at the pass.

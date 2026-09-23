@@ -3791,14 +3791,22 @@ a.tt-btn {
   text-overflow: clip;
 }
 
-/* analytics: top-products table */
+/* analytics: the top-products and ratings tables.
+
+   The table owns the columns and every row is a subgrid of it, so the two
+   number columns are as wide as their widest value, and still line up down the
+   table. They were a fixed 70px and 110px, for two digits and a 73px amount:
+   at 360px that left the dish names 78px, and "Cheesecake" broke mid-word.
+   A browser without subgrid keeps the fixed columns it always had. */
 .tt-analytics-table {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
 }
 .tt-analytics-tr {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 70px 110px;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
   align-items: center;
   gap: 12px;
   padding: 9px 4px;
@@ -3807,6 +3815,15 @@ a.tt-btn {
 }
 .tt-analytics-tr:first-of-type {
   border-top: none;
+}
+/* Its own header, after the row rule: borrowing .tt-staff-thead lost its 12px
+   to the row's 14px, and the ratings table's header had no rule at all and
+   read as one more dish. */
+.tt-analytics-th {
+  color: var(--tt-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 /* platform admin tables */
@@ -4463,6 +4480,13 @@ a.tt-btn {
   .tt-prod-right {
     flex-basis: 100%;
     justify-content: flex-end;
+    /* The price, the switch and up to four actions, on a row of their own —
+       which at 320px was still wider than the screen and pushed the page 21px
+       sideways. They wrap now, the actions under the price, only when there
+       is not room; at 390px nothing moves. */
+    flex-wrap: wrap;
+    row-gap: 6px;
+    min-width: 0;
   }
 }
 .tt-iconbtn {

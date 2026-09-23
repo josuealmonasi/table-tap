@@ -53,7 +53,13 @@ const anyOrder = tracked?.id ?? null;
 // non-desktop layout stretched to its widest — which is every iPad in portrait
 // and the base iPad in landscape. Nothing swept that band, and the restaurant
 // side is what runs on a tablet at the pass.
+//
+// 360 is the most common Android width, and the sweep never opened it. At 360
+// the menu editor's product row already spilled 28px past its own box (padding
+// hid it until 320), and Analytics broke "Cheesecake" in half. Both were
+// clean at 390.
 const SIZES = [
+  { name: "small phone", width: 360, height: 780 },
   { name: "phone", width: 390, height: 844 },
   { name: "tablet", width: 820, height: 1180 },
   { name: "desktop", width: 1280, height: 900 },
