@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { AUDIT } from "./layout-audit.mjs";
 import { CREW } from "./layout-paths.mjs";
 import { changedParts, fingerprint, holdWrites } from "./hold-writes.mjs";
+import { watchDevWorker } from "./preflight.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -22,6 +23,7 @@ process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.d
 const BASE = prod
   ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
   : "http://localhost:3000";
+watchDevWorker(BASE);
 // The narrow end of the phone band, not the iPhone: no breakpoint falls
 // between 360 and 390, so 360 is the same rules with 30px less room, and the
 // harder of the two. `pnpm layout` still measures 390.

@@ -1198,6 +1198,18 @@ Lealtad. So the one promise the pause made had no screen that kept it. The
 lookup now offers the reward whenever the card is ready, and stamping alone
 waits for the program; the off banner says where to go.
 
+## Reds that were the server, not the code
+
+`next dev` replaces its worker when it grows too big, and a long gate run is
+what grows it. Whatever the gate had in flight at that moment failed: an
+ECONNRESET in the RLS gate that also left a fixture payment behind, so the
+money gate went red next; a button the promise sweep never saw render; an
+order detail the layout gate could not open. Three in one day, each read as a
+fault in the code, each green when run again alone. Every gate that talks to
+the dev server now notes the worker's pid when it starts and, at exit, says so
+beside its failures when the worker changed, and an invariant keeps a new gate
+from skipping it.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read

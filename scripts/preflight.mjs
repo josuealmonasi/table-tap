@@ -1,3 +1,5 @@
+import { execSync } from "node:child_process";
+
 /**
  * Is the thing we are about to check actually up?
  *
@@ -17,6 +19,7 @@ export async function reachable(base) {
 }
 
 export async function requireServer(base, prod) {
+  watchDevWorker(base);
   if (await reachable(base)) return;
   console.error(
     `\n  The server does not answer at ${base}.\n` +
@@ -80,4 +83,44 @@ export async function retryFetch(url, init, base) {
       );
     }
   }
+}
+
+/** The pids of the dev server's workers, or null against anything but localhost. */
+function devWorkers(base) {
+  if (!/^http:\/\/localhost[:/]/.test(base)) return null;
+  try {
+    return execSync("pgrep -f next-server", { encoding: "utf8" }).trim().split("\n").sort().join(",") || null;
+  } catch {
+    return null; // pgrep exits 1 when nothing matches: no worker to watch
+  }
+}
+
+/**
+ * Says so when `next dev` replaced its worker while this gate ran.
+ *
+ * During a long sweep the dev server recycles its worker (`next-server`) when
+ * it grows too big, and whatever was in flight at that moment fails: an
+ * ECONNRESET in the RLS gate that left a fixture payment behind, so money went
+ * red next; a button the promise sweep never saw render; an order detail the
+ * layout gate could not open. Each read as a fault in the code, and each
+ * passed when run again alone. Nothing in the output said the server had
+ * moved underneath.
+ *
+ * Checked at exit, so it costs nothing while the gate runs. A run that failed
+ * across a restart says so beside its failures; one that passed says it only
+ * as a note.
+ */
+export function watchDevWorker(base) {
+  const before = devWorkers(base);
+  if (!before) return;
+  process.on("exit", code => {
+    const after = devWorkers(base);
+    if (!after || after === before) return;
+    console.log(
+      `\n  The dev server replaced its worker during this run (pid ${before} -> ${after}).\n` +
+        (code
+          ? "  A failure above may be that restart, not the code: run this gate again, alone, before debugging it.\n"
+          : "  Nothing failed across it.\n"),
+    );
+  });
 }

@@ -20,6 +20,7 @@
 // ============================================================================
 import { createClient } from "@supabase/supabase-js";
 import { attackLoyalty } from "./attack-loyalty.mjs";
+import { watchDevWorker } from "./preflight.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(prod ? ".env.production.local" : ".env.development.local");
@@ -29,6 +30,7 @@ process.loadEnvFile(prod ? ".env.production.local" : ".env.development.local");
 const base = prod
   ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
   : "http://localhost:3000";
+watchDevWorker(base);
 
 const admin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,

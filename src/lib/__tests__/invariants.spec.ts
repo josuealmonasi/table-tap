@@ -1876,3 +1876,18 @@ describe("a card brings its own padding", () => {
     expect(offenders, `a card with nothing between its border and its words:\n${offenders.join("\n")}`).toEqual([]);
   });
 });
+
+describe("a gate says when the dev server moved under it", () => {
+  it("watches the dev worker in every gate that talks to the dev server", () => {
+    // `next dev` recycles its worker during long sweeps, and a request in
+    // flight then fails as though the code were wrong. Three false reds in one
+    // day (rls, promises, layout) all passed when run again alone. A gate that
+    // talks to localhost now says at exit when the worker changed under it.
+    const gates = fs.readdirSync("scripts")
+      .filter(f => f.endsWith(".mjs") && f !== "db.mjs" && f !== "preflight.mjs")
+      .filter(f => read(`scripts/${f}`).includes('"http://localhost:3000"'));
+    expect(gates.length, "no gate talks to the dev server any more — the scan broke").toBeGreaterThan(4);
+    const blind = gates.filter(f => !/\b(requireServer|watchDevWorker)\(/.test(read(`scripts/${f}`)));
+    expect(blind, "a gate that cannot tell a restart from a failure").toEqual([]);
+  });
+});
