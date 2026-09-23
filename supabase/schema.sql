@@ -2622,3 +2622,179 @@ create trigger orders_enqueue_kitchen_ticket
   for each row execute function public.enqueue_kitchen_ticket();
 
 revoke all on function public.enqueue_kitchen_ticket() from public, anon, authenticated;
+
+-- ============================================================================
+-- Loyalty: a visit card the diner keeps on their phone.
+--
+-- Nothing here names a person. A card is a random code; a visit is a card, a
+-- day and the member of staff who scanned it; a redemption is a card, the
+-- visits it used and the reward as it read at the time. Today the card is an
+-- image the diner saves. The same rows are what a Wallet pass would be built
+-- from later: the card's id is its serial, its code is its barcode, and the
+-- visits are its progress — so moving to Apple or Google Wallet adds a way of
+-- showing a card, not a new kind of card.
+--
+-- Progress is never stored. It is the visits a card has minus the visits its
+-- redemptions used, counted from the rows every time, because a counter kept
+-- beside the rows is a second record of one fact.
+-- ============================================================================
+alter table plan_limits add column if not exists allows_loyalty boolean not null default false;
+update plan_limits set allows_loyalty = true where plan in ('casa', 'grupo');
+
+-- One per restaurant. `goal` is how many visits earn the reward.
+create table if not exists loyalty_programs (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null unique references restaurants(id) on delete cascade,
+  active        boolean not null default false,
+  goal          int not null default 8 check (goal between 2 and 50),
+  reward        text not null default '' check (char_length(reward) <= 80),
+  updated_at    timestamptz not null default now()
+);
+
+-- `code` is twelve Crockford base32 characters — 60 random bits, no I, L, O or
+-- U to misread — printed on the card and carried by its QR. `goal` is the goal
+-- the card was given: a restaurant that raises its goal does not move the
+-- finish line on a card already on its way; the new one applies after the
+-- card's next reward.
+create table if not exists loyalty_cards (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  code          text not null unique check (code ~ '^[0-9A-HJKMNP-TV-Z]{12}$'),
+  goal          int not null check (goal between 2 and 50),
+  created_at    timestamptz not null default now()
+);
+create index if not exists loyalty_cards_restaurant_idx
+  on loyalty_cards(restaurant_id, created_at desc);
+
+-- One visit per card per day, in the restaurant's own time zone. The unique
+-- key is the rule: a second scan the same day — a double tap, two waiters, a
+-- race — adds nothing.
+create table if not exists loyalty_visits (
+  id            uuid primary key default gen_random_uuid(),
+  card_id       uuid not null references loyalty_cards(id) on delete cascade,
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  visit_day     date not null,
+  actor_email   text not null,
+  created_at    timestamptz not null default now(),
+  unique (card_id, visit_day)
+);
+create index if not exists loyalty_visits_restaurant_idx
+  on loyalty_visits(restaurant_id, created_at desc);
+
+create table if not exists loyalty_redemptions (
+  id            uuid primary key default gen_random_uuid(),
+  card_id       uuid not null references loyalty_cards(id) on delete cascade,
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  visits_used   int not null check (visits_used > 0),
+  reward        text not null,
+  actor_email   text not null,
+  created_at    timestamptz not null default now()
+);
+create index if not exists loyalty_redemptions_card_idx on loyalty_redemptions(card_id);
+
+-- Server only. Every read and write goes through a route that checks who is
+-- asking and scopes it to their restaurant; a browser key reads none of it.
+alter table loyalty_programs    enable row level security;
+alter table loyalty_cards       enable row level security;
+alter table loyalty_visits      enable row level security;
+alter table loyalty_redemptions enable row level security;
+revoke all on loyalty_programs from anon, authenticated;
+revoke all on loyalty_cards from anon, authenticated;
+revoke all on loyalty_visits from anon, authenticated;
+revoke all on loyalty_redemptions from anon, authenticated;
+
+-- Where a card stands: visits not yet spent on a reward, against its goal.
+create or replace function public.loyalty_progress(p_card uuid)
+returns int
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select (select count(*)::int from loyalty_visits where card_id = p_card)
+       - coalesce((select sum(visits_used)::int from loyalty_redemptions where card_id = p_card), 0);
+$$;
+revoke all on function public.loyalty_progress(uuid) from public, anon, authenticated;
+grant execute on function public.loyalty_progress(uuid) to service_role;
+
+-- Record today's visit on a card. The card row is locked, so two scans racing
+-- are served one after the other; the unique key does the rest. Returns
+-- nothing when the card is not this restaurant's, the program is off, or the
+-- plan does not include loyalty — checked here as well as in the route, so a
+-- route that forgot cannot stamp for a restaurant that has not paid for it.
+create or replace function public.loyalty_stamp(p_restaurant uuid, p_code text, p_actor text)
+returns table (card_id uuid, progress int, goal int, stamped boolean)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_card     loyalty_cards%rowtype;
+  v_day      date;
+  v_inserted int;
+begin
+  if not exists (
+    select 1
+      from loyalty_programs p
+      join restaurants r on r.id = p.restaurant_id
+      join plan_limits l on l.plan = r.plan
+     where p.restaurant_id = p_restaurant and p.active and l.allows_loyalty
+  ) then
+    return;
+  end if;
+
+  select * into v_card from loyalty_cards c
+   where c.code = p_code and c.restaurant_id = p_restaurant
+   for update;
+  if not found then return; end if;
+
+  select (now() at time zone coalesce(r.timezone, 'America/Mexico_City'))::date into v_day
+    from restaurants r where r.id = p_restaurant;
+
+  insert into loyalty_visits (card_id, restaurant_id, visit_day, actor_email)
+  values (v_card.id, p_restaurant, v_day, p_actor)
+  on conflict on constraint loyalty_visits_card_id_visit_day_key do nothing;
+  get diagnostics v_inserted = row_count;
+
+  return query select v_card.id, public.loyalty_progress(v_card.id), v_card.goal, v_inserted = 1;
+end;
+$$;
+revoke all on function public.loyalty_stamp(uuid, text, text) from public, anon, authenticated;
+grant execute on function public.loyalty_stamp(uuid, text, text) to service_role;
+
+-- Spend a card's visits on its reward, once. Locked like the stamp, and refused
+-- — nothing returned — unless the card has reached its goal. A reward already
+-- earned is honoured even if the program was switched off or the plan changed
+-- since: the diner did their part. The card then takes the program's current
+-- goal for its next round.
+create or replace function public.loyalty_redeem(p_restaurant uuid, p_code text, p_actor text)
+returns table (card_id uuid, progress int, goal int, reward text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_card   loyalty_cards%rowtype;
+  v_reward text;
+  v_next   int;
+begin
+  select * into v_card from loyalty_cards c
+   where c.code = p_code and c.restaurant_id = p_restaurant
+   for update;
+  if not found then return; end if;
+  if public.loyalty_progress(v_card.id) < v_card.goal then return; end if;
+
+  select p.reward, p.goal into v_reward, v_next
+    from loyalty_programs p where p.restaurant_id = p_restaurant;
+
+  insert into loyalty_redemptions (card_id, restaurant_id, visits_used, reward, actor_email)
+  values (v_card.id, p_restaurant, v_card.goal, coalesce(v_reward, ''), p_actor);
+
+  update loyalty_cards c set goal = coalesce(v_next, v_card.goal) where c.id = v_card.id;
+
+  return query
+    select v_card.id, public.loyalty_progress(v_card.id), coalesce(v_next, v_card.goal), coalesce(v_reward, '');
+end;
+$$;
+revoke all on function public.loyalty_redeem(uuid, text, text) from public, anon, authenticated;
+grant execute on function public.loyalty_redeem(uuid, text, text) to service_role;

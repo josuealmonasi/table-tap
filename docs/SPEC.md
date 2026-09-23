@@ -257,7 +257,7 @@ dishes on a bill the restaurant has just cancelled.
 ## Data model
 
 `supabase/schema.sql` is one idempotent script; git history is the changelog.
-Thirty tables, RLS on every one of them, in groups:
+Thirty-four tables, RLS on every one of them, in groups:
 
 - **The restaurant** — `restaurants`, `staff`, `profiles`, `platform_admins`,
   `plan_limits`, `user_logs`
@@ -268,6 +268,8 @@ Thirty tables, RLS on every one of them, in groups:
 - **Paper** — `print_jobs`
 - **Offers** — `promotions`, `promotion_items`, `coupons`, `coupon_redemptions`
 - **Money asked for** — `discount_requests`, `write_off_requests`
+- **Coming back** — `loyalty_programs`, `loyalty_cards`, `loyalty_visits`,
+  `loyalty_redemptions`
 - **Telling people** — `notifications`
 - **Keeping the door shut** — `rate_limits`
 
@@ -764,6 +766,47 @@ it now, waiting for the same moment, because printing before the stylesheet
 applies puts an 80mm ticket on a Letter page. And `Permissions-Policy` said
 `camera=()`, an EMPTY list, which refuses our own page as well: the
 scan-to-collect button shipped and could never open a lens. It is `(self)`.
+
+## The visit card
+
+A loyalty card a diner keeps on their phone, stamped by staff on each visit and
+worth a reward the restaurant chooses at a number of visits it chooses. Casa and
+Grupo (`plan_limits.allows_loyalty`). It knows nobody: a card is a random code,
+a visit is a card, a day and the member of staff who scanned it, and a reward is
+the visits it used and what it said at the time. No name, email or phone.
+
+- **The code** is twelve Crockford base32 characters — 60 random bits, no I, L,
+  O or U — printed as `K7QM-3XW9-TB4R` and carried by the card's QR as a link to
+  `/rewards?c=…`, so a diner can point their own camera at their card.
+  `loyalty_cards.code` holds the rule as a check constraint and
+  `src/lib/loyalty/code.ts` makes codes by it; a test compares the two.
+- **Progress is counted, never stored**: visits minus the visits rewards used,
+  by `loyalty_progress()`. A counter beside the rows would be a second record.
+- **One visit per card per day**, in the restaurant's time zone — a unique key,
+  so a double tap, two waiters or a race add nothing. `loyalty_stamp()` locks
+  the card and refuses when the program is off or the plan does not include
+  loyalty, as well as the route refusing it.
+- **A card keeps its own goal.** Raising the goal does not move the finish line
+  on a card already on its way; the new goal applies after its next reward.
+- **A reward is spent once**, under the same lock, by `loyalty_redeem()`, and a
+  reward already earned is honoured after the program is switched off or the
+  plan changes — the diner did their part.
+- **Server only.** The four tables and three functions are revoked from every
+  browser key; staff and diners reach them through routes that check who is
+  asking.
+
+**Built to become a Wallet pass.** Today the card is an image the diner saves.
+Everything a card shows is decided once, by `cardFace()` in
+`src/lib/loyalty/face.ts` — name, mark, progress, printed code and QR payload —
+and each way of showing a card draws from that. An Apple Wallet pass or a Google
+Wallet object is one more way of drawing it: its serial is the card's id, its
+barcode is the same link, its progress is the same count. Nothing the scanner,
+the rewards page or the visits already earned depend on changes.
+
+Being built in steps: the data and its rules (this); the public `/rewards`
+page; the staff scanner that stamps and redeems; then, together, the owner's
+settings, the offer after paying and the card download — the offer never exists
+before a card can be stamped. Until that last step nothing here is visible.
 
 ## What is checked, and how
 

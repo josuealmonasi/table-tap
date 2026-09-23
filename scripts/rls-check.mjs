@@ -49,6 +49,7 @@ for (const table of [
   "coupons", "coupon_redemptions", "staff", "user_logs", "profiles",
   "platform_admins", "rate_limits", "restaurant_tables",
   "icon_groups", "icon_group_items",
+  "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions",
 ]) {
   verdict(`cannot read ${table}`, await anon.from(table).select("*").limit(1));
 }
@@ -85,6 +86,11 @@ for (const [fn, args] of [
   // Seeding dietary tags belongs to the trigger and nobody else. RLS would stop
   // it anyway; the grant stops it before it reaches the table.
   ["seed_dietary_tags", { p_restaurant: crypto.randomUUID() }],
+  // A card is stamped and redeemed by staff through a route that checks who
+  // they are. Called from a phone, either would be a free visit or a free meal.
+  ["loyalty_stamp", { p_restaurant: crypto.randomUUID(), p_code: "0000000000AA", p_actor: "anon" }],
+  ["loyalty_redeem", { p_restaurant: crypto.randomUUID(), p_code: "0000000000AA", p_actor: "anon" }],
+  ["loyalty_progress", { p_card: crypto.randomUUID() }],
 ]) {
   const { error } = await anon.rpc(fn, args);
   if (error) ok(`anon cannot call ${fn}()`);
@@ -457,7 +463,8 @@ if (!signIn.error && theirs) {
   const TENANT = ["bill_splits", "categories", "coupon_redemptions", "coupons", "dietary_tags",
     "discount_requests", "dish_ratings", "icon_groups", "menu_items", "menus", "notifications",
     "orders", "payments", "print_jobs", "promotions", "restaurant_tables", "service_requests",
-    "staff", "table_sessions", "user_logs", "write_off_requests"];
+    "staff", "table_sessions", "user_logs", "write_off_requests",
+    "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions"];
   const TEAM = [["anon", null], ["owner", "demo@tabletap.dev"], ["manager", "demo-manager@tabletap.dev"],
     ["waiter", "demo-waiter@tabletap.dev"], ["cashier", "demo-cashier@tabletap.dev"],
     ["kitchen", "demo-kitchen@tabletap.dev"]];
