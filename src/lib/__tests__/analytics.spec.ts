@@ -167,3 +167,14 @@ describe("computeAnalytics", () => {
     expect(a.byHour[20].count).toBe(1);
   });
 });
+
+describe("the day labels are in the reader's language", () => {
+  it("names the days in Spanish for a Spanish page and in English for an English one", () => {
+    const now = new Date("2026-09-23T18:00:00Z");
+    const es = computeAnalytics([], "7d", MX, now, "es").byDay.map(d => d.label).join(" ");
+    const en = computeAnalytics([], "7d", MX, now, "en").byDay.map(d => d.label).join(" ");
+    expect(es).toMatch(/mié|miér|lun|mar|jue|vie|sáb|dom/i);
+    expect(es).not.toMatch(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/);
+    expect(en).toMatch(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/);
+  });
+});

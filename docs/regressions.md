@@ -35,6 +35,9 @@ us, and what now catches each one.
 | A state that is not a dialog can still be measured | Renaming a menu at 390px made the page scroll sideways, and neither sweep could see it |
 | `schema.sql` builds an empty database, top to bottom | A revoke above the table it named broke every reset from nothing for two weeks, unseen |
 | The demo seed never collides with its own kitchen trigger | `db:mock` failed half-built whenever the newest random order was still at the pass |
+| A grid column can shrink below its content | A month's takings pushed Analytics' tiles 21px off a phone, and the skeleton was a fixed guess |
+| A date is written in the reader's language, not the machine's | Every Spanish owner's chart said "25 Tue": `Intl.DateTimeFormat([])` answered in the host's English |
+| The fault that matters most is never cut from layout's list | Thirty squashed chart labels filled the list's twelve places, and "the page scrolls sideways" was cut off |
 | Seeded visits are dated by the restaurant's calendar, never today | The demo's seed filled today's slot after 6 p.m. in Mexico City, and a first scan said "already stamped" |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
@@ -857,6 +860,30 @@ card's first real scan answered "this card already has today's visit". Caught
 by driving the scanner in a browser, where the halfway card refused its first
 stamp; the api case for "first visit today" would have passed or failed by the
 hour. The seed dates visits in the demo's time zone now, and never today.
+
+## A month too wide for a phone
+
+Analytics' four tiles sat in `repeat(2, 1fr)` on a phone, and a plain `1fr`
+column will not shrink below its content: over thirty days "MX$1,497.71" in 24px
+bold made its column 200px of the 358 there were, and the page scrolled 21px
+sideways. "Today" has short numbers, and `pnpm layout` only ever opened today,
+so it measured the page clean every time. The columns are `minmax(0, 1fr)` now,
+the figure is sized by its tile (`clamp(14px, 14cqi, 24px)` in a size container)
+so it stays whole down to 320px, and layout opens the thirty-day view too. The
+loading skeleton had its own fixed guess, 72px tiles under a 38px row of pills,
+off by up to 6px at every width; it is built from the real tile now and matches
+at 390, 820 and 1280px.
+
+Opening the thirty-day view found three more. The day chart put thirty labels
+inside thirty bars, each 5px wide on a phone and 19px on a tablet; the labels
+have their own row now, about seven of them, each as wide as the bars it names.
+Layout's list of faults stops at twelve, and those thirty squashed labels had
+filled it — so on the old CSS the page scrolling sideways, the fault that
+mattered, was the one cut off; page-level faults go first now. And every label
+said "Tue": `new Intl.DateTimeFormat([])` formats in the machine's language, and
+the host's is English. The labels take the reader's language, the coupon list's
+dates did the same thing in the browser's language and are fixed too, and an
+invariant now refuses a date formatted in the machine's default.
 
 ## The decoder under the optimiser
 

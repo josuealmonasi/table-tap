@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
-import { useT } from "@/lib/i18n/context";
+import { useLocale, useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useCoupons, type Coupon } from "@/hooks/useCoupons";
@@ -37,6 +37,7 @@ export default function CouponsPanel({
   currency: string;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   const toast = useToast();
   const confirm = useConfirm();
   const { coupons, loading, create, update, setActive, remove } =
@@ -171,7 +172,9 @@ export default function CouponsPanel({
     }
     // A date-limited coupon needs its window visible; "why isn't my code
     // working" is almost always a schedule that hasn't started or has passed.
-    const day = (iso: string) => new Date(iso).toLocaleDateString();
+    // In the app's language, not the browser's: a Spanish owner on an English
+    // phone read "9/30/2026" beside Spanish words.
+    const day = (iso: string) => new Date(iso).toLocaleDateString(locale === "es" ? "es-MX" : "en-US");
     if (c.starts_at && c.ends_at) {
       parts.push(t("coupons.between", { from: day(c.starts_at), to: day(c.ends_at) }));
     } else if (c.starts_at) {

@@ -275,6 +275,11 @@ export const AUDIT = `(() => {
     });
   }
 
+  // The page running off the side first. The list is cut at twelve, and thirty
+  // squashed chart labels once filled every place in it, so the fault that
+  // mattered most — the whole page scrolling sideways — was the one cut off.
+  faults.sort((a, b) => (b.kind === "overflowing") - (a.kind === "overflowing"));
+
   // The same fault on twenty rows of a list is one fault, not twenty.
   const seen = new Set();
   return faults.filter(f => {
