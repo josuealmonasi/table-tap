@@ -35,6 +35,7 @@ us, and what now catches each one.
 | A state that is not a dialog can still be measured | Renaming a menu at 390px made the page scroll sideways, and neither sweep could see it |
 | `schema.sql` builds an empty database, top to bottom | A revoke above the table it named broke every reset from nothing for two weeks, unseen |
 | The demo seed never collides with its own kitchen trigger | `db:mock` failed half-built whenever the newest random order was still at the pass |
+| Seeded visits are dated by the restaurant's calendar, never today | The demo's seed filled today's slot after 6 p.m. in Mexico City, and a first scan said "already stamped" |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -760,6 +761,7 @@ that does not; each gate was watched failing with the password wrong. The first
 run with the fix found one more: `pnpm promises` had signed in as the platform
 admin with the demo password on every run there had been, failed, and checked
 the admin screen signed out — ok, each time.
+
 ## Still settling, for ever
 
 The fix for cash told cash apart from a card whose webhook had not landed. Every
@@ -845,6 +847,16 @@ stopped half-built, with the loyalty cards and everything after the tickets
 missing. It passed often enough to look fine. The seed now marks the queued
 ticket printed instead of adding another; the collision was reproduced against
 a real queued ticket before the fix and does not happen after it.
+
+## The seed that stamped today
+
+The demo's visit cards were seeded with days in UTC, while a real stamp is dated
+by the restaurant's own calendar. After six in the evening in Mexico City, "one
+day ago" in UTC is today there — so the seed quietly took today's slot, and the
+card's first real scan answered "this card already has today's visit". Caught
+by driving the scanner in a browser, where the halfway card refused its first
+stamp; the api case for "first visit today" would have passed or failed by the
+hour. The seed dates visits in the demo's time zone now, and never today.
 
 ## The decoder under the optimiser
 

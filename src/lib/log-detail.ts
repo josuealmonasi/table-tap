@@ -44,6 +44,7 @@ export const LOG_ENTITIES = [
   "promotion",
   "settings",
   "menu",
+  "loyalty",
 ] as const;
 
 /**

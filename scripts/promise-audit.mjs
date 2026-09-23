@@ -130,6 +130,8 @@ await guest.close();
 // tomorrow, so the restore runs whether the case passed, failed or threw.
 const { data: full } = await admin.from("restaurants").select("*").eq("id", restaurant.id).single();
 const { data: menuRows } = await admin.from("menus").select("id, active").eq("restaurant_id", restaurant.id);
+const { data: loyaltyProgram } = await admin
+  .from("loyalty_programs").select("active").eq("restaurant_id", restaurant.id).maybeSingle();
 const ctx = { restaurantId: restaurant.id, tableId: table.id };
 
 async function restore() {
@@ -141,6 +143,9 @@ async function restore() {
     stripe_charges_enabled: full.stripe_charges_enabled,
   }).eq("id", restaurant.id);
   for (const m of menuRows ?? []) await admin.from("menus").update({ active: m.active }).eq("id", m.id);
+  if (loyaltyProgram) {
+    await admin.from("loyalty_programs").update({ active: loyaltyProgram.active }).eq("restaurant_id", restaurant.id);
+  }
 }
 
 /** A throwaway counter order, for the cases that need one to look at. */

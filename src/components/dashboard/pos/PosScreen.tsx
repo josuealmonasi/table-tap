@@ -7,6 +7,7 @@ import { shortMessage } from "@/lib/stock-message";
 import StockTag from "@/components/dashboard/StockTag";
 import { useLiveStock } from "@/hooks/useLiveStock";
 import ScanToCollect from "@/components/dashboard/ScanToCollect";
+import StampCard from "@/components/dashboard/loyalty/StampCard";
 import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
 import { CheckIcon } from "@/components/ui/icons";
@@ -51,6 +52,7 @@ export default function PosScreen({
   closedNow,
   dietaryTags,
   canEmailReceipt,
+  loyalty = false,
 }: {
   restaurant: Restaurant;
   categories: Category[];
@@ -65,6 +67,8 @@ export default function PosScreen({
   dietaryTags: StoredDietaryTag[];
   /** False when no mail provider is configured — then emailing is not offered. */
   canEmailReceipt: boolean;
+  /** The restaurant takes visit-card stamps right now: plan and program both. */
+  loyalty?: boolean;
 }) {
   const t = useT();
   const toast = useToast();
@@ -320,7 +324,10 @@ export default function PosScreen({
               It collects nowhere near here: the code names a bill, and the
               bill is settled on the screen that settles bills. One way for
               money to be taken, not two that have to agree. */}
-          <ScanToCollect onFound={id => router.push(`/dashboard/bills?order=${id}`)} />
+          <div className="tt-pos-head-actions">
+            <ScanToCollect onFound={id => router.push(`/dashboard/bills?order=${id}`)} />
+            {loyalty && <StampCard />}
+          </div>
         </header>
 
         {closedNow && <p className="tt-offline-banner">{t("pos.closedNow")}</p>}

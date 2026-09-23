@@ -21,11 +21,18 @@ const GOAL = 8;
 const REWARD = "Free dessert";
 const FLOOR = ["demo-waiter@tabletap.dev", "demo-cashier@tabletap.dev", "demo-manager@tabletap.dev"];
 
-/** Visits on `count` distinct past days, the most recent `endDaysAgo` ago. */
+// The demo restaurant's own calendar, the one a stamp is dated by. The first
+// version dated visits in UTC: after six in the evening in Mexico City, "one
+// day ago" in UTC is today there, so the seed quietly filled today's slot and
+// the card's first real scan said "already has today's visit".
+const ZONE = "America/Mexico_City";
+const localDay = when => new Intl.DateTimeFormat("en-CA", { timeZone: ZONE }).format(when);
+
+/** Visits on `count` distinct past days, the most recent `endDaysAgo` ago, never today. */
 function visitDays(count, endDaysAgo) {
   return Array.from({ length: count }, (_, i) => {
-    const d = new Date(Date.now() - (endDaysAgo + i * 4) * 86_400_000);
-    return d.toISOString().slice(0, 10);
+    const days = Math.max(1, endDaysAgo) + i * 4;
+    return localDay(new Date(Date.now() - days * 86_400_000));
   });
 }
 

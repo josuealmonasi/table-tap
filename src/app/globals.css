@@ -6702,3 +6702,43 @@ a.tt-user-plan:hover {
   font-size: 13px;
   color: var(--tt-muted);
 }
+
+/* ── The staff scanner that stamps a visit card ────────────────────────────
+   The camera on top, the typed code beneath it for a card the lens will not
+   read, then what the card says now. The field shrinks; the button does not. */
+.tt-stamp-type {
+  margin-top: 14px;
+  text-align: left;
+}
+.tt-stamp-type-row {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.tt-stamp-type-row .tt-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tt-stamp-type-row .tt-btn {
+  flex-shrink: 0;
+}
+.tt-stamp-outcome {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  text-align: center;
+}
+.tt-stamp-headline {
+  margin: 0;
+  font-weight: 700;
+  font-size: 17px;
+}
+/* The POS header's two cameras — the queue's codes and the visit cards —
+   side by side, wrapping under the title on a phone. */
+.tt-pos-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}

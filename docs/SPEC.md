@@ -812,11 +812,26 @@ a code is the only key a card has. The page is `noindex`, since a code in its
 address is the card. "What the card needs next" is one function, `nextStep()`,
 so this page and the staff scanner cannot word it differently.
 
-Being built in steps: the data and its rules; the `/rewards` page (these two);
-the staff scanner that stamps and redeems; then, together, the owner's
-settings, the offer after paying and the card download — the offer never exists
-before a card can be stamped. Until that last step no card can be made, so
-`/rewards` can only answer that it does not know the code.
+**"Sellar tarjeta"** is the staff side, on Cuentas and at the till, for the
+owner, a manager, a waiter or a cashier — never the kitchen. One dialog: the
+back camera (native `BarcodeDetector`, jsQR on iPad Safari, the same
+`useQrCamera` the bill scanner uses) or the code typed off the card, then what
+the card says now and, when its reward is ready, the button that spends it.
+`POST /api/loyalty/stamp` and `/redeem` check the role, the plan and the
+program, and every stamp and redemption goes in the activity log with who made
+it — a stamp without a sale behind it is how this would be abused, and the log
+is where an owner sees it. The button appears only where `loyaltyOn()` says a
+stamp would be taken: the plan has it and the program is on. Stamping and
+redeeming are never queued offline — a stamp replayed on reconnect is a second
+visit. `pnpm attack` judges it by rows: another restaurant's card gains
+nothing, the kitchen adds nothing, three scans at once make one visit, and a
+reward spent twice at once is spent once.
+
+Being built in steps: the data and its rules; the `/rewards` page; the staff
+scanner (these three); then, together, the owner's settings, the offer after
+paying and the card download — the offer never exists before a card can be
+stamped. Until then no card can be made in production, so the scanner is shown
+nowhere there and `/rewards` can only answer that it does not know the code.
 
 ## What is checked, and how
 

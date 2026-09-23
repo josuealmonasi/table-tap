@@ -1524,3 +1524,18 @@ describe("the demo seeds the same way every time", () => {
       .toMatch(/on conflict \(order_id, kind\)/);
   });
 });
+
+describe("the stamp button and the stamp are one decision", () => {
+  it("shows the scanner only where loyaltyOn says the route will take the stamp", () => {
+    // "Sellar tarjeta" on a restaurant whose program is off, or whose plan
+    // lacks the card, would be a button into "the visit card is switched off".
+    // The screens and the route ask the same function, or they drift.
+    for (const page of ["src/app/dashboard/bills/page.tsx", "src/app/dashboard/pos/page.tsx"]) {
+      expect(read(page), `${page} decides the scanner by itself`).toMatch(/loyalty=\{await loyaltyOn\(/);
+    }
+    expect(read("src/app/api/loyalty/stamp/route.ts"), "the stamp route no longer asks loyaltyOn").toMatch(/await loyaltyOn\(/);
+    for (const screen of ["src/components/dashboard/BillsPanel.tsx", "src/components/dashboard/pos/PosScreen.tsx"]) {
+      expect(read(screen), `${screen} shows the scanner without being told to`).toMatch(/\{loyalty &&[^}]*<StampCard/);
+    }
+  });
+});

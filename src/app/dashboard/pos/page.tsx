@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getMembership, TAKES_COUNTER_ORDERS } from "@/lib/membership";
 import { getPlan } from "@/lib/plan-server";
+import { loyaltyOn } from "@/lib/loyalty/server";
 import { can } from "@/lib/plan";
 import { loadOrderingData } from "@/lib/ordering-data";
 import PosScreen from "@/components/dashboard/pos/PosScreen";
@@ -56,6 +57,7 @@ export default async function PosPage() {
       closedNow={data.closedNow}
       dietaryTags={data.dietaryTags}
       canEmailReceipt={data.receipts}
+      loyalty={await loyaltyOn(membership.restaurant.id, plan.limits)}
     />
   );
 }
