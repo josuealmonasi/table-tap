@@ -282,6 +282,17 @@ export const STATES = [
     keeps: /intentar de nuevo|try again/i,
   },
   {
+    // "Llamar al mesero" said "¡En camino!" for a minute whatever came back.
+    // Refused the way a busy room's Wi-Fi refuses it, the button must come
+    // back and the screen must say why — never that somebody is coming.
+    name: "the waiter cannot be called · the menu",
+    refuse: { url: "**/api/service-requests" },
+    open: /llamar al mesero|call waiter/i,
+    says: /demasiadas solicitudes|too many requests/i,
+    offers: /en camino|on the way/i,
+    keeps: /llamar al mesero|call waiter/i,
+  },
+  {
     name: "counter order ready",
     as: "tracker",
     // Placed from the general QR, so nobody is carrying it anywhere. The
