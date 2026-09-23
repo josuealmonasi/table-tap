@@ -281,7 +281,7 @@ for (const size of SIZES) {
           // Having clicked does not mean anything opened. A silent no-op reads exactly
           // like an ok, and that is how a whole role went unchecked with nothing
           // saying so.
-          const open = await tab.evaluate("!!document.querySelector('[role=dialog]')");
+          const open = await tab.evaluate(`!!document.querySelector(${JSON.stringify(dialog.shows ?? "[role=dialog]")})`);
           if (!clicked || !open) {
             console.log(`    –        ${who.role} · ${path} → ${dialog.name}: did not open (no data)`);
             continue;

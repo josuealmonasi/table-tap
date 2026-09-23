@@ -3024,10 +3024,33 @@ a.tt-btn {
   color: var(--tt-accent);
   font-weight: 700;
 }
+/* Renaming happens inside the breadcrumb, which is one row that cannot shrink
+   below its content. The field takes what the row can spare, up to 220px,
+   and the two buttons drop beneath it, together, when there is not room. A
+   fixed 220px field beside two buttons, in a box that could not shrink, made
+   the row 458px wide at 390px and the whole page scroll sideways. */
+.tt-menu-switcher-rename-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 .tt-menu-switcher-rename {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+}
+/* A width, not only a flex basis: the row sizes itself from what its children
+   say they need, and `.tt-input` says 100% — which counts as nothing there, so
+   the row came out too narrow and the buttons wrapped on a desktop as well. */
+.tt-menu-switcher-rename .tt-input {
+  width: 220px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.tt-menu-switcher-rename-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 @media (max-width: 640px) {

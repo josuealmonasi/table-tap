@@ -76,7 +76,7 @@ export default function MenuSwitcher({
 
   if (renaming) {
     return (
-      <div ref={ref} style={{ display: "inline-block" }}>
+      <div ref={ref} className="tt-menu-switcher-rename-wrap">
         <form
           className="tt-menu-switcher-rename"
           onSubmit={submitRename}
@@ -94,7 +94,6 @@ export default function MenuSwitcher({
         >
           <input
             className="tt-input"
-            style={{ width: 220 }}
             value={value}
             onChange={e => {
               setValue(e.target.value);
@@ -103,27 +102,30 @@ export default function MenuSwitcher({
             autoFocus
             onFocus={e => e.target.select()}
           />
-          <button
-            className="tt-btn tt-btn-primary tt-btn-sm"
-            type="submit"
-            // iOS doesn't focus a button on tap, so the form's blur fired with
-            // no relatedTarget and cancelled the edit before the click landed.
-            onPointerDown={e => e.preventDefault()}
-            disabled={!renameChanged}
-          >
-            {t("menu.save")}
-          </button>
-          <button
-            type="button"
-            className="tt-btn tt-btn-ghost tt-btn-sm"
-            onPointerDown={e => e.preventDefault()}
-            onClick={() => {
-              setRenaming(false);
-              setOpen(false);
-            }}
-          >
-            {t("menu.cancel")}
-          </button>
+          {/* Together, so on a phone they drop beneath the field as a pair. */}
+          <span className="tt-menu-switcher-rename-actions">
+            <button
+              className="tt-btn tt-btn-primary tt-btn-sm"
+              type="submit"
+              // iOS doesn't focus a button on tap, so the form's blur fired with
+              // no relatedTarget and cancelled the edit before the click landed.
+              onPointerDown={e => e.preventDefault()}
+              disabled={!renameChanged}
+            >
+              {t("menu.save")}
+            </button>
+            <button
+              type="button"
+              className="tt-btn tt-btn-ghost tt-btn-sm"
+              onPointerDown={e => e.preventDefault()}
+              onClick={() => {
+                setRenaming(false);
+                setOpen(false);
+              }}
+            >
+              {t("menu.cancel")}
+            </button>
+          </span>
         </form>
         {error && <p className="tt-field-error">{error}</p>}
       </div>

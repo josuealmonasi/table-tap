@@ -32,6 +32,7 @@ us, and what now catches each one.
 | The live board is seeded by status, with no row limit | An order the kitchen had not started fell off the board after 100 newer ones, while the badge still counted it |
 | A sweep that clicks everything changes nothing | One `pnpm dialogs` run completed every live order, duplicated dishes and approved a write-off |
 | Every seed accepts the terms the app enforces | A hand-kept copy of the version fell a month behind, and every seeded account opened on the terms modal |
+| A state that is not a dialog can still be measured | Renaming a menu at 390px made the page scroll sideways, and neither sweep could see it |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -804,6 +805,19 @@ terms modal — `test-users.mjs` kept its own copy of the version, a month behin
 and the demo restaurant recorded none — so the sweep measured every owner
 screen from underneath the modal. The seeds read the version from
 `src/lib/legal.ts` now, and an invariant refuses a copy.
+
+## Renaming ran off the page
+
+Renaming a menu happens in the breadcrumb: a fixed 220px field and two buttons,
+in a box that could not shrink, inside a row that cannot shrink below its
+content. At 390px the row came out 458px and the whole page scrolled sideways.
+Nothing measured it — `pnpm layout` opens a list of dialogs and `pnpm dialogs`
+only audits what opens as one, and renaming is neither. It surfaced by accident,
+when the terms modal was open underneath and made the pencil look like it had
+opened something. The field now takes what the row can spare, the two buttons
+drop beneath it together on a phone, and `layout-paths` can name a state by what
+it `shows` — so the rename is measured at every width, and failed on the old
+code at 390px for the owner and the manager.
 
 ## The decoder under the optimiser
 
