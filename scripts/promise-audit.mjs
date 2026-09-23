@@ -252,7 +252,28 @@ for (const state of STATES) {
     const tab = await context.newPage();
     try {
       await tab.goto(BASE + path, { waitUntil: "networkidle" });
-      await tab.waitForTimeout(1700);
+      // Wait for what the case is about, not for a number of milliseconds. A
+      // fixed 1.7s was usually enough; on a slow compile the plan lock arrived
+      // after it, and "free plan · promotions" failed as "shows nothing and
+      // explains nothing" — a red gate over nothing, then green on a rerun,
+      // which is how a gate teaches people to ignore it. A screen that truly
+      // never says it still fails, ten seconds later.
+      const deadline = Date.now() + 10000;
+      while (Date.now() < deadline) {
+        const text = await tab.evaluate("document.body.innerText");
+        // The most specific signal first. The words a case looks for can be on
+        // the page before the page is — "Cuentas" is in the navigation while
+        // the bills still load — so a control is the better sign it is there.
+        const ready = state.open
+          ? (await visible(tab, state.open)) > 0
+          : state.keeps
+            ? (await visible(tab, state.keeps)) > 0
+            : state.says.test(text);
+        if (ready) break;
+        await tab.waitForTimeout(250);
+      }
+      // A breath, so a control that renders just after the text is counted.
+      await tab.waitForTimeout(600);
 
       // Some of these live behind a button. Opening it here rather than
       // assuming the page shows everything: the bill is a dialog, and a dialog

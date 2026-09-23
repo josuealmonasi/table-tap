@@ -39,6 +39,7 @@ us, and what now catches each one.
 | A date is written in the reader's language, not the machine's | Every Spanish owner's chart said "25 Tue": `Intl.DateTimeFormat([])` answered in the host's English |
 | The fault that matters most is never cut from layout's list | Thirty squashed chart labels filled the list's twelve places, and "the page scrolls sideways" was cut off |
 | A date on screen is in the app's language, not the browser's | A Spanish owner on an English phone read English dates and times on eight screens |
+| A gate waits for what it checks, not for a number of milliseconds | "free plan · promotions" failed on a slow compile and passed on the rerun |
 | Seeded visits are dated by the restaurant's calendar, never today | The demo's seed filled today's slot after 6 p.m. in Mexico City, and a first scan said "already stamped" |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
@@ -898,6 +899,19 @@ write it in a third language. They take the app's language now, through
 checked with the app in Spanish on an English browser and the other way round,
 with no hydration warnings, and an invariant refuses `[]` or `undefined` as a
 date's locale — it named all eight on the old code.
+
+## A gate that failed by the clock
+
+`pnpm promises` opened each state's page, waited 1.7 seconds and judged. On a
+slow compile the plan lock arrived after that, and "free plan · promotions"
+failed as "shows nothing and explains nothing" — then passed on the rerun. A
+gate that goes red over nothing teaches people to rerun it until it is green,
+which is how a real red gets waved through. Each case now waits, up to ten
+seconds, for its own sign that the page is there: the control it opens, else the
+control it must keep, else its words — in that order, because the words can be
+on the page first: "Cuentas" is in the navigation while the bills still load,
+and the first version of this waited on it and judged the skeleton. Three runs
+in a row clean; a case pointed at words its screen never says still fails.
 
 ## The decoder under the optimiser
 
