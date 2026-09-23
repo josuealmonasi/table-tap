@@ -36,12 +36,6 @@ async function promoId(fx) {
   return data?.id ?? "";
 }
 
-async function staffId(fx) {
-  const { data } = await fx.admin
-    .from("staff").select("id").eq("email", `${MARK}@tabletap.dev`).maybeSingle();
-  return data?.id ?? "";
-}
-
 /**
  * Any order of this restaurant's — the print route only needs one to exist.
  *
@@ -81,7 +75,7 @@ async function couponId(fx) {
 const ROOM_ADDRESS = "203.0.113.30";
 
 export function cases(fx) {
-  const { restaurant, table, dish, paidOrder, unpaidOrder, tableOrder, walkoutOrder, menu } = fx;
+  const { restaurant, table, dish, paidOrder, unpaidOrder, tableOrder, walkoutOrder } = fx;
   // One reference per run, shared by the two cases below: the first collection
   // and the retry of that same collection. Fresh each run so a row a previous
   // run somehow left behind cannot make the first call look like the second.
