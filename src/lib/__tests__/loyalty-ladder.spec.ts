@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import { GOAL_MAX, GOAL_MIN, REWARD_MAX } from "@/lib/loyalty/rules";
 import { checkLadder, checkProgram, ladderLines, ladderOf, STEPS_MAX } from "@/lib/loyalty/ladder";
 import { standing } from "@/lib/loyalty/standing";
 import { en } from "@/lib/i18n/en";
@@ -147,5 +149,26 @@ describe("the ladder, worded for a card", () => {
       expect(lines[0]).toContain("Coffee");
       expect(ladderLines([{ visits: 8, reward: "" }], t)[0]).toContain("8");
     }
+  });
+});
+
+// The database's own rule for a ladder, read out of the schema. The form, the
+// route and the check constraint are three places that must refuse the same
+// ladders; a ladder the app saves and the table refuses is a 500 for an owner
+// who did nothing wrong.
+describe("the ladder's bounds, in the app and in the database", () => {
+  const schema = fs.readFileSync("supabase/schema.sql", "utf8");
+  const fn = /create or replace function public\.loyalty_steps_ok[\s\S]*?\$\$;/.exec(schema)?.[0] ?? "";
+
+  it("are the same numbers", () => {
+    expect(fn, "loyalty_steps_ok is not in schema.sql").not.toBe("");
+    expect(fn).toContain(`jsonb_array_length(p_steps) > ${STEPS_MAX}`);
+    expect(fn).toContain(`not between ${GOAL_MIN} and ${GOAL_MAX}`);
+    expect(fn).toContain(`not between 1 and ${REWARD_MAX}`);
+  });
+
+  it("guard both tables", () => {
+    expect(schema).toMatch(/loyalty_programs_steps_check check \(\s*public\.loyalty_steps_ok\(steps\)/);
+    expect(schema).toMatch(/loyalty_cards_steps_check check \(\s*steps is null\s*or \(public\.loyalty_steps_ok\(steps\)/);
   });
 });
