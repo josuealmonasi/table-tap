@@ -34,6 +34,7 @@ us, and what now catches each one.
 | Every seed accepts the terms the app enforces | A hand-kept copy of the version fell a month behind, and every seeded account opened on the terms modal |
 | A state that is not a dialog can still be measured | Renaming a menu at 390px made the page scroll sideways, and neither sweep could see it |
 | `schema.sql` builds an empty database, top to bottom | A revoke above the table it named broke every reset from nothing for two weeks, unseen |
+| The demo seed never collides with its own kitchen trigger | `db:mock` failed half-built whenever the newest random order was still at the pass |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -833,6 +834,17 @@ the checklist — "`pnpm db:reset` on dev, proves the schema still builds from
 nothing" — and nobody had run it. Found by running it; dev was left with no
 tables until the fix. `schema-order.spec.ts` now fails on any table or function
 named before it is created, and named exactly those two on the old file.
+
+## A seed that failed by the roll of a die
+
+The demo restaurant prints kitchen tickets by itself, so the trigger queues a
+ticket for every order still at the pass. The seed then added "one ticket
+already printed" for the newest order — and when the dice made that order one
+still at the pass, the two collided on `print_jobs_once` and `pnpm db:mock`
+stopped half-built, with the loyalty cards and everything after the tickets
+missing. It passed often enough to look fine. The seed now marks the queued
+ticket printed instead of adding another; the collision was reproduced against
+a real queued ticket before the fix and does not happen after it.
 
 ## The decoder under the optimiser
 

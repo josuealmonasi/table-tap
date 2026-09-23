@@ -1510,3 +1510,17 @@ describe("a sweep that clicks everything changes nothing", () => {
       .toMatch(/terms_version, terms_accepted_at, terms_accepted_email/);
   });
 });
+
+describe("the demo seeds the same way every time", () => {
+  it("never adds a print job the kitchen trigger may already have queued", () => {
+    // The demo prints kitchen tickets by itself, so every order still at the
+    // pass already has its ticket. The seed's "one ticket already printed"
+    // collided with it whenever the newest order happened to be one of those,
+    // and failed the whole seed half-built — about one run in several.
+    const seed = read("scripts/mock-data.mjs");
+    const at = seed.indexOf("into print_jobs");
+    expect(at, "the seed no longer writes a printed ticket where this looks").toBeGreaterThan(-1);
+    expect(seed.slice(at, at + 400), "the seed's ticket can collide with the trigger's")
+      .toMatch(/on conflict \(order_id, kind\)/);
+  });
+});
