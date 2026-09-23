@@ -977,6 +977,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     dietaryTagName: "Ponle un nombre con letras: el emoji solo no alcanza.",
     dietaryTagTaken: "Ya tienes una etiqueta con ese nombre.",
     iconGroupEmpty: "Agrega al menos un icono al grupo.",
+    iconGroupSave: "No se pudo guardar el grupo de iconos. Inténtalo de nuevo.",
     pickPlan: "Elige un plan para suscribirte.",
     noBilling: "Este restaurante todavía no tiene suscripción.",
     notYourStage: "Solo la cocina puede mover un pedido entre etapas.",

@@ -210,7 +210,16 @@ export async function PATCH(req: NextRequest) {
   // Replace the product list wholesale. Diffing it would be more code for the
   // same result, and the rows carry nothing worth preserving. Safe to scope by
   // promotion_id alone now that ownership is proven above.
-  await db.from("promotion_items").delete().eq("promotion_id", body.id);
+  //
+  // The old list is read first and put back if the new one does not land: it
+  // was deleted unchecked and the insert could fail — a dish deleted by another
+  // manager mid-edit is a foreign-key refusal — which left the promotion active
+  // with no products at all, the state the create path above refuses to leave.
+  const { data: before, error: readErr } = await db
+    .from("promotion_items").select("item_id, qty").eq("promotion_id", body.id);
+  if (readErr) return await apiError("apiErr.promoAttach", 500);
+  const { error: clearErr } = await db.from("promotion_items").delete().eq("promotion_id", body.id);
+  if (clearErr) return await apiError("apiErr.promoAttach", 500);
   const { error: linkErr } = await db.from("promotion_items").insert(
     body.items!.map(i => ({
       promotion_id: body.id,
@@ -219,6 +228,9 @@ export async function PATCH(req: NextRequest) {
     })),
   );
   if (linkErr) {
+    if (before?.length) {
+      await db.from("promotion_items").insert(before.map(row => ({ promotion_id: body.id, ...row })));
+    }
     return await apiError("apiErr.promoAttach", 500);
   }
   return NextResponse.json({ ok: true });
