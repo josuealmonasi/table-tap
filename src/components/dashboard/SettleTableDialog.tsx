@@ -168,13 +168,15 @@ export default function SettleTableDialog({
       {unread ? (
         <>
           <p className="tt-field-error" role="alert">{t("settle.loadFailed")}</p>
-          <button
-            className="tt-btn tt-btn-primary tt-btn-lg"
-            style={{ width: "100%" }}
-            onClick={() => setAttempt(n => n + 1)}
-          >
-            {t("settle.retry")}
-          </button>
+          <div className="tt-bill-actions">
+            <button
+              className="tt-btn tt-btn-primary tt-btn-lg"
+              style={{ width: "100%" }}
+              onClick={() => setAttempt(n => n + 1)}
+            >
+              {t("settle.retry")}
+            </button>
+          </div>
         </>
       ) : !bill ? (
         <p className="tt-muted">{t("common.loading")}</p>
