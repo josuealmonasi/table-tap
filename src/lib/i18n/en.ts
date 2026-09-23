@@ -579,6 +579,7 @@ myBill: "View my bill",
   service: {
     callWaiter: "Call waiter",
     waiterSent: "On the way!",
+    doneFailed: "Couldn't mark it handled. It's still waiting.",
   },
   plan: {
     frozenBanner: "Your subscription is paused: the dashboard is read-only and changes will not save. Your menu is still live and taking orders.",

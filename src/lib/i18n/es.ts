@@ -576,6 +576,7 @@ myBill: "Ver mi cuenta",
   service: {
     callWaiter: "Llamar al mesero",
     waiterSent: "¡En camino!",
+    doneFailed: "No se pudo marcar como atendido. Sigue pendiente.",
   },
   plan: {
     frozenBanner: "Tu suscripción está pausada: el panel es solo de lectura y no se guardarán los cambios. Tu menú sigue activo y recibiendo pedidos.",

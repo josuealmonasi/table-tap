@@ -1724,7 +1724,12 @@ describe("a request whose answer nobody reads", () => {
     const offenders: string[] = [];
     for (const file of walkAll("src").filter(f => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__"))) {
       const code = read(file).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-      if (/^\s*(await|void)\s+fetch\(/m.test(code) && !(file in MAY_DISCARD)) offenders.push(file);
+      const fired = /^\s*(await|void)\s+fetch\(/m.test(code);
+      // A browser write straight to the database is a request too: the waiter
+      // bar hid a call before its "done" was written and never looked back.
+      const written = /^\s*(await|void)\s+(supabase|createClient\(\))\s*\.from\(/m.test(code) &&
+        (file.startsWith("src/components/") || file.startsWith("src/hooks/"));
+      if ((fired || written) && !(file in MAY_DISCARD)) offenders.push(file);
     }
     expect(offenders, `a request fired and its answer ignored:\n${offenders.join("\n")}`).toEqual([]);
   });

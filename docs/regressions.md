@@ -1040,9 +1040,17 @@ connection at all. The bill sheet's "pay at the table" had the same bug and was
 fixed with a comment that says so, and the button on the menu, one component
 over, was left as it was. It reads the answer now, takes the "on its way" back
 and shows the server's sentence when it is refused, and only rests for a
-minute once the call has really gone. An invariant fails on any request fired
-with its answer thrown away. The one file excused, the rating sheet, says why:
-a lost opinion claims nothing, because the sheet only closes.
+minute once the call has really gone.
+
+The staff side had two more. The waiter bar's "done" took a call off the bar
+and then wrote it without looking at the result, so a failed write hid the call
+on this phone while it stayed pending on every other one. It goes back on the
+bar now, with a line that says it is still waiting. Duplicating a dish said
+"Producto duplicado" while the insert that copies its extras went unchecked.
+An invariant fails on any request fired with its answer thrown away, and on any
+browser write to the database that is never read. The one file excused, the
+rating sheet, says why: a lost opinion claims nothing, because the sheet only
+closes.
 
 ## Before merging anything large
 
