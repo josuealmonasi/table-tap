@@ -35,16 +35,20 @@ export default async function LoyaltyPage() {
     );
   }
 
-  const program = (await programOf(r.id)) ?? { active: false, goal: 8, reward: "" };
+  const program = (await programOf(r.id)) ?? { active: false, goal: 8, reward: "", steps: [{ visits: 8, reward: "" }] };
 
   // The card as a diner gets it, drawn on the owner's screen from a sample
   // code. Built here so the QR library stays on the server, as it does for
-  // the diner. With no reward written yet there is nothing to show on it.
+  // the diner. Until every step has its reward there is nothing to show on it.
   const h = await headers();
   const host = h.get("host") ?? "localhost:3000";
   const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  const face = program.reward.trim()
-    ? cardFace({ name: r.name, logo: r.logo ?? null, logo_url: r.logo_url ?? null }, program, { code: SAMPLE_CODE, goal: program.goal, progress: 0 }, `${proto}://${host}`)
+  const face = program.steps.every(s => s.reward.trim())
+    ? cardFace(
+        { name: r.name, logo: r.logo ?? null, logo_url: r.logo_url ?? null },
+        { code: SAMPLE_CODE, progress: 0, ladder: program.steps },
+        `${proto}://${host}`,
+      )
     : null;
   const preview = face ? { face, qr: qrGrid(face.qrPayload) } : null;
 

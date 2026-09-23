@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { drawCard } from "@/lib/loyalty/card-image";
+import { ladderLines } from "@/lib/loyalty/ladder";
 import type { CardFace } from "@/lib/loyalty/face";
 import type { QrGrid } from "@/lib/loyalty/qr-grid";
 
@@ -31,9 +32,7 @@ export default function CardDownload({ face, qr, preview = false }: CardDownload
     const host = typeof window === "undefined" ? "" : window.location.host;
     drawCard(face, qr, {
       title: t("loyaltyOffer.cardTitle"),
-      rewardLine: face.reward
-        ? t("loyaltyOffer.cardReward", { goal: face.standing.goal, reward: face.reward })
-        : t("loyaltyOffer.cardGoal", { goal: face.standing.goal }),
+      rewardLines: ladderLines(face.standing.steps, t),
       showIt: t("loyaltyOffer.cardShow"),
       checkAt: t("loyaltyOffer.cardCheck", { site: `${host}/rewards` }),
     })

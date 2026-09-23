@@ -9,12 +9,16 @@
 //   - the kitchen: no visit
 //   - the same card twice in the same instant: one visit, not two
 //   - a ready reward spent by two people at once: spent once
+//   - on a ladder with every reward ready, the same button pressed twice at
+//     once: one reward, not the next one too; a later reward, out of order:
+//     nothing
 //
 // Everything planted here is removed again, whatever happens in between.
 // ============================================================================
 
 const CARD = "ATKXTEST0000"; // valid, and nobody could be handed it
 const NEIGHBOUR_CARD = "ATKXTEST0001";
+const LADDER_CARD = "ATKXTEST0002";
 
 /** One visit per card per day, however many ask; one reward, however many spend it. */
 export async function attackLoyalty({ admin, post, who, home, ok, bad }) {
@@ -22,7 +26,7 @@ export async function attackLoyalty({ admin, post, who, home, ok, bad }) {
     (await admin.from(table).select("id", { count: "exact", head: true }).eq("card_id", cardId)).count ?? 0;
 
   // Leftovers from a run that did not finish, before planting more.
-  await admin.from("loyalty_cards").delete().in("code", [CARD, NEIGHBOUR_CARD]);
+  await admin.from("loyalty_cards").delete().in("code", [CARD, NEIGHBOUR_CARD, LADDER_CARD]);
   await admin.from("loyalty_programs").delete().eq("reward", "attack");
 
   const { data: program } = await admin
@@ -95,6 +99,32 @@ export async function attackLoyalty({ admin, post, who, home, ok, bad }) {
     const spent = await count("loyalty_redemptions", ours.id);
     if (spent === 1) ok("a ready reward spent twice at once is spent once");
     else bad(`a ready reward was spent ${spent} times`);
+
+    // A ladder with both rewards ready. The button names the reward it spends,
+    // so two taps on "coffee" spend the coffee once — without that, the second
+    // tap would find the dessert next and spend it too.
+    const { data: ladder } = await admin
+      .from("loyalty_cards")
+      .insert({
+        restaurant_id: home.id, code: LADDER_CARD, goal: 3,
+        steps: [{ visits: 2, reward: "attack coffee" }, { visits: 3, reward: "attack dessert" }],
+      })
+      .select("id").single();
+    planted.push(ladder.id);
+    await admin.from("loyalty_visits").insert(["2026-01-01", "2026-01-02", "2026-01-03"].map(visit_day => ({
+      card_id: ladder.id, restaurant_id: home.id, visit_day, actor_email: "attack@tabletap.dev",
+    })));
+    await post("/api/loyalty/redeem", { code: LADDER_CARD, step: 3 }, who.waiter);
+    const outOfOrder = await count("loyalty_redemptions", ladder.id);
+    if (outOfOrder === 0) ok("a later reward pressed before the one due is not spent");
+    else bad(`a later reward was spent out of order (${outOfOrder} redemption(s))`);
+    await Promise.all([
+      post("/api/loyalty/redeem", { code: LADDER_CARD, step: 2 }, who.waiter),
+      post("/api/loyalty/redeem", { code: LADDER_CARD, step: 2 }, who.waiter),
+    ]);
+    const onLadder = await count("loyalty_redemptions", ladder.id);
+    if (onLadder === 1) ok("one reward on a ladder, pressed twice at once, spends that reward once and not the next");
+    else bad(`one press twice on a ladder spent ${onLadder} rewards`);
   } finally {
     if (madeProgram) await admin.from("loyalty_programs").delete().eq("restaurant_id", neighbour.id);
     else if (!theirProgram.active) await admin.from("loyalty_programs").update({ active: false }).eq("id", theirProgram.id);

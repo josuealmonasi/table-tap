@@ -304,7 +304,7 @@ export async function loadOrderingData(
   const program = await offeredProgram(restaurantId, plan?.limits ?? null);
   const loyalty: LoyaltyOfferInfo | null =
     restaurant && program
-      ? { restaurantId, restaurantName: restaurant.name, goal: program.goal, reward: program.reward }
+      ? { restaurantId, restaurantName: restaurant.name, goal: program.goal, reward: program.reward, steps: program.steps }
       : null;
 
   return {

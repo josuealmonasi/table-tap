@@ -6,6 +6,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { formatCode } from "@/lib/loyalty/code";
 import type { Standing } from "@/lib/loyalty/standing";
+import LadderSteps from "@/components/loyalty/LadderSteps";
 
 export interface LookedUp {
   code: string;
@@ -19,7 +20,6 @@ interface CardLookupResultProps {
   card: LookedUp;
   /** The program is on: the stamp and redeem routes will take this card. */
   active: boolean;
-  reward: string;
   /** Read the card again after anything changed it. */
   onChanged: (code: string) => Promise<void>;
 }
@@ -30,7 +30,7 @@ interface CardLookupResultProps {
  * live only behind "Sellar tarjeta" on Cuentas and Caja, so a manager holding
  * a card they had just looked up had to go somewhere else to stamp it.
  */
-export default function CardLookupResult({ card, active, reward, onChanged }: CardLookupResultProps) {
+export default function CardLookupResult({ card, active, onChanged }: CardLookupResultProps) {
   const t = useT();
   const confirm = useConfirm();
   const toast = useToast();
@@ -67,12 +67,14 @@ export default function CardLookupResult({ card, active, reward, onChanged }: Ca
   }
 
   const s = card.standing;
+  const reward = s.next?.reward ?? "";
   return (
     <div className="tt-loyalty-card">
       <p className="tt-rewards-count">
         {formatCode(card.code)} · {t("rewards.visitsOf", { visits: s.visits, goal: s.goal })}
       </p>
       <p className="tt-muted" style={{ fontSize: 12, margin: 0 }}>{t("rewards.memberSince", { date: card.since })}</p>
+      <LadderSteps standing={s} />
       {s.ready && <p className="tt-rewards-ready">{t("loyalty.ready")}</p>}
       {active && (
         <div className="tt-loyalty-actions">
@@ -90,7 +92,7 @@ export default function CardLookupResult({ card, active, reward, onChanged }: Ca
               type="button"
               className="tt-btn tt-btn-ghost tt-btn-sm"
               disabled={busy}
-              onClick={() => void act("/api/loyalty/redeem", "POST", { code: card.code }, d =>
+              onClick={() => void act("/api/loyalty/redeem", "POST", { code: card.code, step: s.next?.visits }, d =>
                 d.spent ? t("loyalty.redeemed", { reward: d.spent as string }) : t("loyalty.redeemedNoReward"))}
             >
               {reward ? t("loyalty.redeem", { reward }) : t("loyalty.redeemNoReward")}

@@ -41,7 +41,7 @@ export default function LoyaltyAdmin({ program, preview }: LoyaltyAdminProps) {
           <div className="tt-cols">
             <ProgramForm program={program} />
             <div className="tt-loyalty-col">
-              <CardLookup active={program.active} reward={program.reward} />
+              <CardLookup active={program.active} />
               {preview && (
                 <section className="tt-section">
                   <div className="tt-section-head">

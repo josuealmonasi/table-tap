@@ -4,17 +4,20 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
-import { GOAL_MAX, GOAL_MIN, REWARD_MAX } from "@/lib/loyalty/rules";
+import { checkProgram } from "@/lib/loyalty/ladder";
 import type { LoyaltyProgram } from "@/lib/loyalty/server";
+import LadderEditor, { type StepDraft } from "./LadderEditor";
 
 interface ProgramFormProps {
   program: LoyaltyProgram;
 }
 
 /**
- * Whether the card runs, how many visits earn the reward, and what it is.
+ * Whether the card runs, and its rewards: one to four, each earned at a number
+ * of visits.
  *
- * Saved as one: switching on with no reward written would hand out cards that
+ * Saved as one, and checked here by the same function the route checks it
+ * with: switching on with a reward left blank would hand out cards that
  * promise nothing, so the route refuses it and this says why before asking.
  */
 export default function ProgramForm({ program }: ProgramFormProps) {
@@ -22,14 +25,15 @@ export default function ProgramForm({ program }: ProgramFormProps) {
   const toast = useToast();
   const router = useRouter();
   const [active, setActive] = useState(program.active);
-  const [goal, setGoal] = useState(String(program.goal));
-  const [reward, setReward] = useState(program.reward);
+  const [rows, setRows] = useState<StepDraft[]>(() =>
+    program.steps.map((s, i) => ({ id: i + 1, visits: String(s.visits), reward: s.reward })),
+  );
   const [saving, setSaving] = useState(false);
 
-  const goalNumber = Number(goal);
-  const goalOk = Number.isInteger(goalNumber) && goalNumber >= GOAL_MIN && goalNumber <= GOAL_MAX;
-  const rewardOk = reward.trim().length <= REWARD_MAX && (!active || reward.trim().length > 0);
-  const changed = active !== program.active || goalNumber !== program.goal || reward.trim() !== program.reward;
+  const steps = rows.map(r => ({ visits: Number(r.visits), reward: r.reward.trim() }));
+  const checked = checkProgram(active, steps);
+  const saved = program.steps.map(s => ({ visits: s.visits, reward: s.reward }));
+  const changed = active !== program.active || JSON.stringify(steps) !== JSON.stringify(saved);
 
   async function save(): Promise<void> {
     setSaving(true);
@@ -37,13 +41,15 @@ export default function ProgramForm({ program }: ProgramFormProps) {
       const res = await fetch("/api/loyalty/program", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ active, goal: goalNumber, reward: reward.trim() }),
+        body: JSON.stringify({ active, steps }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         toast(data.error ?? t("apiErr.generic"), "error");
         return;
       }
+      // Saved in order of visits; show it the way it now reads.
+      setRows(r => [...r].sort((a, b) => Number(a.visits) - Number(b.visits)));
       toast(t("loyaltyAdmin.saved"));
       router.refresh();
     } catch {
@@ -74,37 +80,20 @@ export default function ProgramForm({ program }: ProgramFormProps) {
         </span>
       </label>
 
-      <label className="tt-mod-label tt-loyalty-field" htmlFor="loyalty-goal">{t("loyaltyAdmin.goalLabel")}</label>
-      <input
-        id="loyalty-goal"
-        className="tt-input tt-loyalty-goal"
-        type="number"
-        inputMode="numeric"
-        min={GOAL_MIN}
-        max={GOAL_MAX}
-        value={goal}
-        onChange={e => setGoal(e.target.value)}
-      />
-      {!goalOk && <p className="tt-field-error">{t("apiErr.loyaltyGoal", { min: GOAL_MIN, max: GOAL_MAX })}</p>}
+      <p className="tt-mod-label tt-loyalty-field">{t("loyaltyAdmin.stepsLabel")}</p>
+      <LadderEditor rows={rows} disabled={saving} onChange={setRows} />
+      {"error" in checked && (
+        <p className="tt-field-error" role="alert">{t(checked.error, checked.vars)}</p>
+      )}
+      <p className="tt-muted" style={{ fontSize: 12 }}>{t("loyaltyAdmin.stepsHint")}</p>
       <p className="tt-muted" style={{ fontSize: 12 }}>{t("loyaltyAdmin.goalHint")}</p>
       <p className="tt-muted" style={{ fontSize: 12 }}>{t("loyaltyAdmin.roundHint")}</p>
-
-      <label className="tt-mod-label tt-loyalty-field" htmlFor="loyalty-reward">{t("loyaltyAdmin.rewardLabel")}</label>
-      <input
-        id="loyalty-reward"
-        className="tt-input"
-        value={reward}
-        maxLength={REWARD_MAX}
-        placeholder={t("loyaltyAdmin.rewardPlaceholder")}
-        onChange={e => setReward(e.target.value)}
-      />
-      {active && reward.trim().length === 0 && <p className="tt-field-error">{t("apiErr.loyaltyRewardNeeded")}</p>}
 
       <button
         type="button"
         className="tt-btn tt-btn-primary"
         style={{ marginTop: 16 }}
-        disabled={saving || !changed || !goalOk || !rewardOk}
+        disabled={saving || !changed || "error" in checked}
         onClick={() => void save()}
       >
         {saving ? t("loyaltyAdmin.saving") : t("loyaltyAdmin.save")}

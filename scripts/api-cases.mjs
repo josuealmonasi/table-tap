@@ -156,12 +156,20 @@ export function cases(fx) {
     { name: "POST /api/loyalty/redeem (not ready yet)", as: "waiter", method: "POST",
       path: "/api/loyalty/redeem", body: { code: fx.stampableCode ?? "" },
       expect: [409], expectError: /faltan visitas|hasn't reached/i },
+    // The reward the waiter pressed is named, so the same tap twice spends it
+    // once — on a ladder, a second tap would otherwise spend the NEXT reward.
     { name: "POST /api/loyalty/redeem (a ready card)", as: "cashier", method: "POST",
-      path: "/api/loyalty/redeem", body: { code: fx.readyCode ?? "no-ready-card-in-the-seed" }, expect: [200],
-      check: d => (typeof d.spent === "string" && d.standing?.ready === false) || `answered ${JSON.stringify(d)}` },
+      path: "/api/loyalty/redeem", body: { code: fx.readyCode ?? "no-ready-card-in-the-seed", step: fx.readyStep }, expect: [200],
+      check: d => {
+        if (typeof d.spent !== "string" || d.standing?.ready !== false) return `answered ${JSON.stringify(d)}`;
+        const step = (d.standing.steps ?? []).find(s => s.visits === fx.readyStep);
+        return !step || step.done || d.standing.goal === fx.readyStep || "the reward spent is not marked redeemed";
+      } },
     { name: "POST /api/loyalty/redeem (the same reward twice)", as: "waiter", method: "POST",
-      path: "/api/loyalty/redeem", body: { code: fx.readyCode ?? "" },
-      expect: [409], expectError: /faltan visitas|hasn't reached/i },
+      path: "/api/loyalty/redeem", body: { code: fx.readyCode ?? "", step: fx.readyStep },
+      expect: [409], expectError: /ya se canjeó|already redeemed/i },
+    { name: "POST /api/loyalty/redeem (a step that is not a number)", as: "waiter", method: "POST",
+      path: "/api/loyalty/redeem", body: { code: fx.readyCode ?? "", step: "8" }, expect: [400] },
     // ── the visit card a diner makes, keeps, and may delete ───────────────
     { name: "POST /api/loyalty/card (a diner makes one)", as: "diner", method: "POST",
       path: "/api/loyalty/card", body: { restaurantId: r }, expect: [200],
@@ -201,10 +209,33 @@ export function cases(fx) {
     { name: "DELETE /api/loyalty/visit (today's stamp, taken back)", as: "manager", method: "DELETE",
       path: "/api/loyalty/visit", body: async f => ({ id: await f.visitOf(f.stampableCode, "today") }), expect: [200],
       check: async (_d, f) => (await f.visitOf(f.stampableCode, "today")) === null || "the visit is still there" },
-    { name: "POST /api/loyalty/program (a new goal)", as: "manager", method: "POST",
+    { name: "POST /api/loyalty/program (a reward ladder)", as: "manager", method: "POST",
+      path: "/api/loyalty/program", arrange: f => f.keepLoyaltyProgram(),
+      body: { active: true, steps: [{ visits: 10, reward: "Free main" }, { visits: 3, reward: "Free coffee" }] }, expect: [200],
+      check: async (_d, f) => {
+        const steps = await f.programSteps();
+        if (JSON.stringify(steps) !== JSON.stringify([{ visits: 3, reward: "Free coffee" }, { visits: 10, reward: "Free main" }])) {
+          return `the ladder was saved as ${JSON.stringify(steps)}`;
+        }
+        return (await f.programGoal()) === 10 || "the goal is not the last reward's visits";
+      } },
+    // A page open across the deploy still sends one goal and one reward.
+    { name: "POST /api/loyalty/program (a goal, from a page before the ladder)", as: "manager", method: "POST",
       path: "/api/loyalty/program", arrange: f => f.keepLoyaltyProgram(),
       body: { active: true, goal: 9, reward: "Free dessert" }, expect: [200],
       check: async (_d, f) => (await f.programGoal()) === 9 || "the goal was not saved" },
+    { name: "POST /api/loyalty/program (two rewards at the same visits)", as: "manager", method: "POST",
+      path: "/api/loyalty/program", arrange: f => f.keepLoyaltyProgram(),
+      body: { active: true, steps: [{ visits: 8, reward: "a" }, { visits: 8, reward: "b" }] },
+      expect: [400], expectError: /mismo número de visitas|same number of visits/i },
+    { name: "POST /api/loyalty/program (five rewards)", as: "manager", method: "POST",
+      path: "/api/loyalty/program", arrange: f => f.keepLoyaltyProgram(),
+      body: { active: true, steps: [3, 6, 9, 12, 15].map(visits => ({ visits, reward: "x" })) },
+      expect: [400], expectError: /hasta 4 recompensas|up to 4 rewards/i },
+    { name: "POST /api/loyalty/program (a reward left blank)", as: "manager", method: "POST",
+      path: "/api/loyalty/program", arrange: f => f.keepLoyaltyProgram(),
+      body: { active: false, steps: [{ visits: 4, reward: "Free coffee" }, { visits: 8, reward: " " }] },
+      expect: [400], expectError: /cada recompensa|each reward/i },
     { name: "POST /api/loyalty/program (switched on with no reward)", as: "manager", method: "POST",
       path: "/api/loyalty/program", arrange: f => f.keepLoyaltyProgram(),
       body: { active: true, goal: 8, reward: "  " }, expect: [400], expectError: /recompensa|reward/i },

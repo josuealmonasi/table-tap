@@ -776,10 +776,12 @@ scan-to-collect button shipped and could never open a lens. It is `(self)`.
 ## The visit card
 
 A loyalty card a diner keeps on their phone, stamped by staff on each visit and
-worth a reward the restaurant chooses at a number of visits it chooses. Casa and
-Grupo (`plan_limits.allows_loyalty`). It knows nobody: a card is a random code,
-a visit is a card, a day and the member of staff who scanned it, and a reward is
-the visits it used and what it said at the time. No name, email or phone.
+worth the rewards the restaurant chooses, each at a number of visits it chooses
+— a reward ladder: 4 visits a coffee, 8 a dessert, 12 a meal. Casa and Grupo
+(`plan_limits.allows_loyalty`). It knows nobody: a card is a random code, a
+visit is a card, a day and the member of staff who scanned it, and a reward is
+the step it was, the visits it used and what it said at the time. No name,
+email or phone.
 
 - **The code** is twelve Crockford base32 characters — 60 random bits, no I, L,
   O or U — printed as `K7QM-3XW9-TB4R` and carried by the card's QR as a link to
@@ -792,12 +794,33 @@ the visits it used and what it said at the time. No name, email or phone.
   so a double tap, two waiters or a race add nothing. `loyalty_stamp()` locks
   the card and refuses when the program is off or the plan does not include
   loyalty, as well as the route refusing it.
-- **A card keeps its own goal.** Raising the goal does not move the finish line
-  on a card already on its way; the new goal applies after its next reward.
-- **A reward is spent once**, under the same lock, by `loyalty_redeem()`, and a
-  reward already earned is honoured after the program is switched off or the
-  plan changes — the diner did their part.
-- **Server only.** The four tables and three functions are revoked from every
+- **The ladder** is one to four steps `{visits, reward}`, strictly increasing,
+  2 to 50 visits and a reward of up to 80 characters each
+  (`loyalty_programs.steps`). The last step's visits are the round, and are
+  also the program's `goal`; its reward is `reward`. `checkProgram()` in
+  `src/lib/loyalty/ladder.ts` checks a ladder for the form and the route alike,
+  and `loyalty_steps_ok()` is the check constraint that finally refuses one —
+  out of order, out of bounds, too many, a blank reward, or a goal that is not
+  the last step. A program saved before the ladder is a ladder of one: its goal
+  and its reward. A program switched off may have no reward yet, and then has
+  no ladder, so no card can be made from it.
+- **Rewards are redeemed in order, once per round.** The next reward is the
+  lowest step not redeemed in the card's current round (`round_no`, carried on
+  each redemption, so "this round" is an equality and not a guess from times).
+  A step in the middle spends no visits; the last step spends the round's
+  visits, closes the round and carries the rest over. A diner at 12 who skipped
+  the coffee is offered the coffee first: nothing earned is lost.
+- **A card keeps its own ladder.** A card snapshots the program's steps when it
+  is made and again when a round closes (`loyalty_cards.steps`, with `goal` the
+  last step), so editing the program never moves a finish line a diner is
+  walking towards.
+- **A reward is spent once**, under the same lock, by `loyalty_redeem()`. The
+  button names the reward it spends (`step`, its visits), and the function
+  refuses unless that is still the next one — on a ladder with every reward
+  ready, a second tap would otherwise spend the reward after it; it answers
+  "already redeemed" instead. A reward already earned is honoured after the
+  program is switched off or the plan changes — the diner did their part.
+- **Server only.** The four tables and the functions are revoked from every
   browser key; staff and diners reach them through routes that check who is
   asking.
 
@@ -811,7 +834,9 @@ the rewards page or the visits already earned depend on changes.
 
 **`/rewards`** is where a diner checks a card: they type the printed code, or
 their camera opens the card's QR link with it filled in. It shows the visits,
-what is left and for what, the last visit and the rewards spent — what the card
+what is left and for what, every reward on the ladder and whether it is
+redeemed, ready or how far off (`LadderSteps`, the same list the staff see), the
+last visit and the rewards spent — what the card
 itself would show, never who stamped it or the card's row id. `GET
 /api/rewards` answers it, public and limited to ten looks a minute per address:
 a code is the only key a card has. The page is `noindex`, since a code in its
@@ -831,17 +856,21 @@ stamp would be taken: the plan has it and the program is on. Stamping and
 redeeming are never queued offline — a stamp replayed on reconnect is a second
 visit. `pnpm attack` judges it by rows: another restaurant's card gains
 nothing, the kitchen adds nothing, three scans at once make one visit, and a
-reward spent twice at once is spent once.
+reward spent twice at once is spent once; on a ladder, one reward pressed twice
+at once spends that reward and not the next, and a later reward pressed out of
+order spends nothing.
 
 **Lealtad** (`/dashboard/loyalty`) is the owner's and the managers' — on a
 tier without the card it names the tier that has it. A banner says first
 whether the card is on and what that means: off, diners are not offered it and
 the team cannot stamp (the state every restaurant starts in, and one that
 looked broken while nothing said so); on, where diners get it and where the
-team stamps it. The program: switched on, the visits a reward takes (2 to 50),
-and the reward, which must be written before the card can be switched on, since
-a card that promises nothing is not one; a note says extra visits carry into
-the next round and the card never resets. The card as a diner gets it, drawn
+team stamps it. The program: switched on, and the rewards, one row each — the
+visits it takes and what it is, added and removed up to four, sorted by visits
+when saved — every one written before the card can be switched on, since a card
+that promises nothing is not one; notes say each reward is redeemed once a
+round in order, the last one ends the round, extra visits carry over and the
+card never resets. The card as a diner gets it, drawn
 from a sample code. Any card looked up by its code, typed or read with the
 camera, with every visit, who stamped it and the rewards it spent — the page
 where a stamp with nothing sold behind it shows up — and, while the card is on,
@@ -852,8 +881,8 @@ fact. Saving, pausing and taking back a stamp all go in the activity log.
 **The offer.** Once a diner's order is paid — on the tracker, or on the menu
 at the moment the money is settled, by card or in cash to the waiter, the same
 moment the receipt is offered and never on top of it — a restaurant running the
-card offers "Junta visitas": the goal, the reward, and that the card is an
-image with no sign-up, no name and no email. "Crear mi tarjeta" makes one
+card offers "Junta visitas": every reward and the visits it takes, and that the
+card is an image with no sign-up, no name and no email. "Crear mi tarjeta" makes one
 (`POST /api/loyalty/card`: public, five a minute per address, refused where
 `loyaltyOn()` says no — the menu asks the same function before offering it) and
 hands over the picture; "No volver a preguntar" and a card already made are
@@ -870,8 +899,8 @@ it. The page asks `menuShowsLoyalty()` — the menu's own question — before th
 menu streams, so the skeleton holds the row and the list does not jump.
 
 **The card** is drawn on the phone, not the server — 1080 × 1350, the
-restaurant's mark and name on the accent, the goal and the reward, the QR, the
-code in groups of four — because the phone has the emoji a restaurant uses as
+restaurant's mark and name on the accent, a line per reward, the QR (smaller as
+the ladder grows, never under the rewards), the code in groups of four — because the phone has the emoji a restaurant uses as
 its mark and a server has no emoji font. The QR library stays on the server:
 `POST /api/loyalty/card` and `GET /api/rewards` send the QR as a grid of modules
 (`qrGrid()`) and the canvas paints the squares. `/rewards` can draw the card
@@ -882,9 +911,11 @@ card never had.
 
 The privacy notice says what the card keeps (a random code, the days it was
 stamped and by whom, the rewards spent), what the phone keeps, for how long,
-and that the diner can delete it; the terms say the reward is the restaurant's
-to honour, including after a pause or a change of plan. Terms version
-2026-09-22, and the PDFs regenerated from the same text.
+and that the diner can delete it; the terms say the rewards are the
+restaurant's to honour, redeemed in order once per round, that a card keeps the
+rewards its round started with, and that an earned reward is honoured after a
+pause or a change of plan. Terms version 2026-09-23, and the PDFs regenerated
+from the same text.
 
 **Analytics** shows the card over the same period as the charts, for a
 restaurant that runs one: cards made, visits stamped, cards that came back

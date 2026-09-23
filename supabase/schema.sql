@@ -2685,7 +2685,7 @@ create table if not exists loyalty_redemptions (
   id            uuid primary key default gen_random_uuid(),
   card_id       uuid not null references loyalty_cards(id) on delete cascade,
   restaurant_id uuid not null references restaurants(id) on delete cascade,
-  visits_used   int not null check (visits_used > 0),
+  visits_used   int not null check (visits_used >= 0),
   reward        text not null,
   actor_email   text not null,
   created_at    timestamptz not null default now()
@@ -2702,6 +2702,80 @@ revoke all on loyalty_programs from anon, authenticated;
 revoke all on loyalty_cards from anon, authenticated;
 revoke all on loyalty_visits from anon, authenticated;
 revoke all on loyalty_redemptions from anon, authenticated;
+
+-- The reward ladder: several steps on one card — 4 visits a coffee, 8 a
+-- dessert, 12 a meal — each redeemed once per round, in order. The last step's
+-- visits are the round: redeeming it spends them and the card starts over,
+-- extra visits carrying across. A step in the middle spends none.
+--
+-- `steps` is `[{visits, reward}]`, strictly increasing, one to four of them. A
+-- card keeps the ladder its round started with, as it kept its goal, so a
+-- program edited mid-round does not move anybody's finish line. `goal` stays,
+-- and is always the last step's visits: the round's length. `round_no` counts
+-- a card's rounds; a redemption carries the round it was spent in, so "already
+-- redeemed this round" is an equality, not a guess from timestamps.
+create or replace function public.loyalty_steps_ok(p_steps jsonb)
+returns boolean
+language sql
+immutable
+set search_path = pg_catalog
+as $$
+  -- CASE, not AND: SQL may evaluate AND's sides in any order, and a cast of
+  -- "4.5" to int raises instead of answering false.
+  select case
+    when jsonb_typeof(p_steps) is distinct from 'array' then false
+    when jsonb_array_length(p_steps) > 4 then false
+    else coalesce((
+      select bool_and(case
+        when jsonb_typeof(s->'visits') is distinct from 'number'
+          or jsonb_typeof(s->'reward') is distinct from 'string' then false
+        when (s->>'visits') !~ '^[0-9]{1,2}$' then false
+        when (s->>'visits')::int not between 2 and 50 then false
+        when char_length(s->>'reward') not between 1 and 80 then false
+        when i = 1 then true
+        when jsonb_typeof(p_steps->(i::int - 2)->'visits') is distinct from 'number'
+          or (p_steps->(i::int - 2)->>'visits') !~ '^[0-9]{1,2}$' then false
+        else (s->>'visits')::int > (p_steps->(i::int - 2)->>'visits')::int
+      end)
+      from jsonb_array_elements(p_steps) with ordinality as e(s, i)), true)
+  end
+$$;
+
+alter table loyalty_programs    add column if not exists steps jsonb not null default '[]'::jsonb;
+alter table loyalty_cards       add column if not exists steps jsonb;
+alter table loyalty_cards       add column if not exists round_no int not null default 0;
+alter table loyalty_redemptions add column if not exists step int;
+alter table loyalty_redemptions add column if not exists round_no int;
+-- A step in the middle spends no visits, so zero is a real amount now.
+alter table loyalty_redemptions drop constraint if exists loyalty_redemptions_visits_used_check;
+alter table loyalty_redemptions add constraint loyalty_redemptions_visits_used_check check (visits_used >= 0);
+
+-- A program saved before the ladder keeps `steps` empty and reads as a ladder
+-- of one — its goal and its reward — everywhere it is read. It is deliberately
+-- not backfilled: the code deployed before the ladder writes a program as a
+-- goal and a reward, and a backfilled ladder would make that write break the
+-- check below in the minutes between migrating and deploying.
+--
+-- A card is snapshotted, because a card keeps the rewards its round started
+-- with: it takes the reward its program promises now, not whatever the
+-- program says after its owner edits it. A card whose program has no reward
+-- stays empty and reads the program's, as every card did before.
+update loyalty_cards c
+   set steps = jsonb_build_array(jsonb_build_object('visits', c.goal, 'reward', p.reward))
+  from loyalty_programs p
+ where p.restaurant_id = c.restaurant_id and c.steps is null and p.reward <> '';
+
+-- What finally refuses a ladder the route would not have saved: out of order,
+-- out of bounds, too many, a step with no reward, or a goal that is not the
+-- last step's visits.
+alter table loyalty_programs drop constraint if exists loyalty_programs_steps_check;
+alter table loyalty_programs add constraint loyalty_programs_steps_check check (
+  public.loyalty_steps_ok(steps)
+  and (steps = '[]'::jsonb or (goal = (steps->-1->>'visits')::int and reward = steps->-1->>'reward')));
+alter table loyalty_cards drop constraint if exists loyalty_cards_steps_check;
+alter table loyalty_cards add constraint loyalty_cards_steps_check check (
+  steps is null
+  or (public.loyalty_steps_ok(steps) and jsonb_array_length(steps) > 0 and goal = (steps->-1->>'visits')::int));
 
 -- Where a card stands: visits not yet spent on a reward, against its goal.
 create or replace function public.loyalty_progress(p_card uuid)
@@ -2762,39 +2836,82 @@ $$;
 revoke all on function public.loyalty_stamp(uuid, text, text) from public, anon, authenticated;
 grant execute on function public.loyalty_stamp(uuid, text, text) to service_role;
 
--- Spend a card's visits on its reward, once. Locked like the stamp, and refused
--- — nothing returned — unless the card has reached its goal. A reward already
--- earned is honoured even if the program was switched off or the plan changed
--- since: the diner did their part. The card then takes the program's current
--- goal for its next round.
-create or replace function public.loyalty_redeem(p_restaurant uuid, p_code text, p_actor text)
+-- Spend the card's next reward, once. Locked like the stamp, and refused —
+-- nothing returned — unless that reward is ready. The next reward is the lowest
+-- step of the card's ladder not yet redeemed this round; a round begins after
+-- the last redemption that spent visits. The last step spends the round's
+-- visits and the card takes the program's current ladder for its next round;
+-- a step in the middle spends none. A reward already earned is honoured even if
+-- the program was switched off or the plan changed since: the diner did their
+-- part. With a ladder of one step this is exactly the old rule: reach the goal,
+-- spend it, carry the rest.
+-- `p_step` is the reward the waiter was shown — its visits — and the redemption
+-- is refused unless that is still the card's next one. A card with three
+-- rewards ready would otherwise spend two of them on a double tap: the first
+-- tap the coffee, the second the dessert nobody asked for. Null takes whatever
+-- is next, which is what a caller from before the ladder meant.
+drop function if exists public.loyalty_redeem(uuid, text, text);
+create or replace function public.loyalty_redeem(p_restaurant uuid, p_code text, p_actor text, p_step int default null)
 returns table (card_id uuid, progress int, goal int, reward text)
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  v_card   loyalty_cards%rowtype;
-  v_reward text;
-  v_next   int;
+  v_card     loyalty_cards%rowtype;
+  v_steps    jsonb;
+  v_next     jsonb;
+  v_visits   int;
+  v_last     int;
+  v_used     int;
+  v_program  loyalty_programs%rowtype;
+  v_goal     int;
 begin
   select * into v_card from loyalty_cards c
    where c.code = p_code and c.restaurant_id = p_restaurant
    for update;
   if not found then return; end if;
-  if public.loyalty_progress(v_card.id) < v_card.goal then return; end if;
+  select * into v_program from loyalty_programs p where p.restaurant_id = p_restaurant;
 
-  select p.reward, p.goal into v_reward, v_next
-    from loyalty_programs p where p.restaurant_id = p_restaurant;
+  -- A card from before the ladder has none of its own: it is the one step its
+  -- goal and the program's reward make.
+  v_steps := coalesce(v_card.steps, jsonb_build_array(jsonb_build_object(
+    'visits', v_card.goal, 'reward', coalesce(v_program.reward, ''))));
+  v_last := (v_steps->-1->>'visits')::int;
 
-  insert into loyalty_redemptions (card_id, restaurant_id, visits_used, reward, actor_email)
-  values (v_card.id, p_restaurant, v_card.goal, coalesce(v_reward, ''), p_actor);
+  select s into v_next from jsonb_array_elements(v_steps) s
+   where not exists (
+     select 1 from loyalty_redemptions r
+      where r.card_id = v_card.id
+        and r.round_no = v_card.round_no
+        and r.step = (s->>'visits')::int)
+   order by (s->>'visits')::int
+   limit 1;
+  if v_next is null then return; end if;
+  v_visits := (v_next->>'visits')::int;
+  if p_step is not null and p_step <> v_visits then return; end if;
+  if public.loyalty_progress(v_card.id) < v_visits then return; end if;
 
-  update loyalty_cards c set goal = coalesce(v_next, v_card.goal) where c.id = v_card.id;
+  v_used := case when v_visits = v_last then v_last else 0 end;
+  insert into loyalty_redemptions (card_id, restaurant_id, visits_used, reward, actor_email, step, round_no)
+  values (v_card.id, p_restaurant, v_used, coalesce(v_next->>'reward', ''), p_actor, v_visits, v_card.round_no);
+
+  -- The last step closes the round: the card starts the next one on the
+  -- program's ladder as it is now.
+  v_goal := v_card.goal;
+  if v_used > 0 then
+    -- The program's ladder, or the one step a program from before the ladder
+    -- makes; none at all if it has no reward written.
+    v_steps := coalesce(nullif(v_program.steps, '[]'::jsonb), case when coalesce(v_program.reward, '') <> '' then
+      jsonb_build_array(jsonb_build_object('visits', v_program.goal, 'reward', v_program.reward)) end);
+    v_goal := coalesce((v_steps->-1->>'visits')::int, v_program.goal, v_card.goal);
+    update loyalty_cards c set steps = v_steps, goal = v_goal, round_no = c.round_no + 1
+     where c.id = v_card.id;
+  end if;
 
   return query
-    select v_card.id, public.loyalty_progress(v_card.id), coalesce(v_next, v_card.goal), coalesce(v_reward, '');
+    select v_card.id, public.loyalty_progress(v_card.id), v_goal, coalesce(v_next->>'reward', '');
 end;
 $$;
-revoke all on function public.loyalty_redeem(uuid, text, text) from public, anon, authenticated;
-grant execute on function public.loyalty_redeem(uuid, text, text) to service_role;
+revoke all on function public.loyalty_redeem(uuid, text, text, int) from public, anon, authenticated;
+grant execute on function public.loyalty_redeem(uuid, text, text, int) to service_role;

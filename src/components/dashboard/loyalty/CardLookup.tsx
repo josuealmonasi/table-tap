@@ -10,7 +10,6 @@ import CardLookupResult, { type LookedUp } from "./CardLookupResult";
 interface CardLookupProps {
   /** The program is on, so the card can be stamped and redeemed from here. */
   active: boolean;
-  reward: string;
 }
 
 /**
@@ -18,7 +17,7 @@ interface CardLookupProps {
  * diner's phone with the camera. Typing twelve characters from a screen held
  * out across a counter is the slow way, and it was the only one this page had.
  */
-export default function CardLookup({ active, reward }: CardLookupProps) {
+export default function CardLookup({ active }: CardLookupProps) {
   const t = useT();
   const [typed, setTyped] = useState("");
   const [card, setCard] = useState<LookedUp | null>(null);
@@ -116,7 +115,7 @@ export default function CardLookup({ active, reward }: CardLookupProps) {
       {error && <p className="tt-field-error" role="alert">{error}</p>}
 
       {!card && !error && !scanning && <p className="tt-muted" style={{ fontSize: 13 }}>{t("loyaltyAdmin.lookupHint")}</p>}
-      {card && <CardLookupResult card={card} active={active} reward={reward} onChanged={look} />}
+      {card && <CardLookupResult card={card} active={active} onChanged={look} />}
     </section>
   );
 }

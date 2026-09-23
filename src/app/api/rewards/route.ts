@@ -3,9 +3,9 @@ import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { normalizeCode } from "@/lib/loyalty/code";
-import { standing } from "@/lib/loyalty/standing";
 import { cardFace } from "@/lib/loyalty/face";
 import { qrGrid } from "@/lib/loyalty/qr-grid";
+import { CARD_COLUMNS, cardState, type CardRow } from "@/lib/loyalty/server";
 
 export const runtime = "nodejs";
 
@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 // holds it. Public: the card is the only key there is, the way a gift card is.
 //
 // It answers with what the card itself would show and nothing more — the
-// restaurant, the progress, the reward, the days of the last visit and of each
+// restaurant, the progress, the rewards, the days of the last visit and of each
 // reward spent. Never who stamped it, never the card's internal id.
 export async function GET(req: NextRequest) {
   // Sixty bits cannot be walked, but a page that answers "no such card" as fast
@@ -29,38 +29,34 @@ export async function GET(req: NextRequest) {
   const db = createAdminClient();
   const { data: card, error } = await db
     .from("loyalty_cards")
-    .select("id, restaurant_id, goal, created_at")
+    .select(`${CARD_COLUMNS}, restaurant_id, created_at`)
     .eq("code", code)
-    .maybeSingle();
+    .maybeSingle<CardRow & { restaurant_id: string; created_at: string }>();
   if (error) {
     console.error("rewards: card read failed:", error.message);
     return await apiError("apiErr.generic", 500);
   }
   if (!card) return await apiError("rewards.notFound", 404);
 
-  const [restaurant, program, progress, lastVisit, spent] = await Promise.all([
+  const [restaurant, program, lastVisit, spent] = await Promise.all([
     db.from("restaurants").select("name, logo, logo_url").eq("id", card.restaurant_id).single(),
     db.from("loyalty_programs").select("active, reward").eq("restaurant_id", card.restaurant_id).maybeSingle(),
-    db.rpc("loyalty_progress", { p_card: card.id }),
     db.from("loyalty_visits").select("visit_day").eq("card_id", card.id)
       .order("visit_day", { ascending: false }).limit(1).maybeSingle(),
     db.from("loyalty_redemptions").select("reward, created_at").eq("card_id", card.id)
       .order("created_at", { ascending: false }).limit(20),
   ]);
-  const failed = [restaurant, program, progress, lastVisit, spent].find(r => r.error);
+  const failed = [restaurant, program, lastVisit, spent].find(r => r.error);
   if (failed?.error || !restaurant.data) {
     console.error("rewards: read failed:", failed?.error?.message ?? "no restaurant");
     return await apiError("apiErr.generic", 500);
   }
+  const state = await cardState(card, program.data?.reward ?? "");
+  if (!state) return await apiError("apiErr.generic", 500);
 
   // The card's own face, so a diner who lost the image can save it again from
   // here — drawn from the same face as the first one, to the same QR.
-  const face = cardFace(
-    restaurant.data,
-    { reward: program.data?.reward ?? "" },
-    { code, goal: card.goal, progress: Number(progress.data ?? 0) },
-    req.nextUrl.origin,
-  );
+  const face = cardFace(restaurant.data, { code, ...state }, req.nextUrl.origin);
   return NextResponse.json({
     face,
     qr: qrGrid(face.qrPayload),
@@ -68,8 +64,7 @@ export async function GET(req: NextRequest) {
     // Paused means no new visits, not that the card stopped meaning anything:
     // a reward already earned is still honoured.
     active: program.data?.active ?? false,
-    reward: program.data?.reward ?? "",
-    standing: standing(Number(progress.data ?? 0), card.goal),
+    standing: face.standing,
     memberSince: card.created_at.slice(0, 10),
     lastVisit: lastVisit.data?.visit_day ?? null,
     redeemed: (spent.data ?? []).map(r => ({ day: r.created_at.slice(0, 10), reward: r.reward })),
