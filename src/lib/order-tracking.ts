@@ -42,10 +42,14 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export async function fetchTrackedOrder(orderId: string): Promise<TrackedOrder | null> {
   if (!UUID_RE.test(orderId)) return null;
   const admin = createAdminClient();
-  const { data } = await admin
+  const { data, error } = await admin
     .from("orders")
     .select(TRACKER_COLUMNS)
     .eq("id", orderId)
-    .single();
+    .maybeSingle();
+  // A read that failed is not an order that does not exist. It came back as
+  // null, and the tracker page answered a diner who had just ordered with
+  // "not found". Thrown: the page offers a retry and says nothing was lost.
+  if (error) throw new Error(`Could not read the order: ${error.message}`);
   return (data as TrackedOrder | null) ?? null;
 }

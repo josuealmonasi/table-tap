@@ -34,7 +34,8 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   // Through the tracker's own reader, so an id that is not a real order gets
   // the same answer here as everywhere else rather than minting a code for it.
-  const order = await fetchTrackedOrder(id);
+  const order = await fetchTrackedOrder(id).catch(() => undefined);
+  if (order === undefined) return await apiError("apiErr.ordersLoad", 500);
   if (!order) return await apiError("apiErr.notFound", 404);
 
   const origin = req.nextUrl.origin;

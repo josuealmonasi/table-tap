@@ -23,7 +23,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.tooManyRequests", 429);
   }
 
-  const order = await fetchTrackedOrder(id);
+  const order = await fetchTrackedOrder(id).catch(() => undefined);
+  // Unread is not missing: the tracker keeps what it knew on a 500, and a 404
+  // tells the menu the order was deleted.
+  if (order === undefined) return await apiError("apiErr.ordersLoad", 500);
   if (!order) return await apiError("apiErr.notFound", 404);
 
   return NextResponse.json(order);
