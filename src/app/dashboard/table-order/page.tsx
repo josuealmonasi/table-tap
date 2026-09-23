@@ -3,7 +3,7 @@ import { getMembership, TAKES_TABLE_ORDERS } from "@/lib/membership";
 import { getPlan, allPlans } from "@/lib/plan-server";
 import { can, cheapestWith } from "@/lib/plan";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { loadOrderingData } from "@/lib/ordering-data";
+import { loadOrderingData, unwrap } from "@/lib/ordering-data";
 import TableOrderScreen from "@/components/dashboard/waiter/TableOrderScreen";
 import PlanLock from "@/components/dashboard/plan/PlanLock";
 
@@ -47,11 +47,16 @@ export default async function TableOrderPage() {
   // invent a name, so every order can be found later by the label the
   // restaurant already uses for that table — on the board, on the bill, and in
   // the history search.
-  const { data: tables } = await createAdminClient()
-    .from("restaurant_tables")
-    .select("id, label")
-    .eq("restaurant_id", membership.restaurant.id)
-    .order("label");
+  // A failed read is not a restaurant with no tables: the pad would have had
+  // nowhere to send an order.
+  const tables = unwrap(
+    await createAdminClient()
+      .from("restaurant_tables")
+      .select("id, label")
+      .eq("restaurant_id", membership.restaurant.id)
+      .order("label"),
+    "the tables",
+  );
 
   return (
     <TableOrderScreen

@@ -1,3 +1,4 @@
+import { unwrap } from "@/lib/ordering-data";
 import { redirect } from "next/navigation";
 import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
@@ -32,7 +33,7 @@ export default async function MenuEditorPage({
 
   // The restaurant's own icon-picker groups travel with the editor: they are
   // theirs, and RLS already shows only the caller's restaurant's.
-  const [{ data: menus }, { data: iconGroups }, { data: dietary }] = await Promise.all([
+  const [menusRes, iconGroupsRes, dietaryRes] = await Promise.all([
     supabase
       .from("menus")
       .select("*")
@@ -52,6 +53,11 @@ export default async function MenuEditorPage({
       .order("sort_order"),
   ]);
 
+  // Unwrapped: a failed read of the menus sent the manager back to the
+  // dashboard as though the menu they opened had been deleted.
+  const menus = unwrap(menusRes, "the menus");
+  const iconGroups = unwrap(iconGroupsRes, "the icon groups");
+  const dietary = unwrap(dietaryRes, "the dietary tags");
   const menu = ((menus as Menu[]) ?? []).find(m => menuSlug(m.name) === slug);
   if (!menu) redirect("/dashboard");
 

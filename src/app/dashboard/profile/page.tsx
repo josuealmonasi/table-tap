@@ -1,3 +1,4 @@
+import { unwrap } from "@/lib/ordering-data";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ProfileForm from "@/components/dashboard/profile/ProfileForm";
@@ -12,11 +13,15 @@ export default async function ProfilePage() {
   const user = await currentUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name")
-    .eq("user_id", user.id)
-    .single();
+  // No row is an answer (a login with no name yet); a failed read is not.
+  const profile = unwrap<{ full_name: string | null }>(
+    await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("user_id", user.id)
+      .single(),
+    "your profile",
+  );
 
   return (
     <ProfileForm

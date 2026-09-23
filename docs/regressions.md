@@ -1135,6 +1135,20 @@ connection to take a payment, and so was a waiter stamping a card. Those five
 places say "Error de red — inténtalo de nuevo" now, and an invariant keeps the
 payment line to the settle dialog, the calculator and the board's cancel.
 
+## The rest of the dashboard
+
+#378 made the bills board and the corte refuse a failed read, and its invariant
+named those two pages. Six more took a failed read as an empty answer. The
+tables page showed no tables, or every table free, because nothing unpaid could
+be read. The waiter's pad had no tables to send an order to. Settings called
+the printer "never set up", which invites the owner to set it up again and
+issues a new token that cuts off the printer that works. The menu editor sent
+the manager back to the dashboard as though the menu they opened had been
+deleted. The profile page showed no name, and the platform admin's page showed
+no restaurants and no logins. Every one goes through `unwrap()` now, and the
+invariant reads every dashboard page instead of two, which is how it found the
+admin page's four reads, split across lines where a search had missed them.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read

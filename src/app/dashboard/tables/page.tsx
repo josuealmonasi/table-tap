@@ -1,3 +1,4 @@
+import { unwrap } from "@/lib/ordering-data";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { requireManager } from "@/lib/page-guard";
@@ -26,7 +27,7 @@ export default async function TablesPage() {
   const tablesAllowed = plan ? can(plan.limits, "dineIn") : false;
   const tablesUnlockWith = cheapestWith(catalog, "dineIn")?.plan ?? "servicio";
 
-  const [{ data: tables }, { data: openOrders }] = await Promise.all([
+  const [tablesRes, openOrdersRes] = await Promise.all([
     supabase
       .from("restaurant_tables")
       .select("*")
@@ -41,6 +42,10 @@ export default async function TablesPage() {
       .eq("paid", false)
       .eq("written_off", false),
   ]);
+  // Unwrapped: a failed read here showed no tables, or every table free
+  // because nothing unpaid could be read. The error screen offers a retry.
+  const tables = unwrap(tablesRes, "the tables");
+  const openOrders = unwrap(openOrdersRes, "what the tables owe");
   const tableList = (tables as RestaurantTable[]) ?? [];
 
   // Absolute base URL so scanned QRs reach the deployed site (dev: localhost).
