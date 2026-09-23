@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
-import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { clientIp, forTheRoom, isRateLimited } from "@/lib/rate-limit";
+import { ORDER_HEARTBEAT_MS, ORDERS_FOLLOWED, TRACKER_POLL_MS, perMinute } from "@/lib/poll";
 import { fetchTrackedOrder } from "@/lib/order-tracking";
 
 export const dynamic = "force-dynamic";
@@ -12,11 +13,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return await apiError("apiErr.missingId", 400);
 
-  // The unguessable id is the trust boundary, but this was the one public
-  // route with no ceiling at all — every other one has had a limit for
-  // months. The tracker polls every five seconds, so this is far above what
-  // a real diner's phone asks for.
-  if (await isRateLimited(`order-status:${clientIp(req)}`, 120, 60)) {
+  // The unguessable id is the trust boundary; this is a ceiling on floods.
+  // It is keyed by address, and one address is a whole room on the house
+  // Wi-Fi, so it is sized for the room: every open tracker, and the menu
+  // asking after each order it follows. It was 120, "far above what a real
+  // diner's phone asks for", which was true of one phone.
+  const perPhone = perMinute(TRACKER_POLL_MS) + ORDERS_FOLLOWED * perMinute(ORDER_HEARTBEAT_MS);
+  if (await isRateLimited(`order-status:${clientIp(req)}`, forTheRoom(perPhone), 60)) {
     return await apiError("apiErr.tooManyRequests", 429);
   }
 

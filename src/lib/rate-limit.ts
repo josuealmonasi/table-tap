@@ -6,6 +6,26 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // serverless instances, using the secret key. It fails OPEN: if the limiter
 // itself errors we let the request through rather than block a real customer.
 
+/**
+ * How many phones one address can be.
+ *
+ * Every limit here is keyed by address, and a restaurant's Wi-Fi puts the
+ * whole room behind a single one. The routes a diner's screen polls were sized
+ * for one phone: the tracker's 120 a minute was ten open trackers, or thirty
+ * diners on the menu following one order each. A busy room ran out together,
+ * and every screen behind that address stopped updating.
+ */
+export const PHONES_PER_ADDRESS = 30;
+
+/**
+ * A limit for a polled route, from what one phone asks of it in a minute:
+ * the whole room, doubled for what a poll does not count (a reload on focus,
+ * a read after every action).
+ */
+export function forTheRoom(perPhone: number): number {
+  return perPhone * 2 * PHONES_PER_ADDRESS;
+}
+
 /** Best-effort caller IP from the proxy headers (falls back to a shared bucket). */
 export function clientIp(req: NextRequest): string {
   const fwd = req.headers.get("x-forwarded-for");

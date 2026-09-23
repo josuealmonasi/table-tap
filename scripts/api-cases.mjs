@@ -77,6 +77,9 @@ async function couponId(fx) {
   return data?.id ?? "";
 }
 
+/** A documentation address (TEST-NET-3), standing in for a restaurant's Wi-Fi. */
+const ROOM_ADDRESS = "203.0.113.30";
+
 export function cases(fx) {
   const { restaurant, table, dish, paidOrder, unpaidOrder, tableOrder, walkoutOrder, menu } = fx;
   // One reference per run, shared by the two cases below: the first collection
@@ -93,6 +96,21 @@ export function cases(fx) {
       path: `/api/bill?restaurantId=${r}&tableId=${table.id}`, expect: [200] },
     { name: "GET  /api/order-status", as: "diner", method: "GET",
       path: `/api/order-status?id=${paidOrder}`, expect: [200] },
+    // A room behind one address, which is what a restaurant's Wi-Fi is. The
+    // limit was 120 a minute, sized for one phone; thirty diners on the menu
+    // used it up, and every tracker in the room froze. 130 asks first, then
+    // this one must still be answered. On production the address is the
+    // runner's own, because Vercel sets the header itself.
+    { name: "GET  /api/order-status (a full room behind one address)", as: "diner", method: "GET",
+      path: `/api/order-status?id=${paidOrder}`, headers: { "x-forwarded-for": ROOM_ADDRESS },
+      arrange: async f => {
+        const ask = () => fetch(`${f.base}/api/order-status?id=${paidOrder}`, {
+          headers: { "x-forwarded-for": ROOM_ADDRESS },
+        }).then(res => res.status);
+        for (let batch = 0; batch < 13; batch++) await Promise.all(Array.from({ length: 10 }, ask));
+        return () => f.admin.from("rate_limits").delete().eq("bucket", `order-status:${ROOM_ADDRESS}`);
+      },
+      expect: [200] },
     { name: "POST /api/service-requests", as: "diner", method: "POST", path: "/api/service-requests",
       body: { restaurantId: r, tableId: table.id, kind: "waiter" }, expect: [200] },
     { name: "POST /api/ratings/pending", as: "diner", method: "POST", path: "/api/ratings/pending",
@@ -100,7 +118,7 @@ export function cases(fx) {
       check: d => Array.isArray(d.dishes) && d.dishes.length > 0 || "did not offer the dish that was bought" },
     { name: "POST /api/ratings", as: "diner", method: "POST", path: "/api/ratings",
       body: { restaurantId: r, ratings: [{ orderId: paidOrder, itemId: dish.id, rating: 5 }] },
-      expect: [200], check: d => d.saved === 1 || `guardó ${d.saved}` },
+      expect: [200], check: d => d.saved === 1 || `saved ${d.saved}` },
     { name: "POST /api/coupons/validate", as: "diner", method: "POST", path: "/api/coupons/validate",
       body: { restaurantId: r, code: "API-001", subtotal: 100 }, expect: [200, 400, 404] },
     // A diner checking their visit card by its code. What comes back is what

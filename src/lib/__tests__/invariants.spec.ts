@@ -1671,3 +1671,40 @@ describe("a guard on money fails closed", () => {
     expect(offenders, `a guard whose failure becomes a bare 500:\n${offenders.join("\n")}`).toEqual([]);
   });
 });
+
+describe("a polled route is sized for the room that polls it", () => {
+  // Every public limit is keyed by address, and a restaurant's Wi-Fi is one
+  // address for the whole room. The tracker's route allowed 120 a minute —
+  // "far above what a real diner's phone asks for" — and thirty diners on the
+  // menu, each following one order, used all of it. The poll and the limit
+  // were two numbers in two files; now both come from poll.ts.
+  const POLLED = {
+    "/api/order-status": "src/app/api/order-status/route.ts",
+    "/api/split?": "src/app/api/split/route.ts",
+    "/api/bill?": "src/app/api/bill/route.ts",
+  } as const;
+  const code = (f: string) => read(f).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+
+  it("polls these routes only at an interval from poll.ts", () => {
+    const pollers: string[] = [];
+    const offenders: string[] = [];
+    for (const file of walkAll("src").filter(f => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__") && !f.includes("/app/api/"))) {
+      const src = code(file);
+      if (!Object.keys(POLLED).some(route => src.includes(route)) || !src.includes("setInterval(")) continue;
+      pollers.push(file);
+      const fromPoll = /from "@\/lib\/poll"/.test(src);
+      const literal = /setInterval\([^;]*?,\s*[\d_]+\s*\)/.test(src);
+      if (!fromPoll || literal) offenders.push(file);
+    }
+    expect(pollers.length, "no poller of these routes was found — the scan broke").toBeGreaterThan(3);
+    expect(offenders, `a poll whose rate its route does not know:\n${offenders.join("\n")}`).toEqual([]);
+  });
+
+  it("sizes each of those routes' limits from the same poll", () => {
+    const offenders = Object.values(POLLED).filter(f => {
+      const hits = [...code(f).matchAll(/isRateLimited\(`(order-status|split|bill):\$\{clientIp\(req\)\}`,\s*([^,]+),/g)];
+      return hits.length === 0 || hits.some(m => !m[2].includes("forTheRoom("));
+    });
+    expect(offenders, `a limit sized for one phone:\n${offenders.join("\n")}`).toEqual([]);
+  });
+});

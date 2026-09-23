@@ -12,9 +12,9 @@ import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
 import TrackerBody from "./TrackerBody";
 import TrackerSkeleton from "./TrackerSkeleton";
+import { TRACKER_POLL_MS } from "@/lib/poll";
 
 const TERMINAL: OrderStatus[] = ["completed", "cancelled"];
-const POLL_MS = 5000;
 
 /**
  * Nothing more is going to happen to this order.
@@ -73,7 +73,7 @@ export default function TrackerOverlay({
     if (!order) void read();
     const timer = setInterval(() => {
       if (!order || !over(order)) void read();
-    }, POLL_MS);
+    }, TRACKER_POLL_MS);
 
     return () => {
       active = false;

@@ -37,7 +37,7 @@ const fx = await setup(process.env, BASE);
 const saved = {};
 try {
   for (const c of cases(fx)) {
-    const headers = { "Content-Type": "application/json" };
+    const headers = { "Content-Type": "application/json", ...(c.headers ?? {}) };
     if (c.as !== "diner") headers.cookie = fx.who[c.as];
 
     // Some refusals only exist on the far side of a switch. `/api/split/pay`
