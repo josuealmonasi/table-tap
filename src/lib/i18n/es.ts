@@ -1373,6 +1373,8 @@ badgesHint: "Muestra cuántas cosas esperan acción en cada sección. Aplica a t
   },
   orders: {
     notPaid: "No pagado",
+    moveRefused: "No se pudo mover el pedido. Volvió a donde estaba.",
+    queuedRefused: "{n} cambio(s) guardado(s) sin conexión no se pudieron aplicar.",
     openDetail: "Abrir el pedido {code}",
     historyCountOne: "1 pedido",
     historyCount: "{total} pedidos",

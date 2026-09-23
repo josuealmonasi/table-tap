@@ -6,6 +6,7 @@ import { badgesChanged } from "@/hooks/useBadges";
 import { useOnline } from "@/hooks/useOnline";
 import { enqueue, readQueue, writeQueue, type QueuedMove } from "@/lib/offline-queue";
 import { useT } from "@/lib/i18n/context";
+import { useToast } from "@/components/ui/Toast";
 import type { Order, OrderStatus } from "@/lib/types";
 import type { CancelSummary } from "@/lib/cancel-plan";
 
@@ -33,6 +34,7 @@ function playPing() {
  */
 export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]) {
   const t = useT();
+  const toast = useToast();
   const [orders, setOrders] = useState<Order[]>(initialOrders);
   const { online, markOffline } = useOnline();
   const [pending, setPending] = useState<QueuedMove[]>([]);
@@ -98,6 +100,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
     if (queue.length === 0) return;
 
     const stuck: QueuedMove[] = [];
+    let refused = 0;
     for (const move of queue) {
       try {
         const res = await fetch("/api/orders", {
@@ -105,15 +108,20 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: move.id, status: move.to, from: move.from }),
         });
-        if (!res.ok) stuck.push(move);
+        // A server that is failing may answer differently later; one that
+        // refused has answered. Kept, a refused move was retried on every
+        // reconnect and the board said "saved, will be sent" for ever.
+        if (res.status >= 500) stuck.push(move);
+        else if (!res.ok) refused++;
       } catch {
         stuck.push(move); // still no connection: keep it for next time
       }
     }
     writeQueue(stuck);
     setPending(stuck);
+    if (refused > 0) toast(t("orders.queuedRefused", { n: refused }), "error");
     badgesChanged();
-  }, []);
+  }, [t, toast]);
 
   // Coming back is the moment to send, and the board reloads itself after so
   // what everyone else did while we were away lands too.
@@ -125,13 +133,13 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
     const was = orders.find(o => o.id === id)?.status;
     setOrders(prev => prev.map(o => (o.id === id ? { ...o, status } : o))); // optimistic
 
+    let res: Response;
     try {
-      const res = await fetch("/api/orders", {
+      res = await fetch("/api/orders", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, status }),
       });
-      if (!res.ok) throw new Error(String(res.status));
     } catch {
       // The tap used to be fired and forgotten: on a dropped connection the
       // ticket showed as moved to whoever moved it and untouched to everybody
@@ -142,6 +150,18 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
         setPending(queue);
       }
       markOffline();
+      badgesChanged();
+      return;
+    }
+
+    // Answered, and refused: not a dropped connection. It was held as one — a
+    // board that was online told "saved, will be sent", the ticket moved here
+    // and nowhere else, the move refused again on every reconnect. It goes
+    // back to where it was, with the server's reason.
+    if (!res.ok) {
+      if (was) setOrders(prev => prev.map(o => (o.id === id ? { ...o, status: was } : o)));
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      toast(data.error ?? t("orders.moveRefused"), "error");
     }
 
     // The board's own count changed, so the tab's should too.
