@@ -843,12 +843,6 @@ create policy "owner manages restaurant"
 -- something the restaurant can set.
 revoke insert, update, delete on restaurants from authenticated;
 
--- The same reasoning, for the table that names what each tier costs and
--- allows. It is world-readable on purpose — the pricing page renders from
--- it — and it must be readable ONLY: it is the platform's price list, shared
--- by every restaurant, and one of them editing it is not a tenancy question.
-revoke insert, update, delete on plan_limits from authenticated;
-
 -- DISCOUNT REQUESTS: a waiter asking for a discount they may not grant alone.
 -- The row is the ask; approving it is what actually moves money, and only a
 -- manager or owner can do that.
@@ -1354,6 +1348,14 @@ grant select on plan_limits to authenticated;
 -- existed (the same trap rate_limits, coupons and dish_ratings hit).
 revoke all on plan_limits from anon;
 
+-- Readable ONLY by the team: it is the platform's price list, shared by every
+-- restaurant, and one of them editing it is not a tenancy question. Every
+-- legitimate write goes through the server. This used to sit four hundred
+-- lines up, with the other revokes, and ran before the table existed — so on a
+-- database with the table already there nothing noticed, and building the
+-- schema from nothing failed on it for two weeks.
+revoke insert, update, delete on plan_limits from authenticated;
+
 -- Which plan a restaurant is on, and whether its billing is healthy.
 --
 -- Added nullable and backfilled so the restaurants that existed before plans
@@ -1424,12 +1426,6 @@ $$;
 revoke all on function public.plan_ceiling(uuid, text) from public, anon, authenticated;
 grant execute on function public.plan_ceiling(uuid, text) to service_role;
 
--- The trigger functions are not an API. PostgREST will not expose one anyway —
--- it has no trigger context to call it with — but the grant said otherwise, and
--- said it inconsistently: every other trigger function here is service_role
--- only.
-revoke all on function public.enforce_plan_limit() from public, anon, authenticated;
-
 -- One guard for all three, told by its trigger argument which thing it is
 -- counting. The message is a parseable sentinel rather than a sentence:
 -- Postgres has no idea what language the owner reads, so the dashboard turns
@@ -1468,6 +1464,13 @@ begin
   end if;
   return new;
 end $$;
+
+-- The trigger functions are not an API. PostgREST will not expose one anyway —
+-- it has no trigger context to call it with — but the grant said otherwise, and
+-- said it inconsistently: every other trigger function here is service_role
+-- only. After the function, not before it: above its own definition this
+-- revoke broke building the schema from nothing.
+revoke all on function public.enforce_plan_limit() from public, anon, authenticated;
 
 drop trigger if exists tables_plan_limit on restaurant_tables;
 create trigger tables_plan_limit before insert on restaurant_tables
