@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/lib/i18n/context";
 import type { ServiceRequest } from "@/lib/types";
 
 /** Short double-beep so staff notice a table calling without watching. */
@@ -33,6 +35,8 @@ export function useServiceRequests(
   initialRequests: ServiceRequest[],
 ) {
   const [requests, setRequests] = useState<ServiceRequest[]>(initialRequests);
+  const toast = useToast();
+  const t = useT();
 
   // A fresh server render is the truth. Without this the list was seeded once
   // and never corrected, so a request answered elsewhere — or settled through
@@ -102,8 +106,15 @@ export function useServiceRequests(
   }, [restaurantId]);
 
   async function markDone(id: string): Promise<void> {
+    const handled = requests.find(r => r.id === id);
     setRequests(prev => prev.filter(r => r.id !== id)); // optimistic
-    await createClient().from("service_requests").update({ status: "done" }).eq("id", id);
+    const { error } = await createClient().from("service_requests").update({ status: "done" }).eq("id", id);
+    // Put back when it did not land. It was left hidden here and pending on
+    // every other screen: a table two waiters each think the other answered.
+    if (error) {
+      if (handled) setRequests(prev => (prev.some(r => r.id === id) ? prev : [handled, ...prev]));
+      toast(t("service.doneFailed"), "error");
+    }
   }
 
   return { requests, markDone };

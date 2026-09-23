@@ -301,9 +301,12 @@ export function useMenuEditor(restaurantId: string) {
     // tedious half of copying a dish.
     const addonIds = links[id] ?? [];
     if (addonIds.length > 0) {
-      await supabase.from("item_addons").insert(
+      // Said, not swallowed: the copy was announced as made, and one that lost
+      // its extras on the way would otherwise be found by a diner.
+      const { error } = await supabase.from("item_addons").insert(
         addonIds.map((addon_id, i) => ({ product_id: newId, addon_id, sort_order: i })),
       );
+      reportError("write.updateProductExtras", error);
     }
 
     await reload();

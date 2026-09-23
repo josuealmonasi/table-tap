@@ -6,6 +6,7 @@ import type { RateableDish } from "@/lib/ratings";
 import RateDishesSheet from "./RateDishesSheet";
 import type { RestaurantTable } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
+import { useToast } from "@/components/ui/Toast";
 import { CallWaiterIcon } from "@/components/ui/icons";
 
 interface ServiceButtonsProps {
@@ -39,6 +40,7 @@ export default function ServiceButtons({
   table,
 }: ServiceButtonsProps) {
   const t = useT();
+  const toast = useToast();
   const [sent, setSent] = useState<Set<Kind>>(new Set());
   // Asking for the bill is the moment the meal is over, which is the only
   // moment a rating prompt isn't an interruption.
@@ -50,26 +52,41 @@ export default function ServiceButtons({
     return () => pending.forEach(clearTimeout);
   }, []);
 
+  const release = (kind: Kind): void =>
+    setSent(prev => {
+      const next = new Set(prev);
+      next.delete(kind);
+      return next;
+    });
+
+  /**
+   * The answer is read. It was thrown away, and "¡En camino!" was shown for a
+   * minute whatever came back: a rate limit from the room's Wi-Fi, a table
+   * that no longer exists, no connection at all. The bill's "pay at the table"
+   * was fixed for exactly this; this button, the one on the menu, was not.
+   */
   async function send(kind: Kind): Promise<void> {
     setSent(prev => new Set(prev).add(kind));
-    timers.current.push(
-      setTimeout(() => {
-        setSent(prev => {
-          const next = new Set(prev);
-          next.delete(kind);
-          return next;
-        });
-      }, 60_000),
-    );
     try {
-      await fetch("/api/service-requests", {
+      const res = await fetch("/api/service-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ restaurantId, tableId: table.id, kind }),
       });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        release(kind);
+        toast(data.error ?? t("done.networkError"), "error");
+        return;
+      }
     } catch {
-      // Non-critical — the button re-enables after the cooldown anyway.
+      release(kind);
+      toast(t("done.networkError"), "error");
+      return;
     }
+    // Rests for a minute once it has really gone, so a tapping child cannot
+    // call the waiter ten times.
+    timers.current.push(setTimeout(() => release(kind), 60_000));
 
     // Only after the request has gone out, so the prompt can never delay
     // the thing they actually pressed.

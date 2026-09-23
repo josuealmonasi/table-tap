@@ -1708,3 +1708,34 @@ describe("a polled route is sized for the room that polls it", () => {
     expect(offenders, `a limit sized for one phone:\n${offenders.join("\n")}`).toEqual([]);
   });
 });
+
+describe("a request whose answer nobody reads", () => {
+  // Only where losing it costs nothing AND nothing on screen says it landed.
+  const MAY_DISCARD: Record<string, string> = {
+    "src/components/customer/RateDishesSheet.tsx": "a lost opinion claims nothing: the sheet only closes",
+  };
+
+  it("reads the answer of every request that tells somebody it worked", () => {
+    // "Llamar al mesero" fired its request, threw the answer away and said
+    // "¡En camino!" for a minute whatever came back: a rate limit from the
+    // room's Wi-Fi, a table that no longer exists, no connection at all. The
+    // bill's own waiter button had been fixed for exactly this, and this one
+    // had not.
+    const offenders: string[] = [];
+    for (const file of walkAll("src").filter(f => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__"))) {
+      const code = read(file).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+      const fired = /^\s*(await|void)\s+fetch\(/m.test(code);
+      // A browser write straight to the database is a request too: the waiter
+      // bar hid a call before its "done" was written and never looked back.
+      const written = /^\s*(await|void)\s+(supabase|createClient\(\))\s*\.from\(/m.test(code) &&
+        (file.startsWith("src/components/") || file.startsWith("src/hooks/"));
+      if ((fired || written) && !(file in MAY_DISCARD)) offenders.push(file);
+    }
+    expect(offenders, `a request fired and its answer ignored:\n${offenders.join("\n")}`).toEqual([]);
+  });
+
+  it("only excuses files that still discard an answer", () => {
+    const stale = Object.keys(MAY_DISCARD).filter(f => !/^\s*(await|void)\s+fetch\(/m.test(read(f)));
+    expect(stale, `excused but no longer discarding — drop the excuse:\n${stale.join("\n")}`).toEqual([]);
+  });
+});

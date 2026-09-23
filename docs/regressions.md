@@ -45,6 +45,7 @@ us, and what now catches each one.
 | A failed read is never an answer | One refused bill poll told a diner who owed that they had paid; the waiter was told the table owed nothing; a phone forgot the table it owed at; the badges said nobody was calling |
 | A tip is added once, and the ledger records it | Every repeated delivery of a whole-table card payment raised the order's tip and total again; the payment row left the tip out |
 | A polled route is sized for the room behind one address | The tracker's 120 a minute was thirty diners on the menu; one table of six dividing its bill ran out the split's 60 |
+| A request that says it worked reads its answer | "Llamar al mesero" said "¡En camino!" for a minute whatever came back, a refusal or no connection |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -1029,6 +1030,27 @@ size their limits from them with `forTheRoom()`: every phone of
 `PHONES_PER_ADDRESS` (30), doubled for the reloads a poll does not count. An
 invariant fails when a screen polls one of them at a literal interval or a
 route sizes its limit any other way.
+
+## On its way, to nobody
+
+The menu's "Llamar al mesero" marked the call as sent, fired the request and
+never looked at the answer, so it said "¡En camino!" for a minute whatever came
+back: a rate limit from the room's Wi-Fi, a table that had been deleted, no
+connection at all. The bill sheet's "pay at the table" had the same bug and was
+fixed with a comment that says so, and the button on the menu, one component
+over, was left as it was. It reads the answer now, takes the "on its way" back
+and shows the server's sentence when it is refused, and only rests for a
+minute once the call has really gone.
+
+The staff side had two more. The waiter bar's "done" took a call off the bar
+and then wrote it without looking at the result, so a failed write hid the call
+on this phone while it stayed pending on every other one. It goes back on the
+bar now, with a line that says it is still waiting. Duplicating a dish said
+"Producto duplicado" while the insert that copies its extras went unchecked.
+An invariant fails on any request fired with its answer thrown away, and on any
+browser write to the database that is never read. The one file excused, the
+rating sheet, says why: a lost opinion claims nothing, because the sheet only
+closes.
 
 ## Before merging anything large
 
