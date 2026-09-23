@@ -14,6 +14,7 @@ export type NavItem = {
     | "Orders"
     | "Analytics"
     | "Promotions"
+    | "Loyalty"
     | "Table"
     | "Bills"
     | "Staff"
@@ -86,6 +87,15 @@ export const NAV_ITEMS: NavItem[] = [
     titleKey: "nav.promos",
     shortKey: "nav.promosShort",
     descKey: "nav.promosDesc",
+  },
+  {
+    // The visit card: the program, and every card and who stamped it. Only
+    // on the tiers that include it, like the till.
+    href: "/dashboard/loyalty",
+    icon: "Loyalty",
+    titleKey: "nav.loyalty",
+    descKey: "nav.loyaltyDesc",
+    feature: "loyalty",
   },
   {
     href: "/dashboard/bills",

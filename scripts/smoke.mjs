@@ -81,6 +81,7 @@ const PAGES = [
   // say so, not fall over on the way to explaining itself.
   "/dashboard/bills?order=00000000-0000-4000-8000-000000000000",
   "/dashboard/promotions",
+  "/dashboard/loyalty",
   "/dashboard/analytics",
   "/dashboard/settings",
   "/dashboard/staff",

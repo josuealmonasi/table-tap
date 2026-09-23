@@ -827,11 +827,21 @@ visit. `pnpm attack` judges it by rows: another restaurant's card gains
 nothing, the kitchen adds nothing, three scans at once make one visit, and a
 reward spent twice at once is spent once.
 
+**Lealtad** (`/dashboard/loyalty`) is the owner's and the managers' — on a
+tier without the card it names the tier that has it. The program: switched on,
+the visits a reward takes (2 to 50), and the reward, which must be written
+before the card can be switched on, since a card that promises nothing is not
+one. Any card looked up by its code, with every visit, who stamped it and the
+rewards it spent — the page where a stamp with nothing sold behind it shows
+up. A manager can take back a stamp given today, and nothing older: the record
+a reward was earned on is not rewritten after the fact. Saving, pausing and
+taking back a stamp all go in the activity log.
+
 Being built in steps: the data and its rules; the `/rewards` page; the staff
-scanner (these three); then, together, the owner's settings, the offer after
-paying and the card download — the offer never exists before a card can be
-stamped. Until then no card can be made in production, so the scanner is shown
-nowhere there and `/rewards` can only answer that it does not know the code.
+scanner; the owner's page (these four); then the offer after paying and the
+card download, with the privacy notice that describes them. Until then no card
+can be made in production: an owner can switch the card on and staff can open
+the scanner, but there is nothing yet for a diner to be handed.
 
 ## What is checked, and how
 

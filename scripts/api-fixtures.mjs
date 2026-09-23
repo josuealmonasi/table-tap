@@ -75,6 +75,26 @@ export async function setup(env, base) {
     admin.from("loyalty_visits").select("id").eq("restaurant_id", restaurant.id),
     admin.from("loyalty_redemptions").select("id").eq("restaurant_id", restaurant.id),
   ]);
+  // A visit of a card's: today's, or one from before today.
+  const visitOf = async (code, which) => {
+    const card = cardStates.find(c => c.code === code);
+    if (!card) return null;
+    const q = admin.from("loyalty_visits").select("id").eq("card_id", card.id);
+    const { data } = await (which === "today" ? q.eq("visit_day", today) : q.lt("visit_day", today)).limit(1).maybeSingle();
+    return data?.id ?? null;
+  };
+  // The program exactly as it was, put back after a case that edits it.
+  const keepLoyaltyProgram = async () => {
+    const { data: was } = await admin
+      .from("loyalty_programs").select("active, goal, reward").eq("restaurant_id", restaurant.id).maybeSingle();
+    return async () => {
+      if (was) await admin.from("loyalty_programs").update(was).eq("restaurant_id", restaurant.id);
+    };
+  };
+  const programGoal = async () => {
+    const { data } = await admin.from("loyalty_programs").select("goal").eq("restaurant_id", restaurant.id).maybeSingle();
+    return data?.goal ?? null;
+  };
   // Switch the program off for one request, and back as it was.
   const withLoyaltyOff = async () => {
     const { data: was } = await admin
@@ -418,6 +438,9 @@ export async function setup(env, base) {
     stampableCode: stampable?.code ?? null,
     readyCode: readyCard?.code ?? null,
     withLoyaltyOff,
+    visitOf,
+    keepLoyaltyProgram,
+    programGoal,
     loyaltyBefore: {
       visits: (visitsBefore ?? []).map(v => v.id),
       redemptions: (redemptionsBefore ?? []).map(r => r.id),
