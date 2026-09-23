@@ -834,14 +834,20 @@ nothing, the kitchen adds nothing, three scans at once make one visit, and a
 reward spent twice at once is spent once.
 
 **Lealtad** (`/dashboard/loyalty`) is the owner's and the managers' — on a
-tier without the card it names the tier that has it. The program: switched on,
-the visits a reward takes (2 to 50), and the reward, which must be written
-before the card can be switched on, since a card that promises nothing is not
-one. Any card looked up by its code, with every visit, who stamped it and the
-rewards it spent — the page where a stamp with nothing sold behind it shows
-up. A manager can take back a stamp given today, and nothing older: the record
-a reward was earned on is not rewritten after the fact. Saving, pausing and
-taking back a stamp all go in the activity log.
+tier without the card it names the tier that has it. A banner says first
+whether the card is on and what that means: off, diners are not offered it and
+the team cannot stamp (the state every restaurant starts in, and one that
+looked broken while nothing said so); on, where diners get it and where the
+team stamps it. The program: switched on, the visits a reward takes (2 to 50),
+and the reward, which must be written before the card can be switched on, since
+a card that promises nothing is not one; a note says extra visits carry into
+the next round and the card never resets. The card as a diner gets it, drawn
+from a sample code. Any card looked up by its code, typed or read with the
+camera, with every visit, who stamped it and the rewards it spent — the page
+where a stamp with nothing sold behind it shows up — and, while the card is on,
+stamped or redeemed right there. A manager can take back a stamp given today,
+and nothing older: the record a reward was earned on is not rewritten after the
+fact. Saving, pausing and taking back a stamp all go in the activity log.
 
 **The offer.** Once a diner's order is paid — on the tracker, or on the menu
 at the moment the money is settled, by card or in cash to the waiter, the same

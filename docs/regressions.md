@@ -1149,6 +1149,18 @@ no restaurants and no logins. Every one goes through `unwrap()` now, and the
 invariant reads every dashboard page instead of two, which is how it found the
 admin page's four reads, split across lines where a search had missed them.
 
+## A feature that looked broken because it was off
+
+On production no restaurant had switched the visit card on, so no diner was
+offered one and no waiter saw "Sellar tarjeta" — which is correct, and which
+the owner read as the feature not working, because the Lealtad page never said
+the card was off or what switching it on would change. The scanner was on the
+page, but only once the card was on; the lookup took a typed code only. The
+page opens with a banner that says whether the card is on and what that means,
+shows the card a diner gets, reads a card with the camera, and stamps or
+redeems a looked-up card. `pnpm promises` opens the page both ways: on, it says
+so and keeps the scanner; off, it says so and offers no stamping.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read
