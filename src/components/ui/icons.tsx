@@ -28,6 +28,7 @@ import { ChefHat } from "@phosphor-icons/react/dist/ssr/ChefHat";
 import { ClipboardText } from "@phosphor-icons/react/dist/ssr/ClipboardText";
 import { CookingPot } from "@phosphor-icons/react/dist/ssr/CookingPot";
 import { Crown } from "@phosphor-icons/react/dist/ssr/Crown";
+import { Stamp } from "@phosphor-icons/react/dist/ssr/Stamp";
 import { DownloadSimple } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
 import { ForkKnife } from "@phosphor-icons/react/dist/ssr/ForkKnife";
 import { Gear } from "@phosphor-icons/react/dist/ssr/Gear";
@@ -98,6 +99,8 @@ export const RatingIcon = Star;
 export const OrdersIcon = ClipboardText;
 export const AnalyticsIcon = ChartBar;
 export const PromotionsIcon = Gift;
+/** The visit card: a stamp per visit. */
+export const LoyaltyIcon = Stamp;
 export const StaffIcon = Users;
 export const SettingsIcon = Gear;
 export const PlanIcon = CreditCard;
@@ -150,6 +153,7 @@ export const NAV_ICONS = {
   Orders: OrdersIcon,
   Analytics: AnalyticsIcon,
   Promotions: PromotionsIcon,
+  Loyalty: LoyaltyIcon,
   Table: TableIcon,
   Bills: BillIcon,
   Staff: StaffIcon,

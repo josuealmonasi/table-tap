@@ -70,6 +70,7 @@ const PAGES = {
     sections: { "Busca por código": MANAGES, "Lo mejor calificado": MANAGES },
   },
   "/dashboard/promotions": { allow: MANAGES, marker: "Nuevo combo" },
+  "/dashboard/loyalty": { allow: MANAGES, marker: "Buscar una tarjeta" },
   "/dashboard/settings": {
     allow: MANAGES,
     marker: "Guardar ajustes de impuesto",

@@ -19,6 +19,7 @@ export const CREW = [
       "/dashboard/tables",
       "/dashboard/analytics",
       "/dashboard/promotions",
+      "/dashboard/loyalty",
       "/dashboard/settings",
       "/dashboard/staff",
       "/dashboard/plan",
@@ -38,6 +39,7 @@ export const CREW = [
       "/dashboard/tables",
       "/dashboard/analytics",
       "/dashboard/promotions",
+      "/dashboard/loyalty",
       "/dashboard/settings",
       "/dashboard/profile",
     ],
@@ -111,6 +113,9 @@ export const DIALOGS = {
     // the breadcrumb, and at 390px it made the page scroll sideways. `shows`
     // names what opens when it is not a [role=dialog].
     { name: "rename the menu", click: ".tt-menu-switcher-edit", shows: ".tt-menu-switcher-rename" },
+  ],
+  "/dashboard/loyalty": [
+    { name: "stamp a card", text: "Sellar tarjeta" },
   ],
   "/dashboard/staff": [
     // The button says what it does — "Enviar invitación" — not "Agregar".

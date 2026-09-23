@@ -87,6 +87,15 @@ export const STATES = [
     keeps: /^\s*(escanear|scan)\s*$/i,
   },
   {
+    // Its own page names the plan that carries it, and offers nothing to save.
+    name: "a plan without the visit card · its page",
+    as: "owner",
+    path: "/dashboard/loyalty",
+    apply: (admin, c) => admin.from("restaurants").update({ plan: "servicio", plan_status: "active" }).eq("id", c.restaurantId),
+    says: /viene con|comes with/i,
+    offers: /^\s*(guardar|save)\s*$/i,
+  },
+  {
     name: "a plan without the visit card · bills",
     as: "owner",
     path: "/dashboard/bills",
