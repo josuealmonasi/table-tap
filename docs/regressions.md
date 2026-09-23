@@ -30,6 +30,8 @@ us, and what now catches each one.
 | Every sign-in a gate makes has its error read | A failed sign-in turned nine of a manager's screens into oks nobody had seen |
 | The cancel dialog words its offer from the plan the cancel follows | A POS card sale, a table settled by card, and a table's online bill could never be cancelled — "still settling", for ever |
 | The live board is seeded by status, with no row limit | An order the kitchen had not started fell off the board after 100 newer ones, while the badge still counted it |
+| A sweep that clicks everything changes nothing | One `pnpm dialogs` run completed every live order, duplicated dishes and approved a write-off |
+| Every seed accepts the terms the app enforces | A hand-kept copy of the version fell a month behind, and every seeded account opened on the terms modal |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables
@@ -780,6 +782,28 @@ while the Pedidos badge, which counts by status, still counted it. Two places
 defining "live" differently: a status on one side, a recency window on the
 other. Reproduced with one order older than dev's newest 100 (board: none of it;
 database: one), and fixed by seeding the board with `LIVE_FLOW` itself.
+
+## The gate that emptied the board
+
+`pnpm dialogs` clicks every visible button on every screen, and most buttons do
+not open anything — they act. Measured once, a single run sent 72 writes: it
+completed all thirteen live orders on the demo board, moved menus and categories
+up and down 24 times, paused and resumed promotions, duplicated four dishes that
+were never removed, saved the settings, closed service requests, approved a
+write-off and turned down a discount. Every later `pnpm layout` found no order
+on the board, printed "order detail: did not open (no data)" and moved on — one
+gate had switched another gate's check off, and both printed green. Writes from
+the sweep are now answered in the browser and never reach the server, and the
+demo data is fingerprinted before and after; a run with the holding switched off
+fails on the fingerprint, naming orders, items, promotions, requests, write-offs
+and discounts. With it on, the whole gate chain leaves the board's thirteen
+orders where it found them.
+
+Making it unable to write showed the next thing: both seeds left accounts on the
+terms modal — `test-users.mjs` kept its own copy of the version, a month behind,
+and the demo restaurant recorded none — so the sweep measured every owner
+screen from underneath the modal. The seeds read the version from
+`src/lib/legal.ts` now, and an invariant refuses a copy.
 
 ## The decoder under the optimiser
 

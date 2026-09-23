@@ -21,6 +21,7 @@
 import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { populateMenu } from "./menu-catalog.mjs";
+import { TERMS_VERSION } from "./terms-version.mjs";
 import { bulkInsert, randInt, sample, shuffle } from "./menu-catalog.mjs";
 
 export const DEMO_RESTAURANT = "Demo Bistro";
@@ -202,9 +203,12 @@ export async function seedMock(pg) {
     // neither lands on a trial with no end, which never expires and shows the
     // owner "Prueba · quedan 0 días" for ever. The demo restaurant is meant to
     // look like somebody's real subscribed business.
-    `insert into restaurants (name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, owner_id, plan, plan_status, allow_pay_later, print_token, auto_print_kitchen)
-     values ($1, 'Fresh plates, fast service', '🍽️', 'MXN', 10, true, true, $2, 'casa', 'active', true, $3, true) returning id`,
-    [DEMO_RESTAURANT, ownerId, randomBytes(32).toString("base64url")],
+    // With the current terms accepted by its owner, like every seeded account:
+    // without it the demo opened on the terms modal after every rebuild.
+    `insert into restaurants (name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, owner_id, plan, plan_status, allow_pay_later, print_token, auto_print_kitchen,
+                              terms_version, terms_accepted_at, terms_accepted_email)
+     values ($1, 'Fresh plates, fast service', '🍽️', 'MXN', 10, true, true, $2, 'casa', 'active', true, $3, true, $4, now(), $5) returning id`,
+    [DEMO_RESTAURANT, ownerId, randomBytes(32).toString("base64url"), TERMS_VERSION, DEMO_OWNER.email],
   );
   const rid = rest.id;
 
