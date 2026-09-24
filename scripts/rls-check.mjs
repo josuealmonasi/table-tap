@@ -9,18 +9,20 @@
 //     the wrong restaurant?
 //
 //   pnpm rls            (dev, and the app on localhost:3000)
-//   pnpm rls --prod
+//
+// Never against production. The cases plant a neighbour to attack, and the
+// ones that ask whether a write is refused would, the day one is not, settle a
+// real restaurant's table or delete one of its rows. `rls:audit:prod` reads
+// production's own policies and grants instead.
 // ============================================================================
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { plantNeighbour } from "./rls-fixture.mjs";
-import { watchDevWorker } from "./preflight.mjs";
+import { refuseProduction, watchDevWorker } from "./preflight.mjs";
 
-const prod = process.argv.includes("--prod");
-process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
-const BASE = prod
-  ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
-  : "http://localhost:3000";
+refuseProduction("rls", "it plants rows, and asks for writes on a real restaurant that must be refused");
+process.loadEnvFile(join(process.cwd(), ".env.development.local"));
+const BASE = "http://localhost:3000";
 watchDevWorker(BASE);
 
 const anon = createClient(
@@ -42,7 +44,7 @@ function verdict(label, { data, error }) {
   else bad(`${label} — returned ${data.length} row(s)`);
 }
 
-console.log(`\nRLS check — ${prod ? "production" : "development"}\n`);
+console.log("\nRLS check — development\n");
 
 // ── 1. The publishable key, which ships to every phone ─────────────────────
 console.log("The key on every diner's phone");
@@ -138,8 +140,8 @@ const theirs = restaurants?.find(r => r.id !== mine?.id);
 // be empty — eight tables, eight green ticks, nothing asked. Planted here,
 // attacked by this section AND by the every-table sweep further down, and
 // removed at the end whatever happens in between.
-const fixture = !prod && theirs ? await plantNeighbour(admin, theirs.id) : null;
-if (!prod && theirs && !fixture?.planted.order) {
+const fixture = theirs ? await plantNeighbour(admin, theirs.id) : null;
+if (theirs && !fixture?.planted.order) {
   bad("could not plant anything in the restaurant next door — the reads below prove nothing");
 }
 
@@ -481,14 +483,8 @@ if (!signIn.error && theirs) {
   // twenty-one tables by finding nothing to attack — a green tick for a
   // question never asked, which is exactly how a leak survives a check that
   // "passed". Planted here, attacked below, removed after.
-  //
-  // Never against production. This plants rows, and production is somebody's
-  // real accounting: a probe order and a probe payment there would show up in
-  // their takings and in the corte. The sweep runs with whatever real data
-  // production happens to hold, and says plainly what it therefore could not
-  // reach.
   // Already planted, above, into the restaurant this sweep also attacks.
-  if (!prod && !fixture?.planted.payment) {
+  if (!fixture?.planted.payment) {
     bad("no neighbour's payment was planted — orders/payments went unchecked");
   }
 
@@ -504,11 +500,8 @@ if (!signIn.error && theirs) {
   if (untested.length) console.log(`  ..       no fixture, so not attacked: ${untested.join(", ")}`);
   for (const must of ["orders", "payments", "menu_items", "staff"]) {
     if (testable.includes(must)) continue;
-    // In development the fixture is planted, so a gap here is a real fault. In
-    // production nothing may be planted, so it is a limit of the sweep and is
-    // said out loud rather than counted as a pass.
-    if (prod) console.log(`  ..       ${must} has no second restaurant's rows here — not attacked`);
-    else bad(`${must} has no other restaurant's rows — this sweep proves nothing about it`);
+    // The fixture is planted, so a gap here is a real fault.
+    bad(`${must} has no other restaurant's rows — this sweep proves nothing about it`);
   }
 
   for (const [role, email] of TEAM) {
@@ -553,7 +546,8 @@ if (!signIn.error && theirs) {
 // one it is not. Without that, "no payload arrived" and "realtime is off" look
 // exactly alike — which is how this check would come to pass while proving
 // nothing.
-if (!prod) {
+// Its own block: it names its own restaurants, apart from the ones above.
+{
   console.log("\n  Realtime\n");
 
   const { data: rs2 } = await admin.from("restaurants").select("id, name");

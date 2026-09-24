@@ -118,7 +118,12 @@ almost every bug this app has had.
 `pnpm api` calls all 34 API routes with a legitimate request as the right actor
 and checks each one does its job — the other checks only ever proved that a
 route was *guarded*, not that it *worked*, and that gap is where the bugs came
-through. Any of them takes `:prod` to run against the deployed site.
+through. It is never run against production: every case does its job for
+real, and production's ledger is somebody's real accounting. Nor are `rls`,
+`attack`, or the states `promises` flips — each refuses `--prod` and exits 1.
+What reads the deployed site is `smoke:prod`, `roles:prod`, `layout:prod`,
+`dialogs:prod`, `money:prod`, `rls:audit:prod` and the sweeps of
+`promises:prod`.
 
 `pnpm attack` is the other half of that: what somebody who IS signed in can do
 that they should not. Another restaurant's table, a kitchen login collecting

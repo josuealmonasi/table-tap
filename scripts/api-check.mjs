@@ -10,26 +10,28 @@
 // for missing data — is the route working, which is why `expect` is a list.
 //
 //   pnpm api
-//   pnpm api --prod
+//
+// Never against production. Every case does its job for real — the fixture
+// plants tables, sittings, orders and payments, and the cases stamp cards,
+// redeem rewards and open checkouts — and production is somebody's real
+// accounting. `smoke:prod` and `roles:prod` read the deployed site instead.
 // ============================================================================
 import { join } from "node:path";
 import { setup, teardown } from "./api-fixtures.mjs";
 import { cases } from "./api-cases.mjs";
-import { requireServer, retryFetch } from "./preflight.mjs";
+import { refuseProduction, requireServer, retryFetch } from "./preflight.mjs";
 
-const prod = process.argv.includes("--prod");
-process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
-const BASE = prod
-  ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
-  : "http://localhost:3000";
+refuseProduction("api", "every case writes — it plants orders and payments, and stamps cards");
+process.loadEnvFile(join(process.cwd(), ".env.development.local"));
+const BASE = "http://localhost:3000";
 
-await requireServer(BASE, prod);
+await requireServer(BASE);
 
 let failed = 0;
 const ok = m => console.log(`    ok       ${m}`);
 const bad = m => { failed++; console.log(`    BAD      ${m}`); };
 
-console.log(`\nRequests — ${prod ? "production" : "development"}\n`);
+console.log("\nRequests — development\n");
 
 const fx = await setup(process.env, BASE);
 // What one case leaves for the next: the coupon that gets created is the one
@@ -159,7 +161,7 @@ try {
       }
     }
     if (c.save && res.status === 200) {
-      try { Object.assign(saved, c.save(JSON.parse(text))); } catch { /* sin cuerpo */ }
+      try { Object.assign(saved, c.save(JSON.parse(text))); } catch { /* no body */ }
     }
     ok(`${c.name}${c.expect.length > 1 ? ` (${res.status})` : ""}`);
     } finally {

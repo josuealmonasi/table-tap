@@ -1,8 +1,9 @@
 // ============================================================================
 // TableTap — attacking the routes that move money.
 //
-//   pnpm attack        against the local dev server
-//   pnpm attack:prod   against the deployed site (read-only cases only)
+//   pnpm attack        against the local dev server — never production: every
+//                      case plants an order to attack, and production's ledger
+//                      is somebody's real accounting.
 //
 // `pnpm api` proves a legitimate request works and `pnpm rls` proves the
 // database refuses a foreign row. Neither asks what happens when somebody who
@@ -20,16 +21,12 @@
 // ============================================================================
 import { createClient } from "@supabase/supabase-js";
 import { attackLoyalty } from "./attack-loyalty.mjs";
-import { watchDevWorker } from "./preflight.mjs";
+import { refuseProduction, watchDevWorker } from "./preflight.mjs";
 
-const prod = process.argv.includes("--prod");
-process.loadEnvFile(prod ? ".env.production.local" : ".env.development.local");
+refuseProduction("attack", "every case plants an order to attack");
+process.loadEnvFile(".env.development.local");
 
-// The same host every other prod-facing check uses, so this one cannot end up
-// quietly pointed somewhere else.
-const base = prod
-  ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
-  : "http://localhost:3000";
+const base = "http://localhost:3000";
 watchDevWorker(base);
 
 const admin = createClient(
@@ -91,13 +88,7 @@ async function takings(restaurantId) {
   );
 }
 
-console.log(`\nAttacking the money routes — ${prod ? "production" : "development"}\n`);
-
-if (prod) {
-  console.log("    –        production: nothing here may plant an order, so this is not run");
-  console.log("\nSkipped.\n");
-  process.exit(0);
-}
+console.log("\nAttacking the money routes — development\n");
 
 const { data: restaurants } = await admin.from("restaurants").select("id, name");
 const home = restaurants.find(r => r.name === "Demo Bistro") ?? restaurants[0];

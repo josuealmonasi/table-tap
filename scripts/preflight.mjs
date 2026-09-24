@@ -32,6 +32,24 @@ export async function requireServer(base, prod) {
 }
 
 /**
+ * Stop a gate that writes before it gets anywhere near production.
+ *
+ * Production is somebody's real accounting: a probe order or payment shows up
+ * in their takings and in the corte, and a switch flipped on the live
+ * restaurant stays flipped if the run dies halfway. The refusal exits 1, so a
+ * gate that checked nothing never reads as a pass in a chain of `&&`.
+ */
+export function refuseProduction(gate, why) {
+  if (!process.argv.includes("--prod")) return;
+  console.error(
+    `\n  ${gate} is not run against production: ${why}.\n` +
+      "  What reads the deployed site: smoke:prod, roles:prod, layout:prod, dialogs:prod,\n" +
+      "  money:prod, rls:audit:prod, and the sweeps of promises:prod.\n",
+  );
+  process.exit(1);
+}
+
+/**
  * Compile the routes a sweep is about to open, before it opens them.
  *
  * In development Next compiles a route the first time anything asks for it,
