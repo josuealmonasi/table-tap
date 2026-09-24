@@ -213,10 +213,9 @@ export function cases(fx) {
       path: "/api/loyalty/program", arrange: f => f.keepLoyaltyProgram(),
       body: { active: true, steps: [{ visits: 10, reward: "Free main" }, { visits: 3, reward: "Free coffee" }] }, expect: [200],
       check: async (_d, f) => {
-        const steps = await f.programSteps();
-        if (JSON.stringify(steps) !== JSON.stringify([{ visits: 3, reward: "Free coffee" }, { visits: 10, reward: "Free main" }])) {
-          return `the ladder was saved as ${JSON.stringify(steps)}`;
-        }
+        // Compared as values: jsonb keeps an object's keys in its own order.
+        const steps = (await f.programSteps() ?? []).map(s => `${s.visits}=${s.reward}`).join(", ");
+        if (steps !== "3=Free coffee, 10=Free main") return `the ladder was saved as ${steps}`;
         return (await f.programGoal()) === 10 || "the goal is not the last reward's visits";
       } },
     // A page open across the deploy still sends one goal and one reward.
