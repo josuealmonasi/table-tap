@@ -83,6 +83,56 @@ describe("a stylesheet only asks for tokens that exist", () => {
 });
 
 /**
+ * A colour is a token, or it is black or white.
+ *
+ * The rule was written down and never checked: the "orders paused" banner on
+ * the diner's menu kept a frozen `rgba()` of the orange the brand left behind,
+ * with teal text on it, long after the palette moved — and a scheduled menu's
+ * "live" pill, a combo's warning and the rating stars each carried a hex of
+ * their own. A literal looks right until the token it copied moves, and then
+ * it is silently the old colour. Outside `:root`, only black and white alphas
+ * (shadows, overlays) may be written as values.
+ */
+describe("a colour is a token", () => {
+  const css = readFileSync(CSS, "utf8");
+
+  /** Colour literals outside `:root`, comments blanked, with their line numbers. */
+  function literalsOutsideRoot(source: string): string[] {
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, " "));
+    const out: string[] = [];
+    let depth = 0;
+    let rootDepth: number | null = null;
+    code.split("\n").forEach((line, i) => {
+      if (rootDepth === null && /(^|[\s,]):root\b[^{]*\{/.test(line)) rootDepth = depth;
+      if (rootDepth === null) {
+        for (const m of line.matchAll(/#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?)\([^)]*\)/gi)) {
+          const v = m[0].toLowerCase().replace(/\s+/g, " ");
+          const blackOrWhite =
+            /^#(?:0{3}|0{6}|f{3}|f{6})$/.test(v) ||
+            /^rgba?\( ?(?:0[ ,]+0[ ,]+0|255[ ,]+255[ ,]+255)\b/.test(v);
+          if (!blackOrWhite) out.push(`${CSS}:${i + 1}  ${m[0]}`);
+        }
+      }
+      depth += (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
+      if (rootDepth !== null && depth <= rootDepth) rootDepth = null;
+    });
+    return out;
+  }
+
+  it("finds the colours it is looking for", () => {
+    // Read inside :root, the same scan must find the palette — or it would
+    // pass on a file it had stopped reading.
+    const root = css.slice(css.indexOf(":root"), css.indexOf("}", css.indexOf(":root")));
+    expect(literalsOutsideRoot(root.replace(":root", ".x")).length).toBeGreaterThan(10);
+  });
+
+  it("writes no colour outside :root but black and white", () => {
+    const found = literalsOutsideRoot(css);
+    expect(found, `use a token (or color-mix against one):\n${found.join("\n")}`).toEqual([]);
+  });
+});
+
+/**
  * A skeleton draws the shape of a screen, not its structure.
  *
  * The till's loading state reused `.tt-pos-total`, which carries a 2px rule in

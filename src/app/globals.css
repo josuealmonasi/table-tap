@@ -49,6 +49,9 @@
   --tt-success-wash: color-mix(in srgb, var(--tt-success) 10%, transparent);
   --tt-warning: #9a5b06;
   --tt-warning-wash: color-mix(in srgb, var(--tt-warning) 12%, transparent);
+  /* A rating's stars: amber, what other people thought, neither the accent
+     ("you can press this") nor a warning. */
+  --tt-star: #e8a020;
   /* Destructive. Crimson, pulled to the blue side of red on purpose: the two
      previous attempts (#c0392b, then #b3261e) both still sat in the orange
      band we moved the brand out of, so a Delete button kept reading as warm
@@ -4335,15 +4338,17 @@ a.tt-btn {
   }
 }
 
-/* Customer menu: shown when the restaurant paused orders */
+/* Customer menu: shown when the restaurant paused orders. A state, so the
+   warning tokens: it was a frozen rgba of the orange the brand left behind,
+   with teal text on it — the one place a diner still saw the old palette. */
 .tt-closed-banner {
   margin-top: 12px;
   padding: 10px 14px;
   border-radius: 12px;
   font-size: 14px;
-  background: rgba(200, 90, 40, 0.1);
-  color: var(--tt-accent);
-  border: 1px solid rgba(200, 90, 40, 0.25);
+  background: var(--tt-warning-wash);
+  color: var(--tt-warning);
+  border: 1px solid color-mix(in srgb, var(--tt-warning) 30%, transparent);
 }
 
 /* The visit card, from the menu: quieter than "follow your order", which is
@@ -5231,7 +5236,7 @@ a.tt-btn {
   align-items: center;
 }
 .tt-star-on {
-  color: #e8a020;
+  color: var(--tt-star);
 }
 .tt-star-off {
   color: var(--tt-line);
@@ -5359,7 +5364,7 @@ a.tt-btn {
   margin-top: 6px;
   font-size: 12.5px;
   line-height: 1.4;
-  color: #8a6100;
+  color: var(--tt-warning);
 }
 .tt-promo-warn svg {
   flex: none;
@@ -5502,8 +5507,8 @@ a.tt-btn {
   border-radius: 999px;
 }
 .tt-sched-live {
-  background: color-mix(in srgb, #1f7a4d 14%, transparent);
-  color: #14603a;
+  background: var(--tt-success-wash);
+  color: var(--tt-success);
 }
 .tt-sched-off {
   background: color-mix(in srgb, var(--tt-ink) 7%, transparent);
