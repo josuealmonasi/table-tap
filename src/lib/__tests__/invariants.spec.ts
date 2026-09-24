@@ -2062,3 +2062,25 @@ describe("prod:check compares what each permission is, not only its name", () =>
     expect(missing, "prod:check no longer compares").toEqual([]);
   });
 });
+
+describe("the attack gate leaves nothing behind when a case throws", () => {
+  it("marks every table it makes and sweeps by that mark before and after", () => {
+    // Each case tidied up after itself only when it finished. A dev worker
+    // restart threw one mid-race, and a MX$200 cash payment stayed on a sitting
+    // with no order — the next `pnpm money` would have called it a real
+    // overpayment. The sweep finds everything from the tables' labels, so a
+    // table made without the mark is a table it cannot find.
+    const src = read("scripts/attack-money.mjs").replace(/\/\/.*$/gm, "");
+    const inserts = [...src.matchAll(/from\("restaurant_tables"\)\s*\.insert\(\{([^}]*)\}/g)].map(m => m[1]);
+    expect(inserts.length, "the scan found no table the gate makes").toBeGreaterThan(3);
+    const unmarked = inserts.filter(body => !/label:\s*(MARK\b|`\$\{MARK)/.test(body));
+    expect(unmarked, "a table the sweep cannot find").toEqual([]);
+
+    const firstInsert = src.search(/\.insert\(/);
+    const firstSweep = src.search(/^await sweep\(\);$/m);
+    expect(firstSweep, "no sweep before the first row is planted").toBeGreaterThanOrEqual(0);
+    expect(firstSweep, "the sweep runs after something was already planted").toBeLessThan(firstInsert);
+    const lastFinally = src.lastIndexOf("} finally {");
+    expect(src.indexOf("await sweep();", lastFinally), "the last finally does not sweep").toBeGreaterThan(lastFinally);
+  });
+});
