@@ -108,6 +108,50 @@ const who = {
 // time — and an attack that alters a table the floor is using is an attack on
 // the restaurant rather than on the routes.
 const MARK = "attack-money";
+
+/**
+ * Everything this gate plants, found by its marker rather than remembered.
+ *
+ * Each case tidies up after itself — when it finishes. One that throws skips
+ * its own tidy-up: a dev worker restarted under the five-at-once collection,
+ * `Promise.all` threw, and a MX$200 cash payment stayed behind on a sitting
+ * with no order, which the next `pnpm money` would have reported as a real
+ * overpayment. Every table a case makes carries the marker in its label, so
+ * the sitting, the orders and the money on it are all found from there. Run
+ * before planting too, so a run killed outright is cleaned by the next one.
+ */
+async function sweep() {
+  const { data: tables } = await admin.from("restaurant_tables").select("id").like("label", `${MARK}%`);
+  const tableIds = (tables ?? []).map(t => t.id);
+  const { data: sittings } = tableIds.length
+    ? await admin.from("table_sessions").select("id").in("table_id", tableIds)
+    : { data: [] };
+  const sittingIds = (sittings ?? []).map(s => s.id);
+  const { data: marked } = await admin.from("orders").select("id").eq("note", MARK);
+  const orderIds = (marked ?? []).map(o => o.id);
+  // The ledger first: `payments.order_id` is `on delete set null`, so removing
+  // the orders first would cut these loose rather than remove them.
+  if (orderIds.length) await admin.from("payments").delete().in("order_id", orderIds);
+  if (sittingIds.length) {
+    await admin.from("payments").delete().in("session_id", sittingIds);
+    await admin.from("bill_splits").delete().in("session_id", sittingIds);
+  }
+  await admin.from("payments").delete().like("client_ref", `${MARK}%`);
+  await admin.from("orders").delete().eq("note", MARK);
+  // The last-portion race orders through the route, which writes no marker.
+  if (tableIds.length) await admin.from("orders").delete().in("table_id", tableIds);
+  if (sittingIds.length) await admin.from("table_sessions").delete().in("id", sittingIds);
+  if (tableIds.length) await admin.from("restaurant_tables").delete().in("id", tableIds);
+  // The lines those collections wrote, so the drawer and the ledger still
+  // agree afterwards. Found by the table's name, which nothing else has.
+  await admin.from("user_logs").delete().eq("entity", "bill").like("detail", `table=${MARK}%`);
+}
+await sweep();
+
+// The dish the last-portion race sells out, as it was — put back whatever
+// happens, or the demo menu loses a dish until the next reseed.
+let raced = null;
+
 const { data: table } = await admin
   .from("restaurant_tables").insert({ restaurant_id: home.id, label: MARK })
   .select("id, label").maybeSingle();
@@ -537,6 +581,7 @@ try {
     } else {
       const { data: spare } = await admin.from("restaurant_tables")
         .insert({ restaurant_id: home.id, label: `${MARK}-stock` }).select("id").maybeSingle();
+      raced = dish;
       await admin.from("menu_items")
         .update({ stock: 1, available: true, stock_auto_off: false }).eq("id", dish.id);
 
@@ -653,25 +698,14 @@ try {
   console.log("\n  The visit card\n");
   await attackLoyalty({ admin, post, who, home, ok, bad });
 } finally {
-  // Everything, in the order that leaves nothing holding a reference. The
-  // ledger first: `payments.order_id` is `on delete set null`, so removing the
-  // orders first would cut these loose rather than remove them.
-  const { data: mine } = await admin.from("orders").select("id").eq("note", MARK);
-  const ids = (mine ?? []).map(o => o.id);
-  if (ids.length) await admin.from("payments").delete().in("order_id", ids);
-  if (sitting?.id) {
-    await admin.from("payments").delete().eq("session_id", sitting.id);
-    await admin.from("bill_splits").delete().eq("session_id", sitting.id);
+  await sweep();
+  if (raced) {
+    await admin.from("menu_items").update({
+      stock: raced.stock, available: raced.available, stock_auto_off: false,
+    }).eq("id", raced.id);
+    await admin.from("notifications")
+      .delete().eq("restaurant_id", home.id).eq("kind", "out_of_stock");
   }
-  await admin.from("orders").delete().eq("note", MARK);
-  if (sitting?.id) await admin.from("table_sessions").delete().eq("id", sitting.id);
-  await admin.from("restaurant_tables").delete().eq("id", table.id);
-  // The lines those collections wrote, so the drawer and the ledger still
-  // agree afterwards. Found by the table's name, which nothing else has.
-  await admin.from("user_logs").delete()
-    .eq("restaurant_id", home.id).eq("entity", "bill")
-    .in("action", ["paid", "collected"])
-    .like("detail", `table=${MARK}%`);
 }
 
 console.log(

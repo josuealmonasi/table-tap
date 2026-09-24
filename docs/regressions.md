@@ -51,6 +51,7 @@ us, and what now catches each one.
 | No gate waits with `waitForFunction` | `layout:prod` failed all 220 screens before measuring one: production's CSP forbids the `eval` it runs on |
 | No gate that writes can reach production before it stops | `api --prod` ran against production five times and left its writes in the live activity log; `promises --prod` pointed the live demo at a Stripe account that does not exist |
 | `prod:check` compares each permission by what it is | Policies and functions were compared by name: an unapplied policy body, RLS switched off, or a function handed back to anon would all have passed |
+| The attack gate sweeps by its mark, before and after | A worker restart threw the five-at-once collection mid-case and left a MX$200 payment on a sitting with no order |
 | A screen money is counted on reads or refuses | A failed read on the bills board showed no open tables, or nothing already collected, so the whole bill looked owing again |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
@@ -1321,6 +1322,23 @@ both databases the day it was written, all 34 tables, 41 policies, 880 grants
 and 26 functions agreed. With production doctored in memory — #392 unapplied,
 one table's RLS off, `loyalty_redeem` executable by anon — it named all three
 and exited 1.
+
+## Litter from a case that threw
+
+The dev server replaced its worker while `pnpm attack` fired five collections
+at one table at once. One request died with it, `Promise.all` threw, and the
+case never reached its own tidy-up. The gate's last `finally` removed only the
+orders it had marked and the money on its main sitting, so the race's table,
+its sitting and a MX$200 cash payment with no order stayed in the demo. The
+next `pnpm money` would have reported a sitting holding MX$200 against nothing:
+a real-looking overpayment made by the test. The last-portion race had the same
+gap with a real dish, left at a stock of one.
+
+Every table the gate makes carries its mark in the label, and `sweep()` finds
+the sittings, orders, payments, splits and log lines from there. It runs before
+anything is planted, so a run killed outright is cleaned by the next one, and
+again in the last `finally`, which also puts the raced dish back. An invariant
+fails on a table made without the mark, or a sweep missing from either end.
 
 ## Before merging anything large
 
