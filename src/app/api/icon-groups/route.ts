@@ -39,15 +39,29 @@ function cleanIcons(icons: Body["icons"]): { emoji: string; label: string | null
   return out;
 }
 
-async function writeIcons(groupId: string, icons: ReturnType<typeof cleanIcons>) {
+/**
+ * Replaces a group's icons, and answers whether it did.
+ *
+ * Wholesale: it is a short list, so the order that arrives is the order that
+ * stays, with no reconciling of additions and removals one by one. But the old
+ * list was deleted before the new one was written and neither was checked, so
+ * a failed insert left the group empty while the manager was told it saved.
+ * The old list is read first and put back if the new one does not land.
+ */
+async function writeIcons(groupId: string, icons: ReturnType<typeof cleanIcons>): Promise<boolean> {
   const db = createAdminClient();
-  // Replaced wholesale: it is a short list, so the order that arrives is the
-  // order that stays, with no reconciling of additions and removals one by one.
-  await db.from("icon_group_items").delete().eq("group_id", groupId);
-  if (icons.length === 0) return;
-  await db.from("icon_group_items").insert(
+  const { data: before, error: readError } = await db
+    .from("icon_group_items").select("emoji, label, sort_order").eq("group_id", groupId);
+  if (readError) return false;
+  const { error: clearError } = await db.from("icon_group_items").delete().eq("group_id", groupId);
+  if (clearError) return false;
+  if (icons.length === 0) return true;
+  const { error } = await db.from("icon_group_items").insert(
     icons.map((icon, i) => ({ group_id: groupId, ...icon, sort_order: i })),
   );
+  if (!error) return true;
+  if (before?.length) await db.from("icon_group_items").insert(before.map(row => ({ group_id: groupId, ...row })));
+  return false;
 }
 
 export async function POST(req: NextRequest) {
@@ -83,7 +97,11 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error || !data) return await apiError("apiErr.invalidRequest", 500);
-  await writeIcons(data.id, icons);
+  if (!(await writeIcons(data.id, icons))) {
+    // Not left behind empty: a group with no icons is refused on the way in.
+    await db.from("icon_groups").delete().eq("id", data.id);
+    return await apiError("apiErr.iconGroupSave", 500);
+  }
   return NextResponse.json({ id: data.id });
 }
 
@@ -112,13 +130,14 @@ export async function PATCH(req: NextRequest) {
   if (name) patch.name = name.slice(0, 40);
   if (body.variant && VARIANTS.includes(body.variant)) patch.variant = body.variant;
   if (Object.keys(patch).length) {
-    await db.from("icon_groups").update(patch).eq("id", mine.id);
+    const { error } = await db.from("icon_groups").update(patch).eq("id", mine.id);
+    if (error) return await apiError("apiErr.iconGroupSave", 500);
   }
 
   if (body.icons) {
     const icons = cleanIcons(body.icons);
     if (icons.length === 0) return await apiError("apiErr.iconGroupEmpty", 400);
-    await writeIcons(mine.id, icons);
+    if (!(await writeIcons(mine.id, icons))) return await apiError("apiErr.iconGroupSave", 500);
   }
   return NextResponse.json({ ok: true });
 }

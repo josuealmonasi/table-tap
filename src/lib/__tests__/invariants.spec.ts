@@ -1891,3 +1891,25 @@ describe("a gate says when the dev server moved under it", () => {
     expect(blind, "a gate that cannot tell a restart from a failure").toEqual([]);
   });
 });
+
+describe("a list replaced wholesale is put back when the new one fails", () => {
+  // Editing a promotion or an icon group deletes the old list and inserts the
+  // new one. Neither delete was checked, and a failed insert (a dish another
+  // manager deleted mid-edit is a foreign-key refusal) left a promotion active
+  // with no products, and an icon group empty under "saved".
+  const REPLACERS: [string, string, RegExp][] = [
+    ["src/app/api/promotions/route.ts", "promotion_items", /insert\(before\.map\(/],
+    ["src/app/api/icon-groups/route.ts", "icon_group_items", /insert\(before\.map\(/],
+  ];
+
+  it("reads the old list first, checks the clear, and restores it", () => {
+    const offenders: string[] = [];
+    for (const [file, table, restore] of REPLACERS) {
+      const code = read(file).replace(/\/\/.*$/gm, "");
+      const readsFirst = new RegExp(`from\\("${table}"\\)\\.select\\(`).test(code);
+      const checksClear = new RegExp(`\\{ error: \\w+ \\} = await db\\.from\\("${table}"\\)\\.delete\\(\\)`).test(code);
+      if (!readsFirst || !checksClear || !restore.test(code)) offenders.push(file);
+    }
+    expect(offenders, `a replaced list that is lost when the new one fails:\n${offenders.join("\n")}`).toEqual([]);
+  });
+});

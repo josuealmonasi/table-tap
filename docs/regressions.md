@@ -1210,6 +1210,22 @@ the dev server now notes the worker's pid when it starts and, at exit, says so
 beside its failures when the worker changed, and an invariant keeps a new gate
 from skipping it.
 
+## Saved, with nothing in it
+
+Editing a promotion or an icon group replaces its list wholesale: delete the old
+rows, insert the new ones. The delete was never checked, and the icon group
+checked neither, so an insert that failed after the delete lost the list. The
+icon group answered `{ ok: true }` either way; the promotion said it could not
+attach its products, but had already dropped the old ones, and stayed active
+with none, which is the state its own create path refuses to leave. The diner's
+menu drops a combo with no products, so nothing was mis-sold, but the promotion
+quietly stopped working. Both routes check their input first (owned products,
+no repeated emoji), so reaching the failing insert takes a database fault or a
+dish deleted between the check and the write: rare, and silent when it happens.
+Each route now reads the old list first, checks the clear, and puts the old
+list back if the new one does not land; an icon group that fails as it is
+created is removed rather than left empty. An invariant holds both.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read

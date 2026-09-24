@@ -983,6 +983,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     dietaryTagName: "Give it a name with letters — an emoji alone is not enough.",
     dietaryTagTaken: "You already have a tag with that name.",
     iconGroupEmpty: "Add at least one icon to the group.",
+    iconGroupSave: "Couldn't save the icon group. Please try again.",
     pickPlan: "Pick a plan to subscribe to.",
     noBilling: "This restaurant has no subscription yet.",
     notYourStage: "Only the kitchen can move an order between stages.",
