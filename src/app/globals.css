@@ -7021,6 +7021,36 @@ a.tt-user-plan:hover {
   aspect-ratio: 1080 / 1350;
   margin: 0 auto;
 }
+/* The ladder's three notes, measured off the real page in Spanish: lines of
+   13px, as many as each wraps to at 360, 390, 820 and 1280. */
+.tt-loyalty-skel-steps {
+  height: 26px;
+}
+.tt-loyalty-skel-goal {
+  height: 39px;
+}
+.tt-loyalty-skel-round {
+  height: 52px;
+}
+@media (min-width: 375px) {
+  .tt-loyalty-skel-round {
+    height: 39px;
+  }
+}
+@media (min-width: 600px) {
+  .tt-loyalty-skel-steps,
+  .tt-loyalty-skel-goal {
+    height: 13px;
+  }
+  .tt-loyalty-skel-round {
+    height: 26px;
+  }
+}
+@media (min-width: 1025px) {
+  .tt-loyalty-skel-goal {
+    height: 26px;
+  }
+}
 @media (min-width: 600px) {
   .tt-loyalty-skel-hint {
     height: 28px;
