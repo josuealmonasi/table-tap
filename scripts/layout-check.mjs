@@ -105,7 +105,6 @@ async function gotoOnce(tab, url, opts) {
   }
 }
 
-/** Wait for real content: loading is not the same as having something to measure. */
 /**
  * Wait for the page to stop changing.
  *
@@ -115,19 +114,25 @@ async function gotoOnce(tab, url, opts) {
  * fully-rendered pages sat here for thirty seconds and were reported as
  * failures. Two consecutive samples that agree is what settled actually means,
  * and it does not care how much a screen has to say.
+ *
+ * Polled from here rather than with `waitForFunction`: Playwright runs that
+ * predicate through `eval` inside the page — a function too, not just a
+ * string — and production's CSP forbids `eval`, so against the deployed site
+ * every screen failed before it was measured. `evaluate` goes through the
+ * DevTools protocol, which a CSP does not govern, and the page keeps the
+ * policy it really ships with.
  */
 async function settle(tab) {
-  await tab.waitForFunction(
-    `(() => {
-      const n = document.body.innerText.trim().length;
-      if (n < 40) return false;
-      const before = window.__ttSettleLen;
-      window.__ttSettleLen = n;
-      return before === n;
-    })()`,
-    null,
-    { timeout: 30000, polling: 400 },
-  );
+  const deadline = Date.now() + 30000;
+  let before = -1;
+  for (;;) {
+    // A sample taken mid-navigation has no page to read; it just counts as unsettled.
+    const n = await tab.evaluate("document.body ? document.body.innerText.trim().length : 0").catch(() => -1);
+    if (n >= 40 && n === before) break;
+    if (Date.now() > deadline) throw new Error(`the page never settled in 30s (${n} characters of text)`);
+    before = n;
+    await tab.waitForTimeout(400);
+  }
   await tab.waitForTimeout(900);
 }
 

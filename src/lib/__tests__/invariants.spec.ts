@@ -1892,6 +1892,22 @@ describe("a gate says when the dev server moved under it", () => {
   });
 });
 
+describe("a gate can run against production's CSP", () => {
+  it("never waits with waitForFunction, which evals inside the page", () => {
+    // Playwright runs a waitForFunction predicate through `eval` in the page,
+    // even one passed as a function. Development allows `unsafe-eval` for the
+    // hot reloader and production does not (src/lib/csp.ts), so `pnpm layout`
+    // passed every day while `layout:prod` failed all 220 screens before
+    // measuring one. Poll with `evaluate`, which the CSP does not govern.
+    const files = fs.readdirSync("scripts").filter(f => f.endsWith(".mjs"));
+    expect(files.length, "the scan found no scripts").toBeGreaterThan(10);
+    const offenders = files.filter(f =>
+      /\.waitForFunction\s*\(/.test(read(`scripts/${f}`).replace(/\/\/.*$|\/\*[\s\S]*?\*\//gm, "")),
+    );
+    expect(offenders, "a gate that cannot run against the deployed site").toEqual([]);
+  });
+});
+
 describe("a list replaced wholesale is put back when the new one fails", () => {
   // Editing a promotion or an icon group deletes the old list and inserts the
   // new one. Neither delete was checked, and a failed insert (a dish another

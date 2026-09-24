@@ -48,6 +48,7 @@ us, and what now catches each one.
 | A request that says it worked reads its answer | "Llamar al mesero" said "¡En camino!" for a minute whatever came back, a refusal or no connection |
 | A refused move is not a dropped connection | A 403 from an expired sign-in was held as "saved, will be sent" and retried on every reconnect |
 | An order that could not be read is not a missing one | A failed read of an order was null, and the tracker answered a diner who had just ordered with "not found" |
+| No gate waits with `waitForFunction` | `layout:prod` failed all 220 screens before measuring one: production's CSP forbids the `eval` it runs on |
 | A screen money is counted on reads or refuses | A failed read on the bills board showed no open tables, or nothing already collected, so the whole bill looked owing again |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
@@ -1263,6 +1264,21 @@ The i18n check proves every key resolves and the English-code check looks for
 Spanish in code; English words written on screen passed both. The notice goes
 through `t("cart.extrasRemoved")` now, and an invariant fails on any notice,
 toast or error set from literal words.
+
+## A gate that could not run where it mattered
+
+`pnpm layout --prod` reported 220 problems, and every one was the same
+sentence: evaluating a string as JavaScript violates the Content Security
+Policy. It had been that way since the nonce policy landed on 2026-09-10
+(#306), two weeks before anyone ran it against production. The layout gate
+waited for each page to settle with Playwright's `waitForFunction`, which runs
+its predicate through `eval` inside the page — a function as much as a string.
+Development allows `unsafe-eval` because the hot reloader needs it; production
+does not, so the gate passed every day against the dev server and measured
+nothing on the deployed site. It polls with `evaluate` now, which goes through
+the DevTools protocol and leaves the page under the policy it ships with.
+Bypassing the CSP instead would have measured a page no diner ever sees. An
+invariant fails on any gate that calls `waitForFunction`.
 
 ## Before merging anything large
 
