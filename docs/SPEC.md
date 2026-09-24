@@ -860,6 +860,15 @@ hands over the picture; "No volver a preguntar" and a card already made are
 both remembered in that browser (`tt-loyalty:<restaurant>`), so the offer is
 made once per phone and again only if the phone forgets.
 
+**From the menu, any time.** The menu's header carries a "Tarjeta de visitas"
+row under the service buttons — the goal and the reward, one line on a phone —
+wherever the offer would be made. A phone that has not made a card opens the
+same offer in a sheet, without "no volver a preguntar", since the diner asked;
+a phone that has one goes to its card on `/rewards`. So a diner who wants the
+card before ordering, or said "ahora no" and changed their mind, has a way to
+it. The page asks `menuShowsLoyalty()` — the menu's own question — before the
+menu streams, so the skeleton holds the row and the list does not jump.
+
 **The card** is drawn on the phone, not the server — 1080 × 1350, the
 restaurant's mark and name on the accent, the goal and the reward, the QR, the
 code in groups of four — because the phone has the emoji a restaurant uses as

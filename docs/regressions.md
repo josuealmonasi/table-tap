@@ -1161,6 +1161,22 @@ shows the card a diner gets, reads a card with the camera, and stamps or
 redeems a looked-up card. `pnpm promises` opens the page both ways: on, it says
 so and keeps the scanner; off, it says so and offers no stamping.
 
+## A card with nothing between its border and its words
+
+`.tt-card` draws a frame and leaves the padding to whoever uses it. Every user
+set it inline except the visit card offer, so on the paid-order screen its
+sentence and its button sat on the border — in production, unnoticed, because
+the layout gate measures overlap and overflow and a box with no padding has
+neither. It showed the moment the same offer opened in the menu's sheet. The
+offer has its padding; inside the sheet it drops the frame, since the sheet is
+already one; and an invariant fails on any `tt-card` with no padding from its
+own style or another class.
+
+The same change found the menu's skeleton 41px short of a table's header — it
+drew the table as two small pills where the page has a badge and a service
+row — so every table menu jumped as it loaded. It is measured equal now at all
+four widths, the visit card row included.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read

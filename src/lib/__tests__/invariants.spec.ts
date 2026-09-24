@@ -1831,3 +1831,29 @@ describe("the offline refusal is only said where it is true", () => {
     expect(users.length, "no screen says it any more — the scan broke").toBeGreaterThan(0);
   });
 });
+
+describe("a card brings its own padding", () => {
+  it("never uses .tt-card without padding from its own style or another class", () => {
+    // `.tt-card` draws the frame — background, border, radius — and leaves
+    // the padding to whoever uses it. Every user set it inline except the
+    // visit card offer, whose words and button sat on the border on the
+    // paid-order screen until somebody opened it from the menu and looked.
+    const css = read("src/app/globals.css");
+    const padded = (cls: string): boolean =>
+      new RegExp(`(^|[\\s,])\\.${cls}\\s*(,[^{]*)?\\{[^}]*\\bpadding\\b`, "m").test(css);
+    const offenders: string[] = [];
+    const files = walkAll("src").filter(f => f.endsWith(".tsx") && !f.includes("__tests__"));
+    for (const file of files) {
+      const src = read(file);
+      for (const m of src.matchAll(/"([^"\n]*)"/g)) {
+        const classes = m[1].split(/\s+/);
+        if (!classes.includes("tt-card")) continue;
+        const tag = src.slice(m.index, src.indexOf(">", m.index));
+        const inline = /style=\{\{[^}]*\bpadding\b/.test(tag);
+        if (!inline && !classes.some(c => c !== "tt-card" && padded(c))) offenders.push(`${file}: "${m[1]}"`);
+      }
+    }
+    expect(files.some(f => read(f).includes('"tt-card')), "the scan found no card at all").toBe(true);
+    expect(offenders, `a card with nothing between its border and its words:\n${offenders.join("\n")}`).toEqual([]);
+  });
+});
