@@ -30,6 +30,7 @@ import { CookingPot } from "@phosphor-icons/react/dist/ssr/CookingPot";
 import { Crown } from "@phosphor-icons/react/dist/ssr/Crown";
 import { Stamp } from "@phosphor-icons/react/dist/ssr/Stamp";
 import { Camera } from "@phosphor-icons/react/dist/ssr/Camera";
+import { ClockCounterClockwise } from "@phosphor-icons/react/dist/ssr/ClockCounterClockwise";
 import { DownloadSimple } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
 import { ForkKnife } from "@phosphor-icons/react/dist/ssr/ForkKnife";
 import { Gear } from "@phosphor-icons/react/dist/ssr/Gear";
@@ -104,6 +105,8 @@ export const PromotionsIcon = Gift;
 export const LoyaltyIcon = Stamp;
 /** Reading a QR with the camera. */
 export const ScanIcon = Camera;
+/** "Lo de siempre": what this phone ordered before. */
+export const UsualIcon = ClockCounterClockwise;
 export const StaffIcon = Users;
 export const SettingsIcon = Gear;
 export const PlanIcon = CreditCard;

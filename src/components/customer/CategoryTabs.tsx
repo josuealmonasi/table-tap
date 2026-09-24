@@ -1,7 +1,7 @@
 "use client";
 
 import type { Category } from "@/lib/types";
-import { CouponIcon } from "@/components/ui/icons";
+import { CouponIcon, UsualIcon } from "@/components/ui/icons";
 import { useT } from "@/lib/i18n/context";
 
 /** The horizontal scrollable category filter at the top of the menu. */
@@ -10,10 +10,13 @@ export default function CategoryTabs({
   activeCat,
   onSelect,
   hasDeals = false,
+  hasUsual = false,
 }: {
   categories: Category[];
   activeCat: string;
   onSelect: (categoryId: string) => void;
+  /** Whether this phone has a usual here that today's menu can still make. */
+  hasUsual?: boolean;
   /** Whether there are combos, discounts or promotions to show. */
   hasDeals?: boolean;
 }) {
@@ -26,6 +29,17 @@ export default function CategoryTabs({
       >
         {t("menu.all")}
       </button>
+      {/* First after "Todo": the one tab that is about this diner. Only on a
+          phone that has ordered the same thing here before. */}
+      {hasUsual && (
+        <button
+          className={`tt-cat tt-cat-usual ${activeCat === "usual" ? "tt-cat-on" : ""}`}
+          onClick={() => onSelect("usual")}
+        >
+          <UsualIcon size={13} weight="bold" />
+          {t("menu.usual")}
+        </button>
+      )}
       {/* Right after "Todo", in the offers colour: a combo is not a menu
           category and a restaurant should not have to invent one to make it
           visible. It only appears when there is something in it. */}

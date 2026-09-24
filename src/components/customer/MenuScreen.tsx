@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import type { Category, MenuItem, Restaurant, RestaurantTable } from "@/lib/types";
+import type { Category, MenuItem, OrderLineItem, Restaurant, RestaurantTable } from "@/lib/types";
 import { tagLabel } from "@/lib/dietary";
 import { orderCode } from "@/lib/types";
 import { useDietaryTags } from "@/components/DietaryTagsContext";
@@ -18,10 +18,12 @@ import MenuItemRow from "./MenuItemRow";
 import CartBar from "./CartBar";
 import ServiceButtons from "./ServiceButtons";
 import LoyaltyMenuEntry from "./LoyaltyMenuEntry";
+import UsualCard from "./UsualCard";
 import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
 import LanguageToggle from "./LanguageToggle";
 import {
   CouponIcon,
+  UsualIcon,
   BillIcon,
   CloseIcon,
   FiltersIcon,
@@ -34,6 +36,8 @@ import RestaurantMark, { hasMark } from "@/components/ui/RestaurantMark";
 /** The menu browsing screen: restaurant header, category filter, item list, cart bar. */
 /** The offers tab is not one of the restaurant's categories: it is ours. */
 const DEALS = "deals";
+/** "Lo de siempre": this phone's own usual, a tab only where there is one. */
+const USUAL = "usual";
 
 export default function MenuScreen({
   restaurant,
@@ -52,6 +56,9 @@ export default function MenuScreen({
   notice,
   billDue = false,
   loyalty = null,
+  usual = [],
+  onAddUsual,
+  onForgetUsual,
   onOpenBill,
   trackIds,
   onTrack,
@@ -74,6 +81,10 @@ export default function MenuScreen({
   billDue?: boolean;
   /** The restaurant runs the visit card: the menu offers it, any time. */
   loyalty?: LoyaltyOfferInfo | null;
+  /** What this phone usually orders here, as today's menu can still make it. */
+  usual?: OrderLineItem[];
+  onAddUsual?: () => void;
+  onForgetUsual?: () => void;
   /** Something to say under the banners — the visit card, just after paying. */
   notice?: React.ReactNode;
   onOpenBill?: () => void;
@@ -90,7 +101,12 @@ export default function MenuScreen({
   // the same view. Read once — after mount the address bar is an output, not
   // an input, or every keystroke would fight the field for control of it.
   const initial = readMenuParams(new URLSearchParams(useSearchParams().toString()));
-  const [activeCat, setActiveCat] = useState<string>(initial.cat);
+  const [chosenCat, setActiveCat] = useState<string>(initial.cat);
+  // "Lo de siempre" is a tab only while there is a usual to show: a link that
+  // named it, or one just forgotten, lands on the whole menu instead.
+  const hasUsual = usual.length > 0;
+  const activeCat = chosenCat === USUAL && !hasUsual ? "all" : chosenCat;
+  const usualIds = useMemo(() => new Set(usual.map(l => l.itemId)), [usual]);
   const [search, setSearch] = useState(initial.q);
   const [searchOpen, setSearchOpen] = useState(Boolean(initial.q));
   const [diet, setDiet] = useState<string[]>(initial.diet);
@@ -161,12 +177,14 @@ export default function MenuScreen({
         ? items
         : activeCat === DEALS
           ? items.filter(i => Number(i.discount_pct) > 0 || promoIds.has(i.id))
-          : items.filter(i => i.category_id === activeCat);
+          : activeCat === USUAL
+            ? items.filter(i => usualIds.has(i.id))
+            : items.filter(i => i.category_id === activeCat);
     // An item must carry EVERY selected dietary tag (e.g. vegan AND gluten-free).
     if (diet.length)
       list = list.filter(i => diet.every(k => (i.dietary ?? []).includes(k)));
     return list;
-  }, [activeCat, items, search, diet, promoIds]);
+  }, [activeCat, items, search, diet, promoIds, usualIds]);
 
   // item id → the deal covering it, so the row can advertise it. First deal
   // wins, matching how the pricing engine picks one deal per product.
@@ -358,6 +376,7 @@ export default function MenuScreen({
                 categories={categories}
                 activeCat={activeCat}
                 hasDeals={hasDeals}
+                hasUsual={hasUsual}
                 onSelect={chooseCat}
               />
             )}
@@ -449,6 +468,16 @@ export default function MenuScreen({
                   >
                     {t("menu.all")}
                   </button>
+                  {hasUsual && (
+                    <button
+                      type="button"
+                      className={`tt-side-link tt-side-link-usual ${activeCat === USUAL ? "tt-side-link-on" : ""}`}
+                      onClick={() => chooseCat(USUAL)}
+                    >
+                      <UsualIcon size={14} weight="bold" />
+                      {t("menu.usual")}
+                    </button>
+                  )}
                   {/* On desktop the categories are this list, not the row of
                       pills: adding the offers tab there and not here left it
                       invisible on a large screen. */}
@@ -509,6 +538,16 @@ export default function MenuScreen({
             </aside>
 
             <div className="tt-dish-main">
+              {activeCat === USUAL && !search.trim() && onAddUsual && onForgetUsual && (
+                <UsualCard
+                  lines={usual}
+                  onAdd={onAddUsual}
+                  onForget={() => {
+                    chooseCat("all");
+                    onForgetUsual();
+                  }}
+                />
+              )}
               {filtered.length === 0 &&
                 shownCombos.length === 0 &&
                 (search.trim() || diet.length > 0) && (

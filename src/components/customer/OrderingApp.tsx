@@ -12,6 +12,7 @@ import {
 import { priceCart, type AppliedCoupon, type CartPromo } from "@/lib/pricing";
 import type { Combo } from "@/lib/promotions";
 import { useCart, type CartItem } from "@/hooks/useCart";
+import { forgetUsual, readUsual, rememberUsual, resolveUsual, type UsualEntry } from "@/lib/usual";
 import { useT } from "@/lib/i18n/context";
 import { readMenuParams, syncMenuUrl } from "@/lib/menu-params";
 import { Modal } from "@/components/ui/Modal";
@@ -128,6 +129,16 @@ export default function OrderingApp({
   const [tipCustom, setTipCustom] = useState<number | null>(null);
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
   const cart = useCart(restaurant.id);
+
+  // "Lo de siempre": read after mount — the server has no localStorage, and
+  // deciding there would flash a tab at a phone that has no usual. Offered as
+  // today's menu can make it, recomputed whenever the menu is.
+  const [usualEntries, setUsualEntries] = useState<UsualEntry[]>([]);
+  useEffect(() => setUsualEntries(readUsual(restaurant.id)), [restaurant.id]);
+  const usual = useMemo(
+    () => resolveUsual(usualEntries, items, extras, extrasByProduct),
+    [usualEntries, items, extras, extrasByProduct],
+  );
 
   // When a refresh drops a dish the diner already added, mark it sold out —
   // the same state the checkout would have produced, reached before they are
@@ -473,6 +484,7 @@ export default function OrderingApp({
         // order used to reach only the first.
         rememberMyOrder(restaurant.id, data.orderId);
         rememberRecentOrder(restaurant.id, data.orderId, table?.id);
+        rememberUsual(restaurant.id, orderableItems);
         if (customerName.trim()) rememberDinerName(restaurant.id, customerName);
         // This phone is now sitting at this table, and stays bound to it until
         // the bill is cleared.
@@ -492,6 +504,10 @@ export default function OrderingApp({
         return;
       }
       if (data.url) {
+        // Counted as ordered once the order exists; a checkout abandoned at
+        // Stripe still said what this diner likes, and all it changes is
+        // which dishes the menu suggests.
+        rememberUsual(restaurant.id, orderableItems);
         window.location.href = data.url; // Stripe Checkout
         return;
       }
@@ -677,6 +693,15 @@ export default function OrderingApp({
           onSelectItem={item => openItem(item)}
           onAddCombo={openCombo}
           onOpenCart={() => setScreen("cart")}
+          usual={usual}
+          onAddUsual={() => {
+            for (const line of usual) cart.addItem(line);
+            setScreen("cart");
+          }}
+          onForgetUsual={() => {
+            forgetUsual(restaurant.id);
+            setUsualEntries([]);
+          }}
           onTrack={id => setTracking(id ?? trackIds[0] ?? null)}
           billDue={Boolean(table && bill && !bill.settled)}
           // The visit card, offered once the money is settled — after the

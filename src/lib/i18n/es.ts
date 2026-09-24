@@ -149,6 +149,7 @@ export const es: Messages = {
     deleteIconGroupConfirm: "¿Eliminar el grupo “{name}”?",
     deleteIconGroupMsg: "Sólo se va la pestaña del selector. Los platillos que ya usan uno de estos iconos lo conservan.",
     deals: "Combos y ofertas",
+    usual: "Lo de siempre",
     openDish: "Abrir {name}",
     closedNowTitle: "Estamos cerrados en este momento",
     closedNowBody:
@@ -1646,6 +1647,12 @@ votes: "Votos",
     scanning: "Apunta la cámara al QR de la tarjeta.",
     closeCamera: "Cerrar cámara",
     stampHere: "Sellar visita",
+  },
+  usual: {
+    title: "Lo de siempre",
+    hint: "Lo que más pides aquí, con tus extras y tus notas. Se guarda solo en este teléfono.",
+    add: "Agregar lo de siempre",
+    forget: "Olvidar",
   },
   loyaltyMenu: {
     entry: "Tarjeta de visitas",

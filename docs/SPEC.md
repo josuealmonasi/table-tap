@@ -711,6 +711,25 @@ fail to be found: the half after the comma would be read as another condition,
 and anything shaped like `x,customer_name.not.is.null` would be a filter
 somebody typed into a search box.
 
+## "Lo de siempre": the diner's usual, one tap away
+
+A phone that has ordered the same thing at a restaurant twice or more is
+offered it back: a "Lo de siempre" tab on the menu — first after "Todo", in the
+chip row and the desktop sidebar — whose card lists up to three of the lines it
+orders most, each with its extras, options and note, and one button that puts
+them in the cart. It asks for no account and sends nothing: `src/lib/usual.ts`
+counts each line of every order placed from the phone in `tt-usual:<restaurant>`
+(localStorage, thirty lines at most), and "Olvidar" clears it.
+
+What is offered is rebuilt from the menu the page loaded, never from what was
+remembered: today's price, and only a line whose dish, every extra and every
+option are still on the menu and available — a usual that can no longer be made
+exactly as ordered is left out, not changed. With nothing left, there is no tab.
+The card shows no total on purpose: promotions and the table's charges are
+priced in the cart. The tab lives in a row of fixed height, so appearing after
+hydration moves nothing. `pnpm promises` seeds a usual into the browser and
+checks the tab is offered, and that it is not once its dish sells out.
+
 ## The connection is a requirement
 
 TableTap runs online, and the terms say so rather than implying it. Without a
