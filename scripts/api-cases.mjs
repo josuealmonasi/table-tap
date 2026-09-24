@@ -107,8 +107,14 @@ export function cases(fx) {
         const ask = () => fetch(`${f.base}/api/order-status?id=${paidOrder}`, {
           headers: { "x-forwarded-for": ROOM_ADDRESS },
         }).then(res => res.status);
-        for (let batch = 0; batch < 13; batch++) await Promise.all(Array.from({ length: 10 }, ask));
-        return () => f.admin.from("rate_limits").delete().eq("bucket", `order-status:${ROOM_ADDRESS}`);
+        const clear = () => f.admin.from("rate_limits").delete().eq("bucket", `order-status:${ROOM_ADDRESS}`);
+        try {
+          for (let batch = 0; batch < 13; batch++) await Promise.all(Array.from({ length: 10 }, ask));
+        } catch (e) {
+          await clear(); // a room half-counted would refuse the next run's first asks
+          throw e;
+        }
+        return clear;
       },
       expect: [200] },
     { name: "POST /api/service-requests", as: "diner", method: "POST", path: "/api/service-requests",
