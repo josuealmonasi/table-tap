@@ -1913,3 +1913,34 @@ describe("a list replaced wholesale is put back when the new one fails", () => {
     expect(offenders, `a replaced list that is lost when the new one fails:\n${offenders.join("\n")}`).toEqual([]);
   });
 });
+
+describe("every database function names its search path", () => {
+  it("sets search_path on each function in schema.sql", () => {
+    // A function without one resolves `dietary_tags` against whatever path
+    // the caller set, so a caller who puts their own schema first decides
+    // which table it writes. Supabase's advisor flagged the two seed functions
+    // after every other function already had it; this keeps the list at none.
+    const sql = read("supabase/schema.sql");
+    const fns = [...sql.matchAll(/create or replace function (public\.[a-z_]+)\([^)]*\)([\s\S]*?)\$\$/g)];
+    expect(fns.length, "no function found in schema.sql — the scan broke").toBeGreaterThan(20);
+    const open = fns.filter(([, , head]) => !/set search_path/.test(head)).map(([, name]) => name);
+    expect(open, "a function whose search path the caller decides").toEqual([]);
+  });
+});
+
+describe("a policy asks who is signed in once, not once a row", () => {
+  it("wraps auth.uid() in a select inside every policy", () => {
+    // A bare auth.uid() in a policy is evaluated for every row the query
+    // touches; (select auth.uid()) is evaluated once and means the same. The
+    // staff-membership policy runs on every dashboard request, and Supabase's
+    // advisor flagged it and the own-profile policy. Functions may call it
+    // bare — they run once per call.
+    const sql = read("supabase/schema.sql");
+    const policies = [...sql.matchAll(/create policy "([^"]+)"([\s\S]*?);/g)];
+    expect(policies.length, "no policy found in schema.sql — the scan broke").toBeGreaterThan(10);
+    const bare = policies
+      .filter(([, , body]) => /auth\.uid\(\)/.test(body.replace(/\(select auth\.uid\(\)\)/g, "")))
+      .map(([, name]) => name);
+    expect(bare, "a policy that asks auth.uid() once per row").toEqual([]);
+  });
+});
