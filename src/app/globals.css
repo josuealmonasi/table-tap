@@ -4369,9 +4369,14 @@ a.tt-btn {
   flex-shrink: 0;
   color: var(--tt-accent);
 }
+/* One line, always: the skeleton holds one line's room, and a reward like
+   "Postre gratis a elegir de la carta" wrapped to two at 360px. The sheet it
+   opens says the whole of it. */
 .tt-loyalty-entry-text {
   min-width: 0;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* "You have an order in progress" link on the menu — tappable, accent-filled. */
 .tt-track-banner {
