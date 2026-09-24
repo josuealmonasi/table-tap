@@ -10,7 +10,7 @@ interface UsualCardProps {
   onForget: () => void;
 }
 
-/** "2× 🥬 Coleslaw · Guacamole · Salsa: Verde · “sin cebolla”" */
+/** "2× 🥬 Coleslaw · Guacamole · Sauce: Green · “no onions”" */
 function describe(line: OrderLineItem): string {
   const parts = [
     ...(line.extras ?? []).map(e => e.name),
