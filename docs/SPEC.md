@@ -390,6 +390,15 @@ gets, measure it in a browser. `pnpm promises` learned the second one late: it
 swept whole pages for months without ever opening a DIALOG, which is where the
 bill lives, and three of its nine states now press a button first.
 
+After a merge the deployed site is checked by the gates that only read it:
+`prod:check`, `smoke:prod`, `roles:prod`, `layout:prod`, `dialogs:prod`,
+`money:prod`, `rls:audit:prod`, and the sweeps of `promises:prod`. The gates
+that write — `api`, `rls`, `attack`, and the states `promises` flips — refuse
+`--prod` and exit 1, because production's ledger is somebody's real accounting,
+and a guard that fails on the day it is tested would do its damage there. An
+invariant fails on any gate that can reach production and writes before it
+stops.
+
 `docs/regressions.md` is the list of bugs that have really shipped here and what
 now catches each one.
 

@@ -49,6 +49,7 @@ us, and what now catches each one.
 | A refused move is not a dropped connection | A 403 from an expired sign-in was held as "saved, will be sent" and retried on every reconnect |
 | An order that could not be read is not a missing one | A failed read of an order was null, and the tracker answered a diner who had just ordered with "not found" |
 | No gate waits with `waitForFunction` | `layout:prod` failed all 220 screens before measuring one: production's CSP forbids the `eval` it runs on |
+| No gate that writes can reach production before it stops | `api --prod` ran against production five times and left its writes in the live activity log; `promises --prod` pointed the live demo at a Stripe account that does not exist |
 | A screen money is counted on reads or refuses | A failed read on the bills board showed no open tables, or nothing already collected, so the whole bill looked owing again |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
@@ -1279,6 +1280,30 @@ nothing on the deployed site. It polls with `evaluate` now, which goes through
 the DevTools protocol and leaves the page under the policy it ships with.
 Bypassing the CSP instead would have measured a page no diner ever sees. An
 invariant fails on any gate that calls `waitForFunction`.
+
+## Gates that would have written to production
+
+Three gates took `--prod` and wrote to whatever they were pointed at.
+`api:prod` — which this guide recommended — plants tables, a sitting, orders
+and three payments, then stamps cards, redeems rewards and opens checkouts,
+because every case does its job for real. It was run against production five
+times, on 2026-09-10 and 2026-09-15. Its teardown removed what it planted, but
+the activity log outlives the rows it describes: six entries in the live demo's
+log still read `note=apicheck`, a waiter asking to write off a walkout and a
+manager writing one off. `rls --prod` plants an icon group in a real
+restaurant, and its write cases ask for a real restaurant's table to be settled
+in cash and one of its rows deleted — refused while every guard holds, done for
+real the day one does not. `promises --prod` flips the live demo's plan and
+`accepting_orders`, points it at a Stripe account called `acct_promise_audit`
+with charges on, and inserts a paid order; the restore runs in a `finally`, and
+a run killed halfway never reaches it. Only `attack` refused, and it printed
+"Skipped" and exited 0, so a chain of `&&` read it as a pass.
+
+All three now stop in `refuseProduction()` before they load an env file, and
+exit 1; `promises --prod` runs its read-only sweeps and skips the states. An
+invariant finds every script that can reach production and writes — through
+supabase-js, or by calling a local module that does — and fails unless a stop
+comes before the first write. Pointed at the old versions, it named all three.
 
 ## Before merging anything large
 

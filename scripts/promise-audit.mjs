@@ -17,7 +17,7 @@
 // silent is a broken screen.
 //
 //   pnpm promises
-//   pnpm promises --prod
+//   pnpm promises --prod   (the sweeps only: every state writes, see below)
 // ============================================================================
 import { join } from "node:path";
 import { chromium } from "playwright";
@@ -123,11 +123,28 @@ for (const [name, path] of [
 }
 await guest.close();
 
+async function finish() {
+  await browser.close();
+  console.log(failed === 0 ? "\nNo screen promises more than it has.\n" : `\n${failed} GAP(S) — review one by one.\n`);
+  process.exit(failed === 0 ? 0 : 1);
+}
+
 // ── States ─────────────────────────────────────────────────────────────────
 //
 // Each case changes one thing, looks, and hands back whatever it touched. A
 // check that leaves the demo switched off is a check that looks like a bug
 // tomorrow, so the restore runs whether the case passed, failed or threw.
+//
+// Never against production. Every state rewrites the restaurant it looks at —
+// its plan, its Stripe account, whether it takes orders — and some plant a
+// paid order or a table's bill. There that restaurant is live: a run killed
+// halfway would leave it locked, or sending diners to a Stripe account that
+// does not exist, with a probe sitting in its takings. The sweeps above only
+// read, and they did run.
+if (prod) {
+  console.log("\n  states\n\n    –        not run against production: every one rewrites the live restaurant");
+  await finish();
+}
 const { data: full } = await admin.from("restaurants").select("*").eq("id", restaurant.id).single();
 const { data: menuRows } = await admin.from("menus").select("id, active").eq("restaurant_id", restaurant.id);
 const { data: loyaltyProgram } = await admin
@@ -364,6 +381,4 @@ for (const state of STATES) {
   }
 }
 
-await browser.close();
-console.log(failed === 0 ? "\nNo screen promises more than it has.\n" : `\n${failed} GAP(S) — review one by one.\n`);
-process.exit(failed === 0 ? 0 : 1);
+await finish();

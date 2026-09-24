@@ -1995,3 +1995,46 @@ describe("a message on screen is in the reader's language", () => {
     expect(offenders, `words on screen that no translation reaches:\n${offenders.join("\n")}`).toEqual([]);
   });
 });
+
+describe("no gate writes to production", () => {
+  it("stops under --prod before the first write, in every gate that can reach it", () => {
+    // `pnpm api:prod` would plant tables, orders and three payments in the live
+    // ledger; `rls --prod` would have settled a real restaurant's table the
+    // day a guard broke; `promises --prod` pointed the live demo at a Stripe
+    // account that does not exist, and a run killed halfway left it there.
+    // A script that can reach production — it reads `--prod`, the production
+    // env file or the production host — and writes, itself or through a local
+    // module it imports, must end the run under production before its first
+    // write: `refuseProduction()`, or an `if (prod)` that exits.
+    const WRITE = /\.(insert|update|upsert|delete)\(/;
+    const STOP = /refuseProduction\(|if \(prod\) \{[^}]*?(process\.exit|finish)\(/;
+    const strip = (code: string) => code.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+    const scripts = fs.readdirSync("scripts").filter(f => f.endsWith(".mjs"));
+    const writesItself = (f: string) => WRITE.test(strip(read(`scripts/${f}`)));
+    const offenders: string[] = [];
+    let writers = 0;
+    let reachProduction = 0;
+    for (const file of scripts) {
+      const code = strip(read(`scripts/${file}`));
+      // Names imported from a local module that writes are writes when called.
+      const imported = [...code.matchAll(/import \{([^}]+)\} from "\.\/([\w-]+\.mjs)"/g)]
+        .filter(m => scripts.includes(m[2]) && writesItself(m[2]))
+        .flatMap(m => m[1].split(",").map(n => n.trim().split(/\s+as\s+/).pop() ?? ""))
+        .filter(Boolean);
+      const calls = imported.length ? new RegExp(`\\b(${imported.join("|")})\\(`) : null;
+      const firsts = [code.search(WRITE), calls ? code.search(calls) : -1].filter(i => i >= 0);
+      if (!firsts.length) continue;
+      writers++;
+      if (!/--prod|\.env\.production\.local|PROD_SITE_URL/.test(code)) continue;
+      reachProduction++;
+      const firstWrite = Math.min(...firsts);
+      const stop = code.search(STOP);
+      if (stop < 0 || stop > firstWrite) {
+        offenders.push(`scripts/${file}: writes at "${code.slice(firstWrite, firstWrite + 40).split("\n")[0]}" with nothing stopping it under --prod`);
+      }
+    }
+    expect(writers, "the scan found no gate that writes — it broke").toBeGreaterThanOrEqual(4);
+    expect(reachProduction, "no writing gate reaches production any more — the scan broke").toBeGreaterThanOrEqual(1);
+    expect(offenders, `a gate that would write to production:\n${offenders.join("\n")}`).toEqual([]);
+  });
+});
