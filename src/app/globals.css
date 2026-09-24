@@ -6947,12 +6947,19 @@ a.tt-user-plan:hover {
 }
 
 /* ── The visit card offered after paying, and the card as a picture ─────── */
+/* `.tt-card` draws the frame and leaves the padding to whoever uses it; this
+   one never set any, so its words and its button sat on the border. */
 .tt-loyalty-offer {
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin-top: 16px;
+  padding: 16px;
   min-width: 0;
+}
+.tt-loyalty-offer-sheet {
+  margin-top: 0;
+  padding: 0;
 }
 .tt-loyalty-offer-no {
   display: flex;

@@ -64,9 +64,13 @@ export default function LoyaltyOffer({ offer, asked = false }: LoyaltyOfferProps
     setOpen(false);
   }
 
+  // On the page it is a card of its own; in the menu's sheet the sheet is
+  // already the frame, and a bordered box inside it is a frame in a frame.
+  const frame = asked ? "tt-loyalty-offer tt-loyalty-offer-sheet" : "tt-card tt-loyalty-offer";
+
   if (card) {
     return (
-      <section className="tt-card tt-loyalty-offer" aria-live="polite">
+      <section className={frame} aria-live="polite">
         <strong>{t("loyaltyOffer.ready")}</strong>
         <p className="tt-muted" style={{ margin: 0 }}>{t("loyaltyOffer.saveHint")}</p>
         <CardDownload face={card.face} qr={card.qr} />
@@ -79,7 +83,7 @@ export default function LoyaltyOffer({ offer, asked = false }: LoyaltyOfferProps
   if (!open) return null;
 
   return (
-    <section className="tt-card tt-loyalty-offer">
+    <section className={frame}>
       <strong>{t("loyaltyOffer.title", { name: offer.restaurantName })}</strong>
       <p className="tt-muted" style={{ margin: 0 }}>
         {t("loyaltyOffer.body", { goal: offer.goal, reward: offer.reward })}
