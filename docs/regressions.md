@@ -49,6 +49,7 @@ us, and what now catches each one.
 | A refused move is not a dropped connection | A 403 from an expired sign-in was held as "saved, will be sent" and retried on every reconnect |
 | An order that could not be read is not a missing one | A failed read of an order was null, and the tracker answered a diner who had just ordered with "not found" |
 | A gate that reads production writes nothing there | `roles:prod` created a live 5% coupon, ZZZ-999, on the demo restaurant and re-sent it on every run |
+| Spanish inside an English comment is found, not averaged away | Five lines of Spanish in `schema.sql` passed the English check because the block around them was English |
 | No gate waits with `waitForFunction` | `layout:prod` failed all 220 screens before measuring one: production's CSP forbids the `eval` it runs on |
 | No gate that writes can reach production before it stops | `api --prod` ran against production five times and left its writes in the live activity log; `promises --prod` pointed the live demo at a Stripe account that does not exist |
 | `prod:check` compares each permission by what it is | Policies and functions were compared by name: an unapplied policy body, RLS switched off, or a function handed back to anon would all have passed |
@@ -1365,6 +1366,20 @@ has, and list what they held. Invariants fail on a write probe with no
 `passes`, and on a browser context in a production-capable gate that does not
 hold writes. ZZZ-999 is still on the live demo: removing it is the owner's
 call.
+
+## Spanish that hid inside English comments
+
+The English check scored each comment block as a whole, so Spanish written
+into an English block was outvoted by its neighbours. Five lines in
+`schema.sql` explaining why the `timezone` column is granted to diners, a
+sentence in the page guard, a clause in the discount-options route, the label
+row of the bills skeleton, and a sentence in the icon-group hook that switched
+language halfway through all passed. A lower threshold found them; the fix
+does not lower the threshold. It looks for a run of words with no English-only
+word in it and three Spanish-only ones, once quoted text is taken out, since an
+English comment may quote the Spanish UI it describes. Across the repo that
+flags exactly the five and nothing else, and each file put back as it was
+fails the check.
 
 ## Before merging anything large
 

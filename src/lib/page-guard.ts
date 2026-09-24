@@ -6,8 +6,8 @@ import { getMembership, MANAGES, SETTLES, type Membership } from "@/lib/membersh
  *
  * It was written by hand across nine pages in two different shapes: some asked
  * for `currentUser()` and then the membership, others only the membership; some
- * mandaban a `/login` y otras a `/dashboard`. Ninguna estaba mal —todas
- * refused — but nine copies of a permission rule are nine places where the next
+ * sent people to `/login` and others to `/dashboard`. None of them was wrong —
+ * all of them refused — but nine copies of a permission rule are nine places where the next
  * one gets written differently, and that is the exact shape of every bug in
  * this repo: two places that had to agree with nobody checking that they did.
  *

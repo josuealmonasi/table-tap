@@ -843,7 +843,7 @@ export function cases(fx) {
     { name: "DELETE /api/promotions", as: "manager", method: "DELETE", path: "/api/promotions",
       body: async f => ({ id: await promoId(f) }), expect: [200] },
 
-    // ── el equipo ────────────────────────────────────────────────────────
+    // ── the team ─────────────────────────────────────────────────────────
     // Inviting sends mail through Supabase's own service, which without SMTP
     // configured refuses valid addresses or caps at a few per hour. Today an owner
     // CANNOT add their team: the demo team exists because the seed creates it
