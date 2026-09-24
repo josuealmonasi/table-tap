@@ -131,7 +131,11 @@ function randomOrderDate(days) {
     d.setDate(d.getDate() - ((dow + 2) % 7)); // nudge toward the weekend
   }
   d.setHours(weightedHour(), randInt(0, 59), randInt(0, 59), 0);
-  if (d > new Date()) d.setHours(d.getHours() - 3); // never in the future
+  // Never in the future. Pulling a late hour back by three was not enough in
+  // the morning — seeded at 04:40, a 20:25 order stayed 12 hours ahead, and
+  // the board and today's numbers showed food nobody had ordered yet. The
+  // same hour a day earlier keeps the shape of the day.
+  while (d > new Date()) d.setDate(d.getDate() - 1);
   return d;
 }
 
@@ -506,7 +510,9 @@ export async function seedMock(pg) {
   for (const [key, group] of byDay) {
     const [tableId] = key.split(":");
     const opened = new Date(group[0].created_at);
-    const closed = new Date(new Date(group[group.length - 1].created_at).getTime() + 45 * 60000);
+    // Paid and gone 45 minutes after the last order, or now if that is later
+    // than now: a sitting cannot have closed in the future.
+    const closed = new Date(Math.min(new Date(group[group.length - 1].created_at).getTime() + 45 * 60000, Date.now()));
     const {
       rows: [session],
     } = await pg.query(
@@ -856,6 +862,17 @@ export async function seedMock(pg) {
 
   // The visit card, with a card at every stage. Its own file, like the menu.
   await seedLoyalty(pg, rid);
+
+  // Nothing seeded may have happened later than now. Orders from the future
+  // filled the board and today's numbers for a morning before anybody saw
+  // them; a seed that does it again stops here instead.
+  const { rows: [ahead] } = await pg.query(
+    `select (select count(*) from orders where restaurant_id = $1 and created_at > now())
+          + (select count(*) from table_sessions where restaurant_id = $1 and (opened_at > now() or closed_at > now()))
+          + (select count(*) from payments where restaurant_id = $1 and created_at > now()) as n`,
+    [rid],
+  );
+  if (Number(ahead.n) > 0) throw new Error(`the demo seed wrote ${ahead.n} row(s) dated after now`);
 
   return {
     restaurantId: rid,
