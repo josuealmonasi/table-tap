@@ -6,6 +6,7 @@ import type { CardFace } from "@/lib/loyalty/face";
 import type { QrGrid } from "@/lib/loyalty/qr-grid";
 import { nextStep } from "@/lib/loyalty/next-step";
 import { dateLocale } from "@/lib/format";
+import LadderSteps from "@/components/loyalty/LadderSteps";
 
 /** What /api/rewards answers: what the card itself would show, and no more. */
 export interface CardStanding {
@@ -13,7 +14,7 @@ export interface CardStanding {
   qr: QrGrid;
   restaurant: { name: string; logo: string | null; logo_url: string | null };
   active: boolean;
-  reward: string;
+  /** Its rewards included: the ladder is `standing.steps`. */
   standing: Standing;
   memberSince: string;
   lastVisit: string | null;
@@ -37,8 +38,10 @@ function dayLabel(day: string, locale: string): string {
 
 export default function RewardsCard({ card, locale }: RewardsCardProps) {
   const t = useT();
-  const { standing: s, reward } = card;
-  const next = nextStep(s, reward);
+  const { standing: s } = card;
+  const next = nextStep(s);
+  // The visits a reward lands on, marked on the row of dots.
+  const landings = new Set(s.steps.length > 1 ? s.steps.map(step => step.visits) : []);
   const nextLine = t(next.key, next.vars);
 
   return (
@@ -58,9 +61,13 @@ export default function RewardsCard({ card, locale }: RewardsCardProps) {
       <p className="tt-rewards-count">{t("rewards.visitsOf", { visits: s.visits, goal: s.goal })}</p>
       <div className="tt-rewards-dots" role="img" aria-label={t("rewards.visitsOf", { visits: s.visits, goal: s.goal })}>
         {Array.from({ length: s.goal }, (_, i) => (
-          <span key={i} className={i < s.visits ? "tt-rewards-dot tt-rewards-dot-on" : "tt-rewards-dot"} />
+          <span
+            key={i}
+            className={`tt-rewards-dot${i < s.visits ? " tt-rewards-dot-on" : ""}${landings.has(i + 1) ? " tt-rewards-dot-step" : ""}`}
+          />
         ))}
       </div>
+      <LadderSteps standing={s} />
 
       {s.ready && <p className="tt-rewards-ready">{t("rewards.ready")}</p>}
       <p className="tt-rewards-next">{nextLine}</p>

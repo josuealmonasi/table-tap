@@ -15,7 +15,7 @@
  * the text and fails when the two drift apart, so the decision to bump or not
  * is made deliberately rather than forgotten.
  */
-export const TERMS_VERSION = "2026-09-22";
+export const TERMS_VERSION = "2026-09-23";
 
 /**
  * Where the documents live.

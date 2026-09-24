@@ -6750,6 +6750,62 @@ a.tt-user-plan:hover {
   border-color: var(--tt-accent);
   background: var(--tt-accent);
 }
+/* A dot a reward lands on, on a card with more than one. */
+.tt-rewards-dot-step {
+  outline: 2px solid var(--tt-accent);
+  outline-offset: 2px;
+}
+/* Every reward on a card and where it stands — the diner's page, the stamp
+   result and the manager's lookup read the same list. */
+.tt-ladder {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  text-align: left;
+}
+.tt-ladder-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 10px;
+  border: 1px solid var(--tt-line);
+  border-radius: var(--tt-radius-sm);
+}
+.tt-ladder-visits {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tt-ladder-reward {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tt-ladder-state {
+  font-size: 12px;
+  color: var(--tt-muted);
+  white-space: nowrap;
+}
+.tt-ladder-ready {
+  border-color: color-mix(in srgb, var(--tt-success) 30%, transparent);
+  background: var(--tt-success-wash);
+}
+.tt-ladder-ready .tt-ladder-state {
+  color: var(--tt-success);
+  font-weight: 700;
+}
+.tt-ladder-done {
+  color: var(--tt-muted);
+}
+.tt-ladder-done .tt-ladder-reward {
+  text-decoration: line-through;
+}
 .tt-rewards-ready {
   margin: 4px 0 0;
   font-weight: 700;
@@ -6833,8 +6889,36 @@ a.tt-user-plan:hover {
   display: block;
   margin: 16px 0 6px;
 }
-.tt-loyalty-goal {
-  max-width: 120px;
+/* The reward ladder as the owner edits it: visits, reward, remove — one row
+   per reward. The visits column is narrow on purpose (two digits); the reward
+   takes the rest and is the column allowed to shrink. */
+.tt-ladder-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.tt-ladder-head,
+.tt-ladder-row {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr) 40px;
+  gap: 8px;
+  align-items: center;
+}
+.tt-ladder-head {
+  font-size: 12px;
+  color: var(--tt-muted);
+}
+.tt-ladder-row .tt-input {
+  min-width: 0;
+}
+.tt-ladder-remove {
+  width: 40px;
+  height: 40px;
+}
+.tt-ladder-add {
+  align-self: flex-start;
+  gap: 6px;
 }
 .tt-loyalty-card {
   margin-top: 14px;
@@ -6936,6 +7020,36 @@ a.tt-user-plan:hover {
   max-width: 100%;
   aspect-ratio: 1080 / 1350;
   margin: 0 auto;
+}
+/* The ladder's three notes, measured off the real page in Spanish: lines of
+   13px, as many as each wraps to at 360, 390, 820 and 1280. */
+.tt-loyalty-skel-steps {
+  height: 26px;
+}
+.tt-loyalty-skel-goal {
+  height: 39px;
+}
+.tt-loyalty-skel-round {
+  height: 52px;
+}
+@media (min-width: 375px) {
+  .tt-loyalty-skel-round {
+    height: 39px;
+  }
+}
+@media (min-width: 600px) {
+  .tt-loyalty-skel-steps,
+  .tt-loyalty-skel-goal {
+    height: 13px;
+  }
+  .tt-loyalty-skel-round {
+    height: 26px;
+  }
+}
+@media (min-width: 1025px) {
+  .tt-loyalty-skel-goal {
+    height: 26px;
+  }
 }
 @media (min-width: 600px) {
   .tt-loyalty-skel-hint {

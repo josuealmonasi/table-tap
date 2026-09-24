@@ -43,13 +43,19 @@ export async function POST(req: NextRequest) {
     .from("restaurants").select("name, logo, logo_url").eq("id", restaurantId).maybeSingle();
   if (!restaurant) return await apiError("apiErr.invalidRequest", 400);
 
+  // The card keeps the ladder it starts with, so an owner editing the program
+  // never moves a finish line a diner is already walking towards. A step with
+  // no reward cannot be kept (the database refuses it); such a card reads the
+  // program's reward instead, as every card did before the ladder.
+  const steps = program.steps.every(s => s.reward) ? program.steps : null;
+
   // Sixty random bits collide essentially never; three tries is for "never".
   for (let attempt = 0; attempt < 3; attempt++) {
     const code = newCode();
     const { error } = await db
-      .from("loyalty_cards").insert({ restaurant_id: restaurantId, code, goal: program.goal });
+      .from("loyalty_cards").insert({ restaurant_id: restaurantId, code, goal: program.goal, steps });
     if (!error) {
-      const face = cardFace(restaurant, program, { code, goal: program.goal, progress: 0 }, req.nextUrl.origin);
+      const face = cardFace(restaurant, { code, progress: 0, ladder: program.steps }, req.nextUrl.origin);
       return NextResponse.json({ code, face, qr: qrGrid(face.qrPayload) });
     }
     if (error.code !== "23505") {

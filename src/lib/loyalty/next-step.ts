@@ -6,6 +6,9 @@
 // "ready" on their phone has been told two different things by one system.
 // Once a card is ready the two part ways on purpose — the diner is told to
 // show their card, the staff are handed the button that redeems it.
+//
+// The reward named is always the NEXT one on the ladder: rewards are redeemed
+// in order, so that is the one the next visit, or the next tap, is about.
 // ============================================================================
 import type { Standing } from "@/lib/loyalty/standing";
 
@@ -14,8 +17,8 @@ export interface Sentence {
   vars?: Record<string, string | number>;
 }
 
-export function nextStep(s: Standing, reward: string): Sentence {
-  const r = reward.trim();
+export function nextStep(s: Standing): Sentence {
+  const r = (s.next?.reward ?? "").trim();
   if (s.ready) return r ? { key: "rewards.readyHint", vars: { reward: r } } : { key: "rewards.readyHintNoReward" };
   if (r) return { key: s.toGo === 1 ? "rewards.toGoOne" : "rewards.toGo", vars: { n: s.toGo, reward: r } };
   return { key: s.toGo === 1 ? "rewards.toGoOneNoReward" : "rewards.toGoNoReward", vars: { n: s.toGo } };

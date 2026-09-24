@@ -28,14 +28,14 @@ export default function StampCard({ buttonClass = "tt-btn tt-btn-ghost tt-btn-sm
   const [error, setError] = useState<string | null>(null);
   const found = useRef<string | null>(null);
 
-  async function send(path: string, code: string, kind: Outcome["kind"]): Promise<void> {
+  async function send(path: string, code: string, kind: Outcome["kind"], step?: number): Promise<void> {
     setBusy(true);
     setError(null);
     try {
       const res = await fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ code, step }),
       });
       const data = await res.json();
       if (!res.ok) setError(data.error ?? t("apiErr.generic"));
@@ -89,7 +89,7 @@ export default function StampCard({ buttonClass = "tt-btn tt-btn-ghost tt-btn-sm
             outcome={outcome}
             busy={busy}
             error={error}
-            onRedeem={() => void send("/api/loyalty/redeem", outcome.code, "redeem")}
+            onRedeem={() => void send("/api/loyalty/redeem", outcome.code, "redeem", outcome.standing.next?.visits)}
             onAnother={reset}
           />
         ) : (

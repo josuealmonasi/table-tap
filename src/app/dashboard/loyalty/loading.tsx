@@ -29,18 +29,31 @@ export default function LoyaltyLoading() {
             {gap(13)}
             <Skeleton height={52} radius={12} />
             {gap(16)}
-            <Skeleton width={180} height={15} />
+            <Skeleton width={110} height={16} />
             {gap(6)}
-            <Skeleton width={120} height={40} />
+            {/* The rewards, in the editor's own grid: one row, the state every
+                restaurant starts in and the program most keep. A ladder of
+                more rows lands 49px lower per extra reward; a skeleton cannot
+                know the count before the page does. */}
+            <div className="tt-ladder-editor">
+              <div className="tt-ladder-head">
+                <Skeleton width={44} height={13} />
+                <Skeleton width={70} height={13} />
+              </div>
+              <div className="tt-ladder-row">
+                <Skeleton height={41} radius={8} />
+                <Skeleton height={41} radius={8} />
+                <span className="tt-ladder-remove" />
+              </div>
+              <Skeleton width={173} height={34} radius={999} />
+            </div>
             {gap(12)}
-            <div className="tt-loyalty-skel-note"><Skeleton height="100%" /></div>
+            <div className="tt-loyalty-skel-steps"><Skeleton height="100%" /></div>
             {gap(12)}
-            <div className="tt-loyalty-skel-note"><Skeleton height="100%" /></div>
-            {gap(16)}
-            <Skeleton width={90} height={15} />
-            {gap(6)}
-            <Skeleton height={40} />
-            {gap(16)}
+            <div className="tt-loyalty-skel-goal"><Skeleton height="100%" /></div>
+            {gap(12)}
+            <div className="tt-loyalty-skel-round"><Skeleton height="100%" /></div>
+            {gap(28)}
             <Skeleton width={96} height={40} radius={999} />
           </div>
           <div className="tt-loyalty-col" aria-hidden="true">

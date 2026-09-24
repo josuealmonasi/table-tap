@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeCode } from "@/lib/loyalty/code";
 import { standing } from "@/lib/loyalty/standing";
 import { localToday } from "@/lib/loyalty/day";
+import { CARD_COLUMNS, cardState, programOf, type CardRow } from "@/lib/loyalty/server";
 
 export const runtime = "nodejs";
 
@@ -21,25 +22,27 @@ export async function GET(req: NextRequest) {
   const db = createAdminClient();
   const { data: card } = await db
     .from("loyalty_cards")
-    .select("id, goal, created_at")
+    .select(`${CARD_COLUMNS}, created_at`)
     .eq("restaurant_id", actor.restaurantId)
     .eq("code", code)
-    .maybeSingle();
+    .maybeSingle<CardRow & { created_at: string }>();
   if (!card) return await apiError("apiErr.loyaltyNotHere", 404);
 
-  const [progress, visits, spent, restaurant] = await Promise.all([
-    db.rpc("loyalty_progress", { p_card: card.id }),
+  const program = await programOf(actor.restaurantId);
+  const [state, visits, spent, restaurant] = await Promise.all([
+    cardState(card, program?.reward ?? ""),
     db.from("loyalty_visits").select("id, visit_day, actor_email").eq("card_id", card.id)
       .order("visit_day", { ascending: false }).limit(100),
     db.from("loyalty_redemptions").select("reward, actor_email, created_at").eq("card_id", card.id)
       .order("created_at", { ascending: false }).limit(50),
     db.from("restaurants").select("timezone").eq("id", actor.restaurantId).single(),
   ]);
+  if (!state) return await apiError("apiErr.generic", 500);
   const today = localToday(restaurant.data?.timezone ?? null);
 
   return NextResponse.json({
     code,
-    standing: standing(Number(progress.data ?? 0), card.goal),
+    standing: standing(state.progress, state.ladder, state.done),
     since: card.created_at.slice(0, 10),
     // Only today's may be undone: yesterday's visit is part of the record.
     visits: (visits.data ?? []).map(v => ({ id: v.id, day: v.visit_day, by: v.actor_email, undoable: v.visit_day === today })),

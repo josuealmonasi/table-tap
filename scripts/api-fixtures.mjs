@@ -50,27 +50,41 @@ export async function setup(env, base) {
   const { data: tables } = await admin
     .from("restaurant_tables").select("id, label").eq("restaurant_id", restaurant.id);
   // The demo's visit cards: one for the rewards lookup, one on its way that
-  // has no visit today, and one whose reward is ready. The stamp and redeem
-  // cases write visits and a redemption against them, so what the demo had is
-  // remembered here and put back by teardown — goals included, because a
-  // redemption moves a card to the program's current goal.
+  // has no visit today, and one whose next reward is ready — and whose reward
+  // after that is not, so spending it leaves a card that is plainly not ready.
+  // The stamp and redeem cases write visits and a redemption against them, so
+  // what the demo had is remembered here and put back by teardown — ladder,
+  // goal and round included, because closing a round moves all three.
   const { data: loyaltyCards } = await admin
-    .from("loyalty_cards").select("id, code, goal").eq("restaurant_id", restaurant.id);
+    .from("loyalty_cards").select("id, code, goal, steps, round_no").eq("restaurant_id", restaurant.id);
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: restaurant.timezone ?? "America/Mexico_City",
   }).format(new Date());
   const cardStates = [];
   for (const c of loyaltyCards ?? []) {
-    const [{ data: progress }, { count: todays }] = await Promise.all([
+    const [{ data: progress }, { count: todays }, { data: spent }] = await Promise.all([
       admin.rpc("loyalty_progress", { p_card: c.id }),
       admin.from("loyalty_visits").select("id", { count: "exact", head: true })
         .eq("card_id", c.id).eq("visit_day", today),
+      admin.from("loyalty_redemptions").select("step").eq("card_id", c.id).eq("round_no", c.round_no),
     ]);
-    cardStates.push({ ...c, progress: Number(progress), stampedToday: (todays ?? 0) > 0 });
+    // The same rule as src/lib/loyalty/standing.ts: the next reward is the
+    // lowest step not redeemed this round.
+    const ladder = Array.isArray(c.steps) && c.steps.length ? c.steps : [{ visits: c.goal }];
+    const done = new Set((spent ?? []).map(r => r.step));
+    const pending = ladder.filter(s => !done.has(s.visits));
+    cardStates.push({
+      ...c,
+      progress: Number(progress),
+      stampedToday: (todays ?? 0) > 0,
+      next: pending[0] ?? null,
+      afterNext: pending[1] ?? null,
+    });
   }
   const loyaltyCard = cardStates[0] ?? null;
-  const stampable = cardStates.find(c => c.progress < c.goal - 1 && !c.stampedToday) ?? null;
-  const readyCard = cardStates.find(c => c.progress >= c.goal) ?? null;
+  const stampable = cardStates.find(c => c.next && c.progress < c.next.visits - 1 && !c.stampedToday) ?? null;
+  const readyCard = cardStates.find(c =>
+    c.next && c.progress >= c.next.visits && (!c.afterNext || c.progress < c.afterNext.visits)) ?? null;
   // A card nobody holds, for the diner's "delete my card" to delete.
   // (No I, L, O or U in a code: the table's check refuses them.)
   const throwawayCode = "APXDEVETE000";
@@ -95,10 +109,14 @@ export async function setup(env, base) {
   // The program exactly as it was, put back after a case that edits it.
   const keepLoyaltyProgram = async () => {
     const { data: was } = await admin
-      .from("loyalty_programs").select("active, goal, reward").eq("restaurant_id", restaurant.id).maybeSingle();
+      .from("loyalty_programs").select("active, goal, reward, steps").eq("restaurant_id", restaurant.id).maybeSingle();
     return async () => {
       if (was) await admin.from("loyalty_programs").update(was).eq("restaurant_id", restaurant.id);
     };
+  };
+  const programSteps = async () => {
+    const { data } = await admin.from("loyalty_programs").select("steps").eq("restaurant_id", restaurant.id).maybeSingle();
+    return data?.steps ?? null;
   };
   const programGoal = async () => {
     const { data } = await admin.from("loyalty_programs").select("goal").eq("restaurant_id", restaurant.id).maybeSingle();
@@ -446,15 +464,17 @@ export async function setup(env, base) {
     loyaltyCode: loyaltyCard?.code ?? null,
     stampableCode: stampable?.code ?? null,
     readyCode: readyCard?.code ?? null,
+    readyStep: readyCard?.next?.visits ?? null,
     withLoyaltyOff,
     visitOf,
     throwawayCode,
     keepLoyaltyProgram,
     programGoal,
+    programSteps,
     loyaltyBefore: {
       visits: (visitsBefore ?? []).map(v => v.id),
       redemptions: (redemptionsBefore ?? []).map(r => r.id),
-      goals: cardStates.map(c => ({ id: c.id, goal: c.goal })),
+      goals: cardStates.map(c => ({ id: c.id, goal: c.goal, steps: c.steps, round_no: c.round_no })),
       cards: (cardsBefore ?? []).map(c => c.id),
     },
     paidOrder: await make({ paid: true }),
@@ -489,8 +509,8 @@ export async function teardown(fx) {
     const newRedemptions = (redemptionsNow ?? []).map(r => r.id).filter(id => !keptRedemptions.has(id));
     if (newVisits.length) await admin.from("loyalty_visits").delete().in("id", newVisits);
     if (newRedemptions.length) await admin.from("loyalty_redemptions").delete().in("id", newRedemptions);
-    for (const { id, goal } of fx.loyaltyBefore.goals) {
-      await admin.from("loyalty_cards").update({ goal }).eq("id", id);
+    for (const { id, goal, steps, round_no } of fx.loyaltyBefore.goals) {
+      await admin.from("loyalty_cards").update({ goal, steps, round_no }).eq("id", id);
     }
     // The cards the diner cases made, and the throwaway if it survived.
     const keptCards = new Set(fx.loyaltyBefore.cards);

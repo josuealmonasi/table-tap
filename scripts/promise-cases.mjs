@@ -107,6 +107,20 @@ export const STATES = [
     offers: /tarjeta de visitas|visit card/i,
   },
   {
+    // …and so does the menu's row, nearest reward first.
+    name: "a reward ladder · the menu",
+    says: /(visitas|visits) = free coffee/i,
+    keeps: /tarjeta de visitas|visit card/i,
+  },
+  {
+    // The demo's program is a ladder: the offer names every reward, not only
+    // the last, or a diner would never learn the coffee comes at four visits.
+    name: "a reward ladder · a paid order",
+    as: "tracker",
+    says: /4 (visitas|visits) = free coffee/i,
+    keeps: /crear mi tarjeta|get my card/i,
+  },
+  {
     name: "visit card switched off · a paid order",
     as: "tracker",
     apply: (admin, c) => admin.from("loyalty_programs").update({ active: false }).eq("restaurant_id", c.restaurantId),
@@ -129,6 +143,14 @@ export const STATES = [
     path: "/dashboard/loyalty",
     says: /está activa|is on/i,
     keeps: /sellar tarjeta|stamp a card/i,
+  },
+  {
+    // The ladder is edited here, a row per reward, up to four.
+    name: "a reward ladder · its page",
+    as: "owner",
+    path: "/dashboard/loyalty",
+    says: /hasta 4, cada una|up to 4, each/i,
+    keeps: /añadir recompensa|add a reward/i,
   },
   {
     // Switched off, the page used to be a bare form: nothing said the card was
