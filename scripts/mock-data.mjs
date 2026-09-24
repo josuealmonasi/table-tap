@@ -863,6 +863,17 @@ export async function seedMock(pg) {
   // The visit card, with a card at every stage. Its own file, like the menu.
   await seedLoyalty(pg, rid);
 
+  // Nothing seeded may have happened later than now. Orders from the future
+  // filled the board and today's numbers for a morning before anybody saw
+  // them; a seed that does it again stops here instead.
+  const { rows: [ahead] } = await pg.query(
+    `select (select count(*) from orders where restaurant_id = $1 and created_at > now())
+          + (select count(*) from table_sessions where restaurant_id = $1 and (opened_at > now() or closed_at > now()))
+          + (select count(*) from payments where restaurant_id = $1 and created_at > now()) as n`,
+    [rid],
+  );
+  if (Number(ahead.n) > 0) throw new Error(`the demo seed wrote ${ahead.n} row(s) dated after now`);
+
   return {
     restaurantId: rid,
     tableId: tables[0].id,
