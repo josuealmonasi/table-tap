@@ -147,6 +147,7 @@ export const en = {
     deleteIconGroupConfirm: "Delete the group “{name}”?",
     deleteIconGroupMsg: "Only the picker tab goes. Dishes already using one of these icons keep it.",
     deals: "Deals & combos",
+    usual: "Your usual",
     openDish: "Open {name}",
     closedNowTitle: "We're closed right now",
     closedNowBody:
@@ -1664,6 +1665,12 @@ votes: "Votes",
     stampHere: "Stamp a visit",
   },
   /** The visit card offered to a diner after paying, and the card itself. */
+  usual: {
+    title: "Your usual",
+    hint: "What you order most here, with your extras and notes. Kept on this phone only.",
+    add: "Add my usual",
+    forget: "Forget it",
+  },
   loyaltyMenu: {
     entry: "Visit card",
     mine: "My visit card",

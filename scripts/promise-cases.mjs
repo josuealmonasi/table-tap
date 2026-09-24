@@ -75,6 +75,23 @@ export const REFUSAL = {
   es: "Demasiadas solicitudes",
 };
 
+// "Lo de siempre": a phone that ordered the same dish twice is offered it
+// back. The dish is picked by name inside the main menu — the demo has two
+// dishes of some names, one per menu — and remembered here, so the case that
+// sells it out puts the same one back.
+let usualDishId = null;
+async function usualStorage(admin, c) {
+  const { data: menu } = await admin.from("menus").select("id")
+    .eq("restaurant_id", c.restaurantId).eq("name", "Main Menu").single();
+  const { data: dish } = await admin.from("menu_items").select("id")
+    .eq("menu_id", menu.id).eq("is_addon", false).eq("available", true)
+    .order("name").limit(1).single();
+  usualDishId = dish.id;
+  const usual = [{ itemId: dish.id, extras: [], mods: {}, qty: 1, count: 2, last: Date.now() }];
+  return { [`tt-usual:${c.restaurantId}`]: JSON.stringify(usual) };
+}
+const USUAL_TAB = /^\s*(lo de siempre|your usual)\s*$/i;
+
 export const STATES = [
   // The visit card's scanner, shown only where a stamp would be taken. The
   // first case is the control: with the program on the button is there, so
@@ -111,6 +128,23 @@ export const STATES = [
     name: "a reward ladder · the menu",
     says: /(visitas|visits) = free coffee/i,
     keeps: /tarjeta de visitas|visit card/i,
+  },
+  {
+    name: "your usual · the menu",
+    storage: usualStorage,
+    open: USUAL_TAB,
+    says: /lo que más pides aquí|what you order most/i,
+    keeps: /agregar lo de siempre|add my usual/i,
+  },
+  {
+    // Sold out since: the tab is not offered at all, rather than offering a
+    // usual the cart would refuse.
+    name: "your usual, its dish sold out · the menu",
+    storage: usualStorage,
+    apply: admin => admin.from("menu_items").update({ available: false }).eq("id", usualDishId),
+    undo: admin => admin.from("menu_items").update({ available: true }).eq("id", usualDishId),
+    says: /llamar al mesero|call waiter/i,
+    offers: USUAL_TAB,
   },
   {
     // The demo's program is a ladder: the offer names every reward, not only

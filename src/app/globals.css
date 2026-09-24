@@ -1751,7 +1751,9 @@ a.tt-btn {
    says "careful", not "there are discounts here". All it adds is a dot, which
    goes away once you are inside, because by then it has done its job. */
 .tt-cat-deal,
-.tt-side-link-deal {
+.tt-side-link-deal,
+.tt-cat-usual,
+.tt-side-link-usual {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -4351,6 +4353,38 @@ a.tt-btn {
   border: 1px solid color-mix(in srgb, var(--tt-warning) 30%, transparent);
 }
 
+/* "Lo de siempre": the lines this phone orders most, at the top of its tab. */
+.tt-usual {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  margin: 12px 0;
+  padding: 16px;
+  border: 1px solid var(--tt-line);
+  border-radius: var(--tt-radius);
+  background: var(--tt-white);
+}
+.tt-usual-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tt-usual-hint {
+  margin: 0;
+  font-size: 13px;
+}
+.tt-usual-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
 /* The visit card, from the menu: quieter than "follow your order", which is
    about food on its way, and one line on a phone so it costs the menu little. */
 .tt-loyalty-entry {

@@ -237,12 +237,21 @@ async function withTableBill(run, frozen = false) {
 
 console.log("\n  states\n");
 for (const state of STATES) {
+  // What the phone already remembers, worked out before `apply` changes the
+  // menu it is worked out from — a sold-out case must remember the dish that
+  // is about to sell out, not whichever one is left.
+  const storage = state.storage ? await state.storage(admin, ctx) : null;
   await state.apply?.(admin, ctx);
   const size = state.as === "owner" ? { width: 1280, height: 900 } : { width: 390, height: 844 };
   const context = await browser.newContext({ viewport: size });
   const cookies = [{ name: "tt-locale", value: "es", url: BASE }];
   if (state.as === "owner") cookies.push(await cookieFor(CREW[0].email));
   await context.addCookies(cookies);
+  if (storage) {
+    await context.addInitScript(entries => {
+      for (const [k, v] of entries) localStorage.setItem(k, v);
+    }, Object.entries(storage));
+  }
 
   // A button's text, matched against what is actually on screen.
   const visible = (tab, re) => tab.evaluate(
@@ -350,6 +359,7 @@ for (const state of STATES) {
     } else await visit(state.path ?? `/r/${restaurant.id}/t/${table.id}`);
   } finally {
     await context.close();
+    await state.undo?.(admin, ctx);
     await restore();
   }
 }
