@@ -1095,6 +1095,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     loyaltyRewardNeeded: "Escribe cuál es la recompensa antes de activar la tarjeta.",
     loyaltyVisitGone: "Esa visita ya no existe.",
     loyaltyVisitOld: "Solo se pueden quitar las visitas de hoy.",
+    loyaltyVisitSpent: "Ya se canjeó una recompensa después de este sello, así que no se puede quitar.",
     notAccepting:
       "El restaurante no está recibiendo pedidos en este momento. Inténtalo más tarde.",
     checkoutFailed: "El pago falló",

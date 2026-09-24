@@ -14,8 +14,9 @@ export const runtime = "nodejs";
 // A manager's, and only today's: the card scanned twice at the wrong table,
 // the waiter who stamped a card with nothing sold. Yesterday's visit is part of
 // the record a reward was earned on, and unpicking it later would let the
-// count be rewritten after the fact. Written in the activity log like the
-// stamp it undoes.
+// count be rewritten after the fact — and so is today's, once a reward has
+// been spent after it: taking it back then left the card owing a visit.
+// Written in the activity log like the stamp it undoes.
 export async function DELETE(req: NextRequest) {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
@@ -26,25 +27,30 @@ export async function DELETE(req: NextRequest) {
 
   const db = createAdminClient();
   const [{ data: visit }, { data: restaurant }] = await Promise.all([
-    db.from("loyalty_visits").select("id, visit_day, card_id, actor_email")
+    db.from("loyalty_visits").select("visit_day, actor_email")
       .eq("id", id).eq("restaurant_id", actor.restaurantId).maybeSingle(),
     db.from("restaurants").select("timezone").eq("id", actor.restaurantId).single(),
   ]);
   if (!visit) return await apiError("apiErr.loyaltyVisitGone", 404);
-  if (visit.visit_day !== localToday(restaurant?.timezone ?? null)) {
-    return await apiError("apiErr.loyaltyVisitOld", 409);
-  }
 
-  // Scoped again on the write: the id alone would reach any restaurant's row.
-  const { data: removed, error } = await db
-    .from("loyalty_visits").delete()
-    .eq("id", id).eq("restaurant_id", actor.restaurantId)
-    .select("id");
+  // Decided in the database, under the card's lock: the day, and whether a
+  // reward has been spent since — an undo racing a redemption must not win.
+  const { data: outcome, error } = await db.rpc("loyalty_unstamp", {
+    p_restaurant: actor.restaurantId,
+    p_visit: id,
+    p_today: localToday(restaurant?.timezone ?? null),
+  });
   if (error) {
     console.error("loyalty visit undo failed:", error.message);
     return await apiError("apiErr.generic", 500);
   }
-  if (!removed?.length) return await apiError("apiErr.loyaltyVisitGone", 404);
+  if (outcome === "gone") return await apiError("apiErr.loyaltyVisitGone", 404);
+  if (outcome === "old") return await apiError("apiErr.loyaltyVisitOld", 409);
+  if (outcome === "spent") return await apiError("apiErr.loyaltyVisitSpent", 409);
+  if (outcome !== "done") {
+    console.error("loyalty visit undo answered", outcome);
+    return await apiError("apiErr.generic", 500);
+  }
 
   await logEvent({
     restaurantId: actor.restaurantId,

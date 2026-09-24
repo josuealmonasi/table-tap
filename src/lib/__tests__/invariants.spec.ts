@@ -1561,6 +1561,25 @@ describe("the stamp button and the stamp are one decision", () => {
   });
 });
 
+describe("a visit card's count changes under the card's lock, or not at all", () => {
+  it("stamps, redeems and takes back through the locked functions, never a bare write", () => {
+    // Taking back a stamp was a bare delete, checked only for the day: a stamp
+    // a reward had just been spent on could be taken back, and the card was
+    // left owing a visit — a count below zero that every screen showed as
+    // nought. The three writes that move a card's count each go through a
+    // function that locks the card first, so none of them races another.
+    const routes = walkAll("src/app/api").filter(f => f.endsWith(".ts"));
+    const bare = routes.filter(f =>
+      /from\("loyalty_(visits|redemptions)"\)\s*\.(delete|insert|update|upsert)\(/.test(read(f)));
+    expect(bare, "a route writes visits or rewards directly").toEqual([]);
+    expect(read("src/app/api/loyalty/visit/route.ts")).toMatch(/rpc\("loyalty_unstamp"/);
+    const schema = read("supabase/schema.sql");
+    const unstamp = /function public\.loyalty_unstamp[\s\S]*?\$\$;/.exec(schema)?.[0] ?? "";
+    expect(unstamp, "loyalty_unstamp does not lock the card").toMatch(/from loyalty_cards c where c\.id = v_card for update/);
+    expect(unstamp, "loyalty_unstamp no longer refuses a stamp a reward was spent after").toMatch(/return 'spent'/);
+  });
+});
+
 describe("a date reads in the reader's language, not the machine's", () => {
   it("never formats a date with the server's default locale", () => {
     // `new Intl.DateTimeFormat([])` and a bare `toLocaleDateString()` answer in

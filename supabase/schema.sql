@@ -2836,6 +2836,44 @@ $$;
 revoke all on function public.loyalty_stamp(uuid, text, text) from public, anon, authenticated;
 grant execute on function public.loyalty_stamp(uuid, text, text) to service_role;
 
+-- Take back a stamp given by mistake: today's only, and not once a reward has
+-- been spent after it — that visit is then part of the record the reward was
+-- earned on, and taking it back left the card owing visits (a count below
+-- zero that every screen showed as nought). Locked on the card like the stamp
+-- and the redemption, so an undo and a redemption at the same instant cannot
+-- both go through. Answers what happened: done, gone, old or spent.
+create or replace function public.loyalty_unstamp(p_restaurant uuid, p_visit uuid, p_today date)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_card  uuid;
+  v_visit loyalty_visits%rowtype;
+begin
+  select v.card_id into v_card from loyalty_visits v
+   where v.id = p_visit and v.restaurant_id = p_restaurant;
+  if not found then return 'gone'; end if;
+  perform 1 from loyalty_cards c where c.id = v_card for update;
+
+  -- Read again under the lock: another undo may have taken it meanwhile.
+  select * into v_visit from loyalty_visits v
+   where v.id = p_visit and v.restaurant_id = p_restaurant;
+  if not found then return 'gone'; end if;
+  if v_visit.visit_day <> p_today then return 'old'; end if;
+  if exists (select 1 from loyalty_redemptions r
+              where r.card_id = v_visit.card_id and r.created_at >= v_visit.created_at) then
+    return 'spent';
+  end if;
+
+  delete from loyalty_visits v where v.id = p_visit;
+  return 'done';
+end;
+$$;
+revoke all on function public.loyalty_unstamp(uuid, uuid, date) from public, anon, authenticated;
+grant execute on function public.loyalty_unstamp(uuid, uuid, date) to service_role;
+
 -- Spend the card's next reward, once. Locked like the stamp, and refused —
 -- nothing returned — unless that reward is ready. The next reward is the lowest
 -- step of the card's ladder with no redemption in the card's current round

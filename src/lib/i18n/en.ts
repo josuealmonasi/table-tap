@@ -1100,6 +1100,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     loyaltyRewardNeeded: "Say what the reward is before switching the card on.",
     loyaltyVisitGone: "That visit is already gone.",
     loyaltyVisitOld: "Only today's visits can be taken back.",
+    loyaltyVisitSpent: "A reward was redeemed after this stamp, so it can't be taken back.",
     notAccepting: "The restaurant isn't taking orders right now. Please try again later.",
     checkoutFailed: "Checkout failed",
     verifyItems: "Could not verify items",

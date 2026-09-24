@@ -875,8 +875,11 @@ from a sample code. Any card looked up by its code, typed or read with the
 camera, with every visit, who stamped it and the rewards it spent — the page
 where a stamp with nothing sold behind it shows up — and, while the card is on,
 stamped or redeemed right there. A manager can take back a stamp given today,
-and nothing older: the record a reward was earned on is not rewritten after the
-fact. Saving, pausing and taking back a stamp all go in the activity log.
+and nothing older — and not today's either once a reward has been spent after
+it: the record a reward was earned on is not rewritten after the fact.
+`loyalty_unstamp()` decides it under the card's lock, like the stamp and the
+redemption, and the lookup offers the undo only where it would be taken.
+Saving, pausing and taking back a stamp all go in the activity log.
 
 **The offer.** Once a diner's order is paid — on the tracker, or on the menu
 at the moment the money is settled, by card or in cash to the waiter, the same
