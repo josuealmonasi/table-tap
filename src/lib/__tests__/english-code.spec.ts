@@ -149,9 +149,46 @@ function comments(src: string): string[] {
 function spanishComments(path: string): string[] {
   return comments(readFileSync(path, "utf8"))
     .filter(raw => {
-      return readsSpanish(raw.replace(/\b(EN|ES)\b/g, " "));
+      const text = raw.replace(/\b(EN|ES)\b/g, " ");
+      return readsSpanish(text) || spanishRun(text) !== null;
     })
-    .map(raw => `${path}  ${raw.slice(0, 70)}`);
+    .map(raw => `${path}  ${spanishRun(raw) ?? raw.slice(0, 70)}`);
+}
+
+/**
+ * A Spanish phrase inside a comment that is otherwise English.
+ *
+ * A block was scored as a whole, so Spanish written into an English comment
+ * was averaged away by its neighbours: five lines of `schema.sql` explaining
+ * the `timezone` grant, "mandaban a /login y otras a /dashboard" in the page
+ * guard, "incluido el formato" in the discount route, and a sentence that
+ * switched language halfway, "a second list here would be sitio donde la
+ * verdad puede separarse" — all passed. A run of words with no English-only
+ * word in it and three Spanish-only ones is Spanish, wherever it starts.
+ * Quoted text is taken out first: an English comment may quote the Spanish UI
+ * it is about.
+ */
+function spanishRun(block: string): string | null {
+  const unquoted = block.replace(/"[^"]*"|“[^”]*”|`[^`]*`|«[^»]*»/g, " | ");
+  let run: string[] = [];
+  let es = 0;
+  const end = (): string | null => {
+    const hit = es >= 3 ? run.join(" ") : null;
+    run = [];
+    es = 0;
+    return hit;
+  };
+  for (const raw of unquoted.split(/\s+/)) {
+    const word = raw.toLowerCase().replace(/[^a-záéíóúñü]/g, "");
+    if (raw.includes("|") || EN_ONLY.has(word)) {
+      const hit = end();
+      if (hit) return hit.slice(0, 70);
+      continue;
+    }
+    run.push(raw);
+    if (ES_ONLY.has(word)) es++;
+  }
+  return end()?.slice(0, 70) ?? null;
 }
 
 /**
@@ -234,6 +271,12 @@ describe("the code is written in English", () => {
   it("reads a SQL comment", () => {
     expect(lineComment("-- una política que no existe")).toBe("una política que no existe");
     expect(lineComment("  -- indented too")).toBe("indented too");
+  });
+
+  it("finds Spanish inside an English comment, even halfway through a sentence", () => {
+    expect(spanishRun("The grant is column-scoped on purpose. Sin el permiso la lectura fallaba y caía sin decir nada.")).not.toBeNull();
+    expect(spanishRun("A second list here would be sitio donde la verdad puede separarse.")).not.toBeNull();
+    expect(spanishRun('It is called "lo de siempre" on the menu, and the cart adds it whole.')).toBeNull();
   });
 
   it("reads a comment that does not open its line", () => {

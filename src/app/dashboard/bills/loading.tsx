@@ -11,8 +11,8 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
  * file the route fell back to the dashboard's own skeleton — a grid of nav
  * tiles, which is not this page at all.
  *
- * The real row wraps onto a second line — etiqueta e importe debajo del
- * nombre — so the placeholder carries those two blocks as well. A shimmer one
+ * The real row wraps onto a second line — the label and the amount under the
+ * name — so the placeholder carries those two blocks as well. A shimmer one
  * line shorter than what replaces it is a shimmer that lies.
  */
 export default function BillsLoading() {

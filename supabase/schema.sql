@@ -627,11 +627,11 @@ revoke all on coupons, coupon_redemptions from anon;
 -- Column-scoped on purpose: owner_id, Stripe ids and timestamps stay unreadable.
 -- A new column is invisible to customers until it is listed here, and it fails
 -- silently — the value simply reads as null.
--- `timezone` va en la lista porque el menú lo lee para decidir qué carta está
--- abierta a esta hora. Sin el permiso la lectura fallaba y caía en
--- America/Mexico_City sin decir nada: hoy no se nota porque todos los
--- restaurantes están ahí, y el día que entre uno en Cancún o Tijuana sus
--- horarios de menú abrirían a la hora equivocada.
+-- `timezone` is on the list because the menu reads it to decide which menu is
+-- open at this hour. Without the grant the read failed and fell back to
+-- America/Mexico_City without a word: it does not show today because every
+-- restaurant is there, and the day one opens in Cancún or Tijuana its menu
+-- schedules would open at the wrong hour.
 grant select (id, name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, logo_url, allow_pay_later, timezone, deals_tab_enabled, split_enabled) on restaurants to anon;
 
 -- And `authenticated` sees exactly the same, not the whole table. The revoke

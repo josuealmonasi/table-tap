@@ -17,7 +17,7 @@ export interface IconGroupInput {
  *
  * Refreshes from the server rather than keeping its own copy: the groups come
  * from the same query that paints the editor, and a second list here would be
- * sitio donde la verdad puede separarse.
+ * one more place for the truth to drift apart.
  */
 export function useIconGroups() {
   const router = useRouter();
