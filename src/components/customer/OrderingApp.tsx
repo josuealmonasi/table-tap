@@ -508,11 +508,7 @@ export default function OrderingApp({
       if (data.removedExtraIds) {
         cart.removeExtras(data.removedExtraIds);
         const names: string[] = data.removedExtraNames ?? [];
-        const many = names.length > 1;
-        setNotice(
-          `${names.join(", ")} ${many ? "are" : "is"} no longer available, so we removed ` +
-            `${many ? "them" : "it"} from your order. Review and pay again.`,
-        );
+        setNotice(t("cart.extrasRemoved", { names: names.join(", ") }));
         setLoading(false);
         return;
       }

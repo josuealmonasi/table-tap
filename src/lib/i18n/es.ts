@@ -395,6 +395,7 @@ myBill: "Ver mi cuenta",
   },
   cart: {
     stockTrimmed: "Lo ajustamos a lo que le queda a la cocina.",
+    extrasRemoved: "Ya no hay: {names}. Lo quitamos de tu pedido; revísalo y vuelve a intentarlo.",
     yourName: "¿A nombre de quién?",
     yourNamePlaceholder: "Opcional — para llamarte cuando esté listo",
     payLaterOnlyHint: "Ordena ahora y paga tu cuenta al final, en la mesa.",
