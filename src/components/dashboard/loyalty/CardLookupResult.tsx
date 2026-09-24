@@ -97,7 +97,8 @@ export default function CardLookupResult({ card, active, onChanged }: CardLookup
           {s.ready && (
             <button
               type="button"
-              className="tt-btn tt-btn-ghost tt-btn-sm"
+              // The secondary action beside a stamp; the only one when paused.
+              className={`tt-btn ${active ? "tt-btn-ghost" : "tt-btn-primary"} tt-btn-sm`}
               disabled={busy}
               onClick={() => void act("/api/loyalty/redeem", "POST", { code: card.code, step: s.next?.visits }, d =>
                 d.spent ? t("loyalty.redeemed", { reward: d.spent as string }) : t("loyalty.redeemedNoReward"))}
