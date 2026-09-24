@@ -1944,3 +1944,38 @@ describe("a policy asks who is signed in once, not once a row", () => {
     expect(bare, "a policy that asks auth.uid() once per row").toEqual([]);
   });
 });
+
+describe("a message on screen is in the reader's language", () => {
+  it("never builds a notice, toast or error out of literal words", () => {
+    // When an extra sold out at checkout the diner was told, in English on a
+    // Spanish menu, "Guacamole is no longer available, so we removed it from
+    // your order" — a template literal passed straight to setNotice. The key
+    // check only proves keys resolve, and the English-code check only looks
+    // for Spanish in code; English words on screen passed both. Every message
+    // goes through t() now; the only words allowed outside it are none.
+    const SETTERS = /\b(setNotice|toast|setError|setProblem|setMessage)\(/g;
+    const WORDS = /[A-Za-zÁÉÍÓÚáéíóúñÑ]{3,}\s+[A-Za-zÁÉÍÓÚáéíóúñÑ]{2,}/;
+    const offenders: string[] = [];
+    const files = walkAll("src").filter(f => /\.tsx?$/.test(f) && !f.includes("__tests__") && !f.includes("/i18n/"));
+    for (const file of files) {
+      const src = read(file);
+      for (const m of src.matchAll(SETTERS)) {
+        let i = (m.index ?? 0) + m[0].length;
+        let depth = 1;
+        const start = i;
+        while (i < src.length && depth) {
+          if (src[i] === "(") depth++;
+          else if (src[i] === ")") depth--;
+          i++;
+        }
+        const arg = src.slice(start, i - 1).replace(/\bt\((?:[^()]|\([^()]*\))*\)/g, "T");
+        for (const lit of arg.matchAll(/"([^"\n]*)"|`([^`]*)`|'([^'\n]*)'/g)) {
+          const text = (lit[1] ?? lit[2] ?? lit[3] ?? "").replace(/\$\{[^}]*\}/g, "");
+          if (WORDS.test(text)) offenders.push(`${file}: ${m[1]}(… "${text.slice(0, 50)}" …)`);
+        }
+      }
+    }
+    expect(files.length, "no source found — the scan broke").toBeGreaterThan(50);
+    expect(offenders, `words on screen that no translation reaches:\n${offenders.join("\n")}`).toEqual([]);
+  });
+});

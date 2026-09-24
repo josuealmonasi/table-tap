@@ -1253,6 +1253,17 @@ profile — for calling `auth.uid()` bare, which is evaluated once per row.
 Wrapped in `(select auth.uid())` it means the same and is evaluated once; an
 invariant keeps every policy that way.
 
+## English on a Spanish menu, from a template literal
+
+When an extra sold out between adding it and paying, the cart dropped it and
+told the diner "Guacamole is no longer available, so we removed it from your
+order. Review and pay again." — in English, whatever the menu's language,
+because the sentence was a template literal handed straight to `setNotice`.
+The i18n check proves every key resolves and the English-code check looks for
+Spanish in code; English words written on screen passed both. The notice goes
+through `t("cart.extrasRemoved")` now, and an invariant fails on any notice,
+toast or error set from literal words.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read

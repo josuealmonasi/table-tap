@@ -400,6 +400,7 @@ myBill: "View my bill",
   },
   cart: {
     stockTrimmed: "We reduced it to what the kitchen still has.",
+    extrasRemoved: "No longer available: {names}. We took it out of your order — check it and try again.",
     yourName: "What name is it under?",
     yourNamePlaceholder: "Optional — so we can call you when it is ready",
     payLaterOnlyHint: "Order now and settle your bill at the end, at the table.",
