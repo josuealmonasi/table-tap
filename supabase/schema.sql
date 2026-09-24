@@ -765,7 +765,7 @@ create policy "owner deletes staff"
 drop policy if exists "staff reads own membership" on staff;
 create policy "staff reads own membership"
   on staff for select
-  using (user_id = auth.uid());
+  using (user_id = (select auth.uid()));
 
 -- PROFILES: each user manages only their own row; the owner can additionally
 -- read their staff's profiles so the Staff page can show real names.
@@ -773,8 +773,8 @@ alter table profiles enable row level security;
 drop policy if exists "own profile" on profiles;
 create policy "own profile"
   on profiles for all
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
 drop policy if exists "owner reads staff profiles" on profiles;
 create policy "owner reads staff profiles"
   on profiles for select

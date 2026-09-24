@@ -1927,3 +1927,20 @@ describe("every database function names its search path", () => {
     expect(open, "a function whose search path the caller decides").toEqual([]);
   });
 });
+
+describe("a policy asks who is signed in once, not once a row", () => {
+  it("wraps auth.uid() in a select inside every policy", () => {
+    // A bare auth.uid() in a policy is evaluated for every row the query
+    // touches; (select auth.uid()) is evaluated once and means the same. The
+    // staff-membership policy runs on every dashboard request, and Supabase's
+    // advisor flagged it and the own-profile policy. Functions may call it
+    // bare — they run once per call.
+    const sql = read("supabase/schema.sql");
+    const policies = [...sql.matchAll(/create policy "([^"]+)"([\s\S]*?);/g)];
+    expect(policies.length, "no policy found in schema.sql — the scan broke").toBeGreaterThan(10);
+    const bare = policies
+      .filter(([, , body]) => /auth\.uid\(\)/.test(body.replace(/\(select auth\.uid\(\)\)/g, "")))
+      .map(([, name]) => name);
+    expect(bare, "a policy that asks auth.uid() once per row").toEqual([]);
+  });
+});

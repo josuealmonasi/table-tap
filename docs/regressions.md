@@ -1247,6 +1247,12 @@ with the caller's own rights and are closed to browser keys, so nothing was
 open; they set `search_path = public` now, and an invariant fails on any
 function in `schema.sql` that does not name one.
 
+The same advisor's performance pass flagged two policies — the staff
+membership check that runs on every dashboard request, and a user's own
+profile — for calling `auth.uid()` bare, which is evaluated once per row.
+Wrapped in `(select auth.uid())` it means the same and is evaluated once; an
+invariant keeps every policy that way.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read
