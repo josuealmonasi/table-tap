@@ -8,7 +8,8 @@ import { codeFromScan, formatCode, normalizeCode } from "@/lib/loyalty/code";
 import CardLookupResult, { type LookedUp } from "./CardLookupResult";
 
 interface CardLookupProps {
-  /** The program is on, so the card can be stamped and redeemed from here. */
+  /** The program is on, so the card can be stamped here. A reward already
+   *  earned is redeemed from here either way. */
   active: boolean;
 }
 
