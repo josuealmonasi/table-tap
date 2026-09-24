@@ -29,6 +29,7 @@ import { ClipboardText } from "@phosphor-icons/react/dist/ssr/ClipboardText";
 import { CookingPot } from "@phosphor-icons/react/dist/ssr/CookingPot";
 import { Crown } from "@phosphor-icons/react/dist/ssr/Crown";
 import { Stamp } from "@phosphor-icons/react/dist/ssr/Stamp";
+import { Camera } from "@phosphor-icons/react/dist/ssr/Camera";
 import { DownloadSimple } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
 import { ForkKnife } from "@phosphor-icons/react/dist/ssr/ForkKnife";
 import { Gear } from "@phosphor-icons/react/dist/ssr/Gear";
@@ -101,6 +102,8 @@ export const AnalyticsIcon = ChartBar;
 export const PromotionsIcon = Gift;
 /** The visit card: a stamp per visit. */
 export const LoyaltyIcon = Stamp;
+/** Reading a QR with the camera. */
+export const ScanIcon = Camera;
 export const StaffIcon = Users;
 export const SettingsIcon = Gear;
 export const PlanIcon = CreditCard;
