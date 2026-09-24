@@ -1913,3 +1913,17 @@ describe("a list replaced wholesale is put back when the new one fails", () => {
     expect(offenders, `a replaced list that is lost when the new one fails:\n${offenders.join("\n")}`).toEqual([]);
   });
 });
+
+describe("every database function names its search path", () => {
+  it("sets search_path on each function in schema.sql", () => {
+    // A function without one resolves `dietary_tags` against whatever path
+    // the caller set, so a caller who puts their own schema first decides
+    // which table it writes. Supabase's advisor flagged the two seed functions
+    // after every other function already had it; this keeps the list at none.
+    const sql = read("supabase/schema.sql");
+    const fns = [...sql.matchAll(/create or replace function (public\.[a-z_]+)\([^)]*\)([\s\S]*?)\$\$/g)];
+    expect(fns.length, "no function found in schema.sql — the scan broke").toBeGreaterThan(20);
+    const open = fns.filter(([, , head]) => !/set search_path/.test(head)).map(([, name]) => name);
+    expect(open, "a function whose search path the caller decides").toEqual([]);
+  });
+});

@@ -1237,6 +1237,16 @@ the second answer, so a repeat that crashed the route would still have passed
 on the ledger alone. It fails on a 5xx now. The lint step covers `scripts/` and
 fails on any warning, in the app or the gates.
 
+## Two functions whose search path the caller chose
+
+Supabase's security advisor, run against production after the loyalty
+migrations, flagged the two functions that seed a new restaurant's dietary
+tags: every other function in the schema fixes its `search_path`, and these
+two resolved `dietary_tags` against whatever path the caller had set. Both run
+with the caller's own rights and are closed to browser keys, so nothing was
+open; they set `search_path = public` now, and an invariant fails on any
+function in `schema.sql` that does not name one.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read

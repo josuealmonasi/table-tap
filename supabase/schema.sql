@@ -1181,7 +1181,9 @@ grant select on dietary_tags to anon;
 -- the code carried, so existing dishes stay attached to theirs and the
 -- translations keep working.
 create or replace function public.seed_dietary_tags(p_restaurant uuid)
-returns void language sql as $$
+returns void language sql
+set search_path = public
+as $$
   insert into dietary_tags (restaurant_id, key, label, label_en, emoji, sort_order)
   select p_restaurant, d.key, d.label, d.label_en, d.emoji, d.ord
     from (values
@@ -1208,7 +1210,9 @@ grant execute on function public.seed_dietary_tags(uuid) to service_role;
 -- creates a restaurant seeds them — registration, the test data, a seed run by
 -- hand — and none of them can forget.
 create or replace function public.seed_dietary_tags_on_new_restaurant()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql
+set search_path = public
+as $$
 begin
   perform public.seed_dietary_tags(new.id);
   return new;
