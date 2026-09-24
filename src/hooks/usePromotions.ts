@@ -35,34 +35,45 @@ export function usePromotions(restaurantId: string) {
   // a hidden menu never renders, and the panel has to be able to say so.
   const [activeMenuIds, setActiveMenuIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  // A read that failed is not an empty list. Shown as "no promotions yet", a
+  // manager would set up again the deals that already exist.
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const reload = useCallback(async () => {
     const supabase = createClient();
-    const [promos, { data: items }, { data: cats }, { data: menus }] = await Promise.all([
-      fetchPromotions(supabase, restaurantId),
-      supabase
-        .from("menu_items")
-        .select("*")
-        .eq("restaurant_id", restaurantId)
-        .eq("is_addon", false)
-        .order("name"),
-      // Needed so the product picker can be searched by category too.
-      supabase
-        .from("categories")
-        .select("*")
-        .eq("restaurant_id", restaurantId)
-        .order("sort_order"),
-      supabase
-        .from("menus")
-        .select("id, active")
-        .eq("restaurant_id", restaurantId)
-        .eq("active", true),
-    ]);
-    setPromotions(promos);
-    setProducts((items as MenuItem[] | null) ?? []);
-    setCategories((cats as Category[] | null) ?? []);
-    setActiveMenuIds(new Set(((menus as { id: string }[] | null) ?? []).map(m => m.id)));
-    setLoading(false);
+    try {
+      const [promos, itemsRes, catsRes, menusRes] = await Promise.all([
+        fetchPromotions(supabase, restaurantId),
+        supabase
+          .from("menu_items")
+          .select("*")
+          .eq("restaurant_id", restaurantId)
+          .eq("is_addon", false)
+          .order("name"),
+        // Needed so the product picker can be searched by category too.
+        supabase
+          .from("categories")
+          .select("*")
+          .eq("restaurant_id", restaurantId)
+          .order("sort_order"),
+        supabase
+          .from("menus")
+          .select("id, active")
+          .eq("restaurant_id", restaurantId)
+          .eq("active", true),
+      ]);
+      const failed = itemsRes.error ?? catsRes.error ?? menusRes.error;
+      if (failed) throw failed;
+      setPromotions(promos);
+      setProducts((itemsRes.data as MenuItem[] | null) ?? []);
+      setCategories((catsRes.data as Category[] | null) ?? []);
+      setActiveMenuIds(new Set(((menusRes.data as { id: string }[] | null) ?? []).map(m => m.id)));
+      setLoadFailed(false);
+    } catch {
+      setLoadFailed(true);
+    } finally {
+      setLoading(false);
+    }
   }, [restaurantId]);
 
   useEffect(() => {
@@ -101,6 +112,8 @@ export function usePromotions(restaurantId: string) {
     categories,
     activeMenuIds,
     loading,
+    loadFailed,
+    reload,
     create: (input: PromotionInput) => send("POST", input),
     update: (id: string, input: PromotionInput) => send("PATCH", { id, ...input }),
     setActive: (id: string, active: boolean) => send("PATCH", { id, active }),

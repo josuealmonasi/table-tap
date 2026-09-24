@@ -55,6 +55,8 @@ export default function PromotionsPanel({
     categories,
     activeMenuIds,
     loading,
+    loadFailed,
+    reload,
     create,
     update,
     setActive,
@@ -170,6 +172,13 @@ export default function PromotionsPanel({
 
             {loading ? (
               <ListSkeleton rows={rows} />
+            ) : loadFailed ? (
+              <p className="tt-muted">
+                {t("promos.loadFailed")}{" "}
+                <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={reload}>
+                  {t("fallback.retry")}
+                </button>
+              </p>
             ) : promotions.length === 0 ? (
               <p className="tt-muted">{t("promos.empty")}</p>
             ) : (
