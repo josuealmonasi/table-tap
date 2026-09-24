@@ -14,12 +14,14 @@
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { plantNeighbour } from "./rls-fixture.mjs";
+import { watchDevWorker } from "./preflight.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
 const BASE = prod
   ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
   : "http://localhost:3000";
+watchDevWorker(BASE);
 
 const anon = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,

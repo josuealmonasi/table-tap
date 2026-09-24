@@ -48,8 +48,20 @@ try {
     //
     // `arrange` puts the switch where the case needs it and hands back the
     // undo, which runs whatever the case does — including throwing.
+    //
+    // An arrange that throws — a request it makes dying with the dev server's
+    // worker, a fixture row that will not insert — is this case failing, not
+    // the whole run: it used to crash the gate on case nine, and every case
+    // after it went unchecked while the output read like one broken route.
     let restore = null;
-    if (c.arrange) restore = await c.arrange(fx);
+    if (c.arrange) {
+      try {
+        restore = await c.arrange(fx);
+      } catch (e) {
+        bad(`${c.name} — could not set the case up: ${e.message}`);
+        continue;
+      }
+    }
 
     // `continue` runs a `finally` on its way out, which is what makes this
     // safe: every way this loop body ends — a refusal, a bad status, a thrown
