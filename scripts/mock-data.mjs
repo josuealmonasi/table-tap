@@ -23,7 +23,7 @@ import { createClient } from "@supabase/supabase-js";
 import { populateMenu } from "./menu-catalog.mjs";
 import { TERMS_VERSION } from "./terms-version.mjs";
 import { seedLoyalty } from "./mock-loyalty.mjs";
-import { bulkInsert, randInt, sample, shuffle } from "./menu-catalog.mjs";
+import { bulkInsert, randInt, sample } from "./menu-catalog.mjs";
 
 export const DEMO_RESTAURANT = "Demo Bistro";
 export const DEMO_PASSWORD = "demo123";

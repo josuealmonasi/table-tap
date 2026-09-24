@@ -258,6 +258,9 @@ try {
     const two = await post("/api/table-payment/part",
       { tableId: table.id, amount: 20, method: "cash", ref }, who.waiter);
     if (one.status !== 200) bad(`the first of the two was refused: ${one.status} ${one.body.error ?? ""}`);
+    // The repeat may be answered either way, but never by breaking: a 500 here
+    // is the dedupe crashing, and the ledger alone would still read clean.
+    if (two.status >= 500) bad(`the repeat broke the route: ${two.status} ${two.body.error ?? ""}`);
     const after = await takings(home.id);
     after.rows - before.rows === 1 && Math.abs(after.amount - before.amount - 20) < 0.005
       ? ok("the same collection sent twice lands in the ledger once")

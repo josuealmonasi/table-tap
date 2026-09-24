@@ -1226,6 +1226,17 @@ Each route now reads the old list first, checks the clear, and puts the old
 list back if the new one does not land; an icon group that fails as it is
 created is removed rather than left empty. An invariant holds both.
 
+## The lint that never read the gates
+
+`pnpm lint` was `next lint`, which reads the app and never the scripts, so the
+gates themselves were linted by nothing. `eslint scripts` found 46 warnings.
+Forty-one were the verdict idiom `passed ? ok(…) : bad(…)`, which is a statement
+on purpose and is now allowed for scripts alone. Four were dead code. One was a
+real gap: the attack gate sent the same collection twice and never looked at
+the second answer, so a repeat that crashed the route would still have passed
+on the ledger alone. It fails on a 5xx now. The lint step covers `scripts/` and
+fails on any warning, in the app or the gates.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read
