@@ -14,8 +14,11 @@ import { MenuItemRowSkeleton, Skeleton } from "@/components/ui/Skeleton";
 export default function MenuSkeleton({
   table = false,
   cover = false,
+  loyalty = false,
 }: {
   table?: boolean;
+  /** The menu will show its visit card row; asked before the menu streams. */
+  loyalty?: boolean;
   /**
    * Reserve the cover band. Only restaurants that actually show a photo get
    * it — a band held for everyone would be a gap on most menus, which is the
@@ -51,13 +54,21 @@ export default function MenuSkeleton({
               {!cover && <Skeleton width={72} height={34} radius={999} />}
             </div>
           </div>
-          <Skeleton width={120} height={12} style={{ marginTop: 7 }} />
+          {/* The tagline is a line of text 18px tall; a 12px bar is drawn in
+              it, not instead of it, or the header comes up 6px short. */}
+          <div style={{ marginTop: 7, height: 18, display: "flex", alignItems: "center" }}>
+            <Skeleton width={120} height={12} />
+          </div>
+          {/* The table's badge and its service row, measured off the real
+              ones: two pills side by side was 41px short of them, and the
+              whole menu jumped down when it landed. */}
           {table && (
-            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-              <Skeleton width={96} height={26} radius={999} />
-              <Skeleton width={110} height={26} radius={999} />
-            </div>
+            <>
+              <Skeleton width={76} height={23} radius={999} style={{ marginTop: 10 }} />
+              <Skeleton height={34} radius={999} style={{ marginTop: 12 }} />
+            </>
           )}
+          {loyalty && <Skeleton height={36} radius={12} style={{ marginTop: 12 }} />}
         </div>
       </div>
 

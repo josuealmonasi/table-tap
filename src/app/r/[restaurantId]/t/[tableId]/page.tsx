@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import OrderingApp from "@/components/customer/OrderingApp";
 import MenuSkeleton from "@/components/customer/MenuSkeleton";
-import { loadCoverState, loadOrderingData, unwrap } from "@/lib/ordering-data";
+import { menuShowsLoyalty, loadCoverState, loadOrderingData, unwrap } from "@/lib/ordering-data";
 import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
 import type { RestaurantTable } from "@/lib/types";
@@ -84,11 +84,14 @@ export default async function TablePage({
   params: Promise<{ restaurantId: string; tableId: string }>;
 }) {
   const { restaurantId, tableId } = await params;
-  const { exists, cover } = await loadCoverState(restaurantId);
+  const [{ exists, cover }, loyalty] = await Promise.all([
+    loadCoverState(restaurantId),
+    menuShowsLoyalty(restaurantId),
+  ]);
   if (!exists) notFound();
 
   return (
-    <Suspense fallback={<MenuSkeleton table cover={cover} />}>
+    <Suspense fallback={<MenuSkeleton table cover={cover} loyalty={loyalty} />}>
       <Menu restaurantId={restaurantId} tableId={tableId} />
     </Suspense>
   );

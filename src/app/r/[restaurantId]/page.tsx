@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import OrderingApp from "@/components/customer/OrderingApp";
 import MenuSkeleton from "@/components/customer/MenuSkeleton";
-import { loadCoverState, loadOrderingData } from "@/lib/ordering-data";
+import { menuShowsLoyalty, loadCoverState, loadOrderingData } from "@/lib/ordering-data";
 
 export const dynamic = "force-dynamic";
 
@@ -43,11 +43,14 @@ export default async function RestaurantPage({
   params: Promise<{ restaurantId: string }>;
 }) {
   const { restaurantId } = await params;
-  const { exists, cover } = await loadCoverState(restaurantId);
+  const [{ exists, cover }, loyalty] = await Promise.all([
+    loadCoverState(restaurantId),
+    menuShowsLoyalty(restaurantId),
+  ]);
   if (!exists) notFound();
 
   return (
-    <Suspense fallback={<MenuSkeleton cover={cover} />}>
+    <Suspense fallback={<MenuSkeleton cover={cover} loyalty={loyalty} />}>
       <Menu restaurantId={restaurantId} />
     </Suspense>
   );
