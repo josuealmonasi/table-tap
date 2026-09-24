@@ -48,6 +48,7 @@ us, and what now catches each one.
 | A request that says it worked reads its answer | "Llamar al mesero" said "¡En camino!" for a minute whatever came back, a refusal or no connection |
 | A refused move is not a dropped connection | A 403 from an expired sign-in was held as "saved, will be sent" and retried on every reconnect |
 | An order that could not be read is not a missing one | A failed read of an order was null, and the tracker answered a diner who had just ordered with "not found" |
+| A lookup that failed is not "no access" | In a database blip an owner was told the account had no restaurant and to create a new one, and every staff route answered "forbidden" |
 | A gate that reads production writes nothing there | `roles:prod` created a live 5% coupon, ZZZ-999, on the demo restaurant and re-sent it on every run |
 | Spanish inside an English comment is found, not averaged away | Five lines of Spanish in `schema.sql` passed the English check because the block around them was English |
 | No gate waits with `waitForFunction` | `layout:prod` failed all 220 screens before measuring one: production's CSP forbids the `eval` it runs on |
@@ -1380,6 +1381,35 @@ word in it and three Spanish-only ones, once quoted text is taken out, since an
 English comment may quote the Spanish UI it describes. Across the repo that
 flags exactly the five and nothing else, and each file put back as it was
 fails the check.
+
+## Forbidden, because the database was slow
+
+After #401 merged, `roles:prod` failed once: the owner's staff probe was
+answered 403, and twelve repeats all gave the declared 400. The request never
+reached the invite, and a production read timed out with a 504 in the same
+minute, so the refusal came from the checks before it. Every one of those
+lookups read a failed query as "nobody":
+
+- `getMembership` never looked at its errors, so a timeout meant "a member of
+  nothing". An owner opening the dashboard was told the account had no
+  restaurant and to contact support or create a new account; every guarded
+  page sent them to `/login`; and all 33 routes behind `acting…()` answered
+  "forbidden", a waiter collecting cash included.
+- `getPlatformAdmin` used `.single()`, which reports "no row" as an error, so
+  it could not tell "not an admin" from "could not ask" (and wrote a 406 into
+  the database log on every staff request).
+- `currentUser` read an auth server that did not answer as "signed out".
+- `getPlan` read a failure as "no plan", which the plan guards answer with
+  "forbidden": a restaurant on the right plan refused its own features.
+
+Each now throws on a failed read and returns null only for a real absence: no
+session, no row, or an id that is not one. A page reaches the error screen
+and its retry; a route answers 500, which the client words as "try again".
+Nothing is granted either way. The root layout catches the failure for the
+navbar alone, and the page asks again (both are cached per request) and gets
+the same error, so it lands on that screen rather than on Next's bare default.
+Unit tests cover the answer and the failure for all four; against `main`'s
+files, exactly the failure cases fail.
 
 ## Before merging anything large
 

@@ -133,6 +133,16 @@ export const getMembership = cache(async (): Promise<Membership | null> => {
       .maybeSingle<StaffRow>(),
   ]);
 
+  // A read that failed is not an answer. Returned as null it meant "a member of
+  // nothing": in a database blip a signed-in owner was told the account had no
+  // restaurant and to create a new one, every guarded page sent them to
+  // /login, and every staff route answered "forbidden" — a waiter collecting
+  // cash included. Thrown, a page reaches the error screen and its retry, and
+  // a route answers 500, which the client words as "try again". Nothing is
+  // granted either way.
+  const failed = ownedRes.error ?? staffRes.error;
+  if (failed) throw new Error(`membership lookup failed: ${failed.message}`);
+
   if (ownedRes.data) return { restaurant: ownedRes.data as Restaurant, role: "owner" };
 
   const staff = staffRes.data;

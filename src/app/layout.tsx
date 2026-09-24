@@ -36,8 +36,12 @@ export const dynamic = "force-dynamic";
 
 // Site-wide chrome: Navbar only for logged-in restaurant users, Footer always.
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const admin = await getPlatformAdmin();
-  const membership = admin ? null : await getMembership();
+  // The navbar is drawn without the team's links when these cannot be read:
+  // the page below asks the same question, gets the same failure (both are
+  // cached per request), and shows the error screen with its retry. Letting
+  // it throw here would skip that screen for Next's bare default.
+  const admin = await getPlatformAdmin().catch(() => null);
+  const membership = admin ? null : await getMembership().catch(() => null);
   const locale = await getLocale();
 
   // Which areas this tier includes at all. Read once here so the drawer, the

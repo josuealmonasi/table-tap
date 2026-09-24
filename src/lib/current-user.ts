@@ -1,5 +1,5 @@
 import { cache } from "react";
-import type { User } from "@supabase/supabase-js";
+import { isAuthRetryableFetchError, type User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -18,6 +18,13 @@ export const currentUser = cache(async (): Promise<User | null> => {
   const supabase = await createClient();
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser();
+  // No session, or one the auth server refused, is an answer: signed out. The
+  // auth server not answering is not — read as signed out, a waiter mid-service
+  // was sent to the login screen by a network blip. A diner is unaffected: with
+  // no token there is nothing to ask the server, and a missing session is not a
+  // retryable error.
+  if (error && isAuthRetryableFetchError(error)) throw error;
   return user;
 });
