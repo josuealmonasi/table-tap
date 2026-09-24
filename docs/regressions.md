@@ -48,6 +48,7 @@ us, and what now catches each one.
 | A request that says it worked reads its answer | "Llamar al mesero" said "¡En camino!" for a minute whatever came back, a refusal or no connection |
 | A refused move is not a dropped connection | A 403 from an expired sign-in was held as "saved, will be sent" and retried on every reconnect |
 | An order that could not be read is not a missing one | A failed read of an order was null, and the tracker answered a diner who had just ordered with "not found" |
+| A gate that reads production writes nothing there | `roles:prod` created a live 5% coupon, ZZZ-999, on the demo restaurant and re-sent it on every run |
 | No gate waits with `waitForFunction` | `layout:prod` failed all 220 screens before measuring one: production's CSP forbids the `eval` it runs on |
 | No gate that writes can reach production before it stops | `api --prod` ran against production five times and left its writes in the live activity log; `promises --prod` pointed the live demo at a Stripe account that does not exist |
 | `prod:check` compares each permission by what it is | Policies and functions were compared by name: an unapplied policy body, RLS switched off, or a function handed back to anon would all have passed |
@@ -1339,6 +1340,31 @@ the sittings, orders, payments, splits and log lines from there. It runs before
 anything is planted, so a run killed outright is cleaned by the next one, and
 again in the last `finally`, which also puts the raced dish back. An invariant
 fails on a table made without the mark, or a sweep missing from either end.
+
+## A coupon the roles check left on the live demo
+
+Production's database log showed a coupon refused as a duplicate, twice, in a
+window where only the checks that read production were running. `roles:prod`
+checks who may use each route by sending the request, and it sent real bodies:
+an allowed role got through for real. On 2026-09-10 it created ZZZ-999, 5% off
+and active, on the live demo restaurant, where any diner could use it, and
+re-sent it on every run after. The same list set `accepting_orders` to true,
+which switches ordering back on for a restaurant that had paused it; marked
+every notification read; and asked Supabase to invite an address at a
+stranger's domain. The previous fix listed `roles:prod` among the checks that
+only read.
+
+Each write is now probed with a body the route turns down only after it has
+checked the role: nothing to mark, no field to change, a code in the wrong
+shape, an address that already has an account. `passes` names the one answer
+an allowed role may get, and any other — a 2xx above all — fails the run.
+Against production, every allowed role got exactly its answer and nothing was
+written. The layout and promise sweeps now also hold every write in the
+browser when they run against production, the way the dialog sweep always
+has, and list what they held. Invariants fail on a write probe with no
+`passes`, and on a browser context in a production-capable gate that does not
+hold writes. ZZZ-999 is still on the live demo: removing it is the owner's
+call.
 
 ## Before merging anything large
 

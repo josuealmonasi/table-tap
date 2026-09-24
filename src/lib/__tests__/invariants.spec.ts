@@ -2084,3 +2084,37 @@ describe("the attack gate leaves nothing behind when a case throws", () => {
     expect(src.indexOf("await sweep();", lastFinally), "the last finally does not sweep").toBeGreaterThan(lastFinally);
   });
 });
+
+describe("a gate that reads production writes nothing there", () => {
+  it("probes every write in the roles gate with a body the route turns down", () => {
+    // The roles gate sent real bodies: `roles:prod` made a live 5% coupon,
+    // ZZZ-999, on the demo restaurant and re-sent it on every run. Each write
+    // now names the one answer an allowed role may get, and nothing else passes.
+    const src = read("scripts/roles-check.mjs");
+    const block = src.slice(src.indexOf("const ROUTES = ["), src.indexOf("];", src.indexOf("const ROUTES = [")));
+    const writes = [...block.matchAll(/\{\s*m:\s*"(POST|PATCH|PUT|DELETE)"[^\n]*/g)].map(m => m[0]);
+    expect(writes.length, "the scan found no write in the roles gate").toBeGreaterThan(2);
+    const unguarded = writes.filter(w => !/\bpasses:\s*\d{3}\b/.test(w));
+    expect(unguarded, "a write probe that says nothing about what it may be answered").toEqual([]);
+  });
+
+  it("holds every write in the browser, in every browser gate that can reach it", () => {
+    // A layout or promise sweep clicks dialogs open and walks a diner to the
+    // cart; against production one wrong click is an order in a real
+    // restaurant's books. Every context those gates open answers writes in the
+    // browser, the way the dialog sweep's always has.
+    const gates = fs.readdirSync("scripts")
+      .filter(f => f.endsWith(".mjs"))
+      .filter(f => { const s = read(`scripts/${f}`); return s.includes("chromium") && s.includes("--prod"); });
+    expect(gates.length, "no browser gate reaches production — the scan broke").toBeGreaterThanOrEqual(3);
+    const offenders: string[] = [];
+    for (const f of gates) {
+      const lines = read(`scripts/${f}`).split("\n");
+      lines.forEach((line, i) => {
+        if (!/browser\.newContext\(/.test(line) || line.trim().startsWith("//")) return;
+        if (!lines.slice(i, i + 4).some(l => /holdWrites\(/.test(l))) offenders.push(`scripts/${f}:${i + 1}`);
+      });
+    }
+    expect(offenders, "a browser context that could write to production").toEqual([]);
+  });
+});

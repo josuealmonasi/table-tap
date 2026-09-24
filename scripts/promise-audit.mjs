@@ -25,6 +25,7 @@ import { createClient } from "@supabase/supabase-js";
 import { CREW } from "./layout-paths.mjs";
 import { AUDIT, REFUSAL, STATES } from "./promise-cases.mjs";
 import { requireServer, warm } from "./preflight.mjs";
+import { holdWrites } from "./hold-writes.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -71,6 +72,15 @@ if (!prod) {
 }
 
 const browser = await chromium.launch();
+
+// Against production the sweeps must change nothing: every write a page sends
+// is answered in the browser (see hold-writes.mjs) and listed at the end.
+const held = [];
+async function newContext(options) {
+  const ctx = await browser.newContext(options);
+  if (prod) await holdWrites(ctx, held);
+  return ctx;
+}
 console.log(`\nPromises — ${prod ? "production" : "development"}\n`);
 
 for (const who of CREW) {
@@ -83,7 +93,7 @@ for (const who of CREW) {
     console.log(`    –        ${who.passwordEnv} is not set — skipped\n`);
     continue;
   }
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const ctx = await newContext({ viewport: { width: 1280, height: 900 } });
   await ctx.addCookies([await cookieFor(who.email, password), { name: "tt-locale", value: "es", url: BASE }]);
   for (const path of who.pages) {
     const tab = await ctx.newPage();
@@ -106,7 +116,7 @@ for (const who of CREW) {
 }
 
 // The diner, who loses most when a screen promises more than it has.
-const guest = await browser.newContext({ viewport: { width: 390, height: 844 } });
+const guest = await newContext({ viewport: { width: 390, height: 844 } });
 await guest.addCookies([{ name: "tt-locale", value: "es", url: BASE }]);
 console.log("  diner\n");
 for (const [name, path] of [
@@ -125,6 +135,11 @@ await guest.close();
 
 async function finish() {
   await browser.close();
+  if (held.length) {
+    console.log(`  Held ${held.length} write(s) the pages tried to send; none reached the server:`);
+    for (const w of [...new Set(held)]) console.log(`    ${w}`);
+    console.log("");
+  }
   console.log(failed === 0 ? "\nNo screen promises more than it has.\n" : `\n${failed} GAP(S) — review one by one.\n`);
   process.exit(failed === 0 ? 0 : 1);
 }
@@ -260,7 +275,7 @@ for (const state of STATES) {
   const storage = state.storage ? await state.storage(admin, ctx) : null;
   await state.apply?.(admin, ctx);
   const size = state.as === "owner" ? { width: 1280, height: 900 } : { width: 390, height: 844 };
-  const context = await browser.newContext({ viewport: size });
+  const context = await newContext({ viewport: size });
   const cookies = [{ name: "tt-locale", value: "es", url: BASE }];
   if (state.as === "owner") cookies.push(await cookieFor(CREW[0].email));
   await context.addCookies(cookies);
