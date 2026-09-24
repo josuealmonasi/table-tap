@@ -82,16 +82,30 @@ const PAGES = {
 };
 
 // Route → roles that should be able to use it.
+//
+// A write is probed with a body the route turns down only AFTER it has checked
+// the role: nothing to mark, nothing to change, a code in the wrong shape, an
+// address that already has an account. What is measured is the role check,
+// and nothing is ever written — here or on production. The bodies used to be
+// real: `roles:prod` created a live 5% coupon, ZZZ-999, on the demo restaurant
+// on 2026-09-10 and re-sent it on every run after; it would switch orders
+// back on for a restaurant that had paused them, and it asked Supabase to
+// invite an address at a stranger's domain. `passes` is the one answer an allowed role may get; any
+// other, a 2xx above all, fails the run.
 const ROUTES = [
   { m: "GET", p: "/api/badges", allow: ALL },
   // The bell. Only the people who can order more stock are told a dish is
   // running out — the same line the table's RLS policy draws.
   { m: "GET", p: "/api/notifications", allow: MANAGES },
-  { m: "POST", p: "/api/notifications", body: { all: true }, allow: MANAGES },
+  { m: "POST", p: "/api/notifications", body: {}, allow: MANAGES, passes: 400 },
   { m: "GET", p: "/api/table-bill?tableId=", allow: SERVES, needsTable: true },
-  { m: "POST", p: "/api/settings", body: { accepting_orders: true }, allow: MANAGES },
-  { m: "POST", p: "/api/coupons", body: { code: "ZZZ-999", kind: "percent", value: 5 }, allow: MANAGES },
-  { m: "POST", p: "/api/staff", body: { email: "nope@x.dev", role: "waiter" }, allow: OWNER },
+  // No field at all: answered ok before anything is written.
+  { m: "POST", p: "/api/settings", body: {}, allow: MANAGES, passes: 200 },
+  { m: "POST", p: "/api/coupons", body: { code: "not a code", kind: "percent", value: 5 }, allow: MANAGES, passes: 400 },
+  // This route checks the address before the role, so the address has to be
+  // a good one — and one that already has an account, which Supabase refuses
+  // to invite without sending anything.
+  { m: "POST", p: "/api/staff", body: { email: "demo-waiter@tabletap.dev", role: "waiter" }, allow: OWNER, passes: 400 },
 ];
 
 let failed = 0;
@@ -149,7 +163,9 @@ for (const who of ROLES) {
     const refused = res.status === 401 || res.status === 403;
     if (may && refused) bad(`${r.m} ${r.p.split("?")[0]} refused it (${res.status}) and should have allowed it`);
     else if (!may && !refused) bad(`${r.m} ${r.p.split("?")[0]} let it through (${res.status})`);
-    else ok(`${may ? "can" : "cannot"} ${r.m} ${r.p.split("?")[0]}`);
+    else if (may && r.passes && res.status !== r.passes) {
+      bad(`${r.m} ${r.p.split("?")[0]} answered ${res.status}, not ${r.passes} — the probe may have written`);
+    } else ok(`${may ? "can" : "cannot"} ${r.m} ${r.p.split("?")[0]}`);
   }
   console.log("");
 }

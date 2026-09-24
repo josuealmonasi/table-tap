@@ -14,6 +14,7 @@ import { chromium } from "playwright";
 import { AUDIT } from "./layout-audit.mjs";
 import { CREW, DIALOGS, DINER, PUBLIC } from "./layout-paths.mjs";
 import { requireServer } from "./preflight.mjs";
+import { holdWrites } from "./hold-writes.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -163,6 +164,18 @@ const cookieFor = async (email, password = "demo123") => {
 };
 
 const browser = await chromium.launch();
+
+// Against production nothing this gate does may reach the server. It clicks
+// dialogs open and walks a diner to the cart, and one click on the wrong
+// button is an order in a real restaurant's books — so every write a page
+// sends is answered in the browser instead (see hold-writes.mjs) and listed
+// at the end.
+const held = [];
+async function newContext(options) {
+  const ctx = await browser.newContext(options);
+  if (prod) await holdWrites(ctx, held);
+  return ctx;
+}
 console.log(`\nLayout — ${prod ? "production" : "development"}\n`);
 
 /**
@@ -175,7 +188,7 @@ console.log(`\nLayout — ${prod ? "production" : "development"}\n`);
  * worthless and says so rather than printing a column of ok.
  */
 {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const ctx = await newContext({ viewport: { width: 390, height: 844 } });
   const tab = await ctx.newPage();
   await tab.setContent(`<!doctype html><body style="margin:0">
     <div style="font:20px/1.2 sans-serif;color:#000;height:40px">PLANTED ALPHA TEXT</div>
@@ -201,7 +214,7 @@ for (const size of SIZES) {
   // and the cart broke once over a label that did not fit. The dashboard is
   // checked in Spanish only, which is where the team works.
   for (const lang of ["es", "en"]) {
-  const diner = await browser.newContext({
+  const diner = await newContext({
     viewport: { width: size.width, height: size.height },
     locale: lang === "es" ? "es-MX" : "en-US",
   });
@@ -264,7 +277,7 @@ for (const size of SIZES) {
   }
 
   // ── The front door, signed out ────────────────────────────────────────────
-  const outside = await browser.newContext({
+  const outside = await newContext({
     viewport: { width: size.width, height: size.height },
     locale: "es-MX",
   });
@@ -316,7 +329,7 @@ for (const size of SIZES) {
       console.log(`    –        ${who.role}: ${who.passwordEnv} is not set — skipped`);
       continue;
     }
-    const ctx = await browser.newContext({
+    const ctx = await newContext({
       viewport: { width: size.width, height: size.height },
       locale: "es-MX",
     });
@@ -372,6 +385,11 @@ for (const [key, seen] of opened) {
     failed++;
     console.log(`    BAD      ${key}: opened at ${seen.at.join("/")}px but not at ${seen.missed.join("/")}px`);
   }
+}
+if (held.length) {
+  console.log(`  Held ${held.length} write(s) the pages tried to send; none reached the server:`);
+  for (const w of [...new Set(held)]) console.log(`    ${w}`);
+  console.log("");
 }
 console.log(failed === 0 ? "Everything reads.\n" : `${failed} READABILITY PROBLEM(S).\n`);
 process.exit(failed === 0 ? 0 : 1);
