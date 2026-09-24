@@ -56,7 +56,7 @@ await show("What anon can see", `
    group by table_name order by 1`);
 
 await show("What authenticated can see", `
-  select table_name, string_agg(distinct coalesce(column_name,'TABLA ENTERA'), ', ')
+  select table_name, string_agg(distinct coalesce(column_name,'WHOLE TABLE'), ', ')
     from information_schema.role_column_grants
    where grantee='authenticated' and table_schema='public' and privilege_type='SELECT'
    group by table_name order by 1`,

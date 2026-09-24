@@ -8,7 +8,10 @@
 //
 //   1. Does production's schema still match dev's? A column that exists in dev
 //      and not in prod is invisible until deployed code selects it, at which
-//      point every menu falls to its error boundary.
+//      point every menu falls to its error boundary. The permissions are
+//      compared by what they are — each policy's body, each grant, each
+//      function's rights and source — because a name that matches proves
+//      nothing about what it lets through.
 //   2. Does a real customer menu actually render on production right now?
 //
 // Read-only. Exits non-zero on any difference or failure, so it can gate a
@@ -48,11 +51,33 @@ const QUERIES = {
                where grantee = 'anon' and privilege_type = 'SELECT'
                  and table_schema = 'public' order by 1`,
   tables: `select tablename as k from pg_tables where schemaname = 'public' order by 1`,
-  functions: `select proname as k from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
+  // What each thing IS, not only that it exists. Compared by name, a policy
+  // rewritten in schema.sql and never applied to production passed — and so
+  // did a table whose RLS was switched off, a function that lost its pinned
+  // search_path or was handed back to anon, and a function whose body the
+  // deployed code had moved past. `pnpm rls` proves development's permissions
+  // by effect and refuses production, so this equality is what proves them
+  // there.
+  rls: `select c.relname || ' rls=' || c.relrowsecurity || ' force=' || c.relforcerowsecurity as k
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind = 'r' order by 1`,
+  policies: `select tablename || ': ' || policyname || ' · ' || cmd || ' · ' || array_to_string(roles, ',')
+                    || ' · using ' || coalesce(qual, '—') || ' · check ' || coalesce(with_check, '—') as k
+             from pg_policies where schemaname = 'public' order by 1`,
+  authenticatedGrants: `select table_name || '.' || column_name || ' ' || privilege_type as k
+                        from information_schema.column_privileges
+                        where grantee = 'authenticated' and table_schema = 'public' order by 1`,
+  tableGrants: `select table_name || ' ' || grantee || ' ' || privilege_type as k
+                from information_schema.role_table_grants
+                where grantee in ('anon', 'authenticated') and table_schema = 'public' order by 1`,
+  functions: `select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'
+                     || ' definer=' || p.prosecdef
+                     || ' config=' || coalesce(array_to_string(p.proconfig, ','), '—')
+                     || ' anon=' || has_function_privilege('anon', p.oid, 'EXECUTE')
+                     || ' authenticated=' || has_function_privilege('authenticated', p.oid, 'EXECUTE')
+                     || ' body=' || md5(p.prosrc) as k
+              from pg_proc p join pg_namespace n on n.oid = p.pronamespace
               where n.nspname = 'public' order by 1`,
-  policies: `select tablename || ': ' || policyname as k from pg_policies
-             where schemaname = 'public' order by 1`,
 };
 
 async function snapshot(connectionString) {

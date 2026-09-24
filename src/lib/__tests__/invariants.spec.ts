@@ -2038,3 +2038,27 @@ describe("no gate writes to production", () => {
     expect(offenders, `a gate that would write to production:\n${offenders.join("\n")}`).toEqual([]);
   });
 });
+
+describe("prod:check compares what each permission is, not only its name", () => {
+  it("fingerprints policy bodies, RLS flags, grants and function rights", () => {
+    // It compared policies and functions by name. A policy rewritten in
+    // schema.sql and never applied to production, a table with RLS switched
+    // off there, or a function handed back to anon all kept their names, and
+    // all passed. `pnpm rls` refuses production, so this equality is the only
+    // thing that proves production's permissions are the ones development's
+    // were proven to be.
+    const src = read("scripts/prod-check.mjs");
+    const must: [string, RegExp][] = [
+      ["each policy's using and check", /\bqual\b[\s\S]*\bwith_check\b/],
+      ["each policy's command and roles", /\bcmd\b[\s\S]*\broles\b/],
+      ["whether each table has RLS on", /relrowsecurity/],
+      ["what authenticated may read", /grantee = 'authenticated'/],
+      ["table-level grants", /role_table_grants/],
+      ["each function's owner rights and search path", /prosecdef[\s\S]*proconfig/],
+      ["who may execute each function", /has_function_privilege\('anon'[\s\S]*has_function_privilege\('authenticated'/],
+      ["each function's source", /md5\(p\.prosrc\)/],
+    ];
+    const missing = must.filter(([, re]) => !re.test(src)).map(([what]) => what);
+    expect(missing, "prod:check no longer compares").toEqual([]);
+  });
+});

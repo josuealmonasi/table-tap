@@ -50,6 +50,7 @@ us, and what now catches each one.
 | An order that could not be read is not a missing one | A failed read of an order was null, and the tracker answered a diner who had just ordered with "not found" |
 | No gate waits with `waitForFunction` | `layout:prod` failed all 220 screens before measuring one: production's CSP forbids the `eval` it runs on |
 | No gate that writes can reach production before it stops | `api --prod` ran against production five times and left its writes in the live activity log; `promises --prod` pointed the live demo at a Stripe account that does not exist |
+| `prod:check` compares each permission by what it is | Policies and functions were compared by name: an unapplied policy body, RLS switched off, or a function handed back to anon would all have passed |
 | A screen money is counted on reads or refuses | A failed read on the bills board showed no open tables, or nothing already collected, so the whole bill looked owing again |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
@@ -1304,6 +1305,22 @@ exit 1; `promises --prod` runs its read-only sweeps and skips the states. An
 invariant finds every script that can reach production and writes — through
 supabase-js, or by calling a local module that does — and fails unless a stop
 comes before the first write. Pointed at the old versions, it named all three.
+
+## Production's permissions, compared by name
+
+`prod:check` compared development and production by the names of their
+policies and functions. The #392 rewrite of two policies to
+`(select auth.uid())` kept both names, so a production that never got it would
+have passed; so would a table with RLS switched off, a function that lost its
+pinned `search_path`, a revoked function handed back to anon, and a function
+whose body the deployed code had moved past. It compares what each one is now:
+every policy's command, roles, `using` and `check`; every table's RLS flags;
+what `anon` and `authenticated` may read and write; every function's owner
+rights, search path, who may execute it, and an md5 of its source. Run against
+both databases the day it was written, all 34 tables, 41 policies, 880 grants
+and 26 functions agreed. With production doctored in memory — #392 unapplied,
+one table's RLS off, `loyalty_redeem` executable by anon — it named all three
+and exited 1.
 
 ## Before merging anything large
 
