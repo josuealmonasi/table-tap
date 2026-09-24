@@ -2838,8 +2838,8 @@ grant execute on function public.loyalty_stamp(uuid, text, text) to service_role
 
 -- Spend the card's next reward, once. Locked like the stamp, and refused —
 -- nothing returned — unless that reward is ready. The next reward is the lowest
--- step of the card's ladder not yet redeemed this round; a round begins after
--- the last redemption that spent visits. The last step spends the round's
+-- step of the card's ladder with no redemption in the card's current round
+-- (`round_no`, carried on each redemption). The last step spends the round's
 -- visits and the card takes the program's current ladder for its next round;
 -- a step in the middle spends none. A reward already earned is honoured even if
 -- the program was switched off or the plan changed since: the diner did their
