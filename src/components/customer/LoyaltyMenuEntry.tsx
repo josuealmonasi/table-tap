@@ -7,6 +7,7 @@ import { LoyaltyIcon } from "@/components/ui/icons";
 import { useT } from "@/lib/i18n/context";
 import { readDeviceCard } from "@/lib/loyalty/device";
 import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
+import { ladderLines } from "@/lib/loyalty/ladder";
 import LoyaltyOffer from "./LoyaltyOffer";
 
 interface LoyaltyMenuEntryProps {
@@ -43,9 +44,9 @@ export default function LoyaltyMenuEntry({ offer }: LoyaltyMenuEntryProps) {
         <LoyaltyIcon size={16} weight="bold" />
         <span className="tt-loyalty-entry-text">
           <strong>{t(mine ? "loyaltyMenu.mine" : "loyaltyMenu.entry")}</strong>
-          {offer.reward && (
-            <span className="tt-muted"> · {t("loyaltyMenu.reward", { goal: offer.goal, reward: offer.reward })}</span>
-          )}
+          {/* Every reward, in order — the first is the nearest, so it is the
+              one a one-line row always shows in full. */}
+          <span className="tt-muted"> · {ladderLines(offer.steps, t).join(" · ")}</span>
         </span>
       </button>
       <Modal open={open} onClose={() => setOpen(false)} maxWidth={420} variant="sheet" label={t("loyalty.title")}>

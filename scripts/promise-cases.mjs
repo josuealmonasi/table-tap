@@ -107,6 +107,12 @@ export const STATES = [
     offers: /tarjeta de visitas|visit card/i,
   },
   {
+    // …and so does the menu's row, nearest reward first.
+    name: "a reward ladder · the menu",
+    says: /(visitas|visits) = free coffee/i,
+    keeps: /tarjeta de visitas|visit card/i,
+  },
+  {
     // The demo's program is a ladder: the offer names every reward, not only
     // the last, or a diner would never learn the coffee comes at four visits.
     name: "a reward ladder · a paid order",

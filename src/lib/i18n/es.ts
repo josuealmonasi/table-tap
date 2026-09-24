@@ -1647,7 +1647,6 @@ votes: "Votos",
   loyaltyMenu: {
     entry: "Tarjeta de visitas",
     mine: "Mi tarjeta de visitas",
-    reward: "{goal} visitas = {reward}",
   },
   loyaltyOffer: {
     title: "Junta visitas en {name}",

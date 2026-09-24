@@ -890,7 +890,8 @@ both remembered in that browser (`tt-loyalty:<restaurant>`), so the offer is
 made once per phone and again only if the phone forgets.
 
 **From the menu, any time.** The menu's header carries a "Tarjeta de visitas"
-row under the service buttons — the goal and the reward, one line on a phone —
+row under the service buttons — every reward in order, the nearest first, one
+line on a phone —
 wherever the offer would be made. A phone that has not made a card opens the
 same offer in a sheet, without "no volver a preguntar", since the diner asked;
 a phone that has one goes to its card on `/rewards`. So a diner who wants the

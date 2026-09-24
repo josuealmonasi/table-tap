@@ -1664,7 +1664,6 @@ votes: "Votes",
   loyaltyMenu: {
     entry: "Visit card",
     mine: "My visit card",
-    reward: "{goal} visits = {reward}",
   },
   loyaltyOffer: {
     title: "Collect visits at {name}",
