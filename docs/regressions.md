@@ -1188,6 +1188,16 @@ and refuses a stamp that a reward was spent after. The lookup offers the undo
 only where that function would allow it, and an invariant keeps every write
 that moves a card's count inside a locked function.
 
+## A paused card's reward, with nowhere to redeem it
+
+Pausing the visit card stops new stamps; a reward a diner already earned is
+still theirs — the redeem route honours it, the terms say so, and the diner's
+own page tells them so. But every button that redeems was drawn only while the
+program was on: "Sellar tarjeta" on Cuentas and at the till, and the lookup on
+Lealtad. So the one promise the pause made had no screen that kept it. The
+lookup now offers the reward whenever the card is ready, and stamping alone
+waits for the program; the off banner says where to go.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read

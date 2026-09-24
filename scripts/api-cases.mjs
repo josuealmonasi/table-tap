@@ -170,6 +170,30 @@ export function cases(fx) {
       expect: [409], expectError: /ya se canjeó|already redeemed/i },
     { name: "POST /api/loyalty/redeem (a step that is not a number)", as: "waiter", method: "POST",
       path: "/api/loyalty/redeem", body: { code: fx.readyCode ?? "", step: "8" }, expect: [400] },
+    // A reward already earned is honoured after the program is paused: the
+    // diner's page promises it, and Lealtad's lookup keeps the button for it.
+    { name: "POST /api/loyalty/redeem (an earned reward, program paused)", as: "manager", method: "POST",
+      path: "/api/loyalty/redeem",
+      arrange: async f => {
+        const rid = f.restaurant.id;
+        await f.admin.from("loyalty_cards").delete().eq("code", "PAVSEDXTEST0");
+        const { data: card } = await f.admin.from("loyalty_cards")
+          .insert({ restaurant_id: rid, code: "PAVSEDXTEST0", goal: 2 }).select("id").single();
+        await f.admin.from("loyalty_visits").insert(["2025-01-01", "2025-01-02"].map(visit_day => ({
+          card_id: card.id, restaurant_id: rid, visit_day, actor_email: "api@tabletap.dev",
+        })));
+        f.pausedCard = card.id;
+        const restoreProgram = await f.withLoyaltyOff();
+        return async () => {
+          await restoreProgram();
+          await f.admin.from("loyalty_cards").delete().eq("id", card.id);
+        };
+      },
+      body: { code: "PAVSEDXTEST0" }, expect: [200],
+      check: async (_d, f) => {
+        const { count } = await f.admin.from("loyalty_redemptions").select("id", { count: "exact", head: true }).eq("card_id", f.pausedCard);
+        return count === 1 || `the earned reward was spent ${count} times`;
+      } },
     // ── the visit card a diner makes, keeps, and may delete ───────────────
     { name: "POST /api/loyalty/card (a diner makes one)", as: "diner", method: "POST",
       path: "/api/loyalty/card", body: { restaurantId: r }, expect: [200],

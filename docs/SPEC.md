@@ -873,8 +873,10 @@ round in order, the last one ends the round, extra visits carry over and the
 card never resets. The card as a diner gets it, drawn
 from a sample code. Any card looked up by its code, typed or read with the
 camera, with every visit, who stamped it and the rewards it spent — the page
-where a stamp with nothing sold behind it shows up — and, while the card is on,
-stamped or redeemed right there. A manager can take back a stamp given today,
+where a stamp with nothing sold behind it shows up — stamped right there while
+the card is on, and a reward already earned redeemed right there even while it
+is paused, since the diner's page promises exactly that and this is the one
+screen where a paused card can still be found. A manager can take back a stamp given today,
 and nothing older — and not today's either once a reward has been spent after
 it: the record a reward was earned on is not rewritten after the fact.
 `loyalty_unstamp()` decides it under the card's lock, like the stamp and the

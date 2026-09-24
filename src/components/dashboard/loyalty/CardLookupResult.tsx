@@ -18,7 +18,8 @@ export interface LookedUp {
 
 interface CardLookupResultProps {
   card: LookedUp;
-  /** The program is on: the stamp and redeem routes will take this card. */
+  /** The program is on: the stamp route will take this card. Redeeming a
+   *  reward already earned does not depend on it. */
   active: boolean;
   /** Read the card again after anything changed it. */
   onChanged: (code: string) => Promise<void>;
@@ -76,17 +77,23 @@ export default function CardLookupResult({ card, active, onChanged }: CardLookup
       <p className="tt-muted" style={{ fontSize: 12, margin: 0 }}>{t("rewards.memberSince", { date: card.since })}</p>
       <LadderSteps standing={s} />
       {s.ready && <p className="tt-rewards-ready">{t("loyalty.ready")}</p>}
-      {active && (
+      {/* Stamping needs the card switched on. Redeeming does not: a reward a
+          diner earned is honoured after a pause — the route says so, and so
+          does the diner's own page — so the one screen where a paused card
+          can still be found keeps the button that honours it. */}
+      {(active || s.ready) && (
         <div className="tt-loyalty-actions">
-          <button
-            type="button"
-            className="tt-btn tt-btn-primary tt-btn-sm"
-            disabled={busy}
-            onClick={() => void act("/api/loyalty/stamp", "POST", { code: card.code }, d =>
-              t(d.stamped ? "loyalty.stamped" : "loyalty.already"))}
-          >
-            {t("loyaltyAdmin.stampHere")}
-          </button>
+          {active && (
+            <button
+              type="button"
+              className="tt-btn tt-btn-primary tt-btn-sm"
+              disabled={busy}
+              onClick={() => void act("/api/loyalty/stamp", "POST", { code: card.code }, d =>
+                t(d.stamped ? "loyalty.stamped" : "loyalty.already"))}
+            >
+              {t("loyaltyAdmin.stampHere")}
+            </button>
+          )}
           {s.ready && (
             <button
               type="button"
