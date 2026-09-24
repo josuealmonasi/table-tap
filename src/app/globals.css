@@ -4346,6 +4346,38 @@ a.tt-btn {
   border: 1px solid rgba(200, 90, 40, 0.25);
 }
 
+/* The visit card, from the menu: quieter than "follow your order", which is
+   about food on its way, and one line on a phone so it costs the menu little. */
+.tt-loyalty-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  margin-top: 12px;
+  padding: 9px 14px;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  background: var(--tt-accent-wash);
+  color: var(--tt-header-ink);
+  border: 1px solid color-mix(in srgb, var(--tt-accent) 25%, transparent);
+}
+.tt-loyalty-entry > svg {
+  flex-shrink: 0;
+  color: var(--tt-accent);
+}
+/* One line, always: the skeleton holds one line's room, and a reward like
+   "Postre gratis a elegir de la carta" wrapped to two at 360px. The sheet it
+   opens says the whole of it. */
+.tt-loyalty-entry-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* "You have an order in progress" link on the menu — tappable, accent-filled. */
 .tt-track-banner {
   display: block;
@@ -6920,12 +6952,19 @@ a.tt-user-plan:hover {
 }
 
 /* ── The visit card offered after paying, and the card as a picture ─────── */
+/* `.tt-card` draws the frame and leaves the padding to whoever uses it; this
+   one never set any, so its words and its button sat on the border. */
 .tt-loyalty-offer {
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin-top: 16px;
+  padding: 16px;
   min-width: 0;
+}
+.tt-loyalty-offer-sheet {
+  margin-top: 0;
+  padding: 0;
 }
 .tt-loyalty-offer-no {
   display: flex;

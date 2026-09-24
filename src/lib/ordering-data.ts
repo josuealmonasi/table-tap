@@ -58,21 +58,6 @@ const NO_MENU = "00000000-0000-0000-0000-000000000000";
 const NOT_A_FAULT = new Set(["PGRST116", "22P02"]);
 
 /**
- * Unwraps a Supabase result, telling a real answer apart from a failure.
- *
- * These queries used to be destructured as `{ data }`, dropping `error` on the
- * floor. That turned every transient fault — a network blip, an exhausted
- * connection pool — into a confident lie: a null restaurant became a "page not
- * found" for a customer holding a perfectly valid QR code, and a null item list
- * became an empty menu. Both look permanent and correct, so nobody retries and
- * nothing reaches the logs.
- *
- * The NOT_A_FAULT codes are the ones that ARE an answer: the restaurant
- * genuinely does not exist, so they pass through as null and the caller may
- * 404. Everything else throws, which renders the error boundary ("try again")
- * and surfaces the fault.
- */
-/**
  * Just enough to draw the shell: does this restaurant show a cover?
  *
  * One indexed row, asked before the menu itself, so the skeleton can reserve
@@ -95,6 +80,47 @@ export async function loadCoverState(
   return { exists: Boolean(row), cover: Boolean(row?.cover_enabled && row?.cover_url) };
 }
 
+/**
+ * The program a menu offers, or null: the plan has the card, it is switched
+ * on, and it has a reward to promise. Asked the way the card route asks, so
+ * the menu never offers a card the route would then refuse to make.
+ */
+async function offeredProgram(restaurantId: string, limits: Parameters<typeof loyaltyOn>[1]) {
+  if (!(await loyaltyOn(restaurantId, limits))) return null;
+  const program = await programOf(restaurantId);
+  return program?.active && program.reward ? program : null;
+}
+
+/**
+ * Whether the menu will show its visit card row — asked before the menu
+ * streams, so the skeleton holds the row's room instead of the list jumping
+ * down 48px when it lands. The same question the menu asks, never a guess;
+ * and a skeleton is not worth a failed page, so a fault answers "no row".
+ */
+export async function menuShowsLoyalty(restaurantId: string): Promise<boolean> {
+  try {
+    const plan = await getPlan(restaurantId);
+    return (await offeredProgram(restaurantId, plan?.limits ?? null)) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Unwraps a Supabase result, telling a real answer apart from a failure.
+ *
+ * These queries used to be destructured as `{ data }`, dropping `error` on the
+ * floor. That turned every transient fault — a network blip, an exhausted
+ * connection pool — into a confident lie: a null restaurant became a "page not
+ * found" for a customer holding a perfectly valid QR code, and a null item list
+ * became an empty menu. Both look permanent and correct, so nobody retries and
+ * nothing reaches the logs.
+ *
+ * The NOT_A_FAULT codes are the ones that ARE an answer: the restaurant
+ * genuinely does not exist, so they pass through as null and the caller may
+ * 404. Everything else throws, which renders the error boundary ("try again")
+ * and surfaces the fault.
+ */
 export function unwrap<T>(
   res: { data: T | null; error: { code?: string; message: string } | null },
   what: string,
@@ -275,11 +301,9 @@ export async function loadOrderingData(
     restaurant.allow_pay_later = plan ? can(plan.limits, "deferredPayment") : false;
   }
 
-  // Asked the way the card route asks, so the menu never offers a card the
-  // route would then refuse to make.
-  const program = (await loyaltyOn(restaurantId, plan?.limits ?? null)) ? await programOf(restaurantId) : null;
+  const program = await offeredProgram(restaurantId, plan?.limits ?? null);
   const loyalty: LoyaltyOfferInfo | null =
-    restaurant && program?.active && program.reward
+    restaurant && program
       ? { restaurantId, restaurantName: restaurant.name, goal: program.goal, reward: program.reward }
       : null;
 

@@ -95,6 +95,18 @@ export const STATES = [
     keeps: /crear mi tarjeta|get my card/i,
   },
   {
+    // From the menu, any time: the diner does not have to pay first to find it.
+    name: "visit card on · the menu",
+    says: /tarjeta de visitas|visit card/i,
+    keeps: /tarjeta de visitas|visit card/i,
+  },
+  {
+    name: "visit card switched off · the menu",
+    apply: (admin, c) => admin.from("loyalty_programs").update({ active: false }).eq("restaurant_id", c.restaurantId),
+    says: /llamar al mesero|call waiter/i,
+    offers: /tarjeta de visitas|visit card/i,
+  },
+  {
     name: "visit card switched off · a paid order",
     as: "tracker",
     apply: (admin, c) => admin.from("loyalty_programs").update({ active: false }).eq("restaurant_id", c.restaurantId),

@@ -1634,6 +1634,11 @@ votes: "Votos",
     closeCamera: "Cerrar cámara",
     stampHere: "Sellar visita",
   },
+  loyaltyMenu: {
+    entry: "Tarjeta de visitas",
+    mine: "Mi tarjeta de visitas",
+    reward: "{goal} visitas = {reward}",
+  },
   loyaltyOffer: {
     title: "Junta visitas en {name}",
     body: "{goal} visitas = {reward}. Tu tarjeta es una imagen que guardas en tu teléfono: sin registro, sin nombre y sin correo.",
