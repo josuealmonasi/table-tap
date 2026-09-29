@@ -73,11 +73,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               />
             )}
             {membership && (
-              <SectionNav
-                role={membership.role}
-                restaurantId={membership.restaurant.id}
-                features={features}
-              />
+              <SectionNav role={membership.role} features={features} />
             )}
             {admin && <SectionNav role="admin" />}
             {/* Only the team is offered the installable app. The manifest is

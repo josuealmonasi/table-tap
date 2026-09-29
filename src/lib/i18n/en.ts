@@ -854,8 +854,6 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     promosShort: "Promos",
     menus: "Menus",
     menusDesc: "Your menus, categories and dishes",
-    menusEmpty: "No menus yet",
-    menuPaused: "Paused",
     waiting: "{n} waiting",
     tableOrder: "Take an order",
     tableOrderDesc: "Take the order at the table; the bill is settled at the end.",
