@@ -589,6 +589,8 @@ myBill: "View my bill",
   },
   plan: {
     frozenBanner: "Your subscription is paused: the dashboard is read-only and changes will not save. Your menu is still live and taking orders.",
+    pastDueBanner: "We couldn't collect your last payment. Everything keeps working while we retry; check your payment method so the dashboard isn't paused.",
+    pastDueFix: "Check the payment",
     frozenFix: "Reactivate",
     docsTitle: "Your documents",
     docsHint: "Download them whenever you need them",

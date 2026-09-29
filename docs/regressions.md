@@ -50,6 +50,7 @@ us, and what now catches each one.
 | An order that could not be read is not a missing one | A failed read of an order was null, and the tracker answered a diner who had just ordered with "not found" |
 | A rate limit keeps no address, and nothing past a day | Every diner's IP address sat in `rate_limits` for ever, named nowhere in the privacy notice |
 | A reward already earned can be redeemed on any plan | A restaurant that moved to a tier without the visit card had no screen to honour rewards its diners had earned |
+| A failed payment is told on every screen | The terms promise the owner is notified; only the Plan page said so, until the panel froze |
 | A lookup that failed is not "no access" | In a database blip an owner was told the account had no restaurant and to create a new one, and every staff route answered "forbidden" |
 | A failed read of the promotions is not "no promotions" | Checkout would have charged full price for a deal the menu had shown; the panel told a manager there were none |
 | A card settlement that failed before writing makes Stripe send it again | Marking a paid card order failed, the webhook answered 200, and the diner's money sat in Stripe recorded nowhere |
@@ -1554,6 +1555,15 @@ A restaurant that ran the card keeps, under the lock, the card lookup in the
 mode a paused program uses: it redeems and does not stamp. A promise case
 switches to a tier without the card and requires the scan button and the
 sentence that says why it is there.
+
+## Told, according to a page nobody opens
+
+The terms say that when a subscription payment fails, the owner is notified
+and it is retried. Stripe retries; the notice was one line on the Plan page.
+An owner who did not happen to open it learned of the failure when the panel
+froze. The dashboard's banner, which already says when it is read-only, now
+also says when a payment is being retried — to the owner, on every screen,
+with the link to fix it — and a promise case sets `past_due` and requires it.
 
 ## Before merging anything large
 

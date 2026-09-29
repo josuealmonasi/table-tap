@@ -586,6 +586,8 @@ myBill: "Ver mi cuenta",
   },
   plan: {
     frozenBanner: "Tu suscripción está pausada: el panel es solo de lectura y no se guardarán los cambios. Tu menú sigue activo y recibiendo pedidos.",
+    pastDueBanner: "No pudimos cobrar tu último pago. Todo sigue funcionando mientras lo reintentamos; revisa tu método de pago para que no se pause el panel.",
+    pastDueFix: "Revisar el pago",
     frozenFix: "Reactivar",
     docsTitle: "Tus documentos",
     docsHint: "Descárgalos cuando los necesites",
