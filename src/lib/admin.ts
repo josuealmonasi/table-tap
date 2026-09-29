@@ -16,10 +16,15 @@ export const getPlatformAdmin = cache(async (): Promise<PlatformAdmin | null> =>
   const user = await currentUser();
   if (!user) return null;
 
-  const { data } = await createAdminClient()
+  // `maybeSingle`, because `single` reports "no row" as an error — which every
+  // request from a non-admin was, a 406 in the database log each time — and
+  // that made a real failure look exactly like an answer. Now an error is a
+  // failure, and it is thrown rather than read as "not an admin".
+  const { data, error } = await createAdminClient()
     .from("platform_admins")
     .select("user_id, email")
     .eq("user_id", user.id)
-    .single();
+    .maybeSingle();
+  if (error) throw new Error(`platform admin lookup failed: ${error.message}`);
   return data ? { userId: data.user_id, email: data.email } : null;
 });

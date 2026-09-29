@@ -19,17 +19,22 @@ export interface RestaurantPlan {
  * under it both ask, and they should not each pay for the round trip.
  */
 export const getPlan = cache(async (restaurantId: string): Promise<RestaurantPlan | null> => {
-  const { data } = await createAdminClient()
+  const { data, error } = await createAdminClient()
     .from("restaurants")
     .select("plan_status, trial_ends_at, plan_ends_at, plan_limits(*)")
     .eq("id", restaurantId)
-    .single<{
+    .maybeSingle<{
       plan_status: PlanStatus;
       trial_ends_at: string | null;
       plan_ends_at: string | null;
       plan_limits: PlanLimits | null;
     }>();
 
+  // No such restaurant is an answer, and so is an id that is not one at all
+  // (22P02): diners' routes pass what the URL says. Anything else is a read
+  // that failed, and the plan guards turned its null into "forbidden" — a
+  // restaurant on the right plan refused its own features in a database blip.
+  if (error && error.code !== "22P02") throw new Error(`plan lookup failed: ${error.message}`);
   if (!data?.plan_limits) return null;
 
   // A trial that ran out is settled here rather than by a nightly job. The
