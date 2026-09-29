@@ -124,10 +124,13 @@ export const STATES = [
     offers: /tarjeta de visitas|visit card/i,
   },
   {
-    // …and so does the menu's row, nearest reward first.
+    // …and so does the menu, nearest reward first — in the sheet its chip
+    // opens, since the chip itself only names the card. Opened here rather
+    // than assumed: a chip that opened nothing would leave the ladder unsaid.
     name: "a reward ladder · the menu",
+    open: /^\s*(tarjeta de visitas|visit card)\s*$/i,
     says: /(visitas|visits) = free coffee/i,
-    keeps: /tarjeta de visitas|visit card/i,
+    keeps: /crear mi tarjeta|get my card/i,
   },
   {
     name: "your usual · the menu",

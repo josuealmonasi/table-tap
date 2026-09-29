@@ -62,13 +62,16 @@ export default function MenuSkeleton({
           {/* The table's badge and its service row, measured off the real
               ones: two pills side by side was 41px short of them, and the
               whole menu jumped down when it landed. */}
-          {table && (
-            <>
-              <Skeleton width={76} height={23} radius={999} style={{ marginTop: 10 }} />
-              <Skeleton height={34} radius={999} style={{ marginTop: 12 }} />
-            </>
+          {/* The badge and the visit card's chip share one line, as tall as
+              the chip (28px) when there is one and as the badge (23px) when
+              not. */}
+          {(table || loyalty) && (
+            <div className="tt-menu-badges">
+              {table && <Skeleton width={76} height={23} radius={999} />}
+              {loyalty && <Skeleton width={150} height={28} radius={999} />}
+            </div>
           )}
-          {loyalty && <Skeleton height={36} radius={12} style={{ marginTop: 12 }} />}
+          {table && <Skeleton height={34} radius={999} style={{ marginTop: 12 }} />}
         </div>
       </div>
 

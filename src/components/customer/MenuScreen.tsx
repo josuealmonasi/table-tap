@@ -291,11 +291,16 @@ export default function MenuScreen({
             </div>
           </div>
           <div className="tt-sage tt-brand-tagline">{restaurant.tagline}</div>
-          {table && (
-            <span className="tt-badge tt-badge-onink tt-table-badge">
-              <TableIcon size={13} weight="bold" />
-              {t("menu.table", { label: table.label })}
-            </span>
+          {(table || loyalty) && (
+            <div className="tt-menu-badges">
+              {table && (
+                <span className="tt-badge tt-badge-onink">
+                  <TableIcon size={13} weight="bold" />
+                  {t("menu.table", { label: table.label })}
+                </span>
+              )}
+              {loyalty && <LoyaltyMenuEntry offer={loyalty} />}
+            </div>
           )}
 
           {searchOpen && (
@@ -325,7 +330,6 @@ export default function MenuScreen({
               )}
             </div>
           )}
-          {loyalty && <LoyaltyMenuEntry offer={loyalty} />}
           {/* One banner per order still in the kitchen. A counter has no table
               to hang a running tab on, so remembering a drink after ordering
               food makes a SECOND order — and both deserve watching. With more
