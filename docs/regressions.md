@@ -1474,6 +1474,15 @@ own lines, adding up to exactly what the button charges. The service line
 appears whenever there is a charge, including one from before the restaurant
 switched it off.
 
+And switching it off now reaches the bills that are open. The owner's word —
+no service charge — applies to what nobody has started paying, and it only
+ever lowers: switching it on never adds to an order the diner already saw the
+price of. What is already promised is left alone (see the spec's bill
+section), including a card checkout still open, which is why `/api/bill/pay`
+marks its orders before the Stripe session exists and the session now expires
+in 30 minutes. An api case switches it off over a planted bill and reads what
+the bill then owes; unit tests cover the arithmetic and every exclusion.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read

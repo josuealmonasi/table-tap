@@ -969,6 +969,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     noExtras: "Este platillo no lleva extras.",
   },
   apiErr: {
+    serviceRepriceFailed: "Guardamos el ajuste, pero no pudimos quitar el servicio de las cuentas abiertas. Vuelve a guardar.",
     belowCardMinimum: "Ese total es menor al mínimo que acepta la tarjeta — agrega algo más a tu pedido.",
     couponExists: "Ya existe un cupón con ese código.",
     couponCreateFailed: "No pudimos crear el cupón.",
@@ -1260,7 +1261,7 @@ badgesHint: "Muestra cuántas cosas esperan acción en cada sección. Aplica a t
     currency: "Moneda",
     serviceFee: "Cobrar cargo por servicio",
     serviceFeeHint:
-      "Se añade a cada pedido como % del subtotal — desactivado por defecto",
+      "Se añade a cada pedido como % del subtotal. Quitarlo o bajarlo también lo baja en las cuentas abiertas que nadie ha empezado a pagar.",
     serviceFeePct: "% de servicio",
     serviceOn: "Servicio activado",
     serviceOff: "Servicio desactivado",

@@ -7,6 +7,7 @@ import { logEvent } from "@/lib/activity-log";
 import { actingManager } from "@/lib/api-guard";
 import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
 import { isOwnStorageUrl } from "@/lib/images";
+import { repriceOpenService } from "@/lib/service-reprice";
 
 export const runtime = "nodejs";
 
@@ -145,5 +146,23 @@ export async function POST(req: NextRequest) {
       .map(([k, v]) => `${k}: ${typeof v === "string" && v.length > 30 ? "…" : v}`)
       .join(", "),
   });
+
+  // Switching the service charge off, or lowering it, takes it off the bills
+  // nobody has started paying — the owner said there is no service charge, and
+  // a MX$4.00 salad kept being owed as MX$4.40. It never adds to them.
+  if ("service_enabled" in update || "service_pct" in update) {
+    const { data: now, error: readError } = await createAdminClient()
+      .from("restaurants")
+      .select("service_enabled, service_pct")
+      .eq("id", actor.restaurantId)
+      .single();
+    const pct = now ? (now.service_enabled ? Number(now.service_pct) || 0 : 0) : null;
+    const repriced = readError || pct === null ? null : await repriceOpenService(actor.restaurantId, pct);
+    // Saved, but the open bills still carry the old charge: said so, because
+    // "saved" would have the owner believe the bills changed too. Saving again
+    // runs it again.
+    if (repriced === null) return await apiError("apiErr.serviceRepriceFailed", 500);
+    return NextResponse.json({ ok: true, repriced });
+  }
   return NextResponse.json({ ok: true });
 }

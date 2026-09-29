@@ -195,6 +195,19 @@ dishes on a bill the restaurant has just cancelled.
   person's own" is true of the one added when a share is *paid*: clamped to the
   payable amount, recorded in `payments.tip`, and added to the oldest order on
   the sitting.
+- **A bill names every charge in its total.** The diner's bill lists the
+  dishes, any discount, the service charge (with the percentage it was taken
+  at) and any tip as their own lines, adding up to exactly what is charged.
+- **The service charge only goes down on an open bill.** Each order stores the
+  charge it was priced with. Switching it off or lowering it in Settings
+  lowers it on the restaurant's open bills (`src/lib/service-reprice.ts`);
+  switching it on or raising it never adds to an order already placed. Left
+  alone is every order whose total is already promised: paid, written off,
+  cancelled or waiting for its own card payment; with money against it or its
+  sitting; being divided; named in a discount or write-off a manager has not
+  decided; or in a card checkout opened in the last 35 minutes
+  (`orders.card_checkout_at`, set by `/api/bill/pay` before the Stripe session
+  exists, which expires after 30).
 - **Our fee on a divided bill is the table's, not each person's.** It is
   computed only when no share has yet been paid and rides on the first one, the
   same way settling a whole table puts it on the first order. Charging it per

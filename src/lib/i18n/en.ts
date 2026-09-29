@@ -975,6 +975,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     noExtras: "This dish takes no extras.",
   },
   apiErr: {
+    serviceRepriceFailed: "Saved — but we couldn't take the service charge off the open bills. Save again.",
     belowCardMinimum: "That total is below the card minimum — please add a little more to your order.",
     couponExists: "That code already exists.",
     couponCreateFailed: "Could not create the coupon.",
@@ -1263,7 +1264,8 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
     tagline: "Tagline (optional)",
     currency: "Currency",
     serviceFee: "Charge a service fee",
-    serviceFeeHint: "Added to every order as a % of the subtotal — off by default",
+    serviceFeeHint:
+      "Added to every order as a % of the subtotal. Switching it off or lowering it also lowers it on open bills nobody has started paying.",
     serviceFeePct: "Service fee %",
     serviceOn: "Service fee on",
     serviceOff: "Service fee off",
