@@ -3,7 +3,7 @@ import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { TERMS_VERSION } from "@/lib/legal";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { passwordTooShort } from "@/lib/password";
 
 export const runtime = "nodejs";
@@ -26,7 +26,7 @@ const TRIAL_DAYS = 30;
 // if the restaurant insert fails we remove the just-created user so a retry works.
 export async function POST(req: NextRequest) {
   // Cap account-creation attempts per IP to blunt signup spam.
-  if (await isRateLimited(`signup:${clientIp(req)}`, 5, 60)) {
+  if (await isRateLimited(`signup:${clientKey(req)}`, 5, 60)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
 

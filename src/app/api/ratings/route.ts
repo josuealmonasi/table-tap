@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import {
   acceptableRatings,
   isStorableId,
@@ -25,7 +25,7 @@ import type { OrderLineItem } from "@/lib/types";
  */
 export async function POST(req: NextRequest) {
   // A rating is cheap to send and permanent once stored, so cap the rate.
-  if (await isRateLimited(`rating:${clientIp(req)}`, 20, 60)) {
+  if (await isRateLimited(`rating:${clientKey(req)}`, 20, 60)) {
     return await apiError("apiErr.tooManyRequests", 429);
   }
 

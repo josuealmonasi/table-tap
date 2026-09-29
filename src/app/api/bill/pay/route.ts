@@ -6,7 +6,7 @@ import { billWindowStart, MAX_BILL_ORDERS } from "@/lib/table-bill";
 import { packOrderIds, stripeProductName } from "@/lib/stripe-limits";
 import { staffOpenedBill } from "@/lib/table-session";
 import { splitInProgress } from "@/lib/split-service";
-import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { orderFeeCents } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
@@ -36,7 +36,7 @@ export const runtime = "nodejs";
 // caller can choose WHICH of the table's orders to settle — that is the "pay
 // mine / pay everything" choice — but not what they cost.
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  if (await isRateLimited(`billpay:${clientIp(req)}`, 10, 60)) {
+  if (await isRateLimited(`billpay:${clientKey(req)}`, 10, 60)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
 

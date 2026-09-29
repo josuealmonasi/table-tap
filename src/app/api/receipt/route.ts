@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
-import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { messagesFor, translate } from "@/lib/i18n";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { getLocale } from "@/lib/i18n/server";
@@ -37,7 +37,7 @@ const RESENDS_PER_ORDER = 4;
  * to use our sender to bother strangers.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  if (await isRateLimited(`receipt:${clientIp(req)}`, 5, 60)) {
+  if (await isRateLimited(`receipt:${clientKey(req)}`, 5, 60)) {
     return await apiError("apiErr.tooManyRequests", 429);
   }
 

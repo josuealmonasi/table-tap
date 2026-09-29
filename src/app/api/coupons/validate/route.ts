@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jsonBody } from "@/lib/json-body";
-import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { isValidCouponFormat, normalizeCoupon } from "@/lib/coupons";
 import { couponProblem, findCoupon } from "@/lib/coupon-service";
 
@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 // hints at other codes. Rate-limited because the code space is small enough to
 // guess at otherwise.
 export async function POST(req: NextRequest) {
-  if (await isRateLimited(`coupon:${clientIp(req)}`, 10, 60)) {
+  if (await isRateLimited(`coupon:${clientKey(req)}`, 10, 60)) {
     return NextResponse.json({ valid: false, reason: "tooMany" }, { status: 429 });
   }
 

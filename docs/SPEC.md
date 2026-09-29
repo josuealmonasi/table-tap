@@ -307,6 +307,11 @@ Thirty-four tables, RLS on every one of them, in groups:
 `orders` snapshots its line items as JSON at purchase time, so a menu edited
 tomorrow never rewrites what someone bought today.
 
+`rate_limits` keys on a keyed hash of the caller's address (`clientKey`:
+HMAC-SHA256 under the server's secret, 20 hex characters), never the address
+itself, and `rate_limit_hit` sweeps windows older than a day. The privacy
+notice says both.
+
 `orders.diner` is the throwaway token a phone gives itself for the evening —
 localStorage, per restaurant, bounded to 64 characters and rejected rather than
 truncated past that. It names a device and nothing else: no account, no person,

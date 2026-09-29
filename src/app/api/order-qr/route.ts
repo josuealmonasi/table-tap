@@ -1,6 +1,6 @@
 import { type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
-import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { qrSvg } from "@/lib/qr";
 import { fetchTrackedOrder } from "@/lib/order-tracking";
 
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   // The unguessable id is the trust boundary, same as the tracker's — but a
   // public route still gets a ceiling. Lower than order-status because this
   // one is fetched once and then cached, not polled.
-  if (await isRateLimited(`order-qr:${clientIp(req)}`, 30, 60)) {
+  if (await isRateLimited(`order-qr:${clientKey(req)}`, 30, 60)) {
     return await apiError("apiErr.tooManyRequests", 429);
   }
 

@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -26,11 +27,24 @@ export function forTheRoom(perPhone: number): number {
   return perPhone * 2 * PHONES_PER_ADDRESS;
 }
 
-/** Best-effort caller IP from the proxy headers (falls back to a shared bucket). */
-export function clientIp(req: NextRequest): string {
+/**
+ * Who is asking, as a rate limit needs to know it and as nothing else can.
+ *
+ * A limit only needs to tell that two requests came from the same place
+ * within its window. It used to key on the caller's IP address itself, which
+ * put every diner's address in the database — kept for ever, and named nowhere
+ * in the privacy notice. A keyed hash answers the same question: the same
+ * address gives the same key, and without the server's secret the key cannot
+ * be turned back into the address. `rate_limit_hit` clears windows older than
+ * a day, and the notice says both.
+ */
+export function clientKey(req: NextRequest): string {
   const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0].trim();
-  return req.headers.get("x-real-ip") ?? "unknown";
+  const address = fwd ? fwd.split(",")[0].trim() : (req.headers.get("x-real-ip") ?? "unknown");
+  return createHmac("sha256", process.env.SUPABASE_SECRET_KEY ?? "")
+    .update(address)
+    .digest("hex")
+    .slice(0, 20);
 }
 
 /**

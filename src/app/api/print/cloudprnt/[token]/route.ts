@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { kitchenTicket } from "@/lib/ticket";
 import { DEFAULT_LOCALE, messagesFor, translate } from "@/lib/i18n";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
@@ -74,7 +74,7 @@ async function printerFor(req: NextRequest, token: string): Promise<Printer | nu
   // somebody guessing a fresh bucket with every guess, which is no limit at
   // all. A real printer polls from one address every few seconds; 120 a minute
   // is generous for that and useless for a search.
-  if (await isRateLimited(`cloudprnt:${clientIp(req)}`, 120, 60)) return null;
+  if (await isRateLimited(`cloudprnt:${clientKey(req)}`, 120, 60)) return null;
 
   const db = createAdminClient();
   const { data } = await db
