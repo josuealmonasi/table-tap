@@ -58,6 +58,14 @@ export interface BillSide {
    * nobody trusts: the diner needs to see where the difference went.
    */
   discount: number;
+  /**
+   * The service charge inside `total`, as each order was priced when it was
+   * placed. Carried so the bill can say what it is: summed into the total
+   * alone, a MX$4.00 salad read "Subtotal MX$4.40" with nothing to say why.
+   */
+  service: number;
+  /** A tip already on these orders, inside `total` too. */
+  tip: number;
 }
 
 export interface TableBill {
@@ -79,6 +87,10 @@ export interface TableBill {
   total: number;
   /** Everything already taken off the table's bill. */
   discount: number;
+  /** The service charge inside `total`. */
+  service: number;
+  /** A tip already inside `total`. */
+  tip: number;
   /** Nothing owed: no bill, and no reason to show a bill button. */
   settled: boolean;
 }
@@ -123,6 +135,8 @@ function side(orders: Order[]): BillSide {
     // disagree with the sum of its parts by a cent.
     total: round2(orders.reduce((sum, o) => sum + Number(o.total), 0)),
     discount: round2(orders.reduce((sum, o) => sum + Number(o.discount ?? 0), 0)),
+    service: round2(orders.reduce((sum, o) => sum + Number(o.service_fee ?? 0), 0)),
+    tip: round2(orders.reduce((sum, o) => sum + Number(o.tip ?? 0), 0)),
   };
 }
 
@@ -141,6 +155,8 @@ export function tableBill(orders: Order[], myOrderIds: string[]): TableBill {
     paid: side(paidOrders(orders)),
     total: round2(mine.total + others.total),
     discount: round2(mine.discount + others.discount),
+    service: round2(mine.service + others.service),
+    tip: round2(mine.tip + others.tip),
     settled: owed.length === 0,
   };
 }
@@ -170,3 +186,17 @@ export function canPayMineOnly(bill: TableBill): boolean {
  * without getting in the way.
  */
 export const PAID_LINES_SHOWN = 3;
+
+/**
+ * The service charge as the percentage it was, when it was one.
+ *
+ * Every order is priced with the restaurant's percentage at the time, so on a
+ * bill it is usually a round number; when orders from before and after a
+ * change are mixed it is not, and the line is labelled without one rather than
+ * with a figure nobody set.
+ */
+export function servicePercent(part: number, of: number): number {
+  if (part <= 0 || of <= 0) return 0;
+  const pct = (part / of) * 100;
+  return Math.abs(pct - Math.round(pct)) < 0.05 ? Math.round(pct) : 0;
+}

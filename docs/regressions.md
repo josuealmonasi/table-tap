@@ -51,6 +51,7 @@ us, and what now catches each one.
 | A lookup that failed is not "no access" | In a database blip an owner was told the account had no restaurant and to create a new one, and every staff route answered "forbidden" |
 | A failed read of the promotions is not "no promotions" | Checkout would have charged full price for a deal the menu had shown; the panel told a manager there were none |
 | A card settlement that failed before writing makes Stripe send it again | Marking a paid card order failed, the webhook answered 200, and the diner's money sat in Stripe recorded nowhere |
+| A bill names every charge in its total | A MX$4.00 salad read "Subtotal MX$4.40": the service charge was inside the subtotal with no line of its own |
 | A gate that reads production writes nothing there | `roles:prod` created a live 5% coupon, ZZZ-999, on the demo restaurant and re-sent it on every run |
 | Spanish inside an English comment is found, not averaged away | Five lines of Spanish in `schema.sql` passed the English check because the block around them was English |
 | No gate waits with `waitForFunction` | `layout:prod` failed all 220 screens before measuring one: production's CSP forbids the `eval` it runs on |
@@ -1454,6 +1455,24 @@ order marked paid, the payment row not written — still cannot be retried,
 because the guard then matches nothing. That needs one transaction per
 settlement. Unit tests with a recording fake database cover each path; against
 `main`'s file, the five failure cases fail and the two normal ones pass.
+
+## MX$4.00 of salad, MX$4.40 of subtotal
+
+The owner opened a diner's bill on the live demo: "1× Side Salad MX$4.00",
+then "Subtotal MX$4.40, Total MX$4.40", and nothing in between. Both orders
+on that table were placed while the 10% service charge was on, so each stored
+its fee; the bill summed the orders' totals, called the sum a subtotal, and
+passed a service charge of zero to the totals card. The money was right —
+it is what the orders were priced at and what the waiter would collect — but
+a total that does not add up from the lines above it reads as a wrong price,
+and to a diner it is one.
+
+`tableBill` carries each side's service charge and any tip already on its
+orders, and the bill shows the dishes, the discount, the service (with the
+percentage it was charged at when that is a round number) and the tip as their
+own lines, adding up to exactly what the button charges. The service line
+appears whenever there is a charge, including one from before the restaurant
+switched it off.
 
 ## Before merging anything large
 
