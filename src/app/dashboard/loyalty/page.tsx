@@ -25,7 +25,7 @@ export default async function LoyaltyPage() {
   const plan = await getPlan(r.id);
 
   if (!plan || !can(plan.limits, "loyalty")) {
-    const unlocks = cheapestWith(await allPlans(), "loyalty");
+    const unlocks = cheapestWith(await allPlans(), "loyalty", plan?.limits);
     return (
       <div className="tt-dash">
         <div className="container">

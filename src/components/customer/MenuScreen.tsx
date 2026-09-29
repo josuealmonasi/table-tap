@@ -48,6 +48,7 @@ export default function MenuScreen({
   promos,
   ratings,
   closedNow = false,
+  orderAtRegister = false,
   cartCount,
   cartTotal,
   onSelectItem,
@@ -72,6 +73,8 @@ export default function MenuScreen({
   ratings: Record<string, { avg: number; count: number }>;
   /** No menu is serving at this hour — show why instead of an empty list. */
   closedNow?: boolean;
+  /** Caja: the menu is to read, and the order is taken at the register. */
+  orderAtRegister?: boolean;
   cartCount: number;
   cartTotal: number;
   onSelectItem: (item: MenuItem) => void;
@@ -314,7 +317,9 @@ export default function MenuScreen({
               onChange={e => changeSearch(e.target.value)}
             />
           )}
-          {table && (
+          {/* Not on Caja: nobody waits tables there, and the bill is paid at the
+              register, so both buttons would call for what the plan has not got. */}
+          {table && !orderAtRegister && (
             <div className="tt-service-row">
               <ServiceButtons restaurantId={restaurant.id} table={table} />
               {/* One door to the bill, and it says what it does. "Ask for the
@@ -349,10 +354,16 @@ export default function MenuScreen({
                   : t("menu.trackOrder")}
               </button>
             ))}
-          {!restaurant.accepting_orders && (
+          {orderAtRegister ? (
             <div className="tt-closed-banner" role="status">
-              {t("menu.closed")}
+              {t("menu.orderAtRegister")}
             </div>
+          ) : (
+            !restaurant.accepting_orders && (
+              <div className="tt-closed-banner" role="status">
+                {t("menu.closed")}
+              </div>
+            )
           )}
           {notice}
         </div>

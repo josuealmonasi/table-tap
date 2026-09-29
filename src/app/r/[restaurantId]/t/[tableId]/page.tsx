@@ -66,6 +66,7 @@ async function Menu({
       promos={data.promos}
       ratings={data.ratings}
       closedNow={data.closedNow}
+      orderAtRegister={data.orderAtRegister}
       receipts={data.receipts}
       loyalty={data.loyalty}
       dietaryTags={data.dietaryTags}

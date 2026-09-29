@@ -53,6 +53,9 @@ export const NAV_ITEMS: NavItem[] = [
     icon: "Orders",
     titleKey: "nav.orders",
     descKey: "nav.ordersDesc",
+    // Caja is the register on its own: a sale is served where it is paid, and
+    // there is no board for it to wait on.
+    feature: "kitchenBoard",
   },
   {
     // The counter till. Only on the tiers that include it — the screen itself

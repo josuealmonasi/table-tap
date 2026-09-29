@@ -463,6 +463,35 @@ export function cases(fx) {
       body: { posRef: "00000000-0000-4000-8000-000000000001", method: "cash",
               items: [{ itemId: "00000000-0000-4000-8000-000000000002", qty: 1 }] },
       expect: [403] },
+    // ── Caja: the register on its own ────────────────────────────────────
+    // A diner's phone cannot check out — the order is taken at the register —
+    // and the route says the same sentence the menu does.
+    { name: "POST /api/checkout (Caja takes the order at the register)", as: "diner", method: "POST",
+      path: "/api/checkout", arrange: f => f.onCaja(),
+      body: { restaurantId: r, tableId: null, payLater: true, note: MARK,
+        items: [{ itemId: dish.id, name: dish.name, price: Number(dish.price), qty: 1,
+          emoji: "🍽️", mods: {} }] },
+      expect: [409], expectError: /toma los pedidos en la caja|takes orders at the register/i },
+    // No kitchen board and no tables, so no login for a cook: refused with the
+    // tier that has one, before any invite is sent.
+    { name: "POST /api/staff (a cook on Caja)", as: "owner", method: "POST", path: "/api/staff",
+      arrange: f => f.onCaja(), body: { email: "demo-waiter@tabletap.dev", role: "kitchen" },
+      expect: [403], expectError: /cocina y meseros|kitchen and waiter/i },
+    // Served where it is paid: with no board to wait on, the sale is finished
+    // the moment it is rung.
+    { name: "POST /api/pos/order (Caja: served where it is paid)", as: "cashier", method: "POST",
+      path: "/api/pos/order", arrange: f => f.onCaja(),
+      body: { posRef: crypto.randomUUID(), method: "cash", note: `${MARK} caja`,
+        items: [{ itemId: dish.id, name: dish.name, price: Number(dish.price), qty: 1,
+          emoji: "🍽️", mods: {} }] },
+      expect: [200],
+      effect: async f => {
+        const { data } = await f.admin.from("orders").select("status, paid")
+          .eq("restaurant_id", f.restaurant.id).eq("note", `${MARK} caja`).maybeSingle();
+        return data?.status === "completed" && data?.paid === true
+          ? true
+          : `the sale is ${data?.status ?? "missing"}, paid=${data?.paid}`;
+      } },
     { name: "POST /api/pos/order (no cart)", as: "cashier", method: "POST",
       path: "/api/pos/order",
       body: { posRef: "00000000-0000-4000-8000-000000000003", method: "cash", items: [] },

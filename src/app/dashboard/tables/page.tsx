@@ -25,7 +25,7 @@ export default async function TablesPage() {
   // trigger the owner never saw coming.
   const [plan, catalog] = await Promise.all([getPlan(r.id), allPlans()]);
   const tablesAllowed = plan ? can(plan.limits, "dineIn") : false;
-  const tablesUnlockWith = cheapestWith(catalog, "dineIn")?.plan ?? "servicio";
+  const tablesUnlockWith = cheapestWith(catalog, "dineIn", plan?.limits)?.plan ?? "servicio";
 
   const [tablesRes, openOrdersRes] = await Promise.all([
     supabase

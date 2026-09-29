@@ -42,6 +42,11 @@ interface CartScreenProps {
   loading: boolean;
   /** False when nothing orderable remains (empty or all sold out). */
   canCheckout: boolean;
+  /**
+   * Caja: the order is taken at the register. The cart is a list to show the
+   * cashier, and offers no button that would be refused.
+   */
+  orderAtRegister?: boolean;
   onChangeNote: (note: string) => void;
   /** Counter orders only — the name the cashier calls out. */
   customerName?: string;
@@ -89,6 +94,7 @@ export default function CartScreen({
   orderNote,
   loading,
   canCheckout,
+  orderAtRegister = false,
   onChangeNote,
   customerName = "",
   onChangeName,
@@ -262,6 +268,12 @@ export default function CartScreen({
                 control the diner came here for must never need finding — the
                 same rule the dish detail already follows. */}
             <div className="tt-cart-actions">
+              {orderAtRegister ? (
+                <p className="tt-cart-register-note" role="status">
+                  {t("cart.orderAtRegister")}
+                </p>
+              ) : (
+              <>
               {/* At a table that settles later this places the order; the
                   bill it opens is where paying happens, and it is the same
                   bill whether they pay now or after dessert. Everywhere else
@@ -331,6 +343,8 @@ export default function CartScreen({
                   );
                 })()}
               </p>
+              </>
+              )}
             </div>
           </>
         )}

@@ -30,7 +30,7 @@ export default async function TableOrderPage() {
   const plan = await getPlan(membership.restaurant.id);
   if (!plan || !can(plan.limits, "waiterService")) {
     // Named, not merely locked: the screen says which tier carries it.
-    const unlocks = cheapestWith(await allPlans(), "waiterService");
+    const unlocks = cheapestWith(await allPlans(), "waiterService", plan?.limits);
     return (
       <div className="tt-dash">
         <div className="container">

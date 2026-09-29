@@ -228,9 +228,15 @@ describe("a role is known everywhere or nowhere", () => {
       expect(api, `POST /api/staff refuses "${role}"`).toContain(`"${role}"`);
     }
 
+    // The options are drawn from one list, and a tier narrows it
+    // (`assignableRoles` — Caja has no kitchen board and no tables), so the
+    // list itself is what must name every role.
     const picker = read("src/components/dashboard/staff/StaffPanel.tsx");
+    const listed = picker.match(/const ALL_ROLES: StaffRole\[\] = \[([^\]]*)\]/);
+    expect(listed, "the team screen no longer draws its roles from one list").toBeTruthy();
+    expect(picker, "the invite form does not render the list it was given").toMatch(/roles\.map\(r =>/);
     for (const role of hired) {
-      expect(picker, `no way to hire a "${role}"`).toContain(`value="${role}"`);
+      expect(listed![1], `no way to hire a "${role}"`).toContain(`"${role}"`);
     }
 
     const schema = read("supabase/schema.sql");

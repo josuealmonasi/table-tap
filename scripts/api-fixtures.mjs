@@ -145,6 +145,26 @@ export async function setup(env, base) {
     };
   };
   const servicedOrder = { id: "" };
+  // The demo restaurant on Caja for one case — the register on its own — and
+  // back on its own plan afterwards. A sale the case rings is removed with its
+  // money, the payment first: `payments.order_id` is `on delete set null`, so
+  // the other order would leave it in the ledger belonging to nothing.
+  const onCaja = async () => {
+    const { data: was } = await admin
+      .from("restaurants").select("plan, plan_status").eq("id", restaurant.id).single();
+    await admin.from("restaurants").update({ plan: "caja", plan_status: "active" }).eq("id", restaurant.id);
+    return async () => {
+      await admin.from("restaurants")
+        .update({ plan: was.plan, plan_status: was.plan_status }).eq("id", restaurant.id);
+      const { data: sales } = await admin
+        .from("orders").select("id").eq("restaurant_id", restaurant.id).eq("note", `${MARK} caja`);
+      const ids = (sales ?? []).map(o => o.id);
+      if (ids.length) {
+        await admin.from("payments").delete().in("order_id", ids);
+        await admin.from("orders").delete().in("id", ids);
+      }
+    };
+  };
   const withLoyaltyOff = async () => {
     const { data: was } = await admin
       .from("loyalty_programs").select("active").eq("restaurant_id", restaurant.id).maybeSingle();
@@ -448,6 +468,7 @@ export async function setup(env, base) {
   return {
     admin, base, who, restaurant, dish, menu, serviceRequestBefore,
     withServicedOrder, servicedOrder,
+    onCaja,
     // Read when a case asks, never snapshotted: an earlier case MINTS a new
     // token (`POST /api/print/token`), so a value captured at setup is stale
     // by the time the printer's own cases run — and a stale token is refused,

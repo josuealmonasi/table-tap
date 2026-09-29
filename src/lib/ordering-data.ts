@@ -41,6 +41,12 @@ export interface OrderingData {
    * could not stamp — the same rule the scanner is shown by.
    */
   loyalty: LoyaltyOfferInfo | null;
+  /**
+   * The menu is to read, and the order is taken at the register: Caja is the
+   * register on its own, with no ordering from the diner's phone. The menu
+   * says so, and the cart becomes a list to show the cashier.
+   */
+  orderAtRegister: boolean;
 }
 
 // Sentinel so an `.in("menu_id", [])` never matches (a restaurant with no active menus).
@@ -317,6 +323,7 @@ export async function loadOrderingData(
 
   return {
     closedNow,
+    orderAtRegister: plan ? !can(plan.limits, "onlineOrdering") : false,
     receipts: mailConfigured(),
     loyalty,
     dietaryTags: (dietaryRes.data as StoredDietaryTag[] | null) ?? [],

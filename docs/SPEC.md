@@ -88,11 +88,29 @@ dishes on a bill the restaurant has just cancelled.
 - **Stripe Connect, direct charges.** The restaurant's account takes the payment;
   we take an `application_fee_amount`. It used to be a destination charge on our
   platform, which had Stripe billing *us* for every order.
-- **Plans** (`plan_limits`): `carta` free, `servicio`, `casa`, `grupo`. Each row
-  carries the ceilings (tables, staff, menus, items) and the feature flags:
-  dine-in, menu schedules, deferred payment, promotions, coupons, staff
-  discounts, inventory, the counter till, waiter service.
-  `can(limits, feature)` is the only way to ask.
+- **Plans** (`plan_limits`): `carta` free, `caja` MX$399, `servicio`, `casa`,
+  `grupo`. Each row carries the ceilings (tables, staff, menus, items) and the
+  feature flags: dine-in, menu schedules, deferred payment, promotions,
+  coupons, staff discounts, inventory, the counter till, waiter service, the
+  visit card, ordering from the diner's phone, and the kitchen board.
+  `can(limits, feature)` is the only way to ask; the last two read as on unless
+  a row says otherwise, because every tier before Caja had them.
+- **Caja is the register on its own.** Cash or the restaurant's own card
+  terminal, tips, receipts, promotions, inventory and the visit card — and
+  nothing through the diner's phone: the QR menu is to read ("pasa a la caja"),
+  the cart is a list to show the cashier, `/api/checkout` refuses with the same
+  sentence, and a table's QR offers no waiter and no bill. No kitchen board: a
+  register sale is `completed` the moment it is rung, the orders board sends
+  staff on to the till, and only cashier, manager and owner logins can be
+  handed out (`assignableRoles`). It earns no per-order fee — none of its
+  money touches Stripe — so the subscription is its price.
+- **The ladder is not a line.** Caja sits above Carta in price and below it in
+  one thing (ordering from the phone), so `nextPlan` and `cheapestWith` only
+  name a tier that keeps everything the restaurant already has
+  (`keepsEverything`): a Carta restaurant asking for the till is pointed at
+  Servicio, not at Caja. Flags are set by naming their tiers in `schema.sql`,
+  never by `rank`, so a tier added between two others inherits nothing by
+  position.
 - **Trials.** Signing up opens thirty days of `servicio` with `plan_status`
   'trialing' and a `trial_ends_at`. Nothing runs at night to end it: `getPlan`
   drops a lapsed trial to `carta` the first time anybody asks, and changes the
@@ -818,8 +836,8 @@ scan-to-collect button shipped and could never open a lens. It is `(self)`.
 
 A loyalty card a diner keeps on their phone, stamped by staff on each visit and
 worth the rewards the restaurant chooses, each at a number of visits it chooses
-— a reward ladder: 4 visits a coffee, 8 a dessert, 12 a meal. Casa and Grupo
-(`plan_limits.allows_loyalty`). It knows nobody: a card is a random code, a
+— a reward ladder: 4 visits a coffee, 8 a dessert, 12 a meal. Every paid tier
+(`plan_limits.allows_loyalty`): Caja carries it, so the tiers above it must. It knows nobody: a card is a random code, a
 visit is a card, a day and the member of staff who scanned it, and a reward is
 the step it was, the visits it used and what it said at the time. No name,
 email or phone.

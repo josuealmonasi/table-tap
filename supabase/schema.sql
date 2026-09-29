@@ -2653,7 +2653,9 @@ revoke all on function public.enqueue_kitchen_ticket() from public, anon, authen
 -- beside the rows is a second record of one fact.
 -- ============================================================================
 alter table plan_limits add column if not exists allows_loyalty boolean not null default false;
-update plan_limits set allows_loyalty = true where plan in ('casa', 'caja', 'grupo');
+-- Every paid tier since Caja: the register-only plan includes it, so the tier
+-- above it must too, or upgrading from Caja would take the visit card away.
+update plan_limits set allows_loyalty = true where plan in ('caja', 'servicio', 'casa', 'grupo');
 
 -- ── Caja: the register, on its own ──────────────────────────────────────────
 -- A counter that takes the order face to face and the money at the till, and

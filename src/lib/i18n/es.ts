@@ -160,6 +160,7 @@ export const es: Messages = {
     searchIn: "Busca en {name}",
     all: "Todo",
     closed: "⏸️ No estamos tomando pedidos en este momento — vuelve pronto.",
+    orderAtRegister: "🧾 Aquí puedes ver el menú. Para ordenar y pagar, pasa a la caja.",
     table: "Mesa {label}",
 myBill: "Ver mi cuenta",
     trackOrder: "Tienes un pedido en curso — síguelo",
@@ -395,6 +396,7 @@ myBill: "Ver mi cuenta",
     retry: "Intentar de nuevo",
   },
   cart: {
+    orderAtRegister: "Muéstrale esta lista a quien atiende la caja: ahí se ordena y se paga.",
     stockTrimmed: "Lo ajustamos a lo que le queda a la cocina.",
     extrasRemoved: "Ya no hay: {names}. Lo quitamos de tu pedido; revísalo y vuelve a intentarlo.",
     yourName: "¿A nombre de quién?",
@@ -652,6 +654,9 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
       promotions: "Promociones y combos",
       coupons: "Códigos de cupón",
       staffDiscounts: "Descuentos aplicados por tu equipo",
+      register: "Caja para cobrar en efectivo o con tu terminal",
+      viewOnlyMenu: "Menú para ver desde el celular — se ordena en caja",
+      loyalty: "Tarjeta de visitas",
     },
     frozen: "Tu suscripción está pausada, así que el panel es solo de lectura. Tu menú sigue activo y sigue recibiendo pedidos.",
     limit: {
@@ -667,6 +672,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
       staff: "Tu plan {plan} no incluye accesos para tu equipo. Mejora tu plan para agregarlos.",
     },
     needs: {
+      kitchenBoard: "Los accesos para cocina y meseros vienen con {plan}: Caja no tiene tablero de cocina ni mesas.",
       waiterService: "Tomar pedidos en la mesa viene con {plan}.",
     pos: "La caja del mostrador viene con {plan}.",
       deferredPayment: "Cobrar al final o en la caja viene con {plan}. Con el plan gratuito se cobra con tarjeta al ordenar.",
@@ -968,6 +974,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
   },
   apiErr: {
     serviceRepriceFailed: "Guardamos el ajuste, pero no pudimos quitar el servicio de las cuentas abiertas. Vuelve a guardar.",
+    orderAtRegister: "Este restaurante toma los pedidos en la caja. Pasa a ordenar y pagar ahí.",
     belowCardMinimum: "Ese total es menor al mínimo que acepta la tarjeta — agrega algo más a tu pedido.",
     couponExists: "Ya existe un cupón con ese código.",
     couponCreateFailed: "No pudimos crear el cupón.",

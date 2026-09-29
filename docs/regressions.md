@@ -52,6 +52,7 @@ us, and what now catches each one.
 | A failed read of the promotions is not "no promotions" | Checkout would have charged full price for a deal the menu had shown; the panel told a manager there were none |
 | A card settlement that failed before writing makes Stripe send it again | Marking a paid card order failed, the webhook answered 200, and the diner's money sat in Stripe recorded nowhere |
 | A bill names every charge in its total | A MX$4.00 salad read "Subtotal MX$4.40": the service charge was inside the subtotal with no line of its own |
+| A tier is only an upgrade if it keeps everything | Caja sits above Carta in price and below it in one thing; "the next plan up" by rank would have taken a Carta restaurant's QR ordering away |
 | A gate that reads production writes nothing there | `roles:prod` created a live 5% coupon, ZZZ-999, on the demo restaurant and re-sent it on every run |
 | Spanish inside an English comment is found, not averaged away | Five lines of Spanish in `schema.sql` passed the English check because the block around them was English |
 | No gate waits with `waitForFunction` | `layout:prod` failed all 220 screens before measuring one: production's CSP forbids the `eval` it runs on |
@@ -1500,6 +1501,22 @@ same list the page it opens already is. The owner found it confusing: a panel
 that appeared under the pointer on the way to somewhere else, offering the
 place the click was about to go anyway. The tab is one place now, like every
 other tab, and `MenusMenu` is gone with its styles and its two strings.
+
+## Caja, and the ladder that stopped being a line
+
+Caja is the register on its own — cash or the restaurant's own terminal, tips,
+receipts, promotions, inventory and the visit card, and nothing through the
+diner's phone. Building it found three things that had only worked because
+every tier contained the one below it. Two flags in `schema.sql` were set by
+`rank` (`allows_menu_schedules = rank >= 2`, `allows_deferred_payment = rank >=
+1`), so inserting a tier at rank 1 would have handed Servicio menu schedules
+and Caja pay-later on the next deploy; they name their tiers now. `nextPlan`
+and `cheapestWith` took the next rank up, which from Carta would have been Caja
+— an "upgrade" that takes QR ordering away; they only name a tier that keeps
+everything (`keepsEverything`). And the visit card was Casa-and-up, so Caja
+having it made Servicio a step down from Caja; Servicio has it now, on the
+owner's decision. Tests pin all three, and promise cases open Caja's menu and
+its till.
 
 ## Before merging anything large
 

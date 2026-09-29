@@ -5,6 +5,8 @@ import { jsonBody } from "@/lib/json-body";
 import { actingStaff } from "@/lib/api-guard";
 import { TAKES_COUNTER_ORDERS } from "@/lib/membership";
 import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
+import { getPlan } from "@/lib/plan-server";
+import { can } from "@/lib/plan";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { capName, capNote } from "@/lib/notes";
 import { priceCart } from "@/lib/pricing";
@@ -201,7 +203,13 @@ export async function POST(req: NextRequest) {
   // Only at the counter. The flag means "needs no preparation", and the
   // counter is the one place where that also means already delivered — a
   // bottled water ordered from table 6 still has to be carried to table 6.
-  const handedOverAtOnce = verified.length > 0 && verified.every(line => line.skipsKitchen);
+  //
+  // And on Caja, always: it is the register on its own, with no kitchen board
+  // for a sale to wait on, so every sale is served where it is paid.
+  const plan = await getPlan(actor.restaurantId);
+  const noBoard = plan ? !can(plan.limits, "kitchenBoard") : false;
+  const handedOverAtOnce =
+    verified.length > 0 && (noBoard || verified.every(line => line.skipsKitchen));
 
   const { data: order, error } = await db
     .from("orders")

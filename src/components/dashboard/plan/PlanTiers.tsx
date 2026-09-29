@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import { isSelfServe } from "@/lib/billing";
-import { launchSaving, planLabel, type PlanLimits, type PlanName } from "@/lib/plan";
+import { can, launchSaving, planLabel, type PlanLimits, type PlanName } from "@/lib/plan";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { currentPrice, foundingOpen, slotsLeft } from "@/lib/founding";
@@ -20,13 +20,18 @@ function includes(limits: PlanLimits, t: (k: string, v?: Record<string, string |
         ? t(`plan.tier.${key}None`)
         : t(`plan.tier.${key}`, { n });
 
-  const lines = [cap(limits.max_tables, "tables"), cap(limits.max_staff, "staff")];
+  // Caja has no tables and no ordering from the phone, so "a QR for the whole
+  // place" would promise the one thing it does not do. It says what it is.
+  const lines = can(limits, "onlineOrdering")
+    ? [cap(limits.max_tables, "tables"), cap(limits.max_staff, "staff")]
+    : [t("plan.tier.register"), t("plan.tier.viewOnlyMenu"), cap(limits.max_staff, "staff")];
   if (limits.allows_deferred_payment) lines.push(t("plan.tier.deferredPayment"));
   if (limits.allows_menu_schedules) lines.push(t("plan.tier.schedules"));
   if (limits.allows_inventory) lines.push(t("plan.tier.inventory"));
   if (limits.allows_promotions) lines.push(t("plan.tier.promotions"));
   if (limits.allows_coupons) lines.push(t("plan.tier.coupons"));
   if (limits.allows_staff_discounts) lines.push(t("plan.tier.staffDiscounts"));
+  if (limits.allows_loyalty) lines.push(t("plan.tier.loyalty"));
   return lines;
 }
 
@@ -167,7 +172,9 @@ export default function PlanTiers({
                     {t("plan.feeCap", { cap: formatMoney(tier.fee_cap, currency) })}
                   </li>
                 ) : null}
-                <li className="tt-muted">{t("plan.stripeFee")}</li>
+                {/* Caja takes no card through us — its card sales are on the
+                    restaurant's own terminal — so Stripe's fee is not its to pay. */}
+                {can(tier, "onlineOrdering") && <li className="tt-muted">{t("plan.stripeFee")}</li>}
               </ul>
 
               <ul className="tt-tier-list">
