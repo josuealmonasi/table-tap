@@ -1962,6 +1962,14 @@ alter table orders add column if not exists pos_ref uuid;
 create unique index if not exists orders_pos_ref_once
   on orders (pos_ref) where pos_ref is not null;
 
+-- When a card checkout for this order last went to Stripe. A table's bill is
+-- priced from its orders' totals when the diner opens Stripe, and the webhook
+-- records those same orders' totals when the money lands — so switching the
+-- service charge off must not lower a total while its checkout is open, or the
+-- ledger records less than Stripe took. Set before the session is created;
+-- sessions expire after 30 minutes, and repricing leaves these alone for 35.
+alter table orders add column if not exists card_checkout_at timestamptz;
+
 -- ── Inventory ───────────────────────────────────────────────────────────────
 -- How many are left, when the restaurant wants us to count.
 --

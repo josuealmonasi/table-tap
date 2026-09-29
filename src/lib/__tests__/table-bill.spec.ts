@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canPayMineOnly,
   ordersToPay,
+  servicePercent,
   tableBill,
   unpaidOrders,
 } from "@/lib/table-bill";
@@ -247,5 +248,38 @@ describe("what somebody already paid at the table", () => {
     const bill = tableBill([order("b", 60, { paid: true })], []);
     expect(bill.settled).toBe(true);
     expect(bill.paid.total).toBe(60);
+  });
+});
+
+describe("what the bill says a table pays for", () => {
+  // Mesa 8 on the live demo: a MX$4.00 salad and a MX$6.00 pie, both ordered
+  // while the 10% service charge was on. The bill read "Subtotal MX$4.40",
+  // with nothing to say where the forty cents came from.
+  const salad = { ...order("salad", 4.4), subtotal: 4, service_fee: 0.4 };
+  const pie = { ...order("pie", 6.6), subtotal: 6, service_fee: 0.6 };
+
+  it("carries the service charge inside each side's total", () => {
+    const bill = tableBill([salad, pie], ["salad"]);
+    expect(bill.mine).toMatchObject({ total: 4.4, service: 0.4, tip: 0 });
+    expect(bill.others).toMatchObject({ total: 6.6, service: 0.6 });
+    expect(bill).toMatchObject({ total: 11, service: 1 });
+  });
+
+  it("adds up: the dishes, the service and the tip are the total", () => {
+    const tipped = { ...order("tipped", 12.5), subtotal: 10, service_fee: 1, tip: 1.5 };
+    const side = tableBill([tipped], ["tipped"]).mine;
+    const dishes = side.total - side.service - side.tip;
+    expect(dishes).toBe(10);
+    expect(dishes + side.service + side.tip).toBe(side.total);
+  });
+
+  it("names the percentage the orders were charged at", () => {
+    expect(servicePercent(0.4, 4)).toBe(10);
+    expect(servicePercent(1, 10)).toBe(10);
+  });
+
+  it("names no percentage when there was none, or when orders from before and after a change are mixed", () => {
+    expect(servicePercent(0, 4)).toBe(0);
+    expect(servicePercent(0.4, 7.3)).toBe(0);
   });
 });

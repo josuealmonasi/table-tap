@@ -72,9 +72,13 @@ export default function OrderTotals({
           <span>{formatMoney(iva, currency)}</span>
         </div>
       )}
-      {servicePct > 0 && (
+      {/* Whenever there is one — including a charge on orders placed before
+          the restaurant switched it off, which is still in the total. */}
+      {(servicePct > 0 || serviceFee > 0) && (
         <div className="tt-row" style={{ marginTop: 8 }}>
-          <span className="tt-muted">{t("totals.service", { pct: servicePct })}</span>
+          <span className="tt-muted">
+            {servicePct > 0 ? t("totals.service", { pct: servicePct }) : t("totals.serviceFlat")}
+          </span>
           <span>{formatMoney(serviceFee, currency)}</span>
         </div>
       )}

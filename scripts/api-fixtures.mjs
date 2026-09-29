@@ -123,6 +123,28 @@ export async function setup(env, base) {
     return data?.goal ?? null;
   };
   // Switch the program off for one request, and back as it was.
+  // The service charge switched on, and an open bill priced with it — so a
+  // case can switch it off and look at what the bill then owes. Put back as it
+  // was whatever the case does.
+  const withServicedOrder = async () => {
+    const { data: was } = await admin
+      .from("restaurants").select("service_enabled, service_pct").eq("id", restaurant.id).single();
+    await admin.from("restaurants").update({ service_enabled: true, service_pct: 10 }).eq("id", restaurant.id);
+    const { data: order, error } = await admin.from("orders").insert({
+      restaurant_id: restaurant.id, table_label: null, table_id: null,
+      items: [{ itemId: "x", name: `${MARK} serviced`, emoji: "🥗", price: 4, qty: 1, mods: {} }],
+      subtotal: 4, service_fee: 0.4, tip: 0, tax_pct: 0, discount: 0, total: 4.4,
+      note: MARK, status: "received",
+    }).select("id").single();
+    if (error) throw new Error(`could not create the serviced order: ${error.message}`);
+    servicedOrder.id = order.id;
+    return async () => {
+      await admin.from("restaurants")
+        .update({ service_enabled: was.service_enabled, service_pct: was.service_pct }).eq("id", restaurant.id);
+      await admin.from("orders").delete().eq("id", order.id);
+    };
+  };
+  const servicedOrder = { id: "" };
   const withLoyaltyOff = async () => {
     const { data: was } = await admin
       .from("loyalty_programs").select("active").eq("restaurant_id", restaurant.id).maybeSingle();
@@ -425,6 +447,7 @@ export async function setup(env, base) {
 
   return {
     admin, base, who, restaurant, dish, menu, serviceRequestBefore,
+    withServicedOrder, servicedOrder,
     // Read when a case asks, never snapshotted: an earlier case MINTS a new
     // token (`POST /api/print/token`), so a value captured at setup is stale
     // by the time the printer's own cases run — and a stale token is refused,

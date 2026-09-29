@@ -234,6 +234,8 @@ export type Order = {
   status: OrderStatus;
   subtotal: number;
   service_fee: number;
+  /** When a card checkout for this order last went to Stripe (see service-reprice). */
+  card_checkout_at?: string | null;
   tip: number;
   tax_pct: number;
   total: number;

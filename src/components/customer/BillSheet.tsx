@@ -11,6 +11,7 @@ import {
   PAID_LINES_SHOWN,
   type BillSide,
   type TableBill,
+  servicePercent,
 } from "@/lib/table-bill";
 import { applyCoupon, itemSalePrice } from "@/lib/pricing";
 import { rememberSettling } from "@/hooks/useReceiptOffer";
@@ -307,10 +308,19 @@ export default function BillSheet({
   // more than the total unless it is shown, and a bill that doesn't add up is
   // a bill nobody trusts.
   const applied = scope === "mine" ? bill.mine.discount : bill.discount;
-  const discount = round2(applied + (coupon ? applyCoupon(coupon, food) : 0));
-  const base = round2(food - (coupon ? applyCoupon(coupon, food) : 0));
+  const couponOff = coupon ? applyCoupon(coupon, food) : 0;
+  const discount = round2(applied + couponOff);
+  const base = round2(food - couponOff);
   const tip = tipCustom !== null ? Math.min(tipCustom, base) : round2(base * (tipPct / 100));
   const total = round2(base + tip);
+  // `food` is what the orders were priced at, service and any tip included —
+  // passed as the subtotal, a MX$4.00 salad read "Subtotal MX$4.40" with no
+  // line saying where the forty cents came from. Each part gets its own line,
+  // and the lines add up to exactly what the button charges.
+  const service = scope === "mine" ? bill.mine.service : bill.service;
+  const priorTip = scope === "mine" ? bill.mine.tip : bill.tip;
+  const dishes = round2(food - service - priorTip);
+  const servicePct = servicePercent(service, dishes);
 
   async function payOnline(): Promise<void> {
     setBusy(true);
@@ -500,14 +510,14 @@ export default function BillSheet({
           {!splitLocked && (
           <>
           <OrderTotals
-            subtotal={base}
-            grossSubtotal={round2(food + applied)}
+            subtotal={Math.max(0, round2(dishes - couponOff))}
+            grossSubtotal={round2(dishes + applied)}
             discount={discount}
-            serviceFee={0}
-            tip={tip}
-            tipPct={tipCustom !== null ? 0 : tipPct}
+            serviceFee={service}
+            tip={round2(priorTip + tip)}
+            tipPct={tipCustom !== null || priorTip > 0 ? 0 : tipPct}
             total={total}
-            servicePct={0}
+            servicePct={servicePct}
             taxPct={Number(restaurant.tax_pct) || 0}
             taxBreakdown={Boolean(restaurant.tax_show_breakdown)}
             currency={currency}

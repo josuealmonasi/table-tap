@@ -178,6 +178,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.billSettled", 409);
   }
 
+  // Marked before Stripe hears of it, so there is no moment when a checkout is
+  // open on these orders and switching the service charge off could lower
+  // them: the webhook records these same totals when the money lands, and a
+  // total lowered in between records less than Stripe took (service-reprice).
+  const { error: markError } = await db
+    .from("orders")
+    .update({ card_checkout_at: new Date().toISOString() })
+    .in("id", orders.map(o => o.id))
+    .eq("restaurant_id", restaurantId);
+  if (markError) {
+    if (coupon) await releaseCoupon(coupon.id);
+    return await apiError("apiErr.generic", 500);
+  }
+
   const origin = req.headers.get("origin") ?? new URL(req.url).origin;
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -226,6 +240,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         },
         success_url: `${origin}/r/${restaurantId}/t/${tableId}?settled=1`,
         cancel_url: `${origin}/r/${restaurantId}/t/${tableId}?cancelled=1`,
+        // Half an hour, as the other checkouts: the price is fixed while it is
+        // open, and repricing holds off for as long (service-reprice).
+        expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
       },
       { stripeAccount: restaurant.stripe_account_id },
     );
