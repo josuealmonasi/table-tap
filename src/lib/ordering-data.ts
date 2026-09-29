@@ -201,9 +201,12 @@ export async function loadOrderingData(
       .eq("restaurant_id", restaurantId)
       .order("sort_order"),
   ]);
-  const menuRows = (menusRes.data as MenuOpenState[] | null) ?? [];
+  // Through `unwrap`, like the reads below: a failed menus read was "this
+  // restaurant has no menus", a blank menu for a diner holding a valid QR, and
+  // a failed time zone read opened the menus by Mexico City's clock.
+  const menuRows = unwrap<MenuOpenState[]>(menusRes, "menus") ?? [];
   const timeZone =
-    (zoneRes.data as { timezone?: string } | null)?.timezone ?? DEFAULT_TIME_ZONE;
+    unwrap<{ timezone?: string }>(zoneRes, "the time zone")?.timezone ?? DEFAULT_TIME_ZONE;
   const { ids: activeMenuIds, closedNow } = openMenuIds(menuRows, timeZone);
   const menuFilter = activeMenuIds.length ? activeMenuIds : [NO_MENU];
 
@@ -285,11 +288,16 @@ export async function loadOrderingData(
   // diner's — their read grant does not include them, and it should stay that
   // way. What reaches the browser is a yes or a no.
   if (restaurant) {
-    const { data: pay } = await createAdminClient()
-      .from("restaurants")
-      .select("stripe_account_id, stripe_charges_enabled")
-      .eq("id", restaurantId)
-      .maybeSingle();
+    // Unwrapped too: read as "no card reader", a blip took card payment off the
+    // menu without a word, and paying is the one thing a menu must not hide.
+    const pay = unwrap<{ stripe_account_id: string | null; stripe_charges_enabled: boolean | null }>(
+      await createAdminClient()
+        .from("restaurants")
+        .select("stripe_account_id, stripe_charges_enabled")
+        .eq("id", restaurantId)
+        .maybeSingle(),
+      "card readiness",
+    );
     restaurant.cards_enabled = Boolean(pay?.stripe_account_id && pay?.stripe_charges_enabled);
   }
 

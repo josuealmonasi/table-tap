@@ -21,17 +21,22 @@ export async function fetchPromotions(
     .order("sort_order");
   if (activeOnly) query = query.eq("active", true);
 
-  const { data } = await query;
+  // A failed read is not "no promotions". Read that way, checkout priced a cart
+  // without the deal the menu had just shown the diner — two for one charged
+  // as two — and the till and the waiter's order did the same.
+  const { data, error } = await query;
+  if (error) throw new Error(`Could not load the promotions: ${error.message}`);
   const promos = (data as PromotionRow[] | null) ?? [];
   if (promos.length === 0) return [];
 
-  const { data: links } = await supabase
+  const { data: links, error: linksError } = await supabase
     .from("promotion_items")
     .select("promotion_id, item_id, qty")
     .in(
       "promotion_id",
       promos.map(p => p.id),
     );
+  if (linksError) throw new Error(`Could not load what the promotions include: ${linksError.message}`);
 
   const byPromo = new Map<string, { item_id: string; qty: number }[]>();
   for (const row of (links as

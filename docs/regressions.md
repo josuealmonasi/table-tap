@@ -49,6 +49,7 @@ us, and what now catches each one.
 | A refused move is not a dropped connection | A 403 from an expired sign-in was held as "saved, will be sent" and retried on every reconnect |
 | An order that could not be read is not a missing one | A failed read of an order was null, and the tracker answered a diner who had just ordered with "not found" |
 | A lookup that failed is not "no access" | In a database blip an owner was told the account had no restaurant and to create a new one, and every staff route answered "forbidden" |
+| A failed read of the promotions is not "no promotions" | Checkout would have charged full price for a deal the menu had shown; the panel told a manager there were none |
 | A gate that reads production writes nothing there | `roles:prod` created a live 5% coupon, ZZZ-999, on the demo restaurant and re-sent it on every run |
 | Spanish inside an English comment is found, not averaged away | Five lines of Spanish in `schema.sql` passed the English check because the block around them was English |
 | No gate waits with `waitForFunction` | `layout:prod` failed all 220 screens before measuring one: production's CSP forbids the `eval` it runs on |
@@ -1410,6 +1411,24 @@ navbar alone, and the page asks again (both are cached per request) and gets
 the same error, so it lands on that screen rather than on Next's bare default.
 Unit tests cover the answer and the failure for all four; against `main`'s
 files, exactly the failure cases fail.
+
+## Prices and a menu from reads that failed
+
+The diner's menu has an `unwrap` for exactly this — a failed read throws and
+reaches "try again", a missing row is an answer — and three of its reads did
+not go through it. A failed menus read was "this restaurant has no menus", a
+blank menu for a diner holding a valid QR; a failed time zone read opened the
+menus by Mexico City's clock; and a failed card-readiness read took card
+payment off the menu without a word. They go through `unwrap` now.
+
+`fetchPromotions` read a failure as no promotions, and checkout, the waiter's
+order and the till all price a cart against it: a blip would have charged
+full price for a two-for-one the menu had just shown. It throws now, so the
+routes answer "try again" and nothing is charged. On the dashboard the same
+read said "No promotions yet. Create one below", and a manager who believed it
+would have set up again the deals that already exist; the panel says it could
+not load them and offers to try again, and a promise case refuses the read and
+requires exactly that.
 
 ## Before merging anything large
 

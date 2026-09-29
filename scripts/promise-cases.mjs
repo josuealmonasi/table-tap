@@ -370,6 +370,18 @@ export const STATES = [
     keeps: /intentar de nuevo|try again/i,
   },
   {
+    // A failed read of the promotions said "Aún no hay promociones. Crea una
+    // abajo." — and a manager who believed it would set up again the deals
+    // that already exist. Refused, the panel must say it could not load them
+    // and offer to try again.
+    name: "the promotions cannot be read · promotions",
+    as: "owner",
+    path: "/dashboard/promotions",
+    refuse: { url: "**/rest/v1/promotions?*" },
+    says: /no pudimos cargar las promociones|couldn't load the promotions/i,
+    keeps: /intentar de nuevo|try again/i,
+  },
+  {
     // "Llamar al mesero" said "¡En camino!" for a minute whatever came back.
     // Refused the way a busy room's Wi-Fi refuses it, the button must come
     // back and the screen must say why — never that somebody is coming.
