@@ -50,6 +50,7 @@ us, and what now catches each one.
 | An order that could not be read is not a missing one | A failed read of an order was null, and the tracker answered a diner who had just ordered with "not found" |
 | A lookup that failed is not "no access" | In a database blip an owner was told the account had no restaurant and to create a new one, and every staff route answered "forbidden" |
 | A failed read of the promotions is not "no promotions" | Checkout would have charged full price for a deal the menu had shown; the panel told a manager there were none |
+| A card settlement that failed before writing makes Stripe send it again | Marking a paid card order failed, the webhook answered 200, and the diner's money sat in Stripe recorded nowhere |
 | A gate that reads production writes nothing there | `roles:prod` created a live 5% coupon, ZZZ-999, on the demo restaurant and re-sent it on every run |
 | Spanish inside an English comment is found, not averaged away | Five lines of Spanish in `schema.sql` passed the English check because the block around them was English |
 | No gate waits with `waitForFunction` | `layout:prod` failed all 220 screens before measuring one: production's CSP forbids the `eval` it runs on |
@@ -1429,6 +1430,30 @@ read said "No promotions yet. Create one below", and a manager who believed it
 would have set up again the deals that already exist; the panel says it could
 not load them and offers to try again, and a promise case refuses the read and
 requires exactly that.
+
+## Card money that a failed write left in Stripe
+
+The Stripe webhook answers 200 unless settling throws, and Stripe only sends
+an event again after a failure. Every settling path read a failed write as
+"nothing to settle": marking a pay-now order or a table's bill paid, reading
+a divided bill, marking one diner's share paid. The diner's money was in
+Stripe, recorded nowhere, the order still owed, and nothing would ever ask
+again. Each of those is the first write of its path, so when it fails nothing
+has been written: it throws now, and the `paid = false` / `paid_at is null`
+guards make Stripe's retry safe.
+
+The divided bill had a worse one. After a share was paid, the unpaid shares
+were counted and `(count ?? 0) === 0` closed the pot — so a count that failed
+read as zero, marked every order the table divided as paid, and closed the
+split while other diners' shares were still owed: food out, unpaid. Only a
+count that came back zero closes it now; a failed one leaves the bill open
+and part-paid, which is the truth.
+
+What this does not fix is decision 1: a failure AFTER the first write — the
+order marked paid, the payment row not written — still cannot be retried,
+because the guard then matches nothing. That needs one transaction per
+settlement. Unit tests with a recording fake database cover each path; against
+`main`'s file, the five failure cases fail and the two normal ones pass.
 
 ## Before merging anything large
 
