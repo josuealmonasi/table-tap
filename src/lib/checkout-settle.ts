@@ -63,22 +63,29 @@ async function settleSplitShare(session: Stripe.Checkout.Session): Promise<void>
   const shareNo = Number(session.metadata?.split_share ?? -1);
   const shareAmount = Number(session.metadata?.split_amount ?? 0);
 
-  const { data: split } = await db
+  // A failure before anything is written is thrown, so the webhook answers 500
+  // and Stripe sends the event again. Read as "no such split" or "not claimed",
+  // it answered 200: the diner's money sat in Stripe, recorded nowhere, and
+  // nothing would ever ask again. Nothing has been written at that point, and
+  // the `paid_at is null` guard makes the retry safe.
+  const { data: split, error: splitError } = await db
     .from("bill_splits")
     .select("id, restaurant_id, session_id, shares, status, locked_at")
     .eq("id", splitId)
     .maybeSingle();
+  if (splitError) throw new Error(`settling a share: could not read the split: ${splitError.message}`);
 
   if (split) {
     // Their seat, marked once — a webhook Stripe repeats must not record
     // the same money twice.
-    const { data: claimed } = await db
+    const { data: claimed, error: claimError } = await db
       .from("bill_split_claims")
       .update({ paid_at: new Date().toISOString() })
       .eq("split_id", splitId)
       .eq("share_no", shareNo)
       .is("paid_at", null)
       .select("share_no");
+    if (claimError) throw new Error(`settling a share: could not mark it paid: ${claimError.message}`);
 
     if (claimed?.length) {
       // Stripe charged the share AND the gratuity on it. Recording only the
@@ -130,13 +137,19 @@ async function settleSplitShare(session: Stripe.Checkout.Session): Promise<void>
 
       // The last share closes the pot: everything the table divided is
       // paid for, so the orders it covered stop being owed.
-      const { count: unpaidShares } = await db
+      //
+      // Only a count that came back zero closes it. A count that failed was
+      // read as zero, and that marked every order the table divided as paid
+      // while other diners' shares were still owed: food out, unpaid. Left
+      // open instead, the floor sees a part-paid bill, which is the truth.
+      const { count: unpaidShares, error: countError } = await db
         .from("bill_split_claims")
         .select("share_no", { count: "exact", head: true })
         .eq("split_id", splitId)
         .is("paid_at", null);
+      if (countError) console.error("settling a share: could not count the unpaid shares", countError.message);
 
-      if ((unpaidShares ?? 0) === 0) {
+      if (!countError && unpaidShares === 0) {
         const { data: covered } = await db
           .from("orders")
           .update({ paid: true, pay_method: "card" })
@@ -209,7 +222,7 @@ async function settleBill(session: Stripe.Checkout.Session): Promise<void> {
   // reads back the same way.
   const settleIds = unpackOrderIds(session.metadata);
   const db = createAdminClient();
-  const { data: settled } = await db
+  const { data: settled, error: settleError } = await db
     .from("orders")
     .update({ paid: true, pay_method: "card" })
     .in("id", settleIds)
@@ -218,6 +231,10 @@ async function settleBill(session: Stripe.Checkout.Session): Promise<void> {
     // them is recorded as money that arrived a second time.
     .eq("paid", false)
     .select("id, total, session_id, restaurant_id");
+  // Marking them paid failed, so nothing was written: thrown, Stripe sends the
+  // event again. Read as "none to settle", the bill's money was recorded
+  // nowhere and the webhook told Stripe it was done.
+  if (settleError) throw new Error(`settling a bill: could not mark it paid: ${settleError.message}`);
 
   // The tip was collected against the table, not a dish, so it rides on one
   // order: the first of the settled ones, and only one THIS delivery settled.
@@ -309,7 +326,7 @@ async function settleOrder(session: Stripe.Checkout.Session): Promise<void> {
   // than marking it paid and looking it up again afterwards. The second read
   // finds the order whether or not this delivery was the one that changed it,
   // so a webhook Stripe repeats recorded the same money twice.
-  const { data: settled } = await supabase
+  const { data: settled, error: settleError } = await supabase
     .from("orders")
     .update({
       paid: true,
@@ -321,6 +338,10 @@ async function settleOrder(session: Stripe.Checkout.Session): Promise<void> {
     .eq("id", orderId)
     .eq("paid", false)
     .select("session_id, total, restaurant_id");
+  // As for a bill: the write failed, so nothing was written, and thrown the
+  // event comes back. Read as "already paid", the order stayed unpaid with the
+  // diner's money in Stripe.
+  if (settleError) throw new Error(`settling an order: could not mark it paid: ${settleError.message}`);
 
   // A pay-now order can be the only thing the table owed.
   const justPaid = settled?.[0] ?? null;
