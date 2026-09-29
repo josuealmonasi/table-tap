@@ -1620,6 +1620,7 @@ votes: "Votos",
     retry: "Intentar de nuevo",
   },
   loyaltyAdmin: {
+    earnedAfterPlan: "Tu plan ya no incluye la tarjeta de visitas, pero lo que un comensal ya ganó sigue siendo suyo: busca su tarjeta para canjearlo.",
     programTitle: "El programa",
     programHint: "Tu equipo sella la tarjeta de un cliente con «Sellar tarjeta» en Cuentas y en la caja, una vez al día por tarjeta. Cuando la tarjeta llega a una recompensa, se canjea ahí mismo.",
     activeLabel: "Tarjeta de visitas activa",

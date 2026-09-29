@@ -202,14 +202,17 @@ export const STATES = [
     keeps: /^\s*(escanear|scan)\s*$/i,
   },
   {
-    // Its own page names the plan that carries it, and offers nothing to save.
-    // Carta: every paid tier has the card since Caja arrived with it.
+    // Its own page names the plan that carries it, and offers nothing to save
+    // — but keeps a way to redeem what diners already earned, which the terms
+    // promise survives a change of plan. Carta: every paid tier has the card
+    // since Caja arrived with it.
     name: "a plan without the visit card · its page",
     as: "owner",
     path: "/dashboard/loyalty",
     apply: (admin, c) => admin.from("restaurants").update({ plan: "carta", plan_status: "active" }).eq("id", c.restaurantId),
-    says: /viene con|comes with/i,
+    says: /sigue siendo suyo|still theirs/i,
     offers: /^\s*(guardar|save)\s*$/i,
+    keeps: /^\s*(escanear|scan)\s*$/i,
   },
   {
     name: "a plan without the visit card · bills",
