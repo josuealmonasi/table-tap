@@ -1493,6 +1493,14 @@ opens and in its accessible name. The skeleton holds the same line — badge and
 chip together — instead of a 36px row that no longer exists, and the promise
 case that read the rewards off the row opens the chip and reads them there.
 
+## Two ways to the same list of menus
+
+Hovering the Menús tab unfolded a panel listing the restaurant's menus — the
+same list the page it opens already is. The owner found it confusing: a panel
+that appeared under the pointer on the way to somewhere else, offering the
+place the click was about to go anyway. The tab is one place now, like every
+other tab, and `MenusMenu` is gone with its styles and its two strings.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read

@@ -848,8 +848,6 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     promosShort: "Promos",
     menus: "Menús",
     menusDesc: "Tus menús, categorías y platillos",
-    menusEmpty: "Aún no tienes menús",
-    menuPaused: "En pausa",
     waiting: "{n} pendientes",
     tableOrder: "Tomar pedido",
     tableOrderDesc: "Toma el pedido en la mesa; la cuenta se paga al final.",

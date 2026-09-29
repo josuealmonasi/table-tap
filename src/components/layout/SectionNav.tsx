@@ -6,7 +6,6 @@ import type { PlanFeature } from "@/lib/plan";
 import { navItemsFor, type DashboardRole } from "@/lib/nav";
 import { useT } from "@/lib/i18n/context";
 import { NAV_ICONS } from "@/components/ui/icons";
-import MenusMenu from "./MenusMenu";
 import { useBadges } from "@/hooks/useBadges";
 import { badgeLabel } from "@/lib/badges";
 
@@ -30,12 +29,9 @@ const SETTINGS_AREAS = ["/dashboard/staff", "/dashboard/plan", "/dashboard/setti
  */
 export default function SectionNav({
   role,
-  restaurantId,
   features = [],
 }: {
   role: DashboardRole;
-  /** Whose menus the Menús tab unfolds. */
-  restaurantId?: string;
   /** Areas this restaurant's tier includes. Empty means none are gated in. */
   features?: PlanFeature[];
 }) {
@@ -67,7 +63,10 @@ export default function SectionNav({
         {items.map(item => {
           const Icon = NAV_ICONS[item.icon];
           const active = item.href === current;
-          const link = (
+          // Every tab is one place. The Menús tab used to unfold a list of the
+          // menus on hover, which the page it opens already is — two ways to
+          // the same list, one of them a panel that appeared under the pointer.
+          return (
             <Link
               key={item.href}
               href={item.href}
@@ -90,16 +89,6 @@ export default function SectionNav({
                 </span>
               )}
             </Link>
-          );
-
-          // Only the menus tab has anything to unfold — the others are one
-          // place each.
-          return item.href === "/dashboard" && restaurantId ? (
-            <MenusMenu key={item.href} restaurantId={restaurantId}>
-              {link}
-            </MenusMenu>
-          ) : (
-            link
           );
         })}
       </div>
