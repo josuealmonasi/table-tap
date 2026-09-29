@@ -22,6 +22,11 @@ interface LoyaltyMenuEntryProps {
  * to it. A phone that already made one here goes to its card instead. Always
  * rendered at the same height, and only the words change once this phone is
  * read, so the menu below it never jumps.
+ *
+ * A chip beside the table's badge, not a row of its own: a full-width band
+ * between the service buttons and the order banners pushed the menu down for
+ * something a diner taps once. The rewards are in the sheet it opens, and in
+ * its accessible name, so a screen reader still hears what the card gives.
  */
 export default function LoyaltyMenuEntry({ offer }: LoyaltyMenuEntryProps) {
   const t = useT();
@@ -38,16 +43,12 @@ export default function LoyaltyMenuEntry({ offer }: LoyaltyMenuEntryProps) {
     <>
       <button
         type="button"
-        className="tt-loyalty-entry"
+        className="tt-loyalty-chip"
+        aria-label={`${t(mine ? "loyaltyMenu.mine" : "loyaltyMenu.entry")} · ${ladderLines(offer.steps, t).join(" · ")}`}
         onClick={() => (mine ? router.push(`/rewards?c=${mine}`) : setOpen(true))}
       >
-        <LoyaltyIcon size={16} weight="bold" />
-        <span className="tt-loyalty-entry-text">
-          <strong>{t(mine ? "loyaltyMenu.mine" : "loyaltyMenu.entry")}</strong>
-          {/* Every reward, in order — the first is the nearest, so it is the
-              one a one-line row always shows in full. */}
-          <span className="tt-muted"> · {ladderLines(offer.steps, t).join(" · ")}</span>
-        </span>
+        <LoyaltyIcon size={14} weight="bold" />
+        <span className="tt-loyalty-chip-text">{t(mine ? "loyaltyMenu.mine" : "loyaltyMenu.entry")}</span>
       </button>
       <Modal open={open} onClose={() => setOpen(false)} maxWidth={420} variant="sheet" label={t("loyalty.title")}>
         <LoyaltyOffer offer={offer} asked />

@@ -1483,6 +1483,16 @@ marks its orders before the Stripe session exists and the session now expires
 in 30 minutes. An api case switches it off over a planted bill and reads what
 the bill then owes; unit tests cover the arithmetic and every exclusion.
 
+## The visit card, as a chip
+
+The owner found the visit card's row on the menu too big: a full-width band
+between the service buttons and the order banners, pushing the dishes down for
+something a diner taps once. It is a chip beside the table's badge now, 28px
+tall so a thumb finds it, naming the card; the rewards are in the sheet it
+opens and in its accessible name. The skeleton holds the same line — badge and
+chip together — instead of a 36px row that no longer exists, and the promise
+case that read the rewards off the row opens the chip and reads them there.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read
