@@ -1249,7 +1249,7 @@ alter table orders add column if not exists customer_name text;
 -- A null limit means unlimited. Prices are MXN and informational: Stripe is
 -- the authority on what was actually charged; these drive the plan screen.
 create table if not exists plan_limits (
-  plan          text primary key check (plan in ('carta', 'servicio', 'casa', 'grupo')),
+  plan          text primary key check (plan in ('carta', 'caja', 'servicio', 'casa', 'grupo')),
   rank          int not null,              -- upgrade order, lowest first
   monthly_price numeric not null default 0,
   order_fee     numeric not null default 0, -- flat platform fee per CARD order
@@ -1277,9 +1277,9 @@ insert into plan_limits (
   -- it costs us almost nothing and it is how a restaurant tries us.
   ('carta',    0,    0, 3.00,    0,    2,    1,   30, false, false, false, false,   1,   1),
   -- Dine-in: tables, open bills, pay later, call the waiter. The value moment.
-  ('servicio', 1,  699, 1.50,   25,   10,    3, null,  true,  true, false, false,  30,  30),
-  ('casa',     2, 1499, 0.75, null, null, null, null,  true,  true,  true,  true, 365, 365),
-  ('grupo',    3, 3499, 0.00, null, null, null, null,  true,  true,  true,  true, 365, 365)
+  ('servicio', 2,  699, 1.50,   25,   10,    3, null,  true,  true, false, false,  30,  30),
+  ('casa',     3, 1499, 0.75, null, null, null, null,  true,  true,  true,  true, 365, 365),
+  ('grupo',    4, 3499, 0.00, null, null, null, null,  true,  true,  true,  true, 365, 365)
 on conflict (plan) do update set
   rank                   = excluded.rank,
   monthly_price          = excluded.monthly_price,
@@ -1597,7 +1597,9 @@ update plan_limits set
 -- one menu never misses it, and desayunos / comida corrida / cena feels it
 -- every day. It moves to Casa with the rest of the growth tools.
 alter table plan_limits add column if not exists allows_menu_schedules boolean not null default false;
-update plan_limits set allows_menu_schedules = (rank >= 2);
+-- Named, not derived from `rank`: a tier added between two others would
+-- inherit it by position (Caja arrived at rank 1).
+update plan_limits set allows_menu_schedules = (plan in ('casa', 'grupo'));
 
 -- Letting food leave before it is paid for — at the end at a table, or at the
 -- till on the general QR — belongs to a paid plan, and not out of greed: Carta
@@ -1611,7 +1613,7 @@ update plan_limits set allows_menu_schedules = (rank >= 2);
 -- it is recomputed on the fly.
 alter table plan_limits add column if not exists allows_deferred_payment boolean not null default false;
 alter table plan_limits drop column if exists allows_counter_payment;
-update plan_limits set allows_deferred_payment = (rank >= 1);
+update plan_limits set allows_deferred_payment = (plan in ('servicio', 'casa', 'grupo'));
 
 -- And on the restaurant's side, the two switches become one.
 -- `allow_counter_payment` was the same permission counted separately, which is
@@ -2651,7 +2653,66 @@ revoke all on function public.enqueue_kitchen_ticket() from public, anon, authen
 -- beside the rows is a second record of one fact.
 -- ============================================================================
 alter table plan_limits add column if not exists allows_loyalty boolean not null default false;
-update plan_limits set allows_loyalty = true where plan in ('casa', 'grupo');
+update plan_limits set allows_loyalty = true where plan in ('casa', 'caja', 'grupo');
+
+-- ── Caja: the register, on its own ──────────────────────────────────────────
+-- A counter that takes the order face to face and the money at the till, and
+-- nothing that goes through the diner's phone: no ordering from a QR, no tables,
+-- no kitchen screen. What most small places already have is a register, and
+-- this is what replaces it — cash, their own card terminal, tips, receipts —
+-- with promotions priced for them, stock that takes a dish off when it runs
+-- out, and the visit card stamped at the till. Diners can still scan the QR
+-- and read the menu; they order at the register.
+--
+-- It earns no per-order fee: none of its money touches Stripe. The
+-- subscription is what pays for it, which is why it is priced below Servicio
+-- rather than at the free tier.
+--
+-- Two new permissions, true for every tier that already had the thing they
+-- name, so nothing changes for them: ordering from the diner's phone, and the
+-- kitchen board a sale goes to once it is paid.
+alter table plan_limits drop constraint if exists plan_limits_plan_check;
+alter table plan_limits add constraint plan_limits_plan_check
+  check (plan in ('carta', 'caja', 'servicio', 'casa', 'grupo'));
+alter table plan_limits add column if not exists allows_online_ordering boolean not null default true;
+alter table plan_limits add column if not exists allows_kitchen_board boolean not null default true;
+
+-- Every column named, and last in the file, so a fresh database gets the whole
+-- row rather than whatever the updates above happened to reach.
+insert into plan_limits (
+  plan, rank, monthly_price, list_price, order_fee, fee_cap,
+  max_tables, max_staff, max_menus, max_items,
+  allows_dine_in, allows_waiter_service, allows_deferred_payment,
+  allows_online_ordering, allows_kitchen_board, allows_pos,
+  allows_promotions, allows_coupons, allows_staff_discounts,
+  allows_menu_schedules, allows_inventory, allows_loyalty,
+  analytics_days, log_days
+) values (
+  'caja', 1, 399, 399, 0, 0,
+  0, 5, 3, null,
+  false, false, false,
+  false, false, true,
+  true, false, false,
+  false, true, true,
+  30, 30
+)
+on conflict (plan) do update set
+  rank = excluded.rank, monthly_price = excluded.monthly_price,
+  list_price = excluded.list_price, order_fee = excluded.order_fee,
+  fee_cap = excluded.fee_cap, max_tables = excluded.max_tables,
+  max_staff = excluded.max_staff, max_menus = excluded.max_menus,
+  max_items = excluded.max_items, allows_dine_in = excluded.allows_dine_in,
+  allows_waiter_service = excluded.allows_waiter_service,
+  allows_deferred_payment = excluded.allows_deferred_payment,
+  allows_online_ordering = excluded.allows_online_ordering,
+  allows_kitchen_board = excluded.allows_kitchen_board,
+  allows_pos = excluded.allows_pos, allows_promotions = excluded.allows_promotions,
+  allows_coupons = excluded.allows_coupons,
+  allows_staff_discounts = excluded.allows_staff_discounts,
+  allows_menu_schedules = excluded.allows_menu_schedules,
+  allows_inventory = excluded.allows_inventory,
+  allows_loyalty = excluded.allows_loyalty,
+  analytics_days = excluded.analytics_days, log_days = excluded.log_days;
 
 -- One per restaurant. `goal` is how many visits earn the reward.
 create table if not exists loyalty_programs (
