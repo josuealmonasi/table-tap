@@ -49,6 +49,7 @@ us, and what now catches each one.
 | A refused move is not a dropped connection | A 403 from an expired sign-in was held as "saved, will be sent" and retried on every reconnect |
 | An order that could not be read is not a missing one | A failed read of an order was null, and the tracker answered a diner who had just ordered with "not found" |
 | A rate limit keeps no address, and nothing past a day | Every diner's IP address sat in `rate_limits` for ever, named nowhere in the privacy notice |
+| A reward already earned can be redeemed on any plan | A restaurant that moved to a tier without the visit card had no screen to honour rewards its diners had earned |
 | A lookup that failed is not "no access" | In a database blip an owner was told the account had no restaurant and to create a new one, and every staff route answered "forbidden" |
 | A failed read of the promotions is not "no promotions" | Checkout would have charged full price for a deal the menu had shown; the panel told a manager there were none |
 | A card settlement that failed before writing makes Stripe send it again | Marking a paid card order failed, the webhook answered 200, and the diner's money sat in Stripe recorded nowhere |
@@ -1539,6 +1540,20 @@ can record a name on its profile and the activity log keeps who did each
 operation — both are in the notice now. A test fails if the
 key contains any part of the address, if anything else reads a request's
 address, or if the sweep or the sentence goes.
+
+## A promise with no screen behind it
+
+The terms say a visit-card reward a diner has earned is honoured even if the
+restaurant pauses its program or changes plan. The pause was kept: a paused
+program still redeems. The change of plan was not, although the route never
+checked the plan — on a tier without the card the loyalty page was nothing but
+a lock, and the bills screen hides its stamp button, so no screen could redeem
+anything. The audit that read the terms against the app found it.
+
+A restaurant that ran the card keeps, under the lock, the card lookup in the
+mode a paused program uses: it redeems and does not stamp. A promise case
+switches to a tier without the card and requires the scan button and the
+sentence that says why it is there.
 
 ## Before merging anything large
 

@@ -1637,6 +1637,7 @@ votes: "Votes",
   },
   /** /dashboard/loyalty — the visit card, run by the owner and the managers. */
   loyaltyAdmin: {
+    earnedAfterPlan: "Your plan no longer includes the visit card, but what a diner already earned is still theirs: look up their card to redeem it.",
     programTitle: "The program",
     programHint: "Your team stamps a diner's card with «Stamp a card» on Open bills and at the till — once a day per card. When a card reaches a reward, it is redeemed right there.",
     activeLabel: "Visit card on",

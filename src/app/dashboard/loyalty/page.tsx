@@ -4,6 +4,7 @@ import { can, cheapestWith } from "@/lib/plan";
 import { programOf } from "@/lib/loyalty/server";
 import PlanLock from "@/components/dashboard/plan/PlanLock";
 import LoyaltyAdmin from "@/components/dashboard/loyalty/LoyaltyAdmin";
+import EarnedRewards from "@/components/dashboard/loyalty/EarnedRewards";
 import { headers } from "next/headers";
 import { cardFace } from "@/lib/loyalty/face";
 import { qrGrid } from "@/lib/loyalty/qr-grid";
@@ -26,10 +27,15 @@ export default async function LoyaltyPage() {
 
   if (!plan || !can(plan.limits, "loyalty")) {
     const unlocks = cheapestWith(await allPlans(), "loyalty", plan?.limits);
+    // A restaurant that ran the card and moved to a tier without it still owes
+    // the rewards its diners earned (terms, §7): the lock, and under it a way
+    // to redeem them. One that never ran it has nothing to honour.
+    const ranIt = (await programOf(r.id)) !== null;
     return (
       <div className="tt-dash">
         <div className="container">
           <PlanLock feature="loyalty" unlocksWith={unlocks?.plan ?? "casa"} />
+          {ranIt && <EarnedRewards />}
         </div>
       </div>
     );
