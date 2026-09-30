@@ -1565,6 +1565,17 @@ froze. The dashboard's banner, which already says when it is read-only, now
 also says when a payment is being retried — to the owner, on every screen,
 with the link to fix it — and a promise case sets `past_due` and requires it.
 
+## Missing at 360, because the site had just woken up
+
+`layout:prod` run straight after four deploys reported seven of the owner's
+dialogs as opening at 390, 820 and 1280px but not at 360px. At 360px, on a
+warm page a minute later, every one of them opened. The owner's screens are
+the first the run opens and 360px is its first width, so those pages were the
+cold ones, and one pause of 1.5s before the retry was not enough for them to
+hydrate. The gate now tries twice more, after 1.5s and then 3s, before calling
+a dialog missing. A dialog that really does not open still fails, just
+seconds later.
+
 ## Before merging anything large
 
 Every step by its exit code. Chain them with `&&`, or run each to a log and read
