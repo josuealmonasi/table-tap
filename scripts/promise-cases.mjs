@@ -248,8 +248,9 @@ export const STATES = [
     as: "owner",
     path: "/dashboard",
     apply: (admin, c) => admin.from("restaurants").update({ plan_status: "past_due" }).eq("id", c.restaurantId),
-    says: /no pudimos cobrar tu último pago|couldn't collect your last payment/i,
-    keeps: /revisar el pago|check the payment/i,
+    // The sentence and the link to fix it, in one: the link is an <a>, which
+    // `keeps` (buttons only) cannot see.
+    says: /no pudimos cobrar tu último pago[\s\S]*revisar el pago|couldn't collect your last payment[\s\S]*check the payment/i,
   },
   {
     name: "orders paused",
