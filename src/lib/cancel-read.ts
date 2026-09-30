@@ -17,6 +17,8 @@ export interface CancelTarget {
   stripe_payment_intent: string | null;
   stripe_refund_id: string | null;
   items: OrderLineItem[] | null;
+  /** On a customer account: owed by the account, paid when it is. */
+  account_id?: string | null;
 }
 
 export type CancelRead =
@@ -33,7 +35,7 @@ export async function readCancel(
   // moves money.
   const { data: order, error: orderErr } = await admin
     .from("orders")
-    .select("id, status, paid, pay_method, total, stripe_payment_intent, stripe_refund_id, items")
+    .select("id, status, paid, pay_method, total, stripe_payment_intent, stripe_refund_id, items, account_id")
     .eq("id", id)
     .eq("restaurant_id", restaurantId)
     .maybeSingle<CancelTarget>();
@@ -45,6 +47,26 @@ export async function readCancel(
 
   if (order.status !== "received" && order.status !== "preparing") {
     return { error: "apiErr.cancelStatus", status: 409 };
+  }
+
+  // On an account the customer is paying online right now: Stripe will charge
+  // the orders the payment was opened for, this one among them, and a dish
+  // cancelled in between would be paid for anyway. Wait for it to land or
+  // run out — the hold is half an hour at most.
+  if (!order.paid && order.account_id) {
+    const { data: account, error: accountErr } = await admin
+      .from("customer_accounts")
+      .select("checkout_until")
+      .eq("id", order.account_id)
+      .eq("restaurant_id", restaurantId)
+      .maybeSingle();
+    if (accountErr) {
+      console.error("cancel: account read failed:", accountErr.message);
+      return { error: "apiErr.orderCancel", status: 500 };
+    }
+    if (account?.checkout_until && new Date(account.checkout_until) > new Date()) {
+      return { error: "apiErr.accountPayingOnline", status: 409 };
+    }
   }
 
   // How the money arrived, payment by payment. A read that fails refuses the
