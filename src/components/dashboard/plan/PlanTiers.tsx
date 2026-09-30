@@ -32,6 +32,7 @@ function includes(limits: PlanLimits, t: (k: string, v?: Record<string, string |
   if (limits.allows_coupons) lines.push(t("plan.tier.coupons"));
   if (limits.allows_staff_discounts) lines.push(t("plan.tier.staffDiscounts"));
   if (limits.allows_loyalty) lines.push(t("plan.tier.loyalty"));
+  if (limits.allows_open_accounts) lines.push(t("plan.tier.accounts"));
   return lines;
 }
 

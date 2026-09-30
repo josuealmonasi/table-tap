@@ -46,6 +46,8 @@ export default function MenuSkeleton({
             <Skeleton width={160} height={22} />
             {/* Search sits on the name's line, opposite the name. */}
             <div className="tt-head-controls">
+              {/* The scan button, a circle at every width. */}
+              <Skeleton width={34} height={34} radius={999} />
               {/* The search is a circle on a phone and a field on a wide
                   screen, so its placeholder has to be both. */}
               <div className="tt-sk-search">

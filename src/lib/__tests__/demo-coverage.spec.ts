@@ -32,6 +32,7 @@ const NOT_DEMO_DATA = new Set([
   "categories",
   "menu_items",
   "item_addons", // filled by populateMenu()
+  "account_checkouts", // an online payment in progress; only the pay route opens one
 ]);
 
 describe("the demo shows the whole app", () => {

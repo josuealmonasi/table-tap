@@ -254,6 +254,8 @@ export type Order = {
   paid: boolean;
   /** Served but never paid for; out of revenue, and no longer owed. */
   written_off?: boolean;
+  /** On a customer's account: delivered, owed by the account, not the table. */
+  account_id?: string | null;
   /** The coupon this order was priced with, if any — it can't take another. */
   coupon_code?: string | null;
   /** What came off this order, whether at checkout or from the floor later. */

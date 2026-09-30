@@ -65,3 +65,50 @@ export function tableFromScan(raw: string | null | undefined): ScannedTable | nu
   if (!UUID.test(parts[1]) || !UUID.test(parts[3])) return null;
   return { restaurantId: parts[1], tableId: parts[3] };
 }
+
+/** Twelve Crockford base32 characters: the code of an account or a visit card. */
+const CODE = /^[0-9A-HJKMNP-TV-Z]{12}$/;
+
+function pathOf(text: string): URL | null {
+  try {
+    return new URL(text);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The account a scanned code names: its statement link, `…/cuenta/<code>`.
+ * For the till, when a customer holds up their statement to pay it.
+ */
+export function accountCodeFromScan(raw: string | null | undefined): string | null {
+  const url = pathOf((raw ?? "").trim());
+  if (!url) return null;
+  const parts = url.pathname.split("/").filter(Boolean);
+  return parts.length === 2 && parts[0] === "cuenta" && CODE.test(parts[1].toUpperCase())
+    ? parts[1].toUpperCase()
+    : null;
+}
+
+/**
+ * Where the diner's own scan button takes them: an account's statement, a
+ * visit card, or a table's menu — the codes TableTap prints — as a path in
+ * THIS app. The host a code names is ignored on purpose: a sticker over a
+ * table's QR could name any site, and the button must never be the thing that
+ * sends a diner there.
+ */
+export function dinerPathFromScan(raw: string | null | undefined): string | null {
+  const code = accountCodeFromScan(raw);
+  if (code) return `/cuenta/${code}`;
+  const url = pathOf((raw ?? "").trim());
+  if (!url) return null;
+  if (url.pathname === "/rewards") {
+    const card = (url.searchParams.get("c") ?? "").toUpperCase();
+    return CODE.test(card) ? `/rewards?c=${card}` : null;
+  }
+  const table = tableFromScan(raw);
+  if (table) return `/r/${table.restaurantId}/t/${table.tableId}`;
+  const parts = url.pathname.split("/").filter(Boolean);
+  if (parts.length === 2 && parts[0] === "r" && UUID.test(parts[1])) return `/r/${parts[1]}`;
+  return null;
+}

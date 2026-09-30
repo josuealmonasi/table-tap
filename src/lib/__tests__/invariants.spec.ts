@@ -2183,3 +2183,39 @@ describe("a coupon lookup that failed is not an unknown code", () => {
     expect(bare, "a coupon lookup whose failure would read as 'not found'").toEqual([]);
   });
 });
+
+describe("a customer account's orders are never a table's", () => {
+  it("leaves them out of every reader of what a table owes", () => {
+    // An order on an account is delivered and not paid, so `paid = false`
+    // alone would put it on the table's bill as well: the table charged for a
+    // dish somebody's account already owes. Every such reader says so.
+    const exempt = new Set([
+      // The account's own reads, which want exactly these orders.
+      "src/lib/accounts-server.ts",
+      // The webhook marks the orders named in Stripe's metadata; an order a
+      // card checkout is open on cannot be put on an account (account_charge).
+      "src/lib/checkout-settle.ts",
+    ]);
+    const missing: string[] = [];
+    for (const f of sources.filter(f => !exempt.has(f))) {
+      const lines = read(f).split("\n");
+      lines.forEach((line, i) => {
+        if (!/\.eq\("paid", false\)/.test(line) || /^\s*(\/\/|\*)/.test(line)) return;
+        // Either way round: leaving the accounts out, or asking for them on
+        // purpose (the corte's "still owed on accounts").
+        const near = lines.slice(Math.max(0, i - 2), i + 3).join("\n");
+        if (!/\.is\("account_id", null\)|\.not\("account_id", "is", null\)/.test(near)) missing.push(`${f}:${i + 1}`);
+      });
+    }
+    expect(missing, "a reader of unpaid orders that would bill a table for an account's food").toEqual([]);
+
+    // The same, in the two functions that decide what a sitting owes.
+    const schema = read("supabase/schema.sql");
+    for (const fn of ["close_session_if_clear", "collect_on_sitting"]) {
+      const start = schema.indexOf(`create or replace function public.${fn}(`);
+      expect(start, `${fn} is not in the schema`).toBeGreaterThan(-1);
+      const body = schema.slice(start, schema.indexOf("$$;", start));
+      expect(body, `${fn} counts an account's orders as the table's`).toContain("account_id is null");
+    }
+  });
+});

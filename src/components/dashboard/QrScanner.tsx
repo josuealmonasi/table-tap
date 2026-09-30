@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useQrCamera, type ScanVerdict } from "@/hooks/useQrCamera";
 
@@ -16,6 +16,8 @@ interface QrScannerProps {
   onRead: (raw: string) => ScanVerdict;
   /** Styling for the button, when the surrounding screen wants a different one. */
   buttonClass?: string;
+  /** An icon in place of the label's text; the label stays as its name. */
+  icon?: ReactNode;
 }
 
 /**
@@ -31,6 +33,7 @@ export default function QrScanner({
   noCamera,
   onRead,
   buttonClass = "tt-btn tt-btn-ghost tt-btn-sm",
+  icon,
 }: QrScannerProps) {
   const [open, setOpen] = useState(false);
   const { videoRef, problem, setProblem } = useQrCamera(open, onRead, () => setOpen(false), noCamera);
@@ -40,12 +43,13 @@ export default function QrScanner({
       <button
         type="button"
         className={buttonClass}
+        aria-label={icon ? label : undefined}
         onClick={() => {
           setProblem(null);
           setOpen(true);
         }}
       >
-        {label}
+        {icon ?? label}
       </button>
 
       <Modal open={open} onClose={() => setOpen(false)} maxWidth={420} title={title}>

@@ -103,7 +103,7 @@ export interface TableBill {
  * screen instead of copying the rule out — which is how the two come to
  * disagree about what a table owes.
  */
-type OrderState = Pick<Order, "paid" | "written_off" | "status">;
+type OrderState = Pick<Order, "paid" | "written_off" | "status" | "account_id">;
 
 /**
  * Orders still owed for.
@@ -113,7 +113,8 @@ type OrderState = Pick<Order, "paid" | "written_off" | "status">;
  * on a bill would ask somebody to pay for food nobody is charging for.
  */
 export function unpaidOrders<T extends OrderState>(orders: T[]): T[] {
-  return orders.filter(o => !o.paid && !o.written_off && o.status !== "cancelled");
+  // An account's orders are owed by the account: never on the table's bill.
+  return orders.filter(o => !o.paid && !o.written_off && !o.account_id && o.status !== "cancelled");
 }
 
 /**

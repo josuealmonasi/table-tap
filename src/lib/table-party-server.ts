@@ -17,6 +17,7 @@ export async function tableParty(restaurantId: string, tableId: string): Promise
     .eq("restaurant_id", restaurantId)
     .eq("table_id", tableId)
     .eq("paid", false)
+    .is("account_id", null)
     .eq("written_off", false)
     .neq("status", "pending_payment")
     .neq("status", "cancelled");

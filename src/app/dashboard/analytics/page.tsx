@@ -69,7 +69,7 @@ export default async function AnalyticsPage({
   const admin = createAdminClient();
   const since = dayStart.toISOString();
 
-  const [paidRes, givenUpRes] = await Promise.all([
+  const [paidRes, givenUpRes, owedRes] = await Promise.all([
     admin
       .from("payments")
       .select("actor_email, amount, method")
@@ -81,14 +81,28 @@ export default async function AnalyticsPage({
       .eq("restaurant_id", membership.restaurant.id)
       // "refunded" is money handed back after it arrived. It comes out of the
       // drawer of whoever took it, which is why the corte needs to see it.
-      .in("action", ["written_off", "discounted", "refunded"])
+      // "charged" is food put on a customer's account: out of the kitchen,
+      // owed, and in nobody's drawer.
+      .in("action", ["written_off", "discounted", "refunded", "charged"])
       .gte("created_at", since),
+    // What customers owe on their accounts right now, however old.
+    admin
+      .from("orders")
+      .select("total")
+      .eq("restaurant_id", membership.restaurant.id)
+      .not("account_id", "is", null)
+      .eq("paid", false)
+      .neq("status", "cancelled"),
   ]);
 
   const paidRows = unwrap(paidRes, "today's takings");
   const givenUp = unwrap(givenUpRes, "today's write-offs and discounts");
+  const owedRows = unwrap(owedRes, "what customer accounts owe") as { total: number }[] | null;
   const corte = paidRows
-    ? corteFrom(paidRows as CortePayment[], (givenUp ?? []) as CorteAdjustment[])
+    ? {
+        ...corteFrom(paidRows as CortePayment[], (givenUp ?? []) as CorteAdjustment[]),
+        accountsOwed: Math.round((owedRows ?? []).reduce((s, o) => s + Number(o.total), 0) * 100) / 100,
+      }
     : EMPTY_CORTE;
   // In the owner's language: the day is words, and "martes 23 de septiembre"
   // above an English corte is a Spanish sentence on an English page.

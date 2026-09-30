@@ -106,6 +106,14 @@ const ROUTES = [
   // address with an account — refused only because the account existed, and
   // sent to production's invite endpoint on every roles:prod run.
   { m: "POST", p: "/api/staff", body: { email: "not an address", role: "waiter" }, allow: OWNER, passes: 400 },
+  // Customer accounts: everyone who takes money, never the kitchen. Every
+  // write probe is refused on its shape — no name, no account, no amount — so
+  // nothing is opened, charged or collected, here or on production.
+  { m: "GET", p: "/api/accounts", allow: SERVES },
+  { m: "POST", p: "/api/accounts", body: { name: " " }, allow: SERVES, passes: 400 },
+  { m: "PATCH", p: "/api/accounts", body: {}, allow: SERVES, passes: 400 },
+  { m: "POST", p: "/api/accounts/charge", body: {}, allow: SERVES, passes: 400 },
+  { m: "POST", p: "/api/accounts/settle", body: {}, allow: SERVES, passes: 400 },
 ];
 
 let failed = 0;

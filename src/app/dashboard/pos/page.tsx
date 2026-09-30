@@ -58,6 +58,7 @@ export default async function PosPage() {
       dietaryTags={data.dietaryTags}
       canEmailReceipt={data.receipts}
       loyalty={await loyaltyOn(membership.restaurant.id, plan.limits)}
+      canChargeAccount={can(plan.limits, "openAccounts")}
     />
   );
 }

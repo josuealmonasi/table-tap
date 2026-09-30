@@ -23,10 +23,12 @@ describe("navItemsFor", () => {
     // Bills because they can ask for a discount on one; the order screen
     // because taking the order at the table is the waiter's whole job, and
     // until it existed they had to borrow a diner's phone to start one.
+    // And customer accounts: a waiter puts a table's bill on one.
     expect(hrefs("waiter")).toEqual([
       "/dashboard/orders",
       "/dashboard/table-order",
       "/dashboard/bills",
+      "/dashboard/accounts",
     ]);
   });
 
@@ -51,7 +53,9 @@ describe("an area the tier does not include", () => {
   });
 
   it("leaves the cashier their other screens", () => {
-    expect(withoutPos("cashier")).toEqual(["/dashboard/orders", "/dashboard/bills"]);
+    // Customer accounts stay on every tier: one opened on a paid plan still
+    // owes after a move down, and its page collects it (opening is locked).
+    expect(withoutPos("cashier")).toEqual(["/dashboard/orders", "/dashboard/bills", "/dashboard/accounts"]);
   });
 
   it("never offers the till to a waiter or the kitchen", () => {

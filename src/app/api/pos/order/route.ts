@@ -26,6 +26,7 @@ import { messagesFor, translate } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n/server";
 import type { OrderLineItem } from "@/lib/types";
 import { dateLocale } from "@/lib/format";
+import { ringOnAccount } from "@/lib/account-sale";
 
 export const runtime = "nodejs";
 
@@ -64,7 +65,9 @@ export async function POST(req: NextRequest) {
   const body = await jsonBody<{
     posRef?: string;
     items?: OrderLineItem[];
-    method?: "cash" | "card";
+    method?: "cash" | "card" | "account";
+    /** With `method: "account"`: the customer account the sale goes on. */
+    accountId?: string;
     customerName?: string;
     email?: string;
     note?: string;
@@ -79,8 +82,17 @@ export async function POST(req: NextRequest) {
   if (!posRef || !Array.isArray(items) || items.length === 0) {
     return await apiError("apiErr.invalidRequest", 400);
   }
-  if (method !== "cash" && method !== "card") {
+  if (method !== "cash" && method !== "card" && method !== "account") {
     return await apiError("apiErr.invalidRequest", 400);
+  }
+  // "Ponlo en mi cuenta": the food goes out now and the account owes it. The
+  // cashier ringing it is the approval; the account's ceiling is checked
+  // under its lock once the sale exists.
+  const onAccount = method === "account";
+  if (onAccount) {
+    if (typeof body.accountId !== "string") return await apiError("apiErr.invalidRequest", 400);
+    const noAccounts = await planBlocks(actor.restaurantId, "openAccounts");
+    if (noAccounts) return noAccounts;
   }
 
   const db = createAdminClient();
@@ -181,8 +193,9 @@ export async function POST(req: NextRequest) {
     items: verified,
     servicePct: restaurant.service_pct,
     serviceEnabled: restaurant.service_enabled,
-    tipPct: Number(body.tipPct) || 0,
-    tipAmount: typeof body.tipAmount === "number" ? body.tipAmount : undefined,
+    // On an account there is no tip yet: it is left when the account is paid.
+    tipPct: onAccount ? 0 : Number(body.tipPct) || 0,
+    tipAmount: !onAccount && typeof body.tipAmount === "number" ? body.tipAmount : undefined,
     coupon: null,
     promos: toCartPromos(promotions),
   });
@@ -228,8 +241,8 @@ export async function POST(req: NextRequest) {
       // nothing on the pass, and no name to call out. One prepared line is
       // enough to make it an ordinary order again.
       status: handedOverAtOnce ? "completed" : "received",
-      paid: true,
-      pay_method: method,
+      // On an account nothing has been paid: the account owes it.
+      ...(onAccount ? { paid: false, pay_method: null } : { paid: true, pay_method: method }),
       pos_ref: posRef,
       subtotal: pricing.subtotal,
       service_fee: pricing.serviceFee,
@@ -277,6 +290,17 @@ export async function POST(req: NextRequest) {
     }
     await releaseStock(actor.restaurantId, verified);
     return await apiError("apiErr.orderCreate", 500);
+  }
+
+  if (onAccount) {
+    return await ringOnAccount({
+      restaurantId: actor.restaurantId,
+      accountId: body.accountId as string,
+      orderId: order.id as string,
+      total: pricing.total,
+      actor: actor.email,
+      release: () => releaseStock(actor.restaurantId, verified),
+    });
   }
 
   await recordPayment({

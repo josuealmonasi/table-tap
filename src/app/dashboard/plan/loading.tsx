@@ -13,10 +13,10 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 // moves with it.
 const TIER_SHAPES = [
   { lines: 2, button: false },
-  { lines: 6, button: true },
-  { lines: 6, button: true },
-  { lines: 9, button: true },
-  { lines: 9, button: false },
+  { lines: 7, button: true },
+  { lines: 7, button: true },
+  { lines: 10, button: true },
+  { lines: 10, button: false },
 ];
 
 export default function PlanLoading() {

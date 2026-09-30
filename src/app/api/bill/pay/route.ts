@@ -105,6 +105,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Same window the diner's bill uses, so what is charged is what was shown.
     .gte("created_at", billWindowStart().toISOString())
     .eq("paid", false)
+    .is("account_id", null)
     .eq("written_off", false)
     .neq("status", "pending_payment")
     .neq("status", "cancelled")

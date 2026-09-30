@@ -6,6 +6,7 @@ import { releaseStock } from "@/lib/stock-service";
 import type { OrderLineItem } from "@/lib/types";
 import type Stripe from "stripe";
 import { round2 } from "@/lib/money";
+import { abandonAccountCheckout, settleAccountCheckout } from "@/lib/account-checkout";
 
 /**
  * What a completed or abandoned Stripe Checkout means for the money.
@@ -39,6 +40,7 @@ export async function settleCheckout(session: Stripe.Checkout.Session): Promise<
   // nothing: it is the signature on this request that does.
   if (session.payment_status !== "paid") return;
 
+  if (session.metadata?.account_checkout) return await settleAccountCheckout(session);
   if (session.metadata?.split_id) return await settleSplitShare(session);
   if ((session.metadata?.settle_order_ids ?? "").trim()) return await settleBill(session);
   if (session.metadata?.order_id) return await settleOrder(session);
@@ -374,6 +376,7 @@ async function settleOrder(session: Stripe.Checkout.Session): Promise<void> {
  * cart, and clears the order that will never be paid for.
  */
 export async function abandonCheckout(session: Stripe.Checkout.Session): Promise<void> {
+  if (session.metadata?.account_checkout) return await abandonAccountCheckout(session);
   // A bill that was never paid: the orders are real food already eaten, so
   // only the coupon reservation goes back — the rows stay on the table.
   const settled = unpackOrderIds(session.metadata)[0];

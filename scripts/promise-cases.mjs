@@ -115,6 +115,12 @@ async function firstCardCode(admin, c) {
   return data.code;
 }
 const cardPage = async (admin, c) => `/rewards?c=${await firstCardCode(admin, c)}&back=/r/${c.restaurantId}`;
+// A seeded customer account's statement, by the customer's name.
+const statementOf = name => async (admin, c) => {
+  const { data } = await admin.from("customer_accounts").select("code")
+    .eq("restaurant_id", c.restaurantId).eq("name", name).single();
+  return `/cuenta/${data.code}`;
+};
 // What a case changed on the card or the program, put back by its undo.
 const kept = {};
 const uprootCombo = (admin, c) =>
@@ -333,6 +339,64 @@ export const STATES = [
     offers: /guardar cambios|save changes/i,
   },
   {
+    // Customer accounts: the page lists who owes what and opens new ones.
+    name: "customer accounts · the page",
+    as: "owner",
+    path: "/dashboard/accounts",
+    says: /carmen ruiz/i,
+    keeps: /abrir cuenta|open account/i,
+  },
+  {
+    // Carta does not carry accounts: the page says which tier does, offers no
+    // opening, and still lists what is owed — money owed survives a plan.
+    name: "a plan without accounts · the page",
+    as: "owner",
+    path: "/dashboard/accounts",
+    apply: (admin, c) => admin.from("restaurants").update({ plan: "carta", plan_status: "active" }).eq("id", c.restaurantId),
+    says: /cuentas de clientes vienen con[\s\S]*carmen ruiz|customer accounts come with[\s\S]*carmen ruiz/i,
+    offers: /abrir cuenta|open account/i,
+  },
+  {
+    // "Ponlo en mi cuenta" at the till.
+    name: "the till · on account",
+    as: "owner",
+    path: "/dashboard/pos",
+    says: /toca un platillo para empezar|tap a dish to start/i,
+    keeps: /^\s*(a cuenta|on account)\s*$/i,
+  },
+  {
+    // And on a table's bill, beside cash and card.
+    name: "a table's bill · put it on an account",
+    as: "owner",
+    path: "/dashboard/bills",
+    open: /^\s*(Cobrar|Collect)\s*$/i,
+    says: /cuenta|bill/i,
+    keeps: /cargar a una cuenta de cliente|put it on a customer account/i,
+  },
+  {
+    // The customer's statement: what is owed, and the ways to pay it.
+    name: "a customer's statement",
+    as: "diner",
+    path: statementOf("Carmen Ruiz"),
+    says: /carmen ruiz[\s\S]*por pagar|carmen ruiz[\s\S]*to pay/i,
+    keeps: /pagar en la caja|pay at the register/i,
+  },
+  {
+    // Nothing owed: nothing to pay, and it says so.
+    name: "a statement with nothing owed",
+    as: "diner",
+    path: statementOf("Luis Ortega"),
+    says: /no debe nada|owes nothing/i,
+    offers: /pagar en l[ií]nea|pay online|pagar en la caja|pay at the register/i,
+  },
+  {
+    // The diner's scanner, beside the search.
+    name: "the menu · scan a code",
+    as: "diner",
+    says: /demo bistro/i,
+    keeps: /escanear un código|scan a code/i,
+  },
+  {
     // The card's page had no way back to the menu but the browser's.
     name: "a visit card's page · the way back",
     as: "diner",
@@ -521,8 +585,9 @@ export const STATES = [
       admin.from("restaurants").update({ plan: "carta", plan_status: "active" }).eq("id", c.restaurantId),
     open: /^\s*(Cobrar|Collect)\s*$/i,
     says: /cuenta|bill/i,
-    // The calculator's door, which the route refuses on this plan.
-    offers: /cobrar por partes|collect in parts/i,
+    // The calculator's door, which the route refuses on this plan — and the
+    // customer account, which Carta does not carry.
+    offers: /cobrar por partes|collect in parts|cargar a una cuenta de cliente|put it on a customer account/i,
     // Settling in full still works and must stay.
     keeps: /pagó en efectivo|paid cash/i,
   },

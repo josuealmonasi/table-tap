@@ -1018,6 +1018,60 @@ cause), rewards spent, and the stamps each person gave, most first, which is
 where a stamp with nothing sold behind it would show. Counted by
 `loyaltyStats()` from the rows, read with the secret key like the corte.
 
+## Customer accounts
+
+A customer the restaurant trusts can take food now and pay later, all at once
+("cuenta abierta", a tab). It is credit the restaurant extends, so the rules
+lean on who is trusted with what:
+
+- **Paid tiers only** (`allows_open_accounts`: Caja, Servicio, Casa, Grupo),
+  and only for the people who take money (`KEEPS_ACCOUNTS`: everyone but the
+  kitchen). Opening one and charging one are plan-gated; collecting one is
+  not, and neither is its page: an account opened on a paid tier still owes
+  after a move down, and money owed is always collectable.
+- **A ceiling on every account**, set by whoever opens it
+  (`customer_accounts.credit_limit`). Only a manager or owner moves it, never
+  below what is already owed, and every change is logged.
+- **Only the staff charge an account.** The customer asks; the waiter (from
+  the bills board's collect dialog, "Cargar a una cuenta de cliente") or the
+  cashier (at the till, "A cuenta") picks the account and confirms — that
+  second press is the approval, logged with who, whose account and how much.
+  `account_charge()` does it under the account's row lock, so two charges at
+  once cannot pass the ceiling together, and refuses a bill that changed since
+  it was shown, one partly collected or being divided, and one a card checkout
+  is open on. A till sale refused by the account is deleted with its stock
+  given back.
+- **An order on an account is delivered and not paid**: `paid` false,
+  `account_id` set, `charged_by`/`charged_at` recorded. Every reader of what a
+  table owes leaves these out (`.is("account_id", null)`, and the two sitting
+  functions in SQL), or a table would be billed for food an account already
+  owes; an invariant fails on a reader that forgets. A table whose whole bill
+  goes on an account closes with `close_reason = 'account'`. The board shows
+  "En cuenta", not "No pagado".
+- **Paid whole, any day.** In person: the Accounts page (or the customer's QR,
+  scanned there) → "Cobrar", with the same tip chips as the cart, cash or
+  card, through `account_settle()` — one payment row with `account_id` for the
+  whole balance, the tip on the latest order, the orders marked paid, a
+  retried tap answered as the same payment. Online: the statement's "Pagar en
+  línea" opens `account_checkout_open()`, which snapshots exactly the orders
+  owed and holds the account against the till for 35 minutes; Stripe's
+  webhook settles that checkout with `account_checkout_settle()` (once, and a
+  failure throws so Stripe retries), and an abandoned session lifts the hold.
+- **The statement** is `/cuenta/<code>`: a random twelve-character code (the
+  visit card's alphabet) on a QR. Holding it shows the customer's name, what
+  is owed day by day with times and dishes, and earlier payments, and lets
+  them pay; nothing else — no ceiling, no email, no staff names. Staff can
+  issue a new code. It prints, and emails the statement when mail is
+  configured (the typed address is used once, never stored). The menu has a
+  scan button beside the search that reads TableTap's own codes — a
+  statement, a visit card, a table — and follows only paths in this app.
+- **The corte** counts account money where it lands: a collection in person
+  is in that person's drawer, one online is online. Underneath it shows what
+  went on accounts today and what customers still owe across all accounts,
+  because the corte closes the night, not anybody's account.
+- **`pnpm money`** reconciles each account's paid orders against its
+  payments, and the drawer check reads account collections too.
+
 ## What is checked, and how
 
 `pnpm test` `api` `rls` `roles` `smoke` `layout` `promises` `money` `attack`,

@@ -125,9 +125,11 @@ export default function OrderCard({
                 letting go of it. A general-QR order that chose to pay at the
                 till arrives here like any other, and without this the food
                 leaves with nobody having collected. */}
+            {/* On an account it is owed, but not here: nobody collects it
+                at the pass, so it does not say "unpaid". */}
             {!order.paid && (
-              <span className="tt-status-badge tt-unpaid-badge">
-                {t("orders.notPaid")}
+              <span className={`tt-status-badge ${order.account_id ? "tt-account-badge" : "tt-unpaid-badge"}`}>
+                {t(order.account_id ? "orders.onAccount" : "orders.notPaid")}
               </span>
             )}
             <span

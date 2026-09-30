@@ -69,6 +69,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // the bill half done with nobody seeing it.
   const base = (tableId ? scoped.eq("table_id", tableId) : scoped.eq("id", orderId!).is("table_id", null))
     .eq("paid", false)
+    .is("account_id", null)
     .eq("written_off", false)
     .neq("status", "pending_payment")
     .neq("status", "cancelled");

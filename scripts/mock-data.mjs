@@ -23,6 +23,7 @@ import { createClient } from "@supabase/supabase-js";
 import { populateMenu } from "./menu-catalog.mjs";
 import { TERMS_VERSION } from "./terms-version.mjs";
 import { seedLoyalty } from "./mock-loyalty.mjs";
+import { seedAccounts } from "./mock-accounts.mjs";
 import { bulkInsert, randInt, sample } from "./menu-catalog.mjs";
 
 export const DEMO_RESTAURANT = "Demo Bistro";
@@ -862,6 +863,8 @@ export async function seedMock(pg) {
 
   // The visit card, with a card at every stage. Its own file, like the menu.
   await seedLoyalty(pg, rid);
+  // Customer accounts, one owing across two days. Its own file too.
+  await seedAccounts(pg, rid);
 
   // Nothing seeded may have happened later than now. Orders from the future
   // filled the board and today's numbers for a morning before anybody saw
