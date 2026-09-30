@@ -35,6 +35,15 @@ async function ownerSlotFree(restaurantId: string): Promise<boolean> {
 // kitchen). We email them an invite link to set their own password, so the
 // owner never handles someone else's credentials.
 export async function POST(req: NextRequest) {
+  // Who is asking, before what they sent. The address was checked first, so
+  // the only request the roles gate could use to prove an owner gets past the
+  // role check was a well-formed address — one that already had an account,
+  // so Supabase would refuse to invite it. That made every roles:prod run ask
+  // production to invite somebody, and kept it harmless only as long as the
+  // account stayed there and stayed confirmed.
+  const actor = await actingOwner();
+  if (!actor) return await apiError("apiErr.forbidden", 403);
+
   const body = await jsonBody<{ email?: string; role?: string }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { email, role } = body;
@@ -45,9 +54,6 @@ export async function POST(req: NextRequest) {
   if (!role || !ROLES.includes(role)) {
     return await apiError("apiErr.pickRole", 400);
   }
-
-  const actor = await actingOwner();
-  if (!actor) return await apiError("apiErr.forbidden", 403);
 
   // Every invited login is a seat, whatever its role. One pool rather than a
   // quota per role: an owner who needs a fourth waiter should not be told they
