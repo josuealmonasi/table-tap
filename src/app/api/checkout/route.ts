@@ -22,7 +22,7 @@ import {
   toAppliedCoupon,
   type CouponRow,
 } from "@/lib/coupon-service";
-import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { fetchPromotions } from "@/lib/promotions-data";
 import { toCartPromos } from "@/lib/promotions";
 import { cartReferences, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
@@ -59,7 +59,7 @@ const NO_PLAN = { allows_deferred_payment: false } as PlanLimits;
 export async function POST(req: NextRequest) {
   try {
     // Throttle abusive callers before we create any orders or Stripe sessions.
-    if (await isRateLimited(`checkout:${clientIp(req)}`, 10, 60)) {
+    if (await isRateLimited(`checkout:${clientKey(req)}`, 10, 60)) {
       return await apiError("apiErr.tooManyAttempts", 429);
     }
 

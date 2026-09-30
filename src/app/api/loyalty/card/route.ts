@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
-import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPlan } from "@/lib/plan-server";
 import { newCode } from "@/lib/loyalty/code";
@@ -25,7 +25,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Answers with the card's face and its QR as a grid of modules, so the phone
 // draws the image itself and the QR library never ships to it.
 export async function POST(req: NextRequest) {
-  if (await isRateLimited(`loyalty-card:${clientIp(req)}`, 5, 60)) {
+  if (await isRateLimited(`loyalty-card:${clientKey(req)}`, 5, 60)) {
     return await apiError("apiErr.tooManyWait", 429);
   }
 

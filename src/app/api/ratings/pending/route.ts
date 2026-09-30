@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { rateableDishes } from "@/lib/ratings";
 import type { OrderLineItem } from "@/lib/types";
 
@@ -20,7 +20,7 @@ import type { OrderLineItem } from "@/lib/types";
  * claim it did.
  */
 export async function POST(req: NextRequest) {
-  if (await isRateLimited(`rating-pending:${clientIp(req)}`, 30, 60)) {
+  if (await isRateLimited(`rating-pending:${clientKey(req)}`, 30, 60)) {
     return await apiError("apiErr.tooManyRequests", 429);
   }
 

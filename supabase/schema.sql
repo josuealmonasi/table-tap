@@ -730,6 +730,13 @@ as $$
 declare
   v_count int;
 begin
+  -- A window that ended more than a day ago answers nothing a limit asks, and
+  -- a key kept for ever is data kept for ever: the privacy notice promises a
+  -- day. Swept now and then rather than on every call — one call in fifty
+  -- clears the whole table.
+  if random() < 0.02 then
+    delete from rate_limits where window_start < now() - interval '1 day';
+  end if;
   insert into rate_limits (bucket, count, window_start)
   values (p_bucket, 1, now())
   on conflict (bucket) do update set

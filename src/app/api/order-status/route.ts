@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
-import { clientIp, forTheRoom, isRateLimited } from "@/lib/rate-limit";
+import { clientKey, forTheRoom, isRateLimited } from "@/lib/rate-limit";
 import { ORDER_HEARTBEAT_MS, ORDERS_FOLLOWED, TRACKER_POLL_MS, perMinute } from "@/lib/poll";
 import { fetchTrackedOrder } from "@/lib/order-tracking";
 
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // asking after each order it follows. It was 120, "far above what a real
   // diner's phone asks for", which was true of one phone.
   const perPhone = perMinute(TRACKER_POLL_MS) + ORDERS_FOLLOWED * perMinute(ORDER_HEARTBEAT_MS);
-  if (await isRateLimited(`order-status:${clientIp(req)}`, forTheRoom(perPhone), 60)) {
+  if (await isRateLimited(`order-status:${clientKey(req)}`, forTheRoom(perPhone), 60)) {
     return await apiError("apiErr.tooManyRequests", 429);
   }
 

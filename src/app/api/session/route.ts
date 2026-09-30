@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
-import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { unpaidOrders } from "@/lib/table-bill";
 import type { Order } from "@/lib/types";
@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return await apiError("apiErr.missingId", 400);
-  if (await isRateLimited(`session:${clientIp(req)}`, 60, 60)) {
+  if (await isRateLimited(`session:${clientKey(req)}`, 60, 60)) {
     return await apiError("apiErr.tooManyRequests", 429);
   }
 

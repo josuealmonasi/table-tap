@@ -1746,7 +1746,7 @@ describe("a polled route is sized for the room that polls it", () => {
 
   it("sizes each of those routes' limits from the same poll", () => {
     const offenders = Object.values(POLLED).filter(f => {
-      const hits = [...code(f).matchAll(/isRateLimited\(`(order-status|split|bill):\$\{clientIp\(req\)\}`,\s*([^,]+),/g)];
+      const hits = [...code(f).matchAll(/isRateLimited\(`(order-status|split|bill):\$\{clientKey\(req\)\}`,\s*([^,]+),/g)];
       return hits.length === 0 || hits.some(m => !m[2].includes("forTheRoom("));
     });
     expect(offenders, `a limit sized for one phone:\n${offenders.join("\n")}`).toEqual([]);

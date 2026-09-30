@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { staffOpenedBill } from "@/lib/table-session";
-import { clientIp, forTheRoom, isRateLimited } from "@/lib/rate-limit";
+import { clientKey, forTheRoom, isRateLimited } from "@/lib/rate-limit";
 import { SPLIT_POLL_MS, perMinute } from "@/lib/poll";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { currentSplit } from "@/lib/split-service";
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
   // Polled by every phone in a split, and one address is the whole room: at 60
   // a minute, one table of six dividing its bill on the Wi-Fi ran it out.
-  if (await isRateLimited(`split:${clientIp(req)}`, forTheRoom(perMinute(SPLIT_POLL_MS)), 60)) {
+  if (await isRateLimited(`split:${clientKey(req)}`, forTheRoom(perMinute(SPLIT_POLL_MS)), 60)) {
     return await apiError("apiErr.tooManyRequests", 429);
   }
 
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  if (await isRateLimited(`splitnew:${clientIp(req)}`, 10, 60)) {
+  if (await isRateLimited(`splitnew:${clientKey(req)}`, 10, 60)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
 

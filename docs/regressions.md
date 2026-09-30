@@ -48,6 +48,7 @@ us, and what now catches each one.
 | A request that says it worked reads its answer | "Llamar al mesero" said "¡En camino!" for a minute whatever came back, a refusal or no connection |
 | A refused move is not a dropped connection | A 403 from an expired sign-in was held as "saved, will be sent" and retried on every reconnect |
 | An order that could not be read is not a missing one | A failed read of an order was null, and the tracker answered a diner who had just ordered with "not found" |
+| A rate limit keeps no address, and nothing past a day | Every diner's IP address sat in `rate_limits` for ever, named nowhere in the privacy notice |
 | A lookup that failed is not "no access" | In a database blip an owner was told the account had no restaurant and to create a new one, and every staff route answered "forbidden" |
 | A failed read of the promotions is not "no promotions" | Checkout would have charged full price for a deal the menu had shown; the panel told a manager there were none |
 | A card settlement that failed before writing makes Stripe send it again | Marking a paid card order failed, the webhook answered 200, and the diner's money sat in Stripe recorded nowhere |
@@ -1517,6 +1518,27 @@ everything (`keepsEverything`). And the visit card was Casa-and-up, so Caja
 having it made Servicio a step down from Caja; Servicio has it now, on the
 owner's decision. Tests pin all three, and promise cases open Caja's menu and
 its till.
+
+## Addresses the privacy notice never mentioned
+
+An audit of the app against its own terms and privacy notice found that every
+rate limit keyed on the caller's IP address — `bill:189.x.x.x`,
+`checkout:189.x.x.x` — and that nothing ever deleted a row: production held
+137, the oldest six weeks old. The notice lists every kind of data the app
+keeps, and addresses were not on it, nor in what it says about how long
+anything is kept.
+
+The limiter only needs to know that two requests came from the same place
+within a minute. `clientKey` answers that with an HMAC of the address under
+the server's secret, so the same address gives the same key and the key does
+not give back the address; `rate_limit_hit` sweeps windows older than a day;
+and the notice now says what is kept, why, and for how long, with the terms
+and notice versioned 2026-09-29 and their PDFs regenerated. The same reading
+found the staff line short too: it named an email and a role, while a login
+can record a name on its profile and the activity log keeps who did each
+operation — both are in the notice now. A test fails if the
+key contains any part of the address, if anything else reads a request's
+address, or if the sweep or the sentence goes.
 
 ## Before merging anything large
 

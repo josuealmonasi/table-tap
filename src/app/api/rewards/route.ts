@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { normalizeCode } from "@/lib/loyalty/code";
 import { cardFace } from "@/lib/loyalty/face";
 import { qrGrid } from "@/lib/loyalty/qr-grid";
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   // Sixty bits cannot be walked, but a page that answers "no such card" as fast
   // as it is asked is still an oracle. Ten looks a minute is plenty for a
   // person with a card in their hand.
-  if (await isRateLimited(`rewards:${clientIp(req)}`, 10, 60)) {
+  if (await isRateLimited(`rewards:${clientKey(req)}`, 10, 60)) {
     return await apiError("apiErr.tooManyWait", 429);
   }
 
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
 // it; its visits and rewards go with it. It is the privacy notice's promise of
 // cancellation, kept without asking for a name the card never had.
 export async function DELETE(req: NextRequest) {
-  if (await isRateLimited(`rewards:${clientIp(req)}`, 10, 60)) {
+  if (await isRateLimited(`rewards:${clientKey(req)}`, 10, 60)) {
     return await apiError("apiErr.tooManyWait", 429);
   }
   const code = normalizeCode(req.nextUrl.searchParams.get("c") ?? "");
