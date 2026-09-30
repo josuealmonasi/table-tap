@@ -1104,6 +1104,11 @@ a.tt-btn {
   border-bottom: 1px solid color-mix(in srgb, var(--tt-warning) 30%, transparent);
   color: var(--tt-warning);
 }
+/* A payment being retried: a warning, not a lock. */
+.tt-frozen-banner-warn {
+  background: color-mix(in srgb, var(--tt-warning) 14%, var(--tt-surface));
+  border-color: color-mix(in srgb, var(--tt-warning) 40%, transparent);
+}
 .tt-frozen-text {
   display: flex;
   align-items: center;

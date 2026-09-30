@@ -242,6 +242,17 @@ export const STATES = [
     says: /toca un platillo para empezar|tap a dish to start/i,
   },
   {
+    // A payment failed and Stripe is retrying. The terms promise the owner is
+    // told; it said so only on the Plan page, which an owner may never open.
+    name: "a payment being retried · the dashboard",
+    as: "owner",
+    path: "/dashboard",
+    apply: (admin, c) => admin.from("restaurants").update({ plan_status: "past_due" }).eq("id", c.restaurantId),
+    // The sentence and the link to fix it, in one: the link is an <a>, which
+    // `keeps` (buttons only) cannot see.
+    says: /no pudimos cobrar tu último pago[\s\S]*revisar el pago|couldn't collect your last payment[\s\S]*check the payment/i,
+  },
+  {
     name: "orders paused",
     as: "diner",
     apply: (admin, c) => admin.from("restaurants").update({ accepting_orders: false }).eq("id", c.restaurantId),

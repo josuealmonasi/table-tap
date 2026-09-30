@@ -97,6 +97,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               dashboardFrozen(
                 (membership.restaurant.plan_status ?? "active") as PlanStatus,
               ) && <FrozenBanner isOwner={membership.role === "owner"} />}
+            {/* A payment failed and is being retried: the owner is told (terms,
+                §5), everywhere, before anything freezes. */}
+            {membership?.role === "owner" && membership.restaurant.plan_status === "past_due" && (
+              <FrozenBanner isOwner pastDue />
+            )}
             {/* Only the owner is asked, and only in the dashboard: the diner's
                 menu renders through this same layout, and holding up somebody's
                 dinner over a contract with their restaurant would be absurd. */}

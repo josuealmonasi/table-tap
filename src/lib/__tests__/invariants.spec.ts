@@ -2124,3 +2124,16 @@ describe("a gate that reads production writes nothing there", () => {
     expect(offenders, "a browser context that could write to production").toEqual([]);
   });
 });
+
+describe("every promise case is a case of its own", () => {
+  it("exports one state for every name the file declares", async () => {
+    // A conflict resolved by keeping both sides dropped one case's closing
+    // brace and the next one's opening: two cases became one object with
+    // duplicate keys, the later won, and "Caja · the till" stopped running
+    // without a line in the output to say so.
+    const { STATES } = await import("../../../scripts/promise-cases.mjs");
+    const names = [...read("scripts/promise-cases.mjs").matchAll(/^ {4}name: "/gm)].length;
+    expect(names, "the scan found no case").toBeGreaterThan(20);
+    expect(STATES.length, "a case swallowed by the one before it").toBe(names);
+  });
+});
