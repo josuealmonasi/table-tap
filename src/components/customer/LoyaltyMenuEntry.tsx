@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
 import { LoyaltyIcon } from "@/components/ui/icons";
 import { useT } from "@/lib/i18n/context";
 import { readDeviceCard } from "@/lib/loyalty/device";
+import { rewardsPath } from "@/lib/loyalty/code";
 import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
 import { ladderLines } from "@/lib/loyalty/ladder";
 import LoyaltyOffer from "./LoyaltyOffer";
@@ -31,6 +32,7 @@ interface LoyaltyMenuEntryProps {
 export default function LoyaltyMenuEntry({ offer }: LoyaltyMenuEntryProps) {
   const t = useT();
   const router = useRouter();
+  const pathname = usePathname();
   const [mine, setMine] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -45,7 +47,7 @@ export default function LoyaltyMenuEntry({ offer }: LoyaltyMenuEntryProps) {
         type="button"
         className="tt-loyalty-chip"
         aria-label={`${t(mine ? "loyaltyMenu.mine" : "loyaltyMenu.entry")} · ${ladderLines(offer.steps, t).join(" · ")}`}
-        onClick={() => (mine ? router.push(`/rewards?c=${mine}`) : setOpen(true))}
+        onClick={() => (mine ? router.push(rewardsPath(mine, pathname)) : setOpen(true))}
       >
         <LoyaltyIcon size={14} weight="bold" />
         <span className="tt-loyalty-chip-text">{t(mine ? "loyaltyMenu.mine" : "loyaltyMenu.entry")}</span>

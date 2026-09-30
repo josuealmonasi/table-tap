@@ -127,11 +127,42 @@ export function cases(fx) {
       path: `/api/rewards?c=${fx.loyaltyCode ?? "no-card-in-the-seed"}`, expect: [200],
       check: d => {
         if (!d.standing || !(d.standing.goal > 0)) return `no standing in ${JSON.stringify(d).slice(0, 80)}`;
-        const said = JSON.stringify(d);
+        // The restaurant's own id is its public menu address — printed in
+        // every table's QR — and is what the page's way back links to.
+        if (d.restaurant?.id !== r) return `the way back points at ${d.restaurant?.id}, not the card's restaurant`;
+        const said = JSON.stringify({ ...d, restaurant: { ...d.restaurant, id: undefined } });
         if (said.includes("@")) return "the lookup names the staff who stamped the card";
         if (/[0-9a-f]{8}-[0-9a-f]{4}-/.test(said)) return "the lookup hands out a row id";
+        // The seed's cards were saved when they were made, and no round has
+        // moved their rewards since.
+        if (d.saveAgain !== false) return "a card nobody changed is asked to be saved again";
         return true;
       } },
+    // Saved before its round closed onto new rewards, the picture shows
+    // rewards the card no longer has: the page asks for it to be saved again,
+    // and saving it stops the asking.
+    { name: "GET  /api/rewards (a card whose rewards moved on)", as: "diner", method: "GET",
+      path: `/api/rewards?c=${fx.loyaltyCode ?? "no-card-in-the-seed"}`,
+      arrange: f => f.withCardSavedBefore(fx.loyaltyCode),
+      expect: [200], check: d => d.saveAgain === true || "the page does not ask for the picture again" },
+    { name: "PATCH /api/rewards (the diner saved the picture)", as: "diner", method: "PATCH",
+      path: `/api/rewards?c=${fx.loyaltyCode ?? "no-card-in-the-seed"}`,
+      arrange: f => f.withCardSavedBefore(fx.loyaltyCode),
+      expect: [200],
+      effect: async f => {
+        const { data } = await f.admin.from("loyalty_cards").select("saved_at, ladder_at")
+          .eq("code", fx.loyaltyCode).maybeSingle();
+        return new Date(data.saved_at) >= new Date(data.ladder_at) || "saving did not stop the page asking";
+      } },
+    { name: "PATCH /api/rewards (no such card)", as: "diner", method: "PATCH",
+      path: "/api/rewards?c=0000-0000-0000", expect: [404], expectError: /encontramos|couldn't find/i },
+    // Rewards the restaurant added since the card's round started are the
+    // next round's (terms) — said on the page, not left to be wondered at.
+    { name: "GET  /api/rewards (the program's rewards changed)", as: "diner", method: "GET",
+      path: `/api/rewards?c=${fx.loyaltyCode ?? "no-card-in-the-seed"}`,
+      arrange: f => f.withProgramRewardRenamed(),
+      expect: [200],
+      check: d => (Array.isArray(d.upcoming) && d.upcoming.length > 0) || `upcoming is ${JSON.stringify(d.upcoming)}` },
     { name: "GET  /api/rewards (no such card)", as: "diner", method: "GET",
       path: "/api/rewards?c=0000-0000-0000", expect: [404], expectError: /encontramos|couldn't find/i },
     { name: "GET  /api/rewards (not a code)", as: "diner", method: "GET",

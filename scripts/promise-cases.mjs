@@ -108,6 +108,15 @@ async function plantCombo(admin, c) {
     .select("id").single();
   await admin.from("promotion_items").insert({ promotion_id: combo.id, item_id: dish.id, qty: 2 });
 }
+// A visit card of the demo's, and its page. The oldest, so every run reads the same one.
+async function firstCardCode(admin, c) {
+  const { data } = await admin.from("loyalty_cards").select("code")
+    .eq("restaurant_id", c.restaurantId).order("created_at").limit(1).single();
+  return data.code;
+}
+const cardPage = async (admin, c) => `/rewards?c=${await firstCardCode(admin, c)}&back=/r/${c.restaurantId}`;
+// What a case changed on the card or the program, put back by its undo.
+const kept = {};
 const uprootCombo = (admin, c) =>
   admin.from("promotions").delete().eq("restaurant_id", c.restaurantId).eq("name", AUDIT_COMBO);
 
@@ -322,6 +331,54 @@ export const STATES = [
     open: /^\s*(horario|opening hours)\s*$/i,
     says: /menús por horario vienen con|menus on a schedule come with/i,
     offers: /guardar cambios|save changes/i,
+  },
+  {
+    // The card's page had no way back to the menu but the browser's.
+    name: "a visit card's page · the way back",
+    as: "diner",
+    path: cardPage,
+    says: /visitas|visits/i,
+    keeps: /volver al menú|back to the menu/i,
+  },
+  {
+    // The picture lists the card's rewards. Saved before its round closed onto
+    // new ones, it shows rewards the card no longer has: the page says so and
+    // offers the picture again.
+    name: "a visit card saved before its rewards moved · its page",
+    as: "diner",
+    path: cardPage,
+    apply: async (admin, c) => {
+      const code = await firstCardCode(admin, c);
+      const { data } = await admin.from("loyalty_cards").select("saved_at, ladder_at").eq("code", code).single();
+      kept.card = { code, ...data };
+      const dayBefore = new Date(new Date(data.ladder_at).getTime() - 86_400_000).toISOString();
+      await admin.from("loyalty_cards").update({ saved_at: dayBefore }).eq("code", code);
+    },
+    undo: admin => admin.from("loyalty_cards")
+      .update({ saved_at: kept.card.saved_at, ladder_at: kept.card.ladder_at }).eq("code", kept.card.code),
+    says: /guárdala otra vez|save it again/i,
+    keeps: /guardar la tarjeta al día|save the updated card/i,
+  },
+  {
+    // Rewards the restaurant changed are the next round's (terms): the page
+    // names them and says when they arrive, instead of disagreeing silently
+    // with the menu.
+    name: "new rewards on the program · a card's page",
+    as: "diner",
+    path: cardPage,
+    apply: async (admin, c) => {
+      const { data } = await admin.from("loyalty_programs")
+        .select("reward, steps").eq("restaurant_id", c.restaurantId).single();
+      kept.program = data;
+      const renamed = `${data.reward || "Reward"} +`.slice(0, 80);
+      const steps = Array.isArray(data.steps) && data.steps.length
+        ? data.steps.map((s, i, all) => (i === all.length - 1 ? { ...s, reward: renamed } : s))
+        : [];
+      await admin.from("loyalty_programs").update({ reward: renamed, steps }).eq("restaurant_id", c.restaurantId);
+    },
+    undo: (admin, c) => admin.from("loyalty_programs")
+      .update({ reward: kept.program.reward, steps: kept.program.steps }).eq("restaurant_id", c.restaurantId),
+    says: /nuevas recompensas|new rewards/i,
   },
   {
     // The control for the case after it: on the demo's own tier a combo is on

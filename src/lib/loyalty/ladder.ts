@@ -34,6 +34,12 @@ export function ladderOf(steps: unknown, goal: number, reward: string): LadderSt
   return [{ visits: goal, reward }];
 }
 
+/** Whether two ladders promise the same rewards at the same visits. */
+export function sameLadder(a: LadderStep[], b: LadderStep[]): boolean {
+  return a.length === b.length &&
+    a.every((s, i) => s.visits === b[i].visits && s.reward.trim() === b[i].reward.trim());
+}
+
 export type LadderCheck = { steps: LadderStep[] } | { error: string; vars?: Record<string, number> };
 
 /** A ladder somebody typed: cleaned and sorted, or the key of what is wrong with it. */

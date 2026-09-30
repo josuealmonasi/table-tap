@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
 import { rememberCard, rememberDeclined, shouldOffer } from "@/lib/loyalty/device";
 import type { CardFace } from "@/lib/loyalty/face";
@@ -9,6 +10,7 @@ import type { QrGrid } from "@/lib/loyalty/qr-grid";
 import CardDownload from "@/components/loyalty/CardDownload";
 import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
 import { ladderLines } from "@/lib/loyalty/ladder";
+import { rewardsPath } from "@/lib/loyalty/code";
 
 interface LoyaltyOfferProps {
   offer: LoyaltyOfferInfo;
@@ -25,6 +27,7 @@ interface LoyaltyOfferProps {
  */
 export default function LoyaltyOffer({ offer, asked = false }: LoyaltyOfferProps) {
   const t = useT();
+  const pathname = usePathname();
   // Read after mount: the server has no localStorage, and deciding there would
   // flash the offer at a phone that already has a card.
   const [open, setOpen] = useState(asked);
@@ -75,7 +78,7 @@ export default function LoyaltyOffer({ offer, asked = false }: LoyaltyOfferProps
         <strong>{t("loyaltyOffer.ready")}</strong>
         <p className="tt-muted" style={{ margin: 0 }}>{t("loyaltyOffer.saveHint")}</p>
         <CardDownload face={card.face} qr={card.qr} />
-        <Link className="tt-accent" href={`/rewards?c=${card.face.printedCode.replace(/-/g, "")}`}>
+        <Link className="tt-accent" href={rewardsPath(card.face.printedCode.replace(/-/g, ""), pathname)}>
           {t("loyaltyOffer.checkLater")}
         </Link>
       </section>

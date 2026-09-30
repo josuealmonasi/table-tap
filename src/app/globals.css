@@ -7140,6 +7140,43 @@ a.tt-user-plan:hover {
   margin-top: 14px;
   color: var(--tt-danger);
 }
+/* The way back to the menu the diner came from, above the card. */
+.tt-rewards-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+/* The program's rewards when they are not yet the card's: the next round's. */
+.tt-rewards-upcoming {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px dashed var(--tt-line);
+  border-radius: var(--tt-radius-sm);
+  text-align: left;
+}
+.tt-rewards-upcoming p {
+  margin: 0;
+  font-size: 13px;
+}
+/* The picture lists rewards the card no longer has: save it again. */
+.tt-rewards-resave {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--tt-radius-sm);
+  background: var(--tt-accent-wash);
+}
+.tt-rewards-resave p {
+  margin: 0;
+  font-size: 14px;
+}
 .tt-rewards-notice {
   margin: 0 0 8px;
   color: var(--tt-success);
