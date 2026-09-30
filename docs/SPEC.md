@@ -102,7 +102,9 @@ dishes on a bill the restaurant has just cancelled.
   sentence, and a table's QR offers no waiter and no bill. No kitchen board: a
   register sale is `completed` the moment it is rung, the orders board sends
   staff on to the till, and only cashier, manager and owner logins can be
-  handed out (`assignableRoles`). It earns no per-order fee — none of its
+  handed out (`assignableRoles`). A kitchen or waiter login kept through a move
+  down to Caja has no screen: the board tells it so and asks it to see the
+  owner. It earns no per-order fee — none of its
   money touches Stripe — so the subscription is its price.
 - **The ladder is not a line.** Caja sits above Carta in price and below it in
   one thing (ordering from the phone), so `nextPlan` and `cheapestWith` only

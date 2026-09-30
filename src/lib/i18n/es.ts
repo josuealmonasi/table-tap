@@ -615,6 +615,8 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     monthlyMax: "Lo máximo que pagarías este mes",
     lockHint: "Todo lo demás en esta página sigue funcionando.",
     seePlans: "Ver planes",
+    noScreenTitle: "Este acceso no tiene pantalla en {plan}",
+    noScreenBody: "{plan} cobra todo en la caja y no tiene tablero de cocina ni mesas, así que un acceso de cocina o de mesero no tiene nada que abrir. Pide al dueño que cambie tu rol a cajero o que cambie de plan.",
     currentTitle: "Tu plan",
     usageTitle: "Lo que estás usando",
     tiersTitle: "Planes",

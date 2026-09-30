@@ -242,6 +242,17 @@ export const STATES = [
     says: /toca un platillo para empezar|tap a dish to start/i,
   },
   {
+    // A kitchen login kept through a move down to Caja has no board to open.
+    // /dashboard sent it to the board and the board sent it back to
+    // /dashboard: the browser bounced between them and the person saw an
+    // empty frame. It has to land on a sentence that says why.
+    name: "Caja · a kitchen login",
+    as: "kitchen",
+    path: "/dashboard",
+    apply: (admin, c) => admin.from("restaurants").update({ plan: "caja", plan_status: "active" }).eq("id", c.restaurantId),
+    says: /no tiene pantalla en caja|has no screen on caja/i,
+  },
+  {
     // A payment failed and Stripe is retrying. The terms promise the owner is
     // told; it said so only on the Plan page, which an owner may never open.
     name: "a payment being retried · the dashboard",
