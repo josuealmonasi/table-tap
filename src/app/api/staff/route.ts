@@ -59,14 +59,19 @@ export async function POST(req: NextRequest) {
   const frozen = await frozenBlocks(actor.restaurantId);
   if (frozen) return frozen;
 
+  // A role the tier has no screen for is refused before the seats are
+  // counted: "Caja has no kitchen board" is the answer to a cook, and "you
+  // are out of seats" would send the owner to buy a seat for a login that
+  // still could not sign in to anything.
+  const roleRefused = await roleBlocks(actor.restaurantId, role);
+  if (roleRefused) return roleRefused;
+
   const noSeat = await seatBlocks(actor.restaurantId, seatsUsed ?? 0);
   if (noSeat) return noSeat;
 
   if (role === "owner" && !(await ownerSlotFree(actor.restaurantId))) {
     return await apiError("apiErr.ownerCap", 409, { n: MAX_OWNERS });
   }
-  const roleRefused = await roleBlocks(actor.restaurantId, role);
-  if (roleRefused) return roleRefused;
 
   const admin = createAdminClient();
   const origin = req.headers.get("origin") ?? new URL(req.url).origin;
