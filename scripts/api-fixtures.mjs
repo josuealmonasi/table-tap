@@ -178,6 +178,31 @@ export async function setup(env, base) {
         .update({ plan: was.plan, plan_status: was.plan_status }).eq("id", restaurant.id);
     };
   };
+  // A card whose picture was saved a day before its rewards last moved.
+  const withCardSavedBefore = async code => {
+    const { data: was } = await admin.from("loyalty_cards").select("ladder_at, saved_at").eq("code", code).single();
+    const dayBefore = new Date(new Date(was.ladder_at).getTime() - 86_400_000).toISOString();
+    await admin.from("loyalty_cards").update({ saved_at: dayBefore }).eq("code", code);
+    return async () => {
+      await admin.from("loyalty_cards").update({ saved_at: was.saved_at, ladder_at: was.ladder_at }).eq("code", code);
+    };
+  };
+  // The program's last reward renamed, so it no longer matches the ladder the
+  // card started its round with. Goal and visits stay, which keeps the table's
+  // own check (the last step is the goal and the reward) satisfied.
+  const withProgramRewardRenamed = async () => {
+    const { data: was } = await admin.from("loyalty_programs")
+      .select("goal, reward, steps").eq("restaurant_id", restaurant.id).single();
+    const renamed = `${was.reward || "Reward"} +`.slice(0, 80);
+    const steps = Array.isArray(was.steps) && was.steps.length
+      ? was.steps.map((s, i, all) => (i === all.length - 1 ? { ...s, reward: renamed } : s))
+      : [];
+    await admin.from("loyalty_programs").update({ reward: renamed, steps }).eq("restaurant_id", restaurant.id);
+    return async () => {
+      await admin.from("loyalty_programs")
+        .update({ reward: was.reward, steps: was.steps }).eq("restaurant_id", restaurant.id);
+    };
+  };
   const withLoyaltyOff = async () => {
     const { data: was } = await admin
       .from("loyalty_programs").select("active").eq("restaurant_id", restaurant.id).maybeSingle();
@@ -499,6 +524,8 @@ export async function setup(env, base) {
     withServicedOrder, servicedOrder,
     onCaja,
     onCarta,
+    withCardSavedBefore,
+    withProgramRewardRenamed,
     combo,
     // Read when a case asks, never snapshotted: an earlier case MINTS a new
     // token (`POST /api/print/token`), so a value captured at setup is stale

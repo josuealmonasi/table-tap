@@ -69,7 +69,7 @@ const { data: table } = await admin
 if (!prod) {
   await warm(BASE, [
     ...CREW.flatMap(r => r.pages ?? []),
-    ...STATES.flatMap(c => (c.path ? [c.path] : [])),
+    ...STATES.flatMap(c => (typeof c.path === "string" ? [c.path] : [])),
     `/r/${restaurant.id}`,
     `/r/${restaurant.id}/t/${table.id}`,
   ]);
@@ -438,7 +438,11 @@ for (const state of STATES) {
     if (state.as === "tracker") await withCounterOrder(id => visit(`/order/${id}`));
     else if (state.as === "bill") {
       await withTableBill(free => visit(`/r/${restaurant.id}/t/${free.id}`), state.frozen);
-    } else await visit(state.path ?? `/r/${restaurant.id}/t/${table.id}`);
+    } else {
+      // A path can depend on the data — a visit card's page needs a card's code.
+      const path = typeof state.path === "function" ? await state.path(admin, ctx) : state.path;
+      await visit(path ?? `/r/${restaurant.id}/t/${table.id}`);
+    }
   } finally {
     await context.close();
     await state.undo?.(admin, ctx);

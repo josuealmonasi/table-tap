@@ -2826,6 +2826,13 @@ $$;
 alter table loyalty_programs    add column if not exists steps jsonb not null default '[]'::jsonb;
 alter table loyalty_cards       add column if not exists steps jsonb;
 alter table loyalty_cards       add column if not exists round_no int not null default 0;
+-- When the card's own ladder last changed, and when its diner last saved the
+-- picture of it. The picture lists the rewards, and a card takes new ones only
+-- when a round closes, so a picture saved before that shows rewards the card
+-- no longer has: /rewards asks for it to be saved again. Both start at the
+-- same moment, so no card made before them is asked.
+alter table loyalty_cards       add column if not exists ladder_at timestamptz not null default now();
+alter table loyalty_cards       add column if not exists saved_at timestamptz not null default now();
 alter table loyalty_redemptions add column if not exists step int;
 alter table loyalty_redemptions add column if not exists round_no int;
 -- A step in the middle spends no visits, so zero is a real amount now.
@@ -3025,7 +3032,8 @@ begin
     v_steps := coalesce(nullif(v_program.steps, '[]'::jsonb), case when coalesce(v_program.reward, '') <> '' then
       jsonb_build_array(jsonb_build_object('visits', v_program.goal, 'reward', v_program.reward)) end);
     v_goal := coalesce((v_steps->-1->>'visits')::int, v_program.goal, v_card.goal);
-    update loyalty_cards c set steps = v_steps, goal = v_goal, round_no = c.round_no + 1
+    update loyalty_cards c set steps = v_steps, goal = v_goal, round_no = c.round_no + 1,
+           ladder_at = case when c.steps is distinct from v_steps then now() else c.ladder_at end
      where c.id = v_card.id;
   end if;
 

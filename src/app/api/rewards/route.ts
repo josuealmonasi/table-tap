@@ -6,6 +6,7 @@ import { normalizeCode } from "@/lib/loyalty/code";
 import { cardFace } from "@/lib/loyalty/face";
 import { qrGrid } from "@/lib/loyalty/qr-grid";
 import { CARD_COLUMNS, cardState, type CardRow } from "@/lib/loyalty/server";
+import { ladderOf, sameLadder } from "@/lib/loyalty/ladder";
 
 export const runtime = "nodejs";
 
@@ -29,9 +30,9 @@ export async function GET(req: NextRequest) {
   const db = createAdminClient();
   const { data: card, error } = await db
     .from("loyalty_cards")
-    .select(`${CARD_COLUMNS}, restaurant_id, created_at`)
+    .select(`${CARD_COLUMNS}, restaurant_id, created_at, ladder_at, saved_at`)
     .eq("code", code)
-    .maybeSingle<CardRow & { restaurant_id: string; created_at: string }>();
+    .maybeSingle<CardRow & { restaurant_id: string; created_at: string; ladder_at: string; saved_at: string }>();
   if (error) {
     console.error("rewards: card read failed:", error.message);
     return await apiError("apiErr.generic", 500);
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
 
   const [restaurant, program, lastVisit, spent] = await Promise.all([
     db.from("restaurants").select("name, logo, logo_url").eq("id", card.restaurant_id).single(),
-    db.from("loyalty_programs").select("active, reward").eq("restaurant_id", card.restaurant_id).maybeSingle(),
+    db.from("loyalty_programs").select("active, reward, goal, steps").eq("restaurant_id", card.restaurant_id).maybeSingle(),
     db.from("loyalty_visits").select("visit_day").eq("card_id", card.id)
       .order("visit_day", { ascending: false }).limit(1).maybeSingle(),
     db.from("loyalty_redemptions").select("reward, created_at").eq("card_id", card.id)
@@ -57,10 +58,26 @@ export async function GET(req: NextRequest) {
   // The card's own face, so a diner who lost the image can save it again from
   // here — drawn from the same face as the first one, to the same QR.
   const face = cardFace(restaurant.data, { code, ...state }, req.nextUrl.origin);
+
+  // A card keeps the rewards its round started with (terms), so rewards the
+  // restaurant added since are the next round's. Said, rather than left for
+  // the diner to wonder why the page and the menu disagree.
+  const programLadder = program.data
+    ? ladderOf(program.data.steps, program.data.goal, program.data.reward)
+    : [];
+  const upcoming =
+    program.data?.active && programLadder.some(s => s.reward.trim()) && !sameLadder(programLadder, state.ladder)
+      ? programLadder.map(s => ({ visits: s.visits, reward: s.reward.trim() }))
+      : null;
+
   return NextResponse.json({
     face,
     qr: qrGrid(face.qrPayload),
-    restaurant: restaurant.data,
+    restaurant: { id: card.restaurant_id, ...restaurant.data },
+    upcoming,
+    // The picture lists the card's rewards: saved before they last changed,
+    // it shows rewards the card no longer has.
+    saveAgain: new Date(card.ladder_at) > new Date(card.saved_at),
     // Paused means no new visits, not that the card stopped meaning anything:
     // a reward already earned is still honoured.
     active: program.data?.active ?? false,
@@ -69,6 +86,29 @@ export async function GET(req: NextRequest) {
     lastVisit: lastVisit.data?.visit_day ?? null,
     redeemed: (spent.data ?? []).map(r => ({ day: r.created_at.slice(0, 10), reward: r.reward })),
   });
+}
+
+// PATCH /api/rewards?c=… — the diner saved the picture of their card. Whoever
+// holds the code may say so: all it moves is the moment /rewards compares with
+// the card's last change of rewards, to ask for the picture to be saved again.
+export async function PATCH(req: NextRequest) {
+  if (await isRateLimited(`rewards:${clientKey(req)}`, 10, 60)) {
+    return await apiError("apiErr.tooManyWait", 429);
+  }
+  const code = normalizeCode(req.nextUrl.searchParams.get("c") ?? "");
+  if (!code) return await apiError("rewards.invalid", 400);
+
+  const { data, error } = await createAdminClient()
+    .from("loyalty_cards")
+    .update({ saved_at: new Date().toISOString() })
+    .eq("code", code)
+    .select("id");
+  if (error) {
+    console.error("rewards: saved-at write failed:", error.message);
+    return await apiError("apiErr.generic", 500);
+  }
+  if (!data?.length) return await apiError("rewards.notFound", 404);
+  return NextResponse.json({ ok: true });
 }
 
 // DELETE /api/rewards?c=… — the diner deletes their own card. The code is the

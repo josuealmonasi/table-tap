@@ -1,15 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { formatCode, normalizeCode } from "@/lib/loyalty/code";
 import RewardsCard, { type CardStanding } from "./RewardsCard";
 import CardDownload from "@/components/loyalty/CardDownload";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { BackIcon } from "@/components/ui/icons";
+import RewardsSkeleton from "./RewardsSkeleton";
 
 interface RewardsLookupProps {
   /** From the card's QR link, so the camera lands straight on the answer. */
   initialCode?: string;
+  /** The menu the diner came from, already checked to be one (`/r/…`). */
+  back?: string | null;
 }
 
 /**
@@ -19,7 +24,7 @@ interface RewardsLookupProps {
  * it on their phone; keeping it in this browser as well would be one more
  * place it could be read from.
  */
-export default function RewardsLookup({ initialCode = "" }: RewardsLookupProps) {
+export default function RewardsLookup({ initialCode = "", back = null }: RewardsLookupProps) {
   const t = useT();
   const { locale } = useLocale();
   const [code, setCode] = useState(initialCode ? formatCode(normalizeCode(initialCode) ?? initialCode) : "");
@@ -82,6 +87,20 @@ export default function RewardsLookup({ initialCode = "" }: RewardsLookupProps) 
     [t],
   );
 
+  // The way back to the menu: the one they came from, or the card's own
+  // restaurant once it is known. There used to be none but the browser's.
+  const backHref = back ?? (card ? `/r/${card.restaurant.id}` : null);
+
+  /**
+   * The diner is keeping the picture again. Remembered on the card so the page
+   * stops asking; a miss only means it may ask once more, so nothing waits on it.
+   */
+  function showSave(): void {
+    setSaveAgain(true);
+    const normal = normalizeCode(code);
+    if (normal) void fetch(`/api/rewards?c=${normal}`, { method: "PATCH" }).catch(() => undefined);
+  }
+
   // The QR brought a code: answer at once rather than make them press a button.
   useEffect(() => {
     if (initialCode) void look(initialCode);
@@ -90,15 +109,30 @@ export default function RewardsLookup({ initialCode = "" }: RewardsLookupProps) 
   return (
     <div className="tt-login">
       <div className="container">
-        {card ? (
+        {backHref && (
+          <Link href={backHref} className="tt-btn tt-btn-ghost tt-btn-sm tt-rewards-back">
+            <BackIcon size={14} weight="bold" aria-hidden="true" />
+            {t("rewards.backToMenu")}
+          </Link>
+        )}
+        {busy && !card ? (
+          <RewardsSkeleton />
+        ) : card ? (
           <div className="tt-login-card">
             <RewardsCard card={card} locale={locale} />
             {saveAgain ? (
               <div style={{ marginTop: 16 }}>
                 <CardDownload face={card.face} qr={card.qr} />
               </div>
+            ) : card.saveAgain ? (
+              <div className="tt-rewards-resave" role="status">
+                <p>{t("rewards.saveAgainBody")}</p>
+                <button type="button" className="tt-btn tt-btn-primary" style={{ width: "100%" }} onClick={showSave}>
+                  {t("rewards.saveAgainAction")}
+                </button>
+              </div>
             ) : (
-              <button type="button" className="tt-btn tt-btn-ghost" style={{ marginTop: 16, width: "100%" }} onClick={() => setSaveAgain(true)}>
+              <button type="button" className="tt-btn tt-btn-ghost" style={{ marginTop: 16, width: "100%" }} onClick={showSave}>
                 {t("loyaltyOffer.downloadAgain")}
               </button>
             )}

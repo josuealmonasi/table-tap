@@ -66,3 +66,11 @@ export function codeFromScan(text: string): string | null {
     return normalizeCode(trimmed);
   }
 }
+
+/**
+ * The card's page from inside the app, carrying the menu the diner is on so
+ * the page can offer the way back to it (the page checks it is a menu).
+ */
+export function rewardsPath(code: string, back?: string | null): string {
+  return `/rewards?c=${code}${back ? `&back=${encodeURIComponent(back)}` : ""}`;
+}

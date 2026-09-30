@@ -896,7 +896,12 @@ email or phone.
 - **A card keeps its own ladder.** A card snapshots the program's steps when it
   is made and again when a round closes (`loyalty_cards.steps`, with `goal` the
   last step), so editing the program never moves a finish line a diner is
-  walking towards.
+  walking towards. `/rewards` says so: rewards the program has that the card
+  does not yet are listed as the next round's, and a card whose own ladder
+  moved on after its diner last saved the picture of it (`ladder_at` after
+  `saved_at`) asks for the picture to be saved again. The page links back to
+  the menu the diner came from (`back`, accepted only as `/r/…`) or to the
+  card's restaurant, and shows the card's shape while it looks it up.
 - **A reward is spent once**, under the same lock, by `loyalty_redeem()`. The
   button names the reward it spends (`step`, its visits), and the function
   refuses unless that is still the next one — on a ladder with every reward

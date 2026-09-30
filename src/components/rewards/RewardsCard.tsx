@@ -12,8 +12,12 @@ import LadderSteps from "@/components/loyalty/LadderSteps";
 export interface CardStanding {
   face: CardFace;
   qr: QrGrid;
-  restaurant: { name: string; logo: string | null; logo_url: string | null };
+  restaurant: { id: string; name: string; logo: string | null; logo_url: string | null };
   active: boolean;
+  /** The program's rewards when they differ from the card's: the next round's. */
+  upcoming: { visits: number; reward: string }[] | null;
+  /** The saved picture lists rewards the card no longer has. */
+  saveAgain: boolean;
   /** Its rewards included: the ladder is `standing.steps`. */
   standing: Standing;
   memberSince: string;
@@ -68,6 +72,20 @@ export default function RewardsCard({ card, locale }: RewardsCardProps) {
         ))}
       </div>
       <LadderSteps standing={s} />
+      {card.upcoming && (
+        <div className="tt-rewards-upcoming" role="note">
+          <strong>{t("rewards.upcomingTitle")}</strong>
+          <ul className="tt-ladder">
+            {card.upcoming.map(step => (
+              <li key={step.visits} className="tt-ladder-step tt-ladder-ahead">
+                <span className="tt-ladder-visits">{t("ladder.visits", { n: step.visits })}</span>
+                <span className="tt-ladder-reward">{step.reward || t("ladder.noReward")}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="tt-muted">{t("rewards.upcomingWhen")}</p>
+        </div>
+      )}
 
       {s.ready && <p className="tt-rewards-ready">{t("rewards.ready")}</p>}
       <p className="tt-rewards-next">{nextLine}</p>
