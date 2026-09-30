@@ -84,8 +84,8 @@ const PAGES = {
 // Route → roles that should be able to use it.
 //
 // A write is probed with a body the route turns down only AFTER it has checked
-// the role: nothing to mark, nothing to change, a code in the wrong shape, an
-// address that already has an account. What is measured is the role check,
+// the role: nothing to mark, nothing to change, a code or an address in the
+// wrong shape. What is measured is the role check,
 // and nothing is ever written — here or on production. The bodies used to be
 // real: `roles:prod` created a live 5% coupon, ZZZ-999, on the demo restaurant
 // on 2026-09-10 and re-sent it on every run after; it would switch orders
@@ -102,10 +102,10 @@ const ROUTES = [
   // No field at all: answered ok before anything is written.
   { m: "POST", p: "/api/settings", body: {}, allow: MANAGES, passes: 200 },
   { m: "POST", p: "/api/coupons", body: { code: "not a code", kind: "percent", value: 5 }, allow: MANAGES, passes: 400 },
-  // This route checks the address before the role, so the address has to be
-  // a good one — and one that already has an account, which Supabase refuses
-  // to invite without sending anything.
-  { m: "POST", p: "/api/staff", body: { email: "demo-waiter@tabletap.dev", role: "waiter" }, allow: OWNER, passes: 400 },
+  // Not an address at all, so nothing reaches Supabase. The probe was a real
+  // address with an account — refused only because the account existed, and
+  // sent to production's invite endpoint on every roles:prod run.
+  { m: "POST", p: "/api/staff", body: { email: "not an address", role: "waiter" }, allow: OWNER, passes: 400 },
 ];
 
 let failed = 0;
