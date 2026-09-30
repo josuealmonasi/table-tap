@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { PlanLimits, PlanStatus } from "@/lib/plan";
+import { can, type PlanFeature, type PlanLimits, type PlanStatus } from "@/lib/plan";
 
 export interface RestaurantPlan {
   limits: PlanLimits;
@@ -105,3 +105,9 @@ export const allPlans = cache(async (): Promise<PlanLimits[]> => {
     .order("rank");
   return (data as PlanLimits[] | null) ?? [];
 });
+
+/** Whether the restaurant's tier carries `feature`. No plan row is "no". */
+export async function tierIncludes(restaurantId: string, feature: PlanFeature): Promise<boolean> {
+  const plan = await getPlan(restaurantId);
+  return plan ? can(plan.limits, feature) : false;
+}

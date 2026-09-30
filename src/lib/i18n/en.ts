@@ -691,6 +691,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
       coupons: "Coupons come with {plan}.",
       staffDiscounts: "Discounts applied by your team come with {plan}.",
       loyalty: "The visit card comes with {plan}.",
+      menuSchedules: "Menus on a schedule come with {plan}.",
     },
   },
   receipt: {
@@ -1154,6 +1155,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     addRule: "+ Add another period",
     removeRule: "Remove this period",
     remove: "Remove hours",
+    notApplied: "These hours are saved, but they do not apply while your plan does not include menus on a schedule: the menu follows its switch.",
   },
   tz: {
     mexico: "Mexico",

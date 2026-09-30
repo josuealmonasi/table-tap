@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { DeleteIcon } from "@/components/ui/icons";
 import { useT } from "@/lib/i18n/context";
+import PlanLock from "@/components/dashboard/plan/PlanLock";
 import {
   cleanSchedule,
   scheduleError,
@@ -27,6 +28,13 @@ interface ScheduleDialogProps {
   schedule?: MenuSchedule | null;
   onClose: () => void;
   onSave: (schedule: MenuSchedule | null) => Promise<void>;
+  /**
+   * Set on a tier without menu schedules. The editor is not offered — the
+   * database refuses a new schedule there, and the owner was only told "No se
+   * pudo actualizar el menú" — and one saved on a tier that had them is shown
+   * as not applied, with the way to remove it the database still allows.
+   */
+  locked?: { unlocksWith: string; isOwner: boolean };
 }
 
 /**
@@ -43,6 +51,7 @@ export default function ScheduleDialog({
   schedule,
   onClose,
   onSave,
+  locked,
 }: ScheduleDialogProps) {
   const t = useT();
   const [enabled, setEnabled] = useState(schedule?.enabled ?? true);
@@ -93,6 +102,30 @@ export default function ScheduleDialog({
     await onSave(null);
     setSaving(false);
     onClose();
+  }
+
+  if (locked) {
+    return (
+      <Modal open={open} onClose={onClose} maxWidth={520} title={t("sched.title", { name: menuName })}>
+        <PlanLock feature="menuSchedules" unlocksWith={locked.unlocksWith} isOwner={locked.isOwner} />
+        {schedule && <p className="tt-muted" style={{ fontSize: 13 }}>{t("sched.notApplied")}</p>}
+        <div className="tt-prodform-actions">
+          {schedule && (
+            <button
+              type="button"
+              className="tt-btn tt-btn-ghost tt-btn-sm tt-danger-text"
+              disabled={saving}
+              onClick={remove}
+            >
+              {t("sched.remove")}
+            </button>
+          )}
+          <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={onClose}>
+            {t("menu.cancel")}
+          </button>
+        </div>
+      </Modal>
+    );
   }
 
   return (

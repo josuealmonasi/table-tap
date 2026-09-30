@@ -5,7 +5,7 @@ import { jsonBody } from "@/lib/json-body";
 import { actingStaff } from "@/lib/api-guard";
 import { TAKES_COUNTER_ORDERS } from "@/lib/membership";
 import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
-import { getPlan } from "@/lib/plan-server";
+import { getPlan, tierIncludes } from "@/lib/plan-server";
 import { can } from "@/lib/plan";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { capName, capNote } from "@/lib/notes";
@@ -127,6 +127,7 @@ export async function POST(req: NextRequest) {
   const { ids: openIds, closedNow } = openMenuIds(
     (menusRes.data as MenuOpenState[] | null) ?? [],
     (restaurant.timezone as string | null) ?? DEFAULT_TIME_ZONE,
+    { schedules: await tierIncludes(actor.restaurantId, "menuSchedules") },
   );
   if (closedNow) return await apiError("apiErr.closedNow", 409);
 

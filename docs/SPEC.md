@@ -123,7 +123,10 @@ dishes on a bill the restaurant has just cancelled.
   the bill offer no coupon field there (`coupons_enabled`), and the owner's
   promotions page says the saved ones are not reaching anybody. Back on a tier
   with the feature, they run again. The terms promise exactly this when a trial
-  ends.
+  ends. Menu schedules follow the same rule: below Casa a menu follows its
+  switch alone (`openMenuIds` takes `{ schedules }`, which every caller must
+  decide), and the schedule button opens the plan lock instead of the editor,
+  with a way to remove hours saved on a tier that had them.
 - **Trials.** Signing up opens thirty days of `servicio` with `plan_status`
   'trialing' and a `trial_ends_at`. Nothing runs at night to end it: `getPlan`
   drops a lapsed trial to `carta` the first time anybody asks, and changes the

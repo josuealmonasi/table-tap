@@ -307,6 +307,8 @@ const SIGNS_IN = {
   manager: CREW.find(c => c.role === "manager").email,
   kitchen: CREW.find(c => c.role === "kitchen").email,
 };
+// A control's name: its text, or the title or label an icon button carries.
+const NAME_OF = `(b => b.innerText.trim() || b.title || b.getAttribute("aria-label") || "")`;
 // What a person would press: buttons, links drawn as buttons, and anything
 // that says it is a button — a dish or a combo on the menu is a card that
 // opens when tapped.
@@ -335,7 +337,7 @@ for (const state of STATES) {
   // drawn as a button is a control to whoever presses it: "Ver planes" was an
   // <a>, so a manager was offered the owner's plan page and nothing saw it.
   const visible = (tab, re) => tab.evaluate(
-    `[...document.querySelectorAll(${JSON.stringify(CONTROLS)})].filter(b => b.offsetParent && ${re}.test(b.innerText)).length`);
+    `[...document.querySelectorAll(${JSON.stringify(CONTROLS)})].filter(b => b.offsetParent && ${re}.test(${NAME_OF}(b))).length`);
 
   const visit = async path => {
     const tab = await context.newPage();
@@ -386,7 +388,7 @@ for (const state of STATES) {
           return;
         }
         await tab.evaluate(
-          `[...document.querySelectorAll(${JSON.stringify(CONTROLS)})].find(b => b.offsetParent && ${state.open}.test(b.innerText)).click()`);
+          `[...document.querySelectorAll(${JSON.stringify(CONTROLS)})].find(b => b.offsetParent && ${state.open}.test(${NAME_OF}(b))).click()`);
 
         // Wait for what opened, not for a number of milliseconds. A dialog
         // that takes 1.3s on a slow compile made this case report the screen

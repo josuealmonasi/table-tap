@@ -13,15 +13,18 @@ import MenusPanel from "@/components/dashboard/menu/MenusPanel";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { NAV_ICONS } from "@/components/ui/icons";
 import { useRowMemory } from "@/hooks/useRowMemory";
+import type { ScheduleAccess } from "@/lib/menu-schedule";
 
 interface DashboardHomeProps {
   restaurant: Restaurant;
   /** Filters the area tiles — managers don't see Staff or Settings. */
   role: DashboardRole;
+  /** Whether this tier carries menu schedules (decided on the server). */
+  schedules: ScheduleAccess;
 }
 
 /** Restaurant dashboard landing — the restaurant's menus, plus other areas. */
-export default function DashboardHome({ restaurant, role }: DashboardHomeProps) {
+export default function DashboardHome({ restaurant, role, schedules }: DashboardHomeProps) {
   const t = useT();
   const editor = useMenuEditor(restaurant.id);
   const menuRows = useRowMemory(
@@ -71,6 +74,7 @@ export default function DashboardHome({ restaurant, role }: DashboardHomeProps) 
             onRename={editor.renameMenu}
             onSetSchedule={editor.setMenuSchedule}
             timeZone={restaurant.timezone ?? DEFAULT_TIME_ZONE}
+            schedules={schedules}
             onDelete={editor.deleteMenu}
             onToggleActive={editor.setMenuActive}
             onDuplicate={editor.duplicateMenu}
