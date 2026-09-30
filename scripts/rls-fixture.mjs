@@ -16,6 +16,8 @@ const MARK = "rls fixture";
 const ACTOR = "rls-fixture@tabletap.dev";
 /** The fixture's loyalty card — a valid code nobody could be handed. */
 const CARD = "RSFXTEST0000";
+// The same alphabet as a card: customer_accounts.code refuses anything else.
+const ACCOUNT_CODE = "RSFXACCT0000";
 
 /**
  * Anything a previous run left behind, before this one plants more.
@@ -204,11 +206,24 @@ export async function plantNeighbour(admin, restaurantId) {
     });
   }
 
+  // A customer account of theirs, owing, with an online payment open on it.
+  // Anyone who could read it could read a customer's name and tab; anyone who
+  // could write it could raise its ceiling or wipe what it owes.
+  const { id: accountId } = await keep("account", "customer_accounts", {
+    restaurant_id: restaurantId, name: MARK, code: ACCOUNT_CODE, credit_limit: 100, opened_by: ACTOR,
+  });
+  if (accountId) {
+    await keep("accountCheckout", "account_checkouts", {
+      restaurant_id: restaurantId, account_id: accountId, order_ids: [], amount: 1,
+    });
+  }
+
   return {
     planted,
     /** Children first, so nothing is left holding a reference. */
     remove: async () => {
       const order = [
+        "accountCheckout", "account",
         "loyaltyRedemption", "loyaltyVisit", "loyaltyCard", "loyaltyProgram",
         "split", "sitting", "request", "notification", "iconGroup", "log", "colleague",
         "writeOff", "discount", "redemption", "promotion", "coupon",

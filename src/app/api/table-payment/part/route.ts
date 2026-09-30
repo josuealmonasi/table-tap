@@ -286,6 +286,7 @@ async function sittingFor(
     .eq("table_id", tableId)
     .is("session_id", null)
     .eq("paid", false)
+    .is("account_id", null)
     .eq("written_off", false);
   return opened;
 }
@@ -330,6 +331,7 @@ async function closeBill(
     .eq("restaurant_id", actor.restaurantId)
     .eq("table_id", tableId)
     .eq("paid", false)
+    .is("account_id", null)
     .eq("written_off", false)
     .neq("status", "pending_payment")
     .neq("status", "cancelled")

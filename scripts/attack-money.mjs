@@ -21,6 +21,7 @@
 // ============================================================================
 import { createClient } from "@supabase/supabase-js";
 import { attackLoyalty } from "./attack-loyalty.mjs";
+import { attackAccounts } from "./attack-accounts.mjs";
 import { refuseProduction, watchDevWorker } from "./preflight.mjs";
 
 refuseProduction("attack", "every case plants an order to attack");
@@ -101,6 +102,7 @@ if (!neighbour) {
 const who = {
   waiter: await cookieFor("demo-waiter@tabletap.dev"),
   kitchen: await cookieFor("demo-kitchen@tabletap.dev"),
+  cashier: await cookieFor("demo-cashier@tabletap.dev"),
 };
 
 // A table of our own, made for this and nothing else. Borrowing a real one
@@ -145,6 +147,13 @@ async function sweep() {
   // The lines those collections wrote, so the drawer and the ledger still
   // agree afterwards. Found by the table's name, which nothing else has.
   await admin.from("user_logs").delete().eq("entity", "bill").like("detail", `table=${MARK}%`);
+  // The card reader the Stripe cases lend is given back after their request
+  // answers. One that threw never gave it back: the dev server went down under
+  // a run, the demo kept `acct_attack`, and the next `pnpm api` sent its
+  // "no card reader" cases through to Stripe and failed five of them. A made-up
+  // account is never the demo's own, so it comes off here, whatever happened.
+  await admin.from("restaurants").update({ stripe_account_id: null, stripe_charges_enabled: false })
+    .eq("stripe_account_id", "acct_attack");
 }
 await sweep();
 
@@ -697,6 +706,11 @@ try {
   // kitchen, and two people at once, each judged by the rows that changed.
   console.log("\n  The visit card\n");
   await attackLoyalty({ admin, post, who, home, ok, bad });
+
+  // Credit: food on an account nobody may charge, past its ceiling, or one
+  // balance collected twice.
+  console.log("\n  Customer accounts\n");
+  await attackAccounts({ admin, post, who, home, neighbour, ok, bad });
 } finally {
   await sweep();
   if (raced) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { orderIdFromScan, tableFromScan } from "@/lib/scan-target";
+import { orderIdFromScan, tableFromScan, accountCodeFromScan, dinerPathFromScan } from "@/lib/scan-target";
 
 const ID = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
 
@@ -86,5 +86,37 @@ describe("reading the code stuck to a table", () => {
     // Both scanners look at the same world through the same lens.
     expect(tableFromScan(`https://tabletap.mx/dashboard/bills?order=${ID}`)).toBeNull();
     expect(orderIdFromScan(`https://tabletap.mx/r/${REST}/t/${TABLE}`)).toBeNull();
+  });
+});
+
+describe("accountCodeFromScan", () => {
+  it("reads the code out of a statement link", () => {
+    expect(accountCodeFromScan("https://table-tap-star.vercel.app/cuenta/K7QM3XW9TB4R")).toBe("K7QM3XW9TB4R");
+  });
+  it("refuses a path that only starts like one, and a code in the wrong shape", () => {
+    expect(accountCodeFromScan("https://x.test/cuenta/K7QM3XW9TB4R/pay")).toBeNull();
+    expect(accountCodeFromScan("https://x.test/cuenta/SHORT")).toBeNull();
+    expect(accountCodeFromScan("K7QM3XW9TB4R")).toBeNull();
+  });
+});
+
+describe("dinerPathFromScan", () => {
+  const R = "11111111-1111-4111-8111-111111111111";
+  const T = "22222222-2222-4222-8222-222222222222";
+  it("turns TableTap's own codes into paths in this app", () => {
+    expect(dinerPathFromScan("https://a.test/cuenta/K7QM3XW9TB4R")).toBe("/cuenta/K7QM3XW9TB4R");
+    expect(dinerPathFromScan("https://a.test/rewards?c=K7QM3XW9TB4R")).toBe("/rewards?c=K7QM3XW9TB4R");
+    expect(dinerPathFromScan(`https://a.test/r/${R}/t/${T}`)).toBe(`/r/${R}/t/${T}`);
+    expect(dinerPathFromScan(`https://a.test/r/${R}`)).toBe(`/r/${R}`);
+  });
+  it("never keeps the host a code names", () => {
+    // A sticker over the table's QR can name any site; the path is all that is used.
+    expect(dinerPathFromScan(`https://evil.example/r/${R}`)).toBe(`/r/${R}`);
+  });
+  it("refuses anything else", () => {
+    expect(dinerPathFromScan("https://evil.example/login")).toBeNull();
+    expect(dinerPathFromScan("WIFI:S:cafe;T:WPA;P:secret;;")).toBeNull();
+    expect(dinerPathFromScan("https://a.test/rewards?c=nope")).toBeNull();
+    expect(dinerPathFromScan("")).toBeNull();
   });
 });

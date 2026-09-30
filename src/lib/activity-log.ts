@@ -25,7 +25,9 @@ export type LogEntity =
   | "settings"
   | "menu"
   /** A diner's visit card: stamped, or its reward spent. */
-  | "loyalty";
+  | "loyalty"
+  /** A customer account: opened, charged, collected, its ceiling moved. */
+  | "account";
 
 /** What happened to it. Deliberately plain words: this list is read by owners. */
 export type LogAction =
@@ -45,7 +47,10 @@ export type LogAction =
   | "paused"
   | "resumed"
   | "stamped"
-  | "redeemed";
+  | "redeemed"
+  /** Put on a customer's account: delivered, not yet paid. */
+  | "charged"
+  | "closed";
 
 export interface LogEvent {
   restaurantId: string;

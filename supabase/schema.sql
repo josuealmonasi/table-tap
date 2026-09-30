@@ -1861,6 +1861,7 @@ begin
    where session_id = p_session
      and paid = false
      and written_off = false
+     and account_id is null
      and status <> 'cancelled'
      and status <> 'pending_payment';
 
@@ -2472,6 +2473,7 @@ begin
    where session_id = p_session
      and paid = false
      and written_off = false
+     and account_id is null
      and status <> 'cancelled'
      and status <> 'pending_payment';
 
@@ -3043,3 +3045,287 @@ end;
 $$;
 revoke all on function public.loyalty_redeem(uuid, text, text, int) from public, anon, authenticated;
 grant execute on function public.loyalty_redeem(uuid, text, text, int) to service_role;
+
+-- ── Customer accounts ("cuenta abierta") ───────────────────────────────────
+-- A customer the restaurant trusts to pay later: food goes out now and is paid
+-- for in one go, any day, online or at the till. It is credit the restaurant
+-- extends, so every account has a ceiling set by whoever opened it, and only
+-- the staff put things on it — the customer asks, the waiter or the cashier
+-- charges, and that act is the approval on the record.
+--
+-- An order on an account is delivered and not paid: `paid` stays false (no
+-- money has arrived) and `account_id` says who owes it. Every reader of unpaid
+-- orders that means "the table owes this" must leave these out — a table billed
+-- for a dish already on somebody's account is charged twice.
+alter table plan_limits add column if not exists allows_open_accounts boolean not null default false;
+update plan_limits set allows_open_accounts = (plan in ('caja', 'servicio', 'casa', 'grupo'));
+
+create table if not exists customer_accounts (
+  id             uuid primary key default gen_random_uuid(),
+  restaurant_id  uuid not null references restaurants(id) on delete cascade,
+  name           text not null check (char_length(btrim(name)) between 1 and 80),
+  -- Only to send the statement, and only if the customer gives it.
+  email          text check (email is null or char_length(email) <= 254),
+  -- The statement's key, on its QR: twelve Crockford base32 characters, the
+  -- visit card's alphabet. Holding it shows the statement and pays it.
+  code           text not null unique check (code ~ '^[0-9A-HJKMNP-TV-Z]{12}$'),
+  credit_limit   numeric not null check (credit_limit > 0 and credit_limit <= 1000000),
+  status         text not null default 'open' check (status in ('open', 'closed')),
+  opened_by      text not null,
+  opened_at      timestamptz not null default now(),
+  closed_by      text,
+  closed_at      timestamptz,
+  -- An online payment under way: nobody collects the same balance in person
+  -- until it lands or its session runs out.
+  checkout_until timestamptz
+);
+create index if not exists customer_accounts_restaurant_idx
+  on customer_accounts(restaurant_id, status, name);
+-- Read and written with the secret key only, by routes that check who is
+-- asking first. The same as the visit cards.
+alter table customer_accounts enable row level security;
+revoke all on customer_accounts from anon, authenticated;
+
+-- No `on delete`: an account is closed, never deleted, while it has orders;
+-- deleting the restaurant takes both, and the check waits for the end of it.
+alter table orders add column if not exists account_id uuid references customer_accounts(id);
+alter table orders add column if not exists charged_by text;
+alter table orders add column if not exists charged_at timestamptz;
+create index if not exists orders_account_idx on orders(account_id) where account_id is not null;
+
+alter table payments add column if not exists account_id uuid references customer_accounts(id) on delete set null;
+create index if not exists payments_account_idx on payments(account_id) where account_id is not null;
+
+-- A table whose bill went onto an account closes like a paid one.
+alter table table_sessions drop constraint if exists table_sessions_close_reason_check;
+alter table table_sessions add constraint table_sessions_close_reason_check
+  check (close_reason in ('paid', 'settled', 'written_off', 'expired', 'account'));
+
+-- An online payment of an account: exactly the orders owed when it started,
+-- so a dish charged while the customer was on the card form is not paid for by
+-- a card that never saw it.
+create table if not exists account_checkouts (
+  id                uuid primary key default gen_random_uuid(),
+  restaurant_id     uuid not null references restaurants(id) on delete cascade,
+  account_id        uuid not null references customer_accounts(id) on delete cascade,
+  order_ids         uuid[] not null,
+  amount            numeric not null check (amount > 0),
+  tip               numeric not null default 0 check (tip >= 0),
+  -- Our cut of this payment, recorded on an order once the money is real so
+  -- the monthly ceiling is summed from what was taken.
+  fee               numeric not null default 0 check (fee >= 0),
+  stripe_session_id text unique,
+  status            text not null default 'open' check (status in ('open', 'paid', 'expired')),
+  created_at        timestamptz not null default now()
+);
+alter table account_checkouts enable row level security;
+revoke all on account_checkouts from anon, authenticated;
+
+-- What an account owes: its orders not yet paid, cancelled ones aside.
+create or replace function public.account_owed(p_account uuid)
+returns numeric language sql stable security definer set search_path = public as $$
+  select coalesce(sum(total), 0) from orders
+   where account_id = p_account and paid = false and status <> 'cancelled';
+$$;
+revoke all on function public.account_owed(uuid) from public, anon, authenticated;
+grant execute on function public.account_owed(uuid) to service_role;
+
+-- Puts orders on an account: a table's bill or a sale at the till. Under the
+-- account's lock, so two charges at once cannot pass its ceiling together.
+-- `p_expected` is the amount the person was shown: a bill that changed since
+-- is refused rather than charged at a number nobody saw.
+create or replace function public.account_charge(
+  p_restaurant uuid,
+  p_account    uuid,
+  p_orders     uuid[],
+  p_expected   numeric,
+  p_actor      text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_account  customer_accounts;
+  v_count    int;
+  v_amount   numeric;
+  v_sessions uuid[];
+  v_owed     numeric;
+begin
+  select * into v_account from customer_accounts
+   where id = p_account and restaurant_id = p_restaurant for update;
+  if v_account.id is null or v_account.status <> 'open' then
+    return jsonb_build_object('outcome', 'closed');
+  end if;
+  if p_orders is null or cardinality(p_orders) = 0 then
+    return jsonb_build_object('outcome', 'stale');
+  end if;
+
+  perform 1 from orders where id = any(p_orders) for update;
+
+  -- A card checkout open on any of them: the diner is paying it right now.
+  if exists (select 1 from orders where id = any(p_orders)
+              and card_checkout_at is not null and card_checkout_at > now() - interval '35 minutes'
+              and paid = false) then
+    return jsonb_build_object('outcome', 'paying');
+  end if;
+
+  select count(*), coalesce(sum(total), 0),
+         array_agg(distinct session_id) filter (where session_id is not null)
+    into v_count, v_amount, v_sessions
+    from orders
+   where id = any(p_orders)
+     and restaurant_id = p_restaurant
+     and paid = false and written_off = false and account_id is null
+     and status not in ('cancelled', 'pending_payment');
+  if v_count <> cardinality(p_orders) or abs(v_amount - p_expected) > 0.005 then
+    return jsonb_build_object('outcome', 'stale');
+  end if;
+
+  -- Part of the table's bill already collected, or a division under way: the
+  -- orders cannot move whole, and the account would owe what was paid.
+  if exists (select 1 from payments where session_id = any(coalesce(v_sessions, '{}')) and order_id is null)
+     or exists (select 1 from bill_splits where session_id = any(coalesce(v_sessions, '{}'))
+                 and status in ('proposed', 'locked')) then
+    return jsonb_build_object('outcome', 'partly_paid');
+  end if;
+
+  v_owed := public.account_owed(p_account);
+  if v_owed + v_amount > v_account.credit_limit then
+    return jsonb_build_object('outcome', 'limit', 'owed', v_owed, 'limit', v_account.credit_limit);
+  end if;
+
+  update orders set account_id = p_account, charged_by = p_actor, charged_at = now()
+   where id = any(p_orders);
+  perform public.close_session_if_clear(s, 'account') from unnest(coalesce(v_sessions, '{}')) s;
+
+  return jsonb_build_object('outcome', 'charged', 'amount', v_amount, 'owed', v_owed + v_amount);
+end;
+$$;
+revoke all on function public.account_charge(uuid, uuid, uuid[], numeric, text) from public, anon, authenticated;
+grant execute on function public.account_charge(uuid, uuid, uuid[], numeric, text) to service_role;
+
+-- Collects everything an account owes, in person. `p_expected` is the balance
+-- the cashier was shown; `p_ref` makes a retried tap the same collection.
+create or replace function public.account_settle(
+  p_restaurant uuid,
+  p_account    uuid,
+  p_expected   numeric,
+  p_tip        numeric,
+  p_method     text,
+  p_actor      text,
+  p_ref        text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_account customer_accounts;
+  v_ids     uuid[];
+  v_owed    numeric;
+  v_tip     numeric := greatest(coalesce(p_tip, 0), 0);
+begin
+  select * into v_account from customer_accounts
+   where id = p_account and restaurant_id = p_restaurant for update;
+  if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if p_ref is not null and exists (select 1 from payments
+                                    where restaurant_id = p_restaurant and client_ref = p_ref) then
+    return jsonb_build_object('outcome', 'duplicate');
+  end if;
+  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+    return jsonb_build_object('outcome', 'paying');
+  end if;
+
+  perform 1 from orders where account_id = p_account and paid = false and status <> 'cancelled' for update;
+  select coalesce(sum(total), 0), array_agg(id order by created_at desc)
+    into v_owed, v_ids
+    from orders where account_id = p_account and paid = false and status <> 'cancelled';
+  if v_owed <= 0 then return jsonb_build_object('outcome', 'nothing'); end if;
+  if abs(v_owed - p_expected) > 0.005 then
+    return jsonb_build_object('outcome', 'changed', 'owed', v_owed);
+  end if;
+  -- A gratuity is never more than what it thanks somebody for.
+  v_tip := least(v_tip, v_owed);
+
+  insert into payments (restaurant_id, account_id, amount, tip, method, actor_email, client_ref)
+  values (p_restaurant, p_account, v_owed + v_tip, v_tip, p_method, p_actor, p_ref);
+  update orders set paid = true, pay_method = p_method where id = any(v_ids);
+  -- The gratuity lands on the latest order, as a table's does on its first.
+  if v_tip > 0 then
+    update orders set tip = tip + v_tip, total = total + v_tip where id = v_ids[1];
+  end if;
+  return jsonb_build_object('outcome', 'paid', 'amount', v_owed + v_tip, 'tip', v_tip);
+end;
+$$;
+revoke all on function public.account_settle(uuid, uuid, numeric, numeric, text, text, text) from public, anon, authenticated;
+grant execute on function public.account_settle(uuid, uuid, numeric, numeric, text, text, text) to service_role;
+
+-- Starts an online payment of an account: the orders owed now, held so the
+-- till does not collect them while the customer is on the card form.
+create or replace function public.account_checkout_open(
+  p_restaurant uuid,
+  p_account    uuid,
+  p_expected   numeric,
+  p_tip        numeric,
+  p_fee        numeric
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_account customer_accounts;
+  v_ids     uuid[];
+  v_owed    numeric;
+  v_tip     numeric := greatest(coalesce(p_tip, 0), 0);
+  v_id      uuid;
+begin
+  select * into v_account from customer_accounts
+   where id = p_account and restaurant_id = p_restaurant for update;
+  if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+    return jsonb_build_object('outcome', 'paying');
+  end if;
+  select coalesce(sum(total), 0), array_agg(id order by created_at desc)
+    into v_owed, v_ids
+    from orders where account_id = p_account and paid = false and status <> 'cancelled';
+  if v_owed <= 0 then return jsonb_build_object('outcome', 'nothing'); end if;
+  if abs(v_owed - p_expected) > 0.005 then
+    return jsonb_build_object('outcome', 'changed', 'owed', v_owed);
+  end if;
+  v_tip := least(v_tip, v_owed);
+  insert into account_checkouts (restaurant_id, account_id, order_ids, amount, tip, fee)
+  values (p_restaurant, p_account, v_ids, v_owed, v_tip, greatest(coalesce(p_fee, 0), 0)) returning id into v_id;
+  update customer_accounts set checkout_until = now() + interval '35 minutes' where id = p_account;
+  return jsonb_build_object('outcome', 'open', 'checkout', v_id, 'amount', v_owed, 'tip', v_tip);
+end;
+$$;
+revoke all on function public.account_checkout_open(uuid, uuid, numeric, numeric, numeric) from public, anon, authenticated;
+grant execute on function public.account_checkout_open(uuid, uuid, numeric, numeric, numeric) to service_role;
+
+-- The card payment landed (Stripe's webhook): the orders it was opened for are
+-- paid, the ledger has the money, the hold is lifted. Once: a repeated event
+-- finds the checkout already paid and changes nothing.
+create or replace function public.account_checkout_settle(
+  p_checkout uuid,
+  p_intent   text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_checkout account_checkouts;
+  v_ids      uuid[];
+begin
+  select * into v_checkout from account_checkouts where id = p_checkout for update;
+  if v_checkout.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if v_checkout.status = 'paid' then return jsonb_build_object('outcome', 'duplicate'); end if;
+  perform 1 from customer_accounts where id = v_checkout.account_id for update;
+
+  insert into payments (restaurant_id, account_id, amount, tip, method, stripe_payment_intent)
+  values (v_checkout.restaurant_id, v_checkout.account_id, v_checkout.amount + v_checkout.tip,
+          v_checkout.tip, 'card', p_intent);
+  -- The ones still owed. One paid another way meanwhile cannot be: the hold
+  -- kept the till off them.
+  select array_agg(id order by created_at desc) into v_ids
+    from orders where id = any(v_checkout.order_ids) and paid = false and status <> 'cancelled';
+  update orders set paid = true, pay_method = 'card' where id = any(coalesce(v_ids, '{}'));
+  if v_checkout.tip > 0 and v_ids is not null then
+    update orders set tip = tip + v_checkout.tip, total = total + v_checkout.tip where id = v_ids[1];
+  end if;
+  if v_checkout.fee > 0 and v_ids is not null then
+    update orders set platform_fee = v_checkout.fee where id = v_ids[1];
+  end if;
+  update account_checkouts set status = 'paid' where id = p_checkout;
+  update customer_accounts set checkout_until = null where id = v_checkout.account_id;
+  return jsonb_build_object('outcome', 'paid', 'orders', coalesce(cardinality(v_ids), 0));
+end;
+$$;
+revoke all on function public.account_checkout_settle(uuid, text) from public, anon, authenticated;
+grant execute on function public.account_checkout_settle(uuid, text) to service_role;

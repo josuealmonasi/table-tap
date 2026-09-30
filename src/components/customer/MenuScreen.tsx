@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/icons";
 import CoverBanner from "./CoverBanner";
 import RestaurantMark, { hasMark } from "@/components/ui/RestaurantMark";
+import MenuScanButton from "./MenuScanButton";
 
 /** The menu browsing screen: restaurant header, category filter, item list, cart bar. */
 /** The offers tab is not one of the restaurant's categories: it is ours. */
@@ -289,6 +290,7 @@ export default function MenuScreen({
               {/* Only while something is owed — with nothing outstanding there
                   is no bill to look at, which is what made the old "get the
                   bill" button meaningless. */}
+              <MenuScanButton />
               {searchBtn}
               {searchField}
             </div>

@@ -7182,3 +7182,207 @@ a.tt-user-plan:hover {
   color: var(--tt-success);
   font-weight: 600;
 }
+
+/* ── Customer accounts ──────────────────────────────────────────────────────
+   Credit a restaurant extends: a list the till finds people in, a statement a
+   customer checks before paying, and the badge that tells the pass an order on
+   an account is owed somewhere else. */
+.tt-account-badge {
+  color: var(--tt-warning);
+  background: var(--tt-warning-wash);
+}
+.tt-account-list,
+.tt-account-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tt-account-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tt-account-row,
+.tt-account-pick {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 12px;
+  border: 1px solid var(--tt-line);
+  border-radius: var(--tt-radius-sm);
+  background: var(--tt-white);
+  color: var(--tt-ink);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  min-width: 0;
+}
+.tt-account-row:hover,
+.tt-account-pick:hover:not(:disabled) {
+  background: var(--tt-surface);
+}
+.tt-account-pick:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.tt-account-row-name,
+.tt-account-pick-name {
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tt-account-row-owed,
+.tt-account-pick-owed {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.tt-account-owed,
+.tt-account-settle-owed {
+  font-weight: 700;
+  font-size: 18px;
+  margin: 0 0 6px;
+  font-variant-numeric: tabular-nums;
+}
+.tt-account-settle-total {
+  font-weight: 700;
+  margin: 12px 0;
+  font-variant-numeric: tabular-nums;
+}
+.tt-account-confirm p {
+  margin-top: 0;
+}
+.tt-account-qr {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  margin: 16px 0;
+  padding: 12px;
+  border: 1px solid var(--tt-line);
+  border-radius: var(--tt-radius-sm);
+}
+.tt-account-qr > div:last-child {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.tt-account-qr-img {
+  width: 160px;
+  height: 160px;
+  flex: none;
+  background: var(--tt-white);
+}
+.tt-account-qr-img svg {
+  width: 100%;
+  height: 100%;
+}
+.tt-account-limit {
+  margin-top: 12px;
+}
+.tt-account-limit .tt-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tt-account-more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* The statement: days, and inside each the charges with their dishes. */
+.tt-statement {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 12px 0;
+  /* A list to check line by line, inside a card that centres its heading. */
+  text-align: left;
+}
+.tt-statement-day-head,
+.tt-statement-charge-head,
+.tt-statement-lines li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+.tt-statement-day-head {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--tt-line);
+  font-variant-numeric: tabular-nums;
+}
+.tt-statement-day-head strong::first-letter {
+  text-transform: uppercase;
+}
+.tt-statement-charge {
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--tt-line);
+}
+.tt-statement-charge-head {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.tt-statement-lines {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  font-size: 14px;
+}
+.tt-statement-lines li > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tt-statement-lines li > span:last-child {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.tt-statement-owed {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+.tt-statement-paid {
+  margin: 8px 0;
+  font-size: 14px;
+}
+.tt-statement-paid ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.tt-statement-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+.tt-statement-till {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+.tt-statement-till p {
+  margin: 0;
+}
+.tt-statement-keep {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* A printed statement is the statement: no buttons, no way back. */
+@media print {
+  .tt-no-print {
+    display: none !important;
+  }
+}

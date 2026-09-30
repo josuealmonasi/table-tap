@@ -53,6 +53,8 @@ export interface PlanLimits {
   allows_online_ordering?: boolean;
   /** The kitchen board a sale goes to once it is paid. Every tier but Caja. */
   allows_kitchen_board?: boolean;
+  /** Customer accounts: food now, paid later in one go. Every paid tier. */
+  allows_open_accounts?: boolean;
   allows_staff_discounts: boolean;
   analytics_days: number;
   log_days: number;
@@ -73,7 +75,8 @@ export type PlanFeature =
   | "waiterService"
   | "loyalty"
   | "onlineOrdering"
-  | "kitchenBoard";
+  | "kitchenBoard"
+  | "openAccounts";
 
 const FEATURE_COLUMN: Record<PlanFeature, keyof PlanLimits> = {
   dineIn: "allows_dine_in",
@@ -88,6 +91,7 @@ const FEATURE_COLUMN: Record<PlanFeature, keyof PlanLimits> = {
   loyalty: "allows_loyalty",
   onlineOrdering: "allows_online_ordering",
   kitchenBoard: "allows_kitchen_board",
+  openAccounts: "allows_open_accounts",
 };
 
 /**

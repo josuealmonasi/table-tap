@@ -23,6 +23,7 @@ export const CREW = [
       "/dashboard/analytics?period=30d",
       "/dashboard/promotions",
       "/dashboard/loyalty",
+      "/dashboard/accounts",
       "/dashboard/settings",
       "/dashboard/staff",
       "/dashboard/plan",
@@ -43,12 +44,13 @@ export const CREW = [
       "/dashboard/analytics",
       "/dashboard/promotions",
       "/dashboard/loyalty",
+      "/dashboard/accounts",
       "/dashboard/settings",
       "/dashboard/profile",
     ],
   },
-  { role: "waiter", email: "demo-waiter@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/table-order", "/dashboard/bills", "/dashboard/profile"] },
-  { role: "cashier", email: "demo-cashier@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/bills", "/dashboard/pos", "/dashboard/profile"] },
+  { role: "waiter", email: "demo-waiter@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/table-order", "/dashboard/bills", "/dashboard/accounts", "/dashboard/profile"] },
+  { role: "cashier", email: "demo-cashier@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/bills", "/dashboard/pos", "/dashboard/accounts", "/dashboard/profile"] },
   { role: "kitchen", email: "demo-kitchen@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/profile"] },
   // The platform admin runs the whole business from one screen and was in no
   // check at all: at 390px its five columns gave the name 31px, so every

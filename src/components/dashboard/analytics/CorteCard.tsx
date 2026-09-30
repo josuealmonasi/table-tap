@@ -65,6 +65,12 @@ export default function CorteCard({
         (corte.refunded > 0
           ? ` &nbsp;·&nbsp; ${escapeHtml(t("corte.refunded"))}: ${money(corte.refunded)}`
           : "") +
+        (corte.onAccount > 0
+          ? ` &nbsp;·&nbsp; ${escapeHtml(t("corte.onAccount"))}: ${money(corte.onAccount)}`
+          : "") +
+        (corte.accountsOwed > 0
+          ? ` &nbsp;·&nbsp; ${escapeHtml(t("corte.accountsOwed"))}: ${money(corte.accountsOwed)}`
+          : "") +
         `</p>` +
         `<p style="margin-top:44px;font-size:13px;color:#70707a">${escapeHtml(t("corte.signature"))}</p>` +
         `<div style="margin-top:34px;border-top:1px solid #111113;width:260px"></div>` +
@@ -154,6 +160,16 @@ export default function CorteCard({
             {/* Money that DID arrive and was given back. Already taken out of
                 the drawer of whoever took it — shown here so a line that reads
                 lower than its payments reads lower for a reason. */}
+            {corte.onAccount > 0 && (
+              <span className="tt-muted">
+                {t("corte.onAccount")} <strong>{money(corte.onAccount)}</strong>
+              </span>
+            )}
+            {corte.accountsOwed > 0 && (
+              <span className="tt-muted">
+                {t("corte.accountsOwed")} <strong>{money(corte.accountsOwed)}</strong>
+              </span>
+            )}
             {corte.refunded > 0 && (
               <span className="tt-muted">
                 {t("corte.refunded")} <strong>{money(corte.refunded)}</strong>

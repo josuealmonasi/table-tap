@@ -51,6 +51,7 @@ export default function BillsPanel({
   canSettle,
   canCollectInParts,
   canDiscount,
+  canChargeAccount,
   askedToPay,
   loyalty = false,
   children,
@@ -69,6 +70,8 @@ export default function BillsPanel({
   /** The plan carries staff discounts — without it /api/bill/discount
    *  answers 403, however willingly the picker fills itself. */
   canDiscount: boolean;
+  /** The plan carries customer accounts: a bill can go on one. */
+  canChargeAccount: boolean;
   /** Tables that asked for the bill and are waiting for somebody to come. */
   askedToPay: string[];
   /** The restaurant takes visit-card stamps right now: plan and program both. */
@@ -433,6 +436,7 @@ export default function BillsPanel({
           canApprove={canApprove}
           canCollectInParts={canCollectInParts}
           canDiscount={canDiscount}
+          canChargeAccount={canChargeAccount}
           onClose={() => setSettling(null)}
           onSettled={() => router.refresh()}
           // The same promotion dialog the row opens, reached without leaving

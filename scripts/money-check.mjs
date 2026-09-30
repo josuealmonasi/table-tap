@@ -26,12 +26,12 @@ console.log(`\nMoney — ${prod ? "production" : "development"}\n`);
 
 const { data: orders, error: oErr } = await db
   .from("orders")
-  .select("id, restaurant_id, total, paid, written_off, status, session_id");
+  .select("id, restaurant_id, total, paid, written_off, status, session_id, account_id");
 if (oErr) { console.log(`  cannot read orders: ${oErr.message}`); process.exit(1); }
 
 const { data: payments, error: pErr } = await db
   .from("payments")
-  .select("id, order_id, session_id, amount");
+  .select("id, order_id, session_id, account_id, amount");
 if (pErr) { console.log(`  cannot read payments: ${pErr.message}`); process.exit(1); }
 
 const paidFor = new Map();
@@ -50,11 +50,18 @@ const paidFor = new Map();
  * failed the money gate for doing nothing wrong.
  */
 const paidForSitting = new Map();
+/**
+ * Money that belongs to a customer account: one payment for everything it
+ * owed, which marks all of those orders paid and carries none of them.
+ */
+const paidForAccount = new Map();
 for (const p of payments) {
   if (p.order_id) {
     paidFor.set(p.order_id, (paidFor.get(p.order_id) ?? 0) + Number(p.amount));
   } else if (p.session_id) {
     paidForSitting.set(p.session_id, (paidForSitting.get(p.session_id) ?? 0) + Number(p.amount));
+  } else if (p.account_id) {
+    paidForAccount.set(p.account_id, (paidForAccount.get(p.account_id) ?? 0) + Number(p.amount));
   }
 }
 
@@ -66,9 +73,9 @@ for (const p of payments) {
 // no table is exactly what this check exists to find, and it was the one shape
 // it could not see. `payments.order_id` is `on delete set null`, so deleting an
 // order is all it takes to make one.
-const orphans = payments.filter(p => !p.order_id && !p.session_id);
+const orphans = payments.filter(p => !p.order_id && !p.session_id && !p.account_id);
 orphans.length === 0
-  ? ok(`every payment belongs to an order or a sitting (${payments.length} checked)`)
+  ? ok(`every payment belongs to an order, a sitting or an account (${payments.length} checked)`)
   : bad(
       `${orphans.length} payment(s) attached to nothing — ` +
         orphans.slice(0, 3).map(p => `${p.id.slice(0, 8)} ${p.amount}`).join(", "),
@@ -76,7 +83,10 @@ orphans.length === 0
 
 // 1. Every settled order has money behind it — its own, or its sitting's.
 const settled = orders.filter(o => o.paid && !o.written_off && Number(o.total) > 0);
-const backed = o => paidFor.has(o.id) || (o.session_id && paidForSitting.has(o.session_id));
+const backed = o =>
+  paidFor.has(o.id) ||
+  (o.account_id && paidForAccount.has(o.account_id)) ||
+  (o.session_id && paidForSitting.has(o.session_id));
 const unbacked = settled.filter(o => !backed(o));
 unbacked.length === 0
   ? ok(`every settled order has a payment (${settled.length} checked)`)
@@ -122,6 +132,25 @@ overpaid.length === 0
   : bad(
       `${overpaid.length} sitting(s) with more against them than they owed: ` +
         overpaid.slice(0, 3).map(([id, got]) => `${id.slice(0, 8)} owed ${(sittingHolds.get(id) ?? 0).toFixed(2)} got ${got.toFixed(2)}`).join("; "),
+    );
+
+// 1d. A customer account paid what its paid orders came to — no more, no
+// less. Each payment is the whole balance at the time (the tip rides on an
+// order's total and on the payment alike), so the two sums are one number.
+const accountOrders = new Map();
+for (const o of orders) {
+  if (!o.account_id || !o.paid || o.status === "cancelled") continue;
+  accountOrders.set(o.account_id, (accountOrders.get(o.account_id) ?? 0) + Number(o.total));
+}
+const accountIds = new Set([...accountOrders.keys(), ...paidForAccount.keys()]);
+const accountDrift = [...accountIds]
+  .map(id => ({ id, owed: accountOrders.get(id) ?? 0, got: paidForAccount.get(id) ?? 0 }))
+  .filter(({ owed, got }) => Math.abs(owed - got) > CENT);
+accountDrift.length === 0
+  ? ok(`every customer account was paid what its orders came to (${accountIds.size} checked)`)
+  : bad(
+      `${accountDrift.length} account(s) whose payments and paid orders disagree: ` +
+        accountDrift.slice(0, 3).map(({ id, owed, got }) => `${id.slice(0, 8)} orders ${owed.toFixed(2)} paid ${got.toFixed(2)}`).join("; "),
     );
 
 // 2. And the right amount of it.
@@ -171,7 +200,8 @@ if (!era) {
   const { data: logs, error: lErr } = await db
     .from("user_logs")
     .select("actor_email, detail, created_at")
-    .eq("entity", "bill")
+    // A customer account collected in person is money in a drawer too.
+    .in("entity", ["bill", "account"])
     // Both, because a bill settled in parts writes one line per collection:
     // `collected` while something is still owed, `paid` for the one that
     // closes it. Counting only the last would say the waiter's drawer holds

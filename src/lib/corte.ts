@@ -67,6 +67,17 @@ export interface Corte {
    * so a drawer that reads lower than its payments reads lower for a reason.
    */
   refunded: number;
+  /**
+   * Put on customer accounts in the period: food that went out and is owed,
+   * not paid. Never in a drawer — a cashier who counted it in would be short.
+   */
+  onAccount: number;
+  /**
+   * What customers owe across all open accounts, whenever it was charged. The
+   * corte closes the night; it does not close anybody's account, and this is
+   * the number that says so.
+   */
+  accountsOwed: number;
 }
 
 export const EMPTY_CORTE: Corte = {
@@ -76,6 +87,8 @@ export const EMPTY_CORTE: Corte = {
   writtenOff: 0,
   discounted: 0,
   refunded: 0,
+  onAccount: 0,
+  accountsOwed: 0,
 };
 
 export function corteFrom(
@@ -100,6 +113,7 @@ export function corteFrom(
   let writtenOff = 0;
   let discounted = 0;
   let refunded = 0;
+  let onAccount = 0;
   // Money handed back, by the drawer it leaves and the column it leaves from.
   // Keyed by the person who TOOK it, not the manager who pressed cancel: the
   // cash comes out of the till that took it in.
@@ -111,6 +125,7 @@ export function corteFrom(
     if (!Number.isFinite(amount)) continue;
     if (row.action === "written_off") writtenOff += amount;
     else if (row.action === "discounted") discounted += amount;
+    else if (row.action === "charged") onAccount += amount;
     else if (row.action === "refunded") {
       // Without a method there is no telling which column it left, and a
       // corte that guesses is a corte nobody can sign. Card cancels logged
@@ -166,5 +181,8 @@ export function corteFrom(
     writtenOff: round2(writtenOff),
     discounted: round2(discounted),
     refunded: round2(refunded),
+    onAccount: round2(onAccount),
+    // Not the period's: the page reads the open balances and sets it.
+    accountsOwed: 0,
   };
 }

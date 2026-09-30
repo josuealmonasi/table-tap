@@ -17,6 +17,7 @@ export type NavItem = {
     | "Loyalty"
     | "Table"
     | "Bills"
+    | "Accounts"
     | "Staff"
     | "Menu"
     | "Settings"
@@ -108,6 +109,16 @@ export const NAV_ITEMS: NavItem[] = [
     descKey: "nav.billsDesc",
   },
   {
+    // Not gated on the plan: an account opened on a paid tier still owes
+    // after a move down, and its page — with the lock on opening new ones —
+    // is where it is collected.
+    href: "/dashboard/accounts",
+    icon: "Accounts",
+    titleKey: "nav.accounts",
+    shortKey: "nav.accountsShort",
+    descKey: "nav.accountsDesc",
+  },
+  {
     href: "/dashboard/tables",
     icon: "Table",
     titleKey: "nav.tables",
@@ -193,14 +204,14 @@ export function navItemsFor(
   if (role === "cashier") {
     return allowed(
       NAV_ITEMS.filter(i =>
-        ["/dashboard/orders", "/dashboard/bills", "/dashboard/pos"].includes(i.href),
+        ["/dashboard/orders", "/dashboard/bills", "/dashboard/pos", "/dashboard/accounts"].includes(i.href),
       ),
     );
   }
   if (role === "waiter") {
     return allowed(
       NAV_ITEMS.filter(i =>
-        ["/dashboard/orders", "/dashboard/bills", "/dashboard/table-order"].includes(i.href),
+        ["/dashboard/orders", "/dashboard/bills", "/dashboard/table-order", "/dashboard/accounts"].includes(i.href),
       ),
     );
   }

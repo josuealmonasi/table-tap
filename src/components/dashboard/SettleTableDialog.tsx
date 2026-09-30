@@ -9,8 +9,9 @@ import SettleBillLines from "./SettleBillLines";
 import type { WriteOffReason } from "@/lib/write-off";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
-import { tableBill } from "@/lib/table-bill";
+import { tableBill, unpaidOrders } from "@/lib/table-bill";
 import type { Order } from "@/lib/types";
+import ChargeToAccountDialog from "@/components/dashboard/accounts/ChargeToAccountDialog";
 
 interface SettleTableDialogProps {
   open: boolean;
@@ -34,6 +35,9 @@ interface SettleTableDialogProps {
   /** The plan carries staff discounts. Without it /api/bill/discount
    *  answers 403. */
   canDiscount?: boolean;
+  /** The plan carries customer accounts. Without it /api/accounts/charge
+   *  answers 403. */
+  canChargeAccount?: boolean;
 }
 
 /**
@@ -57,6 +61,7 @@ export default function SettleTableDialog({
   onDiscount,
   canCollectInParts = true,
   canDiscount = true,
+  canChargeAccount = false,
 }: SettleTableDialogProps) {
   const t = useT();
   const toast = useToast();
@@ -70,6 +75,8 @@ export default function SettleTableDialog({
   const [asking, setAsking] = useState(false);
   // The calculator, for a table paying a bit at a time.
   const [inParts, setInParts] = useState(false);
+  // "Ponlo en mi cuenta": the bill onto a customer's account.
+  const [toAccount, setToAccount] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -210,6 +217,16 @@ export default function SettleTableDialog({
                 refuses without waiter service, so on `carta` this button
                 opened a calculator that answered 403 to whatever the waiter
                 typed — with the customer's cash already on the table. */}
+            {canChargeAccount && (
+              <button
+                className="tt-btn tt-btn-ghost tt-btn-lg"
+                style={{ width: "100%", marginTop: 8 }}
+                disabled={busy}
+                onClick={() => setToAccount(true)}
+              >
+                {t("accounts.chargeOpen")}
+              </button>
+            )}
             {tableId && canCollectInParts && (
               <button
                 className="tt-btn tt-btn-ghost tt-btn-lg"
@@ -251,6 +268,20 @@ export default function SettleTableDialog({
           currency={currency}
           onCollected={onSettled}
           onDiscount={canDiscount ? onDiscount : undefined}
+        />
+      )}
+      {bill && orders && (
+        <ChargeToAccountDialog
+          open={toAccount}
+          onClose={() => setToAccount(false)}
+          orderIds={unpaidOrders(orders).map(o => o.id)}
+          amount={bill.total}
+          currency={currency}
+          label={tableLabel}
+          onCharged={() => {
+            onSettled();
+            onClose();
+          }}
         />
       )}
       {bill && (

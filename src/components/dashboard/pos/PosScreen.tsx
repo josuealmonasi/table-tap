@@ -27,6 +27,8 @@ import { DietaryTagsProvider } from "@/components/DietaryTagsContext";
 import type { StoredDietaryTag } from "@/lib/dietary";
 import type { Category, MenuItem, Restaurant } from "@/lib/types";
 import type { CartPromo } from "@/lib/pricing";
+import PosAccountCharge from "./PosAccountCharge";
+import type { AccountListItem } from "@/hooks/useOpenAccounts";
 
 /**
  * The counter till.
@@ -53,6 +55,7 @@ export default function PosScreen({
   dietaryTags,
   canEmailReceipt,
   loyalty = false,
+  canChargeAccount = false,
 }: {
   restaurant: Restaurant;
   categories: Category[];
@@ -69,6 +72,8 @@ export default function PosScreen({
   canEmailReceipt: boolean;
   /** The restaurant takes visit-card stamps right now: plan and program both. */
   loyalty?: boolean;
+  /** The plan carries customer accounts: a sale can go on one. */
+  canChargeAccount?: boolean;
 }) {
   const t = useT();
   const toast = useToast();
@@ -251,7 +256,7 @@ export default function PosScreen({
   }
 
   /** Ring it up. The money is already in the drawer by the time this runs. */
-  async function charge(method: "cash" | "card"): Promise<void> {
+  async function charge(method: "cash" | "card" | "account", account?: AccountListItem): Promise<void> {
     if (lines.length === 0 || busy) return;
     setPending(null);
     setBusy(true);
@@ -265,10 +270,12 @@ export default function PosScreen({
           posRef: crypto.randomUUID(),
           items: lines,
           method,
+          accountId: account?.id,
           customerName: customerName.trim() || undefined,
           note: note.trim() || undefined,
-          tipPct: tipCustom === null ? tipPct : undefined,
-          tipAmount: tipCustom ?? undefined,
+          // On an account the tip waits for the day it is paid.
+          tipPct: account ? undefined : tipCustom === null ? tipPct : undefined,
+          tipAmount: account ? undefined : tipCustom ?? undefined,
           email: canEmailReceipt && !noTicket ? email.trim() || undefined : undefined,
           noReceipt: noTicket || undefined,
         }),
@@ -284,6 +291,9 @@ export default function PosScreen({
           toast(data.error ?? t("done.networkError"), "error");
         }
         return;
+      }
+      if (data.onAccount) {
+        toast(t("accounts.charged", { name: data.onAccount.name, amount: money(Number(data.total)) }));
       }
       if (data.receipt === "failed") toast(t("pos.receiptFailed"), "error");
       else if (data.receipt === "sent") toast(t("pos.receiptSent"));
@@ -464,6 +474,14 @@ export default function PosScreen({
               >
                 {t("pos.chargeCard")}
               </button>
+              {canChargeAccount && (
+                <PosAccountCharge
+                  amount={Math.round((pricing.total - pricing.tip) * 100) / 100}
+                  currency={restaurant.currency}
+                  disabled={busy || closedNow || lines.length === 0}
+                  onCharge={account => charge("account", account)}
+                />
+              )}
             </div>
           </aside>
         </div>

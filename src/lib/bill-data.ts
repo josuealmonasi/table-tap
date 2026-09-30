@@ -56,7 +56,8 @@ export async function fetchTableBill(
       .neq("status", "pending_payment")
       .order("created_at", { ascending: true });
 
-  let owed = base().eq("paid", false);
+  // An account's orders are owed by the account, not the table.
+  let owed = base().eq("paid", false).is("account_id", null);
   // What was already paid is shown but ALWAYS scoped to this meal, and that is
   // the difference from what is owed: an old debt is the waiter's, to collect
   // or write off, which is why it carries no window. What was paid is not

@@ -47,6 +47,13 @@ export const SERVES = (role: Role): boolean => role === "waiter" || role === "ca
 export const SETTLES = (role: Role): boolean => role !== "kitchen";
 
 /**
+ * Opens a customer account, puts a bill on one, and collects it: the people
+ * who take money, because putting food on an account is the same trust as
+ * taking the money for it. Raising an account's ceiling is a manager's.
+ */
+export const KEEPS_ACCOUNTS = SETTLES;
+
+/**
  * Who may move a ticket between kitchen stages.
  *
  * Waiters and cashiers run the floor and the till, not the pass: they mark an

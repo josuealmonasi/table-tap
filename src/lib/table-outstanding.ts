@@ -108,6 +108,7 @@ export async function tableOutstanding(
     .eq("restaurant_id", restaurantId)
     .eq("table_id", tableId)
     .eq("paid", false)
+    .is("account_id", null)
     .eq("written_off", false)
     .neq("status", "pending_payment")
     .order("created_at", { ascending: true });

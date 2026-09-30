@@ -43,6 +43,7 @@ export default async function BillsPage() {
       )
       .eq("restaurant_id", r.id)
       .eq("paid", false)
+      .is("account_id", null)
       .neq("status", "pending_payment")
       .order("created_at", { ascending: false })
       .limit(200),
@@ -171,6 +172,7 @@ export default async function BillsPage() {
         canSettle={SETTLES(membership.role)}
         canCollectInParts={Boolean(plan && can(plan.limits, "waiterService"))}
         canDiscount={Boolean(plan && can(plan.limits, "staffDiscounts"))}
+        canChargeAccount={Boolean(plan && can(plan.limits, "openAccounts"))}
         askedToPay={(asking ?? []).map(a => a.table_id).filter(Boolean) as string[]}
         loyalty={await loyaltyOn(r.id, plan?.limits ?? null)}
       >

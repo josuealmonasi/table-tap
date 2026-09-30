@@ -40,6 +40,7 @@ export default async function TablesPage() {
       .select("id, table_id, total, paid, written_off, status, created_at")
       .eq("restaurant_id", r.id)
       .eq("paid", false)
+      .is("account_id", null)
       .eq("written_off", false),
   ]);
   // Unwrapped: a failed read here showed no tables, or every table free

@@ -60,6 +60,7 @@ export async function repriceOpenService(restaurantId: string, servicePct: numbe
     .select("id, subtotal, service_fee, total, session_id, card_checkout_at")
     .eq("restaurant_id", restaurantId)
     .eq("paid", false)
+    .is("account_id", null)
     .eq("written_off", false)
     .not("status", "in", "(cancelled,pending_payment)")
     .is("stripe_session_id", null)
@@ -115,6 +116,7 @@ export async function repriceOpenService(restaurantId: string, servicePct: numbe
       .eq("id", order.id)
       .eq("restaurant_id", restaurantId)
       .eq("paid", false)
+      .is("account_id", null)
       .eq("service_fee", order.service_fee)
       .select("id");
     if (writeError) {
