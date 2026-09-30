@@ -31,7 +31,7 @@ export default async function PosPage() {
   const plan = await getPlan(membership.restaurant.id);
   if (!plan || !can(plan.limits, "pos")) {
     // Named, not merely locked: the screen says which tier carries the till.
-    const unlocks = cheapestWith(await allPlans(), "pos");
+    const unlocks = cheapestWith(await allPlans(), "pos", plan?.limits);
     return (
       <div className="tt-dash">
         <div className="container">

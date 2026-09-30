@@ -158,6 +158,7 @@ export const en = {
     searchIn: "Search in {name}",
     all: "All",
     closed: "⏸️ We're not taking orders right now — please check back soon.",
+    orderAtRegister: "🧾 You can browse the menu here. To order and pay, go to the register.",
     table: "Table {label}",
 myBill: "View my bill",
     trackOrder: "You have an order in progress — track it",
@@ -400,6 +401,7 @@ myBill: "View my bill",
     retry: "Try again",
   },
   cart: {
+    orderAtRegister: "Show this list at the register — that is where you order and pay.",
     stockTrimmed: "We reduced it to what the kitchen still has.",
     extrasRemoved: "No longer available: {names}. We took it out of your order — check it and try again.",
     yourName: "What name is it under?",
@@ -655,6 +657,9 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
       promotions: "Promotions and combos",
       coupons: "Coupon codes",
       staffDiscounts: "Discounts applied by your team",
+      register: "A register for cash or your own card terminal",
+      viewOnlyMenu: "A menu diners browse on their phone — they order at the register",
+      loyalty: "Visit card",
     },
     frozen: "Your subscription is paused, so the dashboard is read-only. Your menu is still serving and still taking orders.",
     limit: {
@@ -670,6 +675,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
       staff: "Your {plan} plan doesn't include staff logins. Upgrade to add them.",
     },
     needs: {
+      kitchenBoard: "Kitchen and waiter logins come with {plan}: Caja has no kitchen board and no tables.",
       waiterService: "Taking orders at the table comes with {plan}.",
     pos: "The counter till comes with {plan}.",
       deferredPayment: "Paying at the end or at the counter comes with {plan}. On the free plan the card is taken when they order.",
@@ -974,6 +980,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
   },
   apiErr: {
     serviceRepriceFailed: "Saved — but we couldn't take the service charge off the open bills. Save again.",
+    orderAtRegister: "This restaurant takes orders at the register. Order and pay there.",
     belowCardMinimum: "That total is below the card minimum — please add a little more to your order.",
     couponExists: "That code already exists.",
     couponCreateFailed: "Could not create the coupon.",

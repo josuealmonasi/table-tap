@@ -8,11 +8,15 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
  * guessing a shape that only matches on one screen.
  */
 /** Carta, Servicio, Casa, Grupo — what each card actually holds. */
+// Counted off `includes()` in PlanTiers against the seeded catalogue, in rank
+// order: Carta, Caja, Servicio, Casa, Grupo. Change a tier's flags and this
+// moves with it.
 const TIER_SHAPES = [
   { lines: 2, button: false },
-  { lines: 3, button: true },
-  { lines: 5, button: true },
-  { lines: 5, button: false },
+  { lines: 6, button: true },
+  { lines: 6, button: true },
+  { lines: 9, button: true },
+  { lines: 9, button: false },
 ];
 
 export default function PlanLoading() {
@@ -69,11 +73,10 @@ export default function PlanLoading() {
           <div className="tt-section-head">
             <Skeleton width={70} height={19} />
           </div>
-          {/* The catalogue is four fixed tiers, so the shimmer knows their
-              shape rather than drawing four identical guesses: Carta lists
-              two things and ends in a note, Servicio three and a button,
-              Casa and Grupo five. Four uniform cards left this block 58px
-              taller than what replaced it. */}
+          {/* The catalogue is five fixed tiers, so the shimmer knows their
+              shape rather than drawing identical guesses (see TIER_SHAPES).
+              Four uniform cards once left this block 58px taller than what
+              replaced it. */}
           <div className="tt-tier-grid">
             {TIER_SHAPES.map((shape, i) => (
               <div key={i} className="tt-tier">

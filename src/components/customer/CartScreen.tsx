@@ -42,6 +42,11 @@ interface CartScreenProps {
   loading: boolean;
   /** False when nothing orderable remains (empty or all sold out). */
   canCheckout: boolean;
+  /**
+   * Caja: the order is taken at the register. The cart is a list to show the
+   * cashier, and offers no button that would be refused.
+   */
+  orderAtRegister?: boolean;
   onChangeNote: (note: string) => void;
   /** Counter orders only — the name the cashier calls out. */
   customerName?: string;
@@ -89,6 +94,7 @@ export default function CartScreen({
   orderNote,
   loading,
   canCheckout,
+  orderAtRegister = false,
   onChangeNote,
   customerName = "",
   onChangeName,
@@ -184,6 +190,10 @@ export default function CartScreen({
               {t("cart.addMore")}
             </button>
 
+            {/* Not on Caja: the list is shown at the register, so a name, a note
+                for the kitchen, a tip or a coupon typed here would reach nobody —
+                the cashier takes all four at the till. */}
+            {!orderAtRegister && (
             <div style={{ marginBottom: 20 }}>
               {/* Only without a table: at a table, the table IS the name, and
                   asking anyway would be collecting a name for nothing. The
@@ -210,7 +220,9 @@ export default function CartScreen({
                 onChange={onChangeNote}
               />
             </div>
+            )}
 
+            {!orderAtRegister && (
             <TipPicker
               currency={restaurant.currency}
               tipPct={tipPct}
@@ -219,6 +231,7 @@ export default function CartScreen({
               onPresetTip={onChangeTip}
               onCustomTip={onCustomTip}
             />
+            )}
 
             {/* The nudges used to be a block of their own down here, below the
                 tip picker and named after dishes the diner had to scroll back
@@ -233,6 +246,7 @@ export default function CartScreen({
               />
             )}
 
+            {!orderAtRegister && (
             <div className="tt-coupon-row">
               <CouponBox
                 restaurantId={restaurant.id}
@@ -242,6 +256,7 @@ export default function CartScreen({
                 onRemove={onRemoveCoupon}
               />
             </div>
+            )}
 
             <OrderTotals
               subtotal={subtotal}
@@ -262,6 +277,12 @@ export default function CartScreen({
                 control the diner came here for must never need finding — the
                 same rule the dish detail already follows. */}
             <div className="tt-cart-actions">
+              {orderAtRegister ? (
+                <p className="tt-cart-register-note" role="status">
+                  {t("cart.orderAtRegister")}
+                </p>
+              ) : (
+              <>
               {/* At a table that settles later this places the order; the
                   bill it opens is where paying happens, and it is the same
                   bill whether they pay now or after dessert. Everywhere else
@@ -331,6 +352,8 @@ export default function CartScreen({
                   );
                 })()}
               </p>
+              </>
+              )}
             </div>
           </>
         )}

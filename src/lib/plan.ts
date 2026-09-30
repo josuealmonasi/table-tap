@@ -8,7 +8,7 @@ import { round2 } from "@/lib/money";
  * same rows — a limit written in two places is a limit that drifts.
  */
 
-export type PlanName = "carta" | "servicio" | "casa" | "grupo";
+export type PlanName = "carta" | "caja" | "servicio" | "casa" | "grupo";
 
 /**
  * Billing health, which is not the same question as which tier they are on.
@@ -44,8 +44,15 @@ export interface PlanLimits {
   allows_inventory?: boolean;
   allows_pos?: boolean;
   allows_waiter_service?: boolean;
-  /** The visit card diners save and staff stamp. Casa and Grupo. */
+  /** The visit card diners save and staff stamp. Every paid tier. */
   allows_loyalty?: boolean;
+  /**
+   * Ordering from the diner's phone. Every tier but Caja, which is the
+   * register on its own: its diners read the menu and order at the till.
+   */
+  allows_online_ordering?: boolean;
+  /** The kitchen board a sale goes to once it is paid. Every tier but Caja. */
+  allows_kitchen_board?: boolean;
   allows_staff_discounts: boolean;
   analytics_days: number;
   log_days: number;
@@ -64,7 +71,9 @@ export type PlanFeature =
   | "inventory"
   | "pos"
   | "waiterService"
-  | "loyalty";
+  | "loyalty"
+  | "onlineOrdering"
+  | "kitchenBoard";
 
 const FEATURE_COLUMN: Record<PlanFeature, keyof PlanLimits> = {
   dineIn: "allows_dine_in",
@@ -77,11 +86,35 @@ const FEATURE_COLUMN: Record<PlanFeature, keyof PlanLimits> = {
   inventory: "allows_inventory",
   pos: "allows_pos",
   loyalty: "allows_loyalty",
+  onlineOrdering: "allows_online_ordering",
+  kitchenBoard: "allows_kitchen_board",
 };
+
+/**
+ * The features every tier had before Caja, which the columns default to on.
+ * A row read before the column existed, or a test's plan that never mentions
+ * it, means what it always meant: diners order from their phone, and a sale
+ * goes to the kitchen.
+ */
+const ON_UNLESS_SAID: PlanFeature[] = ["onlineOrdering", "kitchenBoard"];
 
 /** Whether this tier includes a feature at all. */
 export function can(limits: PlanLimits, feature: PlanFeature): boolean {
-  return limits[FEATURE_COLUMN[feature]] === true;
+  const value = limits[FEATURE_COLUMN[feature]];
+  return ON_UNLESS_SAID.includes(feature) ? value !== false : value === true;
+}
+
+/**
+ * Whether `plan` keeps everything `current` has.
+ *
+ * The ladder used to be a line — each tier everything below it and more — so
+ * "the next one up" was simply the next rank. Caja broke that on purpose: it
+ * is the register without the diner's phone, so it sits above Carta in price
+ * and below it in one thing. A tier is only an upgrade if nothing the
+ * restaurant already has would be taken away.
+ */
+export function keepsEverything(plan: PlanLimits, current: PlanLimits): boolean {
+  return (Object.keys(FEATURE_COLUMN) as PlanFeature[]).every(f => !can(current, f) || can(plan, f));
 }
 
 /** How many more may be created; null when the ceiling is unlimited. */
@@ -182,7 +215,7 @@ export function nextPlan(all: PlanLimits[], plan: PlanName): PlanLimits | undefi
   const current = planFor(all, plan);
   if (!current) return undefined;
   return [...all]
-    .filter(p => p.rank > current.rank)
+    .filter(p => p.rank > current.rank && keepsEverything(p, current))
     .sort((a, b) => a.rank - b.rank)[0];
 }
 
@@ -195,8 +228,27 @@ export function nextPlan(all: PlanLimits[], plan: PlanName): PlanLimits | undefi
 export function cheapestWith(
   all: PlanLimits[],
   feature: PlanFeature,
+  /** The restaurant's own tier: a lock never names one that would take away what it has. */
+  current?: PlanLimits,
 ): PlanLimits | undefined {
   return [...all]
-    .filter(p => can(p, feature))
+    .filter(p => can(p, feature) && (!current || keepsEverything(p, current)))
     .sort((a, b) => a.rank - b.rank)[0];
+}
+
+/** Every role a login can have, in the order the team screen lists them. */
+export const TEAM_ROLES = ["kitchen", "waiter", "cashier", "manager", "owner"] as const;
+export type TeamRole = (typeof TEAM_ROLES)[number];
+
+/**
+ * The roles a restaurant on this tier can hand out.
+ *
+ * A cook works the kitchen board and a waiter the tables; a tier with no
+ * kitchen board (Caja) has neither screen, so a login for either would sign
+ * in to nothing. The team screen offers only these, and the route refuses the
+ * rest — the same list on both sides.
+ */
+export function assignableRoles(limits: PlanLimits | null | undefined): TeamRole[] {
+  if (!limits || can(limits, "kitchenBoard")) return [...TEAM_ROLES];
+  return TEAM_ROLES.filter(r => r !== "kitchen" && r !== "waiter");
 }

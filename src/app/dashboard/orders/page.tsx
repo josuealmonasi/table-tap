@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { STALE_REQUEST_HOURS } from "@/lib/service-requests";
 import { createClient } from "@/lib/supabase/server";
-import { getMembership, MANAGES, MOVES_ORDERS, SETTLES } from "@/lib/membership";
+import { getMembership, MANAGES, MOVES_ORDERS, SETTLES, TAKES_COUNTER_ORDERS } from "@/lib/membership";
+import { getPlan } from "@/lib/plan-server";
+import { can } from "@/lib/plan";
 import OrdersBoard from "@/components/dashboard/OrdersBoard";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import type { Order, ServiceRequest } from "@/lib/types";
@@ -23,6 +25,14 @@ export default async function OrdersPage() {
   const membership = await getMembership();
   if (!membership) redirect("/dashboard");
   const r = membership.restaurant;
+
+  // No board on Caja: a sale is served where it is paid. Everything that sends
+  // staff "home" sends them here, so it goes on to the register rather than
+  // to a lock — the till is what they came to work at.
+  const plan = await getPlan(r.id);
+  if (plan && !can(plan.limits, "kitchenBoard")) {
+    redirect(TAKES_COUNTER_ORDERS(membership.role) ? "/dashboard/pos" : "/dashboard");
+  }
 
   // Only today's shift. A request nobody ever pressed "done" on stays open
   // forever, so the board was carrying taps from weeks earlier — a chip asking

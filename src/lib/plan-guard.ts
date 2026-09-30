@@ -26,7 +26,7 @@ export async function planBlocks(
   if (!plan) return await apiError("apiErr.forbidden", 403);
   if (can(plan.limits, feature)) return null;
 
-  const unlocks = cheapestWith(await allPlans(), feature);
+  const unlocks = cheapestWith(await allPlans(), feature, plan.limits);
   return await apiError(`plan.needs.${feature}`, 403, {
     plan: planLabel(unlocks?.plan ?? "casa"),
   });

@@ -134,6 +134,14 @@ export async function POST(req: NextRequest) {
       return await apiError("apiErr.notAccepting", 409);
     }
 
+    // Caja takes the order at the register, never from the diner's phone. The
+    // menu offers no way to check out there; this refuses a request that
+    // asks anyway, with the same sentence the menu shows.
+    const planNow = await getPlan(restaurantId);
+    if (planNow && !can(planNow.limits, "onlineOrdering")) {
+      return await apiError("apiErr.orderAtRegister", 409);
+    }
+
     // A menu switched off — or outside its opening hours — stops being
     // orderable, not just invisible. Without this a page left open through
     // closing time could still check out, and so could a hand-made request.

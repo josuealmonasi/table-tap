@@ -5718,6 +5718,17 @@ a.tt-btn {
 
 /* Checkout stays reachable however long the cart runs — same rule as the dish
    detail's add button, which is pinned for exactly this reason. */
+/* Caja: the cart is a list to show at the register, so its foot says so where
+   the pay buttons would be. */
+.tt-cart-register-note {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--tt-radius-sm);
+  background: var(--tt-accent-wash);
+  color: var(--tt-ink);
+  font-size: 14px;
+  text-align: center;
+}
 .tt-cart-actions {
   position: sticky;
   bottom: 0;

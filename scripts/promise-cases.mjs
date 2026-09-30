@@ -203,10 +203,11 @@ export const STATES = [
   },
   {
     // Its own page names the plan that carries it, and offers nothing to save.
+    // Carta: every paid tier has the card since Caja arrived with it.
     name: "a plan without the visit card · its page",
     as: "owner",
     path: "/dashboard/loyalty",
-    apply: (admin, c) => admin.from("restaurants").update({ plan: "servicio", plan_status: "active" }).eq("id", c.restaurantId),
+    apply: (admin, c) => admin.from("restaurants").update({ plan: "carta", plan_status: "active" }).eq("id", c.restaurantId),
     says: /viene con|comes with/i,
     offers: /^\s*(guardar|save)\s*$/i,
   },
@@ -214,10 +215,28 @@ export const STATES = [
     name: "a plan without the visit card · bills",
     as: "owner",
     path: "/dashboard/bills",
-    apply: (admin, c) => admin.from("restaurants").update({ plan: "servicio", plan_status: "active" }).eq("id", c.restaurantId),
+    apply: (admin, c) => admin.from("restaurants").update({ plan: "carta", plan_status: "active" }).eq("id", c.restaurantId),
     says: /cuentas|bills/i,
     offers: /sellar tarjeta|stamp a card/i,
     keeps: /^\s*(escanear|scan)\s*$/i,
+  },
+  {
+    // Caja: the menu is to read, and the order is taken at the register. It
+    // says so, and offers nothing a register-only plan does not have — no
+    // waiter to call, and no table bill to pay from the phone.
+    name: "Caja · the menu",
+    as: "diner",
+    apply: (admin, c) => admin.from("restaurants").update({ plan: "caja", plan_status: "active" }).eq("id", c.restaurantId),
+    says: /pasa a la caja|go to the register/i,
+    offers: /llamar al mesero|call waiter|ver mi cuenta|view my bill/i,
+  },
+  {
+    // …and the register itself works, because it is the whole of the plan.
+    name: "Caja · the till",
+    as: "owner",
+    path: "/dashboard/pos",
+    apply: (admin, c) => admin.from("restaurants").update({ plan: "caja", plan_status: "active" }).eq("id", c.restaurantId),
+    says: /toca un platillo para empezar|tap a dish to start/i,
   },
   {
     name: "orders paused",

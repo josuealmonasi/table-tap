@@ -60,6 +60,7 @@ export default function OrderingApp({
   promos = [],
   ratings = {},
   closedNow = false,
+  orderAtRegister = false,
   receipts = false,
   loyalty = null,
   trackOrder = null,
@@ -76,6 +77,8 @@ export default function OrderingApp({
   ratings?: Record<string, { avg: number; count: number }>;
   /** No menu is serving at this hour. */
   closedNow?: boolean;
+  /** Caja: the menu is to read, and the order is taken at the register. */
+  orderAtRegister?: boolean;
   /** A receipt can be emailed — false when no mail provider is configured. */
   receipts?: boolean;
   /** The visit card, when this restaurant offers one right now. */
@@ -647,7 +650,8 @@ export default function OrderingApp({
             promoSavings={pricing.promoSavings}
             orderNote={orderNote}
             loading={loading}
-            canCheckout={orderableItems.length > 0 && restaurant.accepting_orders}
+            canCheckout={orderableItems.length > 0 && restaurant.accepting_orders && !orderAtRegister}
+            orderAtRegister={orderAtRegister}
             onChangeNote={setOrderNote}
             customerName={customerName}
             onChangeName={setCustomerName}
@@ -688,6 +692,7 @@ export default function OrderingApp({
           promos={promos}
           ratings={ratings}
           closedNow={closedNow}
+          orderAtRegister={orderAtRegister}
           cartCount={cart.count}
           cartTotal={pricing.total}
           onSelectItem={item => openItem(item)}

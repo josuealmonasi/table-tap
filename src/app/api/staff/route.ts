@@ -5,6 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { actingOwner } from "@/lib/api-guard";
 import { frozenBlocks, seatBlocks } from "@/lib/plan-guard";
 import { logUserChange } from "@/lib/user-log";
+import { getPlan, allPlans } from "@/lib/plan-server";
+import { assignableRoles, cheapestWith, planLabel, type TeamRole } from "@/lib/plan";
 
 export const runtime = "nodejs";
 
@@ -56,6 +58,13 @@ export async function POST(req: NextRequest) {
     .eq("restaurant_id", actor.restaurantId);
   const frozen = await frozenBlocks(actor.restaurantId);
   if (frozen) return frozen;
+
+  // A role the tier has no screen for is refused before the seats are
+  // counted: "Caja has no kitchen board" is the answer to a cook, and "you
+  // are out of seats" would send the owner to buy a seat for a login that
+  // still could not sign in to anything.
+  const roleRefused = await roleBlocks(actor.restaurantId, role);
+  if (roleRefused) return roleRefused;
 
   const noSeat = await seatBlocks(actor.restaurantId, seatsUsed ?? 0);
   if (noSeat) return noSeat;
@@ -124,6 +133,8 @@ export async function PATCH(req: NextRequest) {
     return await apiError("apiErr.notFound", 404);
   }
   if (member.role === role) return NextResponse.json({ ok: true });
+  const roleRefused = await roleBlocks(actor.restaurantId, role);
+  if (roleRefused) return roleRefused;
 
   if (role === "owner" && !(await ownerSlotFree(actor.restaurantId))) {
     return await apiError("apiErr.ownerCap", 409, { n: MAX_OWNERS });
@@ -162,4 +173,16 @@ export async function DELETE(req: NextRequest) {
 
   await logUserChange(actor.restaurantId, actor.email, "deleted", member.role, member.email);
   return NextResponse.json({ ok: true });
+}
+
+/**
+ * A role this restaurant's tier has no screen for — a cook or a waiter on
+ * Caja — refused with the tier that has one, the same list the team screen
+ * offers (`assignableRoles`).
+ */
+async function roleBlocks(restaurantId: string, role: string): Promise<NextResponse | null> {
+  const plan = await getPlan(restaurantId);
+  if (assignableRoles(plan?.limits).includes(role as TeamRole)) return null;
+  const unlocks = cheapestWith(await allPlans(), "kitchenBoard", plan?.limits);
+  return await apiError("plan.needs.kitchenBoard", 403, { plan: planLabel(unlocks?.plan ?? "servicio") });
 }

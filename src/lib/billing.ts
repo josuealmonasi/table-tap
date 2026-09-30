@@ -46,7 +46,7 @@ export function subscriptionOutcome(
   }
 }
 
-const PLANS: PlanName[] = ["carta", "servicio", "casa", "grupo"];
+const PLANS: PlanName[] = ["carta", "caja", "servicio", "casa", "grupo"];
 
 /** A plan name from untrusted input — webhook metadata, or a request body. */
 export function readPlanName(value: unknown): PlanName | null {
@@ -59,5 +59,5 @@ export function readPlanName(value: unknown): PlanName | null {
 export function isSelfServe(plan: PlanName): boolean {
   // Carta is free — there is nothing to check out. Grupo is multi-location,
   // which is a conversation and a contract before it is a card.
-  return plan === "servicio" || plan === "casa";
+  return plan === "caja" || plan === "servicio" || plan === "casa";
 }

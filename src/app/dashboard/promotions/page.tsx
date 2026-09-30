@@ -29,8 +29,8 @@ export default async function PromotionsPage() {
         currency={membership.restaurant.currency}
         couponsAllowed={couponsAllowed}
         promosAllowed={promosAllowed}
-        promosUnlockWith={cheapestWith(catalog, "promotions")?.plan ?? "servicio"}
-        couponsUnlockWith={cheapestWith(catalog, "coupons")?.plan ?? "casa"}
+        promosUnlockWith={cheapestWith(catalog, "promotions", plan?.limits)?.plan ?? "servicio"}
+        couponsUnlockWith={cheapestWith(catalog, "coupons", plan?.limits)?.plan ?? "casa"}
       />
     </ConfirmProvider>
   );

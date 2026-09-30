@@ -23,7 +23,20 @@ interface StaffPanelProps {
   restaurantId: string;
   /** Extra sections rendered below the team card (e.g. the activity log). */
   children?: React.ReactNode;
+  /** The roles this tier can hand out (`assignableRoles`). */
+  roles?: StaffRole[];
 }
+
+/** Every role, in the order the screen lists them. */
+const ALL_ROLES: StaffRole[] = ["kitchen", "waiter", "cashier", "manager", "owner"];
+/** The invite form's longer label for each role. */
+const ROLE_LABEL: Record<StaffRole, string> = {
+  kitchen: "dash.roleKitchen",
+  waiter: "dash.roleWaiter",
+  cashier: "dash.roleCashier",
+  manager: "dash.roleManager",
+  owner: "dash.roleOwner",
+};
 
 const ROLE_ICON = {
   owner: RoleOwnerIcon,
@@ -34,14 +47,16 @@ const ROLE_ICON = {
 } satisfies Record<StaffRole, typeof RoleOwnerIcon>;
 
 /** Owner-only team management: create, re-role and remove logins. */
-export default function StaffPanel({ restaurantId, children }: StaffPanelProps) {
+export default function StaffPanel({ restaurantId, children, roles = [...ALL_ROLES] }: StaffPanelProps) {
   const t = useT();
   const toast = useToast();
   const { members, loading, busy, addMember, updateRole, removeMember } =
     useStaff(restaurantId);
   const staffRows = useRowMemory("staff", 3, loading ? undefined : members.length);
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<StaffRole>("kitchen");
+  // The first role on offer: a cook where there is a kitchen board, a cashier on Caja.
+  const firstRole = roles[0] ?? "cashier";
+  const [role, setRole] = useState<StaffRole>(firstRole);
   const confirm = useConfirm();
 
   /** Returns whether the invite landed, so a failure keeps the dialog open. */
@@ -49,7 +64,7 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
     e.preventDefault();
     if (!(await addMember(email.trim(), role))) return false;
     setEmail("");
-    setRole("kitchen");
+    setRole(firstRole);
     toast(t("done.inviteSent"));
     return true;
   }
@@ -115,11 +130,11 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
                       aria-label={t("dash.roleFor", { email: m.email })}
                       onChange={e => updateRole(m.id, e.target.value as StaffRole)}
                     >
-                      <option value="kitchen">{t("dash.kitchen")}</option>
-                      <option value="waiter">{t("dash.waiter")}</option>
-                      <option value="cashier">{t("dash.cashier")}</option>
-                      <option value="manager">{t("dash.manager")}</option>
-                      <option value="owner">{t("dash.owner")}</option>
+                      {/* A member already in a role this tier no longer offers keeps
+                          it shown, so the select never claims a role they lack. */}
+                      {ALL_ROLES.filter(r => roles.includes(r) || r === m.role).map(r => (
+                        <option key={r} value={r}>{t(`dash.${r}`)}</option>
+                      ))}
                     </select>
                     <button
                       className="tt-iconbtn"
@@ -176,11 +191,9 @@ export default function StaffPanel({ restaurantId, children }: StaffPanelProps) 
                       value={role}
                       onChange={e => setRole(e.target.value as StaffRole)}
                     >
-                      <option value="kitchen">{t("dash.roleKitchen")}</option>
-                      <option value="waiter">{t("dash.roleWaiter")}</option>
-                      <option value="cashier">{t("dash.roleCashier")}</option>
-                      <option value="manager">{t("dash.roleManager")}</option>
-                      <option value="owner">{t("dash.roleOwner")}</option>
+                      {roles.map(r => (
+                        <option key={r} value={r}>{t(ROLE_LABEL[r])}</option>
+                      ))}
                     </select>
                   </label>
                   <div className="tt-prodform-actions">

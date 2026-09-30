@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  assignableRoles,
   can,
+  keepsEverything,
   launchSaving,
   cheapestWith,
   dashboardFrozen,
@@ -240,5 +242,61 @@ describe("launch pricing", () => {
     expect(launchSaving({ ...servicio, monthly_price: 899, list_price: 899 })).toBe(0);
     expect(launchSaving({ ...servicio, list_price: null })).toBe(0);
     expect(launchSaving({ ...casa, list_price: undefined })).toBe(0);
+  });
+});
+
+describe("Caja: the register on its own", () => {
+  // Trimmed from the seed: the flags these questions turn on.
+  const base = {
+    order_fee: 0, max_menus: 3, max_items: null, analytics_days: 30, log_days: 30,
+    allows_coupons: false, allows_staff_discounts: false,
+  };
+  const tiers: PlanLimits[] = [
+    { ...base, plan: "carta", rank: 0, monthly_price: 0, max_tables: 0, max_staff: 2,
+      allows_dine_in: false, allows_promotions: false },
+    { ...base, plan: "caja", rank: 1, monthly_price: 399, max_tables: 0, max_staff: 5,
+      allows_dine_in: false, allows_promotions: true, allows_pos: true, allows_inventory: true,
+      allows_loyalty: true, allows_online_ordering: false, allows_kitchen_board: false },
+    { ...base, plan: "servicio", rank: 2, monthly_price: 699, max_tables: 15, max_staff: 10,
+      allows_dine_in: true, allows_promotions: true, allows_pos: true, allows_inventory: true,
+      allows_loyalty: true, allows_waiter_service: true, allows_deferred_payment: true },
+    { ...base, plan: "casa", rank: 3, monthly_price: 1499, max_tables: 50, max_staff: null,
+      allows_dine_in: true, allows_promotions: true, allows_pos: true, allows_inventory: true,
+      allows_loyalty: true, allows_waiter_service: true, allows_deferred_payment: true,
+      allows_coupons: true, allows_staff_discounts: true, allows_menu_schedules: true },
+  ];
+  const [cartaTier, caja, servicioTier] = tiers;
+
+  it("has the register, and no ordering from the phone and no kitchen board", () => {
+    expect(can(caja, "pos")).toBe(true);
+    expect(can(caja, "onlineOrdering")).toBe(false);
+    expect(can(caja, "kitchenBoard")).toBe(false);
+  });
+
+  it("reads a tier that never mentions the new columns as having both, as every tier did", () => {
+    expect(can(cartaTier, "onlineOrdering")).toBe(true);
+    expect(can(cartaTier, "kitchenBoard")).toBe(true);
+  });
+
+  it("is no upgrade from Carta, which it would take the diner's phone away from", () => {
+    expect(keepsEverything(caja, cartaTier)).toBe(false);
+    expect(nextPlan(tiers, "carta")?.plan).toBe("servicio");
+  });
+
+  it("upgrades to Servicio, which keeps everything it has — the visit card included", () => {
+    expect(keepsEverything(servicioTier, caja)).toBe(true);
+    expect(nextPlan(tiers, "caja")?.plan).toBe("servicio");
+  });
+
+  it("is what a lock names for the till only to a restaurant it would take nothing from", () => {
+    expect(cheapestWith(tiers, "pos")?.plan).toBe("caja");
+    expect(cheapestWith(tiers, "pos", cartaTier)?.plan).toBe("servicio");
+    expect(cheapestWith(tiers, "promotions", cartaTier)?.plan).toBe("servicio");
+  });
+
+  it("hands out only the roles it has a screen for", () => {
+    expect(assignableRoles(caja)).toEqual(["cashier", "manager", "owner"]);
+    expect(assignableRoles(servicioTier)).toEqual(["kitchen", "waiter", "cashier", "manager", "owner"]);
+    expect(assignableRoles(null)).toHaveLength(5);
   });
 });
