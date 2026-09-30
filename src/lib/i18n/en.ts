@@ -618,6 +618,8 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     monthlyMax: "Most you would pay this month",
     lockHint: "Everything else on this page keeps working.",
     seePlans: "See plans",
+    noScreenTitle: "This login has no screen on {plan}",
+    noScreenBody: "{plan} takes every order at the register and has no kitchen board or tables, so a kitchen or waiter login has nothing to open. Ask the owner to make you a cashier or to change plans.",
     currentTitle: "Your plan",
     usageTitle: "What you're using",
     tiersTitle: "Plans",

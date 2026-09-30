@@ -3,7 +3,10 @@ import { STALE_REQUEST_HOURS } from "@/lib/service-requests";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership, MANAGES, MOVES_ORDERS, SETTLES, TAKES_COUNTER_ORDERS } from "@/lib/membership";
 import { getPlan } from "@/lib/plan-server";
-import { can } from "@/lib/plan";
+import { can, planLabel } from "@/lib/plan";
+import { getLocale } from "@/lib/i18n/server";
+import { messagesFor, translate } from "@/lib/i18n";
+import { SecureIcon } from "@/components/ui/icons";
 import OrdersBoard from "@/components/dashboard/OrdersBoard";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import type { Order, ServiceRequest } from "@/lib/types";
@@ -31,7 +34,28 @@ export default async function OrdersPage() {
   // to a lock — the till is what they came to work at.
   const plan = await getPlan(r.id);
   if (plan && !can(plan.limits, "kitchenBoard")) {
-    redirect(TAKES_COUNTER_ORDERS(membership.role) ? "/dashboard/pos" : "/dashboard");
+    if (TAKES_COUNTER_ORDERS(membership.role)) redirect("/dashboard/pos");
+    // A kitchen or waiter login kept through a move down to Caja. This used to
+    // send it to /dashboard, which sends every role that does not manage
+    // straight back here: the browser bounced between the two for as long as
+    // it was let, and the person saw an empty frame and no reason.
+    const m = messagesFor(await getLocale());
+    const name = planLabel(plan.limits.plan);
+    return (
+      <div className="tt-dash">
+        <div className="container">
+          <div className="tt-section tt-plan-lock">
+            <div className="tt-plan-lock-body">
+              <SecureIcon size={20} weight="bold" aria-hidden="true" />
+              <div>
+                <strong>{translate(m, "plan.noScreenTitle", { plan: name })}</strong>
+                <p className="tt-muted">{translate(m, "plan.noScreenBody", { plan: name })}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // Only today's shift. A request nobody ever pressed "done" on stays open

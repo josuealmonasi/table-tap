@@ -267,6 +267,13 @@ async function withTableBill(run, frozen = false) {
   }
 }
 
+// The logins a state can open its screen as. The owner sees the dashboard at
+// desk width; a kitchen login is the phone or tablet at the pass.
+const SIGNS_IN = {
+  owner: CREW[0].email,
+  kitchen: CREW.find(c => c.role === "kitchen").email,
+};
+
 console.log("\n  states\n");
 for (const state of STATES) {
   // What the phone already remembers, worked out before `apply` changes the
@@ -277,7 +284,8 @@ for (const state of STATES) {
   const size = state.as === "owner" ? { width: 1280, height: 900 } : { width: 390, height: 844 };
   const context = await newContext({ viewport: size });
   const cookies = [{ name: "tt-locale", value: "es", url: BASE }];
-  if (state.as === "owner") cookies.push(await cookieFor(CREW[0].email));
+  const login = SIGNS_IN[state.as];
+  if (login) cookies.push(await cookieFor(login));
   await context.addCookies(cookies);
   if (storage) {
     await context.addInitScript(entries => {
