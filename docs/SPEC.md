@@ -426,7 +426,10 @@ on its list** — invariants now fail when a route or screen exists that nothing
 checks. And **static guesses lie**: when the question is what a person actually
 gets, measure it in a browser. `pnpm promises` learned the second one late: it
 swept whole pages for months without ever opening a DIALOG, which is where the
-bill lives, and three of its nine states now press a button first.
+bill lives, and three of its nine states now press a button first. Its sweep
+also follows every dashboard link a role is shown and fails when the link
+sends that role somewhere else, and a link drawn as a button counts as a
+control: the lock on a locked screen offered a manager the owner's plan page.
 
 After a merge the deployed site is checked by the gates that only read it:
 `prod:check`, `smoke:prod`, `roles:prod`, `layout:prod`, `dialogs:prod`,

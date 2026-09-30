@@ -26,6 +26,7 @@ export default function PromotionsPanel({
   couponsUnlockWith,
   promosAllowed = true,
   promosUnlockWith = "servicio",
+  isOwner,
 }: {
   restaurantId: string;
   currency: string;
@@ -37,6 +38,8 @@ export default function PromotionsPanel({
   promosAllowed?: boolean;
   /** The cheapest tier that includes them. */
   promosUnlockWith?: string;
+  /** Whether the viewer can change the plan a lock names. */
+  isOwner: boolean;
 }) {
   const t = useT();
   const toast = useToast();
@@ -166,7 +169,7 @@ export default function PromotionsPanel({
               </div>
             ) : (
               <div style={{ marginBottom: 14 }}>
-                <PlanLock feature="promotions" unlocksWith={promosUnlockWith} />
+                <PlanLock feature="promotions" unlocksWith={promosUnlockWith} isOwner={isOwner} />
               </div>
             )}
 
@@ -269,7 +272,7 @@ export default function PromotionsPanel({
           {couponsAllowed ? (
             <CouponsPanel restaurantId={restaurantId} currency={currency} />
           ) : (
-            <PlanLock feature="coupons" unlocksWith={couponsUnlockWith} />
+            <PlanLock feature="coupons" unlocksWith={couponsUnlockWith} isOwner={isOwner} />
           )}
         </div>
       </div>

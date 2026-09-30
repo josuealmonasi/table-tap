@@ -39,6 +39,10 @@ await requireServer(BASE);
 let failed = 0;
 const ok = m => console.log(`    ok       ${m}`);
 const bad = m => { failed++; console.log(`    GAP      ${m}`); };
+const pathOf = path => new URL(path, BASE).pathname;
+// The dashboard links a person can see, by path.
+const DASHBOARD_LINKS = `[...new Set([...document.querySelectorAll('a[href^="/dashboard"]')]
+  .filter(a => a.offsetParent).map(a => new URL(a.href).pathname))]`;
 
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
 // A sign-in that fails must stop the sweep. It used to go on with a cookie
@@ -95,12 +99,21 @@ for (const who of CREW) {
   }
   const ctx = await newContext({ viewport: { width: 1280, height: 900 } });
   await ctx.addCookies([await cookieFor(who.email, password), { name: "tt-locale", value: "es", url: BASE }]);
+  const linked = new Set();
   for (const path of who.pages) {
     const tab = await ctx.newPage();
     try {
       await tab.goto(BASE + path, { waitUntil: "networkidle" });
       // Modules that read from the browser take a moment longer than the page.
       await tab.waitForTimeout(1800);
+      // A page that sent this role elsewhere was being judged as the page it
+      // landed on, and printed ok under the name of one nobody saw.
+      const landed = new URL(tab.url()).pathname;
+      if (landed !== pathOf(path)) {
+        bad(`${path} · sends ${who.role} to ${landed}`);
+        continue;
+      }
+      for (const href of await tab.evaluate(DASHBOARD_LINKS)) linked.add(href);
       const holes = await tab.evaluate(AUDIT);
       if (holes.length === 0) ok(`${path}`);
       else for (const h of holes) {
@@ -108,8 +121,28 @@ for (const who of CREW) {
       }
     } catch (e) {
       bad(`${path} · could not be checked (${e.message.slice(0, 60)})`);
+    } finally {
+      await tab.close();
     }
-    await tab.close();
+  }
+  // Every link this role was shown opens for this role. The lock on a locked
+  // screen offered a manager "Ver planes" — the owner's page, which sends
+  // anyone else back to the dashboard with no word why. /dashboard itself is
+  // home, which by design lands each role on its own screen.
+  const unvisited = [...linked].filter(h => h !== "/dashboard" && !who.pages.some(p => pathOf(p) === h));
+  for (const href of unvisited) {
+    const tab = await ctx.newPage();
+    try {
+      await tab.goto(BASE + href, { waitUntil: "networkidle" });
+      await tab.waitForTimeout(1200);
+      const landed = new URL(tab.url()).pathname;
+      if (landed === href) ok(`link to ${href} opens`);
+      else bad(`a link to ${href} is shown to ${who.role}, and sends them to ${landed}`);
+    } catch (e) {
+      bad(`link to ${href} · could not be checked (${e.message.slice(0, 60)})`);
+    } finally {
+      await tab.close();
+    }
   }
   await ctx.close();
   console.log("");
@@ -271,8 +304,11 @@ async function withTableBill(run, frozen = false) {
 // desk width; a kitchen login is the phone or tablet at the pass.
 const SIGNS_IN = {
   owner: CREW[0].email,
+  manager: CREW.find(c => c.role === "manager").email,
   kitchen: CREW.find(c => c.role === "kitchen").email,
 };
+// What a person would press: buttons, and links drawn as buttons.
+const CONTROLS = "button, a.tt-btn";
 
 console.log("\n  states\n");
 for (const state of STATES) {
@@ -293,9 +329,11 @@ for (const state of STATES) {
     }, Object.entries(storage));
   }
 
-  // A button's text, matched against what is actually on screen.
+  // A control's text, matched against what is actually on screen. A link
+  // drawn as a button is a control to whoever presses it: "Ver planes" was an
+  // <a>, so a manager was offered the owner's plan page and nothing saw it.
   const visible = (tab, re) => tab.evaluate(
-    `[...document.querySelectorAll("button")].filter(b => b.offsetParent && ${re}.test(b.innerText)).length`);
+    `[...document.querySelectorAll(${JSON.stringify(CONTROLS)})].filter(b => b.offsetParent && ${re}.test(b.innerText)).length`);
 
   const visit = async path => {
     const tab = await context.newPage();
@@ -346,7 +384,7 @@ for (const state of STATES) {
           return;
         }
         await tab.evaluate(
-          `[...document.querySelectorAll("button")].find(b => b.offsetParent && ${state.open}.test(b.innerText)).click()`);
+          `[...document.querySelectorAll(${JSON.stringify(CONTROLS)})].find(b => b.offsetParent && ${state.open}.test(b.innerText)).click()`);
 
         // Wait for what opened, not for a number of milliseconds. A dialog
         // that takes 1.3s on a slow compile made this case report the screen
