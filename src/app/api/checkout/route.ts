@@ -285,7 +285,10 @@ export async function POST(req: NextRequest) {
     // usage cap under concurrency.
     let coupon: CouponRow | null = null;
     if (typeof couponCode === "string" && couponCode.trim()) {
-      const found = await findCoupon(restaurantId, couponCode);
+      // A failed lookup keeps the coupon in the cart (a `couponReason` drops
+      // it): the code may be perfectly good, so the diner is asked to retry.
+      const found = await findCoupon(restaurantId, couponCode).catch(() => undefined);
+      if (found === undefined) return await apiError("apiErr.couponLookupFailed", 503);
       if (!found) {
         return NextResponse.json({ couponReason: "notFound" }, { status: 409 });
       }

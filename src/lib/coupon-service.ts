@@ -54,6 +54,11 @@ export function couponInPlan(limits: PlanLimits | null | undefined, coupon: Pick
 /**
  * Looks up a coupon by code for one restaurant. Null when there's no match,
  * and when the restaurant's tier does not carry it (`couponInPlan`).
+ *
+ * A read that failed throws. It used to be "no match": in a blip the diner was
+ * told a code printed on the restaurant's own flyer does not exist, took it
+ * off and paid full price, and the floor was refused a discount it had just
+ * been offered.
  */
 export async function findCoupon(
   restaurantId: string,
@@ -62,7 +67,7 @@ export async function findCoupon(
   const code = normalizeCoupon(rawCode);
   if (!isValidCouponFormat(code)) return null;
 
-  const [{ data }, plan] = await Promise.all([
+  const [{ data, error }, plan] = await Promise.all([
     createAdminClient()
       .from("coupons")
       .select(COLUMNS)
@@ -71,6 +76,7 @@ export async function findCoupon(
       .maybeSingle(),
     getPlan(restaurantId),
   ]);
+  if (error) throw new Error(`Could not look up the coupon: ${error.message}`);
   const coupon = (data as CouponRow | null) ?? null;
   return coupon && couponInPlan(plan?.limits, coupon) ? coupon : null;
 }

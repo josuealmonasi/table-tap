@@ -76,7 +76,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.nothingToDiscount", 409);
   }
 
-  const coupon = await findCoupon(actor.restaurantId, request.code);
+  // A failed lookup is not "no such code" (findCoupon throws): the code may be
+  // perfectly good, so it is kept and the person is asked to try again.
+  const coupon = await findCoupon(actor.restaurantId, request.code).catch(() => undefined);
+  if (coupon === undefined) return await apiError("apiErr.couponLookupFailed", 503);
   if (!coupon) return await apiError("apiErr.couponNotFound", 400);
 
   const { applyCoupon } = await import("@/lib/pricing");

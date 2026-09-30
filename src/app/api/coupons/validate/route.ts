@@ -33,7 +33,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ valid: false, reason: "badFormat" });
   }
 
-  const coupon = await findCoupon(restaurantId, normalized);
+  // A failed lookup is not "no such code" (findCoupon throws): the code may be
+  // perfectly good, so it is kept and the person is asked to try again.
+  const coupon = await findCoupon(restaurantId, normalized).catch(() => undefined);
+  if (coupon === undefined) {
+    return NextResponse.json({ valid: false, reason: "lookupFailed" }, { status: 503 });
+  }
   // A floor-only promotion answers exactly as a code that doesn't exist. It is
   // applied by staff looking at a membership card, so a diner who guesses it
   // must learn nothing from having guessed right.
