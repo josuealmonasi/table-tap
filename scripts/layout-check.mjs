@@ -67,6 +67,8 @@ const SIZES = [
 ];
 
 let failed = 0;
+/** Dialogs that needed a fresh load to open — said at the end, not hidden. */
+let reloads = 0;
 
 /**
  * Which widths each team dialog opened at, and which it did not.
@@ -364,6 +366,21 @@ for (const size of SIZES) {
             await tab.waitForTimeout(900);
             open = await isOpen();
           }
+          // And once more on a fresh load. When the dev server swaps its worker
+          // mid-run, the page already open keeps a bundle that no longer
+          // answers, and pressing it again changes nothing: five times in one
+          // day a dialog read as missing at exactly one width, on a page this
+          // change never touched, during a restart — and opened on the rerun.
+          // A fresh navigation is what a person would do, and a dialog that
+          // still does not open after it is missing.
+          if (!clicked || !open) {
+            await gotoOnce(tab, BASE + path, { waitUntil: "load", timeout: 60000 });
+            await settle(tab);
+            clicked = await press();
+            await tab.waitForTimeout(900);
+            open = await isOpen();
+            if (clicked && open) reloads++;
+          }
           noteDialog(`${who.role} · ${path} → ${dialog.name}`, size.width, clicked && open);
           if (!clicked || !open) {
             console.log(`    –        ${who.role} · ${path} → ${dialog.name}: did not open (no data)`);
@@ -390,6 +407,9 @@ for (const [key, seen] of opened) {
     failed++;
     console.log(`    BAD      ${key}: opened at ${seen.at.join("/")}px but not at ${seen.missed.join("/")}px`);
   }
+}
+if (reloads) {
+  console.log(`  ${reloads} dialog(s) opened only after the page was loaded again — a worker restart, or a page slow to wire its buttons.`);
 }
 if (held.length) {
   console.log(`  Held ${held.length} write(s) the pages tried to send; none reached the server:`);
