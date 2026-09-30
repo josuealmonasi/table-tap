@@ -350,11 +350,16 @@ for (const size of SIZES) {
           // like an ok, and that is how a whole role went unchecked with nothing
           // saying so.
           let open = await isOpen();
-          // Once more, after a pause: a click that lands before the page is ready
-          // is the usual reason, and now that a dialog missing at one width fails
-          // the run, a slow page must not read as a broken one.
-          if (!clicked || !open) {
-            await tab.waitForTimeout(1500);
+          // Again, after a pause, and once more after a longer one: a click that
+          // lands before the page is ready is the usual reason, and now that a
+          // dialog missing at one width fails the run, a slow page must not read
+          // as a broken one. One pause of 1.5s was not enough right after a
+          // deploy: the first pages of a production run are cold, and every one
+          // of the owner's dialogs at 360px read as missing while all of them
+          // opened on a warm page a minute later.
+          for (const pause of [1500, 3000]) {
+            if (clicked && open) break;
+            await tab.waitForTimeout(pause);
             clicked = await press();
             await tab.waitForTimeout(900);
             open = await isOpen();
