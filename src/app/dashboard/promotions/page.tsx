@@ -31,6 +31,7 @@ export default async function PromotionsPage() {
         promosAllowed={promosAllowed}
         promosUnlockWith={cheapestWith(catalog, "promotions", plan?.limits)?.plan ?? "servicio"}
         couponsUnlockWith={cheapestWith(catalog, "coupons", plan?.limits)?.plan ?? "casa"}
+        isOwner={membership.role === "owner"}
       />
     </ConfirmProvider>
   );

@@ -35,7 +35,7 @@ export default async function PosPage() {
     return (
       <div className="tt-dash">
         <div className="container">
-          <PlanLock feature="pos" unlocksWith={unlocks?.plan ?? "servicio"} />
+          <PlanLock feature="pos" unlocksWith={unlocks?.plan ?? "servicio"} isOwner={membership.role === "owner"} />
         </div>
       </div>
     );

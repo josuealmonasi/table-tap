@@ -63,6 +63,7 @@ us, and what now catches each one.
 | `prod:check` compares each permission by what it is | Policies and functions were compared by name: an unapplied policy body, RLS switched off, or a function handed back to anon would all have passed |
 | The attack gate sweeps by its mark, before and after | A worker restart threw the five-at-once collection mid-case and left a MX$200 payment on a sitting with no order |
 | A screen money is counted on reads or refuses | A failed read on the bills board showed no open tables, or nothing already collected, so the whole bill looked owing again |
+| Every dashboard link a role is shown opens for that role | The plan lock offered managers, cashiers and waiters "Ver planes" — the owner's page, which sent them back to the dashboard with no word why. The audit only counted `<button>`s, and the link was an `<a>` |
 | A login with no screen on its tier lands on a sentence | A kitchen or waiter login kept through a move down to Caja bounced between `/dashboard` and the board forever: each sent it to the other, and the person saw an empty frame. `pnpm promises` opens it as the kitchen |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with

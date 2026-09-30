@@ -289,6 +289,18 @@ export const STATES = [
     apply: (admin, c) => admin.from("restaurants").update({ plan: "carta", plan_status: "active" }).eq("id", c.restaurantId),
     says: /viene[n]? con|comes with/i,
     offers: /nuevo combo|new combo/i,
+    // The control for the case after it: the owner is offered the plans.
+    keeps: /ver planes|see plans/i,
+  },
+  {
+    // The same lock, seen by a manager. /dashboard/plan is the owner's alone,
+    // so "Ver planes" sent a manager back to the dashboard with no word why.
+    name: "free plan · promotions, as a manager",
+    as: "manager",
+    path: "/dashboard/promotions",
+    apply: (admin, c) => admin.from("restaurants").update({ plan: "carta", plan_status: "active" }).eq("id", c.restaurantId),
+    says: /solo el dueño puede cambiar el plan|only the owner can change the plan/i,
+    offers: /ver planes|see plans/i,
   },
   {
     name: "free plan · tables",

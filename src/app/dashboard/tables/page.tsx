@@ -76,6 +76,7 @@ export default async function TablesPage() {
         currency={r.currency}
         tablesAllowed={tablesAllowed}
         tablesUnlockWith={tablesUnlockWith}
+        isOwner={membership.role === "owner"}
       />
     </ConfirmProvider>
   );

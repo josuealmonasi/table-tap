@@ -34,7 +34,7 @@ export default async function TableOrderPage() {
     return (
       <div className="tt-dash">
         <div className="container">
-          <PlanLock feature="waiterService" unlocksWith={unlocks?.plan ?? "servicio"} />
+          <PlanLock feature="waiterService" unlocksWith={unlocks?.plan ?? "servicio"} isOwner={membership.role === "owner"} />
         </div>
       </div>
     );

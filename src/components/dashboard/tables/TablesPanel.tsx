@@ -33,6 +33,8 @@ interface TablesPanelProps {
   tablesAllowed?: boolean;
   /** The cheapest tier that includes it. */
   tablesUnlockWith?: string;
+  /** Whether the viewer can change the plan the lock names. */
+  isOwner: boolean;
 }
 
 /** Dashboard Tables & QR: one restaurant-wide QR plus a per-table QR manager. */
@@ -45,6 +47,7 @@ export default function TablesPanel({
   currency,
   tablesAllowed = true,
   tablesUnlockWith = "servicio",
+  isOwner,
 }: TablesPanelProps) {
   const t = useT();
   const toast = useToast();
@@ -104,7 +107,7 @@ export default function TablesPanel({
       {addForm}
     </AddInDialog>
   ) : (
-    <PlanLock feature="dineIn" unlocksWith={tablesUnlockWith} />
+    <PlanLock feature="dineIn" unlocksWith={tablesUnlockWith} isOwner={isOwner} />
   );
 
   // A dining room can run to fifty tables, and every card carries a QR the

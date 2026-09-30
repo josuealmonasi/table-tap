@@ -34,7 +34,7 @@ export default async function LoyaltyPage() {
     return (
       <div className="tt-dash">
         <div className="container">
-          <PlanLock feature="loyalty" unlocksWith={unlocks?.plan ?? "casa"} />
+          <PlanLock feature="loyalty" unlocksWith={unlocks?.plan ?? "casa"} isOwner={membership.role === "owner"} />
           {ranIt && <EarnedRewards />}
         </div>
       </div>
