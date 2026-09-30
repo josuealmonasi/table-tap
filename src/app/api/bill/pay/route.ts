@@ -136,7 +136,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (orders.some(o => o.coupon_code)) {
       return await apiError("apiErr.couponAlreadyUsed", 409);
     }
-    coupon = await findCoupon(restaurantId, couponCode);
+    const found = await findCoupon(restaurantId, couponCode).catch(() => undefined);
+    if (found === undefined) return await apiError("apiErr.couponLookupFailed", 503);
+    coupon = found;
     if (!coupon || coupon.staff_only) return await apiError("apiErr.couponNotFound", 400);
     if (couponProblem(coupon, food)) return await apiError("apiErr.couponNotValid", 400);
 

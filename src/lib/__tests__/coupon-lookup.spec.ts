@@ -64,6 +64,11 @@ describe("a coupon lookup", () => {
     expect(await findCoupon("r1", "ABC-123")).toBeNull();
   });
 
+  it("throws when the read fails, rather than calling a real code unknown", async () => {
+    answer.error = { message: "canceling statement due to statement timeout" };
+    await expect(findCoupon("r1", "ABC-123")).rejects.toThrow(/could not look up the coupon/i);
+  });
+
   it("finds nothing for a restaurant with no plan row", async () => {
     answer.data = coupon();
     tier.limits = null;

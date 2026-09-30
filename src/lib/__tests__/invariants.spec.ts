@@ -2166,3 +2166,20 @@ describe("a tier without the feature takes nothing off a sale", () => {
     expect(direct, "a route that reads coupons without asking the plan").toEqual([]);
   });
 });
+
+describe("a coupon lookup that failed is not an unknown code", () => {
+  it("catches findCoupon's throw at every call and answers it as a retry", () => {
+    // findCoupon throws when the read fails. Read as null, a blip told a diner
+    // a code from the restaurant's own flyer did not exist, and they paid full
+    // price; at checkout the cart dropped the coupon as well.
+    const calls = sources
+      .filter(f => f !== "src/lib/coupon-service.ts")
+      .flatMap(f => read(f).split("\n").map((line, i) => ({ f, i, line })))
+      .filter(({ line }) => /\bfindCoupon\(/.test(line) && !/^\s*(\/\/|\*|import)/.test(line));
+    expect(calls.length, "the scan found no lookup").toBeGreaterThanOrEqual(5);
+    const bare = calls
+      .filter(({ line }) => !/\.catch\(\(\) => undefined\)/.test(line))
+      .map(({ f, i }) => `${f}:${i + 1}`);
+    expect(bare, "a coupon lookup whose failure would read as 'not found'").toEqual([]);
+  });
+});
