@@ -13,6 +13,7 @@ import {
   isMenuOpen,
   summarizeSchedule,
   type MenuSchedule,
+  type ScheduleAccess,
 } from "@/lib/menu-schedule";
 
 interface MenuRowProps {
@@ -23,6 +24,7 @@ interface MenuRowProps {
   onRename: (id: string, name: string) => Promise<void>;
   onSetSchedule: (id: string, schedule: MenuSchedule | null) => Promise<void>;
   timeZone: string;
+  schedules: ScheduleAccess;
   onToggle: (menu: Menu, next: boolean) => Promise<void>;
   onDuplicate: (menu: Menu) => Promise<void>;
   onDelete: (menu: Menu) => Promise<void>;
@@ -40,6 +42,7 @@ export default function MenuRow({
   onRename,
   onSetSchedule,
   timeZone,
+  schedules,
   onToggle,
   onDuplicate,
   onDelete,
@@ -52,16 +55,18 @@ export default function MenuRow({
   const [scheduling, setScheduling] = useState(false);
 
   // Sits between the name and the controls so the row reads
-  // "what it is · when it shows · what you can do to it".
+  // "what it is · when it shows · what you can do to it". Not on a tier
+  // without schedules: a saved one is not followed there, so it is not "when
+  // it shows".
   const summary =
-    menu.schedule && hasLiveSchedule(menu.schedule)
+    schedules.allowed && menu.schedule && hasLiveSchedule(menu.schedule)
       ? summarizeSchedule(
           menu.schedule,
           [0, 1, 2, 3, 4, 5, 6].map(d => t(`sched.day${d}`)),
           t("sched.allDayShort"),
         )
       : null;
-  const paused = Boolean(menu.schedule?.rules?.length) && !menu.schedule?.enabled;
+  const paused = schedules.allowed && Boolean(menu.schedule?.rules?.length) && !menu.schedule?.enabled;
 
   /**
    * Whether the schedule is serving *right now*.
@@ -153,6 +158,7 @@ export default function MenuRow({
         schedule={menu.schedule}
         onClose={() => setScheduling(false)}
         onSave={s => onSetSchedule(menu.id, s)}
+        locked={schedules.allowed ? undefined : schedules}
       />
       <ReorderButtons
         canMoveUp={canMoveUp}

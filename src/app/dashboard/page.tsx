@@ -6,6 +6,8 @@ import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { getLocale } from "@/lib/i18n/server";
 import { messagesFor, translate } from "@/lib/i18n";
 import { currentUser } from "@/lib/current-user";
+import { allPlans, getPlan } from "@/lib/plan-server";
+import { can, cheapestWith } from "@/lib/plan";
 
 export const dynamic = "force-dynamic";
 
@@ -32,9 +34,18 @@ export default async function DashboardPage() {
     );
   }
 
+  // Decided here, on the server: the database refuses a new schedule on a
+  // tier without them, so the editor must not be offered there.
+  const [plan, catalog] = await Promise.all([getPlan(membership.restaurant.id), allPlans()]);
+  const schedules = {
+    allowed: plan ? can(plan.limits, "menuSchedules") : false,
+    unlocksWith: cheapestWith(catalog, "menuSchedules", plan?.limits)?.plan ?? "casa",
+    isOwner: membership.role === "owner",
+  };
+
   return (
     <ConfirmProvider>
-      <DashboardHome restaurant={membership.restaurant} role={membership.role} />
+      <DashboardHome restaurant={membership.restaurant} role={membership.role} schedules={schedules} />
     </ConfirmProvider>
   );
 }

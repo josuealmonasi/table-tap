@@ -10,7 +10,7 @@ import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-m
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { can, orderFeeCents, type PlanLimits } from "@/lib/plan";
-import { getPlan } from "@/lib/plan-server";
+import { getPlan, tierIncludes } from "@/lib/plan-server";
 import { feesTakenThisMonth } from "@/lib/fee-month";
 import { itemSalePrice, priceCart, type AppliedCoupon } from "@/lib/pricing";
 import {
@@ -156,6 +156,7 @@ export async function POST(req: NextRequest) {
     const { ids: openIds, closedNow } = openMenuIds(
       (menusRes.data as MenuOpenState[] | null) ?? [],
       (zoneRes.data as { timezone?: string } | null)?.timezone ?? DEFAULT_TIME_ZONE,
+      { schedules: await tierIncludes(restaurantId, "menuSchedules") },
     );
     if (closedNow) {
       return await apiError("apiErr.closedNow", 409);

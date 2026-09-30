@@ -302,6 +302,28 @@ export const STATES = [
     says: /solo de lectura|read-only/i,
   },
   {
+    // The control for the case after it: on the demo's own tier a menu's
+    // schedule button opens the editor, with its save.
+    name: "menu schedules · the editor",
+    as: "owner",
+    path: "/dashboard",
+    open: /^\s*(horario|opening hours)\s*$/i,
+    says: /usar este horario|use these hours/i,
+    keeps: /guardar cambios|save changes/i,
+  },
+  {
+    // The editor used to open on every tier and save into a refusal: the
+    // database takes no new schedule below Casa, and the owner was told only
+    // "No se pudo actualizar el menú". It names the tier now, with no save.
+    name: "a plan without schedules · the editor",
+    as: "owner",
+    path: "/dashboard",
+    apply: (admin, c) => admin.from("restaurants").update({ plan: "servicio", plan_status: "active" }).eq("id", c.restaurantId),
+    open: /^\s*(horario|opening hours)\s*$/i,
+    says: /menús por horario vienen con|menus on a schedule come with/i,
+    offers: /guardar cambios|save changes/i,
+  },
+  {
     // The control for the case after it: on the demo's own tier a combo is on
     // the menu, and the sweep can see it.
     name: "the menu · a combo",

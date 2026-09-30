@@ -23,6 +23,18 @@ export interface ScheduleRule {
   end?: string;
 }
 
+/**
+ * Whether the restaurant's tier carries menu schedules, and what the lock
+ * says when it does not. Decided on the server from the plan.
+ */
+export interface ScheduleAccess {
+  allowed: boolean;
+  /** The cheapest tier that has them, named by the lock. */
+  unlocksWith: string;
+  /** Only the owner is offered the plans. */
+  isOwner: boolean;
+}
+
 export interface MenuSchedule {
   /** Paused schedules are kept but stop deciding anything. */
   enabled: boolean;

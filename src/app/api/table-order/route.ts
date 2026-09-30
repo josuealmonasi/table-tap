@@ -10,6 +10,7 @@ import { capNote } from "@/lib/notes";
 import { priceCart } from "@/lib/pricing";
 import { cartReferences, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
 import { promotionsOnSale } from "@/lib/promotions-on-sale";
+import { tierIncludes } from "@/lib/plan-server";
 import { toCartPromos } from "@/lib/promotions";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
 import { raiseStockNotifications, releaseStock, reserveStock } from "@/lib/stock-service";
@@ -91,6 +92,7 @@ export async function POST(req: NextRequest) {
   const { ids: openIds, closedNow } = openMenuIds(
     (menusRes.data as MenuOpenState[] | null) ?? [],
     (restaurant.timezone as string | null) ?? DEFAULT_TIME_ZONE,
+    { schedules: await tierIncludes(actor.restaurantId, "menuSchedules") },
   );
   if (closedNow) return await apiError("apiErr.closedNow", 409);
 

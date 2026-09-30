@@ -688,6 +688,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
       coupons: "Los cupones vienen con {plan}.",
       staffDiscounts: "Los descuentos aplicados por tu equipo vienen con {plan}.",
       loyalty: "La tarjeta de visitas viene con {plan}.",
+      menuSchedules: "Los menús por horario vienen con {plan}.",
     },
   },
   receipt: {
@@ -1151,6 +1152,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     addRule: "+ Agregar otro periodo",
     removeRule: "Quitar este periodo",
     remove: "Quitar horario",
+    notApplied: "Este horario está guardado, pero no se aplica mientras tu plan no incluya menús por horario: el menú sigue su interruptor.",
   },
   tz: {
     mexico: "México",

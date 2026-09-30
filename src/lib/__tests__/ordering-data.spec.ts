@@ -65,6 +65,7 @@ describe("a switched-off menu is a closed kitchen, not an empty restaurant", () 
         { id: "b", active: false, schedule: null },
       ],
       tz,
+      { schedules: true },
     );
     expect(ids).toEqual([]);
     expect(closedNow).toBe(true);
@@ -72,7 +73,7 @@ describe("a switched-off menu is a closed kitchen, not an empty restaurant", () 
 
   it("still says nothing when the restaurant genuinely has no menus", () => {
     // A restaurant mid-setup has nothing to apologise for.
-    expect(openMenuIds([], tz).closedNow).toBe(false);
+    expect(openMenuIds([], tz, { schedules: true }).closedNow).toBe(false);
   });
 
   it("says open when at least one menu is on", () => {
@@ -82,6 +83,7 @@ describe("a switched-off menu is a closed kitchen, not an empty restaurant", () 
         { id: "b", active: true, schedule: null },
       ],
       tz,
+      { schedules: true },
     );
     expect(ids).toEqual(["b"]);
     expect(closedNow).toBe(false);

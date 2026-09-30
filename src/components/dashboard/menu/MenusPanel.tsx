@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { MenuSchedule } from "@/lib/menu-schedule";
+import type { MenuSchedule, ScheduleAccess } from "@/lib/menu-schedule";
 import AddInDialog from "@/components/ui/AddInDialog";
 import type { Menu } from "@/lib/types";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -19,6 +19,8 @@ interface MenusPanelProps {
   onSetSchedule: (id: string, schedule: MenuSchedule | null) => Promise<void>;
   /** The restaurant's zone — the rows say whether a menu is live right now. */
   timeZone: string;
+  /** Whether this tier carries schedules (decided on the server). */
+  schedules: ScheduleAccess;
   onDelete: (id: string) => Promise<void>;
   onToggleActive: (id: string, active: boolean) => Promise<void>;
   onDuplicate: (id: string) => Promise<string | undefined>;
@@ -40,6 +42,7 @@ export default function MenusPanel({
   onRename,
   onSetSchedule,
   timeZone,
+  schedules,
   onDelete,
   onToggleActive,
   onDuplicate,
@@ -217,6 +220,7 @@ export default function MenusPanel({
                 onRename={onRename}
                 onSetSchedule={onSetSchedule}
                 timeZone={timeZone}
+                schedules={schedules}
                 onToggle={toggle}
                 onDuplicate={duplicate}
                 onDelete={remove}

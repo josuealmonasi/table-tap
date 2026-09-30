@@ -213,7 +213,9 @@ export async function loadOrderingData(
   const menuRows = unwrap<MenuOpenState[]>(menusRes, "menus") ?? [];
   const timeZone =
     unwrap<{ timezone?: string }>(zoneRes, "the time zone")?.timezone ?? DEFAULT_TIME_ZONE;
-  const { ids: activeMenuIds, closedNow } = openMenuIds(menuRows, timeZone);
+  const { ids: activeMenuIds, closedNow } = openMenuIds(menuRows, timeZone, {
+    schedules: plan ? can(plan.limits, "menuSchedules") : false,
+  });
   const menuFilter = activeMenuIds.length ? activeMenuIds : [NO_MENU];
 
   const [restaurantRes, categoriesRes, menuItemsRes] = await Promise.all([
