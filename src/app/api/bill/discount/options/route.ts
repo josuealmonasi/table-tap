@@ -3,7 +3,8 @@ import { apiError } from "@/lib/api-error";
 import { isValidCouponFormat, normalizeCoupon } from "@/lib/coupons";
 import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { couponProblem, type CouponRow } from "@/lib/coupon-service";
+import { couponInPlan, couponProblem, type CouponRow } from "@/lib/coupon-service";
+import { getPlan } from "@/lib/plan-server";
 import { applyCoupon } from "@/lib/pricing";
 
 export const runtime = "nodejs";
@@ -25,12 +26,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const total = Number(req.nextUrl.searchParams.get("total")) || 0;
 
-  const { data } = await createAdminClient()
-    .from("coupons")
-    .select("id, code, kind, value, min_subtotal, max_uses, uses_count, active, starts_at, ends_at, staff_only")
-    .eq("restaurant_id", actor.restaurantId)
-    .eq("active", true)
-    .order("code");
+  const [{ data }, plan] = await Promise.all([
+    createAdminClient()
+      .from("coupons")
+      .select("id, code, kind, value, min_subtotal, max_uses, uses_count, active, starts_at, ends_at, staff_only")
+      .eq("restaurant_id", actor.restaurantId)
+      .eq("active", true)
+      .order("code"),
+    getPlan(actor.restaurantId),
+  ]);
 
   const options = ((data ?? []) as CouponRow[])
     // Same rules the apply endpoint enforces, so nothing offered here can be
@@ -38,6 +42,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // before anything else. A code stored in another shape was offered with a
     // computed discount and then answered "coupon not found".
     .filter(coupon => isValidCouponFormat(normalizeCoupon(coupon.code)))
+    .filter(coupon => couponInPlan(plan?.limits, coupon))
     .filter(coupon => !couponProblem(coupon, total))
     .map(coupon => ({
       code: coupon.code,

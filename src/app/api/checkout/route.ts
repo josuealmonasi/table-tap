@@ -23,7 +23,7 @@ import {
   type CouponRow,
 } from "@/lib/coupon-service";
 import { clientKey, isRateLimited } from "@/lib/rate-limit";
-import { fetchPromotions } from "@/lib/promotions-data";
+import { promotionsOnSale } from "@/lib/promotions-on-sale";
 import { toCartPromos } from "@/lib/promotions";
 import { cartReferences, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
 import { MAX_CARD_CART_LINES, stripeProductName } from "@/lib/stripe-limits";
@@ -207,7 +207,7 @@ export async function POST(req: NextRequest) {
 
     // Promotions come from the DB too, so a combo's price and a quantity deal's
     // terms are never the client's to decide.
-    const promotions = await fetchPromotions(supabase, restaurantId, {
+    const promotions = await promotionsOnSale(supabase, restaurantId, {
       activeOnly: true,
     });
     const cartPromos = toCartPromos(promotions);

@@ -246,7 +246,7 @@ export default function CartScreen({
               />
             )}
 
-            {!orderAtRegister && (
+            {!orderAtRegister && restaurant.coupons_enabled && (
             <div className="tt-coupon-row">
               <CouponBox
                 restaurantId={restaurant.id}

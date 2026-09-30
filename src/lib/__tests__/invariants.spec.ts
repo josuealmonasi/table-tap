@@ -2137,3 +2137,32 @@ describe("every promise case is a case of its own", () => {
     expect(STATES.length, "a case swallowed by the one before it").toBe(names);
   });
 });
+
+describe("a tier without the feature takes nothing off a sale", () => {
+  it("reads promotions through promotionsOnSale and coupons through findCoupon", () => {
+    // Only creating a promotion or a coupon asked the plan. The saved ones went
+    // on discounting at checkout, the till and the bill after a move to a tier
+    // without them. Everything that shows or prices a sale now reads through
+    // the two functions that ask; the dashboard's own list is the exception,
+    // because it has to show the owner what is saved.
+    const allowed = new Set([
+      "src/lib/promotions-data.ts",
+      "src/lib/promotions-on-sale.ts",
+      "src/hooks/usePromotions.ts",
+    ]);
+    const bare = sources.filter(f => !allowed.has(f) && /\bfetchPromotions\(/.test(read(f)));
+    expect(bare, "a sale path that reads promotions without asking the plan").toEqual([]);
+
+    const onSale = sources.filter(f => /\bpromotionsOnSale\(/.test(read(f)) && f !== "src/lib/promotions-on-sale.ts");
+    expect(onSale.length, "the scan found no sale path").toBeGreaterThanOrEqual(4);
+
+    // A coupon read straight from the table is one findCoupon never saw.
+    const direct = sources.filter(f =>
+      /\.from\("coupons"\)/.test(read(f)) &&
+      f.startsWith("src/app/api/") &&
+      !f.startsWith("src/app/api/coupons/") &&
+      !/couponInPlan\(|findCoupon\(/.test(read(f)),
+    );
+    expect(direct, "a route that reads coupons without asking the plan").toEqual([]);
+  });
+});

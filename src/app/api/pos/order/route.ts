@@ -11,7 +11,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { capName, capNote } from "@/lib/notes";
 import { priceCart } from "@/lib/pricing";
 import { cartReferences, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
-import { fetchPromotions } from "@/lib/promotions-data";
+import { promotionsOnSale } from "@/lib/promotions-on-sale";
 import { toCartPromos } from "@/lib/promotions";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
 import { raiseStockNotifications, releaseStock, reserveStock } from "@/lib/stock-service";
@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
   // Products AND extras AND every combo component — the same list checkout
   // fetches, from the same function, because verifyCart prices only what it is
   // handed and a missing extra reads to it as one that has vanished.
-  const promotions = await fetchPromotions(supabase, actor.restaurantId);
+  const promotions = await promotionsOnSale(supabase, actor.restaurantId);
   const refs = cartReferences(items, promotions);
   if (!refs.ok) {
     const { key, vars } = rejectionMessage(refs.rejection);

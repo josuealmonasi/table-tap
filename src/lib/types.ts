@@ -126,6 +126,12 @@ export type Restaurant = {
    * to find out was to tap it and get a 409.
    */
   cards_enabled?: boolean;
+  /**
+   * Whether a diner may type a coupon. Derived on the server from the plan:
+   * a restaurant that moved to a tier without coupons still has its codes,
+   * and checkout refuses every one of them.
+   */
+  coupons_enabled?: boolean;
   /** The restaurant's connected account. Reaches the dashboard only, never the diner. */
   stripe_account_id?: string | null;
   stripe_charges_enabled?: boolean | null;

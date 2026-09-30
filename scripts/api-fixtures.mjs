@@ -165,6 +165,19 @@ export async function setup(env, base) {
       }
     };
   };
+  // The demo restaurant on Carta for one case — the free tier, with the
+  // promotions and coupons it made on its own tier still saved — and back on
+  // its own plan afterwards. The cases it serves are refused before anything
+  // is written.
+  const onCarta = async () => {
+    const { data: was } = await admin
+      .from("restaurants").select("plan, plan_status").eq("id", restaurant.id).single();
+    await admin.from("restaurants").update({ plan: "carta", plan_status: "active" }).eq("id", restaurant.id);
+    return async () => {
+      await admin.from("restaurants")
+        .update({ plan: was.plan, plan_status: was.plan_status }).eq("id", restaurant.id);
+    };
+  };
   const withLoyaltyOff = async () => {
     const { data: was } = await admin
       .from("loyalty_programs").select("active").eq("restaurant_id", restaurant.id).maybeSingle();
@@ -457,6 +470,22 @@ export async function setup(env, base) {
     client_ref: `${MARK}-bill-${tableBillOrder}`,
   });
 
+  // A combo of our own — two of the serving menu's dish — as the cart sends
+  // it: the line's id is the promotion's. Not the seed's: that one is built
+  // from the weekend brunch, which serves on Saturday and Sunday mornings, so
+  // any other hour refuses it as gone and a case built on it passes or fails
+  // by the clock. Swept with the gate's other promotions, by its mark.
+  const { data: comboRow } = await admin
+    .from("promotions")
+    .insert({ restaurant_id: restaurant.id, kind: "combo", name: `${MARK} combo`, emoji: "🧪",
+      combo_price: Number(dish.price), active: true })
+    .select("id, name, emoji, combo_price").single();
+  await admin.from("promotion_items").insert({ promotion_id: comboRow.id, item_id: dish.id, qty: 2 });
+  const combo = comboRow && {
+    itemId: comboRow.id, comboId: comboRow.id, name: comboRow.name,
+    emoji: comboRow.emoji, price: Number(comboRow.combo_price), qty: 1, mods: {},
+  };
+
   // A ticket of our own for the printer to collect, so the cases below do not
   // race the seed's or swallow one a real screen queued. Queued by the trigger
   // on `status = 'received'`, not inserted here — inserting it collides with
@@ -469,6 +498,8 @@ export async function setup(env, base) {
     admin, base, who, restaurant, dish, menu, serviceRequestBefore,
     withServicedOrder, servicedOrder,
     onCaja,
+    onCarta,
+    combo,
     // Read when a case asks, never snapshotted: an earlier case MINTS a new
     // token (`POST /api/print/token`), so a value captured at setup is stale
     // by the time the printer's own cases run — and a stale token is refused,
