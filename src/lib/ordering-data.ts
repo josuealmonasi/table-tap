@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Category, MenuItem, Restaurant } from "@/lib/types";
-import { fetchPromotions } from "@/lib/promotions-data";
+import { promotionsOnSale } from "@/lib/promotions-on-sale";
 import { buildCombos, toCartPromos, type Combo } from "@/lib/promotions";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
 import type { CartPromo } from "@/lib/pricing";
@@ -196,7 +196,7 @@ export async function loadOrderingData(
       .select("id, active, schedule")
       .eq("restaurant_id", restaurantId),
     supabase.from("restaurants").select("timezone").eq("id", restaurantId).single(),
-    fetchPromotions(supabase, restaurantId, { activeOnly: true }),
+    promotionsOnSale(supabase, restaurantId, { activeOnly: true }),
     supabase.rpc("dish_rating_stats", { p_restaurant_id: restaurantId }),
     getPlan(restaurantId),
     // The dietary tags depend on nothing else, so they travel with this first
@@ -314,6 +314,10 @@ export async function loadOrderingData(
   if (restaurant?.allow_pay_later) {
     restaurant.allow_pay_later = plan ? can(plan.limits, "deferredPayment") : false;
   }
+  // The same for coupons: codes saved on a tier that had them are still in
+  // the database, and checkout no longer takes them (`findCoupon`), so the
+  // cart and the bill must not offer a field that can only say "not found".
+  if (restaurant) restaurant.coupons_enabled = plan ? can(plan.limits, "coupons") : false;
 
   const program = await offeredProgram(restaurantId, plan?.limits ?? null);
   const loyalty: LoyaltyOfferInfo | null =

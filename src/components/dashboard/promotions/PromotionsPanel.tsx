@@ -170,6 +170,11 @@ export default function PromotionsPanel({
             ) : (
               <div style={{ marginBottom: 14 }}>
                 <PlanLock feature="promotions" unlocksWith={promosUnlockWith} isOwner={isOwner} />
+                {/* The saved ones are still listed, with their switches, so
+                    say plainly that none of them reaches a diner right now. */}
+                {!loading && promotions.length > 0 && (
+                  <p className="tt-muted" style={{ fontSize: 13, marginBottom: 0 }}>{t("promos.lockedSaved")}</p>
+                )}
               </div>
             )}
 

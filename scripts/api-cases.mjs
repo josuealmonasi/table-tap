@@ -463,6 +463,43 @@ export function cases(fx) {
       body: { posRef: "00000000-0000-4000-8000-000000000001", method: "cash",
               items: [{ itemId: "00000000-0000-4000-8000-000000000002", qty: 1 }] },
       expect: [403] },
+    // ── A tier without the feature: saved discounts stop ─────────────────
+    // Promotions and coupons made on a tier that had them stay saved after a
+    // move down, and used to go on discounting every sale. Each refusal has a
+    // control on the demo's own tier first, so it cannot pass merely because
+    // the request was malformed.
+    { name: "POST /api/coupons/validate (a coupon the tier carries)", as: "diner", method: "POST",
+      path: "/api/coupons/validate", body: async f => ({ restaurantId: r, code: f.cardCouponCode, subtotal: 1000 }),
+      expect: [200], check: d => d.valid === true || `answered ${JSON.stringify(d).slice(0, 80)}` },
+    { name: "POST /api/coupons/validate (a coupon on a tier without coupons)", as: "diner", method: "POST",
+      path: "/api/coupons/validate", arrange: f => f.onCarta(),
+      body: async f => ({ restaurantId: r, code: f.cardCouponCode, subtotal: 1000 }),
+      expect: [200], check: d => (d.valid === false && d.reason === "notFound") || `answered ${JSON.stringify(d).slice(0, 80)}` },
+    { name: "POST /api/checkout (a coupon on a tier without coupons)", as: "diner", method: "POST",
+      path: "/api/checkout",
+      arrange: async f => {
+        const putReaderBack = await f.withCardReader();
+        const putPlanBack = await f.onCarta();
+        return async () => { await putPlanBack(); await putReaderBack(); };
+      },
+      body: async f => ({ restaurantId: r, tableId: null, note: MARK, couponCode: f.cardCouponCode,
+        items: [{ itemId: dish.id, name: dish.name, price: Number(dish.price), qty: 5, emoji: "🍽️", mods: {} }] }),
+      expect: [409], check: d => d.couponReason === "notFound" || `answered ${JSON.stringify(d).slice(0, 80)}` },
+    // The control goes as far as Stripe, which refuses the fake account: the
+    // combo passed every check before it.
+    { name: "POST /api/checkout (a combo the tier carries)", as: "diner", method: "POST",
+      path: "/api/checkout", arrange: f => f.withCardReader(),
+      body: async f => ({ restaurantId: r, tableId: null, note: MARK, items: [f.combo] }),
+      expect: [500], expectError: /pago falló|payment failed/i },
+    { name: "POST /api/checkout (a combo on a tier without promotions)", as: "diner", method: "POST",
+      path: "/api/checkout",
+      arrange: async f => {
+        const putReaderBack = await f.withCardReader();
+        const putPlanBack = await f.onCarta();
+        return async () => { await putPlanBack(); await putReaderBack(); };
+      },
+      body: async f => ({ restaurantId: r, tableId: null, note: MARK, items: [f.combo] }),
+      expect: [400], expectError: /ya no está disponible|no longer available/i },
     // ── Caja: the register on its own ────────────────────────────────────
     // A diner's phone cannot check out — the order is taken at the register —
     // and the route says the same sentence the menu does.

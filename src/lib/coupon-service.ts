@@ -1,5 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidCouponFormat, normalizeCoupon } from "@/lib/coupons";
+import { can, type PlanLimits } from "@/lib/plan";
+import { getPlan } from "@/lib/plan-server";
 import type { AppliedCoupon } from "@/lib/pricing";
 
 // Server-side coupon lookup and eligibility. Shared by /api/coupons/validate
@@ -35,7 +37,24 @@ export interface CouponRow {
 const COLUMNS =
   "id, code, kind, value, min_subtotal, max_uses, uses_count, active, starts_at, ends_at, staff_only";
 
-/** Looks up a coupon by code for one restaurant. Null when there's no match. */
+/**
+ * Whether the restaurant's tier carries this kind of code: coupons for the
+ * ones a diner types, staff discounts for the ones the floor applies.
+ *
+ * Only creating a coupon used to ask. Codes saved on Casa went on discounting
+ * at checkout and on the bill after a move to Servicio or Carta, while the
+ * owner's screen said coupons come with Casa and the terms say a paid plan's
+ * features stop with it. The codes are kept as they are, and work again back
+ * on a tier that has them.
+ */
+export function couponInPlan(limits: PlanLimits | null | undefined, coupon: Pick<CouponRow, "staff_only">): boolean {
+  return Boolean(limits) && can(limits!, coupon.staff_only ? "staffDiscounts" : "coupons");
+}
+
+/**
+ * Looks up a coupon by code for one restaurant. Null when there's no match,
+ * and when the restaurant's tier does not carry it (`couponInPlan`).
+ */
 export async function findCoupon(
   restaurantId: string,
   rawCode: string,
@@ -43,13 +62,17 @@ export async function findCoupon(
   const code = normalizeCoupon(rawCode);
   if (!isValidCouponFormat(code)) return null;
 
-  const { data } = await createAdminClient()
-    .from("coupons")
-    .select(COLUMNS)
-    .eq("restaurant_id", restaurantId)
-    .ilike("code", code) // codes are compared case-insensitively
-    .maybeSingle();
-  return (data as CouponRow | null) ?? null;
+  const [{ data }, plan] = await Promise.all([
+    createAdminClient()
+      .from("coupons")
+      .select(COLUMNS)
+      .eq("restaurant_id", restaurantId)
+      .ilike("code", code) // codes are compared case-insensitively
+      .maybeSingle(),
+    getPlan(restaurantId),
+  ]);
+  const coupon = (data as CouponRow | null) ?? null;
+  return coupon && couponInPlan(plan?.limits, coupon) ? coupon : null;
 }
 
 /**

@@ -470,7 +470,7 @@ export default function BillSheet({
           {/* Everything below settles the WHOLE bill, which is not what this
               phone owes any more once the table has divided it. Two ways to
               pay, disagreeing about the amount, is how somebody pays twice. */}
-          {!splitLocked && !alreadyDiscounted && can.extras && (
+          {!splitLocked && !alreadyDiscounted && can.extras && restaurant.coupons_enabled && (
             <div className="tt-coupon-row">
               <CouponBox
                 restaurantId={restaurant.id}

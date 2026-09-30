@@ -307,8 +307,10 @@ const SIGNS_IN = {
   manager: CREW.find(c => c.role === "manager").email,
   kitchen: CREW.find(c => c.role === "kitchen").email,
 };
-// What a person would press: buttons, and links drawn as buttons.
-const CONTROLS = "button, a.tt-btn";
+// What a person would press: buttons, links drawn as buttons, and anything
+// that says it is a button — a dish or a combo on the menu is a card that
+// opens when tapped.
+const CONTROLS = "button, a.tt-btn, [role=button]";
 
 console.log("\n  states\n");
 for (const state of STATES) {

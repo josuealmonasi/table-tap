@@ -9,7 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { capNote } from "@/lib/notes";
 import { priceCart } from "@/lib/pricing";
 import { cartReferences, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
-import { fetchPromotions } from "@/lib/promotions-data";
+import { promotionsOnSale } from "@/lib/promotions-on-sale";
 import { toCartPromos } from "@/lib/promotions";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
 import { raiseStockNotifications, releaseStock, reserveStock } from "@/lib/stock-service";
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
     return !menuId || openIds.includes(menuId);
   };
 
-  const promotions = await fetchPromotions(db, actor.restaurantId);
+  const promotions = await promotionsOnSale(db, actor.restaurantId);
   const refs = cartReferences(items, promotions);
   if (!refs.ok) {
     const { key, vars } = rejectionMessage(refs.rejection);

@@ -92,6 +92,25 @@ async function usualStorage(admin, c) {
 }
 const USUAL_TAB = /^\s*(lo de siempre|your usual)\s*$/i;
 
+// A combo of the audit's own, from the main menu, which serves at every hour.
+// The seed's is built from the weekend brunch, so on a weekday it is off the
+// menu for a reason that has nothing to do with the plan.
+const AUDIT_COMBO = "Audit combo";
+async function plantCombo(admin, c) {
+  const { data: menu } = await admin.from("menus").select("id")
+    .eq("restaurant_id", c.restaurantId).eq("name", "Main Menu").single();
+  const { data: dish } = await admin.from("menu_items").select("id, price")
+    .eq("menu_id", menu.id).eq("is_addon", false).eq("available", true)
+    .order("name").limit(1).single();
+  const { data: combo } = await admin.from("promotions")
+    .insert({ restaurant_id: c.restaurantId, kind: "combo", name: AUDIT_COMBO, emoji: "🧪",
+      combo_price: Number(dish.price), active: true, sort_order: -1 })
+    .select("id").single();
+  await admin.from("promotion_items").insert({ promotion_id: combo.id, item_id: dish.id, qty: 2 });
+}
+const uprootCombo = (admin, c) =>
+  admin.from("promotions").delete().eq("restaurant_id", c.restaurantId).eq("name", AUDIT_COMBO);
+
 export const STATES = [
   // The visit card's scanner, shown only where a stamp would be taken. The
   // first case is the control: with the program on the button is there, so
@@ -283,6 +302,30 @@ export const STATES = [
     says: /solo de lectura|read-only/i,
   },
   {
+    // The control for the case after it: on the demo's own tier a combo is on
+    // the menu, and the sweep can see it.
+    name: "the menu · a combo",
+    as: "diner",
+    apply: plantCombo,
+    undo: uprootCombo,
+    says: /audit combo/i,
+    keeps: /audit combo/i,
+  },
+  {
+    // Promotions saved on a tier that had them stayed on the menu after a move
+    // to Carta — and discounted at checkout — while the owner was told they
+    // come with Servicio, and the terms say a paid plan's features stop.
+    name: "free plan · the menu",
+    as: "diner",
+    apply: async (admin, c) => {
+      await plantCombo(admin, c);
+      await admin.from("restaurants").update({ plan: "carta", plan_status: "active" }).eq("id", c.restaurantId);
+    },
+    undo: uprootCombo,
+    says: /demo bistro/i,
+    offers: /audit combo/i,
+  },
+  {
     name: "free plan · promotions",
     as: "owner",
     path: "/dashboard/promotions",
@@ -301,6 +344,15 @@ export const STATES = [
     apply: (admin, c) => admin.from("restaurants").update({ plan: "carta", plan_status: "active" }).eq("id", c.restaurantId),
     says: /solo el dueño puede cambiar el plan|only the owner can change the plan/i,
     offers: /ver planes|see plans/i,
+  },
+  {
+    // The saved ones are still listed with their switches, so the owner is
+    // told none of them reaches a diner while the tier lacks them.
+    name: "free plan · saved promotions",
+    as: "owner",
+    path: "/dashboard/promotions",
+    apply: (admin, c) => admin.from("restaurants").update({ plan: "carta", plan_status: "active" }).eq("id", c.restaurantId),
+    says: /no aparecen en el menú ni se aplican|not on the menu and take nothing off/i,
   },
   {
     name: "free plan · tables",

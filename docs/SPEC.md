@@ -113,6 +113,17 @@ dishes on a bill the restaurant has just cancelled.
   Servicio, not at Caja. Flags are set by naming their tiers in `schema.sql`,
   never by `rank`, so a tier added between two others inherits nothing by
   position.
+- **A feature the tier lacks stops; what it made stays.** Promotions and
+  coupons saved on a tier that had them are kept, untouched, after a move down
+  — and take nothing off any sale while the tier lacks them: the menu, checkout,
+  the till and the waiter's order all read promotions through
+  `promotionsOnSale`, and every coupon lookup goes through `findCoupon`, which
+  answers "not found" for a code the tier does not carry (`couponInPlan`:
+  coupons for a diner's codes, staff discounts for the floor's). The cart and
+  the bill offer no coupon field there (`coupons_enabled`), and the owner's
+  promotions page says the saved ones are not reaching anybody. Back on a tier
+  with the feature, they run again. The terms promise exactly this when a trial
+  ends.
 - **Trials.** Signing up opens thirty days of `servicio` with `plan_status`
   'trialing' and a `trial_ends_at`. Nothing runs at night to end it: `getPlan`
   drops a lapsed trial to `carta` the first time anybody asks, and changes the
