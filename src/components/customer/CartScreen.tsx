@@ -190,6 +190,10 @@ export default function CartScreen({
               {t("cart.addMore")}
             </button>
 
+            {/* Not on Caja: the list is shown at the register, so a name, a note
+                for the kitchen, a tip or a coupon typed here would reach nobody —
+                the cashier takes all four at the till. */}
+            {!orderAtRegister && (
             <div style={{ marginBottom: 20 }}>
               {/* Only without a table: at a table, the table IS the name, and
                   asking anyway would be collecting a name for nothing. The
@@ -216,7 +220,9 @@ export default function CartScreen({
                 onChange={onChangeNote}
               />
             </div>
+            )}
 
+            {!orderAtRegister && (
             <TipPicker
               currency={restaurant.currency}
               tipPct={tipPct}
@@ -225,6 +231,7 @@ export default function CartScreen({
               onPresetTip={onChangeTip}
               onCustomTip={onCustomTip}
             />
+            )}
 
             {/* The nudges used to be a block of their own down here, below the
                 tip picker and named after dishes the diner had to scroll back
@@ -239,6 +246,7 @@ export default function CartScreen({
               />
             )}
 
+            {!orderAtRegister && (
             <div className="tt-coupon-row">
               <CouponBox
                 restaurantId={restaurant.id}
@@ -248,6 +256,7 @@ export default function CartScreen({
                 onRemove={onRemoveCoupon}
               />
             </div>
+            )}
 
             <OrderTotals
               subtotal={subtotal}
