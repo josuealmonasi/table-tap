@@ -918,6 +918,25 @@ export function cases(fx) {
       } },
     { name: "POST /api/orders/cancel", as: "owner", method: "POST", path: "/api/orders/cancel",
       body: { id: tableOrder }, expect: [200] },
+    // On an account the customer is paying online: Stripe will charge the
+    // orders the payment opened for, so one cancelled in between would be
+    // paid for anyway. Refused until the payment lands or runs out.
+    { name: "POST /api/orders/cancel (an account being paid online)", as: "owner", method: "POST",
+      path: "/api/orders/cancel",
+      arrange: async f => {
+        await f.admin.from("orders").update({ account_id: fx.accountId }).eq("id", fx.acctOrder2);
+        await f.admin.from("customer_accounts")
+          .update({ checkout_until: new Date(Date.now() + 10 * 60_000).toISOString() }).eq("id", fx.accountId);
+        return async () => {
+          await f.admin.from("customer_accounts").update({ checkout_until: null }).eq("id", fx.accountId);
+          await f.admin.from("orders").update({ account_id: null }).eq("id", fx.acctOrder2);
+        };
+      },
+      body: { id: fx.acctOrder2 }, expect: [409], expectError: /pago en línea|online payment/i,
+      effect: async f => {
+        const { data } = await f.admin.from("orders").select("status").eq("id", fx.acctOrder2).single();
+        return data.status !== "cancelled" || "the order was cancelled while its account was being paid";
+      } },
     // Cash is not a card that has not settled yet. Treating it as one made a
     // cash sale impossible to cancel — the owner was told "payment is still
     // settling, try again" for ever, on an order the board kept showing, while
