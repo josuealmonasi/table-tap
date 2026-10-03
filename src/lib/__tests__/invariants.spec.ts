@@ -1191,7 +1191,7 @@ describe("every route that settles an order records the payment", () => {
     // Every centavo here is recorded as it is collected; the pass that marks
     // the orders paid at the end deliberately records nothing, because the
     // money is already in the ledger under its own collection.
-    ["src/app/api/table-payment/part/route.ts", "a bill settled in parts records none of it"],
+    ["src/lib/part-payment.ts", "a bill settled in parts records none of it"],
     ["src/lib/checkout-settle.ts", "a card payment is no longer written to the ledger"],
     ["src/app/api/pos/order/route.ts", "a counter sale is no longer written to the ledger"],
   ] as const;
@@ -1218,7 +1218,7 @@ describe("every route that settles an order records the payment", () => {
     // "Pagó en efectivo" marked the orders paid and then wrote the ledger. A
     // failed second write left a bill paid with no money behind it, and no
     // retry could repair it: every path guards on `paid = false`.
-    for (const file of ["src/app/api/table-payment/route.ts", "src/app/api/table-payment/part/route.ts"]) {
+    for (const file of ["src/app/api/table-payment/route.ts", "src/lib/part-payment.ts"]) {
       const src = read(file);
       expect(src, `${file} no longer settles through settle_orders`).toMatch(/rpc\("settle_orders"/);
       expect(src, `${file} marks orders paid outside settle_orders`).not.toMatch(/paid:\s*true/);
