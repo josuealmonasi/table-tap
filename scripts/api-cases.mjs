@@ -458,6 +458,32 @@ export function cases(fx) {
           ? true
           : `the shelf went from 20 to ${item?.stock} on a sale that never happened`;
       } },
+    // The same promise for a refusal that comes before any charge. The table
+    // is checked after the coupon is claimed, and that answer once returned
+    // without handing the use back: a code with a limit could be spent down
+    // to nothing by asking for a table that is not this restaurant's, and a
+    // diner whose table was deleted while they ordered lost one quietly.
+    { name: "POST /api/checkout (a table that is not here gives back the coupon)", as: "diner",
+      method: "POST", path: "/api/checkout",
+      body: async f => {
+        const { data } = await f.admin
+          .from("coupons").select("uses_count").eq("id", f.cardCouponId).maybeSingle();
+        f.couponUsesBefore = data?.uses_count ?? 0;
+        return {
+          restaurantId: r, tableId: crypto.randomUUID(), payLater: true, note: MARK,
+          couponCode: f.cardCouponCode,
+          items: [{ itemId: dish.id, name: dish.name, price: Number(dish.price),
+                    qty: 5, emoji: "🍽️", mods: {} }],
+        };
+      },
+      expect: [404], expectError: /mesa no encontrada|table not found/i,
+      effect: async f => {
+        const { data } = await f.admin
+          .from("coupons").select("uses_count").eq("id", f.cardCouponId).maybeSingle();
+        return data?.uses_count === f.couponUsesBefore
+          ? true
+          : `the coupon went from ${f.couponUsesBefore} uses to ${data?.uses_count} on an order refused for its table`;
+      } },
     // And one that cannot pass by being refused at the door.
     //
     // The case above accepts 200 OR 409, because with no Stripe account the
