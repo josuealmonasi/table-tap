@@ -74,6 +74,8 @@ drop function if exists public.claim_founding_price(uuid, int);
 drop function if exists public.close_session_if_clear(uuid, text);
 drop function if exists public.collect_on_sitting(uuid, uuid, numeric, numeric, text, text, text) cascade;
 drop function if exists public.settle_orders(uuid, uuid[], text, text, jsonb);
+drop function if exists public.settle_card_orders(uuid[], text, numeric, uuid, text);
+drop function if exists public.settle_split_share(uuid, int, numeric, numeric, text);
 drop function if exists public.open_table_session(uuid, uuid, int);
 drop function if exists public.join_bill_split(uuid, text, numeric);
 drop function if exists public.reserve_stock(uuid, jsonb, int);

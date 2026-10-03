@@ -21,8 +21,15 @@ function answer(table: string, op: Op["op"]) {
   return queue.shift() ?? { data: null, count: null, error: null };
 }
 
+/** Every database function called, with what it was handed. */
+const rpcs: { fn: string; args: Record<string, unknown> }[] = [];
+
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
+    rpc: async (fn: string, args: Record<string, unknown>) => {
+      rpcs.push({ fn, args });
+      return (script[`rpc:${fn}`] ?? []).shift() ?? { data: null, error: null };
+    },
     from: (table: string) => {
       let op: Op["op"] = "select";
       const builder: Record<string, unknown> = {};
@@ -39,11 +46,6 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }));
 
-const recorded: unknown[] = [];
-vi.mock("@/lib/payments", () => ({
-  recordPayment: async (p: unknown) => { recorded.push(p); return "written"; },
-  recordPayments: async (ps: unknown[]) => { recorded.push(...ps); },
-}));
 vi.mock("@/lib/table-session", () => ({ closeSessionsFor: async () => {} }));
 vi.mock("@/lib/stock-service", () => ({ releaseStock: async () => {} }));
 
@@ -54,67 +56,111 @@ const session = (metadata: Record<string, string>) =>
   ({ payment_status: "paid", payment_intent: "pi_test", metadata }) as unknown as Stripe.Checkout.Session;
 const writes = (table: string) => ops.filter(o => o.table === table && o.op === "update");
 
+const settledAs = (ids: string[]) => ({ data: { settled: ids, tip_on: ids[0] ?? null, not_settled: [] }, error: null });
+
 beforeEach(() => {
   ops.length = 0;
-  recorded.length = 0;
+  rpcs.length = 0;
   for (const k of Object.keys(script)) delete script[k];
 });
 
 describe("a pay-now order", () => {
-  it("throws when marking it paid fails, so Stripe sends the event again", async () => {
-    script["orders:update"] = [down];
+  it("throws when settling it fails, so Stripe sends the event again", async () => {
+    script["rpc:settle_card_orders"] = [down];
     await expect(settleCheckout(session({ order_id: "o1" }))).rejects.toThrow("could not mark it paid");
-    expect(recorded).toEqual([]);
+    expect(ops.filter(o => o.op !== "select")).toEqual([]);
   });
 
-  it("records the payment when it is marked paid", async () => {
-    script["orders:update"] = [{ data: [{ session_id: null, total: 120, restaurant_id: "r1" }], error: null }];
+  it("settles it and records its payment in one call, stamped with the payment", async () => {
+    script["rpc:settle_card_orders"] = [settledAs(["o1"])];
     await settleCheckout(session({ order_id: "o1" }));
-    expect(recorded).toHaveLength(1);
+    expect(rpcs).toEqual([{ fn: "settle_card_orders", args: expect.objectContaining({
+      p_orders: ["o1"], p_intent: "pi_test", p_status: "received",
+    }) }]);
+    // Nothing marks it paid or writes the ledger outside that call.
+    expect(writes("orders")).toEqual([]);
+    expect(ops.filter(o => o.table === "payments")).toEqual([]);
   });
 });
 
 describe("a table's bill", () => {
-  it("throws when marking it paid fails, and records nothing", async () => {
-    script["orders:update"] = [down];
+  it("throws when settling it fails, and writes nothing", async () => {
+    script["rpc:settle_card_orders"] = [down];
     await expect(settleCheckout(session({ settle_order_ids: "o1,o2" }))).rejects.toThrow("could not mark it paid");
-    expect(recorded).toEqual([]);
+    expect(writes("orders")).toEqual([]);
+  });
+
+  it("hands the gratuity to the same call that records the money", async () => {
+    script["rpc:settle_card_orders"] = [settledAs(["o1", "o2"])];
+    await settleCheckout(session({ settle_order_ids: "o1,o2", settle_tip: "7.5" }));
+    expect(rpcs[0]).toEqual({ fn: "settle_card_orders", args: expect.objectContaining({
+      p_orders: ["o1", "o2"], p_tip: 7.5, p_tip_order: "o1", p_status: null,
+    }) });
+    // The tip is not added to an order a second time out here.
+    expect(writes("orders").filter(o => JSON.stringify(o.values).includes('"tip"'))).toEqual([]);
   });
 });
 
 describe("one diner's share of a divided bill", () => {
   const SPLIT = { id: "s1", restaurant_id: "r1", session_id: "t1", shares: 2, status: "locked", locked_at: "2026-09-24T12:00:00Z" };
-  const share = session({ split_id: "s1", split_share: "0", split_amount: "100" });
+  const share = session({ split_id: "s1", split_share: "0", split_amount: "100", settle_tip: "10" });
 
   it("throws when the split cannot be read, before anything is written", async () => {
     script["bill_splits:select"] = [down];
     await expect(settleCheckout(share)).rejects.toThrow("could not read the split");
     expect(ops.filter(o => o.op !== "select")).toEqual([]);
+    expect(rpcs).toEqual([]);
   });
 
-  it("throws when the share cannot be marked paid", async () => {
+  it("claims the share and records it with its tip in one call", async () => {
     script["bill_splits:select"] = [{ data: SPLIT, error: null }];
-    script["bill_split_claims:update"] = [down];
+    script["rpc:settle_split_share"] = [{ data: true, error: null }];
+    script["bill_split_claims:select"] = [{ count: 1, error: null }];
+    await settleCheckout(share);
+    expect(rpcs[0]).toEqual({ fn: "settle_split_share", args: {
+      p_split: "s1", p_share: 0, p_amount: 100, p_tip: 10, p_intent: "pi_test",
+    } });
+    expect(writes("bill_split_claims")).toEqual([]);
+  });
+
+  it("throws when the share cannot be claimed", async () => {
+    script["bill_splits:select"] = [{ data: SPLIT, error: null }];
+    script["rpc:settle_split_share"] = [down];
     await expect(settleCheckout(share)).rejects.toThrow("could not mark it paid");
-    expect(recorded).toEqual([]);
+    expect(writes("orders")).toEqual([]);
   });
 
   it("closes the bill when the last share is paid", async () => {
     script["bill_splits:select"] = [{ data: SPLIT, error: null }];
-    script["bill_split_claims:update"] = [{ data: [{ share_no: 0 }], error: null }];
+    script["rpc:settle_split_share"] = [{ data: true, error: null }];
     script["bill_split_claims:select"] = [{ count: 0, error: null }];
     await settleCheckout(share);
     expect(writes("orders").some(o => JSON.stringify(o.values).includes('"paid":true'))).toBe(true);
     expect(writes("bill_splits").some(o => JSON.stringify(o.values).includes('"done"'))).toBe(true);
   });
 
+  it("closes it on a repeated delivery too, when the first one's close failed", async () => {
+    script["bill_splits:select"] = [{ data: SPLIT, error: null }];
+    script["rpc:settle_split_share"] = [{ data: false, error: null }]; // already claimed
+    script["bill_split_claims:select"] = [{ count: 0, error: null }];
+    await settleCheckout(share);
+    expect(writes("orders").some(o => JSON.stringify(o.values).includes('"paid":true'))).toBe(true);
+  });
+
+  it("throws when closing the bill fails, so Stripe sends the event again", async () => {
+    script["bill_splits:select"] = [{ data: SPLIT, error: null }];
+    script["rpc:settle_split_share"] = [{ data: true, error: null }];
+    script["bill_split_claims:select"] = [{ count: 0, error: null }];
+    script["orders:update"] = [down];
+    await expect(settleCheckout(share)).rejects.toThrow("could not close the divided bill");
+  });
+
   it("leaves the bill open when the unpaid shares cannot be counted — never marks the food paid", async () => {
     script["bill_splits:select"] = [{ data: SPLIT, error: null }];
-    script["bill_split_claims:update"] = [{ data: [{ share_no: 0 }], error: null }];
+    script["rpc:settle_split_share"] = [{ data: true, error: null }];
     script["bill_split_claims:select"] = [down];
     await settleCheckout(share);
-    expect(recorded).toHaveLength(1); // this diner's share is still recorded
-    expect(writes("orders")).toEqual([]);
+    expect(writes("orders").filter(o => JSON.stringify(o.values).includes('"paid":true'))).toEqual([]);
     expect(writes("bill_splits")).toEqual([]);
   });
 });
