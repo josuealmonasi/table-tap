@@ -3,35 +3,21 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/layout/Breadcrumb";
-import { badgesChanged } from "@/hooks/useBadges";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
 import { matchesBill, type OpenBill } from "@/lib/open-bills";
 import BillDiscountDialog from "./BillDiscountDialog";
 import SettleTableDialog from "./SettleTableDialog";
-import { BillIcon, SearchIcon, TableIcon } from "@/components/ui/icons";
+import { SearchIcon } from "@/components/ui/icons";
 import ScanToCollect from "./ScanToCollect";
+import OpenBillRow from "./OpenBillRow";
+import BillApprovals, {
+  type DiscountRequest,
+  type WriteOffRequest,
+} from "./BillApprovals";
 import StampCard from "./loyalty/StampCard";
 import { useLiveOrders } from "@/hooks/useLiveOrders";
-
-export interface DiscountRequest {
-  id: string;
-  table_label: string | null;
-  code: string;
-  amount: number;
-  requested_by: string;
-}
-
-/** A waiter asking to cancel what a table owes. */
-export interface WriteOffRequest {
-  id: string;
-  table_label: string | null;
-  amount: number;
-  reason: string;
-  note: string | null;
-  requested_by: string;
-}
 
 /**
  * Open bills, searchable, with the promotion a manager may apply to one.
@@ -119,7 +105,6 @@ export default function BillsPanel({
   useEffect(() => {
     if (scanned) openScanned(scanned);
   }, [scanned, openScanned]);
-  const [busy, setBusy] = useState<string | null>(null);
 
   // "waiting 1h 40m" is a different sentence a minute later, so the server's
   // answer and the browser's disagree and React reports a hydration mismatch.
@@ -148,122 +133,16 @@ export default function BillsPanel({
     [shown, waiting],
   );
 
-  async function decideWriteOff(requestId: string, approve: boolean): Promise<void> {
-    setBusy(requestId);
-    try {
-      const res = await fetch("/api/bill/write-off/approve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestId, approve }),
-      });
-      const data = await res.json().catch(() => ({}));
-      toast(res.ok ? t(approve ? "writeOff.done" : "dash.rejected") : (data.error ?? ""));
-      if (res.ok) {
-        // One fewer thing waiting on a decision.
-        badgesChanged();
-        router.refresh();
-      }
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function decide(requestId: string, approve: boolean): Promise<void> {
-    setBusy(requestId);
-    try {
-      const res = await fetch("/api/bill/discount/approve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestId, approve }),
-      });
-      const data = await res.json();
-      toast(res.ok ? t(approve ? "dash.approved" : "dash.rejected") : (data.error ?? ""));
-      if (res.ok) badgesChanged();
-      router.refresh();
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  /** An open bill: tapped for the promotion or the close, collected separately. */
-  const billRow = (bill: OpenBill) => (
-    <div key={bill.key} className="tt-bill-row tt-bill-open">
-      {/* The row opens the promotion or the close; collecting is its own
-                      action, because it is the thing done most often and should
-                      not hide behind another dialog. */}
-      <button type="button" className="tt-bill-open-main" onClick={() => setChosen(bill)}>
-        <span className="tt-bill-glyph" aria-hidden>
-          {bill.tableLabel ? (
-            <TableIcon size={16} weight="bold" />
-          ) : (
-            <BillIcon size={16} weight="bold" />
-          )}
-        </span>
-        <span className="tt-bill-main">
-          <strong className="tt-bill-name">
-            {bill.tableLabel ? t("dash.tableN", { label: bill.tableLabel }) : bill.code}
-            {/* The name a walk-in gave, beside the code rather than instead of
-                it: the code is what the screen and the diner's phone agree on,
-                the name is what gets called across the room. */}
-            {bill.customerName && (
-              <span className="tt-bill-who"> · {bill.customerName}</span>
-            )}
-          </strong>
-          {/* Said on the row itself, not behind a tap: the number beside it is
-              what the table's orders came to, and a waiter about to take cash
-              needs to know part of it is already in. A divided bill says how
-              far round the table it has got; a bill the waiter has been
-              collecting in parts just says how much. */}
-          {bill.split ? (
-            <span className="tt-badge tt-bill-split">
-              {t("dash.splitting", {
-                paid: bill.split.paidShares,
-                of: bill.split.shares,
-                amount: formatMoney(bill.collected ?? 0, currency),
-              })}
-            </span>
-          ) : (
-            (bill.collected ?? 0) > 0 && (
-              <span className="tt-badge tt-bill-split">
-                {t("dash.partlyPaid", {
-                  amount: formatMoney(bill.collected ?? 0, currency),
-                })}
-              </span>
-            )
-          )}
-          <span className="tt-muted tt-bill-sub">
-            {t(
-              bill.orderIds.length === 1 ? "dash.billsOrders" : "dash.billsOrdersPlural",
-              { n: bill.orderIds.length },
-            )}
-            {now !== null && (
-              <>
-                {" · "}
-                {t("dash.billsWaiting", { time: waited(bill.since, now) })}
-              </>
-            )}
-          </span>
-        </span>
-        {bill.discounted && (
-          <span className="tt-badge tt-bill-flag">{t("dash.staffOnlyBadge")}</span>
-        )}
-        <strong className="tt-bill-total-cell">
-          {formatMoney(bill.total, currency)}
-        </strong>
-      </button>
-      {/* For the counter order too: that is exactly where somebody is
-          standing waiting to be charged. Without this the cashier saw the bill
-          and had nothing to close it with. */}
-      {canSettle && (
-        <button
-          type="button"
-          className="tt-btn tt-btn-primary tt-btn-sm tt-bill-collect"
-          onClick={() => setSettling(bill)}
-        >
-          {t("dash.collect")}
-        </button>
-      )}
-    </div>
+  const row = (bill: OpenBill) => (
+    <OpenBillRow
+      key={bill.key}
+      bill={bill}
+      currency={currency}
+      now={now}
+      canSettle={canSettle}
+      onOpen={setChosen}
+      onCollect={setSettling}
+    />
   );
 
   return (
@@ -279,91 +158,7 @@ export default function BillsPanel({
         </header>
 
         {/* Somebody is standing at a table waiting on these, so they lead. */}
-        {(requests.length > 0 || writeOffs.length > 0) && (
-          <div className="tt-section">
-            <div className="tt-section-head">
-              <h3 className="tt-serif" style={{ margin: 0 }}>
-                {t("dash.approvals")}
-              </h3>
-            </div>
-            {writeOffs.map(r => (
-              <div key={r.id} className="tt-bill-row tt-bill-approval tt-bill-writeoff">
-                <div className="tt-bill-main">
-                  <strong className="tt-bill-name">
-                    {r.table_label
-                      ? t("dash.tableN", { label: r.table_label })
-                      : t("dash.billsToGo")}
-                  </strong>
-                  <span className="tt-muted tt-bill-sub">
-                    {t("writeOff.approvalAsk", {
-                      who: r.requested_by,
-                      reason: t(`writeOff.reasons.${r.reason}`),
-                      amount: formatMoney(r.amount, currency),
-                    })}
-                  </span>
-                  {r.note && (
-                    <span
-                      className="tt-muted tt-bill-sub"
-                      style={{ fontStyle: "italic" }}
-                    >
-                      “{r.note}”
-                    </span>
-                  )}
-                </div>
-                <div className="tt-bill-actions-row">
-                  <button
-                    className="tt-btn tt-btn-danger tt-btn-sm"
-                    disabled={busy === r.id}
-                    onClick={() => decideWriteOff(r.id, true)}
-                  >
-                    {t("writeOff.approve")}
-                  </button>
-                  <button
-                    className="tt-btn tt-btn-ghost tt-btn-sm"
-                    disabled={busy === r.id}
-                    onClick={() => decideWriteOff(r.id, false)}
-                  >
-                    {t("dash.reject")}
-                  </button>
-                </div>
-              </div>
-            ))}
-            {requests.map(r => (
-              <div key={r.id} className="tt-bill-row tt-bill-approval">
-                <div className="tt-bill-main">
-                  <strong className="tt-bill-name">
-                    {r.table_label
-                      ? t("dash.tableN", { label: r.table_label })
-                      : t("dash.billsToGo")}
-                  </strong>
-                  <span className="tt-muted tt-bill-sub">
-                    {t("dash.approvalAsk", {
-                      who: r.requested_by,
-                      code: r.code,
-                      amount: formatMoney(r.amount, currency),
-                    })}
-                  </span>
-                </div>
-                <div className="tt-bill-actions-row">
-                  <button
-                    className="tt-btn tt-btn-primary tt-btn-sm"
-                    disabled={busy === r.id}
-                    onClick={() => decide(r.id, true)}
-                  >
-                    {t("dash.approve")}
-                  </button>
-                  <button
-                    className="tt-btn tt-btn-ghost tt-btn-sm"
-                    disabled={busy === r.id}
-                    onClick={() => decide(r.id, false)}
-                  >
-                    {t("dash.reject")}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <BillApprovals requests={requests} writeOffs={writeOffs} currency={currency} />
 
         <div className="tt-section">
           <div className="tt-section-head">
@@ -405,11 +200,11 @@ export default function BillsPanel({
               {toCollect.length > 0 && (
                 <p className="tt-bill-group">{t("dash.toCollect")}</p>
               )}
-              {toCollect.map(billRow)}
+              {toCollect.map(row)}
               {toCollect.length > 0 && rest.length > 0 && (
                 <p className="tt-bill-group">{t("dash.stillOpen")}</p>
               )}
-              {rest.map(billRow)}
+              {rest.map(row)}
             </div>
           )}
         </div>
@@ -459,12 +254,4 @@ export default function BillsPanel({
       )}
     </div>
   );
-}
-
-/** How long the table has been sitting on this bill, in the floor's own units. */
-function waited(since: string, now: number): string {
-  const mins = Math.max(0, Math.floor((now - new Date(since).getTime()) / 60_000));
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.floor(mins / 60);
-  return hours < 24 ? `${hours}h ${mins % 60}m` : `${Math.floor(hours / 24)}d`;
 }
