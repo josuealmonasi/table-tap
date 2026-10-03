@@ -74,6 +74,7 @@ us, and what now catches each one.
 | A read-only gate's probe is refused on its shape, not on data | `roles:prod` probed staff invites with an address that already had an account, because the route checked the address before the role: every run asked production's auth to invite somebody, harmless only while that account stayed confirmed |
 | Every dashboard link a role is shown opens for that role | The plan lock offered managers, cashiers and waiters "Ver planes" — the owner's page, which sent them back to the dashboard with no word why. The audit only counted `<button>`s, and the link was an `<a>` |
 | A login with no screen on its tier lands on a sentence | A kitchen or waiter login kept through a move down to Caja bounced between `/dashboard` and the board forever: each sent it to the other, and the person saw an empty frame. `pnpm promises` opens it as the kitchen |
+| The docs do not count what the code decides | `CLAUDE.md` said the API gate called 34 routes and the spec said 48; there were 61, and the dialog count was as far behind. A number in prose is right the day it is written. An invariant fails on a doc that counts routes, dialogs, overlays, tables, screens or pages, in digits or in words |
 
 `src/lib/__tests__/schema-drop.spec.ts` keeps `drop.sql` in step with
 `schema.sql` — every table, every function, every storage policy. Eight tables

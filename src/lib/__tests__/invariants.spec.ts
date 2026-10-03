@@ -2219,3 +2219,18 @@ describe("a customer account's orders are never a table's", () => {
     }
   });
 });
+
+describe("the docs do not count what the code decides", () => {
+  it("states no number of routes, dialogs or tables that the code can outgrow", () => {
+    // CLAUDE.md said the API gate covered "34 API routes", the spec "48"; there
+    // were 61. A count in prose is right the day it is written. The gates and
+    // the invariants are what say "every one", and they cannot drift.
+    const docs = ["CLAUDE.md", "README.md", "docs/SPEC.md"];
+    const number = String.raw`(\d{2,}|(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(-[a-z]+)?|ten|eleven|twelve|[a-z]+teen)`;
+    const countPattern = new RegExp(String.raw`\b${number}\s+(API\s+)?(routes|dialogs|overlays|tenant tables|screens|pages)\b`, "i");
+    const counted = docs.flatMap(f =>
+      read(f).split("\n").flatMap((line, i) =>
+        countPattern.test(line) ? [`${f}:${i + 1}  ${line.trim()}`] : []));
+    expect(counted, "a count of something the code decides — say \"every\" and let a gate enforce it").toEqual([]);
+  });
+});

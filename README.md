@@ -5,7 +5,10 @@ table, browses the menu, customises and pays (card / Apple Pay / Google Pay via
 Stripe) — or a waiter takes the order on their own phone, carries the plates out
 and collects the bill in cash, by card, in equal parts or a hundred pesos at a
 time. There is a counter till for walk-ins, a kitchen board that keeps working
-when the wifi does not, and tickets on paper for the pass.
+when the wifi does not, and tickets on paper for the pass. Regulars get a visit
+card with rewards, and customers the restaurant trusts can run an account and
+pay it later. A register-only plan (Caja) runs the till on its own, with a menu diners read
+on their phones and order at the counter.
 
 Built with **Next.js (App Router) · Supabase · Stripe**.
 
@@ -31,6 +34,10 @@ src/app/dashboard/orders/                 ← the kitchen board, and what is rea
 src/app/dashboard/table-order/            ← the waiter's pad
 src/app/dashboard/bills/                  ← open bills, collecting, the calculator
 src/app/dashboard/pos/                    ← the counter till
+src/app/dashboard/accounts/               ← customer accounts: open, charge, collect
+src/app/dashboard/loyalty/                ← the visit card program
+src/app/cuenta/[code]/                    ← a customer's account statement (its QR)
+src/app/rewards/                          ← a diner's visit card, by its code
 src/app/dashboard/[menu]/                 ← menus, sections, products, extras
 src/app/dashboard/{tables,promotions,analytics,settings,staff,plan,admin}/
 src/app/api/checkout/                     ← prices a cart and opens Stripe Checkout
@@ -117,7 +124,7 @@ pnpm dev
   | login | plan | what it is for |
   | --- | --- | --- |
   | `test1@tabletap.dev` | **Carta** (free) | The gates. Table QRs fall back to the counter menu, coupons and promotions are refused, the dish ceiling bites. It keeps the tables and dishes the seed built, which is what a real downgrade looks like. |
-  | `test2@tabletap.dev` | **Servicio** | The entry paid tier: tables, open bills, promotions. No coupons, no menu schedules. |
+  | `test2@tabletap.dev` | **Servicio** | The entry paid tier with tables: open bills, promotions, the visit card, customer accounts. No coupons, no menu schedules. |
   | `test3@tabletap.dev` | **Casa** | Everything that is buyable — coupons, menu schedules, staff discounts, a year of analytics. |
   | `test4@tabletap.dev` | **Grupo** | What the top tier unlocks, before the tier itself is finished. |
   | `test5@tabletap.dev` | **Servicio, trial expired yesterday** | A lapsed trial without waiting thirty days for one: the app settles it to Carta on the first request, exactly as it would in life. |
@@ -177,12 +184,13 @@ the business can supply: live keys, a mail provider, and the legal identity.
   every item's real price from the database before charging.
 - The order id is an unguessable UUID, used as a capability token so the customer
   can track their order without logging in.
-- Dashboard writes require a logged-in owner; RLS ties each restaurant to its
-  `owner_id`.
+- Dashboard writes go through server routes that check the signed-in person's
+  role (owner, manager, cashier, waiter, kitchen) before anything else; RLS
+  scopes every read to the restaurant they work at.
 - Every response carries a **Content-Security-Policy with a per-request nonce**
   (`src/lib/csp.ts`): no inline script anywhere, and `connect-src` limited to us
   and Supabase, so a script that somehow ran has nowhere to send a bill.
-- `pnpm rls` attacks all 21 tenant tables as all six roles, and `pnpm attack`
+- `pnpm rls` attacks every tenant table as every role, and `pnpm attack`
   asks what a signed-in person can do that they should not — judged on whether
   a peso moved, never on the absence of an error.
 

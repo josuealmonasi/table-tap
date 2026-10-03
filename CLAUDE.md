@@ -106,7 +106,7 @@ no list of dialogs and cannot fall behind one. Every write those clicks send is
 answered in the browser and never reaches the server, and the demo data is
 fingerprinted before and after — a sweep that completed the board's orders once
 left every later `pnpm layout` with no order to open. `pnpm layout` measures a
-curated list of nine; the app has thirty-one overlays, and a dialog is exactly where a
+curated list of dialogs; the app has far more overlays than that, and a dialog is exactly where a
 layout fault hides, because nobody sees it until a waiter opens one mid-service.
 
 `pnpm promises` opens every screen as every role and flips the switches that
@@ -115,7 +115,7 @@ locked, a tier without the feature — and fails when a screen offers a control
 the system refuses, or shows nothing and explains nothing. That is the shape of
 almost every bug this app has had.
 
-`pnpm api` calls all 34 API routes with a legitimate request as the right actor
+`pnpm api` calls every API route with a legitimate request as the right actor
 and checks each one does its job — the other checks only ever proved that a
 route was *guarded*, not that it *worked*, and that gap is where the bugs came
 through. It is never run against production: every case does its job for

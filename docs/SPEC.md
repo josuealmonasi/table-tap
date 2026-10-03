@@ -400,18 +400,23 @@ Assume the browser is hostile; it holds the publishable key and nothing else.
 Diner: menu with categories, search, dietary filters, combos and offers, item
 modifiers and extras, cart, coupons, tips, card payment, pay-at-the-end,
 pay-at-the-counter, dividing the bill with the rest of the table, live tracker
-with a QR staff can scan, receipts by email, dish ratings, ES/EN.
+with a QR staff can scan, receipts by email, dish ratings, "lo de siempre", the
+visit card and its page, a customer account's statement (`/cuenta/<code>`) to
+check and pay, a scan button for TableTap's own codes, ES/EN.
 
 Restaurant: multiple menus with schedules, full menu editing, dietary tags and
 icon groups, tables with printable QR codes, the orders board, open bills,
 discounts and write-offs with approval, promotions and coupons, inventory with
 low-stock alerts and live counts on the selling screens, analytics, corte de
 caja, staff and roles, plan and billing, Stripe onboarding, activity log,
-notifications bell, and the switches that decide what the diner is offered —
+notifications bell, the counter till, the waiter's pad, kitchen tickets on
+paper, the visit card (stamping, rewards, its ladder), customer accounts (open,
+charge, collect), and the switches that decide what the diner is offered —
 taking orders, pay-at-the-end, dividing the bill.
 
-Platform: sign-up, plans, founding prices, the admin console, legal documents
-generated as PDFs from the same source the app renders.
+Platform: sign-up, five plans (Carta, Caja, Servicio, Casa, Grupo), founding
+prices, the admin console, legal documents generated as PDFs from the same
+source the app renders.
 
 ## How it is kept honest
 
@@ -420,7 +425,7 @@ The gate, all of which must pass before anything ships:
 | command | what it proves |
 | --- | --- |
 | `pnpm test` | the pure logic, and the invariants that span files |
-| `pnpm api` | all 48 routes answer a legitimate request correctly |
+| `pnpm api` | every route answers a legitimate request correctly (`pnpm test` fails on a route with no case) |
 | `pnpm rls` | nothing is exposed, by read or by socket, as every role |
 | `pnpm roles` | each role reaches its own screens and no others |
 | `pnpm smoke` | every page renders |
@@ -440,7 +445,7 @@ on its list** — invariants now fail when a route or screen exists that nothing
 checks. And **static guesses lie**: when the question is what a person actually
 gets, measure it in a browser. `pnpm promises` learned the second one late: it
 swept whole pages for months without ever opening a DIALOG, which is where the
-bill lives, and three of its nine states now press a button first. Its sweep
+bill lives, and the states that need it now press a button first. Its sweep
 also follows every dashboard link a role is shown and fails when the link
 sends that role somewhere else, and a link drawn as a button counts as a
 control: the lock on a locked screen offered a manager the owner's plan page.
