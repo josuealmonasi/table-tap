@@ -1,11 +1,9 @@
 import { closeSessionsFor } from "@/lib/table-session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { unpackOrderIds } from "@/lib/stripe-limits";
-import { recordPayment, recordPayments } from "@/lib/payments";
 import { releaseStock } from "@/lib/stock-service";
 import type { OrderLineItem } from "@/lib/types";
 import type Stripe from "stripe";
-import { round2 } from "@/lib/money";
 import { abandonAccountCheckout, settleAccountCheckout } from "@/lib/account-checkout";
 
 /**
@@ -78,37 +76,22 @@ async function settleSplitShare(session: Stripe.Checkout.Session): Promise<void>
   if (splitError) throw new Error(`settling a share: could not read the split: ${splitError.message}`);
 
   if (split) {
-    // Their seat, marked once — a webhook Stripe repeats must not record
-    // the same money twice.
-    const { data: claimed, error: claimError } = await db
-      .from("bill_split_claims")
-      .update({ paid_at: new Date().toISOString() })
-      .eq("split_id", splitId)
-      .eq("share_no", shareNo)
-      .is("paid_at", null)
-      .select("share_no");
+    // Their seat claimed, the money recorded and the gratuity put on the
+    // sitting's oldest order, in one write (`settle_split_share`), marked once
+    // — a webhook Stripe repeats claims nothing the second time. Stripe
+    // charged the share AND the gratuity on it, and the payment carries both:
+    // recording only the share said a smaller number arrived than did.
+    const tip = Math.max(0, Number(session.metadata?.settle_tip ?? 0));
+    const { data: claimed, error: claimError } = await db.rpc("settle_split_share", {
+      p_split: splitId,
+      p_share: shareNo,
+      p_amount: shareAmount,
+      p_tip: tip,
+      p_intent: typeof session.payment_intent === "string" ? session.payment_intent : null,
+    });
     if (claimError) throw new Error(`settling a share: could not mark it paid: ${claimError.message}`);
 
-    if (claimed?.length) {
-      // Stripe charged the share AND the gratuity on it. Recording only the
-      // share said a smaller number arrived than did: the tip reached the
-      // restaurant's account and appeared in the app's takings nowhere at all,
-      // which is the one direction a ledger must never be wrong in.
-      const tip = Math.max(0, Number(session.metadata?.settle_tip ?? 0));
-      await recordPayment({
-        restaurantId: split.restaurant_id as string,
-        sessionId: split.session_id as string,
-        amount: shareAmount + tip,
-        tip,
-        method: "card",
-        stripePaymentIntent:
-          typeof session.payment_intent === "string" ? session.payment_intent : null,
-      });
-
-      // Onto the oldest order the split covers, the way settling a whole table
-      // and collecting one in parts both do it. `total` and `tip` rise together
-      // so a running balance still reads the same food as owed.
-      if (tip > 0) await addTipToSitting(split.session_id as string, tip);
+    if (claimed === true) {
 
       // Our cut, on the same order. It rides on the first share to be paid —
       // one bill divided four ways is still one bill — and it is what the
@@ -117,56 +100,96 @@ async function settleSplitShare(session: Stripe.Checkout.Session): Promise<void>
       const shareFee = Number(session.metadata?.settle_fee ?? 0);
       if (shareFee > 0) await chargeFeeOnSitting(split.session_id as string, shareFee);
 
-      // Anything they ordered after the freeze is theirs, and settles now.
+      // Anything they ordered after the freeze is theirs, and settles now:
+      // the orders and their payments in one write.
       const ownIds = unpackOrderIds(session.metadata);
-      if (ownIds.length > 0) {
-        const { data: own } = await db
-          .from("orders")
-          .update({ paid: true, pay_method: "card" })
-          .in("id", ownIds)
-          .eq("paid", false)
-          .select("id, total, session_id, restaurant_id");
-        await recordPayments(
-          (own ?? []).map(o => ({
-            restaurantId: o.restaurant_id as string,
-            orderId: o.id as string,
-            sessionId: o.session_id as string | null,
-            amount: Number(o.total),
-            method: "card" as const,
-          })),
-        );
-      }
-
-      // The last share closes the pot: everything the table divided is
-      // paid for, so the orders it covered stop being owed.
-      //
-      // Only a count that came back zero closes it. A count that failed was
-      // read as zero, and that marked every order the table divided as paid
-      // while other diners' shares were still owed: food out, unpaid. Left
-      // open instead, the floor sees a part-paid bill, which is the truth.
-      const { count: unpaidShares, error: countError } = await db
-        .from("bill_split_claims")
-        .select("share_no", { count: "exact", head: true })
-        .eq("split_id", splitId)
-        .is("paid_at", null);
-      if (countError) console.error("settling a share: could not count the unpaid shares", countError.message);
-
-      if (!countError && unpaidShares === 0) {
-        const { data: covered } = await db
-          .from("orders")
-          .update({ paid: true, pay_method: "card" })
-          .eq("session_id", split.session_id)
-          .eq("paid", false)
-          .lt("created_at", split.locked_at as string)
-          .select("session_id");
-        await db
-          .from("bill_splits")
-          .update({ status: "done" })
-          .eq("id", splitId);
-        await closeSessionsFor(covered ?? [], "paid");
-      }
+      if (ownIds.length > 0) await settleCardOrders(ownIds, session, "settling a share's own orders");
     }
+
+    // The last share closes the pot: everything the table divided is paid
+    // for, so the orders it covered stop being owed. Asked on every delivery,
+    // not only the one that claimed the share: when closing failed, Stripe
+    // sending the event again is what closes it, and that delivery finds the
+    // share already claimed.
+    await closeDividedBill(splitId, split.session_id as string, split.locked_at as string);
   }
+}
+
+/**
+ * Every share of a divided bill paid: the orders it covered are settled.
+ *
+ * No payment is written — each share is already in the ledger against the
+ * sitting. Only a count that came back zero closes it. A count that failed was
+ * read as zero, and that marked every order the table divided as paid while
+ * other diners' shares were still owed: food out, unpaid. Left open instead,
+ * the floor sees a part-paid bill, which is the truth. A close that failed is
+ * thrown, so Stripe sends the event again.
+ */
+async function closeDividedBill(splitId: string, sessionId: string, lockedAt: string): Promise<void> {
+  const db = createAdminClient();
+  const { count: unpaidShares, error: countError } = await db
+    .from("bill_split_claims")
+    .select("share_no", { count: "exact", head: true })
+    .eq("split_id", splitId)
+    .is("paid_at", null);
+  if (countError) {
+    console.error("settling a share: could not count the unpaid shares", countError.message);
+    return;
+  }
+  if (unpaidShares !== 0) return;
+
+  const { data: covered, error } = await db
+    .from("orders")
+    .update({ paid: true, pay_method: "card" })
+    .eq("session_id", sessionId)
+    .eq("paid", false)
+    .lt("created_at", lockedAt)
+    .select("session_id");
+  if (error) throw new Error(`settling a share: could not close the divided bill: ${error.message}`);
+  await db
+    .from("bill_splits")
+    .update({ status: "done" })
+    .eq("id", splitId);
+  await closeSessionsFor(covered ?? [], "paid");
+}
+
+/** What `settle_card_orders` answers. */
+interface CardSettlement {
+  settled: string[];
+  /** The order the gratuity was added to, if any was settled. */
+  tip_on: string | null;
+  /** Orders this payment was for that were already settled some other way. */
+  not_settled: string[];
+}
+
+/**
+ * The orders a card payment was for, marked paid and written to the ledger in
+ * one write (`settle_card_orders`): each for its total, the gratuity on one.
+ * They were two writes, and a failed second one left orders paid with the
+ * diner's money recorded nowhere. A failure is thrown, so the webhook answers
+ * 500 and Stripe sends the event again — nothing was written, and the
+ * `paid = false` guard makes the repeat safe.
+ */
+async function settleCardOrders(
+  ids: string[],
+  session: Stripe.Checkout.Session,
+  what: string,
+  opts: { tip?: number; tipOrder?: string; status?: "received" } = {},
+): Promise<CardSettlement & { sessions: { session_id: string | null }[] }> {
+  const db = createAdminClient();
+  const { data, error } = await db.rpc("settle_card_orders", {
+    p_orders: ids,
+    p_intent: typeof session.payment_intent === "string" ? session.payment_intent : null,
+    p_tip: opts.tip ?? 0,
+    p_tip_order: opts.tipOrder ?? null,
+    p_status: opts.status ?? null,
+  });
+  if (error) throw new Error(`${what}: could not mark it paid: ${error.message}`);
+  const result = data as CardSettlement;
+  if (!result.settled.length) return { ...result, sessions: [] };
+  // Which sittings those were, so a table paid in full can clear.
+  const { data: sessions } = await db.from("orders").select("session_id").in("id", result.settled);
+  return { ...result, sessions: (sessions ?? []) as { session_id: string | null }[] };
 }
 
 /**
@@ -192,16 +215,6 @@ async function firstOnSitting(sessionId: string): Promise<{ id: string; tip: num
   return { id: data.id as string, tip: Number(data.tip ?? 0), total: Number(data.total ?? 0) };
 }
 
-/** A gratuity collected against a sitting, attributed the way every other is. */
-async function addTipToSitting(sessionId: string, tip: number): Promise<void> {
-  const first = await firstOnSitting(sessionId);
-  if (!first) return;
-  await createAdminClient()
-    .from("orders")
-    .update({ tip: round2(first.tip + tip), total: round2(first.total + tip) })
-    .eq("id", first.id);
-}
-
 /** Our cut of a divided bill, recorded once the money is real. */
 async function chargeFeeOnSitting(sessionId: string, fee: number): Promise<void> {
   const first = await firstOnSitting(sessionId);
@@ -224,51 +237,21 @@ async function settleBill(session: Stripe.Checkout.Session): Promise<void> {
   // reads back the same way.
   const settleIds = unpackOrderIds(session.metadata);
   const db = createAdminClient();
-  const { data: settled, error: settleError } = await db
-    .from("orders")
-    .update({ paid: true, pay_method: "card" })
-    .in("id", settleIds)
-    // The guard this file says every path has and this one did not: without
-    // it a repeated delivery matches the same rows again, and every one of
-    // them is recorded as money that arrived a second time.
-    .eq("paid", false)
-    .select("id, total, session_id, restaurant_id");
-  // Marking them paid failed, so nothing was written: thrown, Stripe sends the
-  // event again. Read as "none to settle", the bill's money was recorded
-  // nowhere and the webhook told Stripe it was done.
-  if (settleError) throw new Error(`settling a bill: could not mark it paid: ${settleError.message}`);
 
   // The tip was collected against the table, not a dish, so it rides on one
-  // order: the first of the settled ones, and only one THIS delivery settled.
-  // A tip is added to what is there, so it is the one write a repeated
-  // delivery does not leave as it was: every copy of the event raised the
-  // order's tip and total again. And its payment carries it. The ledger was
-  // written from the totals before the tip was added, so Stripe took MX$7.50
-  // and the ledger said MX$2.50 — the direction the split path already
-  // refuses to be wrong in, where the share and its tip land together.
+  // order: the first of the ones asked for if this delivery settles it,
+  // otherwise the first it does settle — and only ever one THIS delivery
+  // settled, because a tip is added to what is there and a repeated delivery
+  // must not raise it again. Its payment carries it, so Stripe's MX$7.50 is
+  // the ledger's MX$7.50, not MX$2.50 with the tip recorded nowhere.
   const tip = Math.max(0, Number(session.metadata?.settle_tip ?? 0));
-  const tipOrder = tip > 0
-    ? ((settled ?? []).find(o => o.id === settleIds[0]) ?? settled?.[0] ?? null)
-    : null;
-
-  await recordPayments(
-    (settled ?? []).map(o => {
-      const tipHere = o.id === tipOrder?.id ? tip : 0;
-      return {
-        restaurantId: o.restaurant_id as string,
-        orderId: o.id as string,
-        sessionId: o.session_id as string | null,
-        amount: Number(o.total) + tipHere,
-        tip: tipHere,
-        method: "card" as const,
-        stripePaymentIntent:
-          typeof session.payment_intent === "string" ? session.payment_intent : null,
-      };
-    }),
-  );
+  const settled = await settleCardOrders(settleIds, session, "settling a bill", {
+    tip,
+    tipOrder: settleIds[0],
+  });
 
   // Paid in full is the ordinary way a table empties.
-  await closeSessionsFor(settled ?? [], "paid");
+  await closeSessionsFor(settled.sessions, "paid");
 
   // Our cut of this settlement, recorded on the first of the settled
   // orders — the same row that carries the tip. It is what the monthly
@@ -276,25 +259,6 @@ async function settleBill(session: Stripe.Checkout.Session): Promise<void> {
   const fee = Number(session.metadata?.settle_fee ?? 0);
   if (fee > 0) {
     await db.from("orders").update({ platform_fee: fee }).eq("id", settleIds[0]);
-  }
-
-  // The same order the payment above carried the tip on, so the order's total
-  // and what the ledger says arrived for it stay one number.
-  if (tipOrder) {
-    const { data: first } = await db
-      .from("orders")
-      .select("id, tip, total")
-      .eq("id", tipOrder.id)
-      .single();
-    if (first) {
-      await db
-        .from("orders")
-        .update({
-          tip: Number(first.tip ?? 0) + tip,
-          total: Number(first.total ?? 0) + tip,
-        })
-        .eq("id", first.id);
-    }
   }
 
   // The coupon use was reserved when the bill was sent to Stripe; the
@@ -324,42 +288,12 @@ async function settleOrder(session: Stripe.Checkout.Session): Promise<void> {
   const orderId = session.metadata!.order_id!;
 
   const supabase = createAdminClient();
-  // `.eq("paid", false)` and then reading the rows the update RETURNED, rather
-  // than marking it paid and looking it up again afterwards. The second read
-  // finds the order whether or not this delivery was the one that changed it,
-  // so a webhook Stripe repeats recorded the same money twice.
-  const { data: settled, error: settleError } = await supabase
-    .from("orders")
-    .update({
-      paid: true,
-      status: "received",
-      pay_method: "card",
-      stripe_payment_intent:
-        typeof session.payment_intent === "string" ? session.payment_intent : null,
-    })
-    .eq("id", orderId)
-    .eq("paid", false)
-    .select("session_id, total, restaurant_id");
-  // As for a bill: the write failed, so nothing was written, and thrown the
-  // event comes back. Read as "already paid", the order stayed unpaid with the
-  // diner's money in Stripe.
-  if (settleError) throw new Error(`settling an order: could not mark it paid: ${settleError.message}`);
+  // Only an order still unpaid is touched, and only the delivery that settles
+  // it records it: a webhook Stripe repeats settles nothing the second time.
+  const settled = await settleCardOrders([orderId], session, "settling an order", { status: "received" });
 
   // A pay-now order can be the only thing the table owed.
-  const justPaid = settled?.[0] ?? null;
-
-  if (justPaid) {
-    await recordPayment({
-      restaurantId: justPaid.restaurant_id as string,
-      orderId,
-      sessionId: justPaid.session_id as string | null,
-      amount: Number(justPaid.total),
-      method: "card",
-      stripePaymentIntent:
-        typeof session.payment_intent === "string" ? session.payment_intent : null,
-    });
-  }
-  await closeSessionsFor(justPaid ? [justPaid] : [], "paid");
+  await closeSessionsFor(settled.sessions, "paid");
 
   // The coupon use was reserved at checkout; the payment makes it real.
   await supabase

@@ -263,7 +263,13 @@ dishes on a bill the restaurant has just cancelled.
   payments together under the orders' row locks, or nothing, and `not_owed`
   when any order the waiter saw has since been settled, so they look again.
   They were two writes, and a failed second one left a bill paid with no
-  money behind it that no retry could repair.
+  money behind it that no retry could repair. A card payment Stripe confirms
+  is written the same way: `settle_card_orders()` marks the orders still owed
+  paid and records each with the gratuity on one, and `settle_split_share()`
+  claims a diner's share, records it and puts its tip on the sitting's oldest
+  order. Each is safe to run twice, and a failure is thrown so Stripe sends the
+  event again. The last share closes a divided bill on every delivery, not only
+  the one that claimed it, so a close that failed is retried too.
 - **Two Stripe accounts, so two webhooks.** A diner's food is a DIRECT charge
   on the restaurant's own Stripe account: Stripe's processing fee comes out of
   their balance and our per-order fee comes to us clean. As a destination

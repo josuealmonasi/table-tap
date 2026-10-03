@@ -2627,6 +2627,143 @@ revoke all on function public.settle_orders(uuid, uuid[], text, text, jsonb)
 grant execute on function public.settle_orders(uuid, uuid[], text, text, jsonb)
   to service_role;
 
+-- A card payment Stripe confirmed, written with the orders it paid for.
+--
+-- The webhook marked the orders paid and then wrote the ledger, two writes; a
+-- failed second one left orders paid with the diner's money recorded nowhere.
+-- Here the orders still owed are marked paid and each is recorded for its
+-- total in one transaction, the gratuity riding on one order — added to its
+-- tip and its total, and to the payment that carries it, so the order and the
+-- ledger stay one number.
+--
+-- Stripe repeats a webhook it is not sure landed, so this is safe to run
+-- twice: only orders still unpaid are touched, and a repeat touches none.
+-- It answers which orders it settled and which it did not, because an order
+-- somebody else settled while the diner was on Stripe's page is money taken
+-- twice, and the caller must not let that pass in silence.
+create or replace function public.settle_card_orders(
+  p_orders    uuid[],
+  p_intent    text,
+  p_tip       numeric,
+  p_tip_order uuid,
+  p_status    text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_settled uuid[];
+  v_tip_on  uuid;
+begin
+  -- Held for the rest of the call, so the choice below and the update after it
+  -- see the same orders: a waiter settling one in between waits for this.
+  perform 1 from orders where id = any(p_orders) for update;
+
+  -- Which order carries the gratuity: the one asked for if this call settles
+  -- it, otherwise the first that it does settle.
+  select coalesce(
+           (select o.id from orders o where o.id = p_tip_order and o.id = any(p_orders) and o.paid = false),
+           (select o.id from orders o where o.id = any(p_orders) and o.paid = false order by o.created_at, o.id limit 1))
+    into v_tip_on;
+
+  with settled as (
+    update orders
+       set paid = true,
+           pay_method = 'card',
+           status = coalesce(p_status, status),
+           stripe_payment_intent = case when p_status is null then stripe_payment_intent else p_intent end
+     where id = any(p_orders)
+       and paid = false
+    returning id, session_id, total, restaurant_id
+  ), written as (
+    insert into payments (restaurant_id, order_id, session_id, amount, tip, method, stripe_payment_intent)
+    select s.restaurant_id, s.id, s.session_id,
+           round(s.total + case when s.id = v_tip_on then coalesce(p_tip, 0) else 0 end, 2),
+           case when s.id = v_tip_on then round(coalesce(p_tip, 0), 2) else 0 end,
+           'card', p_intent
+      from settled s
+     where s.total + case when s.id = v_tip_on then coalesce(p_tip, 0) else 0 end > 0
+    on conflict do nothing
+    returning 1
+  )
+  select coalesce(array_agg(id), '{}') into v_settled from settled;
+
+  if coalesce(p_tip, 0) > 0 and v_tip_on = any(v_settled) then
+    update orders
+       set tip = round(coalesce(tip, 0) + p_tip, 2), total = round(total + p_tip, 2)
+     where id = v_tip_on;
+  end if;
+
+  return jsonb_build_object(
+    'settled', to_jsonb(v_settled),
+    'tip_on', v_tip_on,
+    'not_settled', to_jsonb(coalesce(
+      (select array_agg(o) from unnest(p_orders) o where not (o = any(v_settled))), '{}')));
+end;
+$$;
+revoke all on function public.settle_card_orders(uuid[], text, numeric, uuid, text)
+  from public, anon, authenticated;
+grant execute on function public.settle_card_orders(uuid[], text, numeric, uuid, text)
+  to service_role;
+
+-- One diner's share of a divided bill, paid by card: the seat claimed, the
+-- money recorded against the sitting, and the gratuity put on the sitting's
+-- oldest order — together. The claim was one write and the payment another,
+-- and when the second failed the share read as paid with the diner's money
+-- recorded nowhere; a repeat of the event found the seat already claimed and
+-- did nothing. Answers whether this call claimed it, so a repeat records
+-- nothing twice.
+create or replace function public.settle_split_share(
+  p_split  uuid,
+  p_share  int,
+  p_amount numeric,
+  p_tip    numeric,
+  p_intent text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_restaurant uuid;
+  v_session    uuid;
+  v_claimed    int;
+begin
+  select restaurant_id, session_id into v_restaurant, v_session from bill_splits where id = p_split;
+  if not found then return false; end if;
+
+  update bill_split_claims set paid_at = now()
+   where split_id = p_split and share_no = p_share and paid_at is null;
+  get diagnostics v_claimed = row_count;
+  if v_claimed = 0 then return false; end if;
+
+  insert into payments (restaurant_id, session_id, amount, tip, method, stripe_payment_intent)
+  values (v_restaurant, v_session, round(p_amount + coalesce(p_tip, 0), 2),
+          round(coalesce(p_tip, 0), 2), 'card', p_intent);
+
+  -- `total` and `tip` rise together, so a running balance still reads the
+  -- same food as owed — the way settling a whole table and collecting in
+  -- parts both attribute a gratuity.
+  if coalesce(p_tip, 0) > 0 then
+    update orders
+       set tip = round(coalesce(tip, 0) + p_tip, 2), total = round(total + p_tip, 2)
+     where id = (
+       select id from orders
+        where session_id = v_session
+          and status <> 'cancelled' and status <> 'pending_payment' and written_off = false
+        order by created_at asc limit 1);
+  end if;
+  return true;
+end;
+$$;
+revoke all on function public.settle_split_share(uuid, int, numeric, numeric, text)
+  from public, anon, authenticated;
+grant execute on function public.settle_split_share(uuid, int, numeric, numeric, text)
+  to service_role;
+
 -- ── Printing ────────────────────────────────────────────────────────────────
 -- Tickets on paper: the receipt handed across the counter, and the order that
 -- lands on the pass.
