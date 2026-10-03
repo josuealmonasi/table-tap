@@ -4,51 +4,27 @@ import { jsonBody } from "@/lib/json-body";
 import { tableOf } from "@/lib/table-guard";
 import { openSession } from "@/lib/table-session";
 import { capName, capNote } from "@/lib/notes";
-import { messagesFor, translate } from "@/lib/i18n";
-import { getLocale } from "@/lib/i18n/server";
-import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
-import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { can, orderFeeCents, type PlanLimits } from "@/lib/plan";
-import { getPlan, tierIncludes } from "@/lib/plan-server";
+import { getPlan } from "@/lib/plan-server";
 import { feesTakenThisMonth } from "@/lib/fee-month";
-import { itemSalePrice, priceCart, type AppliedCoupon } from "@/lib/pricing";
-import {
-  claimCoupon,
-  couponProblem,
-  findCoupon,
-  logRedemption,
-  releaseCoupon,
-  toAppliedCoupon,
-  type CouponRow,
-} from "@/lib/coupon-service";
+import { priceCart, type AppliedCoupon } from "@/lib/pricing";
+import { logRedemption, releaseCoupon, toAppliedCoupon } from "@/lib/coupon-service";
 import { isRoomLimited, isTableLimited } from "@/lib/rate-limit";
 import { promotionsOnSale } from "@/lib/promotions-on-sale";
 import { toCartPromos } from "@/lib/promotions";
 import { cartReferences, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
-import { MAX_CARD_CART_LINES, stripeProductName } from "@/lib/stripe-limits";
+import { MAX_CARD_CART_LINES } from "@/lib/stripe-limits";
 import { rejectionMessage } from "@/lib/cart-rejection";
 import { raiseStockNotifications, releaseStock, reserveStock } from "@/lib/stock-service";
 import type { OrderLineItem } from "@/lib/types";
+import { cartError } from "@/lib/checkout/cart-error";
+import { orderableNow } from "@/lib/checkout/orderable-now";
+import { claimCheckoutCoupon } from "@/lib/checkout/claim-coupon";
+import { checkoutLineItems } from "@/lib/checkout/line-items";
+import { openCardSession } from "@/lib/checkout/card-session";
 
 export const runtime = "nodejs";
-
-/**
- * A translated cart error that keeps the machine-readable fields alongside it.
- *
- * The customer screen acts on `unavailableItemId` / `missingModifiers` to
- * highlight the offending line, so the message can't just be a bare string —
- * and it can't stay English either, which is what it was until now.
- */
-async function cartError(
-  key: string,
-  vars: Record<string, string | number>,
-  status: number,
-  extra: Record<string, unknown>,
-): Promise<NextResponse> {
-  const messages = messagesFor(await getLocale());
-  return NextResponse.json({ error: translate(messages, key, vars), ...extra }, { status });
-}
 
 // POST /api/checkout
 // Body: { restaurantId, tableId, tableLabel, items: OrderLineItem[], note }
@@ -148,36 +124,11 @@ export async function POST(req: NextRequest) {
     }
 
     // A menu switched off — or outside its opening hours — stops being
-    // orderable, not just invisible. Without this a page left open through
-    // closing time could still check out, and so could a hand-made request.
-    const [menusRes, zoneRes, catsRes] = await Promise.all([
-      supabase
-        .from("menus")
-        .select("id, active, schedule")
-        .eq("restaurant_id", restaurantId),
-      supabase.from("restaurants").select("timezone").eq("id", restaurantId).single(),
-      supabase.from("categories").select("id, menu_id").eq("restaurant_id", restaurantId),
-    ]);
-    const { ids: openIds, closedNow } = openMenuIds(
-      (menusRes.data as MenuOpenState[] | null) ?? [],
-      (zoneRes.data as { timezone?: string } | null)?.timezone ?? DEFAULT_TIME_ZONE,
-      { schedules: await tierIncludes(restaurantId, "menuSchedules") },
-    );
+    // orderable, not just invisible (`orderableNow`).
+    const { closedNow, onOpenMenu } = await orderableNow(supabase, restaurantId);
     if (closedNow) {
       return await apiError("apiErr.closedNow", 409);
     }
-    const menuOfCategory = new Map(
-      ((catsRes.data as { id: string; menu_id: string | null }[] | null) ?? []).map(c => [
-        c.id,
-        c.menu_id,
-      ]),
-    );
-    /** Extras have no category of their own; they ride with their product. */
-    const onOpenMenu = (categoryId: string | null): boolean => {
-      if (!categoryId) return true;
-      const menuId = menuOfCategory.get(categoryId);
-      return !menuId || openIds.includes(menuId);
-    };
 
     // An unpaid order only leaves here if something holds it, and that is always
     // decided from the database, never from what the client says:
@@ -286,32 +237,11 @@ export async function POST(req: NextRequest) {
     // rule is judged against.
     const base = priceWith(null);
 
-    // The code is re-checked here from the DB — a client that skipped or faked
-    // /validate gets no advantage, and the claim below is what enforces the
-    // usage cap under concurrency.
-    let coupon: CouponRow | null = null;
-    if (typeof couponCode === "string" && couponCode.trim()) {
-      // A failed lookup keeps the coupon in the cart (a `couponReason` drops
-      // it): the code may be perfectly good, so the diner is asked to retry.
-      const found = await findCoupon(restaurantId, couponCode).catch(() => undefined);
-      if (found === undefined) return await apiError("apiErr.couponLookupFailed", 503);
-      if (!found) {
-        return NextResponse.json({ couponReason: "notFound" }, { status: 409 });
-      }
-      // Same rule as the validate endpoint: a floor-only code is not a code a
-      // customer can spend, however they got hold of it.
-      if (found.staff_only) return await apiError("apiErr.couponNotFound", 400);
-
-      const problem = couponProblem(found, base.subtotal);
-      if (problem) {
-        return NextResponse.json({ couponReason: problem }, { status: 409 });
-      }
-      // Reserve the use now. If anything below fails we hand it back.
-      if (!(await claimCoupon(found.id))) {
-        return NextResponse.json({ couponReason: "limitReached" }, { status: 409 });
-      }
-      coupon = found;
-    }
+    // The code is re-checked here from the DB, and its use reserved
+    // (`claimCheckoutCoupon`); a refusal is answered as it is.
+    const claim = await claimCheckoutCoupon(restaurantId, couponCode, base.subtotal);
+    if ("refused" in claim) return claim.refused;
+    const coupon = claim.coupon;
 
     const pricing = coupon ? priceWith(toAppliedCoupon(coupon)) : base;
     const { subtotal, serviceFee, tip, total } = pricing;
@@ -466,122 +396,27 @@ export async function POST(req: NextRequest) {
     const origin = req.headers.get("origin") ?? new URL(req.url).origin;
     const cur = restaurant.currency.toLowerCase();
 
-    // Line items for Stripe (amounts in the smallest currency unit).
-    const line_items: import("stripe").Stripe.Checkout.SessionCreateParams.LineItem[] =
-      verified.map(v => {
-        const modText = Object.entries(v.mods ?? {})
-          .map(([k, val]) => `${k}: ${Array.isArray(val) ? val.join(", ") : val}`)
-          .join(" · ");
-        const extrasText = v.extras?.length
-          ? `Extras: ${v.extras.map(e => e.name).join(", ")}`
-          : "";
-        const description = [modText, extrasText].filter(Boolean).join(" · ");
-        // Charge the sale price. Discounting the line itself (rather than
-        // bolting a credit on the end) keeps the Stripe receipt honest about
-        // what each item actually cost.
-        const unitAmount =
-          itemSalePrice(v.price, v.discountPct) +
-          (v.extras?.reduce((s, e) => s + e.price, 0) ?? 0);
-        return {
-          quantity: v.qty,
-          price_data: {
-            currency: cur,
-            unit_amount: Math.round(unitAmount * 100),
-            product_data: {
-              name: stripeProductName(`${v.emoji ? `${v.emoji} ` : ""}${v.name}`),
-              ...(description ? { description } : {}),
-            },
-          },
-        };
-      });
-
-    if (serviceFee > 0) {
-      line_items.push({
-        quantity: 1,
-        price_data: {
-          currency: cur,
-          unit_amount: Math.round(serviceFee * 100),
-          product_data: { name: `Service charge (${servicePct}%)` },
-        },
-      });
-    }
-
-    if (tip > 0) {
-      line_items.push({
-        quantity: 1,
-        price_data: {
-          currency: cur,
-          unit_amount: Math.round(tip * 100),
-          product_data: { name: tipAmount !== null ? "Tip" : `Tip (${tipPct}%)` },
-        },
-      });
-    }
-
-    // Stripe Checkout supports card, Apple Pay and Google Pay automatically
-    // via the card payment method (wallets show on supported devices).
-    // Destination charge: the platform creates the charge, then routes the
-    // funds to the restaurant's connected account, minus our cut. What that
-
-    // Item discounts are already baked into each line's unit_amount. What's
-    // left — the coupon and any quantity deal — is money off the order as a
-    // whole, and Stripe has no negative line item, so it goes on as a one-off
-    // coupon. The line items minus this equals `total` exactly.
-    const amountOffCents = Math.round(
-      (pricing.couponDiscount + pricing.promoDiscount) * 100,
-    );
-
     let session;
     try {
-      const discounts =
-        amountOffCents > 0
-          ? [
-              {
-                coupon: (
-                  await stripe.coupons.create(
-                    {
-                      amount_off: amountOffCents,
-                      currency: cur,
-                      duration: "once",
-                      name: coupon ? `Coupon ${coupon.code}` : "Discount",
-                    },
-                    // Same account as the session below, or Stripe cannot
-                    // find the coupon when the checkout page loads.
-                    { stripeAccount: restaurant.stripe_account_id },
-                  )
-                ).id,
-              },
-            ]
-          : undefined;
-
-      // A DIRECT charge: the payment is created on the restaurant's own Stripe
-      // account, so Stripe's processing fee comes out of their balance and our
-      // application fee comes to us clean.
-      //
-      // It used to be a destination charge on the platform, which meant Stripe
-      // billed US for every order a diner paid: MX$13.80 on a MX$300 ticket
-      // against MX$0.75 collected. Every restaurant we signed made that worse.
-      // Settling a table already worked this way — now both paths do.
-      session = await stripe.checkout.sessions.create(
-        {
-          mode: "payment",
-          line_items,
-          ...(discounts ? { discounts } : {}),
-          success_url: `${origin}/order/${order.id}?paid=1`,
-          cancel_url: `${origin}/r/${restaurantId}${tableId ? `/t/${tableId}` : ""}?cancelled=1`,
-          // Stock is taken before the diner reaches this page and comes back
-          // when Stripe says the session expired. Left to Stripe's default that
-          // is twenty-four hours, so one diner closing a tab holds the last
-          // portions of a dish off the menu for a day. Thirty minutes is
-          // Stripe's floor and longer than anyone is still deciding.
-          expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-          metadata: { order_id: order.id },
-          payment_intent_data: {
-            metadata: { order_id: order.id },
-            ...(appFee > 0 ? { application_fee_amount: appFee } : {}),
-          },
-        },
-        { stripeAccount: restaurant.stripe_account_id },
-      );
+      session = await openCardSession({
+        stripeAccount: restaurant.stripe_account_id,
+        lineItems: checkoutLineItems({
+          verified,
+          currency: cur,
+          serviceFee,
+          servicePct,
+          tip,
+          tipLabel: tipAmount !== null ? "Tip" : `Tip (${tipPct}%)`,
+        }),
+        amountOffCents: Math.round((pricing.couponDiscount + pricing.promoDiscount) * 100),
+        couponCode: coupon?.code ?? null,
+        currency: cur,
+        origin,
+        orderId: order.id,
+        restaurantId,
+        tableId,
+        appFee,
+      });
     } catch (err) {
       // Stripe refused the session — the pending order will never be paid, so
       // remove it instead of leaving an orphan row, and give back the coupon

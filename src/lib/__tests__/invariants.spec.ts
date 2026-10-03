@@ -296,7 +296,9 @@ describe("a zero platform fee is never sent to Stripe", () => {
     // passes the fee unconditionally works for everyone except the restaurants
     // we most want to keep happy. /api/checkout guarded it; /api/bill/pay did
     // not, and card orders would go through while paying the table's bill died.
-    for (const file of ["src/app/api/checkout/route.ts", "src/app/api/bill/pay/route.ts"]) {
+    // The diner's checkout opens its session through `openCardSession`.
+    expect(read("src/app/api/checkout/route.ts")).toMatch(/await openCardSession\(/);
+    for (const file of ["src/lib/checkout/card-session.ts", "src/app/api/bill/pay/route.ts"]) {
       const body = read(file);
       const uses = body.includes("application_fee_amount");
       expect(uses, `${file} no longer sets an application fee`).toBe(true);
@@ -1127,7 +1129,8 @@ describe("every fact sent to Stripe is read back", () => {
   const PAIRS = [
     ["src/app/api/split/pay/route.ts", "settleSplitShare"],
     ["src/app/api/bill/pay/route.ts", "settleBill"],
-    ["src/app/api/checkout/route.ts", "settleOrder"],
+    // The diner's checkout writes its session in `openCardSession`.
+    ["src/lib/checkout/card-session.ts", "settleOrder"],
   ] as const;
 
   /** Keys of every `metadata: { ... }` object in a file, nesting and all. */
@@ -1163,6 +1166,8 @@ describe("every fact sent to Stripe is read back", () => {
     const orphans: string[] = [];
     for (const [route, fn] of PAIRS) {
       const body = bodyOf(settle, fn);
+      // A file that writes no metadata would pass this by saying nothing.
+      expect(keysWritten(route).length, `${route} writes no Stripe metadata — has the session moved?`).toBeGreaterThan(0);
       for (const key of keysWritten(route)) {
         if (!body.includes(key)) orphans.push(`${route} writes ${key}, ${fn} never reads it`);
       }
@@ -1400,9 +1405,10 @@ describe("Stripe's limits are respected where we build its payloads", () => {
     // accused two call sites that were already correct.
     const risky =
       /\bname:(?![^\n]*stripeProductName)[^\n]*\$\{[^}\n]*\b(?:restaurant\.name|v\.name)\b/;
-    const offenders = walkAll("src/app/api")
-      .filter(f => f.endsWith("route.ts"))
+    // The routes, and the checkout's own line items, which a route builds through.
+    const offenders = [...walkAll("src/app/api").filter(f => f.endsWith("route.ts")), ...walkAll("src/lib/checkout")]
       .filter(f => risky.test(read(f)));
+    expect(read("src/lib/checkout/line-items.ts"), "the dish name reaches Stripe untrimmed").toMatch(/name: stripeProductName\(/);
     expect(
       offenders,
       `These interpolate a name out of the database into a Stripe product name\n` +
