@@ -6,6 +6,7 @@ import type { PromotionWithItems } from "@/lib/promotions";
 import type { Category, MenuItem } from "@/lib/types";
 import { DeleteIcon, EditIcon, WarningIcon } from "@/components/ui/icons";
 import { comboReachProblem } from "@/lib/combo-reach";
+import { promotionItemNames } from "@/lib/promotion-names";
 
 interface PromotionRowProps {
   promotion: PromotionWithItems;
@@ -35,14 +36,7 @@ export default function PromotionRow({
 
   /** One line describing what the promotion does. */
   function describe(): string {
-    const names = p.items
-      .map(i => products.find(x => x.id === i.item_id))
-      .filter(Boolean)
-      .map((x, idx) => {
-        const qty = p.items[idx]?.qty ?? 1;
-        return qty > 1 ? `${qty}× ${x!.name}` : x!.name;
-      })
-      .join(" + ");
+    const names = promotionItemNames(p, products);
     if (p.kind === "combo") {
       return `${names} — ${formatMoney(Number(p.combo_price ?? 0), currency)}`;
     }
