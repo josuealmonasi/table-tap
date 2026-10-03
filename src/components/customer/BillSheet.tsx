@@ -3,28 +3,21 @@
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
-import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
-import {
-  canPayMineOnly,
-  ordersToPay,
-  PAID_LINES_SHOWN,
-  type BillSide,
-  type TableBill,
-  servicePercent,
-} from "@/lib/table-bill";
-import { applyCoupon, itemSalePrice } from "@/lib/pricing";
-import { rememberSettling } from "@/hooks/useReceiptOffer";
+import { canPayMineOnly, ordersToPay, type TableBill } from "@/lib/table-bill";
 import type { AppliedCoupon } from "@/lib/pricing";
 import CouponBox from "./CouponBox";
-import DishImage from "./DishImage";
 import OrderTotals from "./OrderTotals";
 import TipPicker from "./TipPicker";
+import BillSection from "./BillSection";
+import BillActions from "./BillActions";
 import type { Restaurant } from "@/lib/types";
 import { round2 } from "@/lib/money";
+import { billAmounts } from "@/lib/bill-amounts";
 import { billActions, billHintKey } from "@/lib/payment-options";
 import SplitBillCard from "@/components/customer/SplitBillCard";
 import { useSplit } from "@/hooks/useSplit";
+import { useBillPayment } from "@/hooks/useBillPayment";
 
 interface BillSheetProps {
   open: boolean;
@@ -66,114 +59,6 @@ interface BillSheetProps {
   dividing?: boolean;
 }
 
-/** One dish on the bill, laid out like a cart line but not editable. */
-function BillLine({
-  name,
-  emoji,
-  imageUrl,
-  qty,
-  price,
-  discountPct,
-  extras,
-  currency,
-}: {
-  name: string;
-  emoji: string;
-  imageUrl: string | null;
-  qty: number;
-  price: number;
-  /** What came off this dish when it was ordered; the total already has it. */
-  discountPct?: number;
-  extras?: { name: string; price: number }[];
-  currency: string;
-}) {
-  // What this line actually contributed to the bill: the sale price the dish
-  // was ordered at, plus its extras. Showing the list price here made the
-  // lines add up to more than the total a diner was being asked to pay —
-  // 13.50 of dishes under a total of 11.70 — which is the sort of arithmetic
-  // that gets a bill queried in front of everyone.
-  const extrasEach = (extras ?? []).reduce((sum, e) => sum + e.price, 0);
-  const charged = (itemSalePrice(price, discountPct) + extrasEach) * qty;
-  const listed = (price + extrasEach) * qty;
-  return (
-    <div className="tt-card" style={{ padding: 14 }}>
-      <div className="tt-line">
-        <div className="tt-line-thumb">
-          <DishImage url={imageUrl} emoji={emoji} name={name} />
-        </div>
-        <div className="tt-line-body">
-          <strong>
-            {qty}× {name}
-          </strong>
-        </div>
-        <div className="tt-line-actions">
-          {charged < listed && (
-            <span className="tt-was" style={{ fontSize: 13 }}>
-              {formatMoney(listed, currency)}
-            </span>
-          )}
-          <strong className="tt-accent">{formatMoney(charged, currency)}</strong>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Section({
-  heading,
-  side,
-  currency,
-  photoOf,
-  settled = false,
-  collapsible = false,
-}: {
-  heading: string;
-  side: BillSide;
-  currency: string;
-  photoOf: (itemId: string) => string | null;
-  /** Already paid: shown dimmed and counted in no total. */
-  settled?: boolean;
-  /** Summarised when there are many rows, so the total is not pushed off screen. */
-  collapsible?: boolean;
-}) {
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  if (side.orders.length === 0) return null;
-  const foldable = collapsible && side.items.length > PAID_LINES_SHOWN;
-  const shown = foldable && !open ? side.items.slice(0, PAID_LINES_SHOWN) : side.items;
-  return (
-    <div className={settled ? "tt-bill-settled" : undefined}>
-      <div className="tt-mod-label" style={{ marginTop: 4 }}>
-        {heading}
-        {settled && <span className="tt-badge tt-badge-green">{"\u2713"}</span>}
-        {foldable && (
-          <button
-            type="button"
-            className="tt-linkbtn"
-            aria-expanded={open}
-            onClick={() => setOpen(v => !v)}
-          >
-            {t(open ? "bill.hideLines" : "bill.showLines", { n: side.items.length })}
-          </button>
-        )}
-      </div>
-      {shown.map((item, i) => (
-        <BillLine
-          key={i}
-          name={item.name}
-          emoji={item.emoji}
-          imageUrl={photoOf(item.itemId)}
-          qty={item.qty}
-          price={item.price}
-          discountPct={item.discountPct}
-          extras={item.extras}
-          currency={currency}
-        />
-      ))}
-    </div>
-  );
-}
-
 /**
  * The bill, laid out as the checkout the diner already knows.
  *
@@ -203,10 +88,12 @@ export default function BillSheet({
 }: BillSheetProps) {
   const t = useT();
   const currency = restaurant.currency;
-  const [busy, setBusy] = useState(false);
-  const toast = useToast();
-  const [called, setCalled] = useState(false);
   const [scope, setScope] = useState<"all" | "mine">("all");
+  const { busy, called, payShare, payOnline, payAtTable } = useBillPayment(
+    restaurant.id,
+    tableId,
+    sessionId,
+  );
 
   // What this bill can actually be settled with. Every route that charges a
   // card refuses without a connected Stripe account, so a screen that offers
@@ -224,7 +111,12 @@ export default function BillSheet({
   // a bill nobody is looking at does not need asking about every five
   // seconds, and one that cannot be paid by card cannot be paid by share.
   const {
-    split, diner, busy: splitBusy, propose, join, cancel: cancelSplit,
+    split,
+    diner,
+    busy: splitBusy,
+    propose,
+    join,
+    cancel: cancelSplit,
   } = useSplit(
     restaurant.id,
     tableId,
@@ -251,46 +143,6 @@ export default function BillSheet({
    */
   const alone = Boolean(noCard) || splitLocked;
 
-  /** Their share, plus anything they ordered since it froze. */
-  async function payShare(): Promise<void> {
-    if (!split?.mine || !sessionId || busy) return;
-    setBusy(true);
-    try {
-    const res = await fetch("/api/split/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        splitId: split.id,
-        sessionId,
-        diner,
-        restaurantId: restaurant.id,
-        tableId,
-        // Which orders this phone believes are its own. Checked on the server
-        // against what was actually placed after the freeze.
-        ownOrderIds: bill.mine.orders.filter(o => !o.paid).map(o => o.id),
-        tipPct,
-      }),
-    });
-      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-      // Only a redirect leaves this screen. Anything else has to say so: a pay
-      // button that silently does nothing is a button somebody taps again, and
-      // this one opens a Stripe session each time.
-      //
-      // And it says what the SERVER said. Every refusal here already carries a
-      // sentence in the diner's language — the share is not frozen yet, the
-      // waiter is collecting, the restaurant takes no cards — and reporting
-      // all of them as "network error, try again" sent a table of twelve to
-      // press the same button again.
-      if (data.url) window.location.href = data.url;
-      else {
-        toast(data.error ?? t("done.networkError"), "error");
-        setBusy(false);
-      }
-    } catch {
-      toast(t("done.networkError"), "error");
-      setBusy(false);
-    }
-  }
   const [tipPct, setTipPct] = useState(0);
   const [tipCustom, setTipCustom] = useState<number | null>(null);
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
@@ -301,96 +153,27 @@ export default function BillSheet({
   // the same money off twice.
   const alreadyDiscounted = orders.some(o => o.coupon_code);
 
-  // What the chosen scope comes to, before any tip.
-  const food = scope === "mine" ? bill.mine.total : bill.total;
-  // Promotions already taken off — a code the floor applied to this table, or
-  // one used when ordering. `food` is net of it, so the lines above add up to
-  // more than the total unless it is shown, and a bill that doesn't add up is
-  // a bill nobody trusts.
-  const applied = scope === "mine" ? bill.mine.discount : bill.discount;
-  const couponOff = coupon ? applyCoupon(coupon, food) : 0;
-  const discount = round2(applied + couponOff);
-  const base = round2(food - couponOff);
-  const tip = tipCustom !== null ? Math.min(tipCustom, base) : round2(base * (tipPct / 100));
-  const total = round2(base + tip);
-  // `food` is what the orders were priced at, service and any tip included —
-  // passed as the subtotal, a MX$4.00 salad read "Subtotal MX$4.40" with no
-  // line saying where the forty cents came from. Each part gets its own line,
-  // and the lines add up to exactly what the button charges.
-  const service = scope === "mine" ? bill.mine.service : bill.service;
-  const priorTip = scope === "mine" ? bill.mine.tip : bill.tip;
-  const dishes = round2(food - service - priorTip);
-  const servicePct = servicePercent(service, dishes);
-
-  async function payOnline(): Promise<void> {
-    setBusy(true);
-    try {
-      const res = await fetch("/api/bill/pay", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          restaurantId: restaurant.id,
-          tableId,
-          // Which orders, and how much to add on top. The food's price is
-          // summed from the stored rows either way.
-          orderIds: orders.map(o => o.id),
-          couponCode: coupon?.code,
-          tipPct: tipCustom === null ? tipPct : undefined,
-          tipAmount: tipCustom ?? undefined,
-        }),
-      });
-      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-      if (data.url) {
-        // Stripe sends them back to the menu, where the bill is already gone —
-        // so what they just paid for is noted here, while it is still known,
-        // for the receipt offer waiting on the other side.
-        rememberSettling(orders.map(o => o.id));
-        window.location.href = data.url;
-      }
-      else {
-        toast(data.error ?? t("done.networkError"), "error");
-        setBusy(false);
-      }
-    } catch {
-      toast(t("done.networkError"), "error");
-      setBusy(false);
-    }
-  }
+  // What the chosen scope comes to, line by line.
+  const {
+    food,
+    applied,
+    couponOff,
+    discount,
+    base,
+    tip,
+    total,
+    service,
+    priorTip,
+    dishes,
+    servicePct,
+  } = billAmounts(bill, scope, coupon, tipPct, tipCustom);
+  const myUnpaid = bill.mine.orders.filter(o => !o.paid).map(o => o.id);
 
   // Switching what you're paying for changes the amount the coupon was checked
   // against, so the code is re-entered rather than silently re-priced.
   function changeScope(next: "all" | "mine"): void {
     setScope(next);
     setCoupon(null);
-  }
-
-  /**
-   * Ask for somebody to come and take the money.
-   *
-   * The answer is read. It used to be thrown away, and "a waiter is on the
-   * way" was shown whatever came back — a rate limit, a table that no longer
-   * exists, a server that was down. Telling a table somebody is coming when
-   * nobody has been told is the worst version of this screen's one job.
-   */
-  async function payAtTable(): Promise<void> {
-    setBusy(true);
-    try {
-      const res = await fetch("/api/service-requests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ restaurantId: restaurant.id, tableId, kind: "pay" }),
-      });
-      if (res.ok) {
-        setCalled(true);
-        return;
-      }
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      toast(data.error ?? t("done.networkError"), "error");
-    } catch {
-      toast(t("done.networkError"), "error");
-    } finally {
-      setBusy(false);
-    }
   }
 
   return (
@@ -403,8 +186,13 @@ export default function BillSheet({
         <p className="tt-muted">{t("bill.empty")}</p>
       ) : (
         <>
-          <Section heading={t("bill.yours")} side={bill.mine} currency={currency} photoOf={photoOf} />
-          <Section
+          <BillSection
+            heading={t("bill.yours")}
+            side={bill.mine}
+            currency={currency}
+            photoOf={photoOf}
+          />
+          <BillSection
             heading={t("bill.othersAtTable")}
             side={bill.others}
             currency={currency}
@@ -413,7 +201,7 @@ export default function BillSheet({
           {/* What is already paid stays visible and out of the total: whoever
               paid for their dish by card needs to see it, and the rest of the
               table needs to understand why they are not being charged for it. */}
-          <Section
+          <BillSection
             heading={t("bill.alreadyPaid", {
               amount: formatMoney(bill.paid.total, currency),
             })}
@@ -432,19 +220,25 @@ export default function BillSheet({
               reader behind it: a share is charged through the same route as
               the whole bill, so dividing one twelve ways with no Stripe
               account produces twelve people who cannot pay. */}
-          {can.split && <SplitBillCard
-            split={split}
-            diner={diner}
-            busy={splitBusy || busy}
-            currency={currency}
-            outstanding={bill.total}
-            party={party}
-            cardsEnabled={Boolean(restaurant.cards_enabled)}
-            propose={propose}
-            join={join}
-            cancel={cancelSplit}
-            onPay={payShare}
-          />}
+          {can.split && (
+            <SplitBillCard
+              split={split}
+              diner={diner}
+              busy={splitBusy || busy}
+              currency={currency}
+              outstanding={bill.total}
+              party={party}
+              cardsEnabled={Boolean(restaurant.cards_enabled)}
+              propose={propose}
+              join={join}
+              cancel={cancelSplit}
+              onPay={() =>
+                split?.mine
+                  ? payShare({ splitId: split.id, diner, ownOrderIds: myUnpaid, tipPct })
+                  : Promise.resolve()
+              }
+            />
+          )}
 
           {/* Paying for the table or only for yourself changes what the totals
               below are counting, so it sits above them. */}
@@ -470,17 +264,20 @@ export default function BillSheet({
           {/* Everything below settles the WHOLE bill, which is not what this
               phone owes any more once the table has divided it. Two ways to
               pay, disagreeing about the amount, is how somebody pays twice. */}
-          {!splitLocked && !alreadyDiscounted && can.extras && restaurant.coupons_enabled && (
-            <div className="tt-coupon-row">
-              <CouponBox
-                restaurantId={restaurant.id}
-                subtotal={food}
-                applied={coupon}
-                onApply={setCoupon}
-                onRemove={() => setCoupon(null)}
-              />
-            </div>
-          )}
+          {!splitLocked &&
+            !alreadyDiscounted &&
+            can.extras &&
+            restaurant.coupons_enabled && (
+              <div className="tt-coupon-row">
+                <CouponBox
+                  restaurantId={restaurant.id}
+                  subtotal={food}
+                  applied={coupon}
+                  onApply={setCoupon}
+                  onRemove={() => setCoupon(null)}
+                />
+              </div>
+            )}
 
           {/* Neither the code nor the tip does anything on a bill somebody
               is collecting in person: both are theirs to take at the table, on
@@ -488,19 +285,19 @@ export default function BillSheet({
               number is a promise the system will not keep — and with no card
               behind the bill at all, neither of them changes anything. */}
           {!splitLocked && can.extras && (
-          <div style={{ marginTop: 16 }}>
-            <TipPicker
-              currency={currency}
-              tipPct={tipPct}
-              tipCustom={tipCustom}
-              maxTip={base}
-              onPresetTip={pct => {
-                setTipPct(pct);
-                setTipCustom(null);
-              }}
-              onCustomTip={setTipCustom}
-            />
-          </div>
+            <div style={{ marginTop: 16 }}>
+              <TipPicker
+                currency={currency}
+                tipPct={tipPct}
+                tipCustom={tipCustom}
+                maxTip={base}
+                onPresetTip={pct => {
+                  setTipPct(pct);
+                  setTipCustom(null);
+                }}
+                onCustomTip={setTipCustom}
+              />
+            </div>
           )}
 
           {/* Calling somebody over always works, so the button at the bottom is
@@ -508,72 +305,40 @@ export default function BillSheet({
               through the shares, and a total with a card button under it is a
               second way to pay the same food. */}
           {!splitLocked && (
-          <>
-          <OrderTotals
-            subtotal={Math.max(0, round2(dishes - couponOff))}
-            grossSubtotal={round2(dishes + applied)}
-            discount={discount}
-            serviceFee={service}
-            tip={round2(priorTip + tip)}
-            tipPct={tipCustom !== null || priorTip > 0 ? 0 : tipPct}
-            total={total}
-            servicePct={servicePct}
-            taxPct={Number(restaurant.tax_pct) || 0}
-            taxBreakdown={Boolean(restaurant.tax_show_breakdown)}
-            currency={currency}
-          />
-          </>
+            <>
+              <OrderTotals
+                subtotal={Math.max(0, round2(dishes - couponOff))}
+                grossSubtotal={round2(dishes + applied)}
+                discount={discount}
+                serviceFee={service}
+                tip={round2(priorTip + tip)}
+                tipPct={tipCustom !== null || priorTip > 0 ? 0 : tipPct}
+                total={total}
+                servicePct={servicePct}
+                taxPct={Number(restaurant.tax_pct) || 0}
+                taxBreakdown={Boolean(restaurant.tax_show_breakdown)}
+                currency={currency}
+              />
+            </>
           )}
 
-          {called ? (
-            <div className="tt-bill-called" role="status">
-              <strong>{t("bill.called")}</strong>
-              <p className="tt-muted tt-subline" style={{ fontSize: 13, margin: 0 }}>
-                {t("bill.calledBody")}
-              </p>
-            </div>
-          ) : (
-            <div className="tt-bill-actions">
-              {/* A bill somebody else is collecting is settled with them. Said
-                  plainly, with the one button that does anything, rather than
-                  a card field that would be refused after they had typed
-                  their number in — and said at all, because a card button
-                  that is simply missing leaves them looking for it. */}
-              {alone ? (
-                <p className="tt-muted tt-subline" style={{ fontSize: 13, marginTop: 0 }}>
-                  {/* Why there is no card button. Three reasons reach here and
-                      they send the diner to do different things: pay their
-                      share, wait for the waiter already coming, or call one. */}
-                  {t(splitLocked ? "bill.dividing" : (noCard as string))}
-                </p>
-              ) : (
-                <button
-                  className="tt-btn tt-btn-primary tt-btn-lg"
-                  style={{ width: "100%" }}
-                  disabled={busy}
-                  onClick={payOnline}
-                >
-                  {/* The pair of buttons is a choice between two ways to
-                      settle, so each one names its way: online, or with whoever
-                      is serving. The amount is on the total line directly
-                      above, and repeating it here made the buttons read as
-                      "pay" versus something else. */}
-                  {busy ? t("cart.redirecting") : t("bill.payNow")}
-                </button>
-              )}
-              <button
-                className={`tt-btn tt-btn-lg ${alone ? "tt-btn-primary" : "tt-btn-ghost"}`}
-                style={{ width: "100%", marginTop: alone ? 0 : 8 }}
-                disabled={busy}
-                onClick={payAtTable}
-              >
-                {busy ? t("bill.calling") : t("bill.payAtTable")}
-              </button>
-            </div>
-          )}
+          <BillActions
+            called={called}
+            busy={busy}
+            alone={alone}
+            reasonKey={splitLocked ? "bill.dividing" : noCard}
+            onPayOnline={() =>
+              payOnline({
+                orderIds: orders.map(o => o.id),
+                couponCode: coupon?.code,
+                tipPct,
+                tipCustom,
+              })
+            }
+            onPayAtTable={payAtTable}
+          />
         </>
       )}
     </Modal>
   );
 }
-
