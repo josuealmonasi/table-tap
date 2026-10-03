@@ -822,6 +822,25 @@ export async function seedMock(pg) {
     );
   }
 
+  // ── Money taken twice ─────────────────────────────────────────────────
+  // A card payment that arrived for a bill a waiter had already collected, so
+  // Cuentas abiertas has a refund to list and the bell its notice — without
+  // one, every gate measures that screen with the list missing. The payment
+  // intent is made up and the demo has no Stripe account, so the screen says
+  // to connect one rather than offering a refund Stripe would refuse.
+  await bulkInsert(
+    pg,
+    "refunds_due",
+    ["restaurant_id", "stripe_payment_intent", "amount", "table_label"],
+    [[rid, "pi_demo_paid_twice", 84.5, tables[2]?.label ?? "3"]],
+  );
+  await bulkInsert(
+    pg,
+    "notifications",
+    ["restaurant_id", "kind", "data", "read_at"],
+    [[rid, "refund_due", JSON.stringify({ amount: 84.5, currency: "MXN", table: tables[2]?.label ?? "3" }), null]],
+  );
+
   // A counter product and a kitchen printer with a ticket already through it,
   // so the printing screens have something real to show and `pnpm api` has a
   // queue to read. The oldest order stands in for one that has been printed;

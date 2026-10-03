@@ -458,6 +458,45 @@ export function cases(fx) {
           ? true
           : `the shelf went from 20 to ${item?.stock} on a sale that never happened`;
       } },
+    // A card payment that landed on a bill already collected, given back from
+    // Cuentas abiertas. The demo has no real Stripe account, so the healthy
+    // answer is Stripe's refusal — and the assertion is the half that matters:
+    // a refund Stripe never made is not marked done, so the row stays owed.
+    { name: "POST /api/refunds-due (Stripe refuses: the payment stays owed)", as: "manager",
+      method: "POST", path: "/api/refunds-due",
+      arrange: async f => {
+        const putReaderBack = await f.withCardReader();
+        const { data } = await f.admin.from("refunds_due").insert({
+          restaurant_id: r, stripe_payment_intent: `pi_${MARK}_${crypto.randomUUID()}`,
+          amount: 12.5, table_label: MARK,
+        }).select("id").single();
+        f.refundDueId = data?.id ?? "";
+        return async () => {
+          await f.admin.from("refunds_due").delete().eq("id", f.refundDueId);
+          await putReaderBack();
+        };
+      },
+      body: f => ({ id: f.refundDueId }),
+      expect: [502], expectError: /no hizo el reembolso|did not make the refund/i,
+      effect: async f => {
+        const { data } = await f.admin
+          .from("refunds_due").select("refunded_at").eq("id", f.refundDueId).maybeSingle();
+        return data && data.refunded_at === null
+          ? true
+          : `a refund Stripe never made was marked done (${data?.refunded_at ?? "row gone"})`;
+      } },
+    { name: "POST /api/refunds-due (one already given back)", as: "manager",
+      method: "POST", path: "/api/refunds-due",
+      arrange: async f => {
+        const { data } = await f.admin.from("refunds_due").insert({
+          restaurant_id: r, stripe_payment_intent: `pi_${MARK}_${crypto.randomUUID()}`,
+          amount: 12.5, table_label: MARK, refunded_at: new Date().toISOString(),
+        }).select("id").single();
+        f.refundedId = data?.id ?? "";
+        return async () => { await f.admin.from("refunds_due").delete().eq("id", f.refundedId); };
+      },
+      body: f => ({ id: f.refundedId }),
+      expect: [409], expectError: /ya se reembolsó|already refunded/i },
     // The same promise for a refusal that comes before any charge. The table
     // is checked after the coupon is claimed, and that answer once returned
     // without handing the use back: a code with a limit could be spent down

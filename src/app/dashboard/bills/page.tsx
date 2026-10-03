@@ -14,6 +14,8 @@ import { startOfLocalDay } from "@/lib/day-window";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { EMPTY_TILL, tillFrom } from "@/lib/till";
 import TillCard from "@/components/dashboard/TillCard";
+import RefundsDue from "@/components/dashboard/RefundsDue";
+import type { RefundDueRow } from "@/lib/refund-due";
 import type { Order } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -96,6 +98,28 @@ export default async function BillsPage() {
       )
     : null;
   const till = myPayments ? tillFrom(myPayments) : EMPTY_TILL;
+
+  // Card payments that landed on a bill already collected: the diner's money,
+  // waiting to be given back. Owner and manager only, the same line as the
+  // route that refunds them. The Stripe account is read with the secret key
+  // because a browser's own client is not granted that column.
+  const refunds = MANAGES(membership.role)
+    ? ((unwrap(
+        await db
+          .from("refunds_due")
+          .select("id, amount, table_label, created_at")
+          .eq("restaurant_id", r.id)
+          .is("refunded_at", null)
+          .order("created_at", { ascending: true }),
+        "the refunds due",
+      ) ?? []) as RefundDueRow[])
+    : [];
+  const stripeAccount = refunds.length
+    ? (unwrap(
+        await db.from("restaurants").select("stripe_account_id").eq("id", r.id).single(),
+        "the restaurant's Stripe account",
+      ) as { stripe_account_id: string | null } | null)
+    : null;
 
   // Tables part-way through dividing their bill, and what has already come in.
   // A share is money against the sitting rather than any order, so without this
@@ -185,6 +209,12 @@ export default async function BillsPage() {
             The policy is not widened to match: the log also carries staff
             hires, removals and role changes, and a manager does not reach
             /dashboard/staff. */}
+        {/* Above the till: money that is somebody else's comes before counting ours. */}
+        <RefundsDue
+          refunds={refunds}
+          currency={r.currency}
+          canRefund={Boolean(stripeAccount?.stripe_account_id)}
+        />
         {/* Above the log, because counting your own drawer is a thing you do
             at the end of a shift and the log is a thing you read afterwards. */}
         <TillCard till={till} currency={r.currency} />

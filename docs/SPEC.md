@@ -280,8 +280,18 @@ dishes on a bill the restaurant has just cancelled.
   not in the ledger under that payment is written to `refunds_due` — out of
   `payments`, because every reader of the ledger would count it as the
   table's money — with a `refund_due` notification in the owner's and
-  managers' bell. `pnpm money` lists every open one. The refund itself is made
-  in Stripe; the app does not yet record that it was.
+  managers' bell. `pnpm money` lists every open one. Cuentas abiertas lists
+  them too, for owners and managers, each with a **Reembolsar** button
+  (`POST /api/refunds-due`, `refundDue` in `src/lib/refund-due.ts`): it
+  refunds the amount taken twice on the restaurant's own Stripe account with
+  `refund_application_fee`, so our fee goes back in proportion, and only then
+  marks the row (`refunded_at`, `refunded_by`, `stripe_refund_id`). Stripe is
+  asked first so a row is never marked for a refund that does not exist; a
+  retry finds the refund Stripe already made by its `refund_due` tag instead
+  of making a second. One already refunded by hand in Stripe is marked done
+  and our fee on it returned. Its log line carries no `method`, because the
+  corte takes `refunded` rows with one out of the day's takings and this money
+  was never in them. The bell's notice opens Cuentas abiertas.
 - **Two Stripe accounts, so two webhooks.** A diner's food is a DIRECT charge
   on the restaurant's own Stripe account: Stripe's processing fee comes out of
   their balance and our per-order fee comes to us clean. As a destination

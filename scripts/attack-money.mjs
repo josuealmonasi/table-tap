@@ -22,6 +22,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { attackLoyalty } from "./attack-loyalty.mjs";
 import { attackAccounts } from "./attack-accounts.mjs";
+import { attackRefunds } from "./attack-refunds.mjs";
 import { refuseProduction, watchDevWorker } from "./preflight.mjs";
 
 refuseProduction("attack", "every case plants an order to attack");
@@ -103,6 +104,7 @@ const who = {
   waiter: await cookieFor("demo-waiter@tabletap.dev"),
   kitchen: await cookieFor("demo-kitchen@tabletap.dev"),
   cashier: await cookieFor("demo-cashier@tabletap.dev"),
+  manager: await cookieFor("demo-manager@tabletap.dev"),
 };
 
 // A table of our own, made for this and nothing else. Borrowing a real one
@@ -812,6 +814,11 @@ try {
   // balance collected twice.
   console.log("\n  Customer accounts\n");
   await attackAccounts({ admin, post, who, home, neighbour, ok, bad });
+
+  // A diner's money waiting to go back to their card: given back only by the
+  // restaurant it belongs to, and only by somebody who may move money.
+  console.log("\n  Refunds due\n");
+  await attackRefunds({ admin, post, who, home, neighbour, ok, bad });
 } finally {
   await sweep();
   if (raced) {
