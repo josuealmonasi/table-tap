@@ -5,22 +5,22 @@ import { jsonBody } from "@/lib/json-body";
 import { actingStaff } from "@/lib/api-guard";
 import { TAKES_COUNTER_ORDERS } from "@/lib/membership";
 import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
-import { getPlan, tierIncludes } from "@/lib/plan-server";
+import { getPlan } from "@/lib/plan-server";
 import { can } from "@/lib/plan";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { capName, capNote } from "@/lib/notes";
 import { priceCart } from "@/lib/pricing";
-import { cartReferences, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
 import { promotionsOnSale } from "@/lib/promotions-on-sale";
 import { toCartPromos } from "@/lib/promotions";
-import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
 import { raiseStockNotifications, releaseStock, reserveStock } from "@/lib/stock-service";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { orderCode } from "@/lib/types";
-import type { OrderLineItem } from "@/lib/types";
 import { ringOnAccount } from "@/lib/account-sale";
 import { saleReceipt } from "@/lib/pos-receipt";
+import { existingTicket, type PosSaleBody } from "@/lib/pos-sale";
+import { orderableNow } from "@/lib/checkout/orderable-now";
+import { verifiedLines } from "@/lib/checkout/verified-lines";
 
 export const runtime = "nodejs";
 
@@ -56,20 +56,7 @@ export async function POST(req: NextRequest) {
   const blocked = await planBlocks(actor.restaurantId, "pos");
   if (blocked) return blocked;
 
-  const body = await jsonBody<{
-    posRef?: string;
-    items?: OrderLineItem[];
-    method?: "cash" | "card" | "account";
-    /** With `method: "account"`: the customer account the sale goes on. */
-    accountId?: string;
-    customerName?: string;
-    email?: string;
-    note?: string;
-    tipPct?: number;
-    tipAmount?: number;
-    /** The customer declined the ticket: build nothing. */
-    noReceipt?: boolean;
-  }>(req);
+  const body = await jsonBody<PosSaleBody>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { posRef, items, method } = body;
 
@@ -93,87 +80,33 @@ export async function POST(req: NextRequest) {
 
   // The same sale, sent twice. Answer with the ticket that already exists
   // rather than ringing it again.
-  const { data: already } = await db
-    .from("orders")
-    .select("id, total")
-    .eq("pos_ref", posRef)
-    .maybeSingle();
-  if (already) {
-    return NextResponse.json({
-      orderId: already.id,
-      code: orderCode(already.id as string),
-      total: Number(already.total),
-      repeat: true,
-    });
-  }
+  const already = await existingTicket(db, posRef);
+  if (already) return already;
 
   // Read with the secret key, not the staff session. `restaurants` grants a
   // browser only the columns a diner's menu needs, so a cashier's own client
   // cannot see `service_pct` — and a till that cannot read the service charge
   // cannot price a sale. Every query below is scoped to the actor's own
   // restaurant, which is what makes that safe.
-  const supabase = db;
-  const [{ data: restaurant }, menusRes, catsRes] = await Promise.all([
-    supabase
-      .from("restaurants")
-      .select("id, name, currency, tax_pct, service_pct, service_enabled, timezone, low_stock_threshold, low_stock_alerts_enabled")
-      .eq("id", actor.restaurantId)
-      .single(),
-    supabase
-      .from("menus")
-      .select("id, active, schedule")
-      .eq("restaurant_id", actor.restaurantId),
-    supabase.from("categories").select("id, menu_id").eq("restaurant_id", actor.restaurantId),
-  ]);
+  const { data: restaurant } = await db
+    .from("restaurants")
+    .select("id, name, currency, tax_pct, service_pct, service_enabled, timezone, low_stock_threshold, low_stock_alerts_enabled")
+    .eq("id", actor.restaurantId)
+    .single();
   if (!restaurant) return await apiError("apiErr.forbidden", 403);
 
   // Only what the restaurant is actually serving right now: a cashier should
   // not be able to ring a dish from a menu that closed at lunch. The same
   // decision the diner's own menu makes, from the same function.
-  const { ids: openIds, closedNow } = openMenuIds(
-    (menusRes.data as MenuOpenState[] | null) ?? [],
-    (restaurant.timezone as string | null) ?? DEFAULT_TIME_ZONE,
-    { schedules: await tierIncludes(actor.restaurantId, "menuSchedules") },
-  );
+  const { closedNow, onOpenMenu } = await orderableNow(db, actor.restaurantId);
   if (closedNow) return await apiError("apiErr.closedNow", 409);
 
-  const menuOfCategory = new Map(
-    ((catsRes.data as { id: string; menu_id: string | null }[] | null) ?? []).map(c => [
-      c.id,
-      c.menu_id,
-    ]),
-  );
-  /** Extras have no category of their own; they ride with their product. */
-  const onOpenMenu = (categoryId: string | null): boolean => {
-    if (!categoryId) return true;
-    const menuId = menuOfCategory.get(categoryId);
-    return !menuId || openIds.includes(menuId);
-  };
-
-  // Products AND extras AND every combo component — the same list checkout
-  // fetches, from the same function, because verifyCart prices only what it is
-  // handed and a missing extra reads to it as one that has vanished.
-  const promotions = await promotionsOnSale(supabase, actor.restaurantId);
-  const refs = cartReferences(items, promotions);
-  if (!refs.ok) {
-    const { key, vars } = rejectionMessage(refs.rejection);
-    return await apiError(key, 400, vars);
-  }
-  const referencedIds = refs.ids;
-  const { data: dbItems } = await supabase
-    .from("menu_items")
-    .select("id, name, price, emoji, available, discount_pct, modifiers, category_id, skips_kitchen")
-    .in("id", referencedIds)
-    .eq("restaurant_id", actor.restaurantId);
-  if (!dbItems) return await apiError("apiErr.verifyItems", 400);
-
-  const result = verifyCart({
-    items,
-    promotions,
-    dbItems: dbItems as VerifiableItem[],
-    isOnOpenMenu: onOpenMenu,
-  });
+  // Priced from the database by the same function checkout uses, so a dish
+  // cannot be one price at the counter and another on a phone.
+  const promotions = await promotionsOnSale(db, actor.restaurantId);
+  const result = await verifiedLines(db, actor.restaurantId, { items, promotions, onOpenMenu });
   if (!result.ok) {
+    if (!result.rejection) return await apiError("apiErr.verifyItems", 400);
     const { key, vars } = rejectionMessage(result.rejection);
     return await apiError(key, 400, vars);
   }
@@ -273,19 +206,8 @@ export async function POST(req: NextRequest) {
     // back on the shelf that has already been sold. Answer with the ticket
     // that exists, which is what the caller was asking for anyway.
     if (error?.code === "23505") {
-      const { data: won } = await db
-        .from("orders")
-        .select("id, total")
-        .eq("pos_ref", posRef)
-        .maybeSingle();
-      if (won) {
-        return NextResponse.json({
-          orderId: won.id,
-          code: orderCode(won.id as string),
-          total: Number(won.total),
-          repeat: true,
-        });
-      }
+      const won = await existingTicket(db, posRef);
+      if (won) return won;
     }
     await releaseStock(actor.restaurantId, verified);
     return await apiError("apiErr.orderCreate", 500);
