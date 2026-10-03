@@ -275,6 +275,29 @@ export const AUDIT = `(() => {
     });
   }
 
+  // 7. Something cut off at the LEFT edge.
+  //
+  // The check above only sees the page scrolling sideways, and content hanging
+  // off the left never makes it scroll: the bell's panel on a phone started
+  // nine pixels off screen, its border and first letters cut, and passed every
+  // gate. A box that starts left of the window and ends inside it is flagged,
+  // unless a scrolling or clipping container explains it — a strip of
+  // category chips scrolled sideways is meant to look like that.
+  for (const el of all) {
+    const r = el.getBoundingClientRect();
+    if (r.width < 8 || r.height < 8 || !(r.left < -1 && r.right > 1)) continue;
+    let clipped = false;
+    for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) {
+      if (getComputedStyle(up).overflowX !== "visible") {
+        clipped = true;
+        break;
+      }
+    }
+    if (clipped) continue;
+    faults.push({ kind: "cut-off-left", text: (el.className || el.tagName).toString().slice(0, 40), w: Math.round(-r.left) });
+    break;
+  }
+
   // The page running off the side first. The list is cut at twelve, and thirty
   // squashed chart labels once filled every place in it, so the fault that
   // mattered most — the whole page scrolling sideways — was the one cut off.
