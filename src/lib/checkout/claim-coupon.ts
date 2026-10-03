@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import {
+  logRedemption,
   claimCoupon,
   couponProblem,
   findCoupon,
@@ -44,4 +45,26 @@ export async function claimCheckoutCoupon(
     };
   }
   return { coupon: found };
+}
+
+/**
+ * Writes a claimed use down against the order it was spent on — `settled` for
+ * an order with no Stripe session to wait on, so the record is final at once.
+ */
+export async function logCheckoutCoupon(
+  restaurantId: string,
+  coupon: CouponRow | null,
+  orderId: string,
+  amount: number,
+  settled?: true,
+): Promise<void> {
+  if (!coupon) return;
+  await logRedemption({
+    restaurantId,
+    couponId: coupon.id,
+    orderId,
+    code: coupon.code,
+    amount,
+    ...(settled ? { settled } : {}),
+  });
 }
