@@ -1,19 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { ZONE_GROUPS, offsetLabel } from "@/lib/timezones";
 import type { Restaurant } from "@/lib/types";
 import type { Role } from "@/lib/membership";
 import { useSettings } from "@/hooks/useSettings";
-import { BADGES_CHANGED } from "@/hooks/useBadges";
-import { useT } from "@/lib/i18n/context";
-import { ownerWarningKey } from "@/lib/payment-options";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import PaymentsCard from "./PaymentsCard";
 import CoverCard from "./CoverCard";
 import InventoryCard from "./InventoryCard";
 import PrintingCard from "./PrintingCard";
 import LogoCard from "./LogoCard";
+import RestaurantCard from "./RestaurantCard";
+import TaxCard from "./TaxCard";
+import OrderingCard from "./OrderingCard";
 
 interface SettingsFormProps {
   restaurant: Restaurant;
@@ -29,10 +27,6 @@ interface SettingsFormProps {
   printerConfigured?: boolean;
 }
 
-// Two-decimal currencies only, so checkout's Math.round(amount * 100) stays
-// correct (zero-decimal currencies like JPY would be off by 100x).
-const CURRENCIES = ["USD", "MXN"] as const;
-
 /** Dashboard Settings: identity + service charge (owner), tax + pausing (owner + manager). */
 export default function SettingsForm({
   restaurant,
@@ -42,107 +36,8 @@ export default function SettingsForm({
   cardsEnabled = false,
   printerConfigured = false,
 }: SettingsFormProps) {
-  const t = useT();
   const { saving, save } = useSettings();
   const isOwner = role === "owner";
-
-  // Restaurant (owner-only) fields.
-  const [name, setName] = useState(restaurant.name);
-  const [logo, setLogo] = useState(restaurant.logo ?? "");
-  const [tagline, setTagline] = useState(restaurant.tagline ?? "");
-  const [currency, setCurrency] = useState(restaurant.currency);
-  const [timezone, setTimezone] = useState(restaurant.timezone || "America/Mexico_City");
-  const [servicePct, setServicePct] = useState(String(restaurant.service_pct));
-  const [serviceEnabled, setServiceEnabled] = useState(restaurant.service_enabled);
-
-  // Tax (owner + manager).
-  const [taxPct, setTaxPct] = useState(String(restaurant.tax_pct));
-  const [taxBreakdown, setTaxBreakdown] = useState(restaurant.tax_show_breakdown);
-
-  // Ordering (owner + manager) — instant-save.
-  const [acceptingOrders, setAcceptingOrders] = useState(restaurant.accepting_orders);
-  const [payLater, setPayLater] = useState(Boolean(restaurant.allow_pay_later));
-  const [splitting, setSplitting] = useState(restaurant.split_enabled !== false);
-  const [dealsTab, setDealsTab] = useState(restaurant.deals_tab_enabled !== false);
-
-  // Recomputed on the fly: if they switch it off with no Stripe, the warning
-  // goes from "they cannot pay online" to "nobody can order" right there.
-  const paymentWarning = ownerWarningKey({
-    cardsEnabled,
-    allowDeferred: payLater,
-    atTable: true,
-    // Pausing orders is a deliberate, temporary act with its own banner; it is
-    // not a misconfiguration to warn about here.
-    acceptingOrders: true,
-  });
-  const [badges, setBadges] = useState(restaurant.badges_enabled !== false);
-
-  async function saveRestaurant(e: React.FormEvent): Promise<void> {
-    e.preventDefault();
-    await save({
-      name: name.trim(),
-      // Empty means none. This used to substitute the default emoji, so
-      // clearing the field appeared to do nothing at all.
-      logo: logo.trim() || null,
-      tagline: tagline.trim() || null,
-      currency,
-      timezone,
-      service_pct: Math.min(30, Math.max(0, Number(servicePct) || 0)),
-      service_enabled: serviceEnabled,
-    });
-  }
-
-  async function saveTax(e: React.FormEvent): Promise<void> {
-    e.preventDefault();
-    await save({
-      tax_pct: Math.min(100, Math.max(0, Number(taxPct) || 0)),
-      tax_show_breakdown: taxBreakdown,
-    });
-  }
-
-  // The kill switch saves immediately — a rushed kitchen shouldn't also have
-  // to remember to press "Save".
-  async function toggleAcceptingOrders(next: boolean): Promise<void> {
-    setAcceptingOrders(next);
-    const ok = await save(
-      { accepting_orders: next },
-      t(next ? "dash.acceptingAgain" : "dash.ordersPaused"),
-    );
-    if (!ok) setAcceptingOrders(!next); // roll back on failure
-  }
-
-  // Off by default and saved immediately, like the kill switch: turning it on
-  // lets food leave the kitchen before it is paid for, so it should be a
-  // deliberate act with an obvious result.
-  // On by default, and turned off for the whole restaurant rather than per
-  // person: a count nobody wants is noise for everybody, and the floor does
-  // not get to decide it would rather not be told an approval is waiting.
-  async function toggleBadges(next: boolean): Promise<void> {
-    setBadges(next);
-    if (!(await save({ badges_enabled: next }))) {
-      setBadges(!next);
-      return;
-    }
-    window.dispatchEvent(new Event(BADGES_CHANGED));
-  }
-
-  async function toggleDealsTab(next: boolean): Promise<void> {
-    setDealsTab(next);
-    if (!(await save({ deals_tab_enabled: next }))) setDealsTab(!next);
-  }
-
-  async function togglePayLater(next: boolean): Promise<void> {
-    setPayLater(next);
-    if (!(await save({ allow_pay_later: next }))) setPayLater(!next);
-  }
-
-  // On by default: a table of friends expects to be able to halve a bill. Off
-  // is for the places where it gets in the way — a bar on one tab, a set menu,
-  // anywhere the floor would rather do the arithmetic itself.
-  async function toggleSplitting(next: boolean): Promise<void> {
-    setSplitting(next);
-    if (!(await save({ split_enabled: next }))) setSplitting(!next);
-  }
 
   return (
     <div className="tt-dash">
@@ -159,127 +54,7 @@ export default function SettingsForm({
         {/* Cards pair up on desktop instead of stacking down one narrow column. */}
         <div className="tt-cols">
           {isOwner && (
-            <div className="tt-section">
-              <div className="tt-section-head">
-                <h3 className="tt-serif" style={{ margin: 0 }}>
-                  {t("dash.restaurant")}
-                </h3>
-                <span className="tt-muted" style={{ fontSize: 12 }}>
-                  {t("dash.shownToCustomers")}
-                </span>
-              </div>
-
-              <form className="tt-prodform" onSubmit={saveRestaurant}>
-                <div className="tt-prodform-row">
-                  <input
-                    className="tt-input"
-                    style={{ flex: 1 }}
-                    placeholder={t("dash.restaurantName")}
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    required
-                  />
-                  <input
-                    className="tt-input"
-                    style={{ width: 80, textAlign: "center" }}
-                    placeholder="🍱"
-                    aria-label={t("dash.logoEmoji")}
-                    value={logo}
-                    onChange={e => setLogo(e.target.value)}
-                  />
-                </div>
-
-                <input
-                  className="tt-input"
-                  placeholder={t("dash.tagline")}
-                  value={tagline}
-                  onChange={e => setTagline(e.target.value)}
-                />
-
-                <label className="tt-field" style={{ maxWidth: 260 }}>
-                  <span className="tt-mod-label">{t("dash.timezone")}</span>
-                  <select
-                    className="tt-input"
-                    value={timezone}
-                    onChange={e => setTimezone(e.target.value)}
-                  >
-                    {ZONE_GROUPS.map(group => (
-                      <optgroup key={group.labelKey} label={t(group.labelKey)}>
-                        {group.zones.map(z => (
-                          <option key={z.zone} value={z.zone}>
-                            {t(z.labelKey)} ({offsetLabel(z.zone)})
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                  <span className="tt-muted" style={{ fontSize: 12 }}>
-                    {t("dash.timezoneHint")}
-                  </span>
-                </label>
-
-                <label className="tt-field" style={{ maxWidth: 200 }}>
-                  <span className="tt-mod-label">{t("dash.currency")}</span>
-                  <select
-                    className="tt-input"
-                    value={currency}
-                    onChange={e => setCurrency(e.target.value)}
-                  >
-                    {CURRENCIES.map(c => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="tt-settings-toggle">
-                  <span>
-                    <strong>{t("dash.serviceFee")}</strong>
-                    <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
-                      {t("dash.serviceFeeHint")}
-                    </span>
-                  </span>
-                  <span
-                    className="tt-switch"
-                    title={t(serviceEnabled ? "dash.serviceOn" : "dash.serviceOff")}
-                  >
-                    <input
-                      type="checkbox"
-                      aria-label={t(serviceEnabled ? "dash.serviceOn" : "dash.serviceOff")}
-                      checked={serviceEnabled}
-                      onChange={e => setServiceEnabled(e.target.checked)}
-                    />
-                    <span className="tt-switch-track" />
-                  </span>
-                </label>
-
-                {serviceEnabled && (
-                  <label className="tt-field" style={{ width: 150 }}>
-                    <span className="tt-mod-label">{t("dash.serviceFeePct")}</span>
-                    <input
-                      className="tt-input"
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      max="30"
-                      value={servicePct}
-                      onChange={e => setServicePct(e.target.value)}
-                    />
-                  </label>
-                )}
-
-                <div className="tt-prodform-actions">
-                  <button
-                    type="submit"
-                    className="tt-btn tt-btn-primary tt-btn-sm"
-                    disabled={!name.trim() || saving}
-                  >
-                    {saving ? t("common.saving") : t("common.save")}
-                  </button>
-                </div>
-              </form>
-            </div>
+            <RestaurantCard restaurant={restaurant} saving={saving} save={save} />
           )}
 
           {/* Order matters here: the cards flow down one column and into the
@@ -292,62 +67,7 @@ export default function SettingsForm({
 
           {isOwner && <PaymentsCard />}
 
-          <div className="tt-section">
-            <div className="tt-section-head">
-              <h3 className="tt-serif" style={{ margin: 0 }}>
-                {t("dash.taxTitle")}
-              </h3>
-              <span className="tt-muted" style={{ fontSize: 12 }}>
-                {t("dash.taxHint")}
-              </span>
-            </div>
-
-            <form className="tt-prodform" onSubmit={saveTax}>
-              <label className="tt-field" style={{ width: 150 }}>
-                <span className="tt-mod-label">{t("dash.ivaPct")}</span>
-                <input
-                  className="tt-input"
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="100"
-                  value={taxPct}
-                  onChange={e => setTaxPct(e.target.value)}
-                />
-              </label>
-
-              <label className="tt-settings-toggle">
-                <span>
-                  <strong>{t("dash.showBreakdown")}</strong>
-                  <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
-                    {t("dash.showBreakdownHint")}
-                  </span>
-                </span>
-                <span
-                  className="tt-switch"
-                  title={t(taxBreakdown ? "dash.breakdownShown" : "dash.breakdownHidden")}
-                >
-                  <input
-                    type="checkbox"
-                    aria-label={t(taxBreakdown ? "dash.breakdownShown" : "dash.breakdownHidden")}
-                    checked={taxBreakdown}
-                    onChange={e => setTaxBreakdown(e.target.checked)}
-                  />
-                  <span className="tt-switch-track" />
-                </span>
-              </label>
-
-              <div className="tt-prodform-actions">
-                <button
-                  type="submit"
-                  className="tt-btn tt-btn-primary tt-btn-sm"
-                  disabled={saving}
-                >
-                  {saving ? t("common.saving") : t("dash.saveTax")}
-                </button>
-              </div>
-            </form>
-          </div>
+          <TaxCard restaurant={restaurant} saving={saving} save={save} />
 
           {/* The manager's too. Running out of a dish is the floor's problem
               before it is the owner's, and they are who reorders. */}
@@ -368,148 +88,14 @@ export default function SettingsForm({
             save={save}
           />
 
-          <div className="tt-section">
-            <div className="tt-section-head">
-              <h3 className="tt-serif" style={{ margin: 0 }}>
-                {t("dash.orderingTitle")}
-              </h3>
-              <span className="tt-muted" style={{ fontSize: 12 }}>
-                {t("dash.orderingHint")}
-              </span>
-            </div>
-
-            <label className="tt-settings-toggle">
-              <span>
-                <strong>{t("dash.acceptingOrders")}</strong>
-                <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
-                  {t("dash.acceptingOrdersHint")}
-                </span>
-              </span>
-              <span
-                className="tt-switch"
-                title={t(acceptingOrders ? "dash.accepting" : "dash.paused")}
-              >
-                <input
-                  type="checkbox"
-                  aria-label={t(acceptingOrders ? "dash.accepting" : "dash.paused")}
-                  checked={acceptingOrders}
-                  disabled={saving}
-                  onChange={e => toggleAcceptingOrders(e.target.checked)}
-                />
-                <span className="tt-switch-track" />
-              </span>
-            </label>
-
-            <label className="tt-settings-toggle" style={{ marginTop: 10 }}>
-              <span>
-                <strong>{t("dash.badgesTitle")}</strong>
-                <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
-                  {t("dash.badgesHint")}
-                </span>
-              </span>
-              <span className="tt-switch">
-                <input
-                  type="checkbox"
-                  aria-label={t("dash.badgesTitle")}
-                  checked={badges}
-                  disabled={saving}
-                  onChange={e => toggleBadges(e.target.checked)}
-                />
-                <span className="tt-switch-track" />
-              </span>
-            </label>
-
-            {/* The manager's too: this is how the menu looks, not a decision
-                about money or logins. */}
-            <label className="tt-settings-toggle" style={{ marginTop: 10 }}>
-              <span>
-                <strong>{t("dash.dealsTabTitle")}</strong>
-                <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
-                  {t("dash.dealsTabHint")}
-                </span>
-              </span>
-              <span className="tt-switch">
-                <input
-                  type="checkbox"
-                  aria-label={t("dash.dealsTabTitle")}
-                  checked={dealsTab}
-                  disabled={saving}
-                  onChange={e => toggleDealsTab(e.target.checked)}
-                />
-                <span className="tt-switch-track" />
-              </span>
-            </label>
-
-            {/* One question: can the food leave before it is paid for? The
-                answer is the same for the whole business; what changes with the
-                QR is who holds the order, and that is not the owner's to
-                choose. It was two switches and they contradicted each other:
-                with "tables pay at the end" on, the general QR still gave the
-                customer no way out of the cart. */}
-            {isOwner && (
-              <label className="tt-settings-toggle" style={{ marginTop: 10 }}>
-                <span>
-                  <strong>{t("dash.payLaterTitle")}</strong>
-                  <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
-                    {deferredPayAllowed
-                      ? t("dash.payLaterHint")
-                      : t("dash.payLaterLocked")}
-                  </span>
-                </span>
-                <span className="tt-switch">
-                  <input
-                    type="checkbox"
-                    aria-label={t("dash.payLaterTitle")}
-                    checked={payLater}
-                    disabled={saving || !deferredPayAllowed}
-                    onChange={e => togglePayLater(e.target.checked)}
-                  />
-                  <span className="tt-switch-track" />
-                </span>
-              </label>
-            )}
-
-            {/* Not gated on Stripe, because dividing a bill is not only a way
-                of charging one. With no card account the shares are the
-                division the table shows the waiter, who collects each of them
-                on the calculator — which is most of what a table does with a
-                bill anyway. */}
-            <label className="tt-settings-toggle" style={{ marginTop: 10 }}>
-              <span>
-                <strong>{t("dash.splitTitle")}</strong>
-                <span className="tt-muted" style={{ display: "block", fontSize: 12 }}>
-                  {t("dash.splitHint")}
-                </span>
-              </span>
-              <span className="tt-switch">
-                <input
-                  type="checkbox"
-                  aria-label={t("dash.splitTitle")}
-                  checked={splitting}
-                  disabled={saving}
-                  onChange={e => toggleSplitting(e.target.checked)}
-                />
-                <span className="tt-switch-track" />
-              </span>
-            </label>
-
-            {/* What the owner had no way of knowing from here: with no Stripe
-                account connected, online payment cannot be painted on any
-                screen, so this switch stops being a choice and becomes the only
-                way to order. Turning on "pay at the end" and not seeing the
-                card button appear had no explanation anywhere.
-
-                Owner only, and not out of discretion: connecting Stripe is
-                theirs — the Payments card is not even shown to a manager — so
-                to a manager this would be a warning about something they
-                cannot fix. */}
-            {isOwner && paymentWarning && (
-              <div className="tt-hint tt-hint-row" style={{ marginTop: 10 }}>
-                <span>{t(paymentWarning)}</span>
-                <a href="#pagos">{t("dash.fixInPayments")}</a>
-              </div>
-            )}
-          </div>
+          <OrderingCard
+            restaurant={restaurant}
+            isOwner={isOwner}
+            deferredPayAllowed={deferredPayAllowed}
+            cardsEnabled={cardsEnabled}
+            saving={saving}
+            save={save}
+          />
         </div>
       </div>
     </div>
