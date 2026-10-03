@@ -364,7 +364,7 @@ describe("a column exists before the grant that names it", () => {
         .filter(l => /\breleaseStock\s*\(/.test(l)).length;
 
     expect(
-      calls("src/lib/checkout-settle.ts"),
+      calls("src/lib/checkout-abandon.ts"),
       "an abandoned checkout no longer returns its stock",
     ).toBeGreaterThan(0);
     expect(
@@ -1236,7 +1236,8 @@ describe("every route that settles an order records the payment", () => {
     // The webhook marked the orders paid, then wrote the ledger; a share was
     // claimed, then recorded. A failed second write left the diner's money
     // recorded nowhere, and Stripe's repeat found nothing left to do.
-    const src = read("src/lib/checkout-settle.ts");
+    // The webhook's settling, wherever it was split to.
+    const src = ["checkout-settle.ts", "card-settle.ts", "checkout-abandon.ts"].map(f => read(`src/lib/${f}`)).join("\n");
     expect(src).toMatch(/rpc\("settle_card_orders"/);
     expect(src).toMatch(/rpc\("settle_split_share"/);
     expect(src, "the webhook writes the ledger outside the functions").not.toMatch(/recordPayments?\(|from\("payments"\)/);
@@ -1279,7 +1280,7 @@ describe("every route that settles an order records the payment", () => {
     expect(schema).toMatch(/revoke all on refunds_due from anon;/);
     expect(schema).toMatch(/alter table refunds_due enable row level security;/);
     // The webhook says what Stripe charged, or nothing can be compared.
-    expect(read("src/lib/checkout-settle.ts")).toMatch(/p_charged:/);
+    expect(read("src/lib/card-settle.ts")).toMatch(/p_charged:/);
   });
 
   it("takes the table-shaping privileges from every table, after the last one is made", () => {
@@ -2305,6 +2306,9 @@ describe("a customer account's orders are never a table's", () => {
       // The webhook marks the orders named in Stripe's metadata; an order a
       // card checkout is open on cannot be put on an account (account_charge).
       "src/lib/checkout-settle.ts",
+      // Removes the one pending order a card checkout was opened for, by id;
+      // still pending_payment, so it was never put on an account.
+      "src/lib/checkout-abandon.ts",
     ]);
     const missing: string[] = [];
     for (const f of sources.filter(f => !exempt.has(f))) {
