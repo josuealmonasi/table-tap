@@ -2764,6 +2764,60 @@ revoke all on function public.settle_split_share(uuid, int, numeric, numeric, te
 grant execute on function public.settle_split_share(uuid, int, numeric, numeric, text)
   to service_role;
 
+-- A sale rung at the till, settled with the money it took.
+--
+-- The till inserted the order already paid and then wrote the ledger; a failed
+-- second write was a sale in the day's orders with no money in the corte. Now
+-- the order goes in as `pending_payment` — which no board, bill or corte
+-- counts, exactly like a card order waiting on Stripe — and this marks it paid,
+-- gives it its real status (which is what prints the kitchen ticket) and
+-- records the money in one transaction. If this fails the route deletes the
+-- order and puts its stock back: the sale did not happen.
+create or replace function public.settle_sale(
+  p_restaurant uuid,
+  p_order      uuid,
+  p_method     text,
+  p_actor      text,
+  p_status     text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_total numeric;
+begin
+  if p_method not in ('cash', 'card') then
+    raise exception 'settle_sale: unknown method %', p_method;
+  end if;
+  if p_status not in ('received', 'completed') then
+    raise exception 'settle_sale: a sale cannot be %', p_status;
+  end if;
+
+  update orders
+     set paid = true, pay_method = p_method, status = p_status
+   where id = p_order
+     and restaurant_id = p_restaurant
+     and paid = false
+     and status = 'pending_payment'
+  returning total into v_total;
+  if not found then
+    raise exception 'not_owed';
+  end if;
+
+  if v_total > 0 then
+    insert into payments (restaurant_id, order_id, amount, method, actor_email)
+    values (p_restaurant, p_order, round(v_total, 2), p_method, p_actor);
+  end if;
+  return true;
+end;
+$$;
+revoke all on function public.settle_sale(uuid, uuid, text, text, text)
+  from public, anon, authenticated;
+grant execute on function public.settle_sale(uuid, uuid, text, text, text)
+  to service_role;
+
 -- ── Printing ────────────────────────────────────────────────────────────────
 -- Tickets on paper: the receipt handed across the counter, and the order that
 -- lands on the pass.

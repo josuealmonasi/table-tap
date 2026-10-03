@@ -15,7 +15,6 @@ import { promotionsOnSale } from "@/lib/promotions-on-sale";
 import { toCartPromos } from "@/lib/promotions";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
 import { raiseStockNotifications, releaseStock, reserveStock } from "@/lib/stock-service";
-import { recordPayment } from "@/lib/payments";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { orderCode } from "@/lib/types";
@@ -225,6 +224,7 @@ export async function POST(req: NextRequest) {
   const handedOverAtOnce =
     verified.length > 0 && (noBoard || verified.every(line => line.skipsKitchen));
 
+  const finalStatus = handedOverAtOnce ? "completed" : "received";
   const { data: order, error } = await db
     .from("orders")
     .insert({
@@ -240,9 +240,13 @@ export async function POST(req: NextRequest) {
       // as it was rung up, so it is finished, not waiting: no kitchen ticket,
       // nothing on the pass, and no name to call out. One prepared line is
       // enough to make it an ordinary order again.
-      status: handedOverAtOnce ? "completed" : "received",
-      // On an account nothing has been paid: the account owes it.
-      ...(onAccount ? { paid: false, pay_method: null } : { paid: true, pay_method: method }),
+      //
+      // A paid sale goes in as `pending_payment` and `settle_sale` gives it
+      // this status as it records the money, so the two land together. On an
+      // account nothing has been paid: the account owes it.
+      status: onAccount ? finalStatus : "pending_payment",
+      paid: false,
+      pay_method: null,
       pos_ref: posRef,
       subtotal: pricing.subtotal,
       service_fee: pricing.serviceFee,
@@ -303,13 +307,22 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  await recordPayment({
-    restaurantId: actor.restaurantId,
-    orderId: order.id as string,
-    amount: pricing.total,
-    method,
-    actorEmail: actor.email,
+  // Paid, its real status, and the money in the ledger: one write. They were
+  // two, and a failed second one was a sale with no money in the corte. If it
+  // fails the sale did not happen — the order goes and its stock comes back.
+  const { error: settleError } = await db.rpc("settle_sale", {
+    p_restaurant: actor.restaurantId,
+    p_order: order.id,
+    p_method: method,
+    p_actor: actor.email,
+    p_status: finalStatus,
   });
+  if (settleError) {
+    console.error("ringing a sale failed:", settleError.message);
+    await db.from("orders").delete().eq("id", order.id).eq("restaurant_id", actor.restaurantId);
+    await releaseStock(actor.restaurantId, verified);
+    return await apiError("apiErr.orderCreate", 500);
+  }
 
   if (restaurant.low_stock_alerts_enabled) {
     await raiseStockNotifications(actor.restaurantId, reservation.low);
