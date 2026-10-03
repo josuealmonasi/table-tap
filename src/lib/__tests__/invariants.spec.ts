@@ -1670,7 +1670,8 @@ describe("the stamp button and the stamp are one decision", () => {
     }
     expect(read("src/app/api/loyalty/stamp/route.ts"), "the stamp route no longer asks loyaltyOn").toMatch(/await loyaltyOn\(/);
     // …and the diner's offer: a card is offered only where the route will make one.
-    expect(read("src/lib/ordering-data.ts"), "the diner's offer decides by itself").toMatch(/await loyaltyOn\(/);
+    expect(read("src/lib/menu-shell.ts"), "the diner's offer decides by itself").toMatch(/await loyaltyOn\(/);
+    expect(read("src/lib/ordering-data.ts"), "the menu builds its offer some other way").toMatch(/await offeredProgram\(/);
     expect(read("src/app/api/loyalty/card/route.ts"), "the card route no longer asks loyaltyOn").toMatch(/await loyaltyOn\(/);
     for (const screen of ["src/components/dashboard/BillsPanel.tsx", "src/components/dashboard/pos/PosScreen.tsx"]) {
       expect(read(screen), `${screen} shows the scanner without being told to`).toMatch(/\{loyalty &&[^}]*<StampCard/);
