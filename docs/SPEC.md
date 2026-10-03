@@ -374,7 +374,16 @@ Assume the browser is hostile; it holds the publishable key and nothing else.
   a diner's screen polls (`/api/order-status`, `/api/split`, `/api/bill`) are
   sized for `PHONES_PER_ADDRESS` (30) phones, from the same intervals the
   screens poll at (`src/lib/poll.ts`). An invariant keeps the poll and the limit
-  on one number.
+  on one number. What a diner *writes* for a table — checkout, paying the bill,
+  dividing it and paying a share, calling the waiter, a receipt — is counted
+  twice: per table behind the address, at what one phone used to be allowed,
+  and for the whole address at `TABLES_PER_ADDRESS` (10) times that
+  (`isRoomLimited`, then `isTableLimited`, in `src/lib/rate-limit.ts`). A full
+  room is not throttled and one client hammering one table still is; the room
+  is counted before the body is read, so invented table ids meet its ceiling
+  before each opens a counter. The table's key is one keyed hash of address
+  and table, and the privacy notice says so (version 2026-10-02). The counter,
+  with no table, is one place, as the whole address was before.
 - **No secret can reach a client component** — an invariant walks the real import
   graph, counting only imports that survive compilation.
 - **Realtime is the other door out of the database**, and the spec was silent on

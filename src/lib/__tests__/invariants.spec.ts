@@ -117,11 +117,34 @@ describe("every public endpoint has a ceiling", () => {
 
     const naked = routes.filter(
       f =>
-        !/acting(Staff|FrontOfHouse|Manager|Owner)|isRateLimited|getPlatformAdmin|stripe-signature|readStripeEvent/.test(
+        !/acting(Staff|FrontOfHouse|Manager|Owner)|isRateLimited|isRoomLimited|getPlatformAdmin|stripe-signature|readStripeEvent/.test(
           read(f),
         ),
     );
     expect(naked, `no guard and no rate limit: ${naked.join(", ")}`).toEqual([]);
+  });
+
+  it("counts a diner's write per table, with the room counted first", () => {
+    // Every write was limited per address, sized for one phone, and a
+    // restaurant's Wi-Fi is one address for the whole room. A public route
+    // that is told its table counts it (`isTableLimited`), after the room
+    // (`isRoomLimited`) and before it reads the body — so an invented table
+    // meets the room's ceiling before it opens a counter of its own.
+    const code = (f: string) => read(f).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    const publicWrites = walk("src/app/api")
+      .filter(f => f.endsWith("route.ts"))
+      .filter(f => /isRateLimited|isRoomLimited/.test(read(f)))
+      .filter(f => /export async function POST/.test(read(f)) && /tableId\??:\s*string/.test(read(f)));
+    expect(publicWrites.length, "the scan found no public write that takes a table").toBeGreaterThan(4);
+    const offenders = publicWrites.filter(f => {
+      const src = code(f);
+      const post = src.slice(src.indexOf("export async function POST"));
+      const room = post.indexOf("isRoomLimited(");
+      return room === -1 || room > post.indexOf("jsonBody") || !/isTableLimited\(req, "[a-z-]+", (tableId|typeof tableId)/.test(post);
+    });
+    expect(offenders, `a public write that does not count its table:\n${offenders.join("\n")}`).toEqual([]);
+    // The receipt learns its table from the order it reads.
+    expect(code("src/app/api/receipt/route.ts")).toMatch(/isTableLimited\(req, "receipt", order\.table_id/);
   });
 });
 

@@ -4,7 +4,7 @@ import { packOrderIds, stripeProductName } from "@/lib/stripe-limits";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { staffOpenedBill } from "@/lib/table-session";
-import { clientKey, isRateLimited } from "@/lib/rate-limit";
+import { isRoomLimited, isTableLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchTableBill } from "@/lib/bill-data";
 import { tableBill } from "@/lib/table-bill";
@@ -28,7 +28,7 @@ export const dynamic = "force-dynamic";
  * service charge, not to decide each other's generosity.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  if (await isRateLimited(`splitpay:${clientKey(req)}`, 10, 60)) {
+  if (await isRoomLimited(req, "splitpay", 10)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
 
@@ -38,6 +38,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { splitId, sessionId, diner, restaurantId, tableId, ownOrderIds, tipPct, tipAmount } = body;
+  if (await isTableLimited(req, "splitpay", tableId, 10)) {
+    return await apiError("apiErr.tooManyAttempts", 429);
+  }
   if (!splitId || !sessionId || !diner || !restaurantId || !tableId) {
     return await apiError("apiErr.invalidRequest", 400);
   }

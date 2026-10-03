@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
-import { clientKey, isRateLimited } from "@/lib/rate-limit";
+import { isRoomLimited, isTableLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { currentSplit, writeShares } from "@/lib/split-service";
 import { fetchTableBill } from "@/lib/bill-data";
@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
  * each freeze a different total.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  if (await isRateLimited(`splitjoin:${clientKey(req)}`, 20, 60)) {
+  if (await isRoomLimited(req, "splitjoin", 20)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
 
@@ -29,6 +29,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { splitId, sessionId, diner, restaurantId, tableId } = body;
+  if (await isTableLimited(req, "splitjoin", tableId, 20)) {
+    return await apiError("apiErr.tooManyAttempts", 429);
+  }
   if (!splitId || !sessionId || !diner || !restaurantId || !tableId) {
     return await apiError("apiErr.invalidRequest", 400);
   }

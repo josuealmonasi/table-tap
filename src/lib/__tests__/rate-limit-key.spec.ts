@@ -42,6 +42,6 @@ describe("the rate limit's key", () => {
     const fn = schema.slice(schema.indexOf("function public.rate_limit_hit"), schema.indexOf("$$;", schema.indexOf("function public.rate_limit_hit")));
     expect(fn).toMatch(/delete from rate_limits where window_start < now\(\) - interval '1 day'/);
     const notice = readFileSync("src/lib/legal/privacy-es.json", "utf8");
-    expect(notice).toMatch(/se elimina en un plazo máximo de un día/);
+    expect(notice).toMatch(/se eliminan? en un plazo máximo de un día/);
   });
 });

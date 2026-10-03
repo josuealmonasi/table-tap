@@ -44,15 +44,15 @@ describe("the text and the version cannot drift apart", () => {
 
   it("has terms that match the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("terms-es") }).toEqual({
-      version: "2026-09-30.2",
+      version: "2026-10-02",
       text: "d8d8ac93b599a5f4",
     });
   });
 
   it("has a privacy notice that matches the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("privacy-es") }).toEqual({
-      version: "2026-09-30.2",
-      text: "997d873ab00447cd",
+      version: "2026-10-02",
+      text: "2b894d313fe1d7e7",
     });
   });
 });
