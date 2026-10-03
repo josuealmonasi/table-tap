@@ -9,8 +9,11 @@ Last verified against production on 10 September 2026: still test keys, still
 zero webhook endpoints against four connected accounts, still no mail provider.
 Rechecked on 2 October 2026 from the database: none of the seven restaurants has
 a Stripe Connect account yet (so no card payment of any kind can be taken), and
-none has accepted the terms in force (`2026-10-02`). The Stripe dashboard and
-the mail provider were not rechecked — they are not visible from the code.
+none has accepted the terms in force (`2026-10-02` then). Rechecked on 3 October
+2026: the terms in force are `2026-10-03` (the refund-due clause) and still
+none has accepted them — five are on `2026-08-18`, one on `2026-09-29`, one has
+never accepted any. The Stripe dashboard and the mail provider were not
+rechecked — they are not visible from the code.
 
 ## 1. The Stripe webhooks — money is not being recorded without them
 

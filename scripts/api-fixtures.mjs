@@ -676,6 +676,9 @@ export async function teardown(fx) {
   const spent = (fx.passesHanded ?? []).map(p => `loyalty-pass:${p.split(".")[2]}`);
   if (spent.length) await admin.from("rate_limits").delete().in("bucket", spent);
   await admin.from("rate_limits").delete().like("bucket", `loyalty-card:${restaurant.id}:%`);
+  // Refunds due the refund cases planted, should a case die before its own
+  // cleanup: a stray one would sit in Cuentas abiertas offering a refund.
+  await admin.from("refunds_due").delete().eq("restaurant_id", restaurant.id).eq("table_label", MARK);
   await admin.from("dish_ratings").delete().in("order_id", [fx.paidOrder, fx.unpaidOrder]);
   // A collection made in parts belongs to no order, so deleting the orders
   // leaves it behind — on the table's own sitting, quietly making the table's

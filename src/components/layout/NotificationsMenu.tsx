@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { dateLocale, formatMoney } from "@/lib/format";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
@@ -20,6 +21,7 @@ import { NotificationsIcon } from "@/components/ui/icons";
 export default function NotificationsMenu({ enabled }: { enabled: boolean }) {
   const t = useT();
   const { locale } = useLocale();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { notifications, unread, markRead, markAllRead } = useNotifications(enabled);
@@ -104,7 +106,15 @@ export default function NotificationsMenu({ enabled }: { enabled: boolean }) {
                     type="button"
                     role="menuitem"
                     className={`tt-notif-item ${n.read_at ? "" : "tt-notif-unread"}`}
-                    onClick={() => !n.read_at && markRead(n.id)}
+                    onClick={() => {
+                      if (!n.read_at) markRead(n.id);
+                      // A refund is given back from Cuentas abiertas, so that
+                      // is where this one takes you.
+                      if (n.kind === "refund_due") {
+                        setOpen(false);
+                        router.push("/dashboard/bills");
+                      }
+                    }}
                     title={n.read_at ? undefined : t("notif.markRead")}
                   >
                     <span className="tt-notif-text">{sentence(n)}</span>

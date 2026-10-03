@@ -2633,7 +2633,7 @@ grant execute on function public.settle_orders(uuid, uuid[], text, text, jsonb)
 -- so it is not put in the ledger (every reader of `payments` would count it as
 -- the table's money) and it is not dropped either, which is what happened: it
 -- is kept here, the owner and managers are told, and `pnpm money` lists it
--- until somebody refunds it in Stripe.
+-- until somebody refunds it from Cuentas, which returns our fee with it.
 create table if not exists refunds_due (
   id            uuid primary key default gen_random_uuid(),
   restaurant_id uuid not null references restaurants(id) on delete cascade,
@@ -2644,6 +2644,10 @@ create table if not exists refunds_due (
   created_at    timestamptz not null default now(),
   refunded_at   timestamptz
 );
+-- Who gave it back, and the refund Stripe made. Written only after Stripe has
+-- made it: a row marked refunded first would be a diner who never was.
+alter table refunds_due add column if not exists stripe_refund_id text;
+alter table refunds_due add column if not exists refunded_by text;
 -- One per payment: Stripe repeats a webhook, and a repeat is not a second refund.
 create unique index if not exists refunds_due_one_per_intent on refunds_due(stripe_payment_intent);
 create index if not exists refunds_due_restaurant_idx on refunds_due(restaurant_id, created_at desc);
