@@ -120,6 +120,7 @@ export const es: Messages = {
     updateAvailability: "No se pudo actualizar la disponibilidad",
     updateProductExtras: "No se pudieron actualizar los extras del producto",
     createExtra: "No se pudo crear el extra",
+    reorderExtras: "No se pudo reordenar los extras",
     updateExtra: "No se pudo actualizar el extra",
     deleteExtra: "No se pudo eliminar el extra",
     deleteSelected: "No se pudieron eliminar los elementos seleccionados",

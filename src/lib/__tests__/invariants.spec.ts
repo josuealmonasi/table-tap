@@ -3,6 +3,7 @@ import fs from "node:fs";
 import ts from "typescript";
 import path from "node:path";
 import { en } from "@/lib/i18n/en";
+import { es } from "@/lib/i18n/es";
 
 /**
  * Rules that span more than one file, with nothing else to enforce them.
@@ -117,6 +118,23 @@ describe("no probe is left in the repository", () => {
       (r === "." ? fs.readdirSync(".").filter(n => fs.statSync(n).isFile()) : walkAll(r)).filter(f => /\.tmp\./.test(f)),
     );
     expect(found, "a probe was left behind — delete it").toEqual([]);
+  });
+});
+
+describe("the menu editor's failures are said in the owner's language", () => {
+  it("names every failed write by a message that exists in Spanish and English", () => {
+    // Reordering extras passed "reorder extras" where every other write passes
+    // a key, so a failed reorder toasted that raw English phrase to a Spanish
+    // owner. Every key a write in the editor reports must be a real one.
+    const src = read("src/hooks/useMenuEditor.ts");
+    const keys = [...src.matchAll(/\b(?:run|move|insertReturningId|reportError)\(\s*"([^"]+)"/g)].map(m => m[1]);
+    expect(keys.length, "found no reported write in the editor — has it moved?").toBeGreaterThan(15);
+    const missing = keys.filter(k => {
+      const [group, name] = k.split(".");
+      if (group !== "write" || !name) return true;
+      return [en, es].some(m => typeof (m as unknown as Record<string, Record<string, unknown>>).write?.[name] !== "string");
+    });
+    expect(missing, "a write reports a message that is not in both languages").toEqual([]);
   });
 });
 

@@ -382,7 +382,7 @@ export function useMenuEditor(restaurantId: string) {
     const addon = addons.find(a => a.id === id);
     if (!addon) return;
     const siblings = addons.filter(a => a.menu_id === addon.menu_id);
-    await move("reorder extras", "menu_items", siblings, id, direction);
+    await move("write.reorderExtras", "menu_items", siblings, id, direction);
   }
 
   // ── Availability toggle (products and add-ons) — optimistic, rolls back on failure ──
