@@ -3677,3 +3677,11 @@ end;
 $$;
 revoke all on function public.account_checkout_settle(uuid, text) from public, anon, authenticated;
 grant execute on function public.account_checkout_settle(uuid, text) to service_role;
+
+-- ── Last, on purpose ────────────────────────────────────────────────────────
+-- The table-shaping privileges, taken from every table once more. The revoke
+-- near the top only reaches tables that already exist when it runs, so a table
+-- created further down kept TRUNCATE for signed-in accounts until the schema
+-- was run a second time — and RLS does not guard TRUNCATE. refunds_due shipped
+-- to production that way, and `pnpm prod:check` caught the difference.
+revoke truncate, references, trigger on all tables in schema public from authenticated;

@@ -1282,6 +1282,16 @@ describe("every route that settles an order records the payment", () => {
     expect(read("src/lib/checkout-settle.ts")).toMatch(/p_charged:/);
   });
 
+  it("takes the table-shaping privileges from every table, after the last one is made", () => {
+    // RLS does not guard TRUNCATE. The revoke near the top of the schema only
+    // reached tables that existed when it ran, so refunds_due reached
+    // production with TRUNCATE for every signed-in account.
+    const schema = read("supabase/schema.sql");
+    const revoke = "revoke truncate, references, trigger on all tables in schema public from authenticated;";
+    const lastTable = schema.lastIndexOf("create table if not exists");
+    expect(schema.lastIndexOf(revoke), "no revoke runs after the last table is created").toBeGreaterThan(lastTable);
+  });
+
   it("has no other route marking an order paid on the quiet", () => {
     const known = new Set<string>(SETTLES.map(([f]) => f));
     const rogue = walkAll("src/app/api")
