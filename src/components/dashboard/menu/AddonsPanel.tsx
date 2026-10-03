@@ -1,16 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { formatMoney } from "@/lib/format";
 import type { MenuItem } from "@/lib/types";
 import type { AddonInput } from "@/hooks/useMenuEditor";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useT } from "@/lib/i18n/context";
-import { useDirty } from "@/hooks/useDirty";
 import { Modal } from "@/components/ui/Modal";
-import ReorderButtons from "@/components/ui/ReorderButtons";
-import IconPicker from "./IconPicker";
-import { DeleteIcon, EditIcon } from "@/components/ui/icons";
+import AddonForm from "./AddonForm";
+import AddonRow from "./AddonRow";
 
 interface AddonsPanelProps {
   addons: MenuItem[];
@@ -46,7 +42,6 @@ export default function AddonsPanel({
   const t = useT();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  const confirm = useConfirm();
 
   // A search narrows only what's shown; reorder arrows pause meanwhile.
   const shown = searchQuery
@@ -140,94 +135,19 @@ export default function AddonsPanel({
 
         return (
           <div key={addon.id} className="tt-addon">
-            <div
-              className={`tt-prod ${addon.available ? "" : "tt-prod-off"} ${selectedIds?.has(addon.id) ? "tt-prod-selected" : ""}`}
-            >
-              {onToggleSelect ? (
-                <input
-                  type="checkbox"
-                  className="tt-bulk-check"
-                  checked={selectedIds?.has(addon.id) ?? false}
-                  aria-label={t("menu.selectItem", { name: addon.name })}
-                  onChange={() => onToggleSelect(addon.id)}
-                />
-              ) : (
-                <ReorderButtons
-                  canMoveUp={!searchQuery && i > 0}
-                  canMoveDown={!searchQuery && i < addons.length - 1}
-                  onMoveUp={() => onMove(addon.id, "up")}
-                  onMoveDown={() => onMove(addon.id, "down")}
-                />
-              )}
-              <div className="tt-prod-body">
-                <div className="tt-prod-thumb">
-                  <span>{addon.emoji || addon.name.charAt(0).toUpperCase()}</span>
-                </div>
-                <div style={{ flex: 1 }}>
-                  {/* The name opens the editor, the same as on a product: the
-                      pencil is still there, but nobody hunts for it when the
-                      thing they want to change is what they are reading. Same
-                      class, so it behaves the same and there is no second
-                      style to maintain. */}
-                  <button
-                    type="button"
-                    className="tt-prod-name"
-                    onClick={() => setEditingId(addon.id)}
-                    title={t("menu.edit")}
-                  >
-                    {addon.name}
-                  </button>
-                  {!addon.available && (
-                    <span className="tt-badge" style={{ marginLeft: 6 }}>
-                      {t("menu.unavailable")}
-                    </span>
-                  )}
-                </div>
-                <div className="tt-prod-right">
-                  <strong className="tt-accent">
-                    {formatMoney(addon.price, currency)}
-                  </strong>
-                  <label
-                    className="tt-switch"
-                    title={t(addon.available ? "menu.available" : "menu.unavailable")}
-                  >
-                    <input
-                      type="checkbox"
-                      aria-label={t(addon.available ? "menu.available" : "menu.unavailable")}
-                      checked={addon.available}
-                      onChange={e => onToggleAvailable(addon.id, e.target.checked)}
-                    />
-                    <span className="tt-switch-track" />
-                  </label>
-                  <div className="tt-prod-actions">
-                    <button
-                      className="tt-iconbtn"
-                      title={t("menu.edit")}
-                      onClick={() => setEditingId(addon.id)}
-                    >
-                      <EditIcon size={16} />
-                    </button>
-                    <button
-                      className="tt-iconbtn"
-                      title={t("menu.delete")}
-                      onClick={async () => {
-                        if (
-                          await confirm({
-                            title: t("menu.deleteExtraConfirm", { name: addon.name }),
-                            confirmLabel: t("menu.delete"),
-                            danger: true,
-                          })
-                        ) {
-                          onDelete(addon.id);
-                        }
-                      }}
-                    >
-                      <DeleteIcon size={16} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <AddonRow
+              addon={addon}
+              currency={currency}
+              canMoveUp={!searchQuery && i > 0}
+              canMoveDown={!searchQuery && i < addons.length - 1}
+              selectable={Boolean(onToggleSelect)}
+              selected={selectedIds?.has(addon.id) ?? false}
+              onToggleSelect={() => onToggleSelect?.(addon.id)}
+              onEdit={() => setEditingId(addon.id)}
+              onToggleAvailable={available => onToggleAvailable(addon.id, available)}
+              onMove={direction => void onMove(addon.id, direction)}
+              onDelete={() => void onDelete(addon.id)}
+            />
             {modalForms && (
               <Modal
                 open={isEditing}
@@ -242,74 +162,5 @@ export default function AddonsPanel({
         );
       })}
     </div>
-  );
-}
-
-interface AddonFormProps {
-  initial?: MenuItem;
-  submitLabel: string;
-  onSubmit: (input: AddonInput) => Promise<void>;
-  onCancel: () => void;
-}
-
-/** Small inline form for creating/editing an add-on item. */
-function AddonForm({ initial, submitLabel, onSubmit, onCancel }: AddonFormProps) {
-  const t = useT();
-  const [name, setName] = useState(initial?.name ?? "");
-  const [price, setPrice] = useState(String(initial?.price ?? ""));
-  const [emoji, setEmoji] = useState(initial?.emoji ?? "");
-  const [saving, setSaving] = useState(false);
-  const dirty = useDirty([name, price, emoji]);
-
-  return (
-    <form
-      className="tt-prodform"
-      onSubmit={async e => {
-        e.preventDefault();
-        setSaving(true);
-        await onSubmit({ name: name.trim(), price: Number(price) || 0, emoji });
-        setSaving(false);
-      }}
-    >
-      <div className="tt-prodform-row">
-        <input
-          className="tt-input"
-          style={{ flex: 1 }}
-          placeholder={t("menu.extraNamePlaceholder")}
-          value={name}
-          onChange={e => setName(e.target.value)}
-          autoFocus={!initial}
-          required
-        />
-        <input
-          className="tt-input"
-          style={{ width: 110 }}
-          type="number"
-          step="0.01"
-          min="0"
-          placeholder={t("menu.pricePlaceholder")}
-          value={price}
-          onChange={e => setPrice(e.target.value)}
-          required
-        />
-      </div>
-      <IconPicker value={emoji} onChange={setEmoji} variant="addon" />
-      <div className="tt-prodform-actions">
-        <button
-          type="button"
-          className="tt-btn tt-btn-ghost tt-btn-sm"
-          onClick={onCancel}
-        >
-          {t("menu.cancel")}
-        </button>
-        <button
-          type="submit"
-          className="tt-btn tt-btn-primary tt-btn-sm"
-          disabled={!name || !dirty || saving}
-        >
-          {saving ? "…" : submitLabel}
-        </button>
-      </div>
-    </form>
   );
 }
