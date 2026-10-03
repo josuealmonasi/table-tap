@@ -674,6 +674,47 @@ try {
       .like("detail", `table=${MARK}-race%`);
   }
 
+  // ── Two waiters settle the whole table at the same instant ──────────────
+  //
+  // "Pagó en efectivo" marked the orders paid and then wrote the ledger, two
+  // writes with nothing tying them together. `settle_orders` makes them one,
+  // under the orders' row locks: the first tap records the bill, every other
+  // finds it no longer owed and records nothing.
+  {
+    const { data: spare } = await admin.from("restaurant_tables")
+      .insert({ restaurant_id: home.id, label: `${MARK}-settle` }).select("id, label").maybeSingle();
+    const { data: sat } = await admin.from("table_sessions")
+      .insert({ restaurant_id: home.id, table_id: spare.id }).select("id").maybeSingle();
+    await admin.from("orders").insert({
+      restaurant_id: home.id, table_id: spare.id, table_label: spare.label,
+      session_id: sat.id, items: [], subtotal: 200, total: 200, currency: "MXN",
+      status: "ready", paid: false, note: MARK,
+    });
+
+    const shots = await Promise.all([...Array(5)].map(() =>
+      post("/api/table-payment", { tableId: spare.id, settlement: "cash" }, who.waiter)));
+
+    const { data: rows } = await admin.from("payments").select("amount").eq("session_id", sat.id);
+    const got = Number((rows ?? []).reduce((sum, p) => sum + Number(p.amount), 0).toFixed(2));
+    const { count: unpaid } = await admin.from("orders").select("id", { count: "exact", head: true })
+      .eq("session_id", sat.id).eq("paid", false);
+
+    got === 200 && unpaid === 0
+      ? ok("five settles at once record the bill once (MX$200 of MX$200), and it is paid")
+      : bad(`five settles at once recorded MX$${got} on a MX$200 bill, ${unpaid} order(s) left unpaid`);
+    shots.every(s => [200, 409].includes(s.status)) && shots.filter(s => s.status === 200).length === 1
+      ? ok("and exactly one of them is told it settled; the rest are told the bill is not owed")
+      : bad(`settling at once answered ${shots.map(s => s.status).join("/")}`);
+
+    await admin.from("payments").delete().eq("session_id", sat.id);
+    await admin.from("orders").delete().eq("session_id", sat.id);
+    await admin.from("table_sessions").delete().eq("id", sat.id);
+    await admin.from("restaurant_tables").delete().eq("id", spare.id);
+    await admin.from("user_logs").delete()
+      .eq("restaurant_id", home.id).eq("entity", "bill")
+      .like("detail", `table=${MARK}-settle%`);
+  }
+
   // ── A bill the waiter opened is not payable online ──────────────────────
   {
     await admin.from("table_sessions")

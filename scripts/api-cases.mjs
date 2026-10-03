@@ -509,7 +509,19 @@ export function cases(fx) {
       expect: [200], check: d => d.superseded === true || "a stale move was applied" },
     { name: "POST /api/table-payment (counter)", as: "cashier", method: "POST",
       path: "/api/table-payment", body: { orderId: unpaidOrder, settlement: "cash" },
-      expect: [200], check: d => d.orders === 1 || `settled ${d.orders} order(s)` },
+      expect: [200],
+      check: async (d, f) => {
+        if (d.orders !== 1) return `settled ${d.orders} order(s)`;
+        // The order and its money are one write: paid, and in the ledger once.
+        const [{ data: order }, { data: rows }] = await Promise.all([
+          f.admin.from("orders").select("paid, total").eq("id", unpaidOrder).single(),
+          f.admin.from("payments").select("amount, method, actor_email").eq("order_id", unpaidOrder),
+        ]);
+        if (!order?.paid) return "the order is not marked paid";
+        if (rows?.length !== 1) return `${rows?.length ?? 0} payment(s) recorded for it`;
+        if (Number(rows[0].amount) !== Number(order.total)) return `recorded MX$${rows[0].amount} of MX$${order.total}`;
+        return rows[0].method === "cash" && rows[0].actor_email ? true : "recorded without its method or who took it";
+      } },
 
     // ── gerencia ─────────────────────────────────────────────────────────
     // The counter till. A cashier may ring a sale; a waiter may not, and the

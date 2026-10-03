@@ -317,7 +317,12 @@ async function addTip(restaurantId: string, before: Outstanding, tip: number): P
  *
  * No payment is recorded here — every centavo of this bill is already in the
  * ledger against the sitting. Recording the orders as well is how a table that
- * paid MX$200 comes to show MX$400 in the day's takings.
+ * paid MX$200 comes to show MX$400 in the day's takings. So `settle_orders` is
+ * given no sittings to record against, and only marks the orders paid.
+ *
+ * It answered "settled" whatever happened: a failed write left the orders owed
+ * while the waiter was told the table was clear. Now a failure is "not
+ * settled", the bill stays open at MX$0 owing, and "Pagó en efectivo" closes it.
  */
 async function closeBill(
   actor: Actor,
@@ -325,19 +330,36 @@ async function closeBill(
   method: "cash" | "card",
 ): Promise<boolean> {
   const db = createAdminClient();
-  const { data: cleared } = await db
+  const { data: owed, error: readError } = await db
     .from("orders")
-    .update({ paid: true, pay_method: method })
+    .select("id, session_id")
     .eq("restaurant_id", actor.restaurantId)
     .eq("table_id", tableId)
     .eq("paid", false)
     .is("account_id", null)
     .eq("written_off", false)
     .neq("status", "pending_payment")
-    .neq("status", "cancelled")
-    .select("session_id");
+    .neq("status", "cancelled");
+  if (readError) {
+    console.error("closing a bill paid in parts: could not read it:", readError.message);
+    return false;
+  }
+  // Nothing left unpaid: somebody closed it a moment ago, and it is settled.
+  if (!owed?.length) return true;
 
-  await closeSessionsFor(cleared ?? [], "settled");
+  const { error } = await db.rpc("settle_orders", {
+    p_restaurant: actor.restaurantId,
+    p_orders: owed.map(o => o.id),
+    p_method: method,
+    p_actor: actor.email,
+    p_sittings: [],
+  });
+  if (error) {
+    console.error("closing a bill paid in parts failed:", error.message);
+    return false;
+  }
+
+  await closeSessionsFor(owed, "settled");
 
   // Settled, so any open ask to come and settle it is answered.
   await db

@@ -257,7 +257,13 @@ dishes on a bill the restaurant has just cancelled.
   table divides a bill: a third of MX$100 across orders of MX$60 and MX$40 is an
   amount belonging to no order. Every route that marks an order paid records the
   payment in the same breath; two invariants and `pnpm money` are what keep the
-  two records from drifting apart.
+  two records from drifting apart. Settling a table in person — "Pagó en
+  efectivo", a card on the waiter's terminal, and closing a bill collected in
+  parts — is one database write, `settle_orders()`: the orders and their
+  payments together under the orders' row locks, or nothing, and `not_owed`
+  when any order the waiter saw has since been settled, so they look again.
+  They were two writes, and a failed second one left a bill paid with no
+  money behind it that no retry could repair.
 - **Two Stripe accounts, so two webhooks.** A diner's food is a DIRECT charge
   on the restaurant's own Stripe account: Stripe's processing fee comes out of
   their balance and our per-order fee comes to us clean. As a destination
