@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -10,8 +9,7 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 import type { PromotionWithItems } from "@/lib/promotions";
 import ComboForm from "./ComboForm";
 import QuantityForm from "./QuantityForm";
-import { DeleteIcon, EditIcon, WarningIcon } from "@/components/ui/icons";
-import { comboReachProblem } from "@/lib/combo-reach";
+import PromotionRow from "./PromotionRow";
 import CouponsPanel from "./CouponsPanel";
 import PlanLock from "@/components/dashboard/plan/PlanLock";
 import { ListSkeleton } from "@/components/ui/Skeleton";
@@ -89,6 +87,17 @@ export default function PromotionsPanel({
     );
   }
 
+  // Confirm the pause too: without it the only feedback was the label
+  // flipping, which is easy to miss.
+  async function toggle(p: PromotionWithItems): Promise<void> {
+    const next = !p.active;
+    const err = await setActive(p.id, next);
+    toast(
+      err ?? t(next ? "promos.resumed_ok" : "promos.paused_ok"),
+      err ? "error" : "info",
+    );
+  }
+
   async function del(p: PromotionWithItems) {
     const ok = await confirm({
       title: t("promos.deleteConfirm", { name: p.name }),
@@ -98,28 +107,6 @@ export default function PromotionsPanel({
     if (!ok) return;
     const err = await remove(p.id);
     toast(err ?? t("promos.deleted"), err ? "error" : "info");
-  }
-
-  /** One line describing what the promotion does. */
-  function describe(p: PromotionWithItems): string {
-    const names = p.items
-      .map(i => products.find(x => x.id === i.item_id))
-      .filter(Boolean)
-      .map((x, idx) => {
-        const qty = p.items[idx]?.qty ?? 1;
-        return qty > 1 ? `${qty}× ${x!.name}` : x!.name;
-      })
-      .join(" + ");
-    if (p.kind === "combo") {
-      return `${names} — ${formatMoney(Number(p.combo_price ?? 0), currency)}`;
-    }
-    if (p.kind === "bogo") {
-      return t("promos.bogoDesc", { buy: p.buy_qty ?? 0, pay: p.pay_qty ?? 0, names });
-    }
-    const tiers = (p.tiers ?? [])
-      .map(tier => `${tier.qty} → ${formatMoney(tier.price, currency)}`)
-      .join(" · ");
-    return `${names} — ${tiers}`;
   }
 
   return (
@@ -169,11 +156,17 @@ export default function PromotionsPanel({
               </div>
             ) : (
               <div style={{ marginBottom: 14 }}>
-                <PlanLock feature="promotions" unlocksWith={promosUnlockWith} isOwner={isOwner} />
+                <PlanLock
+                  feature="promotions"
+                  unlocksWith={promosUnlockWith}
+                  isOwner={isOwner}
+                />
                 {/* The saved ones are still listed, with their switches, so
                     say plainly that none of them reaches a diner right now. */}
                 {!loading && promotions.length > 0 && (
-                  <p className="tt-muted" style={{ fontSize: 13, marginBottom: 0 }}>{t("promos.lockedSaved")}</p>
+                  <p className="tt-muted" style={{ fontSize: 13, marginBottom: 0 }}>
+                    {t("promos.lockedSaved")}
+                  </p>
                 )}
               </div>
             )}
@@ -183,7 +176,11 @@ export default function PromotionsPanel({
             ) : loadFailed ? (
               <p className="tt-muted">
                 {t("promos.loadFailed")}{" "}
-                <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={reload}>
+                <button
+                  type="button"
+                  className="tt-btn tt-btn-ghost tt-btn-sm"
+                  onClick={reload}
+                >
                   {t("fallback.retry")}
                 </button>
               </p>
@@ -192,81 +189,18 @@ export default function PromotionsPanel({
             ) : (
               <div className="tt-coupon-list">
                 {promotions.map(p => (
-                  <div key={p.id} className="tt-coupon-item">
-                    <div style={{ minWidth: 0 }}>
-                      <strong>
-                        <button
-                          type="button"
-                          className="tt-prod-name"
-                          onClick={() => setEditing(p)}
-                          title={t("promos.edit")}
-                        >
-                          {p.emoji} {p.name}
-                        </button>
-                      </strong>
-                      {!p.active && (
-                        <span className="tt-coupon-off">{t("promos.paused")}</span>
-                      )}
-                      <div className="tt-muted" style={{ fontSize: 13 }}>
-                        {describe(p)}
-                      </div>
-                      {(() => {
-                        const problem = comboReachProblem(
-                          p,
-                          itemsById,
-                          categoriesById,
-                          activeMenuIds,
-                        );
-                        if (!problem) return null;
-                        return (
-                          <div className="tt-promo-warn">
-                            <WarningIcon size={14} weight="bold" />
-                            <span>
-                              {problem.itemName
-                                ? t(
-                                    problem.reason === "unavailable"
-                                      ? "promos.hiddenUnavailable"
-                                      : "promos.hiddenOffMenu",
-                                    { item: problem.itemName },
-                                  )
-                                : t("promos.hiddenMissing")}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                      <button
-                        className="tt-btn tt-btn-ghost tt-btn-sm"
-                        // Confirm the pause too: without it the only feedback
-                        // was the label flipping, which is easy to miss.
-                        onClick={async () => {
-                          const next = !p.active;
-                          const err = await setActive(p.id, next);
-                          toast(
-                            err ?? t(next ? "promos.resumed_ok" : "promos.paused_ok"),
-                            err ? "error" : "info",
-                          );
-                        }}
-                      >
-                        {p.active ? t("promos.pause") : t("promos.resume")}
-                      </button>
-                      <button
-                        className="tt-iconbtn"
-                        title={t("promos.edit")}
-                        onClick={() => setEditing(p)}
-                      >
-                        <EditIcon size={16} />
-                      </button>
-                      <button
-                        className="tt-iconbtn"
-                        title={t("promos.delete")}
-                        onClick={() => del(p)}
-                      >
-                        <DeleteIcon size={16} />
-                      </button>
-                    </div>
-                  </div>
+                  <PromotionRow
+                    key={p.id}
+                    promotion={p}
+                    products={products}
+                    itemsById={itemsById}
+                    categoriesById={categoriesById}
+                    activeMenuIds={activeMenuIds}
+                    currency={currency}
+                    onEdit={setEditing}
+                    onToggle={p2 => void toggle(p2)}
+                    onDelete={p2 => void del(p2)}
+                  />
                 ))}
               </div>
             )}
@@ -277,7 +211,11 @@ export default function PromotionsPanel({
           {couponsAllowed ? (
             <CouponsPanel restaurantId={restaurantId} currency={currency} />
           ) : (
-            <PlanLock feature="coupons" unlocksWith={couponsUnlockWith} isOwner={isOwner} />
+            <PlanLock
+              feature="coupons"
+              unlocksWith={couponsUnlockWith}
+              isOwner={isOwner}
+            />
           )}
         </div>
       </div>
