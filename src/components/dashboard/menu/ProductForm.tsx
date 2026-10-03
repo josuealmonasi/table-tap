@@ -1,16 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { formatMoney } from "@/lib/format";
 import type { MenuItem, Modifier } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
-import { tagLabel } from "@/lib/dietary";
-import { useDietaryTags } from "@/components/DietaryTagsContext";
-import { useT, useLocale } from "@/lib/i18n/context";
+import { useT } from "@/lib/i18n/context";
+import { cleanModifiers } from "@/lib/clean-modifiers";
 import { useDirty } from "@/hooks/useDirty";
 import IconPicker from "./IconPicker";
 import ModifiersEditor from "./ModifiersEditor";
 import DishPhotoField from "./DishPhotoField";
+import ProductStockFields from "./ProductStockFields";
+import ProductChips from "./ProductChips";
 
 interface ProductFormProps {
   /** Photos are stored under the restaurant's own folder, which is what the
@@ -42,8 +42,6 @@ export default function ProductForm({
   onCancel,
 }: ProductFormProps) {
   const t = useT();
-  const { locale: lang } = useLocale();
-  const dietaryOptions = useDietaryTags();
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [price, setPrice] = useState(String(initial?.price ?? ""));
@@ -106,26 +104,13 @@ export default function ProductForm({
         emoji,
         popular,
         skips_kitchen: skipsKitchen,
-        // Only keep groups that actually have a name and choices. Every field
-        // the group carries has to be listed here — this rebuilds the object
-        // rather than spreading it, so anything omitted is silently dropped on
-        // save. `required` was, which meant a manager could tick the box, save,
-        // and the customer would still be able to add without choosing.
-        modifiers: modifiers
-          .map(g => ({
-            label: g.label.trim(),
-            type: g.type,
-            options: g.options.map(o => o.trim()).filter(Boolean),
-            // Written only when true, so groups that don't need it stay clean
-            // in the stored JSON.
-            ...(g.required ? { required: true } : {}),
-          }))
-          .filter(g => g.label && g.options.length > 0),
+        modifiers: cleanModifiers(modifiers),
         dietary,
         discount_pct: pct,
-        stock: !inventoryAllowed || stock.trim() === ""
-          ? null
-          : Math.max(0, Math.floor(Number(stock) || 0)),
+        stock:
+          !inventoryAllowed || stock.trim() === ""
+            ? null
+            : Math.max(0, Math.floor(Number(stock) || 0)),
       },
       picked,
     );
@@ -157,58 +142,17 @@ export default function ProductForm({
         />
       </div>
 
-      <div className="tt-prodform-row">
-        <input
-          className="tt-input"
-          style={{ width: 110 }}
-          type="number"
-          step="1"
-          min="0"
-          max="99"
-          placeholder={t("menu.discountPlaceholder")}
-          value={discountPct}
-          onChange={e => setDiscountPct(e.target.value)}
-        />
-        <span className="tt-muted" style={{ fontSize: 13 }}>
-          {pct > 0 ? (
-            <>
-              <s>{formatMoney(basePrice, currency)}</s>{" "}
-              <strong className="tt-accent">{formatMoney(salePrice, currency)}</strong>{" "}
-              {t("menu.discountShownToCustomers")}
-            </>
-          ) : (
-            t("menu.discountHint")
-          )}
-        </span>
-      </div>
-
-      <div className="tt-prodform-row">
-        <input
-          className="tt-input"
-          style={{ width: 110 }}
-          type="number"
-          step="1"
-          min="0"
-          inputMode="numeric"
-          aria-label={t("menu.stock")}
-          placeholder={t("menu.stockPlaceholder")}
-          disabled={!inventoryAllowed}
-          value={inventoryAllowed ? stock : ""}
-          onChange={e => {
-            // Zero is valid to hold — it is what selling out leaves behind,
-            // and the form opens on it — so the refusal lives here rather than
-            // in `min`. As min="1" the field made a sold-out dish's whole form
-            // invalid, and its name could not be corrected until it was
-            // restocked. Only a zero somebody types is refused.
-            const next = e.target.value;
-            if (next !== "" && Number(next) === 0) return;
-            setStock(next);
-          }}
-        />
-        <span className="tt-muted" style={{ fontSize: 13 }}>
-          {inventoryAllowed ? t("menu.stockHint") : t("menu.stockLocked")}
-        </span>
-      </div>
+      <ProductStockFields
+        discountPct={discountPct}
+        onDiscountPct={setDiscountPct}
+        pct={pct}
+        basePrice={basePrice}
+        salePrice={salePrice}
+        stock={stock}
+        onStock={setStock}
+        inventoryAllowed={inventoryAllowed}
+        currency={currency}
+      />
 
       <textarea
         className="tt-input"
@@ -255,47 +199,14 @@ export default function ProductForm({
 
       <ModifiersEditor value={modifiers} onChange={setModifiers} />
 
-      <div>
-        <div className="tt-mod-label" style={{ marginTop: 6 }}>
-          {t("menu.dietaryAllergens")}{" "}
-          <span className="tt-muted" style={{ fontWeight: 400 }}>
-            {t("menu.shownToCustomers")}
-          </span>
-        </div>
-        <div className="tt-chips">
-          {dietaryOptions.map(tag => (
-            <button
-              type="button"
-              key={tag.key}
-              className={`tt-chip ${dietary.includes(tag.key) ? "tt-chip-on" : ""}`}
-              onClick={() => toggleDietary(tag.key)}
-            >
-              {tag.emoji} {tagLabel(tag, t, lang)}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {addons.length > 0 && (
-        <div>
-          <div className="tt-mod-label" style={{ marginTop: 6 }}>
-            {t("menu.extrasOffered")}
-          </div>
-          <div className="tt-chips">
-            {addons.map(a => (
-              <button
-                type="button"
-                key={a.id}
-                className={`tt-chip ${picked.includes(a.id) ? "tt-chip-on" : ""}`}
-                onClick={() => toggleAddon(a.id)}
-              >
-                {a.emoji ? `${a.emoji} ` : ""}
-                {a.name} · {formatMoney(a.price, currency)}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <ProductChips
+        dietary={dietary}
+        onToggleDietary={toggleDietary}
+        addons={addons}
+        picked={picked}
+        onToggleAddon={toggleAddon}
+        currency={currency}
+      />
 
       <div className="tt-prodform-actions">
         <button
