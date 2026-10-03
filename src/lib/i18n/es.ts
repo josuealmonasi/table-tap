@@ -1026,6 +1026,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     payLaterNotAllowed: "Este restaurante cobra al momento de ordenar.",
     billSettled: "Esa cuenta ya fue pagada.",
     nothingToSettle: "Esa mesa no tiene nada pendiente.",
+    billChanged: "La cuenta cambió mientras la cobrabas. Revísala y vuelve a cobrar.",
     waiterSettles: "Tu mesero está cobrando esta mesa. Pídele la cuenta.",
     nothingToDiscount: "Esa cuenta ya no tiene nada que descontar.",
     nothingToWriteOff: "Esa cuenta ya no tiene nada que cancelar — la cobraron o la cancelaron antes.",

@@ -2538,6 +2538,95 @@ revoke all on function public.collect_on_sitting(uuid, uuid, numeric, numeric, t
 grant execute on function public.collect_on_sitting(uuid, uuid, numeric, numeric, text, text, text)
   to service_role;
 
+-- Settling orders and recording the money they brought, as one write.
+--
+-- Settling a table in person was two: the orders marked paid, then a payment
+-- written to the ledger. When the second failed the orders read as paid with
+-- nothing behind them — the corte short by exactly that bill — and nothing
+-- could repair it, because every path guards on `paid = false` and the orders
+-- no longer were. Here both happen, or neither does.
+--
+-- The caller reads what is owed and names exactly the orders it is settling.
+-- If any of them is no longer owed by the time its row is locked — another
+-- waiter got there first, a card payment landed, a manager wrote it off —
+-- nothing is written and the call fails with `not_owed`, so the waiter looks
+-- again instead of recording money against a bill that changed under them.
+--
+-- `p_sittings` null: each order is recorded for its own total. Otherwise the
+-- table had already handed over part of its bill, and only the remainder is
+-- recorded, against each sitting it pays for ([{session_id, amount}]) — every
+-- centavo before it is in the ledger under its own collection.
+create or replace function public.settle_orders(
+  p_restaurant uuid,
+  p_orders     uuid[],
+  p_method     text,
+  p_actor      text,
+  p_sittings   jsonb
+)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_count int;
+begin
+  if p_method not in ('cash', 'card') then
+    raise exception 'settle_orders: unknown method %', p_method;
+  end if;
+  if coalesce(cardinality(p_orders), 0) = 0 then
+    raise exception 'not_owed';
+  end if;
+  -- A sitting is only ever this restaurant's own.
+  if p_sittings is not null and exists (
+    select 1 from jsonb_array_elements(p_sittings) p
+     where not exists (
+       select 1 from table_sessions s
+        where s.id = (p->>'session_id')::uuid and s.restaurant_id = p_restaurant)
+  ) then
+    raise exception 'settle_orders: a sitting that is not this restaurant''s';
+  end if;
+
+  with settled as (
+    update orders
+       set paid = true, pay_method = p_method
+     where restaurant_id = p_restaurant
+       and id = any(p_orders)
+       and paid = false
+       and account_id is null
+       and written_off = false
+       and status <> 'pending_payment'
+       and status <> 'cancelled'
+    returning id, session_id, total
+  ), written as (
+    insert into payments (restaurant_id, order_id, session_id, amount, method, actor_email)
+    select p_restaurant, s.id, s.session_id, round(s.total, 2), p_method, p_actor
+      from settled s
+     where p_sittings is null and s.total > 0
+    returning 1
+  )
+  select count(*) into v_count from settled;
+
+  -- All of them, or none: a bill that changed is looked at again.
+  if v_count <> cardinality(p_orders) then
+    raise exception 'not_owed';
+  end if;
+
+  if p_sittings is not null then
+    insert into payments (restaurant_id, session_id, amount, method, actor_email)
+    select p_restaurant, (p->>'session_id')::uuid, round((p->>'amount')::numeric, 2), p_method, p_actor
+      from jsonb_array_elements(p_sittings) p
+     where (p->>'amount')::numeric > 0;
+  end if;
+
+  return v_count;
+end;
+$$;
+revoke all on function public.settle_orders(uuid, uuid[], text, text, jsonb)
+  from public, anon, authenticated;
+grant execute on function public.settle_orders(uuid, uuid[], text, text, jsonb)
+  to service_role;
+
 -- ── Printing ────────────────────────────────────────────────────────────────
 -- Tickets on paper: the receipt handed across the counter, and the order that
 -- lands on the pass.

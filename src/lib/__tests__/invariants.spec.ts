@@ -1190,7 +1190,7 @@ describe("every route that settles an order records the payment", () => {
   it("calls recordPayment wherever it sets paid", () => {
     for (const [file, complaint] of SETTLES) {
       const lines = read(file).split("\n").filter(l => !l.trimStart().startsWith("import"));
-      const marksPaid = lines.filter(l => /paid:\s*true/.test(l)).length;
+      const marksPaid = lines.filter(l => /paid:\s*true|"settle_orders"/.test(l)).length;
       // `recordPayment`, or the SQL that does the same job under a lock. The
       // calculator moved to `collect_on_sitting` so that reading the balance,
       // capping against it and inserting happen atomically — two waiters on
@@ -1198,11 +1198,29 @@ describe("every route that settles an order records the payment", () => {
       // route that settles orders and still has to record the money; this
       // invariant just had to learn the second spelling.
       const records = lines.filter(
-        l => /\brecordPayments?\s*\(/.test(l) || /collect_on_sitting/.test(l),
+        l => /\brecordPayments?\s*\(/.test(l) || /collect_on_sitting|"settle_orders"/.test(l),
       ).length;
       expect(marksPaid, `${file}: nothing marks an order paid any more`).toBeGreaterThan(0);
       expect(records, `${file}: ${complaint}`).toBeGreaterThan(0);
     }
+  });
+
+  it("settles a table in person as one write, never as two", () => {
+    // "Pagó en efectivo" marked the orders paid and then wrote the ledger. A
+    // failed second write left a bill paid with no money behind it, and no
+    // retry could repair it: every path guards on `paid = false`.
+    for (const file of ["src/app/api/table-payment/route.ts", "src/app/api/table-payment/part/route.ts"]) {
+      const src = read(file);
+      expect(src, `${file} no longer settles through settle_orders`).toMatch(/rpc\("settle_orders"/);
+      expect(src, `${file} marks orders paid outside settle_orders`).not.toMatch(/paid:\s*true/);
+    }
+    // ...and the function does both under one transaction, refusing a bill that changed.
+    const schema = read("supabase/schema.sql");
+    const fn = schema.slice(schema.indexOf("function public.settle_orders("), schema.indexOf("$$;", schema.indexOf("function public.settle_orders(")));
+    expect(fn).toMatch(/update orders\s+set paid = true/);
+    expect(fn).toMatch(/insert into payments/);
+    expect(fn).toMatch(/if v_count <> cardinality\(p_orders\) then\s+raise exception 'not_owed'/);
+    expect(schema).toMatch(/grant execute on function public\.settle_orders\([^)]*\)\s+to service_role;/);
   });
 
   it("has no other route marking an order paid on the quiet", () => {

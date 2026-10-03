@@ -1032,6 +1032,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     payLaterNotAllowed: "This restaurant takes payment when you order.",
     billSettled: "That bill has already been paid.",
     nothingToSettle: "That table has nothing outstanding.",
+    billChanged: "The bill changed while you were collecting it. Check it and collect again.",
     waiterSettles: "Your waiter is settling this table. Ask them for the bill.",
     nothingToDiscount: "That bill has nothing left to discount.",
     nothingToWriteOff: "That bill has nothing left to write off — it was collected or cancelled first.",

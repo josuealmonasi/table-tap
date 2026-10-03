@@ -6,7 +6,6 @@ import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
-import { recordPayment, recordPayments } from "@/lib/payments";
 import { tableOutstanding } from "@/lib/table-outstanding";
 import { shareOut } from "@/lib/table-balance";
 
@@ -57,11 +56,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const already = tableId ? await tableOutstanding(actor.restaurantId, tableId) : null;
 
   // Scoped by the actor's restaurant, so a table id from elsewhere matches
-  // nothing. Only what is genuinely outstanding is touched: an order already
+  // nothing. Only what is genuinely outstanding is read: an order already
   // paid must not be quietly rewritten.
   const scoped = db
     .from("orders")
-    .update({ paid: true, pay_method: settlement })
+    .select("id, table_label, total, session_id")
     .eq("restaurant_id", actor.restaurantId);
 
   // A general-QR order is collected on its own, and only if it has no table:
@@ -74,45 +73,40 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .neq("status", "pending_payment")
     .neq("status", "cancelled");
 
-  const { data: updated, error } = await base.select("id, table_label, total, session_id");
+  const { data: updated, error } = await base;
   if (error) return await apiError("apiErr.orderData", 500);
   if (!updated?.length) return await apiError("apiErr.nothingToSettle", 409);
 
-  // The ledger, in the same breath as the boolean.
-  //
   // Nothing collected in parts, which is the ordinary case: each order is
   // recorded for what it came to. Otherwise only the remainder is, against the
   // sitting — `owed` is what the table still owes for its food, and every
   // centavo before it is already in the ledger under its own collection.
+  //
+  // Across the sittings it pays for, oldest first. A table can owe on more
+  // than one — an old sitting expires with something still on it and the next
+  // party opens another — and recording the lot against one leaves that
+  // sitting holding money it did not owe and the other marked paid with
+  // nothing behind it.
   const partly = (already?.collected ?? 0) > 0;
   const collectedNow = partly ? already!.owed : total(updated);
+  const sittings = partly
+    ? shareOut(collectedNow, already!.sittings).map(s => ({ session_id: s.id, amount: s.amount }))
+    : null;
 
-  if (partly) {
-    // Across the sittings it pays for, oldest first. A table can owe on more
-    // than one — an old sitting expires with something still on it and the
-    // next party opens another — and recording the lot against one leaves that
-    // sitting holding money it did not owe and the other marked paid with
-    // nothing behind it.
-    for (const share of shareOut(collectedNow, already!.sittings)) {
-      await recordPayment({
-        restaurantId: actor.restaurantId,
-        sessionId: share.id,
-        amount: share.amount,
-        method: settlement as "card" | "cash",
-        actorEmail: actor.email,
-      });
-    }
-  } else {
-    await recordPayments(
-      updated.map(o => ({
-        restaurantId: actor.restaurantId,
-        orderId: o.id,
-        sessionId: o.session_id,
-        amount: Number(o.total),
-        method: settlement as "card" | "cash",
-        actorEmail: actor.email,
-      })),
-    );
+  // The orders and the ledger in one write (`settle_orders`): both, or
+  // neither. They were two, and a failed second write left a bill marked paid
+  // with no money behind it that no retry could repair.
+  const { error: settleError } = await db.rpc("settle_orders", {
+    p_restaurant: actor.restaurantId,
+    p_orders: updated.map(o => o.id),
+    p_method: settlement,
+    p_actor: actor.email,
+    p_sittings: sittings,
+  });
+  if (settleError?.message === "not_owed") return await apiError("apiErr.billChanged", 409);
+  if (settleError) {
+    console.error("settling a bill failed:", settleError.message);
+    return await apiError("apiErr.orderData", 500);
   }
 
   // Money moved without a card, so it is worth being able to ask about later.
