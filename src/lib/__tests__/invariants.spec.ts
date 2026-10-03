@@ -107,6 +107,19 @@ describe("money that stops being owed closes the sitting", () => {
   });
 });
 
+describe("no probe is left in the repository", () => {
+  it("has no *.tmp.* file anywhere it would be committed", () => {
+    // A one-off script that signed in as every demo login and called every
+    // route was committed with a privacy change and sat at the root for weeks,
+    // referenced by nothing. Probes are named *.tmp.* so they can be found.
+    const roots = [".", "scripts", "src", "docs", "supabase"];
+    const found = roots.flatMap(r =>
+      (r === "." ? fs.readdirSync(".").filter(n => fs.statSync(n).isFile()) : walkAll(r)).filter(f => /\.tmp\./.test(f)),
+    );
+    expect(found, "a probe was left behind — delete it").toEqual([]);
+  });
+});
+
 describe("every public endpoint has a ceiling", () => {
   it("guards or rate limits every API route", () => {
     // An endpoint with neither is open to the world with no limit. Found one
