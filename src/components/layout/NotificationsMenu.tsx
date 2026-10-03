@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useLocale, useT } from "@/lib/i18n/context";
-import { dateLocale } from "@/lib/format";
+import { dateLocale, formatMoney } from "@/lib/format";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import { NotificationsIcon } from "@/components/ui/icons";
 
@@ -50,6 +50,12 @@ export default function NotificationsMenu({ enabled }: { enabled: boolean }) {
    * Spanish.
    */
   function sentence(n: Notification): string {
+    if (n.kind === "refund_due") {
+      const amount = formatMoney(Number(n.data.amount ?? 0), n.data.currency ?? "MXN");
+      return n.data.table
+        ? t("notif.refundDue", { amount, label: n.data.table })
+        : t("notif.refundDueCounter", { amount });
+    }
     const name = n.data.name ?? "";
     const count = n.data.stock ?? 0;
     return n.kind === "out_of_stock"

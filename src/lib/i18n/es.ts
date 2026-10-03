@@ -815,6 +815,8 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     unread: "{count} sin leer",
     lowStock: "{name} se está acabando — quedan {count}.",
     outOfStock: "{name} se agotó y salió de la carta.",
+    refundDue: "Llegó un pago con tarjeta de {amount} por la Mesa {label}, que ya estaba cobrada. Reembólsalo al comensal desde Stripe.",
+    refundDueCounter: "Llegó un pago con tarjeta de {amount} por un pedido que ya estaba cobrado. Reembólsalo al comensal desde Stripe.",
   },
   notice: {
     heads: "Atención",

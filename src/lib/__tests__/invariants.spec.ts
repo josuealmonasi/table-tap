@@ -1264,6 +1264,24 @@ describe("every route that settles an order records the payment", () => {
     expect(fn).toMatch(/insert into payments/);
   });
 
+  it("keeps a card payment that landed on a settled bill as a refund due, never drops it", () => {
+    // A waiter took cash while the diner was on Stripe's page; the webhook
+    // matched nothing and the card money was recorded nowhere.
+    const schema = read("supabase/schema.sql");
+    const at = schema.indexOf("function public.settle_card_orders(");
+    const fn = schema.slice(at, schema.indexOf("$$;", at));
+    expect(fn, "a double charge is no longer kept").toMatch(/insert into refunds_due/);
+    expect(fn, "nobody is told about a double charge").toMatch(/insert into notifications[\s\S]*'refund_due'/);
+    expect(fn, "a repeat of the event would flag it again").toMatch(/on conflict \(stripe_payment_intent\) do nothing/);
+    expect(fn, "the refund is not reduced by what was recorded under the payment").toMatch(/v_owed := round\(p_charged - v_recorded, 2\)/);
+    // Out of the ledger: every reader of `payments` would count it as the table's.
+    expect(fn).not.toMatch(/insert into payments[^;]*refund/);
+    expect(schema).toMatch(/revoke all on refunds_due from anon;/);
+    expect(schema).toMatch(/alter table refunds_due enable row level security;/);
+    // The webhook says what Stripe charged, or nothing can be compared.
+    expect(read("src/lib/checkout-settle.ts")).toMatch(/p_charged:/);
+  });
+
   it("has no other route marking an order paid on the quiet", () => {
     const known = new Set<string>(SETTLES.map(([f]) => f));
     const rogue = walkAll("src/app/api")

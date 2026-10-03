@@ -818,6 +818,8 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     unread: "{count} unread",
     lowStock: "{name} is running low — {count} left.",
     outOfStock: "{name} sold out and came off the menu.",
+    refundDue: "A card payment of {amount} arrived for Table {label}, which was already settled. Refund it to the diner in Stripe.",
+    refundDueCounter: "A card payment of {amount} arrived for an order that was already settled. Refund it to the diner in Stripe.",
   },
   notice: {
     heads: "Heads up",

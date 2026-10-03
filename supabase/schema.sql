@@ -2627,6 +2627,38 @@ revoke all on function public.settle_orders(uuid, uuid[], text, text, jsonb)
 grant execute on function public.settle_orders(uuid, uuid[], text, text, jsonb)
   to service_role;
 
+-- Money taken twice: a card payment that arrived for orders somebody had
+-- already settled — a waiter took cash for the table while a diner was on
+-- Stripe's page. The card money is real and is not the restaurant's to keep,
+-- so it is not put in the ledger (every reader of `payments` would count it as
+-- the table's money) and it is not dropped either, which is what happened: it
+-- is kept here, the owner and managers are told, and `pnpm money` lists it
+-- until somebody refunds it in Stripe.
+create table if not exists refunds_due (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  stripe_payment_intent text not null,
+  amount        numeric not null check (amount > 0),
+  order_ids     uuid[] not null default '{}',
+  table_label   text,
+  created_at    timestamptz not null default now(),
+  refunded_at   timestamptz
+);
+-- One per payment: Stripe repeats a webhook, and a repeat is not a second refund.
+create unique index if not exists refunds_due_one_per_intent on refunds_due(stripe_payment_intent);
+create index if not exists refunds_due_restaurant_idx on refunds_due(restaurant_id, created_at desc);
+alter table refunds_due enable row level security;
+revoke all on refunds_due from anon;
+drop policy if exists "managers read refunds due" on refunds_due;
+create policy "managers read refunds due"
+  on refunds_due for select
+  using (has_role(restaurant_id, array['manager']));
+
+-- The bell says so: money a diner must be given back is the owner's to act on.
+alter table notifications drop constraint if exists notifications_kind_check;
+alter table notifications add constraint notifications_kind_check
+  check (kind in ('low_stock', 'out_of_stock', 'refund_due'));
+
 -- A card payment Stripe confirmed, written with the orders it paid for.
 --
 -- The webhook marked the orders paid and then wrote the ledger, two writes; a
@@ -2641,12 +2673,18 @@ grant execute on function public.settle_orders(uuid, uuid[], text, text, jsonb)
 -- It answers which orders it settled and which it did not, because an order
 -- somebody else settled while the diner was on Stripe's page is money taken
 -- twice, and the caller must not let that pass in silence.
+-- What Stripe charged for these orders (`p_charged`) is how a payment that
+-- landed on orders already settled is found: less was recorded under it than
+-- was taken, and the difference is a refund the restaurant owes the diner.
+drop function if exists public.settle_card_orders(uuid[], text, numeric, uuid, text);
 create or replace function public.settle_card_orders(
   p_orders    uuid[],
   p_intent    text,
   p_tip       numeric,
   p_tip_order uuid,
-  p_status    text
+  p_status    text,
+  -- Defaulted, so the call written before it existed still finds this function.
+  p_charged   numeric default null
 )
 returns jsonb
 language plpgsql
@@ -2654,8 +2692,14 @@ security definer
 set search_path = public
 as $$
 declare
-  v_settled uuid[];
-  v_tip_on  uuid;
+  v_settled  uuid[];
+  v_tip_on   uuid;
+  v_missed   uuid[];
+  v_recorded numeric;
+  v_owed     numeric;
+  v_rest     uuid;
+  v_label    text;
+  v_currency text;
 begin
   -- Held for the rest of the call, so the choice below and the update after it
   -- see the same orders: a waiter settling one in between waits for this.
@@ -2696,16 +2740,40 @@ begin
      where id = v_tip_on;
   end if;
 
+  v_missed := coalesce((select array_agg(o) from unnest(p_orders) o where not (o = any(v_settled))), '{}');
+
+  -- Orders this payment was for that somebody else had settled. Whatever was
+  -- charged and is not in the ledger under this payment — a repeat of the
+  -- event finds it all there — is money taken twice.
+  if cardinality(v_missed) > 0 and coalesce(p_charged, 0) > 0 and p_intent is not null then
+    select coalesce(sum(amount), 0) into v_recorded
+      from payments where stripe_payment_intent = p_intent and order_id = any(p_orders);
+    v_owed := round(p_charged - v_recorded, 2);
+    if v_owed > 0 then
+      select o.restaurant_id, o.table_label, o.currency into v_rest, v_label, v_currency
+        from orders o where o.id = v_missed[1];
+      if v_rest is not null then
+        insert into refunds_due (restaurant_id, stripe_payment_intent, amount, order_ids, table_label)
+        values (v_rest, p_intent, v_owed, v_missed, v_label)
+        on conflict (stripe_payment_intent) do nothing;
+        if found then
+          insert into notifications (restaurant_id, kind, data)
+          values (v_rest, 'refund_due',
+                  jsonb_build_object('amount', v_owed, 'currency', v_currency, 'table', v_label));
+        end if;
+      end if;
+    end if;
+  end if;
+
   return jsonb_build_object(
     'settled', to_jsonb(v_settled),
     'tip_on', v_tip_on,
-    'not_settled', to_jsonb(coalesce(
-      (select array_agg(o) from unnest(p_orders) o where not (o = any(v_settled))), '{}')));
+    'not_settled', to_jsonb(v_missed));
 end;
 $$;
-revoke all on function public.settle_card_orders(uuid[], text, numeric, uuid, text)
+revoke all on function public.settle_card_orders(uuid[], text, numeric, uuid, text, numeric)
   from public, anon, authenticated;
-grant execute on function public.settle_card_orders(uuid[], text, numeric, uuid, text)
+grant execute on function public.settle_card_orders(uuid[], text, numeric, uuid, text, numeric)
   to service_role;
 
 -- One diner's share of a divided bill, paid by card: the seat claimed, the

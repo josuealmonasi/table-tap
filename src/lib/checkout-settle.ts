@@ -103,7 +103,12 @@ async function settleSplitShare(session: Stripe.Checkout.Session): Promise<void>
       // Anything they ordered after the freeze is theirs, and settles now:
       // the orders and their payments in one write.
       const ownIds = unpackOrderIds(session.metadata);
-      if (ownIds.length > 0) await settleCardOrders(ownIds, session, "settling a share's own orders");
+      if (ownIds.length > 0) {
+        // What Stripe took for them: the whole charge less the share and its tip.
+        await settleCardOrders(ownIds, session, "settling a share's own orders", {
+          charged: charged(session) - shareAmount - tip,
+        });
+      }
     }
 
     // The last share closes the pot: everything the table divided is paid
@@ -153,6 +158,15 @@ async function closeDividedBill(splitId: string, sessionId: string, lockedAt: st
   await closeSessionsFor(covered ?? [], "paid");
 }
 
+/**
+ * What Stripe charged, in pesos. It is how a payment that landed on orders
+ * somebody had already settled is found: less is recorded under it than was
+ * taken, and `settle_card_orders` keeps the difference as a refund due.
+ */
+function charged(session: Stripe.Checkout.Session): number {
+  return Math.max(0, (session.amount_total ?? 0) / 100);
+}
+
 /** What `settle_card_orders` answers. */
 interface CardSettlement {
   settled: string[];
@@ -174,7 +188,7 @@ async function settleCardOrders(
   ids: string[],
   session: Stripe.Checkout.Session,
   what: string,
-  opts: { tip?: number; tipOrder?: string; status?: "received" } = {},
+  opts: { tip?: number; tipOrder?: string; status?: "received"; charged?: number } = {},
 ): Promise<CardSettlement & { sessions: { session_id: string | null }[] }> {
   const db = createAdminClient();
   const { data, error } = await db.rpc("settle_card_orders", {
@@ -183,6 +197,7 @@ async function settleCardOrders(
     p_tip: opts.tip ?? 0,
     p_tip_order: opts.tipOrder ?? null,
     p_status: opts.status ?? null,
+    p_charged: Math.max(0, Math.round((opts.charged ?? charged(session)) * 100) / 100),
   });
   if (error) throw new Error(`${what}: could not mark it paid: ${error.message}`);
   const result = data as CardSettlement;
