@@ -12,10 +12,8 @@ import type { Combo } from "@/lib/promotions";
 import { useCart } from "@/hooks/useCart";
 import { recallDinerName } from "@/lib/diner-name";
 import MenuScreen from "./MenuScreen";
-import ItemDetailScreen from "./ItemDetailScreen";
-import CartScreen from "./CartScreen";
-import ComboDetailScreen from "./ComboDetailScreen";
-import DetailOverlay from "./DetailOverlay";
+import DishOverlays from "./DishOverlays";
+import CartOverlay from "./CartOverlay";
 import NoticeModal from "./NoticeModal";
 import OwingElsewhereModal from "./OwingElsewhereModal";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
@@ -110,21 +108,8 @@ export default function OrderingApp({
   useMenuFreshness();
   const cart = useCart(restaurant.id);
   // Which screen is showing — menu, dish, combo, a cart line, the cart.
-  const {
-    screen,
-    setScreen,
-    selected,
-    detailFrom,
-    selectedCombo,
-    editingLine,
-    openItem,
-    closeDetail,
-    openCombo,
-    closeCombo,
-    addConfiguredCombo,
-    editLine,
-    saveDish,
-  } = useOrderingScreens(cart, items, combos);
+  const screens = useOrderingScreens(cart, items, combos);
+  const { screen, setScreen, openItem, openCombo, editLine } = screens;
 
   // "Lo de siempre", as today's menu can make it.
   const { usual, forget: forgetUsualOrder } = useUsualOrder(
@@ -135,18 +120,8 @@ export default function OrderingApp({
   );
 
   // What the cart comes to, sold-out lines left out.
-  const {
-    soldOut,
-    markSoldOut,
-    orderableItems,
-    pricing,
-    tipPct,
-    choosePct,
-    tipCustom,
-    setTipCustom,
-    coupon,
-    setCoupon,
-  } = useCartTotals(cart, items, restaurant, promos);
+  const totals = useCartTotals(cart, items, restaurant, promos);
+  const { markSoldOut, orderableItems, pricing, tipPct, tipCustom, coupon, setCoupon } = totals;
 
   // The orders this phone can still watch, its sitting, and the tracker.
   const orders = useTrackedOrders(restaurant.id, table?.id ?? null, trackOrder);
@@ -178,17 +153,6 @@ export default function OrderingApp({
     return (itemId: string) => byId.get(itemId) ?? null;
   }, [items]);
 
-  const extrasById = useMemo(() => new Map(extras.map(e => [e.id, e])), [extras]);
-  const itemsById = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
-
-  // The available extra items offered by the currently selected product.
-  const selectedExtras = useMemo(() => {
-    if (!selected) return [];
-    return (extrasByProduct[selected.id] ?? [])
-      .map(id => extrasById.get(id))
-      .filter((e): e is MenuItem => Boolean(e));
-  }, [selected, extrasByProduct, extrasById]);
-
   const { checkout, loading } = useCheckout({
     restaurantId: restaurant.id,
     table,
@@ -212,105 +176,6 @@ export default function OrderingApp({
       reloadBill();
     },
   });
-
-  /**
-   * The dish detail, layered over whatever screen opened it — the menu when
-   * adding, the cart when editing a line.
-   *
-   * It used to replace that screen outright. On a phone that's right and looks
-   * identical to before, but on a wide screen it meant a full-page takeover
-   * for one dish: the customer lost their place in the list and read a short
-   * form stretched across an otherwise empty page. Keeping the list mounted
-   * behind a dialog is both less jarring and a shorter trip back.
-   */
-  const detail =
-    (screen === "item" || screen === "edit") && selected ? (
-      <DetailOverlay onClose={() => closeDetail(screen === "edit" ? "cart" : detailFrom)}>
-        <ItemDetailScreen
-          item={selected}
-          extras={selectedExtras}
-          currency={restaurant.currency}
-          initialLine={screen === "edit" && editingLine ? editingLine : undefined}
-          promo={promos.find(p => p.itemIds.includes(selected.id))}
-          inCartQty={cart.items
-            .filter(i => i.itemId === selected.id && !i.comboId)
-            .reduce((n, i) => n + i.qty, 0)}
-          onBack={() => closeDetail(screen === "edit" ? "cart" : detailFrom)}
-          onAdd={saveDish}
-        />
-      </DetailOverlay>
-    ) : null;
-
-  const comboDetail =
-    screen === "combo" && selectedCombo ? (
-      <DetailOverlay onClose={closeCombo}>
-        <ComboDetailScreen
-          combo={selectedCombo}
-          currency={restaurant.currency}
-          itemsById={itemsById}
-          extrasById={extrasById}
-          extrasByProduct={extrasByProduct}
-          onBack={closeCombo}
-          onAdd={addConfiguredCombo}
-        />
-      </DetailOverlay>
-    ) : null;
-
-  /**
-   * The cart, layered over the menu rather than replacing it — the same
-   * treatment the dish detail already gets. On a phone the overlay is opaque
-   * and full-bleed, so nothing changes; on a wide screen a checkout form
-   * stretched across an empty page was both harder to read and a longer trip
-   * back to the food.
-   */
-  const cartScreen =
-    screen === "cart" || screen === "edit" ? (
-      <DetailOverlay wide onClose={() => setScreen("menu")}>
-        <CartScreen
-          restaurant={restaurant}
-          table={table}
-          items={cart.items}
-          photoOf={photoOf}
-          suggestions={offered}
-          onPickSuggestion={pickSuggestion}
-          soldOut={soldOut}
-          subtotal={pricing.subtotal}
-          grossSubtotal={pricing.grossSubtotal}
-          discount={pricing.discount}
-          serviceFee={pricing.serviceFee}
-          tip={pricing.tip}
-          tipPct={tipPct}
-          tipCustom={tipCustom}
-          total={pricing.total}
-          coupon={coupon}
-          onApplyCoupon={setCoupon}
-          onRemoveCoupon={() => setCoupon(null)}
-          hints={pricing.hints}
-          promoSavings={pricing.promoSavings}
-          orderNote={orderNote}
-          loading={loading}
-          canCheckout={
-            orderableItems.length > 0 && restaurant.accepting_orders && !orderAtRegister
-          }
-          orderAtRegister={orderAtRegister}
-          onChangeNote={setOrderNote}
-          customerName={customerName}
-          onChangeName={setCustomerName}
-          onChangeTip={choosePct}
-          onCustomTip={setTipCustom}
-          onRemoveItem={cart.removeItem}
-          onChangeQty={cart.setQty}
-          onEditItem={editLine}
-          onAddMore={() => setScreen("menu")}
-          onCheckout={checkout}
-          // One switch for both: at a table the bill stays open, on the
-          // general QR the till holds the order. The cart has the table, so
-          // it is the one that turns this into the right offer.
-          deferredAllowed={Boolean(restaurant.allow_pay_later)}
-          cardsEnabled={Boolean(restaurant.cards_enabled)}
-        />
-      </DetailOverlay>
-    ) : null;
 
   return (
     // The cart's remove asks before it deletes, and useConfirm needs its
@@ -356,7 +221,26 @@ export default function OrderingApp({
             setBillOpen(true);
           }}
         />
-        {cartScreen}
+        {(screen === "cart" || screen === "edit") && (
+          <CartOverlay
+            restaurant={restaurant}
+            table={table}
+            cart={cart}
+            totals={totals}
+            photoOf={photoOf}
+            suggestions={offered}
+            onPickSuggestion={pickSuggestion}
+            orderNote={orderNote}
+            onChangeNote={setOrderNote}
+            customerName={customerName}
+            onChangeName={setCustomerName}
+            loading={loading}
+            orderAtRegister={orderAtRegister}
+            onEditItem={editLine}
+            onCheckout={checkout}
+            onClose={() => setScreen("menu")}
+          />
+        )}
         {/* One at a time. Paying is answered first — it is what just happened,
           and two dialogs stacked would trap focus against each other and take
           two Escapes to leave. The tracker is underneath it either way. */}
@@ -385,8 +269,15 @@ export default function OrderingApp({
         )}
         <OwingElsewhereModal owing={owingElsewhere} currency={restaurant.currency} />
         {offering && <ReceiptPrompt orderIds={offering} open onClose={dismissReceipt} />}
-        {detail}
-        {comboDetail}
+        <DishOverlays
+          screens={screens}
+          currency={restaurant.currency}
+          promos={promos}
+          cartItems={cart.items}
+          items={items}
+          extras={extras}
+          extrasByProduct={extrasByProduct}
+        />
         <NoticeModal notice={notice} onClose={() => setNotice(null)} />
       </ConfirmProvider>
     </DietaryTagsProvider>
