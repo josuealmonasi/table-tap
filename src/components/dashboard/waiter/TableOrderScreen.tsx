@@ -1,27 +1,26 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
 import { shortMessage } from "@/lib/stock-message";
 import { useToast } from "@/components/ui/Toast";
-import { formatMoney } from "@/lib/format";
 import { priceCart, type CartPromo } from "@/lib/pricing";
-
 import ItemDetailScreen from "@/components/customer/ItemDetailScreen";
 import ComboDetailScreen from "@/components/customer/ComboDetailScreen";
-import CartLineRow from "@/components/customer/CartLineRow";
+import DetailOverlay from "@/components/customer/DetailOverlay";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
-import { Modal } from "@/components/ui/Modal";
-import QrScanner from "@/components/dashboard/QrScanner";
-import { tableFromScan } from "@/lib/scan-target";
 import { DietaryTagsProvider } from "@/components/DietaryTagsContext";
 import type { CartItem } from "@/hooks/useCart";
-import StockTag from "@/components/dashboard/StockTag";
 import { useLiveStock } from "@/hooks/useLiveStock";
+import { usePosCart } from "@/hooks/usePosCart";
+import { posSections } from "@/lib/pos-sections";
+import PosMenu from "@/components/dashboard/pos/PosMenu";
 import type { Combo } from "@/lib/promotions";
 import type { StoredDietaryTag } from "@/lib/dietary";
 import type { Category, MenuItem, Restaurant } from "@/lib/types";
+import PadOrderPanel from "./PadOrderPanel";
+import PadSentModal from "./PadSentModal";
 
 /**
  * The waiter's order pad.
@@ -71,7 +70,9 @@ export default function TableOrderScreen({
   useLiveStock(restaurant.id);
 
   const [tableId, setTableId] = useState("");
-  const [lines, setLines] = useState<CartItem[]>([]);
+  // Not kept across a reload, as it never was: the pad is not the till.
+  const cart = usePosCart(restaurant.id, false);
+  const { lines } = cart;
   const [editing, setEditing] = useState<CartItem | null>(null);
   const [openItem, setOpenItem] = useState<MenuItem | null>(null);
   const [openCombo, setOpenCombo] = useState<Combo | null>(null);
@@ -88,53 +89,26 @@ export default function TableOrderScreen({
    * lands in a pad the waiter believes they have already sent.
    */
   const sending = busy || sent !== null;
-  const nextCartId = useRef(1);
-
-  const money = (n: number) => formatMoney(n, restaurant.currency);
 
   // The same quote the server re-runs from the database. No tip: a tip is
   // decided when somebody pays, and nobody is paying yet.
   const pricing = useMemo(
-    () => priceCart({
-      items: lines,
-      servicePct: Number(restaurant.service_pct) || 0,
-      serviceEnabled: Boolean(restaurant.service_enabled),
-      promos,
-    }),
+    () =>
+      priceCart({
+        items: lines,
+        servicePct: Number(restaurant.service_pct) || 0,
+        serviceEnabled: Boolean(restaurant.service_enabled),
+        promos,
+      }),
     [lines, restaurant.service_pct, restaurant.service_enabled, promos],
   );
 
-  const needle = search.trim().toLowerCase();
-  const onPad = items;
-  const sections = new Map<string, { name: string; dishes: typeof onPad }>();
-  for (const category of categories) {
-    const dishes = onPad.filter(i => i.category_id === category.id);
-    if (dishes.length === 0) continue;
-    const key = category.name.trim().toLowerCase();
-    const already = sections.get(key);
-    if (already) already.dishes = [...already.dishes, ...dishes];
-    else sections.set(key, { name: category.name, dishes });
-  }
-  const byCategory = [...sections.values()]
-    .map(s => ({
-      name: s.name,
-      dishes: needle ? s.dishes.filter(d => d.name.toLowerCase().includes(needle)) : s.dishes,
-    }))
-    .filter(s => s.dishes.length > 0);
-  const sectionId = (name: string) => `pad-${name.trim().toLowerCase().replace(/\s+/g, "-")}`;
+  const sections = posSections(categories, items, search);
 
   function extrasFor(item: MenuItem): MenuItem[] {
     return (extrasByProduct[item.id] ?? [])
       .map(id => extras.find(e => e.id === id))
       .filter((e): e is MenuItem => Boolean(e?.available));
-  }
-
-  function changeQty(cartId: number, qty: number): void {
-    setLines(prev =>
-      qty <= 0
-        ? prev.filter(l => l.cartId !== cartId)
-        : prev.map(l => (l.cartId === cartId ? { ...l, qty: Math.min(qty, 99) } : l)),
-    );
   }
 
   /** Send it to the kitchen, owing. */
@@ -160,7 +134,7 @@ export default function TableOrderScreen({
         return;
       }
       setSent({ code: data.code, table: data.table });
-      setLines([]);
+      cart.clear();
       setNote("");
       // The board and the badges have a new ticket to show.
       router.refresh();
@@ -170,6 +144,10 @@ export default function TableOrderScreen({
       setBusy(false);
     }
   }
+
+  const edited = editing
+    ? (items.find(i => i.id === editing.itemId) ?? (editing as unknown as MenuItem))
+    : null;
 
   return (
     <ConfirmProvider>
@@ -184,286 +162,92 @@ export default function TableOrderScreen({
           {closedNow && <p className="tt-offline-banner">{t("pos.closedNow")}</p>}
 
           <div className="tt-pos">
-            <div
-              className={`tt-pos-menu ${sending ? "tt-pos-menu-sending" : ""}`}
-              aria-busy={sending}
-            >
-              <input
-                className="tt-input tt-pos-search"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder={t("pos.search")}
-                aria-label={t("pos.search")}
-              />
-
-              {byCategory.length > 1 && (
-                <nav className="tt-pos-jump" aria-label={t("pos.sections")}>
-                  {byCategory.map(({ name }) => (
-                    <button
-                      type="button"
-                      key={name}
-                      onClick={() =>
-                        document
-                          .getElementById(sectionId(name))
-                          ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                      }
-                    >
-                      {name}
-                    </button>
-                  ))}
-                </nav>
-              )}
-
-              {combos.length > 0 && !needle && (
-                <section id="pad-combos" className="tt-pos-section">
-                  <h3 className="tt-pos-cat">{t("menu.deals")}</h3>
-                  <div className="tt-pos-grid">
-                    {combos.map(combo => (
-                      <button
-                        type="button"
-                        key={combo.id}
-                        className="tt-pos-tile"
-                        onClick={() => setOpenCombo(combo)}
-                      >
-                        <span className="tt-pos-tile-name">{combo.name}</span>
-                        <span className="tt-pos-tile-price">{money(combo.price)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {byCategory.map(({ name, dishes }) => (
-                <section key={name} id={sectionId(name)} className="tt-pos-section">
-                  <h3 className="tt-pos-cat">{name}</h3>
-                  <div className="tt-pos-grid">
-                    {dishes.map(dish => (
-                      <button
-                        type="button"
-                        key={dish.id}
-                        className={`tt-pos-tile ${dish.available ? "" : "tt-pos-tile-out"}`}
-                        disabled={!dish.available}
-                        onClick={() => setOpenItem(dish)}
-                      >
-                        <span className="tt-pos-tile-name">
-                          {dish.emoji} {dish.name}
-                        </span>
-                        {dish.available ? (
-                          <span className="tt-pos-tile-foot">
-                            <span className="tt-pos-tile-price">{money(Number(dish.price))}</span>
-                            {/* Only where there is a limit to know about. */}
-                            <StockTag left={dish.stock} />
-                          </span>
-                        ) : (
-                          <span className="tt-badge tt-pos-tile-out-tag">{t("cart.soldOut")}</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              ))}
-              {byCategory.length === 0 && <p className="tt-muted">{t("pos.noMatch")}</p>}
-            </div>
-
-            <aside className="tt-pos-cart">
-              <h3 className="tt-serif" style={{ marginTop: 0 }}>
-                {t("waiter.order")}
-              </h3>
-
-              {/* Which table, before anything else. It is the one thing that
-                  makes this order findable afterwards — on the board, on the
-                  bill, and in the history search. */}
-              <label className="tt-field">
-                <span className="tt-mod-label">{t("waiter.table")}</span>
-                <div className="tt-waiter-table">
-                  <select
-                    className="tt-input"
-                    value={tableId}
-                    onChange={e => setTableId(e.target.value)}
-                    disabled={sending}
-                  >
-                    <option value="">{t("waiter.pickTable")}</option>
-                    {tables.map(x => (
-                      <option key={x.id} value={x.id}>
-                        {x.label}
-                      </option>
-                    ))}
-                  </select>
-                  {/* For a waiter who has been shown to a table and does not
-                      know what the app calls it. The list is still there and
-                      still works; this is for the ones who have not learned
-                      thirty table names yet, on their first week. */}
-                  <QrScanner
-                    label={t("waiter.scan")}
-                    title={t("waiter.scanTitle")}
-                    hint={t("waiter.scanHint")}
-                    noCamera={t("scan.noCamera")}
-                    buttonClass="tt-btn tt-btn-ghost"
-                    onRead={raw => {
-                      const found = tableFromScan(raw);
-                      // A poster or a wifi card: keep looking, say nothing.
-                      if (!found) return "keep-looking";
-                      // Another venue's table decodes perfectly well. Pointing
-                      // an order at it is exactly what must not happen quietly
-                      // — and the route would refuse it anyway.
-                      if (found.restaurantId !== restaurant.id) {
-                        return { problem: t("waiter.scanElsewhere") };
-                      }
-                      const known = tables.find(x => x.id === found.tableId);
-                      if (!known) return { problem: t("waiter.scanUnknown") };
-                      setTableId(known.id);
-                      toast(t("waiter.scanned", { label: known.label }));
-                      return "taken";
-                    }}
-                  />
-                </div>
-              </label>
-
-              {lines.length === 0 ? (
-                <p className="tt-muted">{t("pos.empty")}</p>
-              ) : (
-                <div className="tt-pos-lines">
-                  {lines.map(line => (
-                    <CartLineRow
-                      key={line.cartId}
-                      item={line}
-                      currency={restaurant.currency}
-                      imageUrl={items.find(i => i.id === line.itemId)?.image_url ?? null}
-                      onRemove={cartId => changeQty(cartId, 0)}
-                      onChangeQty={changeQty}
-                      onEdit={item => setEditing(item)}
-                    />
-                  ))}
-                </div>
-              )}
-
-              <label className="tt-field">
-                <span className="tt-mod-label">{t("pos.note")}</span>
-                <input
-                  className="tt-input"
-                  value={note}
-                  onChange={e => setNote(e.target.value)}
-                  placeholder={t("pos.noteHint")}
-                  disabled={sending}
-                />
-              </label>
-
-              <div className="tt-pos-total">
-                <span>{t("pos.total")}</span>
-                <strong>{money(pricing.total)}</strong>
-              </div>
-
-              {/* Nothing is charged here. The table settles at the end, which
-                  is what the bill screen is for. */}
-              <p className="tt-muted" style={{ fontSize: 12, margin: "0 0 10px" }}>
-                {t("waiter.paysLater")}
-              </p>
-
-              <div className="tt-pos-charge">
-                <button
-                  type="button"
-                  className="tt-btn tt-btn-primary"
-                  disabled={sending || closedNow || lines.length === 0 || !tableId}
-                  onClick={() => void send()}
-                >
-                  {busy ? t("cart.placingOrder") : t("waiter.send")}
-                </button>
-              </div>
-            </aside>
+            <PosMenu
+              sections={sections}
+              combos={combos}
+              search={search}
+              onSearch={setSearch}
+              sending={sending}
+              currency={restaurant.currency}
+              onOpenItem={setOpenItem}
+              onOpenCombo={setOpenCombo}
+            />
+            <PadOrderPanel
+              restaurantId={restaurant.id}
+              currency={restaurant.currency}
+              tables={tables}
+              tableId={tableId}
+              onTable={setTableId}
+              lines={lines}
+              items={items}
+              note={note}
+              onNote={setNote}
+              total={pricing.total}
+              sending={sending}
+              busy={busy}
+              closedNow={closedNow}
+              onChangeQty={cart.changeQty}
+              onEdit={setEditing}
+              onSend={() => void send()}
+            />
           </div>
         </div>
 
         {openItem && (
-          <div className="tt-detail-overlay" onClick={() => setOpenItem(null)}>
-            <div className="tt-detail-panel" onClick={e => e.stopPropagation()}>
-              <DietaryTagsProvider tags={dietaryTags}>
-                <ItemDetailScreen
-                  item={openItem}
-                  currency={restaurant.currency}
-                  extras={extrasFor(openItem)}
-                  onBack={() => setOpenItem(null)}
-                  onAdd={line => {
-                    setLines(prev => [...prev, { ...line, cartId: nextCartId.current++ }]);
-                    setOpenItem(null);
-                  }}
-                />
-              </DietaryTagsProvider>
-            </div>
-          </div>
+          <DetailOverlay onClose={() => setOpenItem(null)}>
+            <DietaryTagsProvider tags={dietaryTags}>
+              <ItemDetailScreen
+                item={openItem}
+                currency={restaurant.currency}
+                extras={extrasFor(openItem)}
+                onBack={() => setOpenItem(null)}
+                onAdd={line => {
+                  cart.add(line);
+                  setOpenItem(null);
+                }}
+              />
+            </DietaryTagsProvider>
+          </DetailOverlay>
         )}
 
-        {editing && (
-          <div className="tt-detail-overlay" onClick={() => setEditing(null)}>
-            <div className="tt-detail-panel" onClick={e => e.stopPropagation()}>
-              <DietaryTagsProvider tags={dietaryTags}>
-                <ItemDetailScreen
-                  item={items.find(i => i.id === editing.itemId) ?? (editing as unknown as MenuItem)}
-                  currency={restaurant.currency}
-                  extras={extrasFor(
-                    items.find(i => i.id === editing.itemId) ?? (editing as unknown as MenuItem),
-                  )}
-                  initialLine={editing}
-                  onBack={() => setEditing(null)}
-                  onAdd={line => {
-                    setLines(prev =>
-                      prev.map(l => (l.cartId === editing.cartId ? { ...line, cartId: l.cartId } : l)),
-                    );
-                    setEditing(null);
-                  }}
-                />
-              </DietaryTagsProvider>
-            </div>
-          </div>
+        {editing && edited && (
+          <DetailOverlay onClose={() => setEditing(null)}>
+            <DietaryTagsProvider tags={dietaryTags}>
+              <ItemDetailScreen
+                item={edited}
+                currency={restaurant.currency}
+                extras={extrasFor(edited)}
+                initialLine={editing}
+                onBack={() => setEditing(null)}
+                onAdd={line => {
+                  cart.replace(editing.cartId, line);
+                  setEditing(null);
+                }}
+              />
+            </DietaryTagsProvider>
+          </DetailOverlay>
         )}
 
         {openCombo && (
-          <div className="tt-detail-overlay" onClick={() => setOpenCombo(null)}>
-            <div className="tt-detail-panel" onClick={e => e.stopPropagation()}>
-              <DietaryTagsProvider tags={dietaryTags}>
-                <ComboDetailScreen
-                  combo={openCombo}
-                  currency={restaurant.currency}
-                  itemsById={new Map(items.map(i => [i.id, i]))}
-                  extrasById={new Map(extras.map(e => [e.id, e]))}
-                  extrasByProduct={extrasByProduct}
-                  onBack={() => setOpenCombo(null)}
-                  onAdd={line => {
-                    setLines(prev => [...prev, { ...line, cartId: nextCartId.current++ }]);
-                    setOpenCombo(null);
-                  }}
-                />
-              </DietaryTagsProvider>
-            </div>
-          </div>
+          <DetailOverlay onClose={() => setOpenCombo(null)}>
+            <DietaryTagsProvider tags={dietaryTags}>
+              <ComboDetailScreen
+                combo={openCombo}
+                currency={restaurant.currency}
+                itemsById={new Map(items.map(i => [i.id, i]))}
+                extrasById={new Map(extras.map(e => [e.id, e]))}
+                extrasByProduct={extrasByProduct}
+                onBack={() => setOpenCombo(null)}
+                onAdd={line => {
+                  cart.add(line);
+                  setOpenCombo(null);
+                }}
+              />
+            </DietaryTagsProvider>
+          </DetailOverlay>
         )}
 
-        {/* Sent. The kitchen has it; the table owes for it.
-            A dialog rather than a screen: `.tt-detail-overlay` is a full-bleed
-            sheet below 1025px, which is right for choosing modifiers and wrong
-            for four lines of confirmation — on a phone it read as being taken
-            somewhere, with the pad gone and most of the page empty. */}
-        <Modal
-          open={Boolean(sent)}
-          onClose={() => setSent(null)}
-          maxWidth={360}
-          label={t("waiter.sentTitle")}
-        >
-          {sent && (
-            <div className="tt-pos-ticket-body">
-              <p className="tt-pos-ticket-said">{t("waiter.sentTitle")}</p>
-              <p className="tt-pos-code">{sent.code}</p>
-              <p className="tt-pos-ticket-total">{t("dash.tableN", { label: sent.table })}</p>
-              <p className="tt-muted tt-pos-ticket-hint">{t("waiter.sentHint")}</p>
-              <button
-                type="button"
-                className="tt-btn tt-btn-primary"
-                onClick={() => setSent(null)}
-              >
-                {t("waiter.next")}
-              </button>
-            </div>
-          )}
-        </Modal>
+        <PadSentModal sent={sent} onClose={() => setSent(null)} />
       </div>
     </ConfirmProvider>
   );
