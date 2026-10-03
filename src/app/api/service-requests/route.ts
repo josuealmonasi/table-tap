@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { clientKey, isRateLimited } from "@/lib/rate-limit";
+import { isRoomLimited, isTableLimited } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 // insert with the secret key, so the client key can't write this table at all.
 export async function POST(req: NextRequest) {
   // A table needs only a handful of calls a minute; block spam past that.
-  if (await isRateLimited(`service:${clientKey(req)}`, 8, 60)) {
+  if (await isRoomLimited(req, "service", 8)) {
     return await apiError("apiErr.tooManyWait", 429);
   }
 
@@ -22,6 +22,9 @@ export async function POST(req: NextRequest) {
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { restaurantId, tableId, kind } = body;
+  if (await isTableLimited(req, "service", tableId, 8)) {
+    return await apiError("apiErr.tooManyWait", 429);
+  }
 
   // 'pay' means a table wants to settle in person; the waiter takes cash or a
   // card and marks the orders paid.

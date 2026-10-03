@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { staffOpenedBill } from "@/lib/table-session";
-import { clientKey, forTheRoom, isRateLimited } from "@/lib/rate-limit";
+import { clientKey, forTheRoom, isRateLimited, isRoomLimited, isTableLimited } from "@/lib/rate-limit";
 import { SPLIT_POLL_MS, perMinute } from "@/lib/poll";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { currentSplit } from "@/lib/split-service";
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  if (await isRateLimited(`splitnew:${clientKey(req)}`, 10, 60)) {
+  if (await isRoomLimited(req, "splitnew", 10)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
 
@@ -55,6 +55,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { sessionId, diner, restaurantId, tableId, shares } = body;
+  if (await isTableLimited(req, "splitnew", tableId, 10)) {
+    return await apiError("apiErr.tooManyAttempts", 429);
+  }
   if (!sessionId || !diner || !restaurantId || !tableId) {
     return await apiError("apiErr.invalidRequest", 400);
   }

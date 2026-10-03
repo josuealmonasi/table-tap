@@ -6,7 +6,7 @@ import { billWindowStart, MAX_BILL_ORDERS } from "@/lib/table-bill";
 import { packOrderIds, stripeProductName } from "@/lib/stripe-limits";
 import { staffOpenedBill } from "@/lib/table-session";
 import { splitInProgress } from "@/lib/split-service";
-import { clientKey, isRateLimited } from "@/lib/rate-limit";
+import { isRoomLimited, isTableLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { orderFeeCents } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
@@ -36,7 +36,7 @@ export const runtime = "nodejs";
 // caller can choose WHICH of the table's orders to settle — that is the "pay
 // mine / pay everything" choice — but not what they cost.
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  if (await isRateLimited(`billpay:${clientKey(req)}`, 10, 60)) {
+  if (await isRoomLimited(req, "billpay", 10)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
 
@@ -50,6 +50,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { restaurantId, tableId, orderIds, tipPct, tipAmount, couponCode } = body;
+  if (await isTableLimited(req, "billpay", tableId, 10)) {
+    return await apiError("apiErr.tooManyAttempts", 429);
+  }
   if (!restaurantId || !tableId || !Array.isArray(orderIds) || orderIds.length === 0) {
     return await apiError("apiErr.invalidRequest", 400);
   }

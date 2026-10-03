@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
-import { clientKey, isRateLimited } from "@/lib/rate-limit";
+import { isRateLimited, isRoomLimited, isTableLimited } from "@/lib/rate-limit";
 import { messagesFor, translate } from "@/lib/i18n";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { getLocale } from "@/lib/i18n/server";
@@ -33,11 +33,12 @@ const RESENDS_PER_ORDER = 4;
  * That is the whole promise made on the screen where they type it, and it is
  * only worth making if the code keeps it.
  *
- * Rate limited by IP: an open endpoint that sends mail to any address is a way
- * to use our sender to bother strangers.
+ * Rate limited by the room, then by the order's table, then by the order: an
+ * open endpoint that sends mail to any address is a way to use our sender to
+ * bother strangers.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  if (await isRateLimited(`receipt:${clientKey(req)}`, 5, 60)) {
+  if (await isRoomLimited(req, "receipt", 5)) {
     return await apiError("apiErr.tooManyRequests", 429);
   }
 
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { data: found } = await db
     .from("orders")
     .select(
-      "id, restaurant_id, items, subtotal, discount, service_fee, tip, total, currency, table_label, created_at, pay_method, paid",
+      "id, restaurant_id, table_id, items, subtotal, discount, service_fee, tip, total, currency, table_label, created_at, pay_method, paid",
     )
     .in("id", ids)
     .order("created_at", { ascending: true });
@@ -88,6 +89,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const orders = (found ?? []).filter(o => o.restaurant_id === first?.restaurant_id);
   if (orders.length === 0) return await apiError("apiErr.notFound", 404);
   const order = orders[0];
+  // The table is known only now; the room was counted before anything was read.
+  if (await isTableLimited(req, "receipt", order.table_id, 5)) {
+    return await apiError("apiErr.tooManyRequests", 429);
+  }
 
   const { data: restaurant } = await db
     .from("restaurants")

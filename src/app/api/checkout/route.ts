@@ -22,7 +22,7 @@ import {
   toAppliedCoupon,
   type CouponRow,
 } from "@/lib/coupon-service";
-import { clientKey, isRateLimited } from "@/lib/rate-limit";
+import { isRoomLimited, isTableLimited } from "@/lib/rate-limit";
 import { promotionsOnSale } from "@/lib/promotions-on-sale";
 import { toCartPromos } from "@/lib/promotions";
 import { cartReferences, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
@@ -58,8 +58,10 @@ const NO_PLAN = { allows_deferred_payment: false } as PlanLimits;
 
 export async function POST(req: NextRequest) {
   try {
-    // Throttle abusive callers before we create any orders or Stripe sessions.
-    if (await isRateLimited(`checkout:${clientKey(req)}`, 10, 60)) {
+    // Throttle abusive callers before we create any orders or Stripe sessions:
+    // the room behind this address first, then — once the body says which —
+    // the table (`isRoomLimited`).
+    if (await isRoomLimited(req, "checkout", 10)) {
       return await apiError("apiErr.tooManyAttempts", 429);
     }
 
@@ -100,6 +102,9 @@ export async function POST(req: NextRequest) {
        */
       diner?: string;
     };
+    if (await isTableLimited(req, "checkout", typeof tableId === "string" ? tableId : null, 10)) {
+      return await apiError("apiErr.tooManyAttempts", 429);
+    }
 
     // Tips: either a preset percentage (recomputed from the verified subtotal)
     // or an exact "Other" amount — sanitised and capped below once the
