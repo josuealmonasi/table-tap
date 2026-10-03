@@ -3,35 +3,32 @@ import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { tableOf } from "@/lib/table-guard";
 import { openSession } from "@/lib/table-session";
-import { capName, capNote } from "@/lib/notes";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { can, orderFeeCents, type PlanLimits } from "@/lib/plan";
+import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
-import { feesTakenThisMonth } from "@/lib/fee-month";
 import { priceCart, type AppliedCoupon } from "@/lib/pricing";
 import { logRedemption, releaseCoupon, toAppliedCoupon } from "@/lib/coupon-service";
 import { isRoomLimited, isTableLimited } from "@/lib/rate-limit";
 import { promotionsOnSale } from "@/lib/promotions-on-sale";
 import { toCartPromos } from "@/lib/promotions";
-import { cartReferences, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
 import { MAX_CARD_CART_LINES } from "@/lib/stripe-limits";
-import { rejectionMessage } from "@/lib/cart-rejection";
 import { raiseStockNotifications, releaseStock, reserveStock } from "@/lib/stock-service";
-import type { OrderLineItem } from "@/lib/types";
-import { cartError } from "@/lib/checkout/cart-error";
+import { refuseCart, refuseShortStock } from "@/lib/checkout/cart-error";
 import { orderableNow } from "@/lib/checkout/orderable-now";
 import { claimCheckoutCoupon } from "@/lib/checkout/claim-coupon";
 import { checkoutLineItems } from "@/lib/checkout/line-items";
 import { openCardSession } from "@/lib/checkout/card-session";
+import { checkoutTip, type CheckoutBody } from "@/lib/checkout/checkout-body";
+import { verifiedLines } from "@/lib/checkout/verified-lines";
+import { checkoutOrderRow } from "@/lib/checkout/order-row";
+import { payLaterAllowed } from "@/lib/checkout/pay-later";
+import { checkoutFeeCents } from "@/lib/checkout/app-fee";
 
 export const runtime = "nodejs";
 
-// POST /api/checkout
-// Body: { restaurantId, tableId, tableLabel, items: OrderLineItem[], note }
+// POST /api/checkout — body: `CheckoutBody`.
 // Creates a pending order, then a Stripe Checkout Session, and returns its URL.
-/** A restaurant with no readable plan has no plan permissions. */
-const NO_PLAN = { allows_deferred_payment: false } as PlanLimits;
-
+// A pay-later order goes straight to the kitchen and returns no URL.
 export async function POST(req: NextRequest) {
   try {
     // Throttle abusive callers before we create any orders or Stripe sessions:
@@ -41,55 +38,13 @@ export async function POST(req: NextRequest) {
       return await apiError("apiErr.tooManyAttempts", 429);
     }
 
-    const body = await jsonBody<Record<string, unknown>>(req);
-  if (!body) return await apiError("apiErr.invalidRequest", 400);
-    const {
-      restaurantId,
-      tableId,
-      tableLabel,
-      items,
-      note,
-      customerName,
-      tipPct: rawTipPct,
-      tipAmount: rawTipAmount,
-      couponCode,
-      payLater,
-      diner,
-    } = body as {
-      restaurantId: string;
-      tableId: string | null;
-      tableLabel: string | null;
-      items: OrderLineItem[];
-      note?: string;
-      /** Only sent from the general QR: at a table, the table is the name. */
-      customerName?: string;
-      tipPct?: number;
-      tipAmount?: number;
-      couponCode?: string;
-      /** Dine-in: send the food now and settle at the end. */
-      payLater?: boolean;
-      /**
-       * The throwaway id this phone gave itself for the evening.
-       *
-       * Stored on the order so a table can be divided between the people who
-       * actually ate: the number of devices that have ordered on the sitting
-       * is the most ways its bill can go. Absent from a waiter's order, and
-       * from a phone with storage switched off.
-       */
-      diner?: string;
-    };
+    const body = await jsonBody<CheckoutBody>(req);
+    if (!body) return await apiError("apiErr.invalidRequest", 400);
+    const { restaurantId, tableId, tableLabel, items, couponCode, payLater } = body;
     if (await isTableLimited(req, "checkout", typeof tableId === "string" ? tableId : null, 10)) {
       return await apiError("apiErr.tooManyAttempts", 429);
     }
-
-    // Tips: either a preset percentage (recomputed from the verified subtotal)
-    // or an exact "Other" amount — sanitised and capped below once the
-    // subtotal is known.
-    const tipPct = [0, 10, 15, 20].includes(rawTipPct ?? 0) ? (rawTipPct ?? 0) : 0;
-    const tipAmount =
-      Number.isFinite(rawTipAmount) && (rawTipAmount as number) > 0
-        ? +(rawTipAmount as number).toFixed(2)
-        : null;
+    const { tipPct, tipAmount } = checkoutTip(body);
 
     if (!restaurantId || !items?.length) {
       return await apiError("apiErr.orderData", 400);
@@ -118,8 +73,8 @@ export async function POST(req: NextRequest) {
     // Caja takes the order at the register, never from the diner's phone. The
     // menu offers no way to check out there; this refuses a request that
     // asks anyway, with the same sentence the menu shows.
-    const planNow = await getPlan(restaurantId);
-    if (planNow && !can(planNow.limits, "onlineOrdering")) {
+    const plan = await getPlan(restaurantId);
+    if (plan && !can(plan.limits, "onlineOrdering")) {
       return await apiError("apiErr.orderAtRegister", 409);
     }
 
@@ -130,25 +85,8 @@ export async function POST(req: NextRequest) {
       return await apiError("apiErr.closedNow", 409);
     }
 
-    // An unpaid order only leaves here if something holds it, and that is always
-    // decided from the database, never from what the client says:
-    //
-    //   - at a table, the table holds it: the bill stays open and the waiter
-    //     collects at the end, if the owner allows it;
-    //   - on the general QR there is no table to come back to, so what holds it
-    //     is the counter: the customer goes to the till, pays and collects.
-    //
-    // Without one of those two, anyone claiming `payLater` would walk off with
-    // food nobody can charge for. Both come from the one switch the owner has:
-    // which of them applies is decided by the QR, not by the restaurant.
-    //
-    // It also comes with the plan, and is asked here rather than only when the
-    // switch is flipped: someone downgrading to Carta keeps the switch on in
-    // the database, and without this would go on giving away orders with no
-    // fee on the free plan.
-    const allowDeferred =
-      Boolean(restaurant.allow_pay_later) &&
-      can((await getPlan(restaurantId))?.limits ?? NO_PLAN, "deferredPayment");
+    // Pay later is decided from the database and the plan (`payLaterAllowed`).
+    const allowDeferred = payLaterAllowed(restaurant.allow_pay_later, plan?.limits);
     const deferred = Boolean(payLater) && allowDeferred;
     if (payLater && !deferred) {
       return await apiError("apiErr.payLaterNotAllowed", 403);
@@ -169,53 +107,17 @@ export async function POST(req: NextRequest) {
     });
     const cartPromos = toCartPromos(promotions);
 
-    // IMPORTANT: never trust client prices. Re-fetch every referenced item
-    // (products AND extras) plus every combo component, so the verification
-    // below can price them from the DB and check they're all still orderable.
-    // Stripe Checkout takes 100 line items and this builds one per line,
-    // plus the service charge and the tip.
-    const refs = cartReferences(items, promotions, MAX_CARD_CART_LINES);
-    if (!refs.ok) {
-      const { key, vars } = rejectionMessage(refs.rejection);
-      return await cartError(key, vars, 400, {});
-    }
-    const referencedIds = refs.ids;
-    const { data: dbItems, error: iErr } = await supabase
-      .from("menu_items")
-      .select("id, name, price, emoji, available, discount_pct, modifiers, category_id, skips_kitchen")
-      .in("id", referencedIds)
-      .eq("restaurant_id", restaurantId);
-
-    if (iErr || !dbItems) {
-      return await apiError("apiErr.verifyItems", 400);
-    }
-
-    const result = verifyCart({
+    // Stripe Checkout takes 100 line items and this builds one per line, plus
+    // the service charge and the tip.
+    const result = await verifiedLines(supabase, restaurantId, {
       items,
       promotions,
-      dbItems: dbItems as VerifiableItem[],
-      isOnOpenMenu: onOpenMenu,
+      onOpenMenu,
       maxLines: MAX_CARD_CART_LINES,
     });
     if (!result.ok) {
-      const r = result.rejection;
-      // Vanished extras are the one refusal the cart can act on by itself: it
-      // drops those lines and asks again, so it gets the ids rather than a
-      // sentence. The wording of the rest lives in `rejectionMessage`.
-      if (r.kind === "removedExtras") {
-        return NextResponse.json(
-          { removedExtraIds: r.ids, removedExtraNames: r.names },
-          { status: 409 },
-        );
-      }
-      const { key, vars } = rejectionMessage(r);
-      const extra =
-        r.kind === "unavailable"
-          ? { unavailableItemId: r.itemId }
-          : r.kind === "missingModifiers"
-            ? { missingModifiers: r.unanswered, unansweredItemId: r.itemId }
-            : {};
-      return await cartError(key, vars, 400, extra);
+      if (!result.rejection) return await apiError("apiErr.verifyItems", 400);
+      return await refuseCart(result.rejection);
     }
     const verified = result.lines;
 
@@ -244,8 +146,6 @@ export async function POST(req: NextRequest) {
     const coupon = claim.coupon;
 
     const pricing = coupon ? priceWith(toAppliedCoupon(coupon)) : base;
-    const { subtotal, serviceFee, tip, total } = pricing;
-    const servicePct = restaurant.service_enabled ? restaurant.service_pct : 0;
 
     /** Set once the stock is ours, so the undo below knows to hand it back. */
     let stockReserved = false;
@@ -256,21 +156,7 @@ export async function POST(req: NextRequest) {
       if (stockReserved) await releaseStock(restaurantId, verified);
     };
 
-    // What we take from this order, worked out before the row is written so it
-    // can be recorded on it — the ceiling for the month is summed from these.
-    //
-    // Capped against the food rather than the amount charged: the tip is the
-    // diner's money on its way to the person who served them, and letting it
-    // raise the ceiling means a generous table pays us more for the same small
-    // order. A deferred order pays nothing here — it settles later, and the
-    // fee is taken then.
-    const feePlan = await getPlan(restaurantId);
-    const takenThisMonth =
-      feePlan?.limits.fee_cap && !deferred ? await feesTakenThisMonth(restaurantId) : 0;
-    const appFee =
-      feePlan && !deferred
-        ? orderFeeCents(feePlan.limits, Math.round(subtotal * 100), takenThisMonth)
-        : 0;
+    const appFee = await checkoutFeeCents(restaurantId, plan, deferred, pricing.subtotal);
 
     // The table has to belong to this restaurant. Without this you can create an
     // order here with another venue's table, and the sitting it opens blocks the
@@ -296,67 +182,31 @@ export async function POST(req: NextRequest) {
     );
     if (!reservation.ok) {
       await undoClaim();
-      // Name the first dish that fell short and say how many there really are.
-      // A bare "unavailable" would send them back to a cart that looks fine.
-      const first = reservation.short[0];
-      return await cartError(
-        first ? "apiErr.onlyLeft" : "apiErr.stockGone",
-        { name: first?.name ?? "", count: first?.available ?? 0 },
-        409,
-        {
-          shortStock: reservation.short.map(s => ({
-            itemId: s.itemId,
-            available: s.available,
-          })),
-        },
-      );
+      return await refuseShortStock(reservation.short);
     }
     stockReserved = true;
 
     // Create the pending order first so the webhook can find it.
     const { data: order, error: oErr } = await supabase
       .from("orders")
-      .insert({
-        restaurant_id: restaurantId,
-        table_id: tableId,
-        table_label: tableLabel,
-        session_id: sessionId,
-        // Which phone this was. Bounded because it comes from the client and
-        // is written with the secret key; anything longer is not one of ours.
-        diner: typeof diner === "string" && diner.length > 0 && diner.length <= 64 ? diner : null,
-        // A deferred order skips the payment gate and goes straight to the
-        // pass: the kitchen starts cooking, `paid` stays false, and the table
-        // settles at the end. `pending_payment` is what hides an order from the
-        // board until Stripe confirms, which is exactly what must not happen
-        // here.
-        status: deferred ? "received" : "pending_payment",
-        subtotal,
-        service_fee: serviceFee,
-        tip,
-        tax_pct: Number(restaurant.tax_pct) || 0,
-        discount: pricing.discount,
-        platform_fee: appFee / 100,
-        coupon_code: coupon?.code ?? null,
-        // Where the discount came from, so the owner can tell a menu sale from
-        // a quantity deal from a coupon when reviewing an order later.
-        promo_detail:
-          pricing.discount > 0
-            ? {
-                item: pricing.itemDiscount,
-                promos: pricing.promoDiscount,
-                coupon: pricing.couponDiscount,
-              }
-            : null,
-        total,
-        currency: restaurant.currency,
-        items: verified,
-        note: capNote(note) ?? null,
-        // Ignored outright when there is a table. A name is how the counter
-        // finds a person; a table already has one, and storing a name nobody
-        // asked for would be collecting personal data for nothing.
-        customer_name: tableId ? null : (capName(customerName) ?? null),
-        paid: false,
-      })
+      .insert(
+        checkoutOrderRow({
+          restaurantId,
+          tableId,
+          tableLabel,
+          sessionId,
+          diner: body.diner,
+          deferred,
+          pricing,
+          taxPct: Number(restaurant.tax_pct) || 0,
+          appFeeCents: appFee,
+          couponCode: coupon?.code ?? null,
+          currency: restaurant.currency,
+          verified,
+          note: body.note,
+          customerName: body.customerName,
+        }),
+      )
       .select("id")
       .single();
 
@@ -372,6 +222,19 @@ export async function POST(req: NextRequest) {
       await raiseStockNotifications(restaurantId, reservation.low);
     }
 
+    /** Writes the coupon's use down against this order. */
+    const logCoupon = async (extra: { settled?: true } = {}) => {
+      if (!coupon) return;
+      await logRedemption({
+        restaurantId,
+        couponId: coupon.id,
+        orderId: order.id,
+        code: coupon.code,
+        amount: pricing.couponDiscount,
+        ...extra,
+      });
+    };
+
     // Nothing to charge now: the order is with the kitchen and the table owes
     // for it. The bill screen picks it up from here.
     if (deferred) {
@@ -380,16 +243,7 @@ export async function POST(req: NextRequest) {
       // order counted against its limit — `uses_count` is incremented either
       // way — and then appeared in no record of what was given away. The
       // money was right and the paperwork was missing.
-      if (coupon) {
-        await logRedemption({
-          restaurantId,
-          couponId: coupon.id,
-          orderId: order.id,
-          code: coupon.code,
-          amount: pricing.couponDiscount,
-          settled: true,
-        });
-      }
+      await logCoupon({ settled: true });
       return NextResponse.json({ orderId: order.id, deferred: true, sessionId });
     }
 
@@ -403,9 +257,9 @@ export async function POST(req: NextRequest) {
         lineItems: checkoutLineItems({
           verified,
           currency: cur,
-          serviceFee,
-          servicePct,
-          tip,
+          serviceFee: pricing.serviceFee,
+          servicePct: restaurant.service_enabled ? restaurant.service_pct : 0,
+          tip: pricing.tip,
           tipLabel: tipAmount !== null ? "Tip" : `Tip (${tipPct}%)`,
         }),
         amountOffCents: Math.round((pricing.couponDiscount + pricing.promoDiscount) * 100),
@@ -431,15 +285,7 @@ export async function POST(req: NextRequest) {
     }
 
     // The use is committed now that there's a real session to pay for.
-    if (coupon) {
-      await logRedemption({
-        restaurantId,
-        couponId: coupon.id,
-        orderId: order.id,
-        code: coupon.code,
-        amount: pricing.couponDiscount,
-      });
-    }
+    await logCoupon();
 
     await supabase
       .from("orders")
