@@ -118,6 +118,7 @@ export const en = {
     updateAvailability: "Couldn't update availability",
     updateProductExtras: "Couldn't update the product's extras",
     createExtra: "Couldn't create the extra",
+    reorderExtras: "Couldn't reorder the extras",
     updateExtra: "Couldn't update the extra",
     deleteExtra: "Couldn't delete the extra",
     deleteSelected: "Couldn't delete the selected items",
