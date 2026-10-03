@@ -1415,6 +1415,20 @@ describe("Stripe's limits are respected where we build its payloads", () => {
     ).toEqual([]);
   });
 
+  it("prices and opens a sale the same way at the till and on a phone", () => {
+    // The till had its own copy of "which menus are serving now" and its own
+    // fetch of the dishes it prices. Two copies are two answers waiting to
+    // happen: a dish one price at the counter and another on a phone, or a
+    // menu closed for diners that the till could still ring.
+    for (const route of ["src/app/api/checkout/route.ts", "src/app/api/pos/order/route.ts"]) {
+      const src = read(route);
+      expect(src, `${route} no longer prices the cart with verifiedLines`).toMatch(/await verifiedLines\(/);
+      expect(src, `${route} no longer asks orderableNow which menus are open`).toMatch(/await orderableNow\(/);
+      expect(src, `${route} decides open menus by itself again`).not.toMatch(/openMenuIds\(/);
+      expect(src, `${route} fetches the dishes it prices by itself again`).not.toMatch(/from\("menu_items"\)/);
+    }
+  });
+
   it("caps the card cart below Stripe's line-item ceiling", () => {
     // Checkout emits one line item per cart line plus the service charge and
     // the tip, and Stripe Checkout takes 100 of them.
