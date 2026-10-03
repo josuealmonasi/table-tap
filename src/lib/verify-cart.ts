@@ -4,6 +4,11 @@ import { capDishName, capNote } from "@/lib/notes";
 import { missingRequired } from "@/lib/modifiers";
 import type { PromotionWithItems } from "@/lib/promotions";
 import type { MenuItem, Modifier, OrderExtra, OrderLineItem } from "@/lib/types";
+import { MAX_CART_LINES, type CartRejection } from "@/lib/cart-limits";
+
+// Kept importable from here, where the routes that check a cart find them.
+export { MAX_CART_LINES, MAX_CART_REFS, type CartRejection } from "@/lib/cart-limits";
+export { cartReferences, referencedItemIds } from "@/lib/cart-references";
 
 /**
  * How many of this dish the line really orders.
@@ -50,81 +55,6 @@ export interface VerifiableItem {
   skips_kitchen?: boolean | null;
 }
 
-/** Why a cart can't be charged, as data — the caller supplies the wording. */
-export type CartRejection =
-  /** A dish (or a bundle) has gone off the menu since it was added. */
-  | { kind: "unavailable"; name: string; itemId: string }
-  /** More lines than any real order has. See `MAX_CART_LINES`. */
-  | { kind: "tooManyLines"; limit: number }
-  /** More distinct products than the lookup can ask about. See `MAX_CART_REFS`. */
-  | { kind: "tooManyRefs"; limit: number }
-  /** A required option group was never answered. */
-  | { kind: "missingModifiers"; unanswered: string[]; forName: string; itemId: string }
-  /** Extras vanished; the customer is asked to confirm before paying. */
-  | { kind: "removedExtras"; ids: string[]; names: string[] };
-
-/**
- * Every menu row a cart refers to: the dishes, their extras, and the
- * components of any bundle in it.
- *
- * Written once because it was written twice. `verifyCart` prices from the rows
- * it is given, so a caller that fetches only the dishes hands it a cart whose
- * extras look like they have vanished — and the till did exactly that, failing
- * every sale with an extra on it. The list of what to fetch belongs with the
- * function that consumes it.
- */
-export function referencedItemIds(
-  items: OrderLineItem[],
-  promotions: PromotionWithItems[],
-): string[] {
-  const comboComponents = promotions
-    .filter(p => items.some(i => i.comboId === p.id))
-    .flatMap(p => p.items.map(i => i.item_id));
-  return [
-    ...new Set([
-      ...items.flatMap(i => [i.itemId, ...(i.extras?.map(e => e.id) ?? [])]),
-      ...comboComponents,
-    ]),
-  ];
-}
-
-/**
- * More distinct products than a lookup can ask about in one go.
- *
- * PostgREST sends `.in(...)` as a URL, and a filter naming a thousand ids is
- * already a Bad Request — five thousand is a 414 from the proxy. The row fetch
- * then comes back empty and the cart is refused for the wrong reason: "could
- * not verify the items", when what happened is that we never managed to ask.
- */
-export const MAX_CART_REFS = 500;
-
-/**
- * The menu rows a cart refers to, or why it is too big to look up.
- *
- * The size of a cart has to be judged BEFORE the rows are fetched, because the
- * fetch is the thing the size breaks. `verifyCart` caps the lines too, but it
- * runs on the rows — by then the query has already been sent, and a cart of
- * two hundred lines carrying ten extras each is two thousand ids in a URL.
- */
-export function cartReferences(
-  items: OrderLineItem[],
-  promotions: PromotionWithItems[],
-  // The diner's checkout passes a lower one: it turns every line into a Stripe
-  // line item, and Stripe takes a hundred of those.
-  maxLines: number = MAX_CART_LINES,
-):
-  | { ok: true; ids: string[] }
-  | { ok: false; rejection: CartRejection } {
-  if (items.length > maxLines) {
-    return { ok: false, rejection: { kind: "tooManyLines", limit: maxLines } };
-  }
-  const ids = referencedItemIds(items, promotions);
-  if (ids.length > MAX_CART_REFS) {
-    return { ok: false, rejection: { kind: "tooManyRefs", limit: MAX_CART_REFS } };
-  }
-  return { ok: true, ids };
-}
-
 export interface VerifyCartInput {
   /** The client's cart, trusted only for *what* was asked for. */
   items: OrderLineItem[];
@@ -139,8 +69,7 @@ export interface VerifyCartInput {
 }
 
 export type VerifyCartResult =
-  | { ok: true; lines: OrderLineItem[] }
-  | { ok: false; rejection: CartRejection };
+  { ok: true; lines: OrderLineItem[] } | { ok: false; rejection: CartRejection };
 
 /** Re-prices an extra from the DB, or reports it as gone. */
 function verifyExtras(
@@ -159,21 +88,6 @@ function verifyExtras(
   }
   return kept;
 }
-
-/**
- * The most lines one order may carry.
- *
- * Nothing capped this, so a single request could create an order of ten
- * thousand lines: MX$115,500 on the board as one card, three and a half
- * seconds of server time to build, and a kitchen ticket queued for a thermal
- * printer that would still be spooling at closing time. No screen can produce
- * it — the cap is on the route, because the route is what somebody can call.
- *
- * Two hundred is far past any real table. A long party orders forty or fifty
- * lines; this is generous enough that nobody meets it by accident and small
- * enough that meeting it deliberately achieves nothing.
- */
-export const MAX_CART_LINES = 200;
 
 export function verifyCart(input: VerifyCartInput): VerifyCartResult {
   const { items, promotions, dbItems, isOnOpenMenu } = input;
@@ -261,7 +175,8 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
       notes: capNote(line.notes),
       // A bundle needs no preparation only when NONE of its plates do. One
       // burger in a meal deal is enough to send the whole thing to a cook.
-      ...(combo.components.length > 0 && combo.components.every(c => priceMap.get(c.itemId)?.skips_kitchen)
+      ...(combo.components.length > 0 &&
+      combo.components.every(c => priceMap.get(c.itemId)?.skips_kitchen)
         ? { skipsKitchen: true }
         : {}),
     });
@@ -335,5 +250,9 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
  * "undefined is no longer available." for the diner to read.
  */
 function gone(line: OrderLineItem, dbName?: string): CartRejection {
-  return { kind: "unavailable", name: dbName ?? capDishName(line.name), itemId: line.itemId };
+  return {
+    kind: "unavailable",
+    name: dbName ?? capDishName(line.name),
+    itemId: line.itemId,
+  };
 }
