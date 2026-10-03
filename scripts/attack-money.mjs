@@ -715,6 +715,66 @@ try {
       .like("detail", `table=${MARK}-settle%`);
   }
 
+  // ── A card payment that lands on a bill already paid in cash ────────────
+  //
+  // A waiter took cash for the table while a diner was on Stripe's page. The
+  // webhook's update matched nothing and the card money was recorded nowhere:
+  // the diner paid twice and nobody was told. It is kept as a refund due now,
+  // out of the ledger (it is not the table's money), and the bell says so.
+  // Delivered here the way the webhook delivers it, through the function.
+  {
+    const { data: spare } = await admin.from("restaurant_tables")
+      .insert({ restaurant_id: home.id, label: `${MARK}-twice` }).select("id, label").maybeSingle();
+    const { data: sat } = await admin.from("table_sessions")
+      .insert({ restaurant_id: home.id, table_id: spare.id }).select("id").maybeSingle();
+    const order = (total, note) => admin.from("orders").insert({
+      restaurant_id: home.id, table_id: spare.id, table_label: spare.label,
+      session_id: sat.id, items: [], subtotal: total, total, currency: "MXN",
+      status: "ready", paid: false, note,
+    }).select("id").maybeSingle();
+    const { data: byCard } = await order(80, MARK);
+    const intentFor = what => `pi_${MARK}_${what}_${sat.id.slice(0, 8)}`;
+    const card = (orders, charged, intent) => admin.rpc("settle_card_orders", {
+      p_orders: orders, p_intent: intent, p_tip: 0, p_tip_order: null, p_status: null, p_charged: charged,
+    });
+
+    // The control: a card payment for an order nobody else settled is recorded, and owes nothing back.
+    await card([byCard.id], 80, intentFor("ok"));
+    const { data: okRows } = await admin.from("payments").select("amount").eq("stripe_payment_intent", intentFor("ok"));
+    const { count: okDue } = await admin.from("refunds_due").select("id", { count: "exact", head: true })
+      .eq("stripe_payment_intent", intentFor("ok"));
+    okRows?.length === 1 && Number(okRows[0].amount) === 80 && okDue === 0
+      ? ok("a card payment for an order still owed is recorded, and nothing is owed back")
+      : bad(`a plain card payment recorded ${JSON.stringify(okRows)} and flagged ${okDue} refund(s)`);
+
+    // The money taken twice: cash at the table, then the card payment arrives.
+    const { data: twice } = await order(150, MARK);
+    const cash = await post("/api/table-payment", { tableId: spare.id, settlement: "cash" }, who.waiter);
+    await card([twice.id], 150, intentFor("twice"));
+    await card([twice.id], 150, intentFor("twice")); // Stripe sends it again
+    const [{ data: cardRows }, { data: due }, { count: told }] = await Promise.all([
+      admin.from("payments").select("amount").eq("stripe_payment_intent", intentFor("twice")),
+      admin.from("refunds_due").select("amount, order_ids").eq("stripe_payment_intent", intentFor("twice")),
+      admin.from("notifications").select("id", { count: "exact", head: true })
+        .eq("restaurant_id", home.id).eq("kind", "refund_due").eq("data->>table", spare.label),
+    ]);
+    cash.status === 200 && (cardRows ?? []).length === 0 && due?.length === 1 &&
+      Number(due[0].amount) === 150 && due[0].order_ids.includes(twice.id) && told === 1
+      ? ok("a card payment on a bill already paid in cash is kept as MX$150 to refund, once, and the bell says so")
+      : bad(`card on a paid bill: cash ${cash.status}, ${cardRows?.length} card payment(s) in the ledger, ` +
+          `refund ${JSON.stringify(due)}, ${told} notification(s)`);
+
+    await admin.from("refunds_due").delete().in("stripe_payment_intent", [intentFor("ok"), intentFor("twice")]);
+    await admin.from("notifications").delete().eq("restaurant_id", home.id).eq("kind", "refund_due").eq("data->>table", spare.label);
+    await admin.from("payments").delete().eq("session_id", sat.id);
+    await admin.from("orders").delete().eq("session_id", sat.id);
+    await admin.from("table_sessions").delete().eq("id", sat.id);
+    await admin.from("restaurant_tables").delete().eq("id", spare.id);
+    await admin.from("user_logs").delete()
+      .eq("restaurant_id", home.id).eq("entity", "bill")
+      .like("detail", `table=${MARK}-twice%`);
+  }
+
   // ── A bill the waiter opened is not payable online ──────────────────────
   {
     await admin.from("table_sessions")

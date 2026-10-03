@@ -356,6 +356,24 @@ const REFUND_ERA = "2026-09-22T00:00:00Z";
   }
 }
 
+// ── Money taken twice, waiting to be given back ──────────────────────────
+// A card payment that landed on orders already settled is kept out of the
+// ledger on purpose (`refunds_due`): it is the diner's, not the table's.
+// Listed on every run until somebody refunds it, and not a failure, because
+// the refund itself happens in Stripe where this cannot see it.
+{
+  const { data: due, error: dErr } = await db
+    .from("refunds_due").select("amount, table_label, created_at").is("refunded_at", null)
+    .order("created_at", { ascending: true });
+  if (dErr) bad(`cannot read refunds_due: ${dErr.message}`);
+  else if (!due?.length) ok("no card payment is waiting to be refunded");
+  else {
+    for (const r of due) {
+      console.log(`    –        refund due: MX$${Number(r.amount).toFixed(2)} for ${r.table_label ? `table ${r.table_label}` : "a counter order"}, since ${r.created_at.slice(0, 16)}`);
+    }
+  }
+}
+
 console.log(
   failed === 0
     ? `\nThe ledger, the orders and the drawer agree. ${payments.length} payment(s).\n`

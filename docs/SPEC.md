@@ -273,6 +273,15 @@ dishes on a bill the restaurant has just cancelled.
   inserts a paid sale as `pending_payment` — which no board, bill or corte
   counts — and `settle_sale()` gives it its real status and records its money
   together; if that fails the order is deleted and its stock put back.
+- **Money taken twice is kept, not dropped.** A waiter can take cash for a
+  table while a diner is on Stripe's page; the card payment then arrives for
+  orders already settled. The webhook used to record it nowhere. Now the
+  webhook tells `settle_card_orders()` what Stripe charged, and whatever is
+  not in the ledger under that payment is written to `refunds_due` — out of
+  `payments`, because every reader of the ledger would count it as the
+  table's money — with a `refund_due` notification in the owner's and
+  managers' bell. `pnpm money` lists every open one. The refund itself is made
+  in Stripe; the app does not yet record that it was.
 - **Two Stripe accounts, so two webhooks.** A diner's food is a DIRECT charge
   on the restaurant's own Stripe account: Stripe's processing fee comes out of
   their balance and our per-order fee comes to us clean. As a destination
