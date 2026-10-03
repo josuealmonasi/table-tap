@@ -1,25 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
 import { shortMessage } from "@/lib/stock-message";
-import StockTag from "@/components/dashboard/StockTag";
 import { useLiveStock } from "@/hooks/useLiveStock";
 import ScanToCollect from "@/components/dashboard/ScanToCollect";
 import StampCard from "@/components/dashboard/loyalty/StampCard";
 import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
-import { CheckIcon } from "@/components/ui/icons";
 import { priceCart } from "@/lib/pricing";
 import { printableReceipt } from "@/lib/print-document";
 import { printWhenReady } from "@/lib/print-window";
-import { Modal } from "@/components/ui/Modal";
-
 import ItemDetailScreen from "@/components/customer/ItemDetailScreen";
-import CartLineRow from "@/components/customer/CartLineRow";
-import TipPicker from "@/components/customer/TipPicker";
 import ComboDetailScreen from "@/components/customer/ComboDetailScreen";
+import DetailOverlay from "@/components/customer/DetailOverlay";
 import type { Combo } from "@/lib/promotions";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import type { CartItem } from "@/hooks/useCart";
@@ -27,8 +22,14 @@ import { DietaryTagsProvider } from "@/components/DietaryTagsContext";
 import type { StoredDietaryTag } from "@/lib/dietary";
 import type { Category, MenuItem, Restaurant } from "@/lib/types";
 import type { CartPromo } from "@/lib/pricing";
-import PosAccountCharge from "./PosAccountCharge";
 import type { AccountListItem } from "@/hooks/useOpenAccounts";
+import { usePosCart } from "@/hooks/usePosCart";
+import { usePosSaleDetails } from "@/hooks/usePosSaleDetails";
+import { posSections } from "@/lib/pos-sections";
+import PosMenu from "./PosMenu";
+import PosSalePanel from "./PosSalePanel";
+import PosAsk from "./PosAsk";
+import PosTicketModal, { type PosTicket } from "./PosTicketModal";
 
 /**
  * The counter till.
@@ -81,27 +82,15 @@ export default function PosScreen({
   // Two tills sell at once; the counts on the tiles follow the kitchen.
   useLiveStock(restaurant.id);
 
-  const [lines, setLines] = useState<CartItem[]>([]);
-  const [restored, setRestored] = useState(false);
+  const cart = usePosCart(restaurant.id);
+  const { lines } = cart;
+  const details = usePosSaleDetails();
   const [editing, setEditing] = useState<CartItem | null>(null);
-  const nextCartId = useRef(1);
-  const [customerName, setCustomerName] = useState("");
-  const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [openItem, setOpenItem] = useState<MenuItem | null>(null);
   const [openCombo, setOpenCombo] = useState<Combo | null>(null);
   const [search, setSearch] = useState("");
-  const [note, setNote] = useState("");
-  // The customer waved the ticket away. Very common on a sale that is handed
-  // over as it is rung up — a bottle of water does not need paperwork — and
-  // the till should not print one nobody is going to take.
-  const [noTicket, setNoTicket] = useState(false);
-  const [ticket, setTicket] = useState<{
-    code: string;
-    total: number;
-    /** Nothing to make: it went in their hand, not on the pass. */
-    handedOver: boolean;
-  } | null>(null);
+  const [ticket, setTicket] = useState<PosTicket | null>(null);
   /**
    * The till is not to be typed into.
    *
@@ -111,50 +100,9 @@ export default function PosScreen({
    */
   const sending = busy || ticket !== null;
   const [pending, setPending] = useState<"cash" | "card" | null>(null);
-  const [tipPct, setTipPct] = useState(0);
-  const [tipCustom, setTipCustom] = useState<number | null>(null);
+  const { tipPct, tipCustom } = details;
 
   const money = (n: number) => formatMoney(n, restaurant.currency);
-
-  /**
-   * A half-rung sale survives a reload.
-   *
-   * A counter is the worst place to lose one: the customer is standing there,
-   * the cashier has already read six items back to them, and a stray refresh
-   * or a tablet reloading itself meant starting the whole order again. Nothing
-   * of this reaches the server — it is the same cart, on the same device,
-   * waiting to be charged.
-   */
-  const storageKey = `tt-pos-cart:${restaurant.id}`;
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const parsed: unknown = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setLines(parsed as CartItem[]);
-          nextCartId.current =
-            Math.max(0, ...(parsed as CartItem[]).map(l => l.cartId ?? 0)) + 1;
-        }
-      }
-    } catch {
-      // A browser that will not give us storage still sells; it just cannot
-      // hold a sale across a reload.
-    }
-    setRestored(true);
-  }, [storageKey]);
-
-  useEffect(() => {
-    // Not before the restore has run, or an empty first render would wipe it.
-    if (!restored) return;
-    try {
-      if (lines.length === 0) localStorage.removeItem(storageKey);
-      else localStorage.setItem(storageKey, JSON.stringify(lines));
-    } catch {
-      // Nothing to do, and nothing worth interrupting a sale for.
-    }
-  }, [lines, restored, storageKey]);
 
   /** The same arithmetic the server will redo from the database. */
   const pricing = useMemo(
@@ -168,10 +116,16 @@ export default function PosScreen({
         coupon: null,
         promos,
       }),
-    [lines, promos, restaurant.service_pct, restaurant.service_enabled, tipPct, tipCustom],
+    [
+      lines,
+      promos,
+      restaurant.service_pct,
+      restaurant.service_enabled,
+      tipPct,
+      tipCustom,
+    ],
   );
 
-  // Grouped by the name on the heading, not by the row id. A restaurant with a
   // Whether this sale is finished the moment it is charged: everything in it
   // comes off a shelf, so it goes in the customer's hand rather than to a
   // cook. Worked out here from the menu the till was given, and decided again
@@ -186,47 +140,13 @@ export default function PosScreen({
   }, [items]);
   const allHandedOver = lines.length > 0 && lines.every(skipsKitchen);
 
-  // lunch menu and a dinner menu has a Starters in each, and listing "STARTERS"
-  // twice tells a cashier nothing about which is which — they are the same
-  // section of the same counter.
-  // Sold-out dishes stay on the till, unlike the diner's menu which hides
-  // them. A cashier is standing in front of somebody who just asked for one,
-  // and "it is not on my screen" is not an answer — "we've run out of that"
-  // is. Shown, marked, and not orderable.
-  const onTill = items;
-  const sections = new Map<string, { name: string; dishes: typeof onTill }>();
-  for (const category of categories) {
-    const dishes = onTill.filter(i => i.category_id === category.id);
-    if (dishes.length === 0) continue;
-    const key = category.name.trim().toLowerCase();
-    const existing = sections.get(key);
-    if (existing) existing.dishes = [...existing.dishes, ...dishes];
-    else sections.set(key, { name: category.name, dishes });
-  }
-  const needle = search.trim().toLowerCase();
-  const byCategory = [...sections.values()]
-    .map(sec => ({
-      ...sec,
-      dishes: needle ? sec.dishes.filter(d => d.name.toLowerCase().includes(needle)) : sec.dishes,
-    }))
-    .filter(sec => sec.dishes.length > 0);
-
-  /** A heading's own id, so a chip can jump to it and scrolling still works. */
-  const sectionId = (name: string) => `pos-${name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  const sections = posSections(categories, items, search);
 
   /** Extras this dish offers, resolved from the ids the menu stores. */
   function extrasFor(item: MenuItem): MenuItem[] {
     return (extrasByProduct[item.id] ?? [])
       .map(id => extras.find(e => e.id === id))
       .filter((e): e is MenuItem => Boolean(e?.available));
-  }
-
-  function changeQty(cartId: number, qty: number): void {
-    setLines(prev =>
-      qty <= 0
-        ? prev.filter(l => l.cartId !== cartId)
-        : prev.map(l => (l.cartId === cartId ? { ...l, qty: Math.min(qty, 99) } : l)),
-    );
   }
 
   /**
@@ -256,7 +176,10 @@ export default function PosScreen({
   }
 
   /** Ring it up. The money is already in the drawer by the time this runs. */
-  async function charge(method: "cash" | "card" | "account", account?: AccountListItem): Promise<void> {
+  async function charge(
+    method: "cash" | "card" | "account",
+    account?: AccountListItem,
+  ): Promise<void> {
     if (lines.length === 0 || busy) return;
     setPending(null);
     setBusy(true);
@@ -271,13 +194,16 @@ export default function PosScreen({
           items: lines,
           method,
           accountId: account?.id,
-          customerName: customerName.trim() || undefined,
-          note: note.trim() || undefined,
+          customerName: details.customerName.trim() || undefined,
+          note: details.note.trim() || undefined,
           // On an account the tip waits for the day it is paid.
           tipPct: account ? undefined : tipCustom === null ? tipPct : undefined,
-          tipAmount: account ? undefined : tipCustom ?? undefined,
-          email: canEmailReceipt && !noTicket ? email.trim() || undefined : undefined,
-          noReceipt: noTicket || undefined,
+          tipAmount: account ? undefined : (tipCustom ?? undefined),
+          email:
+            canEmailReceipt && !details.noTicket
+              ? details.email.trim() || undefined
+              : undefined,
+          noReceipt: details.noTicket || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -293,20 +219,24 @@ export default function PosScreen({
         return;
       }
       if (data.onAccount) {
-        toast(t("accounts.charged", { name: data.onAccount.name, amount: money(Number(data.total)) }));
+        toast(
+          t("accounts.charged", {
+            name: data.onAccount.name,
+            amount: money(Number(data.total)),
+          }),
+        );
       }
       if (data.receipt === "failed") toast(t("pos.receiptFailed"), "error");
       else if (data.receipt === "sent") toast(t("pos.receiptSent"));
       // No address, or an address the mail never reached: it prints.
       if (data.receiptHtml) printReceipt(data.receiptHtml);
-      setTicket({ code: data.code, total: data.total, handedOver: Boolean(data.handedOver) });
-      setLines([]);
-      setCustomerName("");
-      setEmail("");
-      setNote("");
-      setNoTicket(false);
-      setTipPct(0);
-      setTipCustom(null);
+      setTicket({
+        code: data.code,
+        total: data.total,
+        handedOver: Boolean(data.handedOver),
+      });
+      cart.clear();
+      details.reset();
       // The kitchen board and the badges have a new ticket to show.
       router.refresh();
     } catch {
@@ -316,295 +246,84 @@ export default function PosScreen({
     }
   }
 
+  function closeDish(): void {
+    setOpenItem(null);
+    setEditing(null);
+  }
+
+  const dish = editing ? items.find(i => i.id === editing.itemId) : openItem;
+
   return (
     <ConfirmProvider>
-    <div className="tt-dash">
-      <div className="container">
-        <header className="tt-dash-head">
-          <h1 className="tt-serif" style={{ margin: 0 }}>
-            {t("pos.title")}
-          </h1>
-          {/* The queue, not the till's own sale.
-              Somebody who ordered from their phone arrives holding a code that
-              says "the counter scans this and charges it". Until now the
-              cashier had to leave the till, open Cuentas abiertas and find
-              them — with a person waiting. The camera is here too now; the
-              list over there is untouched and still works.
+      <div className="tt-dash">
+        <div className="container">
+          <header className="tt-dash-head">
+            <h1 className="tt-serif" style={{ margin: 0 }}>
+              {t("pos.title")}
+            </h1>
+            {/* The queue, not the till's own sale.
+                Somebody who ordered from their phone arrives holding a code that
+                says "the counter scans this and charges it". Until now the
+                cashier had to leave the till, open Cuentas abiertas and find
+                them — with a person waiting. The camera is here too now; the
+                list over there is untouched and still works.
 
-              It collects nowhere near here: the code names a bill, and the
-              bill is settled on the screen that settles bills. One way for
-              money to be taken, not two that have to agree. */}
-          <div className="tt-pos-head-actions">
-            <ScanToCollect onFound={id => router.push(`/dashboard/bills?order=${id}`)} />
-            {loyalty && <StampCard />}
-          </div>
-        </header>
+                It collects nowhere near here: the code names a bill, and the
+                bill is settled on the screen that settles bills. One way for
+                money to be taken, not two that have to agree. */}
+            <div className="tt-pos-head-actions">
+              <ScanToCollect
+                onFound={id => router.push(`/dashboard/bills?order=${id}`)}
+              />
+              {loyalty && <StampCard />}
+            </div>
+          </header>
 
-        {closedNow && <p className="tt-offline-banner">{t("pos.closedNow")}</p>}
+          {closedNow && <p className="tt-offline-banner">{t("pos.closedNow")}</p>}
 
-        <div className="tt-pos">
-          {/* What is for sale, by section, one tap to add. */}
-          <div
-            className={`tt-pos-menu ${sending ? "tt-pos-menu-sending" : ""}`}
-            aria-busy={sending}
-          >
-            <input
-              className="tt-input tt-pos-search"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={t("pos.search")}
-              aria-label={t("pos.search")}
+          <div className="tt-pos">
+            <PosMenu
+              sections={sections}
+              combos={combos}
+              search={search}
+              onSearch={setSearch}
+              sending={sending}
+              currency={restaurant.currency}
+              onOpenItem={setOpenItem}
+              onOpenCombo={setOpenCombo}
             />
-
-            {/* Jumps to a section without hiding the rest: a cashier who knows
-                where a dish is goes straight there, and one who does not can
-                still scroll past everything the way they always could. */}
-            {byCategory.length > 1 && (
-              <nav className="tt-pos-jump" aria-label={t("pos.sections")}>
-                {byCategory.map(({ name }) => (
-                  <button
-                    type="button"
-                    key={name}
-                    onClick={() =>
-                      document
-                        .getElementById(sectionId(name))
-                        ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                    }
-                  >
-                    {name}
-                  </button>
-                ))}
-              </nav>
-            )}
-
-            {combos.length > 0 && !needle && (
-              <section id="pos-combos" className="tt-pos-section">
-                <h3 className="tt-pos-cat">{t("menu.deals")}</h3>
-                <div className="tt-pos-grid">
-                  {combos.map(combo => (
-                    <button
-                      type="button"
-                      key={combo.id}
-                      className="tt-pos-tile"
-                      onClick={() => setOpenCombo(combo)}
-                    >
-                      <span className="tt-pos-tile-name">{combo.name}</span>
-                      <span className="tt-pos-tile-price">{money(combo.price)}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {byCategory.map(({ name, dishes }) => (
-              <section key={name} id={sectionId(name)} className="tt-pos-section">
-                <h3 className="tt-pos-cat">{name}</h3>
-                <div className="tt-pos-grid">
-                  {dishes.map(dish => (
-                    <button
-                      type="button"
-                      key={dish.id}
-                      className={`tt-pos-tile ${dish.available ? "" : "tt-pos-tile-out"}`}
-                      disabled={!dish.available}
-                      onClick={() => setOpenItem(dish)}
-                    >
-                      <span className="tt-pos-tile-name">
-                        {dish.emoji} {dish.name}
-                      </span>
-                      {dish.available ? (
-                        <span className="tt-pos-tile-foot">
-                          <span className="tt-pos-tile-price">{money(Number(dish.price))}</span>
-                          {/* Only where there is a limit to know about. */}
-                          <StockTag left={dish.stock} />
-                        </span>
-                      ) : (
-                        <span className="tt-badge tt-pos-tile-out-tag">{t("cart.soldOut")}</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </section>
-            ))}
-            {byCategory.length === 0 && <p className="tt-muted">{t("pos.noMatch")}</p>}
-          </div>
-
-          {/* The sale itself. */}
-          <aside className="tt-pos-cart">
-            <h3 className="tt-serif" style={{ marginTop: 0 }}>
-              {t("pos.sale")}
-            </h3>
-
-            {lines.length === 0 ? (
-              <p className="tt-muted">{t("pos.empty")}</p>
-            ) : (
-              <div className="tt-pos-lines">
-                {lines.map(line => (
-                  <CartLineRow
-                    key={line.cartId}
-                    item={line}
-                    currency={restaurant.currency}
-                    imageUrl={items.find(i => i.id === line.itemId)?.image_url ?? null}
-                    onRemove={cartId => changeQty(cartId, 0)}
-                    onChangeQty={changeQty}
-                    onEdit={item => setEditing(item)}
-                  />
-                ))}
-              </div>
-            )}
-
-            <div className="tt-pos-total">
-              <span>{t("pos.total")}</span>
-              <strong>{money(pricing.total)}</strong>
-            </div>
-
-            <div className="tt-pos-charge">
-              <button
-                type="button"
-                className="tt-btn tt-btn-primary"
-                disabled={busy || closedNow || lines.length === 0}
-                onClick={() => setPending("cash")}
-              >
-                {t("pos.chargeCash")}
-              </button>
-              <button
-                type="button"
-                className="tt-btn tt-btn-primary"
-                disabled={busy || closedNow || lines.length === 0}
-                onClick={() => setPending("card")}
-              >
-                {t("pos.chargeCard")}
-              </button>
-              {canChargeAccount && (
-                <PosAccountCharge
-                  amount={Math.round((pricing.total - pricing.tip) * 100) / 100}
-                  currency={restaurant.currency}
-                  disabled={busy || closedNow || lines.length === 0}
-                  onCharge={account => charge("account", account)}
-                />
-              )}
-            </div>
-          </aside>
-        </div>
-      </div>
-
-      {/* The same screen a diner uses to add a dish: the modifiers, the
-          extras, THIS item's own special request, the quantity and the live
-          price. A cashier is taking the same order over a counter, and asking
-          it a second way is how one dish ends up with "less onion" and another
-          in the same sale has nowhere to say "extra onion". */}
-      {/* Who it is for, and where the receipt goes — asked once, at the moment
-          the cashier is already speaking to them, and kept out of the sale
-          panel where it was three fields of dead space on every sale.
-          Both buttons send the order; the backdrop only closes, because an
-          accidental click must never take money. */}
-      {pending && (
-        <div className="tt-detail-overlay" onClick={() => setPending(null)}>
-          <div className="tt-pos-ask" onClick={e => e.stopPropagation()}>
-            <h3 className="tt-serif" style={{ marginTop: 0 }}>
-              {t("pos.askTitle", { amount: money(pricing.total) })}
-            </h3>
-
-            {/* The same chips a diner sees, so the two screens cannot offer
-                different tips on the same menu. */}
-            <div className="tt-pos-tip">
-              <TipPicker
-                currency={restaurant.currency}
-                tipPct={tipCustom !== null ? 0 : tipPct}
-                tipCustom={tipCustom}
-                maxTip={pricing.subtotal}
-                onPresetTip={pct => {
-                  setTipCustom(null);
-                  setTipPct(pct);
-                }}
-                onCustomTip={amount => {
-                  setTipCustom(amount);
-                  if (amount !== null) setTipPct(0);
-                }}
-              />
-            </div>
-
-            <label className="tt-field">
-              <span className="tt-mod-label">{t("pos.customerName")}</span>
-              <input
-                className="tt-input"
-                autoFocus
-                value={customerName}
-                onChange={e => setCustomerName(e.target.value)}
-                placeholder={t("pos.customerNameHint")}
-              />
-            </label>
-
-            <label className="tt-field">
-              <span className="tt-mod-label">{t("pos.note")}</span>
-              <input
-                className="tt-input"
-                value={note}
-                onChange={e => setNote(e.target.value)}
-                placeholder={t("pos.noteHint")}
-              />
-            </label>
-
-            {/* Not a second way to pay — a modifier on the one there is. The
-                customer said no thank you, so there is nowhere to send a
-                receipt and nothing to print, and the address field goes away
-                rather than sitting there asking a question that no longer has
-                a point. */}
-            <label className="tt-pos-noticket">
-              <input
-                type="checkbox"
-                checked={noTicket}
-                disabled={busy}
-                onChange={e => setNoTicket(e.target.checked)}
-              />
-              <span>{t("pos.noTicket")}</span>
-            </label>
-
-            {noTicket ? (
-              <p className="tt-muted" style={{ fontSize: 13, margin: "0 0 4px" }}>
-                {t("pos.noTicketHint")}
-              </p>
-            ) : canEmailReceipt ? (
-              <label className="tt-field">
-                <span className="tt-mod-label">{t("pos.receiptEmail")}</span>
-                <input
-                  className="tt-input"
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder={t("pos.receiptEmailHint")}
-                />
-              </label>
-            ) : (
-              <p className="tt-muted" style={{ fontSize: 13 }}>
-                {t("pos.receiptPrintOnly")}
-              </p>
-            )}
-
-            {/* One way forward. Filled in or left blank, this sends the order —
-                a second button offering the same thing with a different name
-                is a choice nobody has to make. Clicking outside closes and
-                changes nothing, so a stray click never takes money. */}
-            <div className="tt-pos-ask-actions">
-              <button
-                type="button"
-                className="tt-btn tt-btn-primary"
-                disabled={busy}
-                onClick={() => void charge(pending)}
-              >
-                {busy
-                  ? t("cart.placingOrder")
-                  : allHandedOver
-                    ? t("pos.finishSale")
-                    : t("pos.sendToKitchen")}
-              </button>
-            </div>
+            <PosSalePanel
+              lines={lines}
+              items={items}
+              currency={restaurant.currency}
+              total={pricing.total}
+              accountAmount={Math.round((pricing.total - pricing.tip) * 100) / 100}
+              locked={busy || closedNow || lines.length === 0}
+              canChargeAccount={canChargeAccount}
+              onChangeQty={cart.changeQty}
+              onEdit={setEditing}
+              onCharge={setPending}
+              onChargeAccount={account => charge("account", account)}
+            />
           </div>
         </div>
-      )}
 
-      {openCombo && (
-        <div className="tt-detail-overlay" onClick={() => setOpenCombo(null)}>
-          <div className="tt-detail-panel" onClick={e => e.stopPropagation()}>
+        {pending && (
+          <PosAsk
+            details={details}
+            total={pricing.total}
+            subtotal={pricing.subtotal}
+            currency={restaurant.currency}
+            canEmailReceipt={canEmailReceipt}
+            busy={busy}
+            allHandedOver={allHandedOver}
+            onClose={() => setPending(null)}
+            onSend={() => void charge(pending)}
+          />
+        )}
+
+        {openCombo && (
+          <DetailOverlay onClose={() => setOpenCombo(null)}>
             <DietaryTagsProvider tags={dietaryTags}>
               <ComboDetailScreen
                 combo={openCombo}
@@ -614,82 +333,40 @@ export default function PosScreen({
                 extrasByProduct={extrasByProduct}
                 onBack={() => setOpenCombo(null)}
                 onAdd={line => {
-                  setLines(prev => [...prev, { ...line, cartId: nextCartId.current++ }]);
+                  cart.add(line);
                   setOpenCombo(null);
                 }}
               />
             </DietaryTagsProvider>
-          </div>
-        </div>
-      )}
-
-      {/* Charged. Shown over the till rather than instead of it — the menu is
-          still there, and the next customer is already at the counter. */}
-      {/* A dialog rather than a screen: `.tt-detail-overlay` is a full-bleed
-          sheet below 1025px, which is right for choosing modifiers and wrong
-          for four lines of confirmation — on a phone it read as being taken
-          somewhere, with the till gone and most of the page empty. */}
-      <Modal
-        open={Boolean(ticket)}
-        onClose={() => setTicket(null)}
-        maxWidth={360}
-        label={t("pos.charged")}
-      >
-        {ticket && (
-          <div className="tt-pos-ticket-body">
-            <span className="tt-pos-ticket-mark" aria-hidden="true">
-              <CheckIcon size={26} weight="bold" />
-            </span>
-            <p className="tt-pos-ticket-said">{t("pos.charged")}</p>
-            <p className="tt-pos-code">{ticket.code}</p>
-            <p className="tt-pos-ticket-total">{money(ticket.total)}</p>
-            {/* Telling a cashier to call somebody who is still standing there
-                with their drink in their hand is the screen not knowing what
-                just happened. */}
-            <p className="tt-muted tt-pos-ticket-hint">
-              {ticket.handedOver ? t("pos.handedOver") : t("pos.calledOut")}
-            </p>
-            <button
-              type="button"
-              className="tt-btn tt-btn-primary"
-              onClick={() => setTicket(null)}
-            >
-              {t("pos.newSale")}
-            </button>
-          </div>
+          </DetailOverlay>
         )}
-      </Modal>
 
-      {/* The diner's own dish screen, in the diner's own panel: the modifiers,
-          the extras, THIS item's special request, the quantity and the live
-          price. A cashier is taking the same order over a counter. */}
-      {(openItem || editing) && (
-        <div
-          className="tt-detail-overlay"
-          onClick={() => {
-            setOpenItem(null);
-            setEditing(null);
-          }}
-        >
-          <div className="tt-detail-panel" onClick={e => e.stopPropagation()}>
+        <PosTicketModal
+          ticket={ticket}
+          currency={restaurant.currency}
+          onClose={() => setTicket(null)}
+        />
+
+        {/* The diner's own dish screen, in the diner's own panel: the modifiers,
+            the extras, THIS item's special request, the quantity and the live
+            price. A cashier is taking the same order over a counter, and asking
+            it a second way is how one dish ends up with "less onion" and another
+            in the same sale has nowhere to say "extra onion". */}
+        {dish && (
+          <DetailOverlay onClose={closeDish}>
             <DietaryTagsProvider tags={dietaryTags}>
               <ItemDetailScreen
-                item={editing ? items.find(i => i.id === editing.itemId)! : openItem!}
-                extras={extrasFor(editing ? items.find(i => i.id === editing.itemId)! : openItem!)}
+                item={dish}
+                extras={extrasFor(dish)}
                 currency={restaurant.currency}
                 initialLine={editing ?? undefined}
-                onBack={() => {
-                  setOpenItem(null);
-                  setEditing(null);
-                }}
+                onBack={closeDish}
                 onAdd={line => {
                   if (editing) {
-                    setLines(prev =>
-                      prev.map(l => (l.cartId === editing.cartId ? { ...line, cartId: l.cartId } : l)),
-                    );
+                    cart.replace(editing.cartId, line);
                     setEditing(null);
                   } else {
-                    setLines(prev => [...prev, { ...line, cartId: nextCartId.current++ }]);
+                    cart.add(line);
                     setOpenItem(null);
                   }
                 }}
@@ -698,10 +375,9 @@ export default function PosScreen({
                   .reduce((n, l) => n + l.qty, 0)}
               />
             </DietaryTagsProvider>
-          </div>
-        </div>
-      )}
-    </div>
+          </DetailOverlay>
+        )}
+      </div>
     </ConfirmProvider>
   );
 }
