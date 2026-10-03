@@ -1,49 +1,42 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import {
   type Category,
   type MenuItem,
-  type OrderLineItem,
   type Restaurant,
   type RestaurantTable,
 } from "@/lib/types";
-import { priceCart, type AppliedCoupon, type CartPromo } from "@/lib/pricing";
+import type { CartPromo } from "@/lib/pricing";
 import type { Combo } from "@/lib/promotions";
-import { useCart, type CartItem } from "@/hooks/useCart";
-import { forgetUsual, readUsual, rememberUsual, resolveUsual, type UsualEntry } from "@/lib/usual";
-import { useT } from "@/lib/i18n/context";
-import { readMenuParams, syncMenuUrl } from "@/lib/menu-params";
-import { Modal } from "@/components/ui/Modal";
+import { useCart } from "@/hooks/useCart";
+import { recallDinerName } from "@/lib/diner-name";
 import MenuScreen from "./MenuScreen";
 import ItemDetailScreen from "./ItemDetailScreen";
 import CartScreen from "./CartScreen";
 import ComboDetailScreen from "./ComboDetailScreen";
+import DetailOverlay from "./DetailOverlay";
+import NoticeModal from "./NoticeModal";
+import OwingElsewhereModal from "./OwingElsewhereModal";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { DietaryTagsProvider } from "@/components/DietaryTagsContext";
 import type { StoredDietaryTag } from "@/lib/dietary";
 import { useMenuFreshness } from "@/hooks/useMenuFreshness";
-import { rememberMyOrder } from "@/lib/my-orders";
-import { suggestItems } from "@/lib/suggestions";
-import { clearUpsell, offeredUpsell, rememberUpsell } from "@/lib/upsell";
-import { forgetOrder, recallActiveOrders, rememberRecentOrder } from "@/lib/recent-order";
-import { recallDinerName, rememberDinerName } from "@/lib/diner-name";
-import { useFinishedOrders } from "@/hooks/useOrderFinished";
 import { useTableBill } from "@/hooks/useTableBill";
 import { useReceiptOffer } from "@/hooks/useReceiptOffer";
+import { useUsualOrder } from "@/hooks/useUsualOrder";
+import { useTrackedOrders } from "@/hooks/useTrackedOrders";
+import { useUpsell } from "@/hooks/useUpsell";
+import { useCheckout } from "@/hooks/useCheckout";
+import { useCartTotals } from "@/hooks/useCartTotals";
+import { useOrderingScreens } from "@/hooks/useOrderingScreens";
 import LoyaltyOffer from "./LoyaltyOffer";
 import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
 import { useSitting } from "@/hooks/useSitting";
-import { formatMoney } from "@/lib/format";
-import { recallSitting, rememberSitting } from "@/lib/table-binding";
-import { dinerToken } from "@/lib/diner-token";
 import BillSheet from "./BillSheet";
 import ReceiptPrompt from "./ReceiptPrompt";
 import TrackerOverlay from "./TrackerOverlay";
 import type { TrackedOrder } from "@/lib/order-tracking";
-
-type Screen = "menu" | "item" | "combo" | "edit" | "cart";
 
 /**
  * The QR-target customer app. Owns which screen is showing and the cart, and
@@ -91,16 +84,6 @@ export default function OrderingApp({
    */
   trackOrder?: TrackedOrder | null;
 }) {
-  const [screen, setScreen] = useState<Screen>("menu");
-  const [selected, setSelected] = useState<MenuItem | null>(null);
-  // Where the dish screen was opened from, so backing out or adding returns
-  // there. A suggestion is taken from the cart, and dropping that diner on the
-  // menu afterwards makes them find their way back to the order they were
-  // about to place.
-  const [detailFrom, setDetailFrom] = useState<Screen>("menu");
-
-  const [selectedCombo, setSelectedCombo] = useState<Combo | null>(null);
-  const [editingLine, setEditingLine] = useState<CartItem | null>(null);
   const [orderNote, setOrderNote] = useState("");
   // Only ever filled from the general QR; the cart hides the field at a table.
   // Seeded from what they gave last time, so a second order does not mean
@@ -110,136 +93,64 @@ export default function OrderingApp({
   useEffect(() => {
     setCustomerName(prev => prev || recallDinerName(restaurant.id));
   }, [restaurant.id]);
-  const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  // Product ids that sold out at checkout — kept in the cart but greyed out
-  // and excluded from the total and the next payment attempt.
-  const [soldOut, setSoldOut] = useState<Set<string>>(new Set());
   // What the table still owes. Only meaningful at a table: a fast-food QR pays
   // as it orders, so there is never an open bill.
   const [billOpen, setBillOpen] = useState(false);
-  const { bill, reload: reloadBill, staffBill, party, dividing } = useTableBill(
-    restaurant.id,
-    table?.id ?? null,
-    billOpen,
-  );
-
-  const [tipPct, setTipPct] = useState(0);
+  const {
+    bill,
+    reload: reloadBill,
+    staffBill,
+    party,
+    dividing,
+  } = useTableBill(restaurant.id, table?.id ?? null, billOpen);
 
   // Re-asks the server what is being served, so a dish pulled while this page
   // sat open stops being orderable here too.
   useMenuFreshness();
-  const [tipCustom, setTipCustom] = useState<number | null>(null);
-  const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
   const cart = useCart(restaurant.id);
+  // Which screen is showing — menu, dish, combo, a cart line, the cart.
+  const {
+    screen,
+    setScreen,
+    selected,
+    detailFrom,
+    selectedCombo,
+    editingLine,
+    openItem,
+    closeDetail,
+    openCombo,
+    closeCombo,
+    addConfiguredCombo,
+    editLine,
+    saveDish,
+  } = useOrderingScreens(cart, items, combos);
 
-  // "Lo de siempre": read after mount — the server has no localStorage, and
-  // deciding there would flash a tab at a phone that has no usual. Offered as
-  // today's menu can make it, recomputed whenever the menu is.
-  const [usualEntries, setUsualEntries] = useState<UsualEntry[]>([]);
-  useEffect(() => setUsualEntries(readUsual(restaurant.id)), [restaurant.id]);
-  const usual = useMemo(
-    () => resolveUsual(usualEntries, items, extras, extrasByProduct),
-    [usualEntries, items, extras, extrasByProduct],
+  // "Lo de siempre", as today's menu can make it.
+  const { usual, forget: forgetUsualOrder } = useUsualOrder(
+    restaurant.id,
+    items,
+    extras,
+    extrasByProduct,
   );
 
-  // When a refresh drops a dish the diner already added, mark it sold out —
-  // the same state the checkout would have produced, reached before they are
-  // standing at the payment step. Extras live in their own list, so only
-  // products are judged here.
-  const liveIds = useMemo(() => new Set(items.map(i => i.id)), [items]);
-  useEffect(() => {
-    const gone = cart.items
-      .filter(line => !line.comboId && !liveIds.has(line.itemId))
-      .map(line => line.itemId);
-    if (gone.length === 0) return;
-    setSoldOut(prev => {
-      if (gone.every(id => prev.has(id))) return prev;
-      const next = new Set(prev);
-      gone.forEach(id => next.add(id));
-      return next;
-    });
-  }, [cart.items, liveIds]);
-  const t = useT();
-  const sharedParams = readMenuParams(new URLSearchParams(useSearchParams().toString()));
-  const sharedItemId = sharedParams.item;
-  const sharedComboId = sharedParams.combo;
+  // What the cart comes to, sold-out lines left out.
+  const {
+    soldOut,
+    markSoldOut,
+    orderableItems,
+    pricing,
+    tipPct,
+    choosePct,
+    tipCustom,
+    setTipCustom,
+    coupon,
+    setCoupon,
+  } = useCartTotals(cart, items, restaurant, promos);
 
-  // ?item=<id> opens that dish on load — the "look at this one" link. Runs once:
-  // it seeds the screen from the URL and then leaves it alone, so closing the
-  // detail doesn't immediately get reopened by the param that put it there.
-  useEffect(() => {
-    if (!sharedItemId) return;
-    const shared = items.find(i => i.id === sharedItemId);
-    // A link to a dish that's since been removed or sold out just shows the
-    // menu, which is a better landing than an error for something the sender
-    // couldn't have known about.
-    if (!shared) {
-      syncMenuUrl({ item: null });
-      return;
-    }
-    setSelected(shared);
-    setScreen("item");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Same for ?combo=<id>. Reloading with a combo open used to drop you back on
-  // the menu and lose whatever had been configured in it; now the dialog comes
-  // back. A combo that's been paused or had a component go unavailable isn't
-  // in `combos` at all, so the menu is the right landing.
-  useEffect(() => {
-    if (!sharedComboId) return;
-    const shared = combos.find(c => c.id === sharedComboId);
-    if (!shared) {
-      syncMenuUrl({ combo: null });
-      return;
-    }
-    setSelectedCombo(shared);
-    setScreen("combo");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Totals count only the still-orderable lines (sold-out ones are excluded).
-  // A cart line stores what was ordered, not what it looked like — so the
-  // picture is looked up from the menu that is already loaded. Lines whose dish
-  // has no photo, or is no longer on the menu, fall back to their emoji.
-  // An order this phone placed and can still watch. Held here, where orders
-  // are placed, so it appears the moment one is — read only by the menu, it
-  // was seeded once on mount and a dine-in order never showed up at all.
-  // Every order this phone can still watch, newest first. A list rather than
-  // one slot: a counter has no table to hang a running tab on, so "one more
-  // thing" is always a NEW order, and losing the first one to the second is
-  // exactly what used to happen.
-  const [trackIds, setTrackIds] = useState<string[]>(trackOrder?.id ? [trackOrder.id] : []);
-  // Which sitting this phone belongs to. Written when an order lands and read
-  // back here, because dividing a bill is addressed to the sitting rather than
-  // the table: tonight's diners must not inherit a split from whoever sat here
-  // before them.
-  const [sittingSessionId, setSittingSessionId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!table?.id) return;
-    const sitting = recallSitting(restaurant.id);
-    setSittingSessionId(sitting?.tableId === table.id ? sitting.sessionId : null);
-  }, [restaurant.id, table?.id]);
-  useEffect(() => {
-    setTrackIds(prev => (prev.length > 0 ? prev : recallActiveOrders(restaurant.id, table?.id)));
-  }, [restaurant.id, table?.id]);
-
-  // And it withdraws itself once the order is delivered. This used to be read
-  // once on mount and never again: the kitchen marked it delivered and the
-  // button stayed on screen until somebody reloaded, offering to track a dish
-  // they had already eaten. If the tracker is open it does not close — the
-  // diner deserves to see "ready" — but the button below is gone.
-  // Each withdraws itself as it is delivered, and the others stay: a diner
-  // whose drink arrives before their food should keep watching the food.
-  const finished = useFinishedOrders(trackIds);
-  const finishedKey = finished.join(",");
-  useEffect(() => {
-    if (!finishedKey) return;
-    for (const id of finishedKey.split(",")) forgetOrder(restaurant.id, table?.id ?? null, id);
-    setTrackIds(prev => prev.filter(id => !finishedKey.split(",").includes(id)));
-  }, [finishedKey, restaurant.id, table?.id]);
+  // The orders this phone can still watch, its sitting, and the tracker.
+  const orders = useTrackedOrders(restaurant.id, table?.id ?? null, trackOrder);
+  const { trackIds, sittingSessionId, tracking, setTracking, closeTracker } = orders;
 
   // Already owing at another table? Ordering here would open a second bill
   // beside one nobody has settled.
@@ -247,69 +158,14 @@ export default function OrderingApp({
 
   // "Want that by email?" — asked once, when the money is settled, whether
   // that happened by card or in cash at the table.
-  const { offering, dismiss: dismissReceipt, paidNow } = useReceiptOffer(
-    receipts,
-    trackOrder?.id ?? null,
-    bill,
-  );
-
-  // Which order the tracker is showing, if it is open. Landing on /order/<id>
-  // opens it straight away; from the menu the banner opens it, over the menu,
-  // without going anywhere.
-  const [tracking, setTracking] = useState<string | null>(trackOrder?.id ?? null);
-
-  function closeTracker(): void {
-    setTracking(null);
-    // Arriving on /order/<id> leaves that in the address bar with the menu on
-    // screen, so a refresh — or a share — would reopen a tracker the diner has
-    // closed. Swapping it for the menu's own URL, without a navigation, keeps
-    // the bar honest and the page as it is.
-    if (trackOrder) {
-      const menuHref = `/r/${trackOrder.restaurant_id}${
-        trackOrder.table_id ? `/t/${trackOrder.table_id}` : ""
-      }`;
-      window.history.replaceState(null, "", menuHref);
-    }
-  }
+  const {
+    offering,
+    dismiss: dismissReceipt,
+    paidNow,
+  } = useReceiptOffer(receipts, trackOrder?.id ?? null, bill);
 
   // "Anything else?" — asked on the way to ordering, and asked once.
-  //
-  // The offer is worked out the first time the cart is opened and then stands
-  // for the rest of the bill: same three dishes, still there when the diner
-  // comes back from adding something else. Re-running the picks on every visit
-  // would reshuffle the strip under their thumb at the worst possible moment,
-  // and clearing it on the way out — which is what this used to do — retired
-  // the question after a single glance.
-  //
-  // It retires for real when the diner takes one of them, because a waiter who
-  // has been told "yes, and some fries" does not ask again.
-  const [offered, setOffered] = useState<MenuItem[]>([]);
-  useEffect(() => {
-    if (screen !== "cart") return;
-
-    const inCart = new Set(cart.items.map(line => line.itemId));
-    const remembered = offeredUpsell(restaurant.id);
-    if (remembered) {
-      // One of them made it into the order: the question has been answered.
-      if (remembered.some(id => inCart.has(id))) {
-        setOffered([]);
-        return;
-      }
-      const still = remembered
-        .map(id => items.find(i => i.id === id))
-        .filter((i): i is MenuItem => Boolean(i) && i!.available);
-      setOffered(still);
-      return;
-    }
-
-    const picks = suggestItems({ cart: cart.items, items, ratings });
-    if (picks.length === 0) return; // nothing worth suggesting isn't an ask
-    rememberUpsell(
-      restaurant.id,
-      picks.map(p => p.id),
-    );
-    setOffered(picks);
-  }, [screen, restaurant.id, cart.items, items, ratings]);
+  const offered = useUpsell(screen === "cart", restaurant.id, cart.items, items, ratings);
 
   function pickSuggestion(item: MenuItem): void {
     // The ordinary dish screen, so options and notes are still asked for —
@@ -322,35 +178,6 @@ export default function OrderingApp({
     return (itemId: string) => byId.get(itemId) ?? null;
   }, [items]);
 
-  const orderableItems = useMemo(
-    () => cart.items.filter(i => !soldOut.has(i.itemId)),
-    [cart.items, soldOut],
-  );
-
-  // One pricing pass for the whole screen. /api/checkout runs this same
-  // function against DB prices, so what's shown here is what gets charged.
-  const pricing = useMemo(
-    () =>
-      priceCart({
-        items: orderableItems,
-        servicePct: restaurant.service_pct,
-        serviceEnabled: restaurant.service_enabled,
-        tipPct,
-        tipAmount: tipCustom,
-        coupon,
-        promos,
-      }),
-    [
-      orderableItems,
-      restaurant.service_pct,
-      restaurant.service_enabled,
-      tipPct,
-      tipCustom,
-      coupon,
-      promos,
-    ],
-  );
-
   const extrasById = useMemo(() => new Map(extras.map(e => [e.id, e])), [extras]);
   const itemsById = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
 
@@ -362,198 +189,29 @@ export default function OrderingApp({
       .filter((e): e is MenuItem => Boolean(e));
   }, [selected, extrasByProduct, extrasById]);
 
-  // Escape closes the dish detail. It reads as a dialog on desktop, and a
-  // dialog that only closes via its own back arrow is a dead end for anyone
-  // on a keyboard.
-  useEffect(() => {
-    if (screen !== "item" && screen !== "edit" && screen !== "combo") return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== "Escape") return;
-      if (screen === "combo") closeCombo();
-      else closeDetail(screen === "edit" ? "cart" : detailFrom);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [screen, detailFrom]);
-
-  function openItem(item: MenuItem, from: Screen = "menu") {
-    setDetailFrom(from);
-    setSelected(item);
-    setScreen("item");
-    syncMenuUrl({ item: item.id });
-  }
-
-  /** Leaves the dish detail, and takes it out of the shareable URL. */
-  function closeDetail(to: Screen) {
-    syncMenuUrl({ item: null });
-    setScreen(to);
-  }
-
-  function addToCart(line: OrderLineItem) {
-    cart.addItem(line);
-    syncMenuUrl({ item: null });
-    setScreen(detailFrom);
-  }
-
-  /**
-   * Opens the bundle for configuration rather than adding it.
-   *
-   * It used to drop straight into the cart on the assumption a combo has
-   * nothing to customise — but its components are ordinary dishes, with their
-   * own options and paid extras, and a deal containing a coffee had no way to
-   * ask for oat milk. Two bundles configured differently are also genuinely
-   * different lines now, so tapping twice no longer merges them.
-   */
-  function openCombo(combo: Combo) {
-    setSelectedCombo(combo);
-    setScreen("combo");
-    syncMenuUrl({ combo: combo.id });
-  }
-
-  function closeCombo() {
-    setSelectedCombo(null);
-    setScreen("menu");
-    syncMenuUrl({ combo: null });
-  }
-
-  function addConfiguredCombo(line: OrderLineItem) {
-    cart.addItem(line);
-    setSelectedCombo(null);
-    setScreen("menu");
-  }
-
-  /** Re-opens the item screen prefilled with a cart line's choices. */
-  function editLine(item: CartItem) {
-    const product = items.find(i => i.id === item.itemId);
-    if (!product) return; // product left the menu — the line can only be removed
-    setSelected(product);
-    setEditingLine(item);
-    setScreen("edit");
-  }
-
-  async function checkout(payLater = false) {
-    // Only pay for the still-orderable lines (any already-sold-out ones stay
-    // greyed in the cart for the customer to see).
-    if (orderableItems.length === 0) {
-      setNotice(t("notice.allSoldOut"));
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          restaurantId: restaurant.id,
-          tableId: table?.id ?? null,
-          tableLabel: table?.label ?? null,
-          // The list is explicit on purpose — the server must not receive `cartId` or
-          // anything from the view — but it was missing the two things that make a
-          // combo a combo. Without `comboId` the server saw a loose line whose
-          // `itemId` is a promotion id, looked for it among the dishes, did not find
-          // it and answered "no longer available": combos could not be ordered
-          // at all, and they are a paid-plan feature.
-          items: orderableItems.map(c => ({
-            itemId: c.itemId,
-            name: c.name,
-            emoji: c.emoji,
-            price: c.price,
-            qty: c.qty,
-            mods: c.mods,
-            extras: c.extras,
-            notes: c.notes,
-            ...(c.comboId ? { comboId: c.comboId, components: c.components } : {}),
-          })),
-          note: orderNote || undefined,
-          customerName: customerName || undefined,
-          tipPct,
-          tipAmount: tipCustom ?? undefined,
-          couponCode: coupon?.code,
-          payLater,
-          // Which phone ordered. It is how many devices have ordered on the
-          // sitting that decides how many ways the bill can be divided — a
-          // share belongs to a device, and a share nobody can claim stops the
-          // whole table paying.
-          diner: dinerToken(restaurant.id) || undefined,
-        }),
-      });
-      const data = await res.json();
-      // Deferred: the food is already with the kitchen, so there is no Stripe
-      // hop. Remember the id — it is the only thing that tells this phone's
-      // share apart from the rest of the table's on the bill.
-      if (data.deferred && data.orderId) {
-        // Both lists: one decides whose share is whose on the bill, the other
-        // drives the "track your order" link and the rating prompt. A dine-in
-        // order used to reach only the first.
-        rememberMyOrder(restaurant.id, data.orderId);
-        rememberRecentOrder(restaurant.id, data.orderId, table?.id);
-        rememberUsual(restaurant.id, orderableItems);
-        if (customerName.trim()) rememberDinerName(restaurant.id, customerName);
-        // This phone is now sitting at this table, and stays bound to it until
-        // the bill is cleared.
-        if (data.sessionId && table?.id) {
-          rememberSitting(restaurant.id, data.sessionId, table.id);
-          setSittingSessionId(data.sessionId);
-        }
-        clearUpsell(restaurant.id);
-        setTrackIds(prev => [data.orderId, ...prev.filter(id => id !== data.orderId)]);
-        cart.clear();
-        // Back to the menu, nothing in the way. The bill is a tap away on the
-        // receipt button whenever they are ready — pushing it in their face
-        // the moment they order interrupts a meal that has not started.
-        setScreen("menu");
-        reloadBill();
-        setLoading(false);
-        return;
-      }
-      if (data.url) {
-        // Counted as ordered once the order exists; a checkout abandoned at
-        // Stripe still said what this diner likes, and all it changes is
-        // which dishes the menu suggests.
-        rememberUsual(restaurant.id, orderableItems);
-        window.location.href = data.url; // Stripe Checkout
-        return;
-      }
-      // The coupon stopped being usable between applying it and paying (most
-      // likely someone else took the last use). Drop it and let them retry.
-      if (data.couponReason) {
-        setCoupon(null);
-        setNotice(t(`coupon.${data.couponReason}`));
-        setLoading(false);
-        return;
-      }
-      // One or more extras sold out: drop them from the cart, tell the customer,
-      // and let them pay again for the adjusted order.
-      if (data.removedExtraIds) {
-        cart.removeExtras(data.removedExtraIds);
-        const names: string[] = data.removedExtraNames ?? [];
-        setNotice(t("cart.extrasRemoved", { names: names.join(", ") }));
-        setLoading(false);
-        return;
-      }
-      // The kitchen has some, but not as many as they asked for. Cut the cart
-      // to what is really there and say so, rather than making them find the
-      // line and count it down themselves.
-      if (data.shortStock) {
-        cart.trimToStock(data.shortStock);
-        setNotice(`${data.error} ${t("cart.stockTrimmed")}`);
-        setLoading(false);
-        return;
-      }
-      // An item sold out between loading the menu and checking out: mark it
-      // sold out (it greys out and drops from the total) so the rest can pay.
-      if (data.unavailableItemId) {
-        setSoldOut(prev => new Set(prev).add(data.unavailableItemId));
-        setNotice(`${data.error} ${t("notice.markedSoldOut")}`);
-      } else {
-        setNotice(data.error ?? t("notice.generic"));
-      }
-      setLoading(false);
-    } catch {
-      setNotice(t("notice.network"));
-      setLoading(false);
-    }
-  }
+  const { checkout, loading } = useCheckout({
+    restaurantId: restaurant.id,
+    table,
+    orderableItems,
+    orderNote,
+    customerName,
+    tipPct,
+    tipCustom,
+    coupon,
+    cart,
+    dropCoupon: () => setCoupon(null),
+    markSoldOut,
+    notify: setNotice,
+    onPlaced: (orderId, sessionId) => {
+      if (sessionId) orders.setSittingSessionId(sessionId);
+      orders.track(orderId);
+      // Back to the menu, nothing in the way. The bill is a tap away on the
+      // receipt button whenever they are ready — pushing it in their face
+      // the moment they order interrupts a meal that has not started.
+      setScreen("menu");
+      reloadBill();
+    },
+  });
 
   /**
    * The dish detail, layered over whatever screen opened it — the menu when
@@ -567,50 +225,35 @@ export default function OrderingApp({
    */
   const detail =
     (screen === "item" || screen === "edit") && selected ? (
-      <div
-        className="tt-detail-overlay"
-        onClick={() => closeDetail(screen === "edit" ? "cart" : detailFrom)}
-      >
-        <div className="tt-detail-panel" onClick={e => e.stopPropagation()}>
-          <ItemDetailScreen
-            item={selected}
-            extras={selectedExtras}
-            currency={restaurant.currency}
-            initialLine={screen === "edit" && editingLine ? editingLine : undefined}
-            promo={promos.find(p => p.itemIds.includes(selected.id))}
-            inCartQty={cart.items
-              .filter(i => i.itemId === selected.id && !i.comboId)
-              .reduce((n, i) => n + i.qty, 0)}
-            onBack={() => closeDetail(screen === "edit" ? "cart" : detailFrom)}
-            onAdd={line => {
-              if (screen === "edit" && editingLine) {
-                cart.updateItem(editingLine.cartId, line);
-                setEditingLine(null);
-                closeDetail("cart");
-                return;
-              }
-              addToCart(line);
-            }}
-          />
-        </div>
-      </div>
+      <DetailOverlay onClose={() => closeDetail(screen === "edit" ? "cart" : detailFrom)}>
+        <ItemDetailScreen
+          item={selected}
+          extras={selectedExtras}
+          currency={restaurant.currency}
+          initialLine={screen === "edit" && editingLine ? editingLine : undefined}
+          promo={promos.find(p => p.itemIds.includes(selected.id))}
+          inCartQty={cart.items
+            .filter(i => i.itemId === selected.id && !i.comboId)
+            .reduce((n, i) => n + i.qty, 0)}
+          onBack={() => closeDetail(screen === "edit" ? "cart" : detailFrom)}
+          onAdd={saveDish}
+        />
+      </DetailOverlay>
     ) : null;
 
   const comboDetail =
     screen === "combo" && selectedCombo ? (
-      <div className="tt-detail-overlay" onClick={closeCombo}>
-        <div className="tt-detail-panel" onClick={e => e.stopPropagation()}>
-          <ComboDetailScreen
-            combo={selectedCombo}
-            currency={restaurant.currency}
-            itemsById={itemsById}
-            extrasById={extrasById}
-            extrasByProduct={extrasByProduct}
-            onBack={closeCombo}
-            onAdd={addConfiguredCombo}
-          />
-        </div>
-      </div>
+      <DetailOverlay onClose={closeCombo}>
+        <ComboDetailScreen
+          combo={selectedCombo}
+          currency={restaurant.currency}
+          itemsById={itemsById}
+          extrasById={extrasById}
+          extrasByProduct={extrasByProduct}
+          onBack={closeCombo}
+          onAdd={addConfiguredCombo}
+        />
+      </DetailOverlay>
     ) : null;
 
   /**
@@ -622,57 +265,51 @@ export default function OrderingApp({
    */
   const cartScreen =
     screen === "cart" || screen === "edit" ? (
-      <div className="tt-detail-overlay" onClick={() => setScreen("menu")}>
-        <div
-          className="tt-detail-panel tt-detail-panel-wide"
-          onClick={e => e.stopPropagation()}
-        >
-          <CartScreen
-            restaurant={restaurant}
-            table={table}
-            items={cart.items}
-            photoOf={photoOf}
-            suggestions={offered}
-            onPickSuggestion={pickSuggestion}
-            soldOut={soldOut}
-            subtotal={pricing.subtotal}
-            grossSubtotal={pricing.grossSubtotal}
-            discount={pricing.discount}
-            serviceFee={pricing.serviceFee}
-            tip={pricing.tip}
-            tipPct={tipPct}
-            tipCustom={tipCustom}
-            total={pricing.total}
-            coupon={coupon}
-            onApplyCoupon={setCoupon}
-            onRemoveCoupon={() => setCoupon(null)}
-            hints={pricing.hints}
-            promoSavings={pricing.promoSavings}
-            orderNote={orderNote}
-            loading={loading}
-            canCheckout={orderableItems.length > 0 && restaurant.accepting_orders && !orderAtRegister}
-            orderAtRegister={orderAtRegister}
-            onChangeNote={setOrderNote}
-            customerName={customerName}
-            onChangeName={setCustomerName}
-            onChangeTip={pct => {
-              setTipPct(pct);
-              setTipCustom(null); // picking a preset clears the exact amount
-            }}
-            onCustomTip={setTipCustom}
-            onRemoveItem={cart.removeItem}
-            onChangeQty={cart.setQty}
-            onEditItem={editLine}
-            onAddMore={() => setScreen("menu")}
-            onCheckout={checkout}
-            // One switch for both: at a table the bill stays open, on the
-            // general QR the till holds the order. The cart has the table, so
-            // it is the one that turns this into the right offer.
-            deferredAllowed={Boolean(restaurant.allow_pay_later)}
-            cardsEnabled={Boolean(restaurant.cards_enabled)}
-          />
-        </div>
-      </div>
+      <DetailOverlay wide onClose={() => setScreen("menu")}>
+        <CartScreen
+          restaurant={restaurant}
+          table={table}
+          items={cart.items}
+          photoOf={photoOf}
+          suggestions={offered}
+          onPickSuggestion={pickSuggestion}
+          soldOut={soldOut}
+          subtotal={pricing.subtotal}
+          grossSubtotal={pricing.grossSubtotal}
+          discount={pricing.discount}
+          serviceFee={pricing.serviceFee}
+          tip={pricing.tip}
+          tipPct={tipPct}
+          tipCustom={tipCustom}
+          total={pricing.total}
+          coupon={coupon}
+          onApplyCoupon={setCoupon}
+          onRemoveCoupon={() => setCoupon(null)}
+          hints={pricing.hints}
+          promoSavings={pricing.promoSavings}
+          orderNote={orderNote}
+          loading={loading}
+          canCheckout={
+            orderableItems.length > 0 && restaurant.accepting_orders && !orderAtRegister
+          }
+          orderAtRegister={orderAtRegister}
+          onChangeNote={setOrderNote}
+          customerName={customerName}
+          onChangeName={setCustomerName}
+          onChangeTip={choosePct}
+          onCustomTip={setTipCustom}
+          onRemoveItem={cart.removeItem}
+          onChangeQty={cart.setQty}
+          onEditItem={editLine}
+          onAddMore={() => setScreen("menu")}
+          onCheckout={checkout}
+          // One switch for both: at a table the bill stays open, on the
+          // general QR the till holds the order. The cart has the table, so
+          // it is the one that turns this into the right offer.
+          deferredAllowed={Boolean(restaurant.allow_pay_later)}
+          cardsEnabled={Boolean(restaurant.cards_enabled)}
+        />
+      </DetailOverlay>
     ) : null;
 
   return (
@@ -703,16 +340,17 @@ export default function OrderingApp({
             for (const line of usual) cart.addItem(line);
             setScreen("cart");
           }}
-          onForgetUsual={() => {
-            forgetUsual(restaurant.id);
-            setUsualEntries([]);
-          }}
+          onForgetUsual={forgetUsualOrder}
           onTrack={id => setTracking(id ?? trackIds[0] ?? null)}
           billDue={Boolean(table && bill && !bill.settled)}
           // The visit card, offered once the money is settled — after the
           // receipt question, never on top of it, and not behind the tracker,
           // which offers it itself.
-          notice={loyalty && paidNow && !offering && !tracking ? <LoyaltyOffer offer={loyalty} /> : null}
+          notice={
+            loyalty && paidNow && !offering && !tracking ? (
+              <LoyaltyOffer offer={loyalty} />
+            ) : null
+          }
           onOpenBill={() => {
             reloadBill();
             setBillOpen(true);
@@ -745,53 +383,11 @@ export default function OrderingApp({
             dividing={dividing}
           />
         )}
-        {/* Not dismissible into ordering: the point is that a second bill does
-          not get opened while the first is outstanding. They can still read
-          the menu behind it, and settling the other table clears this by
-          itself. */}
-        <Modal
-          open={Boolean(owingElsewhere)}
-          onClose={() => {}}
-          maxWidth={400}
-          label={t("sitting.title")}
-        >
-          <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 8 }}>
-            {t("sitting.title")}
-          </h3>
-          <p className="tt-muted" style={{ marginTop: 0 }}>
-            {t("sitting.body", {
-              table: owingElsewhere?.tableLabel ?? "",
-              amount: formatMoney(owingElsewhere?.owed ?? 0, restaurant.currency),
-            })}
-          </p>
-          <p className="tt-muted tt-subline" style={{ fontSize: 13 }}>
-            {t("sitting.hint")}
-          </p>
-        </Modal>
+        <OwingElsewhereModal owing={owingElsewhere} currency={restaurant.currency} />
         {offering && <ReceiptPrompt orderIds={offering} open onClose={dismissReceipt} />}
         {detail}
         {comboDetail}
-        <Modal
-          open={!!notice}
-          onClose={() => setNotice(null)}
-          maxWidth={400}
-          label={t("notice.heads")}
-        >
-          <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 8 }}>
-            {t("notice.heads")}
-          </h3>
-          <p className="tt-muted" style={{ marginTop: 0 }}>
-            {notice}
-          </p>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-            <button
-              className="tt-btn tt-btn-primary tt-btn-sm"
-              onClick={() => setNotice(null)}
-            >
-              {t("notice.ok")}
-            </button>
-          </div>
-        </Modal>
+        <NoticeModal notice={notice} onClose={() => setNotice(null)} />
       </ConfirmProvider>
     </DietaryTagsProvider>
   );
