@@ -85,6 +85,13 @@ export async function POST(req: NextRequest) {
       return await apiError("apiErr.closedNow", 409);
     }
 
+    // The table must belong to this restaurant, or the sitting it opens blocks
+    // another venue's diners. Asked before anything is reserved: after the
+    // coupon claim, this answer once kept a use nobody spent.
+    if (tableId && !(await tableOf(restaurantId, tableId))) {
+      return await apiError("apiErr.tableNotFound", 404);
+    }
+
     // Pay later is decided from the database and the plan (`payLaterAllowed`).
     const allowDeferred = payLaterAllowed(restaurant.allow_pay_later, plan?.limits);
     const deferred = Boolean(payLater) && allowDeferred;
@@ -157,13 +164,6 @@ export async function POST(req: NextRequest) {
     };
 
     const appFee = await checkoutFeeCents(restaurantId, plan, deferred, pricing.subtotal);
-
-    // The table has to belong to this restaurant. Without this you can create an
-    // order here with another venue's table, and the sitting it opens blocks the
-    // one for their real diners.
-    if (tableId && !(await tableOf(restaurantId, tableId))) {
-      return await apiError("apiErr.tableNotFound", 404);
-    }
 
     // Which sitting this order belongs to. A dine-in order joins whoever is
     // already at the table; a counter order has no table and no sitting.
