@@ -203,6 +203,17 @@ export async function setup(env, base) {
         .update({ reward: was.reward, steps: was.steps }).eq("restaurant_id", restaurant.id);
     };
   };
+  // A visit card is made only with the pass a page hands out as it renders
+  // (src/lib/loyalty/pass.ts), so the cases ask a page for one, the way a
+  // diner's phone does — which also proves each page still hands one out.
+  const passesHanded = [];
+  const visitPass = async path => {
+    const html = await (await fetch(base + path)).text();
+    const pass = /\\?"pass\\?":\\?"([A-Za-z0-9_.-]+)\\?"/.exec(html)?.[1];
+    if (!pass) throw new Error(`${path} handed out no visit pass`);
+    passesHanded.push(pass);
+    return pass;
+  };
   const withLoyaltyOff = async () => {
     const { data: was } = await admin
       .from("loyalty_programs").select("active").eq("restaurant_id", restaurant.id).maybeSingle();
@@ -594,6 +605,8 @@ export async function setup(env, base) {
     readyCode: readyCard?.code ?? null,
     readyStep: readyCard?.next?.visits ?? null,
     withLoyaltyOff,
+    visitPass,
+    passesHanded,
     visitOf,
     throwawayCode,
     keepLoyaltyProgram,
@@ -657,6 +670,12 @@ export async function teardown(fx) {
     const newCards = (cardsNow ?? []).map(c => c.id).filter(id => !keptCards.has(id));
     if (newCards.length) await admin.from("loyalty_cards").delete().in("id", newCards);
   }
+  // What the card cases counted against: each pass they spent, and each
+  // place's tally — a day of runs would otherwise reach a table's ceiling, and
+  // the next run's case would be refused for what the runs before it made.
+  const spent = (fx.passesHanded ?? []).map(p => `loyalty-pass:${p.split(".")[2]}`);
+  if (spent.length) await admin.from("rate_limits").delete().in("bucket", spent);
+  await admin.from("rate_limits").delete().like("bucket", `loyalty-card:${restaurant.id}:%`);
   await admin.from("dish_ratings").delete().in("order_id", [fx.paidOrder, fx.unpaidOrder]);
   // A collection made in parts belongs to no order, so deleting the orders
   // leaves it behind — on the table's own sitting, quietly making the table's

@@ -11,6 +11,7 @@ import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
 import { loyaltyOn, programOf } from "@/lib/loyalty/server";
 import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
+import { issueVisitPass } from "@/lib/loyalty/pass";
 
 /** Everything the customer ordering screens need for one restaurant. */
 export interface OrderingData {
@@ -324,7 +325,12 @@ export async function loadOrderingData(
   const program = await offeredProgram(restaurantId, plan?.limits ?? null);
   const loyalty: LoyaltyOfferInfo | null =
     restaurant && program
-      ? { restaurantId, restaurantName: restaurant.name, goal: program.goal, reward: program.reward, steps: program.steps }
+      ? {
+          restaurantId, restaurantName: restaurant.name, goal: program.goal, reward: program.reward, steps: program.steps,
+          // The counter menu's pass; a table's page and an order's tracker
+          // narrow it to their own place with `offerAt`.
+          pass: issueVisitPass(restaurantId, "counter"),
+        }
       : null;
 
   return {

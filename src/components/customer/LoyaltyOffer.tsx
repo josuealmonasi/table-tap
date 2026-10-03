@@ -47,7 +47,7 @@ export default function LoyaltyOffer({ offer, asked = false }: LoyaltyOfferProps
       const res = await fetch("/api/loyalty/card", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ restaurantId: offer.restaurantId }),
+        body: JSON.stringify({ restaurantId: offer.restaurantId, pass: offer.pass }),
       });
       const data = await res.json();
       if (!res.ok) {

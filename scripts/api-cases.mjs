@@ -226,16 +226,41 @@ export function cases(fx) {
         return count === 1 || `the earned reward was spent ${count} times`;
       } },
     // ── the visit card a diner makes, keeps, and may delete ───────────────
-    { name: "POST /api/loyalty/card (a diner makes one)", as: "diner", method: "POST",
-      path: "/api/loyalty/card", body: { restaurantId: r }, expect: [200],
+    { name: "POST /api/loyalty/card (a diner makes one at their table)", as: "diner", method: "POST",
+      path: "/api/loyalty/card",
+      body: async (f, saved) => {
+        saved.tablePass = await f.visitPass(`/r/${r}/t/${f.table.id}`);
+        // Taken now for the case that switches the program off: a page with
+        // the program off offers no card, so it hands out no pass.
+        saved.unspentPass = await f.visitPass(`/r/${r}/t/${f.table.id}`);
+        return { restaurantId: r, pass: saved.tablePass };
+      },
+      expect: [200],
       check: d => {
         if (!/^[0-9A-HJKMNP-TV-Z]{12}$/.test(d.code ?? "")) return `no valid code in ${JSON.stringify(d).slice(0, 80)}`;
         if (!d.face?.qrPayload?.endsWith(`/rewards?c=${d.code}`)) return "the QR does not point at the card's own page";
         if (!(d.qr?.size > 0 && d.qr.bits.length === d.qr.size * d.qr.size)) return "the QR grid is not square";
         return JSON.stringify(d).includes("@") ? "the new card names somebody" : true;
       } },
+    { name: "POST /api/loyalty/card (the same page asks twice)", as: "diner", method: "POST",
+      path: "/api/loyalty/card", body: (_f, saved) => ({ restaurantId: r, pass: saved.tablePass }),
+      expect: [409], expectError: /ya hizo su tarjeta|already made its card/i },
+    { name: "POST /api/loyalty/card (from the counter menu)", as: "diner", method: "POST",
+      path: "/api/loyalty/card", body: async f => ({ restaurantId: r, pass: await f.visitPass(`/r/${r}`) }),
+      expect: [200], check: d => /^[0-9A-HJKMNP-TV-Z]{12}$/.test(d.code ?? "") || "no card from the counter menu" },
+    { name: "POST /api/loyalty/card (from an order's tracker)", as: "diner", method: "POST",
+      path: "/api/loyalty/card", body: async f => ({ restaurantId: r, pass: await f.visitPass(`/order/${f.paidOrder}`) }),
+      expect: [200], check: d => /^[0-9A-HJKMNP-TV-Z]{12}$/.test(d.code ?? "") || "no card from the tracker" },
+    { name: "POST /api/loyalty/card (from outside: no pass)", as: "diner", method: "POST",
+      path: "/api/loyalty/card", body: { restaurantId: r },
+      expect: [403], expectError: /desde la carta|from the restaurant's menu/i },
+    { name: "POST /api/loyalty/card (a pass carried to another restaurant)", as: "diner", method: "POST",
+      path: "/api/loyalty/card",
+      body: async f => ({ restaurantId: "00000000-0000-4000-8000-000000000000", pass: await f.visitPass(`/r/${r}`) }),
+      expect: [403], expectError: /desde la carta|from the restaurant's menu/i },
     { name: "POST /api/loyalty/card (the program switched off)", as: "diner", method: "POST",
-      path: "/api/loyalty/card", arrange: f => f.withLoyaltyOff(), body: { restaurantId: r },
+      path: "/api/loyalty/card", arrange: f => f.withLoyaltyOff(),
+      body: (_f, saved) => ({ restaurantId: r, pass: saved.unspentPass }),
       expect: [409], expectError: /apagada|switched off/i },
     { name: "POST /api/loyalty/card (not a restaurant)", as: "diner", method: "POST",
       path: "/api/loyalty/card", body: { restaurantId: "not-an-id" }, expect: [400] },

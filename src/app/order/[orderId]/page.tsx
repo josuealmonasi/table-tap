@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import OrderingApp from "@/components/customer/OrderingApp";
 import { fetchTrackedOrder } from "@/lib/order-tracking";
 import { loadOrderingData, unwrap } from "@/lib/ordering-data";
+import { offerAt } from "@/lib/loyalty/pass";
 import type { RestaurantTable } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -56,7 +57,7 @@ export default async function OrderPage({
       closedNow={data.closedNow}
       orderAtRegister={data.orderAtRegister}
       receipts={data.receipts}
-      loyalty={data.loyalty}
+      loyalty={offerAt(data.loyalty, { order: order.id })}
       trackOrder={order}
     />
   );

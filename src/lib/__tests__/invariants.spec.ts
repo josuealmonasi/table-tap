@@ -2234,3 +2234,25 @@ describe("the docs do not count what the code decides", () => {
     expect(counted, "a count of something the code decides — say \"every\" and let a gate enforce it").toEqual([]);
   });
 });
+
+describe("a visit card is made only from inside the restaurant", () => {
+  it("the card route takes a pass it signed, spends it once and counts its place, before it makes a card", () => {
+    // It used to take the restaurant's id alone — printed on every QR — so
+    // anybody could fill an owner's program with cards nobody carries.
+    const route = read("src/app/api/loyalty/card/route.ts");
+    const insert = route.indexOf('.from("loyalty_cards").insert(');
+    expect(insert, "the card route no longer makes cards where this looks").toBeGreaterThan(-1);
+    for (const step of ["readVisitPass(restaurantId, body?.pass)", "`loyalty-pass:${pass.nonce}`", "placeLimit(restaurantId, pass.place)"]) {
+      const at = route.indexOf(step);
+      expect(at, `the card route lost ${step}`).toBeGreaterThan(-1);
+      expect(at, `${step} comes after the card is made`).toBeLessThan(insert);
+    }
+  });
+
+  it("every page that offers the card hands it a pass for its own place, and the phone sends it", () => {
+    expect(read("src/lib/ordering-data.ts")).toMatch(/pass: issueVisitPass\(restaurantId, "counter"\)/);
+    expect(read("src/app/r/[restaurantId]/t/[tableId]/page.tsx")).toMatch(/offerAt\(data\.loyalty, \{ table: /);
+    expect(read("src/app/order/[orderId]/page.tsx")).toMatch(/offerAt\(data\.loyalty, \{ order: /);
+    expect(read("src/components/customer/LoyaltyOffer.tsx")).toMatch(/pass: offer\.pass/);
+  });
+});
