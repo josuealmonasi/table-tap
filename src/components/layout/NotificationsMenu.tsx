@@ -64,7 +64,7 @@ export default function NotificationsMenu({ enabled }: { enabled: boolean }) {
   }
 
   return (
-    <div className="tt-user-menu" ref={menuRef}>
+    <div className="tt-user-menu tt-notif-menu" ref={menuRef}>
       <button
         type="button"
         className="tt-user-btn tt-notif-btn"

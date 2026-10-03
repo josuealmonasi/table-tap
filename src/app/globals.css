@@ -6552,6 +6552,19 @@ a.tt-user-plan:hover {
   padding: 0;
   overflow: hidden;
 }
+/* On a phone the bell sits left of the account button, so a panel anchored to
+   the bell ran nine pixels off the left edge at 375px — its border and first
+   letters cut. There it anchors to the bar instead (the nav is sticky, so it
+   is the nearest positioned box) and lines up with the right gutter at any
+   width. The desktop panel still hangs from the bell. */
+@media (max-width: 520px) {
+  .tt-notif-menu {
+    position: static;
+  }
+  .tt-notif-menu .tt-notif-dropdown {
+    right: 12px;
+  }
+}
 .tt-notif-head {
   display: flex;
   align-items: center;
