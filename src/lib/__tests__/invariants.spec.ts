@@ -126,7 +126,9 @@ describe("the menu editor's failures are said in the owner's language", () => {
     // Reordering extras passed "reorder extras" where every other write passes
     // a key, so a failed reorder toasted that raw English phrase to a Spanish
     // owner. Every key a write in the editor reports must be a real one.
-    const src = read("src/hooks/useMenuEditor.ts");
+    const src = ["useMenuEditor.ts", "menu-editor/menus.ts", "menu-editor/products.ts", "menu-editor/addons.ts"]
+      .map(f => read(`src/hooks/${f}`))
+      .join("\n");
     const keys = [...src.matchAll(/\b(?:run|move|insertReturningId|reportError)\(\s*"([^"]+)"/g)].map(m => m[1]);
     expect(keys.length, "found no reported write in the editor — has it moved?").toBeGreaterThan(15);
     const missing = keys.filter(k => {
