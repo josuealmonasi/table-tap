@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
 import { priceCart, type AppliedCoupon } from "@/lib/pricing";
-import { logRedemption, releaseCoupon, toAppliedCoupon } from "@/lib/coupon-service";
+import { releaseCoupon, toAppliedCoupon } from "@/lib/coupon-service";
 import { isRoomLimited, isTableLimited } from "@/lib/rate-limit";
 import { promotionsOnSale } from "@/lib/promotions-on-sale";
 import { toCartPromos } from "@/lib/promotions";
@@ -15,7 +15,7 @@ import { MAX_CARD_CART_LINES } from "@/lib/stripe-limits";
 import { raiseStockNotifications, releaseStock, reserveStock } from "@/lib/stock-service";
 import { refuseCart, refuseShortStock } from "@/lib/checkout/cart-error";
 import { orderableNow } from "@/lib/checkout/orderable-now";
-import { claimCheckoutCoupon } from "@/lib/checkout/claim-coupon";
+import { claimCheckoutCoupon, logCheckoutCoupon } from "@/lib/checkout/claim-coupon";
 import { checkoutLineItems } from "@/lib/checkout/line-items";
 import { openCardSession } from "@/lib/checkout/card-session";
 import { checkoutTip, type CheckoutBody } from "@/lib/checkout/checkout-body";
@@ -23,6 +23,7 @@ import { verifiedLines } from "@/lib/checkout/verified-lines";
 import { checkoutOrderRow } from "@/lib/checkout/order-row";
 import { payLaterAllowed } from "@/lib/checkout/pay-later";
 import { checkoutFeeCents } from "@/lib/checkout/app-fee";
+import { checkoutHold } from "@/lib/checkout/hold";
 
 export const runtime = "nodejs";
 
@@ -30,6 +31,7 @@ export const runtime = "nodejs";
 // Creates a pending order, then a Stripe Checkout Session, and returns its URL.
 // A pay-later order goes straight to the kitchen and returns no URL.
 export async function POST(req: NextRequest) {
+  const held = checkoutHold();
   try {
     // Throttle abusive callers before we create any orders or Stripe sessions:
     // the room behind this address first, then — once the body says which —
@@ -162,6 +164,7 @@ export async function POST(req: NextRequest) {
       if (coupon) await releaseCoupon(coupon.id);
       if (stockReserved) await releaseStock(restaurantId, verified);
     };
+    held.hold(undoClaim);
 
     const appFee = await checkoutFeeCents(restaurantId, plan, deferred, pricing.subtotal);
 
@@ -181,7 +184,7 @@ export async function POST(req: NextRequest) {
       Number(restaurant.low_stock_threshold) || 0,
     );
     if (!reservation.ok) {
-      await undoClaim();
+      await held.giveBack();
       return await refuseShortStock(reservation.short);
     }
     stockReserved = true;
@@ -211,9 +214,17 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (oErr || !order) {
-      await undoClaim();
+      await held.giveBack();
       return await apiError("apiErr.orderCreate", 500);
     }
+    // A pay-later order is the kitchen's now. A card order is still ours until
+    // its session is open and its coupon written down: give it back, row and all.
+    if (deferred) held.handOver();
+    else
+      held.hold(async () => {
+        await supabase.from("orders").delete().eq("id", order.id);
+        await undoClaim();
+      });
 
     // Only once the order is real: a warning about stock an order never took
     // would send someone to count a shelf that is still full. Off by default,
@@ -221,19 +232,6 @@ export async function POST(req: NextRequest) {
     if (restaurant.low_stock_alerts_enabled) {
       await raiseStockNotifications(restaurantId, reservation.low);
     }
-
-    /** Writes the coupon's use down against this order. */
-    const logCoupon = async (extra: { settled?: true } = {}) => {
-      if (!coupon) return;
-      await logRedemption({
-        restaurantId,
-        couponId: coupon.id,
-        orderId: order.id,
-        code: coupon.code,
-        amount: pricing.couponDiscount,
-        ...extra,
-      });
-    };
 
     // Nothing to charge now: the order is with the kitchen and the table owes
     // for it. The bill screen picks it up from here.
@@ -243,7 +241,7 @@ export async function POST(req: NextRequest) {
       // order counted against its limit — `uses_count` is incremented either
       // way — and then appeared in no record of what was given away. The
       // money was right and the paperwork was missing.
-      await logCoupon({ settled: true });
+      await logCheckoutCoupon(restaurantId, coupon, order.id, pricing.couponDiscount, true);
       return NextResponse.json({ orderId: order.id, deferred: true, sessionId });
     }
 
@@ -275,8 +273,7 @@ export async function POST(req: NextRequest) {
       // Stripe refused the session — the pending order will never be paid, so
       // remove it instead of leaving an orphan row, and give back the coupon
       // use we reserved.
-      await supabase.from("orders").delete().eq("id", order.id);
-      await undoClaim();
+      await held.giveBack();
       const code = err && typeof err === "object" && "code" in err ? err.code : undefined;
       if (code === "amount_too_small") {
         return await apiError("apiErr.belowCardMinimum", 400);
@@ -284,8 +281,10 @@ export async function POST(req: NextRequest) {
       throw err; // anything else falls through to the generic handler below
     }
 
-    // The use is committed now that there's a real session to pay for.
-    await logCoupon();
+    // The use is committed now that there's a real session to pay for, and
+    // from here Stripe's expiry gives back whatever an unpaid session holds.
+    await logCheckoutCoupon(restaurantId, coupon, order.id, pricing.couponDiscount);
+    held.handOver();
 
     await supabase
       .from("orders")
@@ -295,6 +294,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ url: session.url, orderId: order.id, sessionId });
   } catch (err) {
     console.error("checkout error", err);
+    await held.giveBack();
     return await apiError("apiErr.checkoutFailed", 500);
   }
 }
