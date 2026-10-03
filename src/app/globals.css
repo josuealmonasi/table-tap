@@ -3712,6 +3712,24 @@ a.tt-btn {
   padding: 10px 18px;
   border: 1px solid var(--tt-line);
 }
+/* On a phone it sits above the tab bar, which it used to cover, and inside the
+   gutters: centred with nothing to stop it, its 413px ran 26px off both edges
+   of a 360px screen, the count cut on the left and "Eliminar seleccionados" on
+   the right. When it does not fit on one line it wraps, the count above the
+   buttons. */
+@media (max-width: 720px) {
+  .tt-bulk-bar {
+    left: 12px;
+    right: 12px;
+    transform: none;
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    gap: 8px 12px;
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    border-radius: 16px;
+  }
+}
 
 /* analytics: stat tiles */
 /* `minmax(0, 1fr)`, not `1fr`: a plain `1fr` column will not shrink below its
