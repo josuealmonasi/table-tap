@@ -684,11 +684,17 @@ export function cases(fx) {
           emoji: "🍽️", mods: {} }] },
       expect: [200],
       effect: async f => {
-        const { data } = await f.admin.from("orders").select("status, paid")
+        const { data } = await f.admin.from("orders").select("id, status, paid, total")
           .eq("restaurant_id", f.restaurant.id).eq("note", `${MARK} caja`).maybeSingle();
-        return data?.status === "completed" && data?.paid === true
+        if (!(data?.status === "completed" && data?.paid === true)) {
+          return `the sale is ${data?.status ?? "missing"}, paid=${data?.paid}`;
+        }
+        // Rung and recorded as one write: the sale has exactly its money.
+        const { data: rows } = await f.admin.from("payments").select("amount, method, actor_email").eq("order_id", data.id);
+        if (rows?.length !== 1) return `${rows?.length ?? 0} payment(s) recorded for the sale`;
+        return Number(rows[0].amount) === Number(data.total) && rows[0].method === "cash" && rows[0].actor_email
           ? true
-          : `the sale is ${data?.status ?? "missing"}, paid=${data?.paid}`;
+          : `recorded ${JSON.stringify(rows[0])} for a MX$${data.total} sale`;
       } },
     { name: "POST /api/pos/order (no cart)", as: "cashier", method: "POST",
       path: "/api/pos/order",

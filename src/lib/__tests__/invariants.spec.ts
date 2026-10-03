@@ -1199,7 +1199,7 @@ describe("every route that settles an order records the payment", () => {
   it("calls recordPayment wherever it sets paid", () => {
     for (const [file, complaint] of SETTLES) {
       const lines = read(file).split("\n").filter(l => !l.trimStart().startsWith("import"));
-      const marksPaid = lines.filter(l => /paid:\s*true|"settle_(orders|card_orders)"/.test(l)).length;
+      const marksPaid = lines.filter(l => /paid:\s*true|"settle_(orders|card_orders|sale)"/.test(l)).length;
       // `recordPayment`, or the SQL that does the same job under a lock. The
       // calculator moved to `collect_on_sitting` so that reading the balance,
       // capping against it and inserting happen atomically — two waiters on
@@ -1207,7 +1207,7 @@ describe("every route that settles an order records the payment", () => {
       // route that settles orders and still has to record the money; this
       // invariant just had to learn the second spelling.
       const records = lines.filter(
-        l => /\brecordPayments?\s*\(/.test(l) || /collect_on_sitting|"settle_(orders|card_orders|split_share)"/.test(l),
+        l => /\brecordPayments?\s*\(/.test(l) || /collect_on_sitting|"settle_(orders|card_orders|split_share|sale)"/.test(l),
       ).length;
       expect(marksPaid, `${file}: nothing marks an order paid any more`).toBeGreaterThan(0);
       expect(records, `${file}: ${complaint}`).toBeGreaterThan(0);
@@ -1247,6 +1247,21 @@ describe("every route that settles an order records the payment", () => {
       expect(body, `${fn} no longer records the money`).toMatch(/insert into payments/);
       expect(schema).toMatch(new RegExp(`grant execute on function public\\.${fn}\\([^)]*\\)\\s+to service_role;`));
     }
+  });
+
+  it("rings a sale and records its money as one write", () => {
+    // The till inserted the order paid and then wrote the ledger: a failed
+    // second write was a sale with no money in the corte.
+    const src = read("src/app/api/pos/order/route.ts");
+    expect(src).toMatch(/rpc\("settle_sale"/);
+    expect(src, "the till marks a sale paid outside settle_sale").not.toMatch(/paid:\s*true/);
+    expect(src, "the till writes the ledger outside settle_sale").not.toMatch(/recordPayments?\(/);
+    expect(src, "a paid sale is not inserted as pending_payment").toMatch(/status: onAccount \? finalStatus : "pending_payment"/);
+    const schema = read("supabase/schema.sql");
+    const at = schema.indexOf("function public.settle_sale(");
+    const fn = schema.slice(at, schema.indexOf("$$;", at));
+    expect(fn).toMatch(/and status = 'pending_payment'/);
+    expect(fn).toMatch(/insert into payments/);
   });
 
   it("has no other route marking an order paid on the quiet", () => {

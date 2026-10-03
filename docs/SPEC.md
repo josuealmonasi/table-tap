@@ -269,7 +269,10 @@ dishes on a bill the restaurant has just cancelled.
   claims a diner's share, records it and puts its tip on the sitting's oldest
   order. Each is safe to run twice, and a failure is thrown so Stripe sends the
   event again. The last share closes a divided bill on every delivery, not only
-  the one that claimed it, so a close that failed is retried too.
+  the one that claimed it, so a close that failed is retried too. The till
+  inserts a paid sale as `pending_payment` — which no board, bill or corte
+  counts — and `settle_sale()` gives it its real status and records its money
+  together; if that fails the order is deleted and its stock put back.
 - **Two Stripe accounts, so two webhooks.** A diner's food is a DIRECT charge
   on the restaurant's own Stripe account: Stripe's processing fee comes out of
   their balance and our per-order fee comes to us clean. As a destination
