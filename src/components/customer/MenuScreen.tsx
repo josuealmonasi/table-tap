@@ -1,45 +1,30 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import type { Category, MenuItem, OrderLineItem, Restaurant, RestaurantTable } from "@/lib/types";
-import { tagLabel } from "@/lib/dietary";
-import { orderCode } from "@/lib/types";
-import { useDietaryTags } from "@/components/DietaryTagsContext";
-import { readMenuParams, syncMenuUrl } from "@/lib/menu-params";
-import { useT, useLocale } from "@/lib/i18n/context";
+import type {
+  Category,
+  MenuItem,
+  OrderLineItem,
+  Restaurant,
+  RestaurantTable,
+} from "@/lib/types";
+import { useT } from "@/lib/i18n/context";
 import MenuClosed from "./MenuClosed";
 import type { Combo } from "@/lib/promotions";
 import type { CartPromo } from "@/lib/pricing";
-import { Modal } from "@/components/ui/Modal";
 import CategoryTabs from "./CategoryTabs";
 import ComboCard from "./ComboCard";
 import MenuItemRow from "./MenuItemRow";
 import CartBar from "./CartBar";
-import ServiceButtons from "./ServiceButtons";
-import LoyaltyMenuEntry from "./LoyaltyMenuEntry";
 import UsualCard from "./UsualCard";
+import MenuHeader from "./MenuHeader";
+import MenuSideNav from "./MenuSideNav";
+import DietFilterSheet from "./DietFilterSheet";
 import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
-import LanguageToggle from "./LanguageToggle";
-import {
-  CouponIcon,
-  UsualIcon,
-  BillIcon,
-  CloseIcon,
-  FiltersIcon,
-  SearchIcon,
-  TableIcon,
-} from "@/components/ui/icons";
-import CoverBanner from "./CoverBanner";
-import RestaurantMark, { hasMark } from "@/components/ui/RestaurantMark";
-import MenuScanButton from "./MenuScanButton";
+import { FiltersIcon } from "@/components/ui/icons";
+import { useMenuView } from "@/hooks/useMenuView";
+import { USUAL } from "@/lib/menu-filter";
 
 /** The menu browsing screen: restaurant header, category filter, item list, cart bar. */
-/** The offers tab is not one of the restaurant's categories: it is ours. */
-const DEALS = "deals";
-/** "Lo de siempre": this phone's own usual, a tab only where there is one. */
-const USUAL = "usual";
-
 export default function MenuScreen({
   restaurant,
   table,
@@ -99,309 +84,53 @@ export default function MenuScreen({
   onTrack?: (orderId: string) => void;
 }) {
   const t = useT();
-  const { locale: lang } = useLocale();
-  const allTags = useDietaryTags();
-  // The URL is the starting state, so a shared link and a reload both land on
-  // the same view. Read once — after mount the address bar is an output, not
-  // an input, or every keystroke would fight the field for control of it.
-  const initial = readMenuParams(new URLSearchParams(useSearchParams().toString()));
-  const [chosenCat, setActiveCat] = useState<string>(initial.cat);
-  // "Lo de siempre" is a tab only while there is a usual to show: a link that
-  // named it, or one just forgotten, lands on the whole menu instead.
-  const hasUsual = usual.length > 0;
-  const activeCat = chosenCat === USUAL && !hasUsual ? "all" : chosenCat;
-  const usualIds = useMemo(() => new Set(usual.map(l => l.itemId)), [usual]);
-  const [search, setSearch] = useState(initial.q);
-  const [searchOpen, setSearchOpen] = useState(Boolean(initial.q));
-  const [diet, setDiet] = useState<string[]>(initial.diet);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  // Which dietary tags actually appear on this menu (so we only offer useful filters).
-  const menuTags = useMemo(() => {
-    const present = new Set(items.flatMap(i => i.dietary ?? []));
-    return allTags.filter(tag => present.has(tag.key));
-  }, [items, allTags]);
-
-  function toggleDiet(key: string): void {
-    setDiet(prev => {
-      const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
-      syncMenuUrl({ diet: next });
-      return next;
-    });
-  }
-
-  function chooseCat(id: string): void {
-    setActiveCat(id);
-    syncMenuUrl({ cat: id });
-  }
-
-  // Typing is debounced: the query only reaches the URL once you pause, so a
-  // seven-letter dish name is one URL write rather than seven.
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  function changeSearch(value: string): void {
-    setSearch(value);
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => syncMenuUrl({ q: value }), 350);
-  }
-  useEffect(
-    () => () => {
-      if (searchTimer.current) clearTimeout(searchTimer.current);
-    },
-    [],
-  );
-
-  // Which product carries an offer. Computed before the filter because the
-  // offers tab needs it to decide what to show.
-  const promoIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const promo of promos) for (const id of promo.itemIds) ids.add(id);
-    return ids;
-  }, [promos]);
-
-  // There is something to show in Offers: a combo, a discounted dish, or one
-  // inside a promotion. With none of that the tab does not appear — an empty
-  // section is worse than no section.
-  const hasDeals = useMemo(
-    () =>
-      restaurant.deals_tab_enabled !== false &&
-      (combos.length > 0 ||
-        items.some(i => Number(i.discount_pct) > 0 || promoIds.has(i.id))),
-    [combos, items, promoIds, restaurant.deals_tab_enabled],
-  );
-
-  // Search spans the whole menu; the category tabs + dietary filter narrow it.
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    let list = q
-      ? items.filter(
-          i =>
-            i.name.toLowerCase().includes(q) ||
-            (i.description ?? "").toLowerCase().includes(q),
-        )
-      : activeCat === "all"
-        ? items
-        : activeCat === DEALS
-          ? items.filter(i => Number(i.discount_pct) > 0 || promoIds.has(i.id))
-          : activeCat === USUAL
-            ? items.filter(i => usualIds.has(i.id))
-            : items.filter(i => i.category_id === activeCat);
-    // An item must carry EVERY selected dietary tag (e.g. vegan AND gluten-free).
-    if (diet.length)
-      list = list.filter(i => diet.every(k => (i.dietary ?? []).includes(k)));
-    return list;
-  }, [activeCat, items, search, diet, promoIds, usualIds]);
-
-  // item id → the deal covering it, so the row can advertise it. First deal
-  // wins, matching how the pricing engine picks one deal per product.
-  const promoByItem = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const promo of promos) {
-      for (const id of promo.itemIds) if (!map.has(id)) map.set(id, promo.name);
-    }
-    return map;
-  }, [promos]);
-
-  // Combos head the list. They're hidden under a dietary filter (a bundle has
-  // no tags of its own, so we can't honestly claim it matches) and under a
-  // category tab, since a bundle spans categories.
-  const shownCombos = useMemo(() => {
-    if (diet.length) return [];
-    const q = search.trim().toLowerCase();
-    if (q) return combos.filter(c => c.name.toLowerCase().includes(q));
-    return activeCat === "all" || activeCat === DEALS ? combos : [];
-  }, [combos, diet, search, activeCat]);
-
-  const showCover = Boolean(restaurant.cover_enabled && restaurant.cover_url);
-
-  // Over the photo when there is one, otherwise beside the search. It is the
-  // one control a diner may need before reading anything, so it sits highest.
-  const langToggle = <LanguageToggle />;
-
-  // The search is a circle on a phone, on the name's line, and a field on a
-  // wide screen, where the identity line has room to keep it open. Both write
-  // the same query, so a resize keeps it.
-  const searchBtn = (
-    <button
-      type="button"
-      className="tt-icon-round tt-search-toggle"
-      aria-label={t("menu.search")}
-      aria-expanded={searchOpen}
-      // Closing clears the query. Hiding the input while keeping the term left
-      // the menu filtered with nothing on screen to say why — the categories
-      // vanish under an active search, so a diner saw two dishes, no search
-      // box, and no way back short of reloading.
-      onClick={() => {
-        if (searchOpen) changeSearch("");
-        setSearchOpen(open => !open);
-      }}
-    >
-      {searchOpen ? (
-        <CloseIcon size={17} weight="bold" />
-      ) : (
-        <SearchIcon size={17} weight="bold" />
-      )}
-    </button>
-  );
-
-  const searchField = (
-    <div className="tt-search-field">
-      <SearchIcon size={17} weight="bold" />
-      <input
-        type="search"
-        value={search}
-        placeholder={t("menu.searchIn", { name: restaurant.name })}
-        aria-label={t("menu.searchIn", { name: restaurant.name })}
-        onChange={e => changeSearch(e.target.value)}
-      />
-    </div>
-  );
+  const view = useMenuView(restaurant, items, combos, promos, usual);
+  const { activeCat, search, diet, filtered, shownCombos } = view;
 
   return (
     <div className="tt-root tt-root-wide">
-      {/* Photo, floating controls and identity share one box on purpose: it is
-          what the sticky controls are bounded by, so they pin while the photo
-          and the name scroll under them and then hand over to the category bar
-          at the bottom of it, which keeps its own behaviour unchanged. */}
-      <div className="tt-cover-stack">
-        {showCover && (
-          <>
-            <div className="tt-cover-controls">{langToggle}</div>
-            <CoverBanner
-              url={restaurant.cover_url}
-              enabled={restaurant.cover_enabled}
-              name={restaurant.name}
-              priority
-            />
-          </>
-        )}
-        <div className="tt-menu-header">
-          {hasMark(restaurant.logo_url, restaurant.logo) && (
-            <div className="tt-brand-logo">
-              <RestaurantMark
-                logoUrl={restaurant.logo_url}
-                emoji={restaurant.logo}
-                name={restaurant.name}
-              />
-            </div>
-          )}
-          <div className="tt-row tt-brand-row">
-            <div className="tt-serif tt-brand-name">{restaurant.name}</div>
-            <div className="tt-head-controls">
-              {!showCover && langToggle}
-              {/* Only while something is owed — with nothing outstanding there
-                  is no bill to look at, which is what made the old "get the
-                  bill" button meaningless. */}
-              <MenuScanButton />
-              {searchBtn}
-              {searchField}
-            </div>
-          </div>
-          <div className="tt-sage tt-brand-tagline">{restaurant.tagline}</div>
-          {(table || loyalty) && (
-            <div className="tt-menu-badges">
-              {table && (
-                <span className="tt-badge tt-badge-onink">
-                  <TableIcon size={13} weight="bold" />
-                  {t("menu.table", { label: table.label })}
-                </span>
-              )}
-              {loyalty && <LoyaltyMenuEntry offer={loyalty} />}
-            </div>
-          )}
+      <MenuHeader
+        restaurant={restaurant}
+        table={table}
+        loyalty={loyalty}
+        view={view}
+        orderAtRegister={orderAtRegister}
+        billDue={billDue}
+        onOpenBill={onOpenBill}
+        trackIds={trackIds}
+        onTrack={onTrack}
+        notice={notice}
+      />
 
-          {searchOpen && (
-            <input
-              className="tt-input tt-customer-search"
-              type="search"
-              placeholder={t("menu.search")}
-              aria-label={t("menu.search")}
-              autoFocus
-              value={search}
-              onChange={e => changeSearch(e.target.value)}
-            />
-          )}
-          {/* Not on Caja: nobody waits tables there, and the bill is paid at the
-              register, so both buttons would call for what the plan has not got. */}
-          {table && !orderAtRegister && (
-            <div className="tt-service-row">
-              <ServiceButtons restaurantId={restaurant.id} table={table} />
-              {/* One door to the bill, and it says what it does. "Ask for the
-                  bill" describes asking somebody to bring a piece of paper;
-                  here the bill is looked at, and both ways of paying it are
-                  inside. With nothing owed it does not appear: an empty bill
-                  is not a screen worth opening. */}
-              {billDue && onOpenBill && (
-                <button type="button" className="tt-service-btn" onClick={onOpenBill}>
-                  <BillIcon size={16} weight="bold" />
-                  {t("menu.myBill")}
-                </button>
-              )}
-            </div>
-          )}
-          {/* One banner per order still in the kitchen. A counter has no table
-              to hang a running tab on, so remembering a drink after ordering
-              food makes a SECOND order — and both deserve watching. With more
-              than one, each says which it is; with one, the plain sentence
-              reads better than a code nobody needs yet. */}
-          {onTrack &&
-            (trackIds ?? []).map(id => (
-              <button
-                key={id}
-                type="button"
-                className="tt-track-banner"
-                onClick={() => onTrack(id)}
-              >
-                <BillIcon size={14} weight="bold" />{" "}
-                {(trackIds ?? []).length > 1
-                  ? t("menu.trackThisOrder", { code: orderCode(id) })
-                  : t("menu.trackOrder")}
-              </button>
-            ))}
-          {orderAtRegister ? (
-            <div className="tt-closed-banner" role="status">
-              {t("menu.orderAtRegister")}
-            </div>
-          ) : (
-            !restaurant.accepting_orders && (
-              <div className="tt-closed-banner" role="status">
-                {t("menu.closed")}
-              </div>
-            )
-          )}
-          {notice}
-        </div>
-      </div>
-
-      {/* Only this strip stays pinned while scrolling — the restaurant
-          identity above scrolls away with the page. */}
-      {/* One row instead of three: categories scroll, filters live behind a
-          button. Dietary tags matter to a minority but were eating a third of
-          the screen before the first dish. */}
-      {/* Nothing is serving: say so instead of rendering an empty menu,
-          which reads as a failed load. The filter strip goes too — there
-          is nothing left to filter. */}
       {/* Nothing orderable, for either reason. `closedNow` means the menus
           exist and none is serving; an empty item list with no closure means
           the restaurant has not built one yet. Both used to be told apart only
-          by luck — the second painted a blank page. */}
+          by luck — the second painted a blank page. The filter strip goes too:
+          there is nothing left to filter. */}
       {closedNow || (items.length === 0 && combos.length === 0) ? (
         <MenuClosed reason={closedNow ? "closed" : "empty"} />
       ) : (
         <>
+          {/* Only this strip stays pinned while scrolling — the restaurant
+              identity above scrolls away with the page. One row instead of
+              three: categories scroll, filters live behind a button. Dietary
+              tags matter to a minority but were eating a third of the screen
+              before the first dish. */}
           <div className="tt-menu-sticky">
             {!search.trim() && (
               <CategoryTabs
                 categories={categories}
                 activeCat={activeCat}
-                hasDeals={hasDeals}
-                hasUsual={hasUsual}
-                onSelect={chooseCat}
+                hasDeals={view.hasDeals}
+                hasUsual={view.hasUsual}
+                onSelect={view.chooseCat}
               />
             )}
-            {menuTags.length > 0 && (
+            {view.menuTags.length > 0 && (
               <button
                 type="button"
                 className={`tt-filter-btn ${diet.length ? "tt-filter-btn-on" : ""}`}
-                onClick={() => setFiltersOpen(true)}
+                onClick={() => view.setFiltersOpen(true)}
                 aria-label={t("menu.filters")}
                 title={t("menu.filters")}
               >
@@ -413,146 +142,17 @@ export default function MenuScreen({
             )}
           </div>
 
-          <Modal
-            open={filtersOpen}
-            onClose={() => setFiltersOpen(false)}
-            maxWidth={420}
-            label={t("menu.filtersTitle")}
-            variant="sheet"
-          >
-            <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 12 }}>
-              {t("menu.filtersTitle")}
-            </h3>
-            <div className="tt-diet-filter">
-              {menuTags.map(tag => (
-                <button
-                  key={tag.key}
-                  type="button"
-                  className={`tt-diet-chip ${diet.includes(tag.key) ? "tt-diet-chip-on" : ""}`}
-                  aria-pressed={diet.includes(tag.key)}
-                  onClick={() => toggleDiet(tag.key)}
-                >
-                  {tag.emoji} {tagLabel(tag, t, lang)}
-                </button>
-              ))}
-            </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 8,
-                marginTop: 18,
-              }}
-            >
-              <button
-                type="button"
-                className="tt-btn tt-btn-ghost tt-btn-sm"
-                disabled={diet.length === 0}
-                // Clearing leaves nothing to look at, so the sheet closes with it —
-                // staying open just to show empty checkboxes makes the diner tap
-                // twice to get back to the food.
-                onClick={() => {
-                  setDiet([]);
-                  syncMenuUrl({ diet: [] });
-                  setFiltersOpen(false);
-                }}
-              >
-                {t("menu.filtersClear")}
-              </button>
-              <button
-                type="button"
-                className="tt-btn tt-btn-primary tt-btn-sm"
-                onClick={() => setFiltersOpen(false)}
-              >
-                {t("menu.filtersDone")}
-              </button>
-            </div>
-          </Modal>
+          <DietFilterSheet
+            open={view.filtersOpen}
+            onClose={() => view.setFiltersOpen(false)}
+            tags={view.menuTags}
+            diet={diet}
+            onToggle={view.toggleDiet}
+            onClear={view.clearDiet}
+          />
 
           <div className="tt-dish-layout">
-            {/* Desktop only. With room for a column there's no reason to hide the
-              categories behind a scroller and the filters behind a button and a
-              dialog — both become a standing list you can see the state of, and
-              picking one no longer costs an open-and-dismiss. Hidden below
-              1025px, where the chip row and the sheet are the right shapes. */}
-            <aside className="tt-dish-side" aria-label={t("menu.filtersTitle")}>
-              {!search.trim() && (
-                <nav className="tt-side-nav">
-                  <button
-                    type="button"
-                    className={`tt-side-link ${activeCat === "all" ? "tt-side-link-on" : ""}`}
-                    onClick={() => chooseCat("all")}
-                  >
-                    {t("menu.all")}
-                  </button>
-                  {hasUsual && (
-                    <button
-                      type="button"
-                      className={`tt-side-link tt-side-link-usual ${activeCat === USUAL ? "tt-side-link-on" : ""}`}
-                      onClick={() => chooseCat(USUAL)}
-                    >
-                      <UsualIcon size={14} weight="bold" />
-                      {t("menu.usual")}
-                    </button>
-                  )}
-                  {/* On desktop the categories are this list, not the row of
-                      pills: adding the offers tab there and not here left it
-                      invisible on a large screen. */}
-                  {hasDeals && (
-                    <button
-                      type="button"
-                      className={`tt-side-link tt-side-link-deal ${
-                        activeCat === DEALS ? "tt-side-link-on" : ""
-                      }`}
-                      onClick={() => chooseCat(DEALS)}
-                    >
-                      <CouponIcon size={14} weight="bold" />
-                      {t("menu.deals")}
-                    </button>
-                  )}
-                  {categories.map(c => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      className={`tt-side-link ${activeCat === c.id ? "tt-side-link-on" : ""}`}
-                      onClick={() => chooseCat(c.id)}
-                    >
-                      {c.name}
-                    </button>
-                  ))}
-                </nav>
-              )}
-              {menuTags.length > 0 && (
-                <div className="tt-side-group">
-                  <h3 className="tt-side-title">{t("menu.filtersTitle")}</h3>
-                  {menuTags.map(tag => (
-                    <label key={tag.key} className="tt-side-check">
-                      <input
-                        type="checkbox"
-                        checked={diet.includes(tag.key)}
-                        onChange={() => toggleDiet(tag.key)}
-                      />
-                      <span>
-                        {tag.emoji} {tagLabel(tag, t, lang)}
-                      </span>
-                    </label>
-                  ))}
-                  {diet.length > 0 && (
-                    <button
-                      type="button"
-                      className="tt-btn tt-btn-ghost tt-btn-sm"
-                      style={{ marginTop: 6, alignSelf: "flex-start", padding: "6px 0" }}
-                      onClick={() => {
-                        setDiet([]);
-                        syncMenuUrl({ diet: [] });
-                      }}
-                    >
-                      {t("menu.filtersClear")}
-                    </button>
-                  )}
-                </div>
-              )}
-            </aside>
+            <MenuSideNav view={view} categories={categories} />
 
             <div className="tt-dish-main">
               {activeCat === USUAL && !search.trim() && onAddUsual && onForgetUsual && (
@@ -560,7 +160,7 @@ export default function MenuScreen({
                   lines={usual}
                   onAdd={onAddUsual}
                   onForget={() => {
-                    chooseCat("all");
+                    view.chooseCat("all");
                     onForgetUsual();
                   }}
                 />
@@ -588,7 +188,7 @@ export default function MenuScreen({
                     key={item.id}
                     item={item}
                     currency={restaurant.currency}
-                    promoLabel={promoByItem.get(item.id)}
+                    promoLabel={view.promoNameOf.get(item.id)}
                     rating={ratings[item.id]}
                     onSelect={onSelectItem}
                   />
