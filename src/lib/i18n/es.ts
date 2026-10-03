@@ -1138,6 +1138,9 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     // conexión caída, o un 500 que devolvió una página de error en HTML.
     generic: "Algo salió mal.",
     loyaltyOff: "La tarjeta de visitas está apagada en este restaurante.",
+    loyaltyNeedsVisit: "Las tarjetas de visitas se hacen desde la carta del restaurante. Vuelve a abrir la carta e inténtalo de nuevo.",
+    loyaltyCardMade: "Esta página ya hizo su tarjeta. Vuelve a abrir la carta para hacer otra.",
+    loyaltyTooManyHere: "Se hicieron demasiadas tarjetas de visitas aquí en poco tiempo. Inténtalo más tarde o pide ayuda al personal.",
     loyaltyNotHere: "Esa tarjeta no es de este restaurante.",
     loyaltyNotReady: "A esta tarjeta todavía le faltan visitas para su siguiente recompensa.",
     loyaltyAlreadyRedeemed: "Esa recompensa ya se canjeó. Vuelve a buscar la tarjeta para ver la siguiente.",

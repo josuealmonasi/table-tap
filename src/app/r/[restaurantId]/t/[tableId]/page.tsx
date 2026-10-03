@@ -6,6 +6,7 @@ import MenuSkeleton from "@/components/customer/MenuSkeleton";
 import { menuShowsLoyalty, loadCoverState, loadOrderingData, unwrap } from "@/lib/ordering-data";
 import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
+import { offerAt } from "@/lib/loyalty/pass";
 import type { RestaurantTable } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -53,11 +54,12 @@ async function Menu({
   // fault has already thrown, rather than telling the customer their QR code
   // points at nothing.
   if (!data.restaurant) notFound();
+  const seatedAt = dineIn ? table : null;
 
   return (
     <OrderingApp
       restaurant={data.restaurant}
-      table={dineIn ? table : null}
+      table={seatedAt}
       categories={data.categories}
       items={data.items}
       extras={data.extras}
@@ -68,7 +70,7 @@ async function Menu({
       closedNow={data.closedNow}
       orderAtRegister={data.orderAtRegister}
       receipts={data.receipts}
-      loyalty={data.loyalty}
+      loyalty={seatedAt ? offerAt(data.loyalty, { table: seatedAt.id }) : data.loyalty}
       dietaryTags={data.dietaryTags}
     />
   );

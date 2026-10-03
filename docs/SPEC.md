@@ -981,11 +981,25 @@ at the moment the money is settled, by card or in cash to the waiter, the same
 moment the receipt is offered and never on top of it — a restaurant running the
 card offers "Junta visitas": every reward and the visits it takes, and that the
 card is an image with no sign-up, no name and no email. "Crear mi tarjeta" makes one
-(`POST /api/loyalty/card`: public, five a minute per address, refused where
-`loyaltyOn()` says no — the menu asks the same function before offering it) and
-hands over the picture; "No volver a preguntar" and a card already made are
-both remembered in that browser (`tt-loyalty:<restaurant>`), so the offer is
-made once per phone and again only if the phone forgets.
+(`POST /api/loyalty/card`, refused where `loyaltyOn()` says no — the menu asks
+the same function before offering it) and hands over the picture; "No volver a
+preguntar" and a card already made are both remembered in that browser
+(`tt-loyalty:<restaurant>`), so the offer is made once per phone and again only
+if the phone forgets.
+
+**Only from inside the restaurant.** The route is public — a card names nobody
+— but it takes a visit pass, not just the restaurant's id, which is printed on
+every QR and let anybody fill a program with cards nobody carries. The server
+hands the pass to the page as it renders it (`src/lib/loyalty/pass.ts`): a
+table's menu gets one for that table, an order's tracker one for that order,
+the counter menu one for the counter. It is signed with the secret key for
+that restaurant and lasts one sitting (`OPEN_BILL_HOURS`). One pass makes one
+card. A table or an order makes at most a party's worth in a sitting
+(`MAX_SHARES`), the counter 120 an hour, and one address the room's
+(`PHONES_PER_ADDRESS` in ten minutes) — the old five a minute refused the sixth
+diner to pay in the same minute on the restaurant's Wi-Fi. The phone's own
+identifier is not used to tell phones apart: the phone chooses it, so it would
+bound nothing, and the privacy notice gives it one use.
 
 **From the menu, any time.** The menu's header carries a "Tarjeta de visitas"
 row under the service buttons — every reward in order, the nearest first, one

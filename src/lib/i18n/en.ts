@@ -1143,6 +1143,9 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     // connection, or a 500 that returned an HTML error page.
     generic: "Something went wrong.",
     loyaltyOff: "The visit card is switched off for this restaurant.",
+    loyaltyNeedsVisit: "Visit cards are made from the restaurant's menu. Open the menu again and try once more.",
+    loyaltyCardMade: "This page already made its card. Open the menu again to make another.",
+    loyaltyTooManyHere: "Too many visit cards were made here in a short time. Try again later, or ask the staff.",
     loyaltyNotHere: "That card isn't one of this restaurant's.",
     loyaltyNotReady: "This card hasn't reached its next reward yet.",
     loyaltyAlreadyRedeemed: "That reward was already redeemed. Look the card up again to see the next one.",

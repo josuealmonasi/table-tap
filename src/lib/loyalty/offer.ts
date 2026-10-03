@@ -10,4 +10,7 @@ export interface LoyaltyOfferInfo {
   reward: string;
   /** Every reward on the card, in order of visits. */
   steps: LadderStep[];
+  /** What the card route takes as proof the offer came from inside the
+   *  restaurant (`src/lib/loyalty/pass.ts`). One pass makes one card. */
+  pass: string;
 }
