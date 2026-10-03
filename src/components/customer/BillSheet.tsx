@@ -6,13 +6,12 @@ import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import { canPayMineOnly, ordersToPay, type TableBill } from "@/lib/table-bill";
 import type { AppliedCoupon } from "@/lib/pricing";
-import CouponBox from "./CouponBox";
-import OrderTotals from "./OrderTotals";
-import TipPicker from "./TipPicker";
+import BillTotals from "./BillTotals";
+import BillExtras from "./BillExtras";
+import BillScopeChips from "./BillScopeChips";
 import BillSection from "./BillSection";
 import BillActions from "./BillActions";
 import type { Restaurant } from "@/lib/types";
-import { round2 } from "@/lib/money";
 import { billAmounts } from "@/lib/bill-amounts";
 import { billActions, billHintKey } from "@/lib/payment-options";
 import SplitBillCard from "@/components/customer/SplitBillCard";
@@ -154,19 +153,7 @@ export default function BillSheet({
   const alreadyDiscounted = orders.some(o => o.coupon_code);
 
   // What the chosen scope comes to, line by line.
-  const {
-    food,
-    applied,
-    couponOff,
-    discount,
-    base,
-    tip,
-    total,
-    service,
-    priorTip,
-    dishes,
-    servicePct,
-  } = billAmounts(bill, scope, coupon, tipPct, tipCustom);
+  const amounts = billAmounts(bill, scope, coupon, tipPct, tipCustom);
   const myUnpaid = bill.mine.orders.filter(o => !o.paid).map(o => o.id);
 
   // Switching what you're paying for changes the amount the coupon was checked
@@ -243,61 +230,29 @@ export default function BillSheet({
           {/* Paying for the table or only for yourself changes what the totals
               below are counting, so it sits above them. */}
           {!split && canPayMineOnly(bill) && (
-            <div className="tt-tip-row tt-bill-scope">
-              <button
-                type="button"
-                className={`tt-tip-chip ${scope === "all" ? "tt-tip-chip-active" : ""}`}
-                onClick={() => changeScope("all")}
-              >
-                {t("bill.scopeAll")}
-              </button>
-              <button
-                type="button"
-                className={`tt-tip-chip ${scope === "mine" ? "tt-tip-chip-active" : ""}`}
-                onClick={() => changeScope("mine")}
-              >
-                {t("bill.scopeMine")}
-              </button>
-            </div>
+            <BillScopeChips scope={scope} onChange={changeScope} />
           )}
 
           {/* Everything below settles the WHOLE bill, which is not what this
               phone owes any more once the table has divided it. Two ways to
               pay, disagreeing about the amount, is how somebody pays twice. */}
-          {!splitLocked &&
-            !alreadyDiscounted &&
-            can.extras &&
-            restaurant.coupons_enabled && (
-              <div className="tt-coupon-row">
-                <CouponBox
-                  restaurantId={restaurant.id}
-                  subtotal={food}
-                  applied={coupon}
-                  onApply={setCoupon}
-                  onRemove={() => setCoupon(null)}
-                />
-              </div>
-            )}
-
-          {/* Neither the code nor the tip does anything on a bill somebody
-              is collecting in person: both are theirs to take at the table, on
-              the same screen they take the money on. A field that changes no
-              number is a promise the system will not keep — and with no card
-              behind the bill at all, neither of them changes anything. */}
           {!splitLocked && can.extras && (
-            <div style={{ marginTop: 16 }}>
-              <TipPicker
-                currency={currency}
-                tipPct={tipPct}
-                tipCustom={tipCustom}
-                maxTip={base}
-                onPresetTip={pct => {
-                  setTipPct(pct);
-                  setTipCustom(null);
-                }}
-                onCustomTip={setTipCustom}
-              />
-            </div>
+            <BillExtras
+              restaurantId={restaurant.id}
+              currency={currency}
+              couponOffered={!alreadyDiscounted && Boolean(restaurant.coupons_enabled)}
+              food={amounts.food}
+              coupon={coupon}
+              onCoupon={setCoupon}
+              tipPct={tipPct}
+              tipCustom={tipCustom}
+              maxTip={amounts.base}
+              onTipPct={pct => {
+                setTipPct(pct);
+                setTipCustom(null);
+              }}
+              onTipCustom={setTipCustom}
+            />
           )}
 
           {/* Calling somebody over always works, so the button at the bottom is
@@ -305,21 +260,7 @@ export default function BillSheet({
               through the shares, and a total with a card button under it is a
               second way to pay the same food. */}
           {!splitLocked && (
-            <>
-              <OrderTotals
-                subtotal={Math.max(0, round2(dishes - couponOff))}
-                grossSubtotal={round2(dishes + applied)}
-                discount={discount}
-                serviceFee={service}
-                tip={round2(priorTip + tip)}
-                tipPct={tipCustom !== null || priorTip > 0 ? 0 : tipPct}
-                total={total}
-                servicePct={servicePct}
-                taxPct={Number(restaurant.tax_pct) || 0}
-                taxBreakdown={Boolean(restaurant.tax_show_breakdown)}
-                currency={currency}
-              />
-            </>
+            <BillTotals amounts={amounts} restaurant={restaurant} tipPct={tipPct} tipCustom={tipCustom} />
           )}
 
           <BillActions
