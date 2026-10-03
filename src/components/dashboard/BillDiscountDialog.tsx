@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { badgesChanged } from "@/hooks/useBadges";
 import WriteOffDialog from "./WriteOffDialog";
@@ -9,17 +9,10 @@ import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
 import { normalizeCoupon } from "@/lib/coupons";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { useCouponOptions } from "@/hooks/useCouponOptions";
+import CouponCodePicker from "./CouponCodePicker";
+import OpenBillSummary from "./OpenBillSummary";
 import type { OpenBill } from "@/lib/open-bills";
-
-/** A promotion the floor may apply to this bill, priced against it. */
-interface CouponOption {
-  code: string;
-  kind: "percent" | "fixed";
-  value: number;
-  amount: number;
-  remaining: number | null;
-}
 
 interface BillDiscountDialogProps {
   open: boolean;
@@ -88,62 +81,11 @@ export default function BillDiscountDialog({
   }
   const [error, setError] = useState<string | null>(null);
 
-  // The promotions that would actually apply to this bill, from the server —
-  // the floor shouldn't have to remember codes, or leave the table to go and
-  // read the promotions page.
-  const [options, setOptions] = useState<CouponOption[]>([]);
-  // The list arrives a moment after the dialog does. Its space is held from
-  // the start: a modal that grows under a finger already on its way down is
-  // how somebody applies a promotion they never chose.
-  const [loadingOptions, setLoadingOptions] = useState(true);
-  // The list could not be read. "Ninguna promoción coincide" in its place told
-  // the waiter there was nothing to offer; a code can still be typed.
-  const [optionsFailed, setOptionsFailed] = useState(false);
-  const [highlight, setHighlight] = useState(0);
-  const listRef = useRef<HTMLDivElement>(null);
+  const coupons = useCouponOptions(open, bill.total);
 
-  useEffect(() => {
-    if (!open) return;
-    setLoadingOptions(true);
-    setOptionsFailed(false);
-    fetch(`/api/bill/discount/options?total=${bill.total}`)
-      .then(async r => {
-        if (!r.ok) throw new Error(String(r.status));
-        const d = await r.json();
-        setOptions(d.options ?? []);
-      })
-      .catch(() => {
-        setOptions([]);
-        setOptionsFailed(true);
-      })
-      .finally(() => setLoadingOptions(false));
-  }, [open, bill.total]);
-
-  const shown = useMemo(() => {
-    const q = code.trim().toLowerCase();
-    return options.filter(o => !q || o.code.toLowerCase().includes(q));
-  }, [options, code]);
-
-  useEffect(() => setHighlight(0), [code]);
-
-  function choose(option: CouponOption): void {
-    setCode(option.code);
+  function pick(next: string): void {
+    setCode(next);
     setError(null);
-  }
-
-  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>): void {
-    if (shown.length === 0) return;
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      setHighlight(h => {
-        const next = e.key === "ArrowDown" ? h + 1 : h - 1;
-        return (next + shown.length) % shown.length;
-      });
-    } else if (e.key === "Enter" && shown[highlight] && shown[highlight].code !== code) {
-      // Enter picks the highlighted code first; a second Enter submits it.
-      e.preventDefault();
-      choose(shown[highlight]);
-    }
   }
 
   async function submit(e: React.FormEvent): Promise<void> {
@@ -191,43 +133,7 @@ export default function BillDiscountDialog({
         maxWidth={460}
         label={t("dash.billApply")}
       >
-        <h3 className="tt-serif" style={{ marginTop: 0 }}>
-          {bill.tableLabel
-            ? t("dash.tableN", { label: bill.tableLabel })
-            : t("dash.billsToGo")}
-        </h3>
-
-        {bill.items.map((item, i) => (
-          <div key={i} className="tt-row tt-muted" style={{ fontSize: 14, marginTop: 6 }}>
-            <span>
-              {item.qty}× {item.name}
-            </span>
-            <span>{formatMoney(item.price * item.qty, currency)}</span>
-          </div>
-        ))}
-
-        {/* When a promotion is already on this bill the lines add up to more
-          than the total, so the difference is named rather than left for the
-          waiter to explain to the table. Same three rows the diner sees. */}
-        {bill.discount > 0 && (
-          <>
-            <div className="tt-row" style={{ marginTop: 12, fontSize: 14 }}>
-              <span className="tt-muted">{t("totals.subtotal")}</span>
-              <span className="tt-muted">
-                {formatMoney(bill.total + bill.discount, currency)}
-              </span>
-            </div>
-            <div className="tt-row" style={{ marginTop: 4, fontSize: 14 }}>
-              <span className="tt-save">{t("totals.discount")}</span>
-              <span className="tt-save">−{formatMoney(bill.discount, currency)}</span>
-            </div>
-          </>
-        )}
-
-        <div className="tt-row tt-total" style={{ marginTop: 12 }}>
-          <span>{t("totals.total")}</span>
-          <span>{formatMoney(bill.total, currency)}</span>
-        </div>
+        <OpenBillSummary bill={bill} currency={currency} />
 
         {bill.discounted ? (
           <p className="tt-muted" style={{ marginTop: 14 }}>
@@ -235,90 +141,14 @@ export default function BillDiscountDialog({
           </p>
         ) : (
           <form onSubmit={submit} style={{ marginTop: 16 }}>
-            <label className="tt-mod-label" htmlFor="tt-bill-code">
-              {t("dash.billCodeLabel")}
-            </label>
-            <input
-              id="tt-bill-code"
-              className="tt-input"
-              style={{ width: "100%", marginTop: 6 }}
-              value={code}
-              placeholder={t("dash.billCodePick")}
-              role="combobox"
-              aria-expanded={shown.length > 0}
-              aria-controls="tt-bill-code-list"
-              autoComplete="off"
-              onChange={e => {
-                setCode(e.target.value.toUpperCase());
-                setError(null);
-              }}
-              onKeyDown={onKeyDown}
-              autoFocus
+            <CouponCodePicker
+              code={code}
+              onCode={pick}
+              options={coupons.options}
+              loading={coupons.loading}
+              failed={coupons.failed}
+              currency={currency}
             />
-
-            {/* In flow, not floating: the modal is a scroll container, and an
-              absolutely positioned menu inside one gets clipped by it — the
-              bug we hit the last time a dropdown lived in a dialog. A list
-              that pushes the content simply scrolls with it. */}
-            {loadingOptions && (
-              <div className="tt-code-list" aria-hidden="true">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="tt-code-option">
-                    <span className="tt-code-name">
-                      <Skeleton width={92} height={14} />
-                      <Skeleton width={130} height={11} />
-                    </span>
-                    <Skeleton width={62} height={14} />
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {!loadingOptions && (
-              <div
-                className="tt-code-list"
-                id="tt-bill-code-list"
-                role="listbox"
-                ref={listRef}
-              >
-                {shown.length === 0 && (
-                  <p
-                    className="tt-muted"
-                    style={{ margin: 0, padding: "14px 12px", fontSize: 13 }}
-                  >
-                    {t(optionsFailed ? "dash.billCodesFailed" : "dash.billCodeNone")}
-                  </p>
-                )}
-                {shown.map((option, i) => (
-                  <button
-                    key={option.code}
-                    type="button"
-                    role="option"
-                    aria-selected={option.code === code}
-                    className={`tt-code-option ${i === highlight ? "tt-code-option-on" : ""}`}
-                    onMouseEnter={() => setHighlight(i)}
-                    onClick={() => choose(option)}
-                  >
-                    <span className="tt-code-name">
-                      <strong>{option.code}</strong>
-                      <span className="tt-muted tt-subline" style={{ fontSize: 12 }}>
-                        {option.kind === "percent"
-                          ? t("dash.billCodePct", { pct: String(option.value) })
-                          : t("dash.billCodeFixed", {
-                              amount: formatMoney(option.value, currency),
-                            })}
-                        {option.remaining !== null
-                          ? ` · ${t("dash.billCodeLeft", { n: String(option.remaining) })}`
-                          : ""}
-                      </span>
-                    </span>
-                    <strong className="tt-accent" style={{ flex: "none" }}>
-                      −{formatMoney(option.amount, currency)}
-                    </strong>
-                  </button>
-                ))}
-              </div>
-            )}
             {error && (
               <p className="tt-field-error" style={{ margin: "8px 0 0" }}>
                 {error}
