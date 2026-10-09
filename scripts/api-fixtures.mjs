@@ -29,9 +29,9 @@ export async function setup(env, base) {
   const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY);
   const ref = new URL(env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0];
 
-  const cookieFor = async email => {
+  const cookieFor = async (email, password = "demo123") => {
     const c = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-    const { data, error } = await c.auth.signInWithPassword({ email, password: "demo123" });
+    const { data, error } = await c.auth.signInWithPassword({ email, password });
     if (error) throw new Error(`could not sign in as ${email}: ${error.message}`);
     return `sb-${ref}-auth-token=base64-${Buffer.from(JSON.stringify(data.session)).toString("base64")}`;
   };
@@ -42,6 +42,11 @@ export async function setup(env, base) {
     waiter: await cookieFor("demo-waiter@tabletap.dev"),
     cashier: await cookieFor("demo-cashier@tabletap.dev"),
     kitchen: await cookieFor("demo-kitchen@tabletap.dev"),
+    // The platform admin has a password of its own. Missing, the admin cases
+    // would sign in as nobody and be refused — which reads as working.
+    platformAdmin: env.PLATFORM_ADMIN_PASSWORD
+      ? await cookieFor("admin@tabletap.dev", env.PLATFORM_ADMIN_PASSWORD)
+      : (() => { throw new Error("PLATFORM_ADMIN_PASSWORD is not set: the admin cases cannot run"); })(),
     diner: "",
   };
 

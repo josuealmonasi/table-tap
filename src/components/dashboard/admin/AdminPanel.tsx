@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { useAdminActions } from "@/hooks/useAdminActions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { useLocale, useT } from "@/lib/i18n/context";
-import { dateLocale } from "@/lib/format";
+import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import AdminCreateUser from "./AdminCreateUser";
 import AdminEditUser from "./AdminEditUser";
+import AdminRestaurants from "./AdminRestaurants";
+import { planLabel } from "@/lib/plan";
 import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 
 export interface AdminRestaurantRow {
@@ -16,6 +17,9 @@ export interface AdminRestaurantRow {
   owner_email: string;
   team_count: number;
   created_at: string;
+  /** The restaurant's plan, which every login there works under. */
+  plan: string;
+  billed_by_stripe: boolean;
 }
 
 export interface AdminUserRow {
@@ -26,6 +30,8 @@ export interface AdminUserRow {
   /** Founding owners' role is fixed (it comes from restaurants.owner_id). */
   founding?: boolean;
   restaurant_name?: string;
+  /** Their restaurant's plan: a login moves when its restaurant does. */
+  plan?: string;
 }
 
 interface AdminPanelProps {
@@ -33,6 +39,8 @@ interface AdminPanelProps {
   restaurants: AdminRestaurantRow[];
   users: AdminUserRow[];
   restaurantOptions: { id: string; name: string }[];
+  /** Every plan in the catalog, cheapest first. */
+  plans: string[];
 }
 
 const ROLE_META: Record<AdminUserRow["role"], { key: string }> = {
@@ -51,10 +59,10 @@ export default function AdminPanel({
   restaurants,
   users,
   restaurantOptions,
+  plans,
 }: AdminPanelProps) {
   const t = useT();
-  const { locale } = useLocale();
-  const { busy, deleteUser, deleteRestaurant } = useAdminActions();
+  const { busy, deleteUser, deleteRestaurant, movePlan } = useAdminActions();
   const confirm = useConfirm();
   const [editing, setEditing] = useState<AdminUserRow | null>(null);
   const roleLabel = (role: AdminUserRow["role"]): string => {
@@ -69,61 +77,13 @@ export default function AdminPanel({
           <Breadcrumb trail={[{ labelKey: "admin.title" }]} />
         </header>
 
-        <div className="tt-section">
-          <div className="tt-section-head">
-            <h3 className="tt-serif" style={{ margin: 0 }}>
-              {t("admin.restaurants")}
-            </h3>
-            <span className="tt-muted" style={{ fontSize: 12 }}>
-              {t("admin.total", { n: restaurants.length })}
-            </span>
-          </div>
-          <div className="tt-admin-table">
-            <div className="tt-admin-tr tt-admin-tr--rest tt-staff-thead" aria-hidden="true">
-              <span>{t("admin.restaurant")}</span>
-              <span>{t("admin.foundingOwner")}</span>
-              <span>{t("admin.team")}</span>
-              <span>{t("admin.created")}</span>
-              <span />
-            </div>
-            {restaurants.map(r => (
-              <div key={r.id} className="tt-admin-tr tt-admin-tr--rest">
-                <span className="tt-staff-cell" title={r.name}>
-                  <strong>{r.name}</strong>
-                </span>
-                <span className="tt-staff-cell tt-muted" title={r.owner_email}>
-                  {r.owner_email}
-                </span>
-                <span>{r.team_count}</span>
-                <span className="tt-muted" style={{ fontSize: 12 }}>
-                  {new Date(r.created_at).toLocaleDateString(dateLocale(locale), {
-                    day: "2-digit",
-                    month: "short",
-                  })}
-                </span>
-                <button
-                  className="tt-iconbtn"
-                  title={t("admin.deleteRestaurant")}
-                  disabled={busy}
-                  onClick={async () => {
-                    if (
-                      await confirm({
-                        title: t("admin.deleteRestaurantConfirm", { name: r.name }),
-                        message: t("admin.deleteRestaurantMsg"),
-                        confirmLabel: t("admin.deleteRestaurant"),
-                        danger: true,
-                      })
-                    ) {
-                      deleteRestaurant(r.id);
-                    }
-                  }}
-                >
-                  <DeleteIcon size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+        <AdminRestaurants
+          restaurants={restaurants}
+          plans={plans}
+          busy={busy}
+          onMovePlan={movePlan}
+          onDelete={deleteRestaurant}
+        />
 
         <div className="tt-section">
           <div className="tt-section-head">
@@ -153,6 +113,7 @@ export default function AdminPanel({
                 <span className="tt-admin-role">{roleLabel(u.role)}</span>
                 <span className="tt-staff-cell tt-muted" title={u.restaurant_name ?? ""}>
                   {u.restaurant_name ?? "—"}
+                  {u.plan && <> · {planLabel(u.plan)}</>}
                 </span>
                 {u.user_id === adminUserId ? (
                   <span className="tt-muted" style={{ fontSize: 11 }}>

@@ -31,6 +31,13 @@ market is Mexico — prices in MXN, interface in Spanish with English alongside.
 Staff roles live in `staff`; `MANAGES(role)` in `src/lib/membership.ts` is the
 line between running the business and working a shift. A platform admin is a
 row in `platform_admins`, which no browser can read.
+The platform admin can move any restaurant to another plan from its row in
+`/dashboard/admin` (`PATCH /api/admin/restaurants`, `moveRestaurantPlan`), and
+its whole team moves with it — a plan belongs to the restaurant. It is an
+assignment, not a sale: the restaurant comes out `active` with any trial
+cleared, nothing is charged, the move is written in the restaurant's activity
+log, and one still billed by a live Stripe subscription is refused, since the
+next billing event would write Stripe's plan back over it.
 
 ## The two ways in
 
