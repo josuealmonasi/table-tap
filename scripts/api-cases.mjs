@@ -588,6 +588,31 @@ export function cases(fx) {
         return rows[0].method === "cash" && rows[0].actor_email ? true : "recorded without its method or who took it";
       } },
 
+    // Paid while it waits in "Listos": done, off the board by itself. And only
+    // then — a paid order the kitchen is still cooking stays where it is.
+    ...[["ready", "completed", "a ready order paid is completed"], ["preparing", "preparing", "an order still cooking stays where it is"]].map(([before, after, what]) => ({
+      name: `POST /api/table-payment (${what})`, as: "cashier", method: "POST", path: "/api/table-payment",
+      arrange: async f => {
+        const { data } = await f.admin.from("orders").insert({
+          restaurant_id: r, items: [{ itemId: "x", name: `${MARK} listos`, emoji: "🥗", price: 9, qty: 1, mods: {} }],
+          subtotal: 9, service_fee: 0, tip: 0, tax_pct: 0, discount: 0, total: 9, currency: "MXN",
+          note: MARK, status: before, paid: false,
+        }).select("id").single();
+        f.listosOrder = data?.id ?? "";
+        return async () => {
+          await f.admin.from("payments").delete().eq("order_id", f.listosOrder);
+          await f.admin.from("orders").delete().eq("id", f.listosOrder);
+        };
+      },
+      body: f => ({ orderId: f.listosOrder, settlement: "cash" }),
+      expect: [200],
+      check: async (_d, f) => {
+        const { data } = await f.admin.from("orders").select("paid, status").eq("id", f.listosOrder).single();
+        if (!data?.paid) return "the order was not paid";
+        return data.status === after || `paid while ${before}, it is now ${data.status}, not ${after}`;
+      },
+    })),
+
     // ── gerencia ─────────────────────────────────────────────────────────
     // The counter till. A cashier may ring a sale; a waiter may not, and the
     // route says so rather than the screen merely hiding the link.

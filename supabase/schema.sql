@@ -2999,6 +2999,27 @@ create trigger orders_enqueue_kitchen_ticket
 
 revoke all on function public.enqueue_kitchen_ticket() from public, anon, authenticated;
 
+-- An order paid for while it waits in "Listos" is done: the restaurant asked
+-- for it to leave the board by itself rather than wait for somebody to move
+-- it. Ready and not yet paid, it stays — moved by hand, or completed here the
+-- moment the last of its money lands. Done in the database because money
+-- reaches an order by many roads (card webhook, cash at the table, the till,
+-- a split's last share, a customer account), and every one of them sets
+-- `paid`. An update that sets a status of its own is left to say what it means.
+create or replace function public.complete_when_paid()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if new.paid and not old.paid and old.status = 'ready' and new.status = 'ready' then
+    new.status := 'completed';
+  end if;
+  return new;
+end; $$;
+drop trigger if exists orders_complete_when_paid on orders;
+create trigger orders_complete_when_paid
+  before update of paid on orders
+  for each row execute function public.complete_when_paid();
+revoke all on function public.complete_when_paid() from public, anon, authenticated;
+
 -- ============================================================================
 -- Loyalty: a visit card the diner keeps on their phone.
 --
