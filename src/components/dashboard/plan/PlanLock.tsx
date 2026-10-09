@@ -22,6 +22,7 @@ export default function PlanLock({
   feature,
   unlocksWith,
   isOwner,
+  compact = false,
 }: {
   /** dineIn | promotions | coupons | staffDiscounts — a key under plan.needs. */
   feature: string;
@@ -29,16 +30,18 @@ export default function PlanLock({
   unlocksWith: string;
   /** Whether the viewer can change the plan — only the owner can. */
   isOwner: boolean;
+  /** Inside a card, under the switch it explains, rather than standing in for a panel. */
+  compact?: boolean;
 }) {
   const t = useT();
 
   return (
-    <div className="tt-section tt-plan-lock">
+    <div className={compact ? "tt-plan-lock tt-plan-lock-compact" : "tt-section tt-plan-lock"}>
       <div className="tt-plan-lock-body">
         <SecureIcon size={20} weight="bold" aria-hidden="true" />
         <div>
           <strong>{t(`plan.needs.${feature}`, { plan: planLabel(unlocksWith) })}</strong>
-          <p className="tt-muted">{t(isOwner ? "plan.lockHint" : "plan.askOwner")}</p>
+          {!compact && <p className="tt-muted">{t(isOwner ? "plan.lockHint" : "plan.askOwner")}</p>}
         </div>
       </div>
       {isOwner && (

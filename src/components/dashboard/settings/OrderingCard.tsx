@@ -7,12 +7,15 @@ import { BADGES_CHANGED } from "@/hooks/useBadges";
 import { useT } from "@/lib/i18n/context";
 import { ownerWarningKey } from "@/lib/payment-options";
 import SettingsToggle from "./SettingsToggle";
+import PlanLock from "@/components/dashboard/plan/PlanLock";
 
 interface OrderingCardProps {
   restaurant: Restaurant;
   isOwner: boolean;
   /** Whether the plan includes paying at the end. False leaves it visible and off. */
   deferredPayAllowed: boolean;
+  /** The cheapest plan with pay-later, when this one lacks it. */
+  deferredPayUnlocksWith?: string | null;
   /** Whether a Stripe account is connected and charging. Decides what the diner sees. */
   cardsEnabled: boolean;
   saving: boolean;
@@ -28,6 +31,7 @@ export default function OrderingCard({
   restaurant,
   isOwner,
   deferredPayAllowed,
+  deferredPayUnlocksWith = null,
   cardsEnabled,
   saving,
   save,
@@ -146,11 +150,16 @@ export default function OrderingCard({
         <SettingsToggle
           style={gap}
           title={t("dash.payLaterTitle")}
-          hint={deferredPayAllowed ? t("dash.payLaterHint") : t("dash.payLaterLocked")}
+          hint={deferredPayAllowed || deferredPayUnlocksWith ? t("dash.payLaterHint") : t("dash.payLaterLocked")}
           checked={payLater}
           disabled={saving || !deferredPayAllowed}
           onChange={togglePayLater}
         />
+      )}
+      {/* A switch that won't move reads as broken unless it says why and what
+          unlocks it — a customer on the free plan reported exactly that. */}
+      {isOwner && !deferredPayAllowed && deferredPayUnlocksWith && (
+        <PlanLock feature="deferredPayment" unlocksWith={deferredPayUnlocksWith} isOwner compact />
       )}
 
       {/* Not gated on Stripe, because dividing a bill is not only a way of

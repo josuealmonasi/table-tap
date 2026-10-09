@@ -5981,6 +5981,18 @@ a.tt-btn {
   margin: 2px 0 0;
   font-size: 13px;
 }
+/* Under the switch it explains: the setting's own row, tinted, so a locked
+   switch says what unlocks it right where the owner tried to flip it. */
+.tt-plan-lock-compact {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: var(--tt-radius-sm);
+  background: var(--tt-accent-wash);
+  gap: 10px;
+}
+.tt-plan-lock-compact .tt-plan-lock-body strong {
+  font-size: 13px;
+}
 
 /* Finished orders: a list, not a wall of cards. Borrows the activity log's
    row so the two "browse what happened" screens read the same way. */
