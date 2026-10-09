@@ -3689,3 +3689,230 @@ grant execute on function public.account_checkout_settle(uuid, text) to service_
 -- was run a second time — and RLS does not guard TRUNCATE. refunds_due shipped
 -- to production that way, and `pnpm prod:check` caught the difference.
 revoke truncate, references, trigger on all tables in schema public from authenticated;
+
+-- Reservations remember what was actually taken, independently of later plan
+-- changes. No order FK here: stock is reserved before the order is inserted.
+create table if not exists stock_reservations (
+  id uuid primary key,
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  demand jsonb not null,
+  result jsonb not null,
+  created_at timestamptz not null default now(),
+  released_at timestamptz
+);
+alter table stock_reservations enable row level security;
+revoke all on stock_reservations from anon;
+revoke all on stock_reservations from authenticated;
+grant all on stock_reservations to service_role;
+create index if not exists stock_reservations_pending_idx
+  on stock_reservations(created_at) where released_at is null;
+alter table orders add column if not exists stock_managed boolean not null default false;
+alter table orders add column if not exists stock_reservation_id uuid
+  references stock_reservations(id);
+create unique index if not exists orders_stock_reservation_idx
+  on orders(stock_reservation_id) where stock_reservation_id is not null;
+
+-- Starting tracking again is a new count. An older reservation must not add
+-- portions to a new physical count after tracking was switched off and on.
+alter table menu_items add column if not exists stock_epoch int not null default 0;
+create or replace function public.stock_tracking_epoch()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if (old.stock is null) <> (new.stock is null) then
+    new.stock_epoch := old.stock_epoch + 1;
+  else
+    new.stock_epoch := old.stock_epoch;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists stock_tracking_epoch on menu_items;
+create trigger stock_tracking_epoch before update on menu_items
+  for each row execute function public.stock_tracking_epoch();
+revoke all on function public.stock_tracking_epoch() from public, anon, authenticated;
+
+-- The original three-argument function remains for a rolling deployment.
+-- This overload records the exact tracked quantities under the same locks.
+create or replace function public.reserve_stock(
+  p_restaurant uuid, p_demand jsonb, p_threshold int, p_reservation uuid
+)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_result jsonb;
+  v_demand jsonb;
+  v_existing stock_reservations%rowtype;
+begin
+  perform pg_advisory_xact_lock(hashtextextended(p_reservation::text, 0));
+  select * into v_existing from stock_reservations where id = p_reservation;
+  if found then
+    if v_existing.restaurant_id <> p_restaurant or v_existing.released_at is not null then
+      raise exception 'Reservation cannot be reused';
+    end if;
+    return v_existing.result;
+  end if;
+  perform 1 from menu_items m
+   where m.restaurant_id = p_restaurant
+     and m.id in (select item_id from jsonb_to_recordset(p_demand) as d(item_id uuid, qty int))
+   order by m.id for update;
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'item_id', m.id, 'qty', d.qty, 'epoch', m.stock_epoch)), '[]'::jsonb)
+    into v_demand
+    from jsonb_to_recordset(p_demand) as d(item_id uuid, qty int)
+    join menu_items m on m.id = d.item_id and m.restaurant_id = p_restaurant
+   where m.stock is not null;
+  v_result := reserve_stock(p_restaurant, p_demand, p_threshold);
+  if (v_result->>'ok')::boolean then
+    insert into stock_reservations(id, restaurant_id, demand, result)
+    values (p_reservation, p_restaurant, v_demand, v_result);
+  end if;
+  return v_result;
+end;
+$$;
+revoke all on function public.reserve_stock(uuid, jsonb, int, uuid) from public, anon, authenticated;
+grant execute on function public.reserve_stock(uuid, jsonb, int, uuid) to service_role;
+
+create or replace function public.release_stock_reservation(p_restaurant uuid, p_reservation uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_res stock_reservations%rowtype;
+  v_item record;
+begin
+  select * into v_res from stock_reservations
+   where id = p_reservation and restaurant_id = p_restaurant for update;
+  if not found or v_res.released_at is not null then return; end if;
+  if exists (select 1 from orders where stock_reservation_id = p_reservation and status <> 'cancelled') then
+    raise exception 'A live order still owns this reservation';
+  end if;
+  for v_item in
+    select m.id, d.qty from jsonb_to_recordset(v_res.demand) as d(item_id uuid, qty int, epoch int)
+    join menu_items m on m.id = d.item_id
+    where m.restaurant_id = p_restaurant and m.stock is not null and m.stock_epoch = d.epoch
+    order by m.id for update of m
+  loop
+    update menu_items set stock = stock + v_item.qty,
+      available = case when stock = 0 and stock_auto_off then true else available end,
+      stock_auto_off = case when stock = 0 and stock_auto_off then false else stock_auto_off end
+    where id = v_item.id;
+  end loop;
+  update stock_reservations set released_at = now() where id = p_reservation;
+end;
+$$;
+revoke all on function public.release_stock_reservation(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.release_stock_reservation(uuid, uuid) to service_role;
+
+-- Binding and release share the reservation lock. A recovery worker cannot
+-- return stock while an order is taking ownership of it.
+create or replace function public.order_stock_reservation()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_res stock_reservations%rowtype;
+begin
+  if tg_op = 'INSERT' then
+    if new.stock_reservation_id is not null then
+      select * into v_res from stock_reservations where id = new.stock_reservation_id for update;
+      if not found or v_res.restaurant_id <> new.restaurant_id or v_res.released_at is not null then
+        raise exception 'Invalid stock reservation';
+      end if;
+    end if;
+    return new;
+  end if;
+  if tg_op = 'DELETE' then
+    perform release_stock_reservation(old.restaurant_id, old.stock_reservation_id);
+    delete from stock_reservations where id = old.stock_reservation_id;
+    return old;
+  end if;
+  if new.stock_reservation_id is distinct from old.stock_reservation_id
+     or new.stock_managed is distinct from old.stock_managed then
+    raise exception 'An order cannot change its stock reservation';
+  end if;
+  if new.status = 'cancelled' and old.status <> 'cancelled' then
+    perform release_stock_reservation(new.restaurant_id, new.stock_reservation_id);
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists bind_order_stock on orders;
+create trigger bind_order_stock before insert on orders
+  for each row execute function public.order_stock_reservation();
+drop trigger if exists return_order_stock on orders;
+create trigger return_order_stock after update or delete on orders
+  for each row execute function public.order_stock_reservation();
+revoke all on function public.order_stock_reservation() from public, anon, authenticated;
+
+-- One transaction owns the order, removes its unconfirmed coupon use, returns
+-- that use, and deletes the pending order (whose trigger returns its stock).
+drop function if exists public.abandon_checkout(uuid, boolean);
+create or replace function public.abandon_checkout(p_order uuid, p_delete_order boolean, p_legacy_demand jsonb default '[]'::jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_order orders%rowtype; v_coupon record;
+begin
+  select * into v_order from orders where id = p_order for update;
+  if not found then return; end if;
+  if p_delete_order and (v_order.paid or v_order.status <> 'pending_payment') then return; end if;
+  for v_coupon in
+    delete from coupon_redemptions where order_id = p_order and confirmed_at is null
+    returning coupon_id
+  loop
+    if v_coupon.coupon_id is not null then perform release_coupon(v_coupon.coupon_id); end if;
+  end loop;
+  if p_delete_order then
+    if not v_order.stock_managed and v_order.stock_reservation_id is null then
+      perform release_stock(v_order.restaurant_id, p_legacy_demand);
+    end if;
+    delete from orders where id = p_order;
+  end if;
+end;
+$$;
+revoke all on function public.abandon_checkout(uuid, boolean, jsonb) from public, anon, authenticated;
+grant execute on function public.abandon_checkout(uuid, boolean, jsonb) to service_role;
+
+-- Compare-and-set version for subscription synchronization.
+alter table restaurants add column if not exists subscription_sync_revision int not null default 0;
+
+-- An interrupted request may have taken stock without inserting its order.
+-- A grace period keeps ordinary requests out; the reservation lock and the
+-- INSERT trigger prevent a late request from binding returned stock.
+drop function if exists public.recover_stock_reservations();
+create or replace function public.recover_stock_reservations(p_restaurant uuid default null)
+returns int language plpgsql security definer set search_path = public as $$
+declare v_res record; v_count int := 0;
+begin
+  for v_res in
+    select r.id, r.restaurant_id from stock_reservations r
+    where r.released_at is null and r.created_at < now() - interval '1 hour'
+      and (p_restaurant is null or r.restaurant_id = p_restaurant)
+      and not exists (select 1 from orders o where o.stock_reservation_id = r.id)
+    order by r.id limit 1 for update of r skip locked
+  loop
+    -- Recheck after acquiring the lock: an insert could have just committed.
+    if not exists (select 1 from orders where stock_reservation_id = v_res.id) then
+      perform release_stock_reservation(v_res.restaurant_id, v_res.id);
+      v_count := v_count + 1;
+    end if;
+  end loop;
+  return v_count;
+end;
+$$;
+revoke all on function public.recover_stock_reservations(uuid) from public, anon, authenticated;
+grant execute on function public.recover_stock_reservations(uuid) to service_role;
+
+revoke truncate, references, trigger on all tables in schema public from authenticated;
+
+-- The status guard and legacy handback share one transaction. New orders are
+-- returned by the trigger using their exact reservation, regardless of plan.
+create or replace function public.cancel_order(
+  p_restaurant uuid, p_order uuid, p_refund text, p_legacy_demand jsonb
+) returns boolean language plpgsql security definer set search_path = public as $$
+declare v_order orders%rowtype;
+begin
+  update orders set status = 'cancelled', stripe_refund_id = p_refund
+    where id = p_order and restaurant_id = p_restaurant and status in ('received', 'preparing')
+    returning * into v_order;
+  if not found then return false; end if;
+  if not v_order.stock_managed and v_order.stock_reservation_id is null then
+    perform release_stock(p_restaurant, p_legacy_demand);
+  end if;
+  return true;
+end;
+$$;
+revoke all on function public.cancel_order(uuid, uuid, text, jsonb) from public, anon, authenticated;
+grant execute on function public.cancel_order(uuid, uuid, text, jsonb) to service_role;

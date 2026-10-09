@@ -84,7 +84,7 @@ async function settleSplitShare(session: Stripe.Checkout.Session): Promise<void>
     // charged the share AND the gratuity on it, and the payment carries both:
     // recording only the share said a smaller number arrived than did.
     const tip = Math.max(0, Number(session.metadata?.settle_tip ?? 0));
-    const { data: claimed, error: claimError } = await db.rpc("settle_split_share", {
+    const { error: claimError } = await db.rpc("settle_split_share", {
       p_split: splitId,
       p_share: shareNo,
       p_amount: shareAmount,
@@ -93,24 +93,23 @@ async function settleSplitShare(session: Stripe.Checkout.Session): Promise<void>
     });
     if (claimError) throw new Error(`settling a share: could not mark it paid: ${claimError.message}`);
 
-    if (claimed === true) {
+    // Retry all remaining steps even if the share was already recorded.
+    // Both fee assignment and order settlement are idempotent.
+    // Our cut, on the same order. It rides on the first share to be paid —
+    // one bill divided four ways is still one bill — and it is what the
+    // monthly ceiling is summed from, so a share that never recorded it let
+    // us take more this month than the ceiling allows.
+    const shareFee = Number(session.metadata?.settle_fee ?? 0);
+    if (shareFee > 0) await chargeFeeOnSitting(split.session_id as string, shareFee);
 
-      // Our cut, on the same order. It rides on the first share to be paid —
-      // one bill divided four ways is still one bill — and it is what the
-      // monthly ceiling is summed from, so a share that never recorded it let
-      // us take more this month than the ceiling allows.
-      const shareFee = Number(session.metadata?.settle_fee ?? 0);
-      if (shareFee > 0) await chargeFeeOnSitting(split.session_id as string, shareFee);
-
-      // Anything they ordered after the freeze is theirs, and settles now:
-      // the orders and their payments in one write.
-      const ownIds = unpackOrderIds(session.metadata);
-      if (ownIds.length > 0) {
-        // What Stripe took for them: the whole charge less the share and its tip.
-        await settleCardOrders(ownIds, session, "settling a share's own orders", {
-          charged: charged(session) - shareAmount - tip,
-        });
-      }
+    // Anything they ordered after the freeze is theirs, and settles now:
+    // the orders and their payments in one write.
+    const ownIds = unpackOrderIds(session.metadata);
+    if (ownIds.length > 0) {
+      // What Stripe took for them: the whole charge less the share and its tip.
+      await settleCardOrders(ownIds, session, "settling a share's own orders", {
+        charged: charged(session) - shareAmount - tip,
+      });
     }
 
     // The last share closes the pot: everything the table divided is paid
@@ -140,12 +139,11 @@ async function closeDividedBill(splitId: string, sessionId: string, lockedAt: st
     .eq("split_id", splitId)
     .is("paid_at", null);
   if (countError) {
-    console.error("settling a share: could not count the unpaid shares", countError.message);
-    return;
+    throw new Error(`settling a share: could not count the unpaid shares: ${countError.message}`);
   }
   if (unpaidShares !== 0) return;
 
-  const { data: covered, error } = await db
+  const { error } = await db
     .from("orders")
     .update({ paid: true, pay_method: "card" })
     .eq("session_id", sessionId)
@@ -153,11 +151,14 @@ async function closeDividedBill(splitId: string, sessionId: string, lockedAt: st
     .lt("created_at", lockedAt)
     .select("session_id");
   if (error) throw new Error(`settling a share: could not close the divided bill: ${error.message}`);
-  await db
+  const { error: doneError } = await db
     .from("bill_splits")
     .update({ status: "done" })
     .eq("id", splitId);
-  await closeSessionsFor(covered ?? [], "paid");
+  if (doneError) throw new Error(`settling a share: could not finish the split: ${doneError.message}`);
+  // On a retry the orders may already be paid, so the UPDATE returns none.
+  // The split still tells us which sitting needs its final close attempt.
+  await closeSessionsFor([{ session_id: sessionId }], "paid");
 }
 
 /**
@@ -169,7 +170,7 @@ async function closeDividedBill(splitId: string, sessionId: string, lockedAt: st
  * the same rule stated the only way it can be here.
  */
 async function firstOnSitting(sessionId: string): Promise<{ id: string; tip: number; total: number } | null> {
-  const { data } = await createAdminClient()
+  const { data, error } = await createAdminClient()
     .from("orders")
     .select("id, tip, total")
     .eq("session_id", sessionId)
@@ -179,6 +180,7 @@ async function firstOnSitting(sessionId: string): Promise<{ id: string; tip: num
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
+  if (error) throw new Error(`settling a share: could not read its order: ${error.message}`);
   if (!data) return null;
   return { id: data.id as string, tip: Number(data.tip ?? 0), total: Number(data.total ?? 0) };
 }
@@ -189,11 +191,12 @@ async function chargeFeeOnSitting(sessionId: string, fee: number): Promise<void>
   if (!first) return;
   // Only if nothing has been recorded yet: the fee rides on the first share to
   // be paid, and the shares after it must not each add another.
-  await createAdminClient()
+  const { error } = await createAdminClient()
     .from("orders")
     .update({ platform_fee: fee })
     .eq("id", first.id)
     .or("platform_fee.is.null,platform_fee.eq.0");
+  if (error) throw new Error(`settling a share: could not record its fee: ${error.message}`);
 }
 
 /**

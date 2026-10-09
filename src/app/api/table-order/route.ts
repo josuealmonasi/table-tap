@@ -157,11 +157,19 @@ export async function POST(req: NextRequest) {
   // Named, because opening the bill is what makes it the waiter's to settle:
   // the diners can watch it and add to it, and pay the person in front of them
   // rather than a card field on their phone.
-  const sessionId = await openSession(actor.restaurantId, table.id as string, actor.email);
+  let sessionId: string | null;
+  try {
+    sessionId = await openSession(actor.restaurantId, table.id as string, actor.email);
+  } catch (error) {
+    await releaseStock(actor.restaurantId, reservation.reservationId);
+    throw error;
+  }
 
   const { data: order, error } = await db
     .from("orders")
     .insert({
+      stock_managed: true,
+      stock_reservation_id: reservation.reservationId,
       restaurant_id: actor.restaurantId,
       table_id: table.id,
       table_label: table.label,
@@ -193,7 +201,7 @@ export async function POST(req: NextRequest) {
 
   if (error || !order) {
     // The food was never ordered, so it goes back on the shelf.
-    await releaseStock(actor.restaurantId, verified);
+    await releaseStock(actor.restaurantId, reservation.reservationId);
     return await apiError("apiErr.orderCreate", 500);
   }
 

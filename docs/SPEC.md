@@ -1176,3 +1176,43 @@ a mail provider for receipts and staff invitations.
 
 `docs/before-launch.md` is the checked list, with what each one breaks while it
 is missing and how to prove it works once it is done.
+
+### Retrying checkout, stock returns and subscription events
+
+Every new diner, waiter and counter order marks `stock_managed`, including
+orders whose plan does not reserve inventory. When stock is taken, the
+four-argument `reserve_stock` writes a `stock_reservations` row in the same
+transaction as the decrement. Its demand contains only items actually counted,
+with their quantities and tracking epochs. The order owns that reservation.
+Changing plan afterwards does not change what is returned; restarting tracking
+by switching it off and on starts a new epoch and does not receive older stock.
+
+Cancellation and deletion return the reservation within the order transaction.
+A failed return rolls the order change back. Expiring a pending checkout also
+removes its unconfirmed coupon redemption and returns its use in that same
+transaction. Repeating either operation cannot return anything twice. Deleting
+an order removes its returned reservation; cancelled orders keep theirs.
+
+A request that dies before inserting an order leaves a durable orphan instead
+of an invisible decrement. `pnpm money` reports orphan reservations older than
+one hour and fails while any remain. `pnpm db:recover-stock` returns up to 100,
+one transaction each; append `--prod` only to recover production. Recovery locks
+and rechecks ownership, skips every reservation with an order, and rejects a
+late insert that tries to use a returned reservation. It is an explicit
+operational repair, not a scheduled worker. Run `money` again after recovery. It also reports pending checkouts holding
+stock for over an hour; those require verifying Stripe and retrying expiry,
+not an automatic handback that could race a real payment.
+
+Orders from older deployments lack a historical reservation. They retain the
+former plan/current-tracking calculation for compatibility, now inside the
+atomic cancellation/expiry operation. This cannot reconstruct tracking or plan
+changes that happened before reservation records existed. New orders never use
+that approximation. The original three-argument reserve/release functions stay
+available while older workers finish during deployment.
+
+A split payment retry resumes fees, additional orders and closing the bill even
+if its share was already recorded. Database failures propagate to the webhook
+so Stripe retries. Subscription events fetch Stripe's current subscription,
+ignore a replaced older contract, and compare `subscription_sync_revision`
+before writing. A competing update causes a fresh read; an exhausted retry or
+failed read/write is not acknowledged as successful.
