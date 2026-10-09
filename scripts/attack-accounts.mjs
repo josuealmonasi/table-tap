@@ -159,6 +159,35 @@ export async function attackAccounts({ admin, post, who, home, neighbour, ok, ba
         ? ok("a dead checkout's late expiry leaves the hold of the one being paid, and the till cannot collect it")
         : bad(`a dead checkout's late expiry lifted the hold of the one being paid (${first?.outcome}/${second?.outcome}, hold ${hold}, till ${collected?.status ?? "?"}, ${error?.message ?? "no error"})`);
     }
+
+    // A card payment whose webhook arrives after the hold ran out, for a tab
+    // the till collected in cash meanwhile: the customer paid twice. It used
+    // to go into the ledger against food already paid. Like a card payment on
+    // a settled table, it is kept as a refund due, once, and the bell says so.
+    {
+      const tab = await account(home.id, 1000);
+      await order(home.id, 40, { account_id: tab });
+      const checkout = (await admin.rpc("account_checkout_open", {
+        p_restaurant: home.id, p_account: tab, p_expected: 40, p_tip: 0, p_fee: 0,
+      })).data;
+      await admin.from("customer_accounts")
+        .update({ checkout_until: new Date(Date.now() - 60_000).toISOString() }).eq("id", tab);
+      const cash = await post("/api/accounts/settle", { accountId: tab, expected: 40, tip: 0, method: "cash", ref: `${MARK}-twice-${Date.now()}` }, who.cashier);
+      const intent = `pi_${MARK}_twice_${tab.slice(0, 8)}`;
+      await admin.rpc("account_checkout_settle", { p_checkout: checkout?.checkout, p_intent: intent });
+      await admin.rpc("account_checkout_settle", { p_checkout: checkout?.checkout, p_intent: intent }); // Stripe sends it again
+      const [{ data: byCard }, { data: due }, { count: told }] = await Promise.all([
+        admin.from("payments").select("amount").eq("stripe_payment_intent", intent),
+        admin.from("refunds_due").select("amount, account_name").eq("stripe_payment_intent", intent),
+        admin.from("notifications").select("id", { count: "exact", head: true })
+          .eq("restaurant_id", home.id).eq("kind", "refund_due").eq("data->>account", MARK),
+      ]);
+      cash.status === 200 && (byCard ?? []).length === 0 && due?.length === 1 &&
+        Number(due[0].amount) === 40 && due[0].account_name === MARK && told === 1
+        ? ok("a card payment for a tab the till already collected is kept as MX$40 to refund, once, and the bell says so")
+        : bad(`card on a collected tab: cash ${cash.status}, ${byCard?.length} card payment(s) in the ledger, ` +
+            `refund ${JSON.stringify(due)}, ${told} notification(s)`);
+    }
   } finally {
     // The money first, then the orders pointing at the accounts, then them.
     if (made.accounts.length) {
@@ -171,5 +200,7 @@ export async function attackAccounts({ admin, post, who, home, neighbour, ok, ba
       await admin.from("orders").delete().in("id", made.orders);
     }
     await admin.from("user_logs").delete().eq("entity", "account").like("detail", `%name=${MARK}%`);
+    await admin.from("refunds_due").delete().eq("account_name", MARK);
+    await admin.from("notifications").delete().eq("kind", "refund_due").eq("data->>account", MARK);
   }
 }

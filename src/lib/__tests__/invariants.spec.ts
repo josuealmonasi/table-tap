@@ -1294,6 +1294,19 @@ describe("every route that settles an order records the payment", () => {
     expect(fn).toMatch(/insert into payments/);
   });
 
+  it("keeps a card payment for a customer account already collected as a refund due, never in the ledger", () => {
+    // The same double charge as a table's, on a customer account: the webhook
+    // arrived after the hold ran out and the till had collected the tab. It was
+    // recorded as a payment against food already paid, and nobody was told.
+    const schema = read("supabase/schema.sql");
+    const at = schema.indexOf("function public.account_checkout_settle(");
+    const fn = schema.slice(at, schema.indexOf("$$;", at));
+    expect(fn, "the payment is still the whole checkout, whatever was paid meanwhile").not.toMatch(/v_checkout\.amount \+ v_checkout\.tip,\s*v_checkout\.tip, 'card'/);
+    expect(fn, "a double charge is not kept").toMatch(/insert into refunds_due/);
+    expect(fn, "nobody is told about a double charge").toMatch(/insert into notifications[\s\S]*'refund_due'/);
+    expect(fn, "a repeat of the event would flag it again").toMatch(/on conflict \(stripe_payment_intent\) do nothing/);
+  });
+
   it("keeps a card payment that landed on a settled bill as a refund due, never drops it", () => {
     // A waiter took cash while the diner was on Stripe's page; the webhook
     // matched nothing and the card money was recorded nowhere.

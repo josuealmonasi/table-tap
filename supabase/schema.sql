@@ -2645,6 +2645,8 @@ create table if not exists refunds_due (
   created_at    timestamptz not null default now(),
   refunded_at   timestamptz
 );
+-- Whose money it is when it is not a table's: a customer account's name.
+alter table refunds_due add column if not exists account_name text;
 -- Who gave it back, and the refund Stripe made. Written only after Stripe has
 -- made it: a row marked refunded first would be a diner who never was.
 alter table refunds_due add column if not exists stripe_refund_id text;
@@ -3681,20 +3683,44 @@ create or replace function public.account_checkout_settle(
 ) returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_checkout account_checkouts;
+  v_account  customer_accounts;
   v_ids      uuid[];
+  v_still    numeric;
+  v_food     numeric;
+  v_tip      numeric;
+  v_twice    numeric;
 begin
   select * into v_checkout from account_checkouts where id = p_checkout for update;
   if v_checkout.id is null then return jsonb_build_object('outcome', 'missing'); end if;
   if v_checkout.status = 'paid' then return jsonb_build_object('outcome', 'duplicate'); end if;
-  perform 1 from customer_accounts where id = v_checkout.account_id for update;
+  select * into v_account from customer_accounts where id = v_checkout.account_id for update;
 
-  insert into payments (restaurant_id, account_id, amount, tip, method, stripe_payment_intent)
-  values (v_checkout.restaurant_id, v_checkout.account_id, v_checkout.amount + v_checkout.tip,
-          v_checkout.tip, 'card', p_intent);
-  -- The ones still owed. One paid another way meanwhile cannot be: the hold
-  -- kept the till off them.
-  select array_agg(id order by created_at desc) into v_ids
+  -- The ones still owed. The hold keeps the till off them while the customer
+  -- is on Stripe's page, but a payment whose webhook arrives after the hold
+  -- ran out can find the till collected some or all of them meanwhile.
+  select array_agg(id order by created_at desc), coalesce(sum(total), 0) into v_ids, v_still
     from orders where id = any(v_checkout.order_ids) and paid = false and status <> 'cancelled';
+  v_food := least(v_checkout.amount, v_still);
+  v_tip := case when v_ids is null then 0 else v_checkout.tip end;
+  if v_food + v_tip > 0 then
+    insert into payments (restaurant_id, account_id, amount, tip, method, stripe_payment_intent)
+    values (v_checkout.restaurant_id, v_checkout.account_id, v_food + v_tip, v_tip, 'card', p_intent);
+  end if;
+  -- What the card paid for food already paid another way is the customer's
+  -- money taken twice: kept as a refund due, out of the ledger, and the bell
+  -- says so — the same as a card payment landing on a table already settled.
+  v_twice := round(v_checkout.amount + v_checkout.tip - v_food - v_tip, 2);
+  if v_twice > 0 and p_intent is not null then
+    insert into refunds_due (restaurant_id, stripe_payment_intent, amount, order_ids, account_name)
+    values (v_checkout.restaurant_id, p_intent, v_twice, v_checkout.order_ids, v_account.name)
+    on conflict (stripe_payment_intent) do nothing;
+    if found then
+      insert into notifications (restaurant_id, kind, data)
+      values (v_checkout.restaurant_id, 'refund_due',
+              jsonb_build_object('amount', v_twice, 'currency', (select currency from restaurants where id = v_checkout.restaurant_id),
+                                 'account', v_account.name));
+    end if;
+  end if;
   update orders set paid = true, pay_method = 'card' where id = any(coalesce(v_ids, '{}'));
   if v_checkout.tip > 0 and v_ids is not null then
     update orders set tip = tip + v_checkout.tip, total = total + v_checkout.tip where id = v_ids[1];

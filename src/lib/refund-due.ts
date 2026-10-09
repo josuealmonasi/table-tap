@@ -11,6 +11,8 @@ export interface RefundDueRow {
   id: string;
   amount: number;
   table_label: string | null;
+  /** Set when it was a customer account that paid twice, not a table. */
+  account_name: string | null;
   created_at: string;
 }
 

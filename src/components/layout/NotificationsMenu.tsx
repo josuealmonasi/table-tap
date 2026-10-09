@@ -54,6 +54,7 @@ export default function NotificationsMenu({ enabled }: { enabled: boolean }) {
   function sentence(n: Notification): string {
     if (n.kind === "refund_due") {
       const amount = formatMoney(Number(n.data.amount ?? 0), n.data.currency ?? "MXN");
+      if (n.data.account) return t("notif.refundDueAccount", { amount, name: n.data.account });
       return n.data.table
         ? t("notif.refundDue", { amount, label: n.data.table })
         : t("notif.refundDueCounter", { amount });
