@@ -3635,6 +3635,12 @@ begin
   if abs(v_owed - p_expected) > 0.005 then
     return jsonb_build_object('outcome', 'changed', 'owed', v_owed);
   end if;
+  -- A checkout still open once its hold has lapsed is dead: its Stripe session
+  -- expired at thirty minutes, five before the hold. Closed here, so its
+  -- expiry arriving late (Stripe retries for days) finds nothing to release.
+  -- Releasing it lifted the hold of the checkout opened now, and the till
+  -- could collect the account while the customer was paying it by card.
+  update account_checkouts set status = 'expired' where account_id = p_account and status = 'open';
   v_tip := least(v_tip, v_owed);
   insert into account_checkouts (restaurant_id, account_id, order_ids, amount, tip, fee)
   values (p_restaurant, p_account, v_ids, v_owed, v_tip, greatest(coalesce(p_fee, 0), 0)) returning id into v_id;
@@ -3682,6 +3688,26 @@ end;
 $$;
 revoke all on function public.account_checkout_settle(uuid, text) from public, anon, authenticated;
 grant execute on function public.account_checkout_settle(uuid, text) to service_role;
+
+-- The customer walked away from Stripe, or the session could not be made: an
+-- open checkout is closed and its hold lifted, in one transaction. One that is
+-- not open any more (paid, or closed when the next checkout opened) is left
+-- alone — releasing it would lift the hold of whatever holds the account now.
+create or replace function public.account_checkout_release(p_checkout uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_account uuid;
+begin
+  update account_checkouts set status = 'expired'
+   where id = p_checkout and status = 'open'
+   returning account_id into v_account;
+  if v_account is not null then
+    update customer_accounts set checkout_until = null where id = v_account;
+  end if;
+end;
+$$;
+revoke all on function public.account_checkout_release(uuid) from public, anon, authenticated;
+grant execute on function public.account_checkout_release(uuid) to service_role;
 
 -- ── Last, on purpose ────────────────────────────────────────────────────────
 -- The table-shaping privileges, taken from every table once more. The revoke

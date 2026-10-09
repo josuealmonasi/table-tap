@@ -100,8 +100,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await db.from("account_checkouts").update({ stripe_session_id: session.id }).eq("id", r.checkout);
     return NextResponse.json({ url: session.url });
   } catch {
-    // The charge never happened: the till may collect this account again.
-    await releaseAccountCheckout(r.checkout);
+    // The charge never happened: the till may collect this account again. If
+    // even that fails, the hold simply runs out — the safe way round.
+    await releaseAccountCheckout(r.checkout).catch(e => console.error("account checkout release failed:", e));
     return await apiError("apiErr.checkoutFailed", 502);
   }
 }
