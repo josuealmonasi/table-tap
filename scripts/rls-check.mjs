@@ -8,7 +8,7 @@
 //   · do the API routes refuse a caller with no session, and a caller from
 //     the wrong restaurant?
 //
-//   pnpm rls            (dev, and the app on localhost:3000)
+//   pnpm rls            (dev, and the app on DEV_URL, localhost:3000 by default)
 //
 // Never against production. The cases plant a neighbour to attack, and the
 // ones that ask whether a write is refused would, the day one is not, settle a
@@ -19,10 +19,11 @@ import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { plantNeighbour } from "./rls-fixture.mjs";
 import { refuseProduction, watchDevWorker } from "./preflight.mjs";
+import { DEV_URL } from "./dev-url.mjs";
 
 refuseProduction("rls", "it plants rows, and asks for writes on a real restaurant that must be refused");
 process.loadEnvFile(join(process.cwd(), ".env.development.local"));
-const BASE = "http://localhost:3000";
+const BASE = DEV_URL;
 watchDevWorker(BASE);
 
 const anon = createClient(

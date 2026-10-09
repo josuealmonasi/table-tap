@@ -28,6 +28,7 @@ import {
   TEST_PASSWORD,
 } from "./test-users.mjs";
 import { seedMock, dropMock, DEMO_OWNER, DEMO_TEAM, DEMO_PASSWORD } from "./mock-data.mjs";
+import { DEV_URL } from "./dev-url.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -123,7 +124,7 @@ try {
   } else if (config.custom === "mock") {
     const summary = await seedMock(client);
     console.log(`\n✓ [${target}] Demo Bistro ready — ${summary.orders} orders.`);
-    console.log(`  Menu: http://localhost:3000/r/${summary.restaurantId}/t/${summary.tableId}`);
+    console.log(`  Menu: ${DEV_URL}/r/${summary.restaurantId}/t/${summary.tableId}`);
     console.log(`\n  Demo logins at /login (password: ${DEMO_PASSWORD}):`);
     console.log(`    ${DEMO_OWNER.email}   (owner)`);
     for (const t of DEMO_TEAM) console.log(`    ${t.email}   (${t.role})`);
@@ -175,7 +176,7 @@ async function runSqlCommand() {
     console.log(`\n✓ [${target}] Done. ${restaurants.length} restaurant(s).`);
     if (restaurants.length && tables.length) {
       console.log(
-        `  Demo menu: http://localhost:3000/r/${restaurants[0].id}/t/${tables[0].id}`,
+        `  Demo menu: ${DEV_URL}/r/${restaurants[0].id}/t/${tables[0].id}`,
       );
     }
     if (testEmails.length) {

@@ -20,10 +20,11 @@ import { join } from "node:path";
 import { setup, teardown } from "./api-fixtures.mjs";
 import { cases } from "./api-cases.mjs";
 import { refuseProduction, requireServer, retryFetch } from "./preflight.mjs";
+import { DEV_URL } from "./dev-url.mjs";
 
 refuseProduction("api", "every case writes — it plants orders and payments, and stamps cards");
 process.loadEnvFile(join(process.cwd(), ".env.development.local"));
-const BASE = "http://localhost:3000";
+const BASE = DEV_URL;
 
 await requireServer(BASE);
 
