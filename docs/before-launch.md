@@ -29,7 +29,7 @@ Two endpoints, same host, because there are two Stripe accounts:
 | endpoint | register as | events |
 | --- | --- | --- |
 | `/api/webhooks/stripe` | events on **your account** | `customer.subscription.*` |
-| `/api/webhooks/stripe/connect` | events on **connected accounts** | `checkout.session.completed`, `checkout.session.expired` |
+| `/api/webhooks/stripe/connect` | events on **connected accounts** | `checkout.session.completed`, `checkout.session.expired`, `account.updated` |
 
 Then both signing secrets into Vercel as `STRIPE_WEBHOOK_SECRET` and
 `STRIPE_WEBHOOK_SECRET_CONNECT`. Stripe issues a different one per endpoint and

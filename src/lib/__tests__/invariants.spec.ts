@@ -685,6 +685,15 @@ describe("each Stripe stream has its own endpoint and its own secret", () => {
       "the connect endpoint handles our own account's subscription",
     ).toBe(false);
   });
+
+  it("follows a restaurant's account, so card payments do not wait for the owner to open Settings", () => {
+    // Whether diners may pay a restaurant by card was refreshed only on the
+    // Settings screen. Stripe usually finishes reviewing an account after the
+    // owner has left onboarding, and the restaurant took no cards until
+    // somebody opened that screen again.
+    expect(read(CONNECT).includes('"account.updated"'), "the connect endpoint ignores account.updated").toBe(true);
+    expect(read(PLATFORM).includes('"account.updated"'), "a restaurant's account event handled on the platform endpoint").toBe(false);
+  });
 });
 
 describe("nothing that moves money waits offline", () => {

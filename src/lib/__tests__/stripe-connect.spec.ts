@@ -20,19 +20,27 @@ vi.mock("@/lib/stripe", () => ({
     },
   },
 }));
+let writeFails = false;
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => {
+    const where: Record<string, unknown> = {};
     const q = {
       select: () => q,
-      eq: () => q,
+      eq: (k: string, v: unknown) => ((where[k] = v), q),
       single: async () => ({ data: { ...stored }, error: null }),
-      update: (patch: Record<string, unknown>) => (Object.assign(stored, patch), q),
+      // The restaurant whose account it is, looked up by the account id.
+      maybeSingle: async () => ({ data: where.stripe_account_id === stored.stripe_account_id ? { id: "r1" } : null, error: null }),
+      update: (patch: Record<string, unknown>) => {
+        if (writeFails) return { eq: async () => ({ error: { message: "connection reset" } }) };
+        Object.assign(stored, patch);
+        return { eq: async () => ({ error: null }) };
+      },
     };
     return { from: () => q };
   },
 }));
 
-import { ensureConnectAccount, syncConnectStatus } from "@/lib/stripe-connect";
+import { ensureConnectAccount, syncConnectAccount, syncConnectStatus } from "@/lib/stripe-connect";
 
 const withCardPayments = (status: string) => ({
   id: "acct_1",
@@ -41,6 +49,7 @@ const withCardPayments = (status: string) => ({
 
 beforeEach(() => {
   calls.length = 0;
+  writeFails = false;
   Object.assign(stored, { stripe_account_id: "acct_1", stripe_charges_enabled: false });
 });
 
@@ -71,5 +80,32 @@ describe("when a restaurant may take cards", () => {
     account = withCardPayments("restricted");
     expect(await syncConnectStatus("r1")).toMatchObject({ chargesEnabled: false, detailsSubmitted: false });
     expect(stored.stripe_charges_enabled).toBe(false);
+  });
+});
+
+describe("when Stripe says a restaurant's account changed", () => {
+  it("stores what Stripe says now: cards on once it finished reviewing, off once it restricted them", async () => {
+    account = withCardPayments("active");
+    expect(await syncConnectAccount("acct_1")).toBe(true);
+    expect(stored.stripe_charges_enabled).toBe(true);
+    account = withCardPayments("inactive");
+    await syncConnectAccount("acct_1");
+    expect(stored.stripe_charges_enabled).toBe(false);
+    // Read from Stripe itself, not from the event, so an old event cannot store an old answer.
+    expect(calls.filter(c => c.method === "GET").map(c => c.path)).toEqual([
+      "/v2/core/accounts/acct_1?include=configuration.merchant",
+      "/v2/core/accounts/acct_1?include=configuration.merchant",
+    ]);
+  });
+
+  it("leaves alone an account no restaurant here has", async () => {
+    expect(await syncConnectAccount("acct_somebody_else")).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
+  it("fails out loud when the answer cannot be stored, so Stripe sends the event again", async () => {
+    account = withCardPayments("active");
+    writeFails = true;
+    await expect(syncConnectAccount("acct_1")).rejects.toThrow(/connect status write failed/);
   });
 });
