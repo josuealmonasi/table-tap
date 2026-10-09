@@ -3846,8 +3846,8 @@ returns void language plpgsql security definer set search_path = public as $$
 declare v_order orders%rowtype; v_coupon record;
 begin
   select * into v_order from orders where id = p_order for update;
-  if not found or v_order.paid then return; end if;
-  if p_delete_order and v_order.status <> 'pending_payment' then return; end if;
+  if not found then return; end if;
+  if p_delete_order and (v_order.paid or v_order.status <> 'pending_payment') then return; end if;
   for v_coupon in
     delete from coupon_redemptions where order_id = p_order and confirmed_at is null
     returning coupon_id

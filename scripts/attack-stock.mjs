@@ -41,6 +41,16 @@ export async function attackStock({ admin, ok, bad }) {
     assert.equal((await db.query("select uses_count from coupons where id=$1", [coupon])).rows[0].uses_count, 0);
     ok("concurrent expiry returns stock and coupon once");
 
+    // A bill paid at the till can still have an online coupon checkout expire.
+    // Its food stays paid; the unused coupon must not stay consumed forever.
+    const paidBill = (await db.query("insert into orders(restaurant_id,status,paid) values($1,'received',true) returning id", [restaurant])).rows[0].id;
+    await db.query("update coupons set uses_count=1 where id=$1", [coupon]);
+    await db.query("insert into coupon_redemptions(restaurant_id,coupon_id,order_id,code,amount) values($1,$2,$3,'RECOVERY',1)", [restaurant, coupon, paidBill]);
+    await Promise.all([db, peer].map(c => c.query("select abandon_checkout($1,false)", [paidBill])));
+    assert.equal((await db.query("select uses_count from coupons where id=$1", [coupon])).rows[0].uses_count, 0);
+    assert.equal((await db.query("select paid from orders where id=$1", [paidBill])).rows[0].paid, true);
+    ok("expiry returns an unused coupon on a bill paid offline without deleting the food");
+
     const second = await reserve(), placed = await order(second);
     await db.query("update restaurants set plan='carta' where id=$1", [restaurant]);
     await db.query("update menu_items set stock=30 where id=$1", [untracked]);
@@ -59,6 +69,8 @@ export async function attackStock({ admin, ok, bad }) {
     ok("a tracking restart does not receive an old reservation");
 
     const fourth = await reserve([{ item_id: item, qty: 2 }]), held = await order(fourth);
+    await db.query("update coupons set uses_count=1 where id=$1", [coupon]);
+    await db.query("insert into coupon_redemptions(restaurant_id,coupon_id,order_id,code,amount) values($1,$2,$3,'RECOVERY',1)", [restaurant, coupon, held]);
     // Trigger a genuine stock-update failure without installing a global trigger.
     await db.query("begin");
     await db.query("update menu_items set stock=2147483647 where id=$1", [item]);
@@ -67,8 +79,11 @@ export async function attackStock({ admin, ok, bad }) {
     await db.query("rollback to release_failure");
     assert.equal((await db.query("select count(*)::int n from orders where id=$1", [held])).rows[0].n, 1);
     assert.equal((await db.query("select released_at from stock_reservations where id=$1", [fourth])).rows[0].released_at, null);
+    assert.equal((await db.query("select uses_count from coupons where id=$1", [coupon])).rows[0].uses_count, 1);
+    assert.equal((await db.query("select count(*)::int n from coupon_redemptions where order_id=$1", [held])).rows[0].n, 1);
     await db.query("rollback");
     await db.query("select abandon_checkout($1,true)", [held]);
+    assert.equal((await db.query("select uses_count from coupons where id=$1", [coupon])).rows[0].uses_count, 0);
     assert.equal(await count(), 7);
     ok("failed stock return rolls back deletion and can be retried");
 

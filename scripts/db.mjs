@@ -110,7 +110,7 @@ console.log(`▸ [${target}] ${config.label}…`);
 try {
   await client.connect();
 
-  // Demo data commands run custom JS rather than the SQL-file loop.
+  // Custom database operations run in JS rather than the SQL-file loop.
   if (config.custom === "recover-stock") {
     let returned = 0;
     for (let attempt = 0; attempt < 100; attempt++) {
@@ -118,7 +118,7 @@ try {
       if (!rows[0].returned) break;
       returned += rows[0].returned;
     }
-    console.log(`Returned ${returned} orphan stock reservation(s). Run pnpm money to check for remaining work.`);
+    console.log(`Returned ${returned} orphan stock reservation(s). Run pnpm ${isProd ? "money:prod" : "money"} to check for remaining work.`);
   } else if (config.custom === "mock") {
     const summary = await seedMock(client);
     console.log(`\n✓ [${target}] Demo Bistro ready — ${summary.orders} orders.`);
