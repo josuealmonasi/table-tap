@@ -1235,8 +1235,35 @@ export function cases(fx) {
     // 502 while Stripe Connect is not configured on the platform account: the
     // route reports the upstream failure instead of swallowing it, which is
     // correct. Once Connect exists, this will be a 200.
+    // "Conectar Stripe" once accepted 502 as healthy, and so passed every run
+    // while Stripe refused every account it was asked to make: no restaurant
+    // could connect at all. Dev is on Stripe's test mode, so this makes a real
+    // test account, demands the onboarding link, and closes the account again.
     { name: "POST /api/connect/onboard", as: "owner", method: "POST", path: "/api/connect/onboard",
-      body: {}, expect: [200, 400, 409, 502] },
+      arrange: async f => {
+        const { data: was } = await f.admin.from("restaurants")
+          .select("stripe_account_id, stripe_charges_enabled").eq("id", r).single();
+        await f.admin.from("restaurants").update({ stripe_account_id: null, stripe_charges_enabled: false }).eq("id", r);
+        return async () => {
+          const { data: now } = await f.admin.from("restaurants").select("stripe_account_id").eq("id", r).single();
+          if (now?.stripe_account_id && now.stripe_account_id !== was?.stripe_account_id) {
+            const { default: Stripe } = await import("stripe");
+            const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+            await stripe.rawRequest("POST", `/v2/core/accounts/${now.stripe_account_id}/close`,
+              { applied_configurations: ["merchant"] }, { apiVersion: "2026-06-24.preview" }).catch(() => {});
+          }
+          await f.admin.from("restaurants").update({
+            stripe_account_id: was?.stripe_account_id ?? null,
+            stripe_charges_enabled: was?.stripe_charges_enabled ?? false,
+          }).eq("id", r);
+        };
+      },
+      body: {}, expect: [200],
+      check: async (d, f) => {
+        if (!/^https:\/\/connect\.stripe\.com\//.test(d.url ?? "")) return `no Stripe onboarding link (${JSON.stringify(d).slice(0, 80)})`;
+        const { data } = await f.admin.from("restaurants").select("stripe_account_id").eq("id", r).single();
+        return /^acct_/.test(data?.stripe_account_id ?? "") || "no Stripe account was stored for the restaurant";
+      } },
     { name: "POST /api/billing/checkout", as: "owner", method: "POST", path: "/api/billing/checkout",
       body: { plan: "servicio" }, expect: [200, 400, 409, 502] },
 

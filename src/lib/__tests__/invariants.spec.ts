@@ -1396,6 +1396,19 @@ describe("Stripe's limits are respected where we build its payloads", () => {
     ).toEqual([]);
   });
 
+  it("connects restaurants to Stripe the way it charges them", () => {
+    // Diners are charged directly on the restaurant's account. Connect once
+    // still asked for the `recipient` configuration a destination charge needs,
+    // and waited on its transfers before offering cards: Stripe refused the
+    // account outright, and nobody could connect.
+    for (const route of ["src/lib/checkout/card-session.ts", "src/app/api/bill/pay/route.ts", "src/app/api/split/pay/route.ts"]) {
+      expect(read(route), `${route} no longer charges on the restaurant's own account`).toMatch(/stripeAccount/);
+    }
+    const connect = read("src/lib/stripe-connect.ts").split("\n").filter(l => !l.trimStart().startsWith("//")).join("\n");
+    expect(connect, "Connect asks for a configuration direct charges do not use").not.toMatch(/recipient|stripe_transfers/);
+    expect(connect, "cards are no longer decided by card_payments").toMatch(/card_payments\?\.status/);
+  });
+
   it("prices and opens a sale the same way at the till and on a phone", () => {
     // The till had its own copy of "which menus are serving now" and its own
     // fetch of the dishes it prices. Two copies are two answers waiting to
