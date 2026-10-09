@@ -48,7 +48,8 @@ const ok = w => console.log(`    ok       ${w}`);
 const bad = (w, faults) => {
   failed++;
   console.log(`    BAD      ${w}`);
-  for (const f of faults) console.log(`             ${f.kind}: «${f.text}» (${f.w}px)`);
+  // The layout audit reports a measured thing; the typing check, a sentence.
+  for (const f of faults) console.log(`             ${typeof f === "string" ? f : `${f.kind}: «${f.text}» (${f.w}px)`}`);
 };
 
 const cookieFor = async (email, password) => {
@@ -139,7 +140,8 @@ async function typingFaults(tab, scope = "[role=dialog]", most = 4) {
           return a ? a.getAttribute("aria-label") || a.getAttribute("placeholder") || a.tagName.toLowerCase() : "nothing";
         });
         faults.push(`typing in «${name}» moved the cursor to «${now}»`);
-      } else if (!value.includes(chars)) {
+      } else if (!value.toLowerCase().includes(chars)) {
+        // Case aside: a coupon code and the promotion search write in capitals.
         faults.push(`typing «${chars}» in «${name}» left «${value}»`);
       }
     } catch {
