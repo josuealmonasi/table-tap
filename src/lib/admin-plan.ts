@@ -39,7 +39,7 @@ export async function moveRestaurantPlan(
 
   const { data: restaurant } = await db
     .from("restaurants")
-    .select("id, plan, stripe_subscription_id")
+    .select("id, plan, stripe_subscription_id, subscription_sync_revision")
     .eq("id", restaurantId)
     .maybeSingle();
   if (!restaurant) return { ok: false, error: "apiErr.restaurantNotFound", status: 404 };
@@ -57,9 +57,19 @@ export async function moveRestaurantPlan(
   }
 
   const from = restaurant.plan as string;
+  // The finished subscription is unlinked and the sync revision moves on, so a
+  // Stripe event still in flight for it neither matches nor writes over this
+  // (`applySubscription` ignores a finished one the restaurant no longer has).
   const { error } = await db
     .from("restaurants")
-    .update({ plan, plan_status: "active", trial_ends_at: null, plan_ends_at: null })
+    .update({
+      plan,
+      plan_status: "active",
+      trial_ends_at: null,
+      plan_ends_at: null,
+      stripe_subscription_id: null,
+      subscription_sync_revision: Number(restaurant.subscription_sync_revision ?? 0) + 1,
+    })
     .eq("id", restaurantId);
   if (error) {
     console.error("admin plan move failed:", error.message);

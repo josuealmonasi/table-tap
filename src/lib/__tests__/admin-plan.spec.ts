@@ -37,7 +37,7 @@ const stripeWith = (status: string | Error) =>
 
 beforeEach(() => {
   logged.length = 0;
-  restaurant = { id: "r1", plan: "carta", plan_status: "trialing", trial_ends_at: "2026-11-01", plan_ends_at: null, stripe_subscription_id: null };
+  restaurant = { id: "r1", plan: "carta", plan_status: "trialing", trial_ends_at: "2026-11-01", plan_ends_at: null, stripe_subscription_id: null, subscription_sync_revision: 0 };
 });
 
 describe("a platform admin moves a restaurant to another plan", () => {
@@ -45,6 +45,9 @@ describe("a platform admin moves a restaurant to another plan", () => {
     const answer = await moveRestaurantPlan(fakeDb(), "r1", "servicio", "admin@x.dev", stripeWith("canceled"));
     expect(answer).toEqual({ ok: true, from: "carta", to: "servicio" });
     expect(restaurant).toMatchObject({ plan: "servicio", plan_status: "active", trial_ends_at: null, plan_ends_at: null });
+    // Unlinked from any finished subscription, and the sync revision moved on,
+    // so a late Stripe event for it cannot write over this move.
+    expect(restaurant).toMatchObject({ stripe_subscription_id: null, subscription_sync_revision: 1 });
     expect(logged).toEqual([expect.objectContaining({ actor: "admin@x.dev", detail: "plan=carta→servicio by=platform_admin" })]);
   });
 
