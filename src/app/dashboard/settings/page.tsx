@@ -1,8 +1,8 @@
 import { unwrap } from "@/lib/ordering-data";
 import { requireManager } from "@/lib/page-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { can } from "@/lib/plan";
-import { getPlan } from "@/lib/plan-server";
+import { can, cheapestWith } from "@/lib/plan";
+import { allPlans, getPlan } from "@/lib/plan-server";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import SettingsForm from "@/components/dashboard/settings/SettingsForm";
 
@@ -18,6 +18,11 @@ export default async function SettingsPage() {
   // hunting for an option that exists and nobody named.
   const plan = await getPlan(membership.restaurant.id);
   const deferredPay = plan ? can(plan.limits, "deferredPayment") : false;
+  // And named: "comes with Servicio", with the way to get it, not a grey line
+  // under a dead switch — a customer on the free plan read the switch as broken.
+  const deferredPayUnlocksWith = deferredPay
+    ? null
+    : (cheapestWith(await allPlans(), "deferredPayment", plan?.limits)?.plan ?? "servicio");
 
   // Counting stock is a paid feature. Shown on every plan and switched off on
   // the free one, so the owner can see what upgrading buys them.
@@ -53,6 +58,7 @@ export default async function SettingsPage() {
         restaurant={membership.restaurant}
         role={membership.role}
         deferredPayAllowed={deferredPay}
+        deferredPayUnlocksWith={deferredPayUnlocksWith}
         inventoryAllowed={inventory}
         cardsEnabled={cardsEnabled}
         printerConfigured={printerConfigured}

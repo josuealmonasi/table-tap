@@ -18,6 +18,8 @@ interface SettingsFormProps {
   role: Role;
   /** Whether the plan includes paying at the end. False leaves it visible and off. */
   deferredPayAllowed?: boolean;
+  /** The cheapest plan with pay-later, when this one lacks it. */
+  deferredPayUnlocksWith?: string | null;
   /** Whether the plan includes counting stock. */
   inventoryAllowed?: boolean;
   /** Whether a Stripe account is connected and charging. Decides what the diner sees. */
@@ -32,6 +34,7 @@ export default function SettingsForm({
   restaurant,
   role,
   deferredPayAllowed = false,
+  deferredPayUnlocksWith = null,
   inventoryAllowed = false,
   cardsEnabled = false,
   printerConfigured = false,
@@ -92,6 +95,7 @@ export default function SettingsForm({
             restaurant={restaurant}
             isOwner={isOwner}
             deferredPayAllowed={deferredPayAllowed}
+            deferredPayUnlocksWith={deferredPayUnlocksWith}
             cardsEnabled={cardsEnabled}
             saving={saving}
             save={save}
