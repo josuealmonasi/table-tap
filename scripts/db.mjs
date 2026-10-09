@@ -3,6 +3,7 @@
 //
 //   Dev (default → .env.development.local):
 //     pnpm db:create   create tables / RLS / realtime (structure only)
+//     pnpm db:recover-stock   return old orphan stock reservations
 //     pnpm db:seed     insert demo data + create test logins (test1..5@tabletap.dev)
 //     pnpm db:reset    drop + create + seed (fresh start)
 //     pnpm db:drop     drop all tables

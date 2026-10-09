@@ -15,7 +15,7 @@ import type { OrderLineItem } from "@/lib/types";
  * Taking and giving back stock, the same way coupons are claimed and released.
  *
  * A checkout reserves what it needs before the money is asked for, and hands it
- * back if the payment never happens — see `releaseAbandonedOrder` in the Stripe
+ * back if the payment never happens — see `abandonCheckout` in the Stripe
  * webhook, which is the other half of this. Doing it the other way round (count
  * down only once paid) means two diners can both be sold the last portion while
  * they are each staring at a Stripe page.
