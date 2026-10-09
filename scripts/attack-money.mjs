@@ -25,11 +25,12 @@ import { attackAccounts } from "./attack-accounts.mjs";
 import { attackStock } from "./attack-stock.mjs";
 import { attackRefunds } from "./attack-refunds.mjs";
 import { refuseProduction, watchDevWorker } from "./preflight.mjs";
+import { DEV_URL } from "./dev-url.mjs";
 
 refuseProduction("attack", "every case plants an order to attack");
 process.loadEnvFile(".env.development.local");
 
-const base = "http://localhost:3000";
+const base = DEV_URL;
 watchDevWorker(base);
 
 const admin = createClient(

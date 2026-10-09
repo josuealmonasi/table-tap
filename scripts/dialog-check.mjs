@@ -16,13 +16,14 @@ import { AUDIT } from "./layout-audit.mjs";
 import { CREW } from "./layout-paths.mjs";
 import { changedParts, fingerprint, holdWrites } from "./hold-writes.mjs";
 import { watchDevWorker } from "./preflight.mjs";
+import { DEV_URL } from "./dev-url.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
 
 const BASE = prod
   ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
-  : "http://localhost:3000";
+  : DEV_URL;
 watchDevWorker(BASE);
 // The narrow end of the phone band, not the iPhone: no breakpoint falls
 // between 360 and 390, so 360 is the same rules with 30px less room, and the

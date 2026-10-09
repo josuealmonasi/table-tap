@@ -95,6 +95,13 @@ the simpler one.
 pnpm test && pnpm api && pnpm rls && pnpm roles && pnpm smoke && pnpm layout && pnpm promises && pnpm money && pnpm attack
 ```
 
+The gates talk to the dev server at `DEV_URL` (`scripts/dev-url.mjs`, port
+3000 by default). More than one agent works on this repo; if 3000 is taken by
+somebody else's `next dev`, start yours on another port and point the gates
+at it rather than stopping theirs: `pnpm dev -p 3100`, then
+`DEV_URL=http://localhost:3100 pnpm api`. A gate run is only valid against a
+server running YOUR checkout.
+
 `pnpm money` reconciles the `payments` ledger against `orders.paid`. They are
 two records of one fact — a settled order with no payment behind it, or money
 against an order nobody settled, means one of them is lying.

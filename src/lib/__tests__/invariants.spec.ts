@@ -2043,9 +2043,11 @@ describe("a gate says when the dev server moved under it", () => {
     // flight then fails as though the code were wrong. Three false reds in one
     // day (rls, promises, layout) all passed when run again alone. A gate that
     // talks to localhost now says at exit when the worker changed under it.
+    // Found by where they read the dev server's address, which is one place
+    // (`dev-url.mjs`) so a gate can follow a server started on another port.
     const gates = fs.readdirSync("scripts")
       .filter(f => f.endsWith(".mjs") && f !== "db.mjs" && f !== "preflight.mjs")
-      .filter(f => read(`scripts/${f}`).includes('"http://localhost:3000"'));
+      .filter(f => read(`scripts/${f}`).includes('from "./dev-url.mjs"'));
     expect(gates.length, "no gate talks to the dev server any more — the scan broke").toBeGreaterThan(4);
     const blind = gates.filter(f => !/\b(requireServer|watchDevWorker)\(/.test(read(`scripts/${f}`)));
     expect(blind, "a gate that cannot tell a restart from a failure").toEqual([]);

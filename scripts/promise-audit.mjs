@@ -26,12 +26,13 @@ import { CREW } from "./layout-paths.mjs";
 import { AUDIT, REFUSAL, STATES } from "./promise-cases.mjs";
 import { requireServer, warm } from "./preflight.mjs";
 import { holdWrites } from "./hold-writes.mjs";
+import { DEV_URL } from "./dev-url.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
 const BASE = prod
   ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
-  : "http://localhost:3000";
+  : DEV_URL;
 const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0];
 
 await requireServer(BASE);

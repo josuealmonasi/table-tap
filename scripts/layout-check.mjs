@@ -15,12 +15,13 @@ import { AUDIT } from "./layout-audit.mjs";
 import { CREW, DIALOGS, DINER, PUBLIC } from "./layout-paths.mjs";
 import { requireServer } from "./preflight.mjs";
 import { holdWrites } from "./hold-writes.mjs";
+import { DEV_URL } from "./dev-url.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
 const BASE = prod
   ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
-  : "http://localhost:3000";
+  : DEV_URL;
 
 await requireServer(BASE, prod);
 
