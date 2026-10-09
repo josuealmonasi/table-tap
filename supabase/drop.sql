@@ -66,6 +66,7 @@ drop function if exists public.account_charge(uuid, uuid, uuid[], numeric, text)
 drop function if exists public.account_settle(uuid, uuid, numeric, numeric, text, text, text);
 drop function if exists public.account_checkout_open(uuid, uuid, numeric, numeric, numeric);
 drop function if exists public.account_checkout_settle(uuid, text);
+drop function if exists public.account_checkout_release(uuid);
 drop function if exists public.loyalty_redeem(uuid, text, text);
 drop function if exists public.loyalty_redeem(uuid, text, text, int);
 drop function if exists public.loyalty_stamp(uuid, text, text);

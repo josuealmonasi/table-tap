@@ -134,6 +134,31 @@ export async function attackAccounts({ admin, post, who, home, neighbour, ok, ba
         ? ok("the kitchen collects no account, and nobody collects another restaurant's")
         : bad("money was recorded against an account by somebody who may not collect it");
     }
+
+    // A card payment's hold outlives a dead checkout's late expiry. Stripe
+    // retries an expiry for days; one arriving after the hold had lapsed and a
+    // new checkout had opened lifted the NEW checkout's hold, and the till could
+    // collect the account while its customer was paying it by card.
+    {
+      const held = await account(home.id, 1000);
+      await order(home.id, 30, { account_id: held });
+      const open = async () => (await admin.rpc("account_checkout_open", {
+        p_restaurant: home.id, p_account: held, p_expected: 30, p_tip: 0, p_fee: 0,
+      })).data;
+      const first = await open();
+      // Thirty-five minutes on: the hold lapsed with the first still open.
+      await admin.from("customer_accounts")
+        .update({ checkout_until: new Date(Date.now() - 60_000).toISOString() }).eq("id", held);
+      const second = await open();
+      // The first one's expiry, late, through the same function the webhook calls.
+      const { error } = await admin.rpc("account_checkout_release", { p_checkout: first?.checkout });
+      const hold = (await admin.from("customer_accounts").select("checkout_until").eq("id", held).single()).data?.checkout_until;
+      const collected = await post("/api/accounts/settle", { accountId: held, expected: 30, tip: 0, method: "cash", ref: `${MARK}-held-${Date.now()}` }, who.cashier);
+      first?.outcome === "open" && second?.outcome === "open" && !error && hold && new Date(hold) > new Date()
+        && (await paymentsOf(held)).length === 0
+        ? ok("a dead checkout's late expiry leaves the hold of the one being paid, and the till cannot collect it")
+        : bad(`a dead checkout's late expiry lifted the hold of the one being paid (${first?.outcome}/${second?.outcome}, hold ${hold}, till ${collected?.status ?? "?"}, ${error?.message ?? "no error"})`);
+    }
   } finally {
     // The money first, then the orders pointing at the accounts, then them.
     if (made.accounts.length) {

@@ -32,11 +32,13 @@ export async function abandonAccountCheckout(session: Stripe.Checkout.Session): 
   await releaseAccountCheckout(checkout);
 }
 
-/** Lifts an open checkout's hold on its account; a paid one is left alone. */
+/**
+ * Lifts an open checkout's hold on its account. A paid one is left alone, and
+ * so is one closed when a newer checkout opened: Stripe retries an expiry for
+ * days, and one arriving late used to lift the newer checkout's hold while its
+ * customer was paying. A failure throws, so Stripe sends the event again.
+ */
 export async function releaseAccountCheckout(checkoutId: string): Promise<void> {
-  const db = createAdminClient();
-  const { data } = await db.from("account_checkouts").update({ status: "expired" })
-    .eq("id", checkoutId).eq("status", "open").select("account_id");
-  const accountId = data?.[0]?.account_id as string | undefined;
-  if (accountId) await db.from("customer_accounts").update({ checkout_until: null }).eq("id", accountId);
+  const { error } = await createAdminClient().rpc("account_checkout_release", { p_checkout: checkoutId });
+  if (error) throw new Error(`Could not release the account checkout: ${error.message}`);
 }
