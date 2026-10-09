@@ -6,8 +6,8 @@ import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useSettings } from "@/hooks/useSettings";
-import { BUCKET, LOGO, fileError, logoPath } from "@/lib/images";
-import { imageSize, resizeToSpec } from "@/lib/image-resize";
+import { BUCKET, LOGO, SOURCE_MAX_BYTES, logoPath } from "@/lib/images";
+import { preparePhoto } from "@/lib/image-resize";
 import RestaurantMark from "@/components/ui/RestaurantMark";
 import type { Restaurant } from "@/lib/types";
 
@@ -29,25 +29,23 @@ export default function LogoCard({ restaurant }: { restaurant: Restaurant }) {
   const [busy, setBusy] = useState(false);
 
   async function choose(file: File): Promise<void> {
-    const bad = fileError(file, LOGO);
-    if (bad) {
-      toast(t(bad, { mb: String(Math.round(LOGO.maxBytes / 1024 / 1024)) }), "error");
-      return;
-    }
-
     setBusy(true);
     try {
-      const { width } = await imageSize(file);
-      if (width < LOGO.minWidth) {
-        toast(t("img.small", { w: String(width), min: String(LOGO.minWidth) }));
+      const photo = await preparePhoto(file, LOGO);
+      if ("error" in photo) {
+        toast(t(photo.error, { mb: String(SOURCE_MAX_BYTES / 1024 / 1024) }), "error");
+        return;
+      }
+      if (photo.sourceWidth < LOGO.minWidth) {
+        // A warning, not a refusal — a slightly small photo still beats none.
+        toast(t("img.small", { w: String(photo.sourceWidth), min: String(LOGO.minWidth) }));
       }
 
-      const resized = await resizeToSpec(file, LOGO);
       const path = logoPath(restaurant.id);
       const supabase = createClient();
       const { error } = await supabase.storage
         .from(BUCKET)
-        .upload(path, resized, { contentType: "image/webp", upsert: true });
+        .upload(path, photo.blob, { contentType: photo.contentType, upsert: true });
       if (error) {
         toast(t("img.failed"), "error");
         return;

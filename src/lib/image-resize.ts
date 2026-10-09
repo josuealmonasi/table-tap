@@ -1,6 +1,37 @@
 "use client";
 
-import type { ImageSpec } from "@/lib/images";
+import { fileError, resultError, type ImageSpec } from "@/lib/images";
+
+/** A photo resized and encoded for storage, with what to tell storage about it. */
+export interface PreparedPhoto {
+  blob: Blob;
+  contentType: "image/webp" | "image/jpeg";
+  ext: "webp" | "jpg";
+  /** The original's width, for warning about a photo that will look soft. */
+  sourceWidth: number;
+}
+
+/** Something that can encode a picture: a canvas, or a stand-in for one in tests. */
+export interface Encodable {
+  toBlob(callback: (blob: Blob | null) => void, type?: string, quality?: number): void;
+}
+
+/**
+ * WebP when the browser can make it, JPEG when it can't.
+ *
+ * Safari cannot encode WebP. Asked for it, `toBlob` hands back a PNG — which
+ * was then uploaded labelled as WebP, at several times the weight. A JPEG is
+ * what every browser can make and every browser can show.
+ */
+export async function encodePhoto(canvas: Encodable): Promise<Pick<PreparedPhoto, "blob" | "contentType" | "ext"> | null> {
+  const as = (type: string, quality: number) =>
+    new Promise<Blob | null>(resolve => canvas.toBlob(resolve, type, quality));
+  const webp = await as("image/webp", 0.82);
+  if (webp?.type === "image/webp") return { blob: webp, contentType: "image/webp", ext: "webp" };
+  const jpeg = await as("image/jpeg", 0.85);
+  if (jpeg?.type === "image/jpeg") return { blob: jpeg, contentType: "image/jpeg", ext: "jpg" };
+  return null;
+}
 
 /**
  * Shrinks a photo to the size we actually display, before it is uploaded.
@@ -13,15 +44,21 @@ import type { ImageSpec } from "@/lib/images";
  * Cover crops to fill: the band has a fixed shape, so a photo of another shape
  * would be letterboxed by the browser anyway — cropping to the middle is the
  * same result without the bars.
+ *
+ * Answers a message key instead when the photo can't be used: not a picture
+ * this browser can open, or still too heavy after resizing.
  */
-export async function resizeToSpec(file: File, spec: ImageSpec): Promise<Blob> {
-  const bitmap = await createImageBitmap(file);
+export async function preparePhoto(file: File, spec: ImageSpec): Promise<PreparedPhoto | { error: string }> {
+  const bad = fileError(file);
+  if (bad) return { error: bad };
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (!bitmap) return { error: "img.badType" };
   try {
     const canvas = document.createElement("canvas");
     canvas.width = spec.width;
     canvas.height = spec.height;
     const ctx = canvas.getContext("2d");
-    if (!ctx) return file;
+    if (!ctx) return { error: "img.failed" };
 
     // Cover-fit: scale so the shorter side fills, then centre the overflow.
     const scale = Math.max(spec.width / bitmap.width, spec.height / bitmap.height);
@@ -29,21 +66,12 @@ export async function resizeToSpec(file: File, spec: ImageSpec): Promise<Blob> {
     const h = bitmap.height * scale;
     ctx.drawImage(bitmap, (spec.width - w) / 2, (spec.height - h) / 2, w, h);
 
-    const blob = await new Promise<Blob | null>(resolve =>
-      canvas.toBlob(resolve, "image/webp", 0.82),
-    );
-    // A browser without WebP encoding hands back null; the original still
-    // works, it is just heavier.
-    return blob ?? file;
+    const encoded = await encodePhoto(canvas);
+    if (!encoded) return { error: "img.failed" };
+    const tooBig = resultError(encoded.blob, spec);
+    if (tooBig) return { error: tooBig };
+    return { ...encoded, sourceWidth: bitmap.width };
   } finally {
     bitmap.close();
   }
-}
-
-/** Pixel size of a chosen file, for warning when a photo is too small. */
-export async function imageSize(file: File): Promise<{ width: number; height: number }> {
-  const bitmap = await createImageBitmap(file);
-  const size = { width: bitmap.width, height: bitmap.height };
-  bitmap.close();
-  return size;
 }
