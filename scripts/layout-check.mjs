@@ -16,6 +16,7 @@ import { CREW, DIALOGS, DINER, PUBLIC } from "./layout-paths.mjs";
 import { requireServer } from "./preflight.mjs";
 import { holdWrites } from "./hold-writes.mjs";
 import { DEV_URL } from "./dev-url.mjs";
+import { pageInScope, reportScope } from "./gate-scope.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -226,6 +227,7 @@ for (const size of SIZES) {
   // `locale` and believing it was English measured Spanish twice.
   await diner.addCookies([{ name: "tt-locale", value: lang, url: BASE }]);
   for (const flow of DINER) {
+    if (!pageInScope(flow.at ?? "/r/_/t/_")) continue;
     const tab = await diner.newPage();
     try {
       // Most flows start at the table. One does not: the tracker has its own
@@ -285,6 +287,7 @@ for (const size of SIZES) {
     locale: "es-MX",
   });
   for (const path of PUBLIC) {
+    if (!pageInScope(path)) continue;
     const tab = await outside.newPage();
     try {
       await gotoOnce(tab, BASE + path, { waitUntil: "load", timeout: 60000 });
@@ -307,7 +310,9 @@ for (const size of SIZES) {
   const { data: card } = spent
     ? await admin.from("loyalty_cards").select("code").eq("id", spent.card_id).maybeSingle()
     : { data: null };
-  if (!card) {
+  if (!pageInScope("/rewards")) {
+    // Not in this change's reach.
+  } else if (!card) {
     if (prod) console.log("    –        signed out · /rewards (a card): no card to show yet");
     else { failed++; console.log("    BAD      signed out · /rewards (a card): the seed has no card with a reward spent"); }
   } else {
@@ -338,6 +343,7 @@ for (const size of SIZES) {
     });
     await ctx.addCookies([await cookieFor(who.email, password)]);
     for (const path of who.pages) {
+      if (!pageInScope(path)) continue;
       const tab = await ctx.newPage();
       try {
         await gotoOnce(tab, BASE + path, { waitUntil: "load", timeout: 60000 });
@@ -417,5 +423,6 @@ if (held.length) {
   for (const w of [...new Set(held)]) console.log(`    ${w}`);
   console.log("");
 }
+reportScope("layout");
 console.log(failed === 0 ? "Everything reads.\n" : `${failed} READABILITY PROBLEM(S).\n`);
 process.exit(failed === 0 ? 0 : 1);

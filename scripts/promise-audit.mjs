@@ -27,6 +27,7 @@ import { AUDIT, REFUSAL, STATES } from "./promise-cases.mjs";
 import { requireServer, warm } from "./preflight.mjs";
 import { holdWrites } from "./hold-writes.mjs";
 import { DEV_URL } from "./dev-url.mjs";
+import { pageInScope, reportScope } from "./gate-scope.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -102,6 +103,7 @@ for (const who of CREW) {
   await ctx.addCookies([await cookieFor(who.email, password), { name: "tt-locale", value: "es", url: BASE }]);
   const linked = new Set();
   for (const path of who.pages) {
+    if (!pageInScope(path)) continue;
     const tab = await ctx.newPage();
     try {
       await tab.goto(BASE + path, { waitUntil: "networkidle" });
@@ -157,6 +159,7 @@ for (const [name, path] of [
   ["general QR", `/r/${restaurant.id}`],
   ["table QR", `/r/${restaurant.id}/t/${table.id}`],
 ]) {
+  if (!pageInScope(path)) continue;
   const tab = await guest.newPage();
   await tab.goto(BASE + path, { waitUntil: "networkidle" });
   await tab.waitForTimeout(1800);
@@ -174,6 +177,7 @@ async function finish() {
     for (const w of [...new Set(held)]) console.log(`    ${w}`);
     console.log("");
   }
+  reportScope("promises");
   console.log(failed === 0 ? "\nNo screen promises more than it has.\n" : `\n${failed} GAP(S) — review one by one.\n`);
   process.exit(failed === 0 ? 0 : 1);
 }
@@ -315,8 +319,22 @@ const NAME_OF = `(b => b.innerText.trim() || b.title || b.getAttribute("aria-lab
 // opens when tapped.
 const CONTROLS = "button, a.tt-btn, [role=button]";
 
+/**
+ * The screen a state is judged on, worked out without flipping anything, or
+ * null when it cannot be — and then the state runs.
+ */
+async function screenOf(state) {
+  if (state.as === "tracker") return "/order/_";
+  if (state.as === "bill") return "/r/_/t/_";
+  if (typeof state.path !== "function") return state.path ?? "/r/_/t/_";
+  try { return (await state.path(admin, ctx)) ?? "/r/_/t/_"; } catch { return null; }
+}
+
 console.log("\n  states\n");
 for (const state of STATES) {
+  // A scoped run flips only the states whose screen this change can reach.
+  const screen = await screenOf(state);
+  if (screen !== null && !pageInScope(screen)) continue;
   // What the phone already remembers, worked out before `apply` changes the
   // menu it is worked out from — a sold-out case must remember the dish that
   // is about to sell out, not whichever one is left.

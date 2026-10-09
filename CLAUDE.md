@@ -89,11 +89,32 @@ the simpler one.
 
 ## Before shipping anything
 
-**Run the whole gate, every time:**
+**Run `pnpm gate`, every time.** It reads your diff against `origin/main`,
+follows the import graph up from every changed file to the pages and API
+routes that use it, and runs the gates that change needs — on those pages and
+routes only. A changed export reaches only the files that import it; a changed
+CSS rule reaches the components that spell its classes; a changed line of copy
+reaches the screens that use its key. tsc, lint, the unit tests and `pnpm smoke`
+always run in full. Whatever cannot be pinned down that way runs everything: a
+CSS token or bare element rule, the root layout, middleware, the Supabase
+clients, dependencies, `supabase/`, the seed scripts, the gate scripts' shared
+code. Access code in reach runs `api`, `rls` and `roles` in full; a money path
+in reach runs `money` and `attack`. `pnpm gate --plan` prints the plan and
+why; `pnpm gate --only layout,dialogs` runs just those, unscoped.
+
+**`pnpm gate --all` is the whole gate**, the same as:
 
 ```bash
-pnpm test && pnpm api && pnpm rls && pnpm roles && pnpm smoke && pnpm layout && pnpm promises && pnpm money && pnpm attack
+pnpm test && pnpm api && pnpm rls && pnpm roles && pnpm smoke && pnpm layout && pnpm promises && pnpm money && pnpm attack && pnpm dialogs
 ```
+
+An import graph cannot see two screens that agree only through the database,
+so the audit loop runs the whole gate at the start of every round, on main;
+a shipped change it missed turns up there. `pnpm gate` runs the
+gates one at a time, fails a gate whose server on `DEV_URL` is not this
+checkout or whose code changed while it ran, and stops and reruns a gate that
+prints nothing for six minutes (`GATE_STALL_MIN`). Each gate's output is in
+its own file; the summary names it.
 
 The gates talk to the dev server at `DEV_URL` (`scripts/dev-url.mjs`, port
 3000 by default). More than one agent works on this repo; if 3000 is taken by
@@ -106,8 +127,8 @@ server running YOUR checkout.
 two records of one fact — a settled order with no payment behind it, or money
 against an order nobody settled, means one of them is lying.
 
-`pnpm dialogs` is the slow one, so it is not on that line — run it whenever you
-touch a dialog, a shared component or the stylesheet. It clicks every visible
+`pnpm dialogs` is the slow one. `pnpm gate` runs it on the screens a change
+reaches — every dialog, shared component and stylesheet change. It clicks every visible
 button on every screen as every role and measures whatever opens, so it needs
 no list of dialogs and cannot fall behind one. Every write those clicks send is
 answered in the browser and never reaches the server, and the demo data is

@@ -43,6 +43,7 @@
     "rls:audit": "node scripts/rls-audit.mjs",
     "rls:audit:prod": "node scripts/rls-audit.mjs --prod",
     "api": "node scripts/api-check.mjs",
+    "gate": "node scripts/gate.mjs",
     "dev:fresh": "node scripts/dev-fresh.mjs",
     "promises": "node scripts/promise-audit.mjs",
     "promises:prod": "node scripts/promise-audit.mjs --prod",
