@@ -11,6 +11,7 @@
 import { join } from "node:path";
 import { requireServer, retryFetch } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
+import { apiInScope, pageInScope, reportScope } from "./gate-scope.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -136,6 +137,7 @@ for (const who of ROLES) {
   console.log(`  ${who.role} (${who.email})`);
 
   for (const [path, { allow, marker }] of Object.entries(PAGES)) {
+    if (!pageInScope(path)) continue;
     const res = await retryFetch(
       BASE + path,
       { headers: { cookie, "accept-language": "es-MX" } },
@@ -159,6 +161,7 @@ for (const who of ROLES) {
 
   for (const r of ROUTES) {
     const path = r.needsTable ? r.p + table.id : r.p;
+    if (!apiInScope(path)) continue;
     const res = await retryFetch(
       BASE + path,
       {
@@ -179,5 +182,6 @@ for (const who of ROLES) {
   console.log("");
 }
 
+reportScope("roles");
 console.log(failed === 0 ? "Each role sees and handles its own.\n" : `${failed} PROBLEM(S).\n`);
 process.exit(failed === 0 ? 0 : 1);

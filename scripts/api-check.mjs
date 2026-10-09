@@ -21,6 +21,7 @@ import { setup, teardown } from "./api-fixtures.mjs";
 import { cases } from "./api-cases.mjs";
 import { refuseProduction, requireServer, retryFetch } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
+import { apiInScope, reportScope } from "./gate-scope.mjs";
 
 refuseProduction("api", "every case writes — it plants orders and payments, and stamps cards");
 process.loadEnvFile(join(process.cwd(), ".env.development.local"));
@@ -38,8 +39,22 @@ const fx = await setup(process.env, BASE);
 // What one case leaves for the next: the coupon that gets created is the one
 // later switched off and deleted.
 const saved = {};
+// A scoped run checks the routes a change can reach. Cases that hand each
+// other state through `saved` run as one chain: half a chain fails for want
+// of its other half, or leaves behind what the other half would have deleted.
+const all = cases(fx);
+const chained = c => Boolean(c.save) || [c.path, c.body].some(v => typeof v === "function" && v.length >= 2);
+const inScope = new Map();
+for (const c of all) {
+  // Only the route matters here, and a printer's token is any string. A path
+  // that cannot be worked out this early runs: skipping it would be a guess.
+  try { inScope.set(c, apiInScope(typeof c.path === "function" ? await c.path(fx, {}) : c.path)); }
+  catch { inScope.set(c, true); }
+}
+const chainInScope = all.some(c => chained(c) && inScope.get(c));
 try {
-  for (const c of cases(fx)) {
+  for (const c of all) {
+    if (!(chained(c) ? chainInScope : inScope.get(c))) continue;
     const headers = { "Content-Type": "application/json", ...(c.headers ?? {}) };
     if (c.as !== "diner") headers.cookie = fx.who[c.as];
 
@@ -173,5 +188,6 @@ try {
   await teardown(fx);
 }
 
+reportScope("api");
 console.log(failed === 0 ? "\nEvery request answers.\n" : `\n${failed} PROBLEM(S).\n`);
 process.exit(failed === 0 ? 0 : 1);

@@ -17,6 +17,7 @@ import { CREW } from "./layout-paths.mjs";
 import { changedParts, fingerprint, holdWrites } from "./hold-writes.mjs";
 import { watchDevWorker } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
+import { pageInScope, reportScope } from "./gate-scope.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -171,6 +172,7 @@ for (const width of WIDTHS) {
     defuse(tab);
 
     for (const path of who.pages) {
+      if (!pageInScope(path)) continue;
       try {
         await tab.goto(BASE + path, { waitUntil: "load", timeout: 60000 });
         await tab.waitForTimeout(1800);
@@ -246,6 +248,7 @@ if (moved.length) {
   console.log(`  BAD      the sweep changed ${DEMO}'s data anyway: ${moved.join(", ")}`);
 }
 
+reportScope("dialogs");
 console.log(
   failed === 0
     ? `\nAll ${opened} dialogs read.\n`
