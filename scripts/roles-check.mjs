@@ -81,6 +81,10 @@ const PAGES = {
   },
   "/dashboard/staff": { allow: OWNER, marker: "Accesos del equipo" },
   "/dashboard/plan": { allow: OWNER, marker: "Tu plan" },
+  // The platform admin's console: every restaurant role bounces, the owner
+  // too. A page nobody here may open passes on a marker it never prints, so
+  // this one is also opened as the platform admin, below, who must see it.
+  "/dashboard/admin": { allow: [], marker: "Dueño fundador" },
 };
 
 // Route → roles that should be able to use it.
@@ -116,6 +120,14 @@ const ROUTES = [
   { m: "PATCH", p: "/api/accounts", body: {}, allow: SERVES, passes: 400 },
   { m: "POST", p: "/api/accounts/charge", body: {}, allow: SERVES, passes: 400 },
   { m: "POST", p: "/api/accounts/settle", body: {}, allow: SERVES, passes: 400 },
+  // What that console calls — moving a restaurant between plans, deleting
+  // one, managing any login — is the platform admin's alone. Each checks who
+  // is asking first and answers the platform admin 400 for an empty body.
+  { m: "PATCH", p: "/api/admin/restaurants", body: {}, allow: [], passes: 400 },
+  { m: "DELETE", p: "/api/admin/restaurants", body: {}, allow: [], passes: 400 },
+  { m: "POST", p: "/api/admin/users", body: {}, allow: [], passes: 400 },
+  { m: "PATCH", p: "/api/admin/users", body: {}, allow: [], passes: 400 },
+  { m: "DELETE", p: "/api/admin/users", body: {}, allow: [], passes: 400 },
 ];
 
 let failed = 0;
@@ -183,5 +195,27 @@ for (const who of ROLES) {
 }
 
 reportScope("roles");
+// The console's marker, seen by the one person who may open it. Without this
+// every bounce above would pass on a page that had stopped printing it.
+if (pageInScope("/dashboard/admin")) {
+  const email = process.env.PLATFORM_ADMIN_EMAIL ?? "admin@tabletap.dev";
+  const password = process.env.PLATFORM_ADMIN_PASSWORD;
+  console.log(`  platform admin (${email})`);
+  if (!password) bad("could not check the console's marker: PLATFORM_ADMIN_PASSWORD is not set");
+  else {
+    const auth = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+    const { data, error } = await auth.auth.signInWithPassword({ email, password });
+    if (error) bad(`could not sign in to check the console's marker (${error.message})`);
+    else {
+      const cookie = `sb-${ref}-auth-token=base64-${Buffer.from(JSON.stringify(data.session)).toString("base64")}`;
+      const res = await retryFetch(BASE + "/dashboard/admin", { headers: { cookie, "accept-language": "es-MX" } }, BASE);
+      const html = res.status === 200 ? await res.text() : "";
+      if (html.includes(PAGES["/dashboard/admin"].marker)) ok("opens /dashboard/admin, and sees its marker");
+      else bad("/dashboard/admin: the platform admin does not see «" + PAGES["/dashboard/admin"].marker + "» — every bounce above proves nothing");
+    }
+  }
+  console.log("");
+}
+
 console.log(failed === 0 ? "Each role sees and handles its own.\n" : `${failed} PROBLEM(S).\n`);
 process.exit(failed === 0 ? 0 : 1);
