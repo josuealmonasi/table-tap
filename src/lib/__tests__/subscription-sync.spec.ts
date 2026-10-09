@@ -77,6 +77,22 @@ describe("subscription synchronization", () => {
   });
 });
 
+it("leaves a platform admin's move alone when a finished subscription's event arrives late", async () => {
+  // The admin moved the restaurant, which unlinks its cancelled subscription;
+  // Stripe then re-delivers that subscription's cancellation.
+  reads.push({ data: { stripe_subscription_id: null, subscription_sync_revision: 3 }, error: null });
+  retrieve.mockResolvedValue(sub("sub_old", 100, "canceled"));
+  await applySubscription(sub("sub_old", 100, "canceled"));
+  expect(patches).toEqual([]);
+});
+
+it("still records a brand-new subscription when none is linked yet", async () => {
+  reads.push({ data: { stripe_subscription_id: null, subscription_sync_revision: 0 }, error: null });
+  await applySubscription(sub());
+  expect(patches).toHaveLength(1);
+  expect(patches[0]).toMatchObject({ stripe_subscription_id: "sub_new", subscription_sync_revision: 1 });
+});
+
 it("propagates a Stripe read failure so it can be retried", async () => {
   reads.push(current()); retrieve.mockRejectedValue(new Error("Stripe unavailable"));
   await expect(applySubscription(sub())).rejects.toThrow("Stripe unavailable");

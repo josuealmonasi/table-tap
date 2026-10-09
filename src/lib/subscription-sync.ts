@@ -44,6 +44,11 @@ export async function applySubscription(sub: Stripe.Subscription): Promise<void>
     if (readError) throw new Error(`Subscription lookup failed: ${readError.message}`);
     if (!current) return;
     const latest = await stripe.subscriptions.retrieve(sub.id);
+    // A finished subscription the restaurant no longer has is history, not a
+    // plan. Stripe re-delivers a cancellation for days; a platform admin who
+    // moved the restaurant in between (which unlinks the subscription) must
+    // not see that move quietly reset to the free plan.
+    if (!current.stripe_subscription_id && ["canceled", "incomplete_expired"].includes(latest.status)) return;
     if (current.stripe_subscription_id && current.stripe_subscription_id !== latest.id) {
       const active = await stripe.subscriptions.retrieve(current.stripe_subscription_id);
       // A late cancellation from the previous subscription must not replace
