@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -41,6 +41,15 @@ export function Modal({
   variant?: "center" | "sheet";
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  // The latest onClose, read when a key is pressed. It used to be a dependency
+  // of the effect below, and callers pass a new arrow on every render — so
+  // every keystroke in a form inside the dialog re-ran the effect, which moved
+  // focus back to the first field: one character, then the cursor jumped to
+  // the email box. Focus moves in when the dialog OPENS, and only then.
+  const onCloseRef = useRef(onClose);
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -53,7 +62,7 @@ export function Modal({
 
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== "Tab" || !dialog) return;
@@ -78,7 +87,7 @@ export function Modal({
       window.removeEventListener("keydown", onKey);
       previouslyFocused?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
