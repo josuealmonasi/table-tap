@@ -1140,7 +1140,11 @@ lean on who is trusted with what:
   failure throws so Stripe retries), and an abandoned session lifts the hold
   through `account_checkout_release()` — only an open checkout's, and opening
   a checkout closes the account's dead open ones first, so an expiry Stripe
-  delivers late cannot lift the hold of the checkout being paid now.
+  delivers late cannot lift the hold of the checkout being paid now. A card
+  payment whose webhook arrives after the hold ran out, for food the till
+  collected meanwhile, is not booked against that food: what it paid twice is
+  a refund due (`refunds_due.account_name`), shown in Cuentas abiertas and
+  announced on the bell, exactly like a card payment on a settled table.
 - **The statement** is `/cuenta/<code>`: a random twelve-character code (the
   visit card's alphabet) on a QR. Holding it shows the customer's name, what
   is owed day by day with times and dishes, and earlier payments, and lets

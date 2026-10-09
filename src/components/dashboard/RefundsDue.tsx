@@ -82,7 +82,9 @@ export default function RefundsDue({ refunds, currency, canRefund }: RefundsDueP
           <div className="tt-bill-main">
             <strong className="tt-bill-name">{formatMoney(Number(r.amount), currency)}</strong>
             <span className="tt-muted tt-bill-sub">
-              {r.table_label ? t("refunds.table", { label: r.table_label }) : t("refunds.counter")}
+              {r.account_name
+                ? t("refunds.account", { name: r.account_name })
+                : r.table_label ? t("refunds.table", { label: r.table_label }) : t("refunds.counter")}
               {" · "}
               {new Date(r.created_at).toLocaleString(dateLocale(locale), {
                 day: "numeric",

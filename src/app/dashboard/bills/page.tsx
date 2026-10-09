@@ -107,7 +107,7 @@ export default async function BillsPage() {
     ? ((unwrap(
         await db
           .from("refunds_due")
-          .select("id, amount, table_label, created_at")
+          .select("id, amount, table_label, account_name, created_at")
           .eq("restaurant_id", r.id)
           .is("refunded_at", null)
           .order("created_at", { ascending: true }),

@@ -7,7 +7,7 @@ export interface Notification {
   id: string;
   kind: "low_stock" | "out_of_stock" | "refund_due";
   /** The facts the sentence is built from — never the sentence itself. */
-  data: { itemId?: string; name?: string; stock?: number; amount?: number; currency?: string; table?: string | null };
+  data: { itemId?: string; name?: string; stock?: number; amount?: number; currency?: string; table?: string | null; account?: string | null };
   read_at: string | null;
   created_at: string;
 }
