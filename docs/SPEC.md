@@ -83,6 +83,13 @@ pending_payment ──(webhook: paid)──▶ received ──▶ preparing ─�
 `pending_payment` never reaches the board. An order that is delivered before it
 is paid rides the same track and carries its debt on the bills screen instead.
 
+An order paid for while it is `ready` ("Listos") moves to `completed` by
+itself, whichever way the money came (card, cash, the till, a split's last
+share, a customer account): the trigger `orders_complete_when_paid` does it
+the moment `paid` turns true. Ready and not paid, it stays until somebody moves
+it or the payment completes. Paid before it was ready — a card at ordering —
+it reaches "Listos" and waits there to be carried out, as before.
+
 A write-off is not a third terminal state: it forces the order to `completed`
 from wherever the kitchen left it, and leaves an already-`cancelled` row alone.
 `/api/order-status` carries `written_off`, and the diner's tracker treats it as

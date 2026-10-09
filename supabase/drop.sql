@@ -85,6 +85,7 @@ drop function if exists public.join_bill_split(uuid, text, numeric);
 drop function if exists public.reserve_stock(uuid, jsonb, int);
 drop function if exists public.release_stock(uuid, jsonb);
 drop function if exists public.enqueue_kitchen_ticket();
+drop function if exists public.complete_when_paid();
 drop function if exists public.redeem_coupon(uuid);
 drop function if exists public.release_coupon(uuid);
 drop function if exists public.rate_limit_hit(text, int);
