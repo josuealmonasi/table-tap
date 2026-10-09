@@ -142,14 +142,6 @@ export async function POST(req: NextRequest) {
     promos: toCartPromos(promotions),
   });
 
-  // Joins the sitting already open at this table, or opens one. Two waiters
-  // adding to the same table land on the same bill, which is what the diners
-  // sitting there would expect.
-  // Named, because opening the bill is what makes it the waiter's to settle:
-  // the diners can watch it and add to it, and pay the person in front of them
-  // rather than a card field on their phone.
-  const sessionId = await openSession(actor.restaurantId, table.id as string, actor.email);
-
   const reservation = await reserveStock(
     actor.restaurantId,
     verified,
@@ -157,6 +149,20 @@ export async function POST(req: NextRequest) {
   );
   if (!reservation.ok) {
     return NextResponse.json({ short: reservation.short, code: "outOfStock" }, { status: 409 });
+  }
+
+  // Joins the sitting already open at this table, or opens one. Two waiters
+  // adding to the same table land on the same bill, which is what the diners
+  // sitting there would expect.
+  // Named, because opening the bill is what makes it the waiter's to settle:
+  // the diners can watch it and add to it, and pay the person in front of them
+  // rather than a card field on their phone.
+  let sessionId: string | null;
+  try {
+    sessionId = await openSession(actor.restaurantId, table.id as string, actor.email);
+  } catch (error) {
+    await releaseStock(actor.restaurantId, reservation.reservationId);
+    throw error;
   }
 
   const { data: order, error } = await db
