@@ -9,6 +9,9 @@ import { moveRestaurantPlan } from "@/lib/admin-plan";
 
 const PLANS = ["carta", "caja", "servicio", "casa", "grupo"];
 let restaurant: Record<string, unknown>;
+// Something that happens to the row after the move has read it and before it
+// writes — a Stripe webhook, or another admin.
+let meanwhile: (() => void) | null = null;
 
 function fakeDb() {
   return {
@@ -24,8 +27,11 @@ function fakeDb() {
           return { data: restaurant.id === where.id ? { ...restaurant } : null };
         },
         then: (resolve: (v: unknown) => void) => {
-          if (patch && restaurant.id === where.id) Object.assign(restaurant, patch);
-          resolve({ error: null });
+          if (patch) meanwhile?.();
+          // An update lands only where every condition still holds, as in Postgres.
+          const hit = patch && Object.entries(where).every(([k, v]) => restaurant[k] === v);
+          if (hit) Object.assign(restaurant, patch);
+          resolve({ data: hit ? [{ id: restaurant.id }] : [], error: null });
         },
       };
       return q;
@@ -37,6 +43,7 @@ const stripeWith = (status: string | Error) =>
 
 beforeEach(() => {
   logged.length = 0;
+  meanwhile = null;
   restaurant = { id: "r1", plan: "carta", plan_status: "trialing", trial_ends_at: "2026-11-01", plan_ends_at: null, stripe_subscription_id: null, subscription_sync_revision: 0 };
 });
 
@@ -67,6 +74,18 @@ describe("a platform admin moves a restaurant to another plan", () => {
   it("refuses when Stripe cannot say, rather than guess the restaurant is not billed", async () => {
     restaurant.stripe_subscription_id = "sub_1";
     expect(await moveRestaurantPlan(fakeDb(), "r1", "casa", "a", stripeWith(new Error("network")))).toMatchObject({ status: 409 });
+  });
+
+  it("refuses, and changes nothing, when Stripe linked a subscription while it was deciding", async () => {
+    // The owner subscribes in the seconds between the move reading the
+    // restaurant (no subscription) and writing it: the webhook links the new
+    // subscription and moves the revision on. Writing anyway would unlink a
+    // subscription the owner is paying for.
+    meanwhile = () => Object.assign(restaurant, { plan: "servicio", stripe_subscription_id: "sub_new", subscription_sync_revision: 1 });
+    const answer = await moveRestaurantPlan(fakeDb(), "r1", "casa", "a", stripeWith("canceled"));
+    expect(answer).toMatchObject({ ok: false, status: 409, error: "apiErr.planChangedMeanwhile" });
+    expect(restaurant).toMatchObject({ plan: "servicio", stripe_subscription_id: "sub_new", subscription_sync_revision: 1 });
+    expect(logged).toEqual([]);
   });
 
   it("moves one whose subscription has ended or no longer exists", async () => {

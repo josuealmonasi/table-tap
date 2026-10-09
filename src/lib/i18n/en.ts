@@ -1024,6 +1024,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
   apiErr: {
     planUnknown: "That plan does not exist.",
     planHasSubscription: "This restaurant pays for its plan with a Stripe subscription. Change or cancel it in Stripe: the next charge would bring the old plan back.",
+    planChangedMeanwhile: "This restaurant's plan changed in the meantime. Reload the page and check it before moving it.",
     serviceRepriceFailed: "Saved — but we couldn't take the service charge off the open bills. Save again.",
     orderAtRegister: "This restaurant takes orders at the register. Order and pay there.",
     belowCardMinimum: "That total is below the card minimum — please add a little more to your order.",

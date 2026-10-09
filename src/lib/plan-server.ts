@@ -18,15 +18,19 @@ export interface RestaurantPlan {
  * ceiling by any route. Cached per request — a page guard and the handler
  * under it both ask, and they should not each pay for the round trip.
  */
-export const getPlan = cache(async (restaurantId: string): Promise<RestaurantPlan | null> => {
+export const getPlan = cache((restaurantId: string): Promise<RestaurantPlan | null> => readPlan(restaurantId));
+
+async function readPlan(restaurantId: string, again = true): Promise<RestaurantPlan | null> {
   const { data, error } = await createAdminClient()
     .from("restaurants")
-    .select("plan_status, trial_ends_at, plan_ends_at, plan_limits(*)")
+    .select("plan_status, trial_ends_at, plan_ends_at, stripe_subscription_id, subscription_sync_revision, plan_limits(*)")
     .eq("id", restaurantId)
     .maybeSingle<{
       plan_status: PlanStatus;
       trial_ends_at: string | null;
       plan_ends_at: string | null;
+      stripe_subscription_id: string | null;
+      subscription_sync_revision: number;
       plan_limits: PlanLimits | null;
     }>();
 
@@ -41,8 +45,15 @@ export const getPlan = cache(async (restaurantId: string): Promise<RestaurantPla
   // database triggers read `restaurants.plan` directly, so a plan that expired
   // only in the app's head would still let a lapsed trial add tables — the row
   // itself has to change, and this is the moment someone asked.
-  if (data.plan_status === "trialing" && expired(data.trial_ends_at)) {
-    return await endTrial(restaurantId);
+  //
+  // Only the app's own trial, never one Stripe is running for a subscription.
+  if (data.plan_status === "trialing" && expired(data.trial_ends_at) && !data.stripe_subscription_id) {
+    const ended = await endTrial(restaurantId, data.subscription_sync_revision);
+    if (ended) return ended;
+    // Something wrote the restaurant first — another request ending the same
+    // trial, or a Stripe webhook linking the subscription the owner just
+    // paid for. What it is on now is read, not assumed to be the free tier.
+    if (again) return await readPlan(restaurantId, false);
   }
 
   return {
@@ -51,26 +62,35 @@ export const getPlan = cache(async (restaurantId: string): Promise<RestaurantPla
     trialEndsAt: data.trial_ends_at,
     planEndsAt: data.plan_ends_at,
   };
-});
+}
 
 function expired(trialEndsAt: string | null): boolean {
   return Boolean(trialEndsAt) && new Date(trialEndsAt!).getTime() <= Date.now();
 }
 
 /**
- * Drops a finished trial to the free tier and reports what they now have.
+ * Drops a finished trial to the free tier and reports what they now have, or
+ * null when the restaurant changed since it was read.
  *
  * Nothing is deleted: a restaurant keeps every table and dish it built during
  * the trial, it simply cannot add more until it subscribes. Taking their work
  * away would be a strange way to ask for money.
+ *
+ * Written over the sync revision it was read at, like every plan write: the
+ * owner whose subscription webhook lands between that read and this write
+ * subscribed in time, and dropping them to the free tier would leave them
+ * paying Stripe for a plan the restaurant no longer has.
  */
-async function endTrial(restaurantId: string): Promise<RestaurantPlan | null> {
+async function endTrial(restaurantId: string, revision: number): Promise<RestaurantPlan | null> {
   const db = createAdminClient();
-  await db
+  const { data: ended, error } = await db
     .from("restaurants")
-    .update({ plan: "carta", plan_status: "active", trial_ends_at: null })
+    .update({ plan: "carta", plan_status: "active", trial_ends_at: null, subscription_sync_revision: revision + 1 })
     .eq("id", restaurantId)
-    .eq("plan_status", "trialing"); // no-op if another request got here first
+    .eq("subscription_sync_revision", revision)
+    .select("id");
+  if (error) throw new Error(`ending a trial failed: ${error.message}`);
+  if (!ended?.length) return null;
 
   const { data } = await db
     .from("plan_limits")
