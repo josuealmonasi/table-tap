@@ -143,7 +143,7 @@ async function closeDividedBill(splitId: string, sessionId: string, lockedAt: st
   }
   if (unpaidShares !== 0) return;
 
-  const { data: covered, error } = await db
+  const { error } = await db
     .from("orders")
     .update({ paid: true, pay_method: "card" })
     .eq("session_id", sessionId)
@@ -156,7 +156,9 @@ async function closeDividedBill(splitId: string, sessionId: string, lockedAt: st
     .update({ status: "done" })
     .eq("id", splitId);
   if (doneError) throw new Error(`settling a share: could not finish the split: ${doneError.message}`);
-  await closeSessionsFor(covered ?? [], "paid");
+  // On a retry the orders may already be paid, so the UPDATE returns none.
+  // The split still tells us which sitting needs its final close attempt.
+  await closeSessionsFor([{ session_id: sessionId }], "paid");
 }
 
 /**

@@ -46,7 +46,8 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }));
 
-vi.mock("@/lib/table-session", () => ({ closeSessionsFor: async () => {} }));
+const closeSessions = vi.fn();
+vi.mock("@/lib/table-session", () => ({ closeSessionsFor: (...args: unknown[]) => closeSessions(...args) }));
 vi.mock("@/lib/stock-service", () => ({ releaseStock: async () => {} }));
 
 const { settleCheckout } = await import("@/lib/checkout-settle");
@@ -59,6 +60,7 @@ const writes = (table: string) => ops.filter(o => o.table === table && o.op === 
 const settledAs = (ids: string[]) => ({ data: { settled: ids, tip_on: ids[0] ?? null, not_settled: [] }, error: null });
 
 beforeEach(() => {
+  closeSessions.mockReset().mockResolvedValue(undefined);
   ops.length = 0;
   rpcs.length = 0;
   for (const k of Object.keys(script)) delete script[k];
@@ -157,6 +159,17 @@ describe("one diner's share of a divided bill", () => {
     script["bill_split_claims:select"] = [{ count: 0, error: null }];
     await settleCheckout(share);
     expect(writes("orders").some(o => JSON.stringify(o.values).includes('"paid":true'))).toBe(true);
+  });
+
+  it("retries closing the sitting even when its orders were already marked paid", async () => {
+    script["bill_splits:select"] = [{ data: SPLIT, error: null }, { data: SPLIT, error: null }];
+    script["rpc:settle_split_share"] = [{ data: true, error: null }, { data: false, error: null }];
+    script["bill_split_claims:select"] = [{ count: 0, error: null }, { count: 0, error: null }];
+    script["orders:update"] = [{ data: [{ session_id: SPLIT.session_id }], error: null }, { data: [], error: null }];
+    script["bill_splits:update"] = [down, { error: null }];
+    await expect(settleCheckout(share)).rejects.toThrow("could not finish the split");
+    await settleCheckout(share);
+    expect(closeSessions).toHaveBeenCalledWith([{ session_id: SPLIT.session_id }], "paid");
   });
 
   it("throws when closing the bill fails, so Stripe sends the event again", async () => {
