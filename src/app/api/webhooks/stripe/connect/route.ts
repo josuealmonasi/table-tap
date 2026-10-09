@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readStripeEvent } from "@/lib/stripe-webhook";
 import { abandonCheckout, settleCheckout } from "@/lib/checkout-settle";
+import { syncConnectAccount } from "@/lib/stripe-connect";
 import type Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -33,6 +34,13 @@ export async function POST(req: NextRequest) {
   // will never be paid for.
   if (event!.type === "checkout.session.expired") {
     await abandonCheckout(event!.data.object as Stripe.Checkout.Session);
+  }
+
+  // The restaurant's own account changed: Stripe finished reviewing it, asked
+  // for more, or restricted it. Whether diners can pay it by card is read
+  // again from Stripe. Subscribe this endpoint to `account.updated` too.
+  if (event!.type === "account.updated" && event!.account) {
+    await syncConnectAccount(event!.account);
   }
 
   return NextResponse.json({ received: true });

@@ -128,13 +128,41 @@ export async function syncConnectStatus(restaurantId: string): Promise<ConnectSt
   // offered to its diners. "pending" is Stripe reviewing what was submitted.
   const cardPayments = account.configuration?.merchant?.capabilities?.card_payments?.status;
   const chargesEnabled = cardPayments === "active";
-  await createAdminClient()
+  const { error } = await createAdminClient()
     .from("restaurants")
     .update({ stripe_charges_enabled: chargesEnabled })
     .eq("id", restaurantId);
+  // Said, not swallowed: the webhook below answers Stripe with it, and Stripe
+  // only sends the event again if this failed out loud.
+  if (error) throw new Error(`connect status write failed: ${error.message}`);
   return {
     accountId,
     chargesEnabled,
     detailsSubmitted: cardPayments === "active" || cardPayments === "pending",
   };
+}
+
+/**
+ * Re-reads whether a restaurant can take cards when Stripe says its account
+ * changed (`account.updated` on the connected-accounts webhook).
+ *
+ * This used to be refreshed only when the owner opened Settings. Stripe often
+ * finishes reviewing an account after the owner has left onboarding, and the
+ * restaurant then could not be paid by card until somebody happened to open
+ * that screen; an account Stripe later restricted went on offering cards that
+ * every charge then refused. The event is only a nudge: the state is read from
+ * Stripe itself, so a late or repeated event cannot store an old answer.
+ *
+ * Returns false for an account no restaurant here has.
+ */
+export async function syncConnectAccount(accountId: string): Promise<boolean> {
+  const { data, error } = await createAdminClient()
+    .from("restaurants")
+    .select("id")
+    .eq("stripe_account_id", accountId)
+    .maybeSingle();
+  if (error) throw new Error(`connect account lookup failed: ${error.message}`);
+  if (!data) return false;
+  await syncConnectStatus(data.id as string);
+  return true;
 }
