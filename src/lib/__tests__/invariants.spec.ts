@@ -1622,6 +1622,14 @@ describe("a sale is handed back once", () => {
     // stock it held goes back on the shelf twice.
     const src = read("src/app/api/orders/cancel/route.ts");
     expect(src).toContain('rpc("cancel_order"');
+    // The race to cancel is settled before anything is written down: of two
+    // cancels, the loser must be refused before the handback is logged, or the
+    // corte takes the same sale out of the drawer twice. (#464 moved the write
+    // into cancel_order; this keeps the order it was written in.)
+    const settled = src.search(/if \(!moved\) return/);
+    const handback = src.indexOf('action: "refunded"');
+    expect(settled, "nothing refuses the cancel that lost the race").toBeGreaterThan(src.indexOf('rpc("cancel_order"'));
+    expect(handback, "the handback is written before the race is settled").toBeGreaterThan(settled);
     const sql = read("supabase/schema.sql");
     expect(sql).toContain("status in ('received', 'preparing')");
     expect(sql).toContain("if not found then return false; end if;");
