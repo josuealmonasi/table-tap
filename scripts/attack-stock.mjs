@@ -108,6 +108,17 @@ export async function attackStock({ admin, ok, bad }) {
     assert.ok(stalledWarnings.some(message => message.includes(stalled) && message.includes("verify its Stripe")));
     ok("stalled pending checkouts are visible without automatically releasing live stock");
 
+    for (const signature of [
+      "reserve_stock(uuid,jsonb,integer,uuid)", "release_stock_reservation(uuid,uuid)",
+      "abandon_checkout(uuid,boolean,jsonb)", "cancel_order(uuid,uuid,text,jsonb)",
+      "recover_stock_reservations(uuid)",
+    ]) {
+      const { rows } = await db.query(
+        "select has_function_privilege('anon',$1,'execute') a, has_function_privilege('authenticated',$1,'execute') b", [signature]);
+      assert.equal(rows[0].a, false); assert.equal(rows[0].b, false);
+    }
+    ok("all stock and cancellation functions remain restricted to the server");
+
     await db.query("begin");
     await db.query("set local role authenticated");
     await assert.rejects(db.query("select recover_stock_reservations($1)", [restaurant]), /permission denied/);
