@@ -2064,6 +2064,28 @@ describe("a gate says when the dev server moved under it", () => {
   });
 });
 
+describe("a restaurant's plan has one writer at a time", () => {
+  it("writes the plan or its subscription only over the sync revision it read", () => {
+    // The Stripe sync and the platform admin's plan move both write
+    // restaurants.plan. The sync wrote over the revision it had read; the
+    // move did not, so an owner subscribing in the seconds between the move's
+    // read and its write had a live, paid subscription unlinked from the
+    // restaurant, on a plan they were no longer billed for.
+    const writes: string[] = [];
+    for (const file of walkAll("src").filter(f => /\.tsx?$/.test(f) && !f.includes("__tests__"))) {
+      const src = read(file);
+      for (const m of src.matchAll(/\.from\("restaurants"\)[\s\S]{0,200}?\.update\(\{([\s\S]*?)\}\)([\s\S]*?);/g)) {
+        const [, payload, chain] = m;
+        if (!/\b(plan|plan_status|stripe_subscription_id)\s*:/.test(payload)) continue;
+        writes.push(file);
+        expect(/subscription_sync_revision\s*:/.test(payload) && /\.eq\("subscription_sync_revision"/.test(chain),
+          `${file}: writes a restaurant's plan without moving the sync revision AND requiring the one it read`).toBe(true);
+      }
+    }
+    expect(writes.length, "the scan found no plan write — it broke").toBeGreaterThanOrEqual(2);
+  });
+});
+
 describe("a gate can run against production's CSP", () => {
   it("never waits with waitForFunction, which evals inside the page", () => {
     // Playwright runs a waitForFunction predicate through `eval` in the page,

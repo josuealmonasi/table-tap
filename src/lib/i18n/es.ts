@@ -1018,6 +1018,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
   apiErr: {
     planUnknown: "Ese plan no existe.",
     planHasSubscription: "Este restaurante paga su plan con una suscripción de Stripe. Cámbiala o cancélala en Stripe: el próximo cobro devolvería el plan anterior.",
+    planChangedMeanwhile: "El plan de este restaurante cambió mientras tanto. Vuelve a cargar la página y revísalo antes de moverlo.",
     serviceRepriceFailed: "Guardamos el ajuste, pero no pudimos quitar el servicio de las cuentas abiertas. Vuelve a guardar.",
     orderAtRegister: "Este restaurante toma los pedidos en la caja. Pasa a ordenar y pagar ahí.",
     belowCardMinimum: "Ese total es menor al mínimo que acepta la tarjeta — agrega algo más a tu pedido.",

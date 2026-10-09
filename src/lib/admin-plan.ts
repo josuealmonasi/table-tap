@@ -57,10 +57,16 @@ export async function moveRestaurantPlan(
   }
 
   const from = restaurant.plan as string;
+  const revision = Number(restaurant.subscription_sync_revision ?? 0);
   // The finished subscription is unlinked and the sync revision moves on, so a
   // Stripe event still in flight for it neither matches nor writes over this
   // (`applySubscription` ignores a finished one the restaurant no longer has).
-  const { error } = await db
+  //
+  // And only over the revision read above, the way the Stripe sync writes: an
+  // owner who subscribed between that read and this write has a live
+  // subscription this would unlink, and would pay Stripe for a plan the
+  // restaurant no longer has until the next billing event put it back.
+  const { data: moved, error } = await db
     .from("restaurants")
     .update({
       plan,
@@ -68,13 +74,16 @@ export async function moveRestaurantPlan(
       trial_ends_at: null,
       plan_ends_at: null,
       stripe_subscription_id: null,
-      subscription_sync_revision: Number(restaurant.subscription_sync_revision ?? 0) + 1,
+      subscription_sync_revision: revision + 1,
     })
-    .eq("id", restaurantId);
+    .eq("id", restaurantId)
+    .eq("subscription_sync_revision", revision)
+    .select("id");
   if (error) {
     console.error("admin plan move failed:", error.message);
     return { ok: false, error: "apiErr.generic", status: 500 };
   }
+  if (!moved?.length) return { ok: false, error: "apiErr.planChangedMeanwhile", status: 409 };
 
   await logEvent({
     restaurantId,

@@ -1227,4 +1227,9 @@ if its share was already recorded. Database failures propagate to the webhook
 so Stripe retries. Subscription events fetch Stripe's current subscription,
 ignore a replaced older contract, and compare `subscription_sync_revision`
 before writing. A competing update causes a fresh read; an exhausted retry or
-failed read/write is not acknowledged as successful.
+failed read/write is not acknowledged as successful. Every other writer of a
+restaurant's plan follows the same rule: the platform admin's plan move and
+the end of an expired trial write only over the revision they read, and bump
+it. A move that loses answers 409 and changes nothing; a trial ending that
+loses reads the plan again, and a trial is never ended for a restaurant
+Stripe already bills.
