@@ -52,17 +52,19 @@ export function useAdminActions() {
   return {
     busy,
     createUser: (input: NewUserInput) =>
-      call("/api/admin/users", "POST", input, "Login created"),
+      call("/api/admin/users", "POST", input, t("admin.loginCreated")),
     updateUser: (input: {
       userId: string;
       fullName?: string;
       email?: string;
       password?: string;
       role?: string;
-    }) => call("/api/admin/users", "PATCH", input, "Login updated"),
+    }) => call("/api/admin/users", "PATCH", input, t("admin.loginUpdated")),
     deleteUser: (userId: string) =>
-      call("/api/admin/users", "DELETE", { userId }, "Login deleted"),
+      call("/api/admin/users", "DELETE", { userId }, t("admin.loginDeleted")),
     deleteRestaurant: (id: string) =>
-      call("/api/admin/restaurants", "DELETE", { id }, "Restaurant deleted"),
+      call("/api/admin/restaurants", "DELETE", { id }, t("admin.restaurantDeleted")),
+    movePlan: (id: string, plan: string, doneMsg: string) =>
+      call("/api/admin/restaurants", "PATCH", { id, plan }, doneMsg),
   };
 }

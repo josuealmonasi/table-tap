@@ -1279,6 +1279,40 @@ export function cases(fx) {
       path: "/api/admin/users",
       body: { email: "nobody@tabletap.dev", password: "not-a-real-one", role: "admin" },
       expect: [401, 403] },
+    // A platform admin moves a restaurant to another plan, and its team with
+    // it. Put back afterwards, trial and all.
+    { name: "PATCH /api/admin/restaurants (move a plan)", as: "platformAdmin", method: "PATCH",
+      path: "/api/admin/restaurants",
+      arrange: async f => {
+        const { data: was } = await f.admin.from("restaurants")
+          .select("plan, plan_status, trial_ends_at, plan_ends_at").eq("id", r).single();
+        const { data: tiers } = await f.admin.from("plan_limits").select("plan").order("rank");
+        f.planBefore = was;
+        f.planTarget = (tiers ?? []).map(t => t.plan).find(p => p !== was?.plan);
+        return async () => {
+          await f.admin.from("restaurants").update(was).eq("id", r);
+          await f.admin.from("user_logs").delete().eq("restaurant_id", r).eq("entity", "settings").like("detail", "plan=%by=platform_admin");
+        };
+      },
+      body: f => ({ id: r, plan: f.planTarget }),
+      expect: [200],
+      check: async (d, f) => {
+        const { data } = await f.admin.from("restaurants").select("plan, plan_status").eq("id", r).single();
+        return data?.plan === d.to && data?.plan_status === "active" || `the restaurant is on ${data?.plan}/${data?.plan_status}, not ${d.to}`;
+      } },
+    // An owner cannot give themselves a plan — only the platform admin moves one.
+    { name: "PATCH /api/admin/restaurants (an owner refused)", as: "owner", method: "PATCH",
+      path: "/api/admin/restaurants",
+      arrange: async f => {
+        const { data } = await f.admin.from("restaurants").select("plan").eq("id", r).single();
+        f.ownerPlanBefore = data?.plan;
+        return async () => {};
+      },
+      body: { id: r, plan: "grupo" }, expect: [403],
+      effect: async f => {
+        const { data } = await f.admin.from("restaurants").select("plan").eq("id", r).single();
+        return data?.plan === f.ownerPlanBefore || `the owner moved their own plan to ${data?.plan}`;
+      } },
     { name: "DELETE /api/admin/restaurants (manager refused)", as: "manager", method: "DELETE",
       path: "/api/admin/restaurants", body: async f => ({ id: f.restaurant.id }),
       expect: [401, 403] },

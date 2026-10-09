@@ -2,6 +2,7 @@ import { unwrap } from "@/lib/ordering-data";
 import { redirect } from "next/navigation";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { allPlans } from "@/lib/plan-server";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import AdminPanel, {
   type AdminRestaurantRow,
@@ -26,7 +27,7 @@ export default async function AdminPage() {
   ] = await Promise.all([
     db
       .from("restaurants")
-      .select("id, name, logo, owner_id, created_at")
+      .select("id, name, logo, owner_id, created_at, plan, stripe_subscription_id")
       .order("created_at"),
     db.from("staff").select("user_id, restaurant_id, role"),
     db.from("platform_admins").select("user_id"),
@@ -69,6 +70,7 @@ export default async function AdminPage() {
         role,
         founding: !!founded,
         restaurant_name: restaurant?.name,
+        plan: restaurant?.plan as string | undefined,
       };
     })
     .sort((a, b) => a.email.localeCompare(b.email));
@@ -82,6 +84,8 @@ export default async function AdminPage() {
     name: `${r.logo ?? "🍱"} ${r.name}`,
     owner_email: r.owner_id ? (emailByUser.get(r.owner_id) ?? "—") : "—",
     team_count: staffCounts.get(r.id) ?? 0,
+    plan: r.plan as string,
+    billed_by_stripe: Boolean(r.stripe_subscription_id),
     created_at: r.created_at,
   }));
 
@@ -94,6 +98,7 @@ export default async function AdminPage() {
         restaurants={restaurantRows}
         users={userRows}
         restaurantOptions={restaurantOptions}
+        plans={(await allPlans()).map(p => p.plan)}
       />
     </ConfirmProvider>
   );

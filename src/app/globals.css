@@ -3875,11 +3875,19 @@ a.tt-btn {
   border-top: 1px solid var(--tt-cream);
   font-size: 14px;
 }
-/* The restaurants table: name, founding owner, team, created, delete. Declared
-   here rather than inline on the element — an inline style outranks every rule
-   in this file, which is what stopped the phone layout below from applying. */
+/* The restaurants table: name, founding owner, plan, team, created, delete.
+   Declared here rather than inline on the element — an inline style outranks
+   every rule in this file, which is what stopped the phone layout below from
+   applying. */
 .tt-admin-tr--rest {
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) 70px 100px 32px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) 132px 56px 90px 32px;
+}
+/* The plan a platform admin moves a restaurant to: a field, sized to its cell. */
+.tt-admin-plan {
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 13px;
 }
 .tt-admin-tr:first-of-type {
   border-top: none;
@@ -3941,6 +3949,26 @@ a.tt-btn {
     overflow-wrap: anywhere;
   }
   .tt-admin-tr > *:nth-child(5) {
+    margin-top: 6px;
+    justify-self: end;
+  }
+  /* A login's last line is role, restaurant · plan, actions. The role is a
+     word or two and takes what it needs; the restaurant is the one that can
+     run long, so it is the one that gives. The other way round, the plan
+     name added to the restaurant squeezed every role at 360px until
+     "Cocina" broke in two. */
+  .tt-admin-tr:not(.tt-admin-tr--rest) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  /* A restaurant has one cell more — its plan — so its card runs four across:
+     plan, team, date, and delete at the end. */
+  .tt-admin-tr--rest {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+  }
+  .tt-admin-tr--rest > *:nth-child(5) {
+    justify-self: auto;
+  }
+  .tt-admin-tr--rest > *:nth-child(6) {
     margin-top: 6px;
     justify-self: end;
   }
