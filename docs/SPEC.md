@@ -88,6 +88,11 @@ dishes on a bill the restaurant has just cancelled.
 - **Stripe Connect, direct charges.** The restaurant's account takes the payment;
   we take an `application_fee_amount`. It used to be a destination charge on our
   platform, which had Stripe billing *us* for every order.
+  So a restaurant's Stripe account is created with the Accounts v2 `merchant`
+  configuration only (`card_payments`, payouts included), and "can take cards"
+  is `card_payments` being `active` — `src/lib/stripe-connect.ts`. It once
+  still asked for the `recipient` configuration a destination charge needs,
+  which Stripe then refused outright, so no restaurant could connect.
 - **Plans** (`plan_limits`): `carta` free, `caja` MX$399, `servicio`, `casa`,
   `grupo`. Each row carries the ceilings (tables, staff, menus, items) and the
   feature flags: dine-in, menu schedules, deferred payment, promotions,
