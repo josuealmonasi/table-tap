@@ -15,7 +15,10 @@
 //     fingerprinted before and after every gate, and a gate that ran across a
 //     change is marked and fails: it tested neither version.
 //   - a gate that prints nothing for GATE_STALL_MIN minutes (6) has hung. It
-//     is stopped and run once more; a second stall fails it.
+//     is stopped and run once more; a second stall fails it. A gate that
+//     writes and was stopped mid-case never ran its teardown, and what it left
+//     fails the rerun over data — a spent visit card, a coupon code taken — so
+//     the demo data is seeded again (`db.mjs mock`) before the rerun.
 //
 // Flags: --all, --base <ref> (origin/main), --committed (ignore uncommitted
 // work), --plan (print the plan and stop), --only a,b (just these, unscoped).
@@ -34,8 +37,10 @@ const value = name => (flag(name) ? args[args.indexOf(name) + 1] : null);
 const ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const STALL_MS = Number(process.env.GATE_STALL_MIN ?? 6) * 60_000;
 const SERVERLESS = new Set(["tsc", "lint", "test"]);
+const WRITERS = new Set(["api", "rls", "attack", "promises"]);
 
 const COMMANDS = {
+  mock: ["node", ["scripts/db.mjs", "mock"]],
   tsc: ["npx", ["tsc", "--noEmit", "-p", "."]],
   lint: ["pnpm", ["lint"]],
   test: ["npx", ["vitest", "run"]],
@@ -143,6 +148,10 @@ for (const g of p.gates.filter(g => g.run)) {
   let note = "";
   if (run.stalled) {
     note = `fell silent for ${STALL_MS / 60_000} min, stopped and run again`;
+    if (WRITERS.has(g.name)) {
+      const reseed = await runOnce("mock", {}, path.join(LOGS, `${g.name}-reseed.txt`));
+      note += reseed.code === 0 ? " on fresh demo data" : " (reseeding the demo data failed)";
+    }
     run = await runOnce(g.name, env, file);
     if (run.stalled) note = "fell silent twice";
   }
