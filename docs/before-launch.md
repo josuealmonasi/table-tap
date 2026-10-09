@@ -40,7 +40,9 @@ the check that catches a webhook silently not firing.
 
 Online card payments of every kind — an order, a table's bill, a divided share,
 a customer account paid online — also need each restaurant's own **Stripe
-Connect onboarding** (Settings → Pagos). Until it is done the app hides card
+Connect onboarding** (Settings → Pagos) — a button that could not work at all
+until 8 October 2026, when Stripe was refusing the account TableTap asked for.
+Until it is done the app hides card
 payment there rather than offering a button that fails.
 
 ## 2. Live Stripe keys
@@ -168,12 +170,13 @@ clean checkout.
 
 Worth running after any schema change that adds a column the app reasons about.
 
-## Decided, and being done
+## Decided on 2 October 2026, and shipped
 
-- **Large files.** Some twenty source files exceed the ~200-line guideline in
-  CLAUDE.md, led by `OrderingApp.tsx` and `checkout/route.ts`. Decided on
-  2 October 2026: split them, biggest first, one PR each with behaviour
-  unchanged and every gate run.
-- **Settlement in one transaction**, **rate limits counted per table** with a
-  room-wide ceiling, and **visit cards only from a table's or the menu's own
-  page** — decided the same day, each its own PR.
+- **Large files.** Split, biggest first, one PR each with behaviour unchanged
+  (#435–#461). No source file outside `i18n/` and `legal/` is over 300 lines;
+  some scripts in `scripts/` still are.
+- **Settlement in one transaction** (#427–#430), **rate limits counted per
+  table** with a room-wide ceiling (#426), and **visit cards only from a
+  table's or the menu's own page** (#425).
+- **A double card payment** is refunded from Cuentas abiertas with our fee
+  returned (#463), and the terms say so (version `2026-10-03`).
