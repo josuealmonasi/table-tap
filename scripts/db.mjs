@@ -32,6 +32,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 // Each command maps to the ordered list of SQL files it runs.
 const COMMANDS = {
+  "recover-stock": { custom: "recover-stock", label: "Returning orphan stock reservations", destructive: false },
   create: {
     files: ["supabase/schema.sql"],
     label: "Creating schema",
@@ -68,7 +69,7 @@ const config = COMMANDS[command];
 if (!config) {
   console.error(`✗ Unknown command "${command ?? ""}".`);
   console.error(
-    "  Use: create | seed | reset | drop | purge | mock | dropmock   (add --prod)",
+    "  Use: create | seed | reset | drop | purge | mock | dropmock | recover-stock   (add --prod)",
   );
   process.exit(1);
 }
@@ -110,7 +111,15 @@ try {
   await client.connect();
 
   // Demo data commands run custom JS rather than the SQL-file loop.
-  if (config.custom === "mock") {
+  if (config.custom === "recover-stock") {
+    let returned = 0;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const { rows } = await client.query("select recover_stock_reservations() as returned");
+      if (!rows[0].returned) break;
+      returned += rows[0].returned;
+    }
+    console.log(`Returned ${returned} orphan stock reservation(s). Run pnpm money to check for remaining work.`);
+  } else if (config.custom === "mock") {
     const summary = await seedMock(client);
     console.log(`\n✓ [${target}] Demo Bistro ready — ${summary.orders} orders.`);
     console.log(`  Menu: http://localhost:3000/r/${summary.restaurantId}/t/${summary.tableId}`);

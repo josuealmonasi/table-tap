@@ -32,6 +32,7 @@ const NOT_DEMO_DATA = new Set([
   "categories",
   "menu_items",
   "item_addons", // filled by populateMenu()
+  "stock_reservations", // internal checkout recovery records, not a demo feature
   "account_checkouts", // an online payment in progress; only the pay route opens one
   "refunds_due", // money taken twice; only the webhook finds one, and a demo with one teaches that it happens
 ]);

@@ -127,6 +127,19 @@ export async function POST(req: NextRequest) {
     promos: toCartPromos(promotions),
   });
 
+  // Only at the counter. The flag means "needs no preparation", and the
+  // counter is the one place where that also means already delivered — a
+  // bottled water ordered from table 6 still has to be carried to table 6.
+  //
+  // And on Caja, always: it is the register on its own, with no kitchen board
+  // for a sale to wait on, so every sale is served where it is paid.
+  const plan = await getPlan(actor.restaurantId);
+  const noBoard = plan ? !can(plan.limits, "kitchenBoard") : false;
+  const handedOverAtOnce =
+    verified.length > 0 && (noBoard || verified.every(line => line.skipsKitchen));
+
+  const finalStatus = handedOverAtOnce ? "completed" : "received";
+
   const reservation = await reserveStock(
     actor.restaurantId,
     verified,
@@ -141,21 +154,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Only at the counter. The flag means "needs no preparation", and the
-  // counter is the one place where that also means already delivered — a
-  // bottled water ordered from table 6 still has to be carried to table 6.
-  //
-  // And on Caja, always: it is the register on its own, with no kitchen board
-  // for a sale to wait on, so every sale is served where it is paid.
-  const plan = await getPlan(actor.restaurantId);
-  const noBoard = plan ? !can(plan.limits, "kitchenBoard") : false;
-  const handedOverAtOnce =
-    verified.length > 0 && (noBoard || verified.every(line => line.skipsKitchen));
-
-  const finalStatus = handedOverAtOnce ? "completed" : "received";
   const { data: order, error } = await db
     .from("orders")
     .insert({
+      stock_managed: true,
+      stock_reservation_id: reservation.reservationId,
       restaurant_id: actor.restaurantId,
       table_id: null,
       table_label: null,
@@ -200,16 +203,16 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error || !order) {
-    // Two requests carrying the same `pos_ref` can both pass the check above
-    // and race to the unique index. The loser must NOT hand back stock: the
-    // winner legitimately took it, and releasing it here would put a portion
-    // back on the shelf that has already been sold. Answer with the ticket
-    // that exists, which is what the caller was asking for anyway.
+    // Each racing request reserved its own portions. The losing insert must
+    // return its reservation, while the winner keeps the one on its order.
     if (error?.code === "23505") {
       const won = await existingTicket(db, posRef);
-      if (won) return won;
+      if (won) {
+        await releaseStock(actor.restaurantId, reservation.reservationId);
+        return won;
+      }
     }
-    await releaseStock(actor.restaurantId, verified);
+    await releaseStock(actor.restaurantId, reservation.reservationId);
     return await apiError("apiErr.orderCreate", 500);
   }
 
@@ -220,7 +223,7 @@ export async function POST(req: NextRequest) {
       orderId: order.id as string,
       total: pricing.total,
       actor: actor.email,
-      release: () => releaseStock(actor.restaurantId, verified),
+      release: () => releaseStock(actor.restaurantId, reservation.reservationId),
     });
   }
 
@@ -237,7 +240,7 @@ export async function POST(req: NextRequest) {
   if (settleError) {
     console.error("ringing a sale failed:", settleError.message);
     await db.from("orders").delete().eq("id", order.id).eq("restaurant_id", actor.restaurantId);
-    await releaseStock(actor.restaurantId, verified);
+    await releaseStock(actor.restaurantId, reservation.reservationId);
     return await apiError("apiErr.orderCreate", 500);
   }
 

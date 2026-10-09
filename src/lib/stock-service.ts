@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
@@ -19,76 +20,52 @@ import type { OrderLineItem } from "@/lib/types";
  * down only once paid) means two diners can both be sold the last portion while
  * they are each staring at a Stripe page.
  *
- * Everything here runs with the secret key: `reserve_stock` and `release_stock`
+ * Everything here runs with the secret key: `reserve_stock` and `release_stock_reservation`
  * are granted to `service_role` alone, so no browser can move a count.
  */
 
-/** Nothing tracked in this cart — the common case, and worth not paying for. */
-const NOTHING_TO_DO: ReserveResult = { ok: true, short: [], low: [] };
-
-/**
- * Whether this restaurant's plan counts stock at all.
- *
- * Asked on both halves, so they agree: a restaurant that drops to the free tier
- * stops having its counts spent AND stops having them given back. Gating only
- * the taking would hand stock back that was never taken, and gating only the
- * giving would strand it.
- *
- * A restaurant with no plan row is treated as free — the same answer the rest
- * of the app gives when it cannot prove otherwise.
- */
-async function countsStock(restaurantId: string): Promise<boolean> {
-  const plan = await getPlan(restaurantId);
-  return plan ? can(plan.limits, "inventory") : false;
+export interface StockReservation extends ReserveResult {
+  reservationId: string | null;
 }
 
-/**
- * Take what the order needs, all or nothing.
- *
- * Returns `ok: false` with the shortfalls when the kitchen cannot fill it, so
- * the caller can tell the diner how many there really are.
- */
+/** The plan decides whether to take stock; the reservation decides what returns. */
 export async function reserveStock(
   restaurantId: string,
   lines: OrderLineItem[],
   threshold: number,
-): Promise<ReserveResult> {
+): Promise<StockReservation> {
   const demand = stockDemand(lines);
-  if (demand.length === 0) return NOTHING_TO_DO;
-  if (!(await countsStock(restaurantId))) return NOTHING_TO_DO;
-
+  const plan = demand.length ? await getPlan(restaurantId) : null;
+  if (!demand.length || !plan || !can(plan.limits, "inventory")) {
+    return { ok: true, short: [], low: [], reservationId: null };
+  }
+  const reservationId = randomUUID();
   const { data, error } = await createAdminClient().rpc("reserve_stock", {
     p_restaurant: restaurantId,
     p_demand: toDemandPayload(demand),
     p_threshold: threshold,
+    p_reservation: reservationId,
   });
-
-  // A reservation that errored is not a reservation. Refusing here sends the
-  // diner back to the cart, which is recoverable; selling food that is not
-  // there is not.
-  if (error) return { ok: false, short: [], low: [] };
-  return parseReserveResult(data);
+  if (error) throw new Error(`Stock reservation ${reservationId} failed: ${error.message}`);
+  const result = parseReserveResult(data);
+  return { ...result, reservationId: result.ok ? reservationId : null };
 }
 
 /**
- * Give an order's stock back.
- *
- * Safe to call for an order that never reserved anything: untracked dishes are
- * skipped inside the function, an empty cart never reaches it, and a tier that
- * does not count stock never took any to give back.
+ * Return only what this reservation took, once. Cancellation and deletion do
+ * this inside the order's transaction; this call is for a failed order insert.
+ * A failed return throws and leaves the durable record available for recovery.
  */
 export async function releaseStock(
   restaurantId: string,
-  lines: OrderLineItem[],
+  reservationId: string | null,
 ): Promise<void> {
-  const demand = stockDemand(lines);
-  if (demand.length === 0) return;
-  if (!(await countsStock(restaurantId))) return;
-
-  await createAdminClient().rpc("release_stock", {
+  if (!reservationId) return;
+  const { error } = await createAdminClient().rpc("release_stock_reservation", {
     p_restaurant: restaurantId,
-    p_demand: toDemandPayload(demand),
+    p_reservation: reservationId,
   });
+  if (error) throw new Error(`Stock release ${reservationId} failed: ${error.message}`);
 }
 
 /**

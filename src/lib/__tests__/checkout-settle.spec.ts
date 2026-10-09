@@ -130,6 +130,18 @@ describe("one diner's share of a divided bill", () => {
     expect(writes("orders")).toEqual([]);
   });
 
+  it("finishes additional orders on retry after the share has already landed", async () => {
+    const withFood = session({ ...share.metadata, settle_order_ids: "o2" });
+    script["bill_splits:select"] = [{ data: SPLIT, error: null }, { data: SPLIT, error: null }];
+    script["rpc:settle_split_share"] = [{ data: true, error: null }, { data: false, error: null }];
+    script["rpc:settle_card_orders"] = [down, settledAs(["o2"])];
+    script["bill_split_claims:select"] = [{ count: 1, error: null }];
+    await expect(settleCheckout(withFood)).rejects.toThrow("could not mark it paid");
+    await settleCheckout(withFood);
+    expect(rpcs.filter(r => r.fn === "settle_card_orders")).toHaveLength(2);
+    expect(rpcs.at(-1)?.args.p_orders).toEqual(["o2"]);
+  });
+
   it("closes the bill when the last share is paid", async () => {
     script["bill_splits:select"] = [{ data: SPLIT, error: null }];
     script["rpc:settle_split_share"] = [{ data: true, error: null }];
@@ -159,7 +171,7 @@ describe("one diner's share of a divided bill", () => {
     script["bill_splits:select"] = [{ data: SPLIT, error: null }];
     script["rpc:settle_split_share"] = [{ data: true, error: null }];
     script["bill_split_claims:select"] = [down];
-    await settleCheckout(share);
+    await expect(settleCheckout(share)).rejects.toThrow("could not count the unpaid shares");
     expect(writes("orders").filter(o => JSON.stringify(o.values).includes('"paid":true'))).toEqual([]);
     expect(writes("bill_splits")).toEqual([]);
   });

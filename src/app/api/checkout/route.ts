@@ -157,12 +157,12 @@ export async function POST(req: NextRequest) {
     const pricing = coupon ? priceWith(toAppliedCoupon(coupon)) : base;
 
     /** Set once the stock is ours, so the undo below knows to hand it back. */
-    let stockReserved = false;
+    let stockReservationId: string | null = null;
 
     /** Give back what this checkout reserved when it doesn't complete. */
     const undoClaim = async () => {
       if (coupon) await releaseCoupon(coupon.id);
-      if (stockReserved) await releaseStock(restaurantId, verified);
+      if (stockReservationId) await releaseStock(restaurantId, stockReservationId);
     };
     held.hold(undoClaim);
 
@@ -187,13 +187,15 @@ export async function POST(req: NextRequest) {
       await held.giveBack();
       return await refuseShortStock(reservation.short);
     }
-    stockReserved = true;
+    stockReservationId = reservation.reservationId;
 
     // Create the pending order first so the webhook can find it.
     const { data: order, error: oErr } = await supabase
       .from("orders")
-      .insert(
-        checkoutOrderRow({
+      .insert({
+        stock_managed: true,
+        stock_reservation_id: stockReservationId,
+        ...checkoutOrderRow({
           restaurantId,
           tableId,
           tableLabel,
@@ -209,7 +211,7 @@ export async function POST(req: NextRequest) {
           note: body.note,
           customerName: body.customerName,
         }),
-      )
+      })
       .select("id")
       .single();
 
@@ -222,7 +224,8 @@ export async function POST(req: NextRequest) {
     if (deferred) held.handOver();
     else
       held.hold(async () => {
-        await supabase.from("orders").delete().eq("id", order.id);
+        const { error } = await supabase.from("orders").delete().eq("id", order.id);
+        if (error) throw new Error(`Could not remove failed checkout: ${error.message}`);
         await undoClaim();
       });
 

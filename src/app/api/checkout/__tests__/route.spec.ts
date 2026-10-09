@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const step = {
   openSession: vi.fn(async (): Promise<string | null> => "sitting-1"),
-  reserveStock: vi.fn(async () => ({ ok: true, short: [], low: [] })),
+  reserveStock: vi.fn(async () => ({ ok: true, short: [], low: [], reservationId: "reservation-1" })),
   insertOrder: vi.fn(async (): Promise<{ data: { id: string } | null; error: unknown }> => ({
     data: { id: "order-1" },
     error: null,
@@ -113,7 +113,7 @@ const boom = () => {
 beforeEach(() => {
   vi.clearAllMocks();
   step.openSession.mockImplementation(async () => "sitting-1");
-  step.reserveStock.mockImplementation(async () => ({ ok: true, short: [], low: [] }));
+  step.reserveStock.mockImplementation(async () => ({ ok: true, short: [], low: [], reservationId: "reservation-1" }));
   step.insertOrder.mockImplementation(async () => ({ data: { id: "order-1" }, error: null }));
   step.notify.mockImplementation(async () => undefined);
   step.openCard.mockImplementation(async () => ({ id: "cs_1", url: "https://stripe.test/cs_1" }));

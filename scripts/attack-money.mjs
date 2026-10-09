@@ -22,6 +22,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { attackLoyalty } from "./attack-loyalty.mjs";
 import { attackAccounts } from "./attack-accounts.mjs";
+import { attackStock } from "./attack-stock.mjs";
 import { attackRefunds } from "./attack-refunds.mjs";
 import { refuseProduction, watchDevWorker } from "./preflight.mjs";
 
@@ -803,6 +804,8 @@ try {
       ? ok("and nobody can divide it on their phone either")
       : bad(`the split route answered ${split.status} and left ${count} split(s)`);
   }
+
+  await attackStock({ admin, ok, bad });
 
   // ── The visit card ─────────────────────────────────────────────────────
   // Not money in the till, but a free meal is: another restaurant's card, the

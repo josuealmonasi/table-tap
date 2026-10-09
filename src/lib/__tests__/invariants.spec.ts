@@ -386,31 +386,12 @@ describe("a column exists before the grant that names it", () => {
     ).toBe(true);
   });
 
-  it("gives back stock wherever a reserved order stops being an order", () => {
-    // Reserving at checkout is only safe because every way out hands the stock
-    // back. A new exit that forgets to is an order's worth of food sold to
-    // nobody, and nothing else would notice.
-    // Looking for a CALL, not the name: the import line alone would satisfy
-    // `includes("releaseStock")` long after somebody deleted the call under
-    // it, which is exactly the shape of the bug this is here to catch.
-    const calls = (file: string): number =>
-      read(file)
-        .split("\n")
-        .filter(l => !l.trimStart().startsWith("import"))
-        .filter(l => /\breleaseStock\s*\(/.test(l)).length;
-
-    expect(
-      calls("src/lib/checkout-abandon.ts"),
-      "an abandoned checkout no longer returns its stock",
-    ).toBeGreaterThan(0);
-    expect(
-      calls("src/app/api/orders/cancel/route.ts"),
-      "a cancelled order no longer returns its stock",
-    ).toBeGreaterThan(0);
-    expect(
-      calls("src/app/api/checkout/route.ts"),
-      "a checkout that falls over no longer returns what it reserved",
-    ).toBeGreaterThan(0);
+  it("returns an order's stock in the transaction that removes it", () => {
+    const sql = read("supabase/schema.sql");
+    expect(sql).toMatch(/create trigger return_order_stock after update or delete on orders/);
+    expect(sql).toContain("perform release_stock_reservation(old.restaurant_id, old.stock_reservation_id)");
+    expect(sql).toContain("perform release_stock_reservation(new.restaurant_id, new.stock_reservation_id)");
+    expect(read("src/lib/checkout-abandon.ts")).toContain('rpc("abandon_checkout"');
   });
 
   it("creates every granted column earlier in schema.sql than its grant", () => {
@@ -1627,16 +1608,10 @@ describe("a sale is handed back once", () => {
     // succeed, both log, and the sale leaves the drawer twice — while the
     // stock it held goes back on the shelf twice.
     const src = read("src/app/api/orders/cancel/route.ts");
-    const at = src.indexOf('.update({ status: "cancelled"');
-    expect(at, "the cancel route no longer sets the status where this looks").toBeGreaterThan(-1);
-    const write = src.slice(at, src.indexOf(";", at));
-    expect(write, "the cancel write is not conditional on the status it read").toMatch(/\.in\("status"|\.eq\("status"/);
-    expect(write, "the cancel write does not say whether it moved a row").toMatch(/\.select\(/);
-
-    const refused = src.slice(at).search(/if \(!\w+\?\.length\) return/);
-    const handback = src.indexOf('action: "refunded"');
-    expect(refused, "nothing refuses the cancel that lost the race").toBeGreaterThan(-1);
-    expect(handback, "the handback is written before the race is settled").toBeGreaterThan(at + refused);
+    expect(src).toContain('rpc("cancel_order"');
+    const sql = read("supabase/schema.sql");
+    expect(sql).toContain("status in ('received', 'preparing')");
+    expect(sql).toContain("if not found then return false; end if;");
   });
 });
 

@@ -1632,3 +1632,26 @@ or a one-open-sitting rule looks stable at one.
 
 Add a test to `invariants.spec.ts` and a row to the table above. The list is
 only useful because everything on it is something that really happened.
+
+**Checkout and stock recovery must be repeatable.** Two expiry deliveries used
+to return the same coupon and portions twice. A cancellation could become final
+before its stock return failed, leaving no retry. `abandon_checkout` and
+`cancel_order` now own the guarded transaction, and new orders return the exact
+reservation taken at checkout. A plan downgrade, newly tracked item, or tracking
+restart cannot invent or strand portions. `pnpm attack` includes stock tests
+with concurrent expiry/cancel calls, a forced database return failure, and an
+orphan followed by a late insert. Its fixtures are isolated and removed.
+`pnpm money` reports outstanding orphan returns; `db:recover-stock` repairs them
+without touching reservations attached to orders.
+
+**A webhook retry finishes the whole payment.** A split's share could commit
+before settling that diner's later orders failed. The retry saw an already-paid
+share and skipped those orders forever. `checkout-settle.spec.ts` reproduces
+that interruption and verifies the retry reaches the remaining orders. Count,
+fee and final-state errors also request a retry.
+
+**A subscription event is a signal to read current state.** Failed writes used
+to be logged and acknowledged, and older events could overwrite a newer plan.
+`subscription-sync.spec.ts` covers failed reads/writes, stale snapshots, replaced
+subscriptions, and conflicting revisions. Stripe's current object plus a
+conditional local revision write prevents a stale worker from winning.

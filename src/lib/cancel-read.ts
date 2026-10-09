@@ -17,6 +17,7 @@ export interface CancelTarget {
   stripe_payment_intent: string | null;
   stripe_refund_id: string | null;
   items: OrderLineItem[] | null;
+  stock_managed?: boolean;
   /** On a customer account: owed by the account, paid when it is. */
   account_id?: string | null;
 }
@@ -35,7 +36,7 @@ export async function readCancel(
   // moves money.
   const { data: order, error: orderErr } = await admin
     .from("orders")
-    .select("id, status, paid, pay_method, total, stripe_payment_intent, stripe_refund_id, items, account_id")
+    .select("id, status, paid, pay_method, total, stripe_payment_intent, stripe_refund_id, items, account_id, stock_managed")
     .eq("id", id)
     .eq("restaurant_id", restaurantId)
     .maybeSingle<CancelTarget>();

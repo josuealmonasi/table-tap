@@ -6,8 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { actingManager } from "@/lib/api-guard";
-import { releaseStock } from "@/lib/stock-service";
 import { summarise } from "@/lib/cancel-plan";
+import { legacyStockDemand } from "@/lib/legacy-stock";
 import { readCancel } from "@/lib/cancel-read";
 
 export const runtime = "nodejs";
@@ -95,23 +95,20 @@ export async function POST(req: NextRequest) {
   // Conditional on the status read above, so of two cancels racing only one
   // moves the order. The other would write a second handback, and the corte
   // would take the sale out of the drawer twice.
-  const { data: moved, error } = await admin
-    .from("orders")
-    .update({ status: "cancelled", stripe_refund_id: refundId })
-    .eq("id", id)
-    .eq("restaurant_id", actor.restaurantId)
-    .in("status", ["received", "preparing"])
-    .select("id");
+  const { data: moved, error } = await admin.rpc("cancel_order", {
+    p_restaurant: actor.restaurantId,
+    p_order: id,
+    p_refund: refundId,
+    p_legacy_demand: await legacyStockDemand(actor.restaurantId, order),
+  });
   if (error) {
     console.error("cancel failed:", error.message);
     return await apiError("apiErr.orderCancel", 500);
   }
-  if (!moved?.length) return await apiError("apiErr.cancelStatus", 409);
+  if (!moved) return await apiError("apiErr.cancelStatus", 409);
 
-  // The food was never served, so put it back on the shelf. After the status
-  // write, not before: a cancel that failed halfway would otherwise return
-  // stock for an order still standing.
-  await releaseStock(actor.restaurantId, order.items ?? []);
+  // The order trigger returned its reservation in the status transaction.
+  // A failed stock return rolls that transaction back, so retrying is safe.
 
   const code = id.slice(0, 8);
   if (!order.paid) {
