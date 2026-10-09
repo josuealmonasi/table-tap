@@ -4,6 +4,8 @@ import {
   DISH,
   coverPath,
   fileError,
+  resultError,
+  SOURCE_MAX_BYTES,
   itemPath,
   ratio,
 } from "@/lib/images";
@@ -31,23 +33,28 @@ describe("storage paths", () => {
   });
 });
 
-describe("fileError", () => {
-  it("accepts the formats a phone camera produces", () => {
-    for (const type of ["image/jpeg", "image/png", "image/webp"]) {
-      expect(fileError({ type, size: 1000 }, COVER)).toBeNull();
+describe("fileError: whether an original is worth opening", () => {
+  it("accepts the formats a phone camera produces, and a photo with no type at all", () => {
+    for (const type of ["image/jpeg", "image/png", "image/webp", "image/heic", ""]) {
+      expect(fileError({ type, size: 1000 })).toBeNull();
     }
   });
 
-  it("refuses anything that isn't one of those", () => {
-    expect(fileError({ type: "application/pdf", size: 10 }, COVER)).toBe("img.badType");
-    expect(fileError({ type: "image/svg+xml", size: 10 }, COVER)).toBe("img.badType");
+  it("refuses what isn't a photo", () => {
+    expect(fileError({ type: "application/pdf", size: 10 })).toBe("img.badType");
+    expect(fileError({ type: "image/svg+xml", size: 10 })).toBe("img.badType");
   });
 
-  it("refuses a file over the size limit", () => {
-    expect(fileError({ type: "image/jpeg", size: COVER.maxBytes + 1 }, COVER)).toBe(
-      "img.tooBig",
-    );
-    expect(fileError({ type: "image/jpeg", size: COVER.maxBytes }, COVER)).toBeNull();
+  it("opens a phone camera's 13 MB photo — the stored size is checked after resizing", () => {
+    // This is the customer's bug: the 5 MB storage limit was applied to the
+    // original, so every photo taken on the phone was refused on the phone.
+    expect(fileError({ type: "image/jpeg", size: 13 * 1024 * 1024 })).toBeNull();
+    expect(fileError({ type: "image/jpeg", size: SOURCE_MAX_BYTES + 1 })).toBe("img.tooBig");
+  });
+
+  it("holds the resized photo to the storage limit", () => {
+    expect(resultError({ size: DISH.maxBytes }, DISH)).toBeNull();
+    expect(resultError({ size: DISH.maxBytes + 1 }, DISH)).toBe("img.tooBig");
   });
 });
 

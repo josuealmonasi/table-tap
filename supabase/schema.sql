@@ -445,17 +445,18 @@ on conflict (id) do nothing;
 -- file is a page, not a picture. Unbounded size is the other half: nothing
 -- stopped one upload from costing more than a year of the plan.
 --
--- `image/webp` alone, because that is the only thing the app uploads: the
--- picker accepts jpeg, png and webp, and `resizeToSpec` converts every one of
--- them before it goes anywhere near storage. 5 MB is `COVER.maxBytes`, the
--- ceiling the app already states for a SOURCE file — a resized webp is a
--- fraction of it, so this is headroom rather than a limit anyone will meet.
+-- `image/webp` and `image/jpeg`, the only things the app uploads: every photo
+-- is redrawn by `preparePhoto` before it goes anywhere near storage, as WebP,
+-- or as JPEG from Safari, which cannot encode WebP (it used to send a PNG
+-- mislabelled as WebP). Both are pictures, never pages. 5 MB is the spec's
+-- `maxBytes`, held against the RESIZED photo — a phone's original is often
+-- far bigger, and is never stored.
 --
 -- Written every time rather than on insert: the bucket already exists in every
 -- environment, so `on conflict do nothing` above would never have applied it.
 update storage.buckets
    set file_size_limit = 5 * 1024 * 1024,
-       allowed_mime_types = array['image/webp']
+       allowed_mime_types = array['image/webp', 'image/jpeg']
  where id = 'menu';
 
 -- Reads the restaurant id out of an object path, or null when the path is not

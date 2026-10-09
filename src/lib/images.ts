@@ -85,13 +85,39 @@ export const LOGO: ImageSpec = {
   maxBytes: 2 * 1024 * 1024,
 };
 
+/** What the file picker offers. iOS hands its HEIC photos over as JPEG when HEIC isn't listed. */
 export const ACCEPTED = ["image/jpeg", "image/png", "image/webp"];
 
-/** Why this file can't be used, or null when it's fine. Keys, not sentences. */
-export function fileError(file: { type: string; size: number }, spec: ImageSpec): string | null {
-  if (!ACCEPTED.includes(file.type)) return "img.badType";
-  if (file.size > spec.maxBytes) return "img.tooBig";
+/**
+ * The largest ORIGINAL we will try to open.
+ *
+ * Not the stored size: every photo is resized before upload, and what is
+ * stored is held to the spec's `maxBytes`. A phone camera's photo is routinely
+ * 6–15 MB, and checking that against the 5 MB storage limit refused every one
+ * of them on the phone they were taken with — "pesa más de 5MB", with no way
+ * to make it lighter there. This is only a guard against a file too big to
+ * decode at all.
+ */
+export const SOURCE_MAX_BYTES = 40 * 1024 * 1024;
+
+/**
+ * Why this file can't even be opened, or null when it's worth trying. Keys,
+ * not sentences.
+ *
+ * A missing type is allowed: some Android galleries hand over a photo with
+ * none. Whether it really is a picture is decided by decoding it.
+ */
+export function fileError(file: { type: string; size: number }): string | null {
+  // An SVG is a document that can carry script, not a photo; never open one.
+  if (file.type === "image/svg+xml") return "img.badType";
+  if (file.type && !file.type.startsWith("image/")) return "img.badType";
+  if (file.size > SOURCE_MAX_BYTES) return "img.tooBig";
   return null;
+}
+
+/** Why the resized photo can't be stored, or null when it fits. */
+export function resultError(blob: { size: number }, spec: ImageSpec): string | null {
+  return blob.size > spec.maxBytes ? "img.tooBig" : null;
 }
 
 /** Aspect ratio as a CSS-ready string, so the band reserves space before load. */

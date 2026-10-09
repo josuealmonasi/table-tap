@@ -6,8 +6,8 @@ import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useSettings } from "@/hooks/useSettings";
-import { BUCKET, COVER, coverPath, fileError } from "@/lib/images";
-import { imageSize, resizeToSpec } from "@/lib/image-resize";
+import { BUCKET, COVER, coverPath, SOURCE_MAX_BYTES } from "@/lib/images";
+import { preparePhoto } from "@/lib/image-resize";
 import CoverBanner from "@/components/customer/CoverBanner";
 import type { Restaurant } from "@/lib/types";
 
@@ -29,26 +29,23 @@ export default function CoverCard({ restaurant }: { restaurant: Restaurant }) {
   const [busy, setBusy] = useState(false);
 
   async function choose(file: File): Promise<void> {
-    const bad = fileError(file, COVER);
-    if (bad) {
-      toast(t(bad, { mb: String(Math.round(COVER.maxBytes / 1024 / 1024)) }), "error");
-      return;
-    }
-
     setBusy(true);
     try {
-      const { width } = await imageSize(file);
-      if (width < COVER.minWidth) {
+      const photo = await preparePhoto(file, COVER);
+      if ("error" in photo) {
+        toast(t(photo.error, { mb: String(SOURCE_MAX_BYTES / 1024 / 1024) }), "error");
+        return;
+      }
+      if (photo.sourceWidth < COVER.minWidth) {
         // A warning, not a refusal — a slightly small photo still beats none.
-        toast(t("img.small", { w: String(width), min: String(COVER.minWidth) }));
+        toast(t("img.small", { w: String(photo.sourceWidth), min: String(COVER.minWidth) }));
       }
 
-      const resized = await resizeToSpec(file, COVER);
       const path = coverPath(restaurant.id);
       const supabase = createClient();
       const { error } = await supabase.storage
         .from(BUCKET)
-        .upload(path, resized, { contentType: "image/webp", upsert: true });
+        .upload(path, photo.blob, { contentType: photo.contentType, upsert: true });
       if (error) {
         toast(t("img.failed"), "error");
         return;

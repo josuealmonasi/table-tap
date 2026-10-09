@@ -4,8 +4,8 @@ import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
-import { BUCKET, DISH, fileError, itemPath, pathFromUrl } from "@/lib/images";
-import { imageSize, resizeToSpec } from "@/lib/image-resize";
+import { BUCKET, DISH, SOURCE_MAX_BYTES, itemPath, pathFromUrl } from "@/lib/images";
+import { preparePhoto } from "@/lib/image-resize";
 import DishImage from "@/components/customer/DishImage";
 
 interface DishPhotoFieldProps {
@@ -42,27 +42,25 @@ export default function DishPhotoField({
   const [busy, setBusy] = useState(false);
 
   async function choose(file: File): Promise<void> {
-    const bad = fileError(file, DISH);
-    if (bad) {
-      toast(t(bad, { mb: String(Math.round(DISH.maxBytes / 1024 / 1024)) }), "error");
-      return;
-    }
-
     setBusy(true);
     const supabase = createClient();
     try {
-      const { width } = await imageSize(file);
-      if (width < DISH.minWidth) {
-        toast(t("img.small", { w: String(width), min: String(DISH.minWidth) }));
+      const photo = await preparePhoto(file, DISH);
+      if ("error" in photo) {
+        toast(t(photo.error, { mb: String(SOURCE_MAX_BYTES / 1024 / 1024) }), "error");
+        return;
+      }
+      if (photo.sourceWidth < DISH.minWidth) {
+        // A warning, not a refusal — a slightly small photo still beats none.
+        toast(t("img.small", { w: String(photo.sourceWidth), min: String(DISH.minWidth) }));
       }
 
-      const resized = await resizeToSpec(file, DISH);
       // A fresh id per upload: a dish being created has no id yet, and this
       // keeps replacing a photo from fighting a cached copy of the old one.
-      const path = itemPath(restaurantId, crypto.randomUUID());
+      const path = itemPath(restaurantId, crypto.randomUUID(), photo.ext);
       const { error } = await supabase.storage
         .from(BUCKET)
-        .upload(path, resized, { contentType: "image/webp" });
+        .upload(path, photo.blob, { contentType: photo.contentType });
       if (error) {
         toast(t("img.failed"), "error");
         return;
