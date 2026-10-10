@@ -841,6 +841,21 @@ export async function seedMock(pg) {
     [[rid, "refund_due", JSON.stringify({ amount: 84.5, currency: "MXN", table: tables[2]?.label ?? "3" }), null]],
   );
 
+  // ── The cash drawer ───────────────────────────────────────────────────
+  // The day started with 250 in the drawer and the cashier took 120 out for a
+  // supplier, so the register close shows its whole sum — opening, cash sales,
+  // withdrawals, what the drawer should hold — and every gate measures the
+  // block full rather than with its list missing.
+  await bulkInsert(
+    pg,
+    "cash_movements",
+    ["restaurant_id", "kind", "amount", "note", "actor_email"],
+    [
+      [rid, "opening", 250, null, "demo-cashier@tabletap.dev"],
+      [rid, "withdrawal", 120, "Pago al proveedor de verduras", "demo-cashier@tabletap.dev"],
+    ],
+  );
+
   // A counter product and a kitchen printer with a ticket already through it,
   // so the printing screens have something real to show and `pnpm api` has a
   // queue to read. The oldest order stands in for one that has been printed;

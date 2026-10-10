@@ -8,6 +8,7 @@ import CorteCard from "./CorteCard";
 import LoyaltyStatsCard from "./LoyaltyStatsCard";
 import type { LoyaltyStats } from "@/lib/loyalty/analytics";
 import type { Corte } from "@/lib/corte";
+import type { Drawer } from "@/lib/cash-drawer";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import OrderHistory from "@/components/dashboard/OrderHistory";
 
@@ -28,6 +29,10 @@ interface AnalyticsViewProps {
   rated: RatedDish[];
   /** Today's register close, whatever period the charts are showing. */
   corte: Corte;
+  /** Today's cash drawer: opening, cash taken, withdrawals. */
+  drawer: Drawer;
+  /** The restaurant's own clock, for the times a withdrawal was made. */
+  timeZone: string;
   restaurantName: string;
   dayLabel: string;
   /** The visit card over the same period, where the restaurant runs one. */
@@ -49,6 +54,8 @@ export default function AnalyticsView({
   restaurantId,
   rated,
   corte,
+  drawer,
+  timeZone,
   restaurantName,
   dayLabel,
   loyalty = null,
@@ -96,9 +103,11 @@ export default function AnalyticsView({
             below it is always today, whatever period the charts are showing. */}
         <CorteCard
           corte={corte}
+          drawer={drawer}
           currency={currency}
           restaurantName={restaurantName}
           day={dayLabel}
+          timeZone={timeZone}
         />
 
         {loyalty && <LoyaltyStatsCard stats={loyalty} />}

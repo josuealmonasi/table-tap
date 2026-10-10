@@ -353,6 +353,16 @@ dishes on a bill the restaurant has just cancelled.
   payments; cancels before then were logged without an amount. Card paid
   online is reported apart from every drawer: it is real, and nobody was
   standing there to put it in one.
+- **Caja**, above the corte's table: the cash drawer as a sum — the day's
+  opening balance, plus the cash taken (the corte's cash column), minus the
+  withdrawals, equals the cash expected in the drawer (`src/lib/cash-drawer.ts`).
+  Asked for by a restaurant that starts its day with 250 pesos. The opening
+  and the withdrawals live in `cash_movements`, server-only, written through
+  `/api/cash-drawer` by the people who run the drawer — owner, manager and
+  cashier, from the corte or from the till's header. An opening is set again
+  by writing a new one (the day's latest counts, the earlier ones stay as the
+  record), and only a manager strikes a withdrawal off. Card and online money
+  has no opening. The printed corte carries the same four lines.
 
 ## Data model
 

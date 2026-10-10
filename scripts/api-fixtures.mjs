@@ -600,6 +600,8 @@ export async function setup(env, base) {
     splitTableId: splitTable.id,
     printJobId: printJob?.id ?? null,
     billLogsBefore: (logsBefore ?? []).map(l => l.id),
+    // Rows the run itself writes to the cash drawer are the ones after this.
+    startedAt: new Date().toISOString(),
     sessionsBefore: (sessionsBefore ?? []).map(x => x.id),
     writeOffsBefore: (writeOffsBefore ?? []).map(x => x.id),
     discountsBefore: (discountsBefore ?? []).map(x => x.id),
@@ -641,6 +643,10 @@ export async function setup(env, base) {
 /** Everything marked goes, whatever happened to the tests. */
 export async function teardown(fx) {
   const { admin, restaurant } = fx;
+  // The drawer's openings and withdrawals the cases wrote; the seed's are older.
+  if (fx.startedAt) {
+    await admin.from("cash_movements").delete().eq("restaurant_id", restaurant.id).gte("created_at", fx.startedAt);
+  }
   // The gate's customer accounts and everything on them, first: an order still
   // pointing at an account keeps the account from going. The money first of all.
   const { data: ourAccounts } = await admin.from("customer_accounts").select("id")

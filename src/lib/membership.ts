@@ -91,6 +91,13 @@ export const TAKES_TABLE_ORDERS = (role: Role): boolean =>
 export const TAKES_COUNTER_ORDERS = (role: Role): boolean =>
   MANAGES(role) || role === "cashier";
 
+/**
+ * Who may write down the cash drawer's float and what is taken out of it: the
+ * people who run the drawer. The cashier records what they take out; only a
+ * manager may strike a record off again.
+ */
+export const HOLDS_THE_DRAWER = TAKES_COUNTER_ORDERS;
+
 export interface Membership {
   restaurant: Restaurant;
   role: Role;
