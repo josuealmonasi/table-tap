@@ -3756,6 +3756,34 @@ $$;
 revoke all on function public.account_checkout_release(uuid) from public, anon, authenticated;
 grant execute on function public.account_checkout_release(uuid) to service_role;
 
+-- The cash drawer's own movements: the money a day starts with, and the money
+-- taken out during it. Neither is a sale, so neither belongs in `payments` —
+-- but the register close cannot say what the drawer should hold without them:
+-- what it started with, plus the cash taken, minus what was taken out. Card
+-- and online money has no float, so only cash has these.
+--
+-- An opening is set again by writing a new one; the day's latest is the one
+-- that counts, and the earlier ones stay as the record of who changed it.
+-- Written and read only by the server, scoped to the restaurant there.
+create table if not exists cash_movements (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  kind          text not null check (kind in ('opening', 'withdrawal')),
+  amount        numeric not null check (amount >= 0 and amount <= 1000000),
+  note          text check (note is null or char_length(note) <= 140),
+  actor_email   text not null,
+  created_at    timestamptz not null default now()
+);
+-- A withdrawal of nothing is not one; an opening of nothing is an empty drawer.
+alter table cash_movements drop constraint if exists cash_movements_withdrawal_positive;
+alter table cash_movements add constraint cash_movements_withdrawal_positive
+  check (kind <> 'withdrawal' or amount > 0);
+create index if not exists cash_movements_day_idx on cash_movements(restaurant_id, created_at);
+alter table cash_movements enable row level security;
+revoke all on cash_movements from anon;
+revoke all on cash_movements from authenticated;
+grant all on cash_movements to service_role;
+
 -- ── Last, on purpose ────────────────────────────────────────────────────────
 -- The table-shaping privileges, taken from every table once more. The revoke
 -- near the top only reaches tables that already exist when it runs, so a table

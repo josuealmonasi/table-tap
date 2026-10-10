@@ -6,6 +6,7 @@ import { useT } from "@/lib/i18n/context";
 import { useLiveStock } from "@/hooks/useLiveStock";
 import ScanToCollect from "@/components/dashboard/ScanToCollect";
 import StampCard from "@/components/dashboard/loyalty/StampCard";
+import PosCashDrawer from "./PosCashDrawer";
 import { priceCart } from "@/lib/pricing";
 import ItemDetailScreen from "@/components/customer/ItemDetailScreen";
 import ComboDetailScreen from "@/components/customer/ComboDetailScreen";
@@ -174,6 +175,7 @@ export default function PosScreen({
                 onFound={id => router.push(`/dashboard/bills?order=${id}`)}
               />
               {loyalty && <StampCard />}
+              <PosCashDrawer />
             </div>
           </header>
 

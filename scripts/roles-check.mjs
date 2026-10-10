@@ -120,6 +120,11 @@ const ROUTES = [
   { m: "PATCH", p: "/api/accounts", body: {}, allow: SERVES, passes: 400 },
   { m: "POST", p: "/api/accounts/charge", body: {}, allow: SERVES, passes: 400 },
   { m: "POST", p: "/api/accounts/settle", body: {}, allow: SERVES, passes: 400 },
+  // The cash drawer: those who run it write its opening and withdrawals; only
+  // a manager strikes one off. Refused on shape — no kind, no id — so nothing
+  // is written, here or on production.
+  { m: "POST", p: "/api/cash-drawer", body: {}, allow: ["owner", "manager", "cashier"], passes: 400 },
+  { m: "DELETE", p: "/api/cash-drawer", body: {}, allow: MANAGES, passes: 400 },
   // What that console calls — moving a restaurant between plans, deleting
   // one, managing any login — is the platform admin's alone. Each checks who
   // is asking first and answers the platform admin 400 for an empty body.

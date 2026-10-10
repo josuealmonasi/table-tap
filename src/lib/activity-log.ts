@@ -27,7 +27,9 @@ export type LogEntity =
   /** A diner's visit card: stamped, or its reward spent. */
   | "loyalty"
   /** A customer account: opened, charged, collected, its ceiling moved. */
-  | "account";
+  | "account"
+  /** The cash drawer: its opening balance set, money taken out of it. */
+  | "cash";
 
 /** What happened to it. Deliberately plain words: this list is read by owners. */
 export type LogAction =

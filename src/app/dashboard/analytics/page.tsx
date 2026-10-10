@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/i18n/server";
 import { dateLocale } from "@/lib/format";
 import { requireManager } from "@/lib/page-guard";
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import {
   computeAnalytics,
   normalisePeriod,
@@ -18,6 +19,8 @@ import { readLoyaltyStats } from "@/lib/loyalty/analytics-read";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { startOfLocalDay } from "@/lib/day-window";
 import { corteFrom, EMPTY_CORTE, type CorteAdjustment, type CortePayment } from "@/lib/corte";
+import { drawerFrom } from "@/lib/cash-drawer";
+import { drawerMovements } from "@/lib/cash-drawer-server";
 
 export const dynamic = "force-dynamic";
 
@@ -104,6 +107,10 @@ export default async function AnalyticsPage({
         accountsOwed: Math.round((owedRows ?? []).reduce((s, o) => s + Number(o.total), 0) * 100) / 100,
       }
     : EMPTY_CORTE;
+  // The drawer it is counted against: today's opening and withdrawals, and
+  // the cash the corte above counted. A failed read throws to the error
+  // screen — a drawer shown as "nothing set" would be a wrong number to count to.
+  const drawer = drawerFrom(await drawerMovements(membership.restaurant.id, dayStart), corte.totals.cash);
   // In the owner's language: the day is words, and "martes 23 de septiembre"
   // above an English corte is a Spanish sentence on an English page.
   const dayLabel = new Intl.DateTimeFormat(dateLocale(locale), {
@@ -157,7 +164,9 @@ export default async function AnalyticsPage({
       ? await readLoyaltyStats(admin, membership.restaurant.id, start, end)
       : null;
 
+  // The drawer's withdrawals are struck off through a confirm dialog.
   return (
+    <ConfirmProvider>
     <AnalyticsView
       data={data}
       period={period}
@@ -165,9 +174,12 @@ export default async function AnalyticsPage({
       restaurantId={membership.restaurant.id}
       rated={rated}
       corte={corte}
+      drawer={drawer}
+      timeZone={timeZone}
       restaurantName={membership.restaurant.name}
       dayLabel={dayLabel}
       loyalty={loyalty}
     />
+    </ConfirmProvider>
   );
 }

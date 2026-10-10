@@ -4,6 +4,8 @@ import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import { escapeHtml } from "@/lib/html";
 import type { Corte } from "@/lib/corte";
+import type { Drawer } from "@/lib/cash-drawer";
+import DrawerBlock from "./DrawerBlock";
 
 /**
  * The register close, as a manager reads it and as they print it.
@@ -18,14 +20,19 @@ import type { Corte } from "@/lib/corte";
  */
 export default function CorteCard({
   corte,
+  drawer,
   currency,
   restaurantName,
   day,
+  timeZone,
 }: {
   corte: Corte;
+  /** The cash drawer: its opening, today's cash, what was taken out. */
+  drawer: Drawer;
   currency: string;
   restaurantName: string;
   day: string;
+  timeZone: string;
 }) {
   const t = useT();
   const money = (n: number) => formatMoney(n, currency);
@@ -46,6 +53,14 @@ export default function CorteCard({
         `<body style="font-family:system-ui,sans-serif;padding:28px;color:#111113">` +
         `<h1 style="margin:0;font-size:20px">${escapeHtml(t("corte.title"))}</h1>` +
         `<p style="margin:4px 0 18px;color:#70707a">${escapeHtml(restaurantName)} · ${escapeHtml(day)}</p>` +
+        // The drawer first: it is what gets counted, and its total is what the
+        // count is checked against.
+        `<table style="font-size:14px;margin-bottom:18px;border-collapse:collapse">` +
+        `<tr><td style="padding:2px 24px 2px 0">${escapeHtml(t("corte.opening"))}</td><td style="text-align:right">${drawer.openingSet ? money(drawer.opening) : escapeHtml(t("corte.openingNotSet"))}</td></tr>` +
+        `<tr><td style="padding:2px 24px 2px 0">+ ${escapeHtml(t("corte.cashSales"))}</td><td style="text-align:right">${money(drawer.cashSales)}</td></tr>` +
+        `<tr><td style="padding:2px 24px 2px 0">− ${escapeHtml(t("corte.withdrawals"))}</td><td style="text-align:right">${money(drawer.withdrawn)}</td></tr>` +
+        `<tr style="font-weight:700"><td style="padding:6px 24px 2px 0;border-top:2px solid #111113">${escapeHtml(t("corte.expected"))}</td>` +
+        `<td style="text-align:right;padding-top:6px;border-top:2px solid #111113">${money(drawer.expected)}</td></tr></table>` +
         `<table style="width:100%;border-collapse:collapse;font-size:14px">` +
         `<thead><tr style="text-align:left;border-bottom:1px solid #e6e6e9">` +
         `<th>${escapeHtml(t("corte.who"))}</th><th>${escapeHtml(t("corte.count"))}</th>` +
@@ -87,7 +102,7 @@ export default function CorteCard({
         <h3 className="tt-serif" style={{ margin: 0 }}>
           {t("corte.title")}
         </h3>
-        {corte.totals.count > 0 && (
+        {(corte.totals.count > 0 || drawer.openingSet || drawer.withdrawals.length > 0) && (
           <button className="tt-btn tt-btn-ghost tt-btn-sm" onClick={print}>
             {t("corte.print")}
           </button>
@@ -96,6 +111,8 @@ export default function CorteCard({
       <p className="tt-muted" style={{ fontSize: 13, marginTop: 0 }}>
         {t("corte.hint")}
       </p>
+
+      <DrawerBlock drawer={drawer} currency={currency} timeZone={timeZone} />
 
       {corte.totals.count === 0 && corte.online === 0 ? (
         <p className="tt-muted" style={{ fontSize: 13, margin: 0 }}>

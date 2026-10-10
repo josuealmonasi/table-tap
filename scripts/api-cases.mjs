@@ -458,6 +458,44 @@ export function cases(fx) {
           ? true
           : `the shelf went from 20 to ${item?.stock} on a sale that never happened`;
       } },
+    // ── The cash drawer ──────────────────────────────────────────────────
+    // The day's opening balance and the cash taken out, which the register
+    // close sums with the cash taken: the people who run the drawer write them,
+    // only a manager strikes one off, and nothing else may touch them.
+    { name: "POST /api/cash-drawer (the cashier sets the opening balance)", as: "cashier", method: "POST",
+      path: "/api/cash-drawer", body: { kind: "opening", amount: "1,250.50" }, expect: [200],
+      check: async (d, f) => {
+        const { data } = await f.admin.from("cash_movements").select("kind, amount, actor_email").eq("id", d.id).maybeSingle();
+        return data?.kind === "opening" && Number(data.amount) === 1250.5 && data.actor_email === "demo-cashier@tabletap.dev"
+          || `stored ${JSON.stringify(data)}`;
+      } },
+    { name: "POST /api/cash-drawer (a withdrawal, with what it was for)", as: "manager", method: "POST",
+      path: "/api/cash-drawer", body: { kind: "withdrawal", amount: 120, note: `${MARK} supplier` }, expect: [200],
+      save: d => ({ cashWithdrawal: d.id }),
+      check: async (d, f) => {
+        const { data } = await f.admin.from("cash_movements").select("kind, amount, note").eq("id", d.id).maybeSingle();
+        return data?.kind === "withdrawal" && Number(data.amount) === 120 && data.note === `${MARK} supplier`
+          || `stored ${JSON.stringify(data)}`;
+      } },
+    { name: "POST /api/cash-drawer (a withdrawal of nothing)", as: "cashier", method: "POST",
+      path: "/api/cash-drawer", body: { kind: "withdrawal", amount: "0" }, expect: [400],
+      expectError: /cantidad de efectivo|amount of cash/i },
+    { name: "POST /api/cash-drawer (a waiter refused)", as: "waiter", method: "POST",
+      path: "/api/cash-drawer", body: { kind: "withdrawal", amount: 50 }, expect: [403] },
+    { name: "POST /api/cash-drawer (the kitchen refused)", as: "kitchen", method: "POST",
+      path: "/api/cash-drawer", body: { kind: "opening", amount: 50 }, expect: [403] },
+    { name: "DELETE /api/cash-drawer (a cashier cannot strike off a withdrawal)", as: "cashier", method: "DELETE",
+      path: "/api/cash-drawer", body: (_f, saved) => ({ id: saved.cashWithdrawal }), expect: [403] },
+    { name: "DELETE /api/cash-drawer (a manager strikes it off)", as: "manager", method: "DELETE",
+      path: "/api/cash-drawer", body: (_f, saved) => ({ id: saved.cashWithdrawal }), expect: [200],
+      check: async (_d, f) => {
+        const { count } = await f.admin.from("cash_movements").select("id", { count: "exact", head: true })
+          .eq("note", `${MARK} supplier`);
+        return count === 0 || "the withdrawal is still there";
+      } },
+    { name: "DELETE /api/cash-drawer (one that is not here)", as: "manager", method: "DELETE",
+      path: "/api/cash-drawer", body: { id: "00000000-0000-4000-8000-000000000000" }, expect: [404],
+      expectError: /ya no está|not here/i },
     // A card payment that landed on a bill already collected, given back from
     // Cuentas abiertas. The demo has no real Stripe account, so the healthy
     // answer is Stripe's refusal — and the assertion is the half that matters:
