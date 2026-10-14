@@ -55,7 +55,7 @@ export function useCounterPickup(restaurantId: string, initial: Order[]): {
 
   /** The customer took it: the order is done. Only if it is still ready. */
   async function handOver(pickup: ReadyTable): Promise<void> {
-    setOrders(prev => prev.filter(o => !pickup.orderIds.includes(o.id)));
+    let failed = false;
     for (const id of pickup.orderIds) {
       let ok = false;
       try {
@@ -68,9 +68,13 @@ export function useCounterPickup(restaurantId: string, initial: Order[]): {
       } catch {
         // Said below, like a refusal: the order is still on the board.
       }
-      if (!ok) toast(t("pos.pickupFailed", { code: orderCode(id) }), "error");
+      if (ok) setOrders(prev => prev.filter(o => o.id !== id));
+      else {
+        failed = true;
+        toast(t("pos.pickupFailed", { code: orderCode(id) }), "error");
+      }
     }
-    toast(t("pos.pickedUp", { code: pickup.code ?? "" }));
+    if (!failed) toast(t("pos.pickedUp", { code: pickup.code ?? "" }));
   }
 
   return { ready: readyToDeliver(orders).filter(r => r.code !== null), handOver };

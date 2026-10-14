@@ -665,7 +665,8 @@ A café judges the till by how fast a new employee serves a queue
 - **Listos para recoger**: counter orders the kitchen has called ready, by the
   code on the customer's ticket (the till already shows it large when the sale
   is rung). A tap means it went over the counter: completed, only if still
-  ready. Live, quietly — the till does not ping for its own sales.
+  ready. A refused handover stays visible to retry and never reports delivery.
+  Live, quietly — the till does not ping for its own sales.
 
 ## Tickets on paper
 
