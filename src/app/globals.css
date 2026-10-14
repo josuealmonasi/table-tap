@@ -767,6 +767,8 @@ a.tt-btn {
   flex-direction: column;
   gap: 8px;
   max-width: 420px;
+}
+
 /* Importing a menu from a spreadsheet: the source, then the plan. */
 .tt-import-source {
   display: flex;
