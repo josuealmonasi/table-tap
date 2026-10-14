@@ -1665,3 +1665,16 @@ to be logged and acknowledged, and older events could overwrite a newer plan.
 `subscription-sync.spec.ts` covers failed reads/writes, stale snapshots, replaced
 subscriptions, and conflicting revisions. Stripe's current object plus a
 conditional local revision write prevents a stale worker from winning.
+
+## A refused pickup that still said delivered
+
+The till removed a ready pickup before asking the server to complete it, then
+showed the delivered message even when that request failed. A cashier saw an
+error and a success together, with no pickup left to retry. A browser probe
+that refused the request reproduced both symptoms.
+
+`useCounterPickup` now removes only orders the server accepted and reports
+success only when every order was accepted. Refused or offline handovers stay
+visible. Hook tests cover success, a refusal, a network failure and a partly
+accepted handover; the browser probe confirms the refused pickup stays on the
+till without a delivered message.
