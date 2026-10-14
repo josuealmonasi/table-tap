@@ -4,8 +4,8 @@ import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import { escapeHtml } from "@/lib/html";
 import type { Corte } from "@/lib/corte";
-import type { Drawer } from "@/lib/cash-drawer";
-import DrawerBlock from "./DrawerBlock";
+import type { ShiftView } from "@/lib/cash-shift";
+import ShiftBlock from "@/components/dashboard/cash/ShiftBlock";
 
 /**
  * The register close, as a manager reads it and as they print it.
@@ -20,15 +20,15 @@ import DrawerBlock from "./DrawerBlock";
  */
 export default function CorteCard({
   corte,
-  drawer,
+  shifts,
   currency,
   restaurantName,
   day,
   timeZone,
 }: {
   corte: Corte;
-  /** The cash drawer: its opening, today's cash, what was taken out. */
-  drawer: Drawer;
+  /** Today's shifts at the cash drawer, oldest first. */
+  shifts: ShiftView[];
   currency: string;
   restaurantName: string;
   day: string;
@@ -53,14 +53,25 @@ export default function CorteCard({
         `<body style="font-family:system-ui,sans-serif;padding:28px;color:#111113">` +
         `<h1 style="margin:0;font-size:20px">${escapeHtml(t("corte.title"))}</h1>` +
         `<p style="margin:4px 0 18px;color:#70707a">${escapeHtml(restaurantName)} · ${escapeHtml(day)}</p>` +
-        // The drawer first: it is what gets counted, and its total is what the
-        // count is checked against.
-        `<table style="font-size:14px;margin-bottom:18px;border-collapse:collapse">` +
-        `<tr><td style="padding:2px 24px 2px 0">${escapeHtml(t("corte.opening"))}</td><td style="text-align:right">${drawer.openingSet ? money(drawer.opening) : escapeHtml(t("corte.openingNotSet"))}</td></tr>` +
-        `<tr><td style="padding:2px 24px 2px 0">+ ${escapeHtml(t("corte.cashSales"))}</td><td style="text-align:right">${money(drawer.cashSales)}</td></tr>` +
-        `<tr><td style="padding:2px 24px 2px 0">− ${escapeHtml(t("corte.withdrawals"))}</td><td style="text-align:right">${money(drawer.withdrawn)}</td></tr>` +
-        `<tr style="font-weight:700"><td style="padding:6px 24px 2px 0;border-top:2px solid #111113">${escapeHtml(t("corte.expected"))}</td>` +
-        `<td style="text-align:right;padding-top:6px;border-top:2px solid #111113">${money(drawer.expected)}</td></tr></table>` +
+        // The drawer first, a shift per line: what each was expected to hold,
+        // what was counted, and the difference. Each shift prints its own
+        // handover sheet with the detail.
+        (shifts.length
+          ? `<table style="font-size:14px;margin-bottom:18px;border-collapse:collapse">` +
+            `<tr style="text-align:left;color:#70707a"><th style="padding:2px 18px 4px 0">${escapeHtml(t("corte.drawer"))}</th>` +
+            `<th style="padding:2px 18px 4px 0">${escapeHtml(t("corte.expected"))}</th><th style="padding:2px 18px 4px 0">${escapeHtml(t("shift.countedLabel"))}</th>` +
+            `<th style="padding:2px 0 4px">${escapeHtml(t("shift.difference"))}</th></tr>` +
+            shifts
+              .map(
+                ({ shift, sum }) =>
+                  `<tr><td style="padding:2px 18px 2px 0">${escapeHtml(shift.closed_by ?? shift.opened_by)}${shift.closed_at ? "" : ` (${escapeHtml(t("shift.stillOpen"))})`}</td>` +
+                  `<td style="padding:2px 18px 2px 0">${money(Number(shift.expected_cash ?? sum.expected))}</td>` +
+                  `<td style="padding:2px 18px 2px 0">${shift.counted_cash == null ? "—" : money(Number(shift.counted_cash))}</td>` +
+                  `<td>${shift.difference == null ? "—" : money(Number(shift.difference))}</td></tr>`,
+              )
+              .join("") +
+            `</table>`
+          : "") +
         `<table style="width:100%;border-collapse:collapse;font-size:14px">` +
         `<thead><tr style="text-align:left;border-bottom:1px solid #e6e6e9">` +
         `<th>${escapeHtml(t("corte.who"))}</th><th>${escapeHtml(t("corte.count"))}</th>` +
@@ -102,7 +113,7 @@ export default function CorteCard({
         <h3 className="tt-serif" style={{ margin: 0 }}>
           {t("corte.title")}
         </h3>
-        {(corte.totals.count > 0 || drawer.openingSet || drawer.withdrawals.length > 0) && (
+        {(corte.totals.count > 0 || shifts.length > 0) && (
           <button className="tt-btn tt-btn-ghost tt-btn-sm" onClick={print}>
             {t("corte.print")}
           </button>
@@ -112,7 +123,7 @@ export default function CorteCard({
         {t("corte.hint")}
       </p>
 
-      <DrawerBlock drawer={drawer} currency={currency} timeZone={timeZone} />
+      <ShiftBlock shifts={shifts} currency={currency} timeZone={timeZone} restaurantName={restaurantName} />
 
       {corte.totals.count === 0 && corte.online === 0 ? (
         <p className="tt-muted" style={{ fontSize: 13, margin: 0 }}>

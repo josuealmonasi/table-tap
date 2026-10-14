@@ -125,6 +125,8 @@ const ROUTES = [
   // is written, here or on production.
   { m: "POST", p: "/api/cash-drawer", body: {}, allow: ["owner", "manager", "cashier"], passes: 400 },
   { m: "DELETE", p: "/api/cash-drawer", body: {}, allow: MANAGES, passes: 400 },
+  // Its shifts: opened, closed on a count, explained — by those who run it.
+  { m: "POST", p: "/api/cash-shift", body: {}, allow: ["owner", "manager", "cashier"], passes: 400 },
   // What that console calls — moving a restaurant between plans, deleting
   // one, managing any login — is the platform admin's alone. Each checks who
   // is asking first and answers the platform admin 400 for an empty body.

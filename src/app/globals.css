@@ -732,6 +732,43 @@ a.tt-btn {
   font-size: 12px;
 }
 
+/* A closed shift in the corte: its count against what was expected. */
+.tt-shift-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 6px;
+}
+.tt-shift-list-title {
+  font-size: 14px;
+}
+.tt-shift {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--tt-line);
+}
+/* A difference is the line a manager is looking for. */
+.tt-shift-off > * {
+  color: var(--tt-danger);
+}
+.tt-shift-why {
+  margin: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.tt-shift-flag {
+  color: var(--tt-danger);
+  font-weight: 600;
+}
+.tt-shift-explain {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 420px;
+}
+
 .tt-till-figures {
   display: flex;
   flex-wrap: wrap;

@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import { useUserLogs } from "@/hooks/useUserLogs";
 import { useLocale, useT } from "@/lib/i18n/context";
-import { formatMoney, dateLocale } from "@/lib/format";
+import { dateLocale } from "@/lib/format";
 import { LogRowsSkeleton } from "@/components/ui/DashSkeletons";
 import { MoveDownIcon, MoveUpIcon, SearchIcon } from "@/components/ui/icons";
-import { entitiesNamedBy, parseLogDetail } from "@/lib/log-detail";
+import { entitiesNamedBy } from "@/lib/log-detail";
+import { useLogWords } from "@/hooks/useLogWords";
 
 interface UserLogsProps {
   restaurantId: string;
@@ -46,41 +47,7 @@ export default function UserLogs({ restaurantId, currency }: UserLogsProps) {
     sortBy,
   } = useUserLogs(restaurantId, named);
 
-  /**
-   * The specifics, in the reader's language: the server wrote them as fields
-   * because it had no way of knowing who would read them.
-   */
-  const specifics = (log: (typeof logs)[number]): string => {
-    const fields = parseLogDetail(log.detail);
-    if (!fields) return log.detail ?? log.target_email ?? "";
-    const parts: string[] = [];
-    if (fields.table) parts.push(t("dash.tableN", { label: fields.table }));
-    if (fields.code) parts.push(fields.code);
-    if (fields.orders) parts.push(t("dash.logOrders", { n: fields.orders }));
-    if (fields.amount) parts.push(formatMoney(Number(fields.amount), currency));
-    if (fields.method) parts.push(t(`dash.pay${fields.method}`));
-    if (fields.order) parts.push(`#${fields.order}`);
-    // What a part-payment left behind, so the line says how much of the bill
-    // this was rather than just how much changed hands.
-    if (fields.left) {
-      parts.push(t("dash.logLeft", { amount: formatMoney(Number(fields.left), currency) }));
-    }
-    for (const [key, value] of Object.entries(fields)) {
-      if (!["table", "code", "orders", "amount", "method", "order", "left"].includes(key)) {
-        parts.push(`${key}: ${value}`);
-      }
-    }
-    return parts.join(" · ");
-  };
-
-  /** "wrote off a bill", "changed a setting" — in the reader's language. */
-  const describe = (log: (typeof logs)[number]): string => {
-    const key = `log.${log.entity}.${log.action}`;
-    const line = t(key);
-    // A combination we haven't named yet reads as plain words rather than a
-    // key: the log is a record first, and must never show its own internals.
-    return line === key ? `${t(`log.entity.${log.entity}`)} · ${log.action}` : line;
-  };
+  const { describe, specifics } = useLogWords(currency);
 
   /** Only the active column shows a direction; the other is just a label. */
   const Arrow = ({ column }: { column: typeof sort }) =>

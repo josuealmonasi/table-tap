@@ -6,19 +6,18 @@ import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 
 interface CashMovementDialogProps {
-  /** What is being written down, or null when the dialog is shut. */
+  /** A shift opened with its cash, or cash taken out; null when shut. */
   kind: "opening" | "withdrawal" | null;
-  /** The opening already set, to start the field from. */
-  opening?: number;
   onClose: () => void;
   onSaved: () => void;
 }
 
 /**
- * Writing down the drawer's float, or cash taken out of it. One form for
- * both: an amount, and for a withdrawal what it was for.
+ * Opening a shift with the cash the drawer starts with, or writing down cash
+ * taken out of it. One form for both: an amount, and for a withdrawal what it
+ * was for.
  */
-export default function CashMovementDialog({ kind, opening, onClose, onSaved }: CashMovementDialogProps) {
+export default function CashMovementDialog({ kind, onClose, onSaved }: CashMovementDialogProps) {
   const t = useT();
   const toast = useToast();
   const [amount, setAmount] = useState("");
@@ -27,11 +26,10 @@ export default function CashMovementDialog({ kind, opening, onClose, onSaved }: 
   const [error, setError] = useState<string | null>(null);
   const [shownFor, setShownFor] = useState<typeof kind>(null);
 
-  // Each time it opens it starts afresh — from today's opening when that is
-  // what is being changed.
+  // Each time it opens it starts afresh.
   if (kind !== shownFor) {
     setShownFor(kind);
-    setAmount(kind === "opening" && opening ? opening.toFixed(2) : "");
+    setAmount("");
     setNote("");
     setError(null);
   }
@@ -42,17 +40,19 @@ export default function CashMovementDialog({ kind, opening, onClose, onSaved }: 
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/cash-drawer", {
+      const res = await fetch(kind === "opening" ? "/api/cash-shift" : "/api/cash-drawer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind, amount, note: kind === "withdrawal" ? note : undefined }),
+        body: JSON.stringify(
+          kind === "opening" ? { action: "open", amount } : { kind: "withdrawal", amount, note },
+        ),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error ?? t("apiErr.generic"));
         return;
       }
-      toast(kind === "opening" ? t("corte.openingSaved") : t("corte.withdrawalSaved"));
+      toast(kind === "opening" ? t("shift.opened") : t("corte.withdrawalSaved"));
       onSaved();
       onClose();
     } catch {
@@ -62,15 +62,15 @@ export default function CashMovementDialog({ kind, opening, onClose, onSaved }: 
     }
   }
 
-  const title = kind === "opening" ? t("corte.openingTitle") : t("corte.withdrawalTitle");
+  const title = kind === "opening" ? t("shift.openTitle") : t("corte.withdrawalTitle");
   return (
     <Modal open={kind !== null} onClose={onClose} maxWidth={420} title={title}>
       <form className="tt-prodform" onSubmit={e => void submit(e)}>
         <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
-          {kind === "opening" ? t("corte.openingHint") : t("corte.withdrawalHint")}
+          {kind === "opening" ? t("shift.openHint") : t("corte.withdrawalHint")}
         </p>
         <label className="tt-field">
-          <span className="tt-mod-label">{t("corte.amount")}</span>
+          <span className="tt-mod-label">{kind === "opening" ? t("corte.opening") : t("corte.amount")}</span>
           <input
             className="tt-input"
             inputMode="decimal"
@@ -96,7 +96,7 @@ export default function CashMovementDialog({ kind, opening, onClose, onSaved }: 
         {error && <p className="tt-field-error" role="alert">{error}</p>}
         <div className="tt-prodform-actions">
           <button type="submit" className="tt-btn tt-btn-primary" disabled={busy || !amount.trim()}>
-            {busy ? t("common.saving") : t("corte.save")}
+            {busy ? t("common.saving") : kind === "opening" ? t("shift.open") : t("corte.save")}
           </button>
           <button type="button" className="tt-btn tt-btn-ghost" onClick={onClose}>{t("menu.cancel")}</button>
         </div>

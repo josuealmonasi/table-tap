@@ -353,16 +353,26 @@ dishes on a bill the restaurant has just cancelled.
   payments; cancels before then were logged without an amount. Card paid
   online is reported apart from every drawer: it is real, and nobody was
   standing there to put it in one.
-- **Caja**, above the corte's table: the cash drawer as a sum — the day's
-  opening balance, plus the cash taken (the corte's cash column), minus the
-  withdrawals, equals the cash expected in the drawer (`src/lib/cash-drawer.ts`).
-  Asked for by a restaurant that starts its day with 250 pesos. The opening
-  and the withdrawals live in `cash_movements`, server-only, written through
-  `/api/cash-drawer` by the people who run the drawer — owner, manager and
-  cashier, from the corte or from the till's header. An opening is set again
-  by writing a new one (the day's latest counts, the earlier ones stay as the
-  record), and only a manager strikes a withdrawal off. Card and online money
-  has no opening. The printed corte carries the same four lines.
+- **Caja**, above the corte's table: the cash drawer, a shift at a time
+  (`cash_shifts`, server-only; one open per restaurant — there is one
+  drawer). A shift is opened with the cash it starts with and closed on a
+  **blind count**: the person closing enters what they counted and confirms
+  it is theirs, the shift closes on that number, and only then are they told
+  what it should have held — so the count cannot drift toward the answer, and
+  it is final. What it should hold is worked out on the server at the close
+  and stored: the opening, plus the cash taken while it was open (net of cash
+  handed back, as the corte counts it), minus its withdrawals
+  (`src/lib/cash-shift.ts`). A difference ("Sobrante" / "Faltante") is
+  explained once, by the closer or a manager. Withdrawals (`cash_movements`)
+  go only into the open shift, and a manager can strike one off only while it
+  is still open. Each closed shift shows its count, difference and why, a
+  trail of what happened to the money in it (withdrawals, refunds, discounts,
+  cancellations, write-offs — the activity log's own wording), and prints as
+  a handover sheet with two signatures. Owners and managers run it from the
+  corte; the cashier opens, withdraws and closes from the till's header,
+  never seeing the expected amount before counting. `/api/cash-shift` and
+  `/api/cash-drawer`, for owner, manager and cashier. Card and online money
+  has no opening.
 
 ## Data model
 

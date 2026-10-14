@@ -555,6 +555,16 @@ export async function setup(env, base) {
   const { data: printJob } = await admin
     .from("print_jobs").select("id").eq("order_id", printableOrder).maybeSingle();
 
+  // The seed's open shift, set aside: one shift is open at a time, and the
+  // cases open and close their own. Put back at teardown.
+  const { data: seedShift } = await admin.from("cash_shifts").select("id")
+    .eq("restaurant_id", restaurant.id).is("closed_at", null).maybeSingle();
+  const parkedShift = seedShift?.id ?? null;
+  if (parkedShift) {
+    await admin.from("cash_shifts")
+      .update({ closed_by: MARK, closed_at: new Date().toISOString(), counted_cash: 0 }).eq("id", parkedShift);
+  }
+
   return {
     admin, base, who, restaurant, dish, menu, serviceRequestBefore,
     withServicedOrder, servicedOrder,
@@ -602,6 +612,7 @@ export async function setup(env, base) {
     billLogsBefore: (logsBefore ?? []).map(l => l.id),
     // Rows the run itself writes to the cash drawer are the ones after this.
     startedAt: new Date().toISOString(),
+    parkedShift,
     sessionsBefore: (sessionsBefore ?? []).map(x => x.id),
     writeOffsBefore: (writeOffsBefore ?? []).map(x => x.id),
     discountsBefore: (discountsBefore ?? []).map(x => x.id),
@@ -643,9 +654,14 @@ export async function setup(env, base) {
 /** Everything marked goes, whatever happened to the tests. */
 export async function teardown(fx) {
   const { admin, restaurant } = fx;
-  // The drawer's openings and withdrawals the cases wrote; the seed's are older.
+  // The drawer's shifts and withdrawals the cases wrote — the seed's are
+  // older — and then the seed's open shift, set aside at setup, put back.
   if (fx.startedAt) {
     await admin.from("cash_movements").delete().eq("restaurant_id", restaurant.id).gte("created_at", fx.startedAt);
+    await admin.from("cash_shifts").delete().eq("restaurant_id", restaurant.id).gte("opened_at", fx.startedAt);
+  }
+  if (fx.parkedShift) {
+    await admin.from("cash_shifts").update({ closed_by: null, closed_at: null, counted_cash: null }).eq("id", fx.parkedShift);
   }
   // The gate's customer accounts and everything on them, first: an order still
   // pointing at an account keeps the account from going. The money first of all.

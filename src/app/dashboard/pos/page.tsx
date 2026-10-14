@@ -8,6 +8,7 @@ import PosScreen from "@/components/dashboard/pos/PosScreen";
 import PlanLock from "@/components/dashboard/plan/PlanLock";
 import { allPlans } from "@/lib/plan-server";
 import { cheapestWith } from "@/lib/plan";
+import { openShift } from "@/lib/cash-shift-server";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,7 @@ export default async function PosPage() {
       canEmailReceipt={data.receipts}
       loyalty={await loyaltyOn(membership.restaurant.id, plan.limits)}
       canChargeAccount={can(plan.limits, "openAccounts")}
+      shiftOpen={(await openShift(membership.restaurant.id)) !== null}
     />
   );
 }

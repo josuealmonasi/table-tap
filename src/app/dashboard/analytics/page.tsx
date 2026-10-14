@@ -19,8 +19,7 @@ import { readLoyaltyStats } from "@/lib/loyalty/analytics-read";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { startOfLocalDay } from "@/lib/day-window";
 import { corteFrom, EMPTY_CORTE, type CorteAdjustment, type CortePayment } from "@/lib/corte";
-import { drawerFrom } from "@/lib/cash-drawer";
-import { drawerMovements } from "@/lib/cash-drawer-server";
+import { todaysShiftViews } from "@/lib/cash-shift-server";
 
 export const dynamic = "force-dynamic";
 
@@ -107,10 +106,10 @@ export default async function AnalyticsPage({
         accountsOwed: Math.round((owedRows ?? []).reduce((s, o) => s + Number(o.total), 0) * 100) / 100,
       }
     : EMPTY_CORTE;
-  // The drawer it is counted against: today's opening and withdrawals, and
-  // the cash the corte above counted. A failed read throws to the error
-  // screen — a drawer shown as "nothing set" would be a wrong number to count to.
-  const drawer = drawerFrom(await drawerMovements(membership.restaurant.id, dayStart), corte.totals.cash);
+  // The drawer it is counted against, shift by shift: today's, and the one
+  // still open. A failed read throws to the error screen — a drawer shown as
+  // empty would be a wrong number to count to.
+  const shifts = await todaysShiftViews(membership.restaurant.id, dayStart);
   // In the owner's language: the day is words, and "martes 23 de septiembre"
   // above an English corte is a Spanish sentence on an English page.
   const dayLabel = new Intl.DateTimeFormat(dateLocale(locale), {
@@ -174,7 +173,7 @@ export default async function AnalyticsPage({
       restaurantId={membership.restaurant.id}
       rated={rated}
       corte={corte}
-      drawer={drawer}
+      shifts={shifts}
       timeZone={timeZone}
       restaurantName={membership.restaurant.name}
       dayLabel={dayLabel}

@@ -842,18 +842,28 @@ export async function seedMock(pg) {
   );
 
   // ── The cash drawer ───────────────────────────────────────────────────
-  // The day started with 250 in the drawer and the cashier took 120 out for a
-  // supplier, so the register close shows its whole sum — opening, cash sales,
-  // withdrawals, what the drawer should hold — and every gate measures the
-  // block full rather than with its list missing.
+  // A shift closed earlier — counted 20 short, and explained — and one open
+  // now, which started with 250 and had 120 taken out for a supplier. So the
+  // register close shows both kinds of shift, the till offers to close one,
+  // and every gate measures them full.
+  await pg.query(
+    `insert into cash_shifts (restaurant_id, opened_by, opened_at, opening_amount, closed_by, closed_at,
+                              counted_cash, expected_cash, difference, difference_note, explained_by)
+     values ($1, 'demo-cashier@tabletap.dev', now() - interval '50 minutes', 200,
+             'demo-cashier@tabletap.dev', now() - interval '40 minutes', 180, 200, -20,
+             'Di cambio de más a la mesa 4', 'demo-cashier@tabletap.dev')`,
+    [rid],
+  );
+  const { rows: [openShift] } = await pg.query(
+    `insert into cash_shifts (restaurant_id, opened_by, opened_at, opening_amount)
+     values ($1, 'demo-cashier@tabletap.dev', now() - interval '30 minutes', 250) returning id`,
+    [rid],
+  );
   await bulkInsert(
     pg,
     "cash_movements",
-    ["restaurant_id", "kind", "amount", "note", "actor_email"],
-    [
-      [rid, "opening", 250, null, "demo-cashier@tabletap.dev"],
-      [rid, "withdrawal", 120, "Pago al proveedor de verduras", "demo-cashier@tabletap.dev"],
-    ],
+    ["restaurant_id", "kind", "amount", "note", "actor_email", "shift_id"],
+    [[rid, "withdrawal", 120, "Pago al proveedor de verduras", "demo-cashier@tabletap.dev", openShift.id]],
   );
 
   // A counter product and a kitchen printer with a ticket already through it,
