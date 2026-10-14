@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
   const referencedIds = refs.ids;
   const { data: dbItems } = await db
     .from("menu_items")
-    .select("id, name, price, emoji, available, discount_pct, modifiers, category_id, skips_kitchen, menu_id")
+    .select("id, name, price, emoji, available, discount_pct, modifiers, category_id, skips_kitchen, menu_id, categories(station)")
     .in("id", referencedIds)
     .eq("restaurant_id", actor.restaurantId);
   if (!dbItems) return await apiError("apiErr.verifyItems", 400);

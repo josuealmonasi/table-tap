@@ -564,6 +564,21 @@ export async function setup(env, base) {
     await admin.from("cash_shifts")
       .update({ closed_by: MARK, closed_at: new Date().toISOString(), counted_cash: 0 }).eq("id", parkedShift);
   }
+  // Two orders for the stations: a drink and a plate, and a plate alone.
+  // Marked, so teardown deletes them with the run's other orders.
+  const stationMake = async items => {
+    const { data, error } = await admin.from("orders").insert({
+      restaurant_id: restaurant.id, items, subtotal: 20, service_fee: 0, tip: 0, tax_pct: 0, discount: 0,
+      total: 20, currency: "MXN", note: MARK, status: "received", paid: false,
+    }).select("id").single();
+    if (error) throw new Error(`could not create a station order: ${error.message}`);
+    return data.id;
+  };
+  const stationOrder = await stationMake([
+    { itemId: "x", name: `${MARK} latte`, emoji: "", price: 10, qty: 1, mods: {}, station: "bar" },
+    { itemId: "y", name: `${MARK} sandwich`, emoji: "", price: 10, qty: 1, mods: {} },
+  ]);
+  const kitchenOnlyOrder = await stationMake([{ itemId: "y", name: `${MARK} sandwich`, emoji: "", price: 20, qty: 1, mods: {} }]);
 
   return {
     admin, base, who, restaurant, dish, menu, serviceRequestBefore,
@@ -613,6 +628,8 @@ export async function setup(env, base) {
     // Rows the run itself writes to the cash drawer are the ones after this.
     startedAt: new Date().toISOString(),
     parkedShift,
+    stationOrder,
+    kitchenOnlyOrder,
     sessionsBefore: (sessionsBefore ?? []).map(x => x.id),
     writeOffsBefore: (writeOffsBefore ?? []).map(x => x.id),
     discountsBefore: (discountsBefore ?? []).map(x => x.id),

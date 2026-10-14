@@ -66,6 +66,8 @@ export type Category = {
   menu_id: string | null;
   name: string;
   sort_order: number;
+  /** Where its dishes are made: the kitchen (default) or the bar. */
+  station?: "kitchen" | "bar";
 };
 
 /** A named menu (e.g. "Breakfast", "Dinner"). Each owns its own categories,
@@ -216,6 +218,11 @@ export type OrderLineItem = {
    * must not change because somebody edited the menu afterwards.
    */
   skipsKitchen?: boolean;
+  /**
+   * Made at the bar rather than the kitchen — copied from the dish's section
+   * when the order is written, like `skipsKitchen`. Absent means the kitchen.
+   */
+  station?: "bar";
   /** Set when this line is a combo package; `price` is then the combo price. */
   comboId?: string;
   components?: ComboComponent[];
@@ -238,6 +245,8 @@ export type Order = {
   table_id: string | null;
   table_label: string | null;
   status: OrderStatus;
+  /** The stations that have finished their part (see src/lib/stations.ts). */
+  stations_ready?: string[];
   subtotal: number;
   service_fee: number;
   /** When a card checkout for this order last went to Stripe (see service-reprice). */

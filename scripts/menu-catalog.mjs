@@ -293,11 +293,13 @@ export async function populateMenu(pg, restaurantId, menuId) {
 
   // Sections actually used, in a sensible order.
   const usedSections = SECTION_ORDER.filter(s => dishes.some(d => d.c === s));
+  // Drinks are made at the bar, so the board offers its stations and every
+  // gate sees the bar's view as well as the kitchen's.
   const catRows = await bulkInsert(
     pg,
     "categories",
-    ["restaurant_id", "menu_id", "name", "sort_order"],
-    usedSections.map((name, i) => [restaurantId, menuId, name, i]),
+    ["restaurant_id", "menu_id", "name", "sort_order", "station"],
+    usedSections.map((name, i) => [restaurantId, menuId, name, i, name === "Drinks" ? "bar" : "kitchen"]),
     "id, name",
   );
   const catId = Object.fromEntries(catRows.map(r => [r.name, r.id]));

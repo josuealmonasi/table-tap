@@ -8,6 +8,7 @@ import { orderCode, type Order, type OrderStatus } from "@/lib/types";
 import OrderDetailDialog from "./OrderDetailDialog";
 import { STATUS_META, statusMeta } from "@/lib/order-status";
 import { useLocale, useT } from "@/lib/i18n/context";
+import { linesAt, stationDone, stationsOf, type Station } from "@/lib/stations";
 
 
 /** Map an order's current status to the button that advances it. */
@@ -35,6 +36,10 @@ interface OrderCardProps {
   onCancel?: (order: Order) => void;
   /** False for waiters: complete only, no stage moves. */
   canMove?: boolean;
+  /** The station whose view this is; null shows the whole order. */
+  station?: Station | null;
+  /** This station has finished its part. */
+  onStationReady?: (id: string, station: Station) => void;
 }
 
 /** One order on the kitchen board: table, items, total, and its advance button. */
@@ -44,6 +49,8 @@ export default function OrderCard({
   onAdvance,
   onCancel,
   canMove = true,
+  station = null,
+  onStationReady,
 }: OrderCardProps) {
   const t = useT();
   const { locale } = useLocale();
@@ -67,6 +74,12 @@ export default function OrderCard({
     return () => document.removeEventListener("mousedown", onDown);
   }, [moveOpen]);
   const cancellable = order.status === "received" || order.status === "preparing";
+  // In a station's view, finishing means finishing that station's part: the
+  // order is ready when every station it needs has.
+  const stations = stationsOf(order);
+  const partOfMany = stations.length > 1;
+  const stationTurn = station !== null && cancellable && canMove;
+  const lines = linesAt(order, station);
   const placedAt = new Date(order.created_at).toLocaleTimeString(dateLocale(locale), {
     hour: "2-digit",
     minute: "2-digit",
@@ -143,7 +156,7 @@ export default function OrderCard({
       </div>
 
       <div className="tt-order-items">
-        {order.items.map((item, i) => (
+        {lines.map((item, i) => (
           <div key={i} style={{ fontSize: 13, marginBottom: 4 }}>
             <span className="tt-muted">{item.qty}× </span>
             {item.emoji} {item.name}
@@ -170,6 +183,16 @@ export default function OrderCard({
             style={{ fontSize: 12, fontStyle: "italic", marginTop: 6 }}
           >
             📝 {order.note}
+          </div>
+        )}
+        {/* Which stations have finished, when more than one makes this order. */}
+        {partOfMany && (order.stations_ready?.length ?? 0) > 0 && (
+          <div className="tt-order-stations">
+            {stations.map(s => (
+              <span key={s} className={stationDone(order, s) ? "tt-order-station-done" : "tt-muted"}>
+                {t(`stations.${s}`)}: {stationDone(order, s) ? t("stations.done") : t("stations.making")}
+              </span>
+            ))}
           </div>
         )}
       </div>
@@ -228,7 +251,23 @@ export default function OrderCard({
               {t("common.cancel")}
             </button>
           )}
-          {action && canAdvance ? (
+          {stationTurn ? (
+            stationDone(order, station!) ? (
+              <span className="tt-muted" style={{ fontSize: 13, fontWeight: 600 }}>
+                {t("stations.waiting")}
+              </span>
+            ) : (
+              <button
+                className="tt-btn tt-btn-success tt-btn-sm"
+                onClick={e => {
+                  e.stopPropagation();
+                  onStationReady?.(order.id, station!);
+                }}
+              >
+                {t("orders.markReady")}
+              </button>
+            )
+          ) : action && canAdvance ? (
             <button
               className={`tt-btn ${action.variant} tt-btn-sm`}
               onClick={e => {

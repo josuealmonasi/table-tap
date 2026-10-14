@@ -21,6 +21,8 @@ interface SectionEditorProps {
   links: Record<string, string[]>;
   currency: string;
   onRename: (id: string, name: string) => Promise<void>;
+  /** Where the section's dishes are made; absent for the uncategorized bucket. */
+  onSetStation?: (id: string, station: "kitchen" | "bar") => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onAddProduct: (
     categoryId: string | null,
@@ -58,6 +60,7 @@ export default function SectionEditor({
   links,
   currency,
   onRename,
+  onSetStation,
   onDelete,
   onAddProduct,
   onUpdateProduct,
@@ -152,6 +155,19 @@ export default function SectionEditor({
               </h3>
               {section && (
                 <div className="tt-prod-actions">
+                  {/* Where these dishes are made: the bar's screen shows the bar. */}
+                  {onSetStation && (
+                    <select
+                      className="tt-input tt-station-select"
+                      value={section.station ?? "kitchen"}
+                      aria-label={t("stations.madeAt")}
+                      title={t("stations.madeAt")}
+                      onChange={e => void onSetStation(section.id, e.target.value === "bar" ? "bar" : "kitchen")}
+                    >
+                      <option value="kitchen">{t("stations.kitchen")}</option>
+                      <option value="bar">{t("stations.bar")}</option>
+                    </select>
+                  )}
                   <button
                     className="tt-iconbtn"
                     title={t("menu.rename")}

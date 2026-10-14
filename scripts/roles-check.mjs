@@ -124,6 +124,8 @@ const ROUTES = [
   // a manager strikes one off. Refused on shape — no kind, no id — so nothing
   // is written, here or on production.
   { m: "POST", p: "/api/cash-drawer", body: {}, allow: ["owner", "manager", "cashier"], passes: 400 },
+  // A station finishing its part: the people who move orders, never the floor.
+  { m: "POST", p: "/api/orders/station", body: {}, allow: ["owner", "manager", "kitchen"], passes: 400 },
   { m: "DELETE", p: "/api/cash-drawer", body: {}, allow: MANAGES, passes: 400 },
   // Its shifts: opened, closed on a count, explained — by those who run it.
   { m: "POST", p: "/api/cash-shift", body: {}, allow: ["owner", "manager", "cashier"], passes: 400 },

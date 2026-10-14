@@ -646,6 +646,32 @@ export function cases(fx) {
       check: d => d.orders?.length === 1 || "did not find the counter order" },
     { name: "GET  /api/bill/discount/options", as: "manager", method: "GET",
       path: `/api/bill/discount/options?tableId=${table.id}`, expect: [200] },
+    // ── Stations: the bar and the kitchen each finish their part ─────────
+    // One order with a drink and a plate. The bar finishing does not make it
+    // ready; the kitchen finishing after it does. The floor cannot press it,
+    // and a station with nothing in the order cannot either.
+    { name: "POST /api/orders/station (the bar finishes its part)", as: "kitchen", method: "POST",
+      path: "/api/orders/station",
+      body: f => ({ id: f.stationOrder, station: "bar" }), expect: [200],
+      check: async (d, f) => {
+        const { data } = await f.admin.from("orders").select("status, stations_ready").eq("id", f.stationOrder).single();
+        if (d.status !== "preparing") return `answered ${d.status}, not preparing`;
+        return data?.status === "preparing" && JSON.stringify(data.stations_ready) === '["bar"]' || `stored ${JSON.stringify(data)}`;
+      } },
+    { name: "POST /api/orders/station (a waiter cannot press it)", as: "waiter", method: "POST",
+      path: "/api/orders/station", body: f => ({ id: f.stationOrder, station: "kitchen" }), expect: [403] },
+    { name: "POST /api/orders/station (a station with nothing here)", as: "kitchen", method: "POST",
+      path: "/api/orders/station", body: f => ({ id: f.kitchenOnlyOrder, station: "bar" }), expect: [409],
+      expectError: /nada que preparar|nothing to make/i },
+    { name: "POST /api/orders/station (the kitchen finishes: the order is ready)", as: "kitchen", method: "POST",
+      path: "/api/orders/station", body: f => ({ id: f.stationOrder, station: "kitchen" }), expect: [200],
+      check: async (d, f) => {
+        const { data } = await f.admin.from("orders").select("status").eq("id", f.stationOrder).single();
+        return d.status === "ready" && data?.status === "ready" || `answered ${d.status}, stored ${data?.status}`;
+      } },
+    { name: "POST /api/orders/station (an order already ready)", as: "kitchen", method: "POST",
+      path: "/api/orders/station", body: f => ({ id: f.stationOrder, station: "bar" }), expect: [409],
+      expectError: /ya avanzó|already moved on/i },
     { name: "PATCH /api/orders (move)", as: "kitchen", method: "PATCH", path: "/api/orders",
       body: { id: unpaidOrder, status: "preparing" }, expect: [200] },
     // A move that waited out a dropped connection carries the status it began

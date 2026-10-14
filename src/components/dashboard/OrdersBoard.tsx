@@ -15,6 +15,9 @@ import ServiceRequestsBar from "./ServiceRequestsBar";
 import { readyToDeliver } from "@/lib/ready-tables";
 import { EmptyIcon } from "@/components/ui/icons";
 import { cancelWording } from "@/lib/cancel-wording";
+import { inStation, viewStatus, type Station } from "@/lib/stations";
+import { useBoardStation } from "@/hooks/useBoardStation";
+import StationFilter from "./StationFilter";
 
 interface OrdersBoardProps {
   restaurant: Restaurant;
@@ -43,6 +46,8 @@ interface OrdersBoardProps {
   revenueBase: number;
   /** Start of today (ms) — the shared day boundary for the revenue stat. */
   todayStartMs: number;
+  /** The menu has a section made at the bar, so the board offers stations. */
+  hasStations?: boolean;
 }
 
 
@@ -69,6 +74,7 @@ export default function OrdersBoard({
   showRevenue,
   revenueBase,
   todayStartMs,
+  hasStations = false,
 }: OrdersBoardProps) {
   const router = useRouter();
   const t = useT();
@@ -79,7 +85,27 @@ export default function OrdersBoard({
   const confirm = useConfirm();
   const toast = useToast();
 
-  const live = orders.filter(o => LIVE_STATUSES.has(o.status));
+  const [station, setStation] = useBoardStation(restaurant.id, hasStations);
+  // This screen's station sees only orders it makes something in, each in
+  // the column its own part has reached.
+  const live = orders.filter(o => LIVE_STATUSES.has(o.status) && inStation(o, station));
+  const byId = new Map(live.map(o => [o.id, o]));
+  const viewed = live.map(o => ({ ...o, status: viewStatus(o, station) }));
+
+  /** A station finished its part; the database decides whether the order is ready. */
+  async function markStationReady(id: string, done: Station): Promise<void> {
+    try {
+      const res = await fetch("/api/orders/station", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, station: done }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) toast(data.error ?? t("orders.moveRefused"), "error");
+    } catch {
+      toast(t("done.networkError"), "error");
+    }
+  }
 
   const activeCount = live.filter(
     o => o.status === "received" || o.status === "preparing",
@@ -152,6 +178,8 @@ export default function OrdersBoard({
         {/* A table asking for something is waiting on a person right now, so
             it sits above the money: the debts aren't going anywhere, and a
             raised hand is the thing that gets answered first. */}
+        {hasStations && <StationFilter station={station} onChange={setStation} />}
+
         <ServiceRequestsBar
           restaurantId={restaurant.id}
           canSettle={canSettle}
@@ -182,7 +210,7 @@ export default function OrdersBoard({
              a plain grid — it's browsed, not worked. */
           <div className="tt-board">
             {BOARD_COLUMNS.map(col => {
-              const inColumn = columnOrders(live, col.status);
+              const inColumn = columnOrders(viewed, col.status).map(v => byId.get(v.id)!);
               return (
                 <section key={col.status} className="tt-board-col">
                   <header className="tt-board-head">
@@ -202,6 +230,8 @@ export default function OrdersBoard({
                           onAdvance={updateStatus}
                           onCancel={canCancel ? handleCancel : undefined}
                           canMove={canMove}
+                          station={station}
+                          onStationReady={(id, done) => void markStationReady(id, done)}
                         />
                       ))
                     )}
