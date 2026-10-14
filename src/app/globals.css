@@ -1007,6 +1007,7 @@ a.tt-btn {
 /* A till button is hit with a thumb, in a hurry, over and over: a real target
    with a real edge, the price where the eye already is. */
 .tt-pos-tile {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1021,6 +1022,60 @@ a.tt-btn {
   font: inherit;
   color: inherit;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+/* How many of this dish the sale holds: a one-tap add has to show it landed. */
+.tt-pos-tile-count {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  min-width: 26px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--tt-accent);
+  color: var(--tt-accent-ink);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+/* Counter orders the kitchen called ready, by the code the customer holds. */
+.tt-pos-pickup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--tt-success);
+  border-radius: 12px;
+  background: var(--tt-success-wash);
+}
+.tt-pos-pickup-title {
+  font-size: 14px;
+}
+.tt-pos-pickup-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.tt-pos-pickup-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--tt-line);
+  background: var(--tt-white);
+  font: inherit;
+  font-size: 14px;
+  color: inherit;
+  cursor: pointer;
+}
+.tt-pos-pickup-code {
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
 }
 .tt-pos-tile:hover:not(:disabled) {
   border-color: var(--tt-accent);

@@ -645,6 +645,28 @@ Owner, manager and cashier. Not the waiter: carrying a card machine to a table
 is settling a bill somebody else placed, which is a different act from ringing
 a sale.
 
+### The morning rush
+
+A café judges the till by how fast a new employee serves a queue
+(`src/lib/pos-quick.ts`):
+
+- **One tap.** A dish with nothing to choose — no option group, no extra —
+  goes into the sale on a tap; a second tap adds one more to the same line
+  rather than a new one. A dish with something to choose opens its screen as
+  before. Each tile shows how many the sale holds ("×2"); a line can still be
+  opened from the sale to add a note.
+- **Más vendidos**: the eight dishes that sold most over the last 14 days,
+  still on the menu and available, in a row above the sections.
+- **Repetir el último pedido**: the sale this device rang last, kept on the
+  device by what was chosen (never what it cost), rebuilt from today's menu
+  with the same rule as "lo de siempre" (`rebuildLine` in `src/lib/usual.ts`):
+  at today's price, and only lines that can still be made exactly as they
+  were. Combos are left out of it.
+- **Listos para recoger**: counter orders the kitchen has called ready, by the
+  code on the customer's ticket (the till already shows it large when the sale
+  is rung). A tap means it went over the counter: completed, only if still
+  ready. Live, quietly — the till does not ping for its own sales.
+
 ## Tickets on paper
 
 Two printers, two different documents, two different ways of reaching them.

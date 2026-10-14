@@ -1,5 +1,6 @@
 "use client";
 
+import { rememberLastSale } from "@/lib/pos-last-sale";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
@@ -127,6 +128,8 @@ export function usePosCharge({ restaurant, cart, details, canEmailReceipt }: Pos
         total: data.total,
         handedOver: Boolean(data.handedOver),
       });
+      // Kept on this device, so the next "same again" is one tap.
+      rememberLastSale(restaurant.id, cart.lines);
       cart.clear();
       details.reset();
       // The kitchen board and the badges have a new ticket to show.

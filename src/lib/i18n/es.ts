@@ -1098,6 +1098,15 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
   },
 
   pos: {
+    bestSellers: "Más vendidos",
+    inSale: "{n} en esta venta",
+    repeatLast: "Repetir el último pedido",
+    repeatDropped: "{n} producto(s) del último pedido ya no están disponibles y se dejaron fuera.",
+    pickupTitle: "Listos para recoger",
+    pickupHandOver: "Toca cuando se entregue",
+    pickupDishes: "{n} producto(s)",
+    pickedUp: "{code} entregado.",
+    pickupFailed: "No se pudo marcar {code} como entregado. Inténtalo desde el tablero de pedidos.",
     title: "Caja",
     sale: "Venta",
     empty: "Toca un platillo para empezar.",

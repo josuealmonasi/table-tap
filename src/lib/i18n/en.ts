@@ -1104,6 +1104,15 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
   },
 
   pos: {
+    bestSellers: "Best sellers",
+    inSale: "{n} in this sale",
+    repeatLast: "Repeat the last order",
+    repeatDropped: "{n} product(s) from the last order are not available any more and were left out.",
+    pickupTitle: "Ready for pickup",
+    pickupHandOver: "Tap when it is handed over",
+    pickupDishes: "{n} item(s)",
+    pickedUp: "{code} handed over.",
+    pickupFailed: "{code} could not be marked as handed over. Try again from the orders board.",
     title: "Till",
     sale: "Sale",
     empty: "Tap a dish to start.",

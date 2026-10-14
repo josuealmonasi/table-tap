@@ -9,6 +9,10 @@ import PlanLock from "@/components/dashboard/plan/PlanLock";
 import { allPlans } from "@/lib/plan-server";
 import { cheapestWith } from "@/lib/plan";
 import { openShift } from "@/lib/cash-shift-server";
+import { createClient } from "@/lib/supabase/server";
+import { LIVE_FLOW } from "@/lib/order-flow";
+import { topSellers } from "@/lib/pos-quick";
+import type { Order, OrderLineItem } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +50,23 @@ export default async function PosPage() {
   const data = await loadOrderingData(membership.restaurant.id, { includeSoldOut: true });
   if (!data.restaurant) redirect("/dashboard");
 
+  // For the morning rush: the counter's orders still in the kitchen's hands
+  // (the ready ones are called out from here), and what has actually sold
+  // over the last two weeks, for the row at the top. Both are conveniences:
+  // a failed read leaves the strip and the row empty, never the till.
+  const supabase = await createClient();
+  const since = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
+  const [counterRes, soldRes] = await Promise.all([
+    supabase.from("orders").select("*")
+      .eq("restaurant_id", membership.restaurant.id).in("status", LIVE_FLOW).is("table_id", null)
+      .order("created_at", { ascending: true }),
+    supabase.from("orders").select("items")
+      .eq("restaurant_id", membership.restaurant.id).neq("status", "cancelled").gte("created_at", since)
+      .order("created_at", { ascending: false }).limit(1000),
+  ]);
+  if (counterRes.error) console.error("till: counter orders", counterRes.error.message);
+  if (soldRes.error) console.error("till: best sellers", soldRes.error.message);
+
   return (
     <PosScreen
       restaurant={data.restaurant}
@@ -61,6 +82,8 @@ export default async function PosPage() {
       loyalty={await loyaltyOn(membership.restaurant.id, plan.limits)}
       canChargeAccount={can(plan.limits, "openAccounts")}
       shiftOpen={(await openShift(membership.restaurant.id)) !== null}
+      counterOrders={(counterRes.data as Order[] | null) ?? []}
+      bestSellers={topSellers((soldRes.data as { items: OrderLineItem[] | null }[] | null) ?? [], data.items)}
     />
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
 import { useLiveStock } from "@/hooks/useLiveStock";
@@ -16,7 +16,7 @@ import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import type { CartItem } from "@/hooks/useCart";
 import { DietaryTagsProvider } from "@/components/DietaryTagsContext";
 import type { StoredDietaryTag } from "@/lib/dietary";
-import type { Category, MenuItem, Restaurant } from "@/lib/types";
+import type { Category, MenuItem, Order, Restaurant } from "@/lib/types";
 import type { CartPromo } from "@/lib/pricing";
 import { usePosCart } from "@/hooks/usePosCart";
 import { usePosSaleDetails } from "@/hooks/usePosSaleDetails";
@@ -26,6 +26,12 @@ import PosMenu from "./PosMenu";
 import PosSalePanel from "./PosSalePanel";
 import PosAsk from "./PosAsk";
 import PosTicketModal from "./PosTicketModal";
+import PosPickup from "./PosPickup";
+import { useToast } from "@/components/ui/Toast";
+import { useCounterPickup } from "@/hooks/useCounterPickup";
+import { inSale, quickLine } from "@/lib/pos-quick";
+import { rebuildLine, type RememberedLine } from "@/lib/usual";
+import { readLastSale } from "@/lib/pos-last-sale";
 
 /**
  * The counter till.
@@ -54,6 +60,8 @@ export default function PosScreen({
   loyalty = false,
   canChargeAccount = false,
   shiftOpen = false,
+  counterOrders = [],
+  bestSellers = [],
 }: {
   restaurant: Restaurant;
   categories: Category[];
@@ -74,8 +82,13 @@ export default function PosScreen({
   canChargeAccount?: boolean;
   /** A shift is open at the cash drawer. */
   shiftOpen?: boolean;
+  /** The counter's orders still with the kitchen, for the pickup strip. */
+  counterOrders?: Order[];
+  /** The ids of the dishes that sell most, most first. */
+  bestSellers?: string[];
 }) {
   const t = useT();
+  const toast = useToast();
   const router = useRouter();
   // Two tills sell at once; the counts on the tiles follow the kitchen.
   useLiveStock(restaurant.id);
@@ -140,6 +153,36 @@ export default function PosScreen({
   const allHandedOver = lines.length > 0 && lines.every(skipsKitchen);
 
   const sections = posSections(categories, items, search);
+  const pickup = useCounterPickup(restaurant.id, counterOrders);
+  const held = useMemo(() => inSale(lines), [lines]);
+  const topItems = useMemo(
+    () => bestSellers.map(id => items.find(i => i.id === id)).filter((i): i is MenuItem => Boolean(i)),
+    [bestSellers, items],
+  );
+
+  // The sale this till rang last, to ring again. Read after mounting (it is
+  // this device's), and again each time a sale is rung.
+  const [lastSale, setLastSale] = useState<RememberedLine[]>([]);
+  useEffect(() => setLastSale(readLastSale(restaurant.id)), [restaurant.id, ticket]);
+
+  /** One tap: in at once when there is nothing to choose, else its screen. */
+  function tap(dish: MenuItem): void {
+    const line = quickLine(dish, extrasFor(dish).length);
+    if (line) cart.addOne(line);
+    else setOpenItem(dish);
+  }
+
+  /** The last sale again, at today's prices; what can no longer be made is left out. */
+  function repeat(): void {
+    const itemById = new Map(items.map(i => [i.id, i]));
+    const extraById = new Map(extras.map(e => [e.id, e]));
+    const rebuilt = lastSale
+      .map(l => rebuildLine(l, itemById, extraById, extrasByProduct))
+      .filter((l): l is NonNullable<typeof l> => l !== null);
+    rebuilt.forEach(cart.add);
+    const dropped = lastSale.length - rebuilt.length;
+    if (dropped > 0) toast(t("pos.repeatDropped", { n: dropped }), "error");
+  }
 
   /** Extras this dish offers, resolved from the ids the menu stores. */
   function extrasFor(item: MenuItem): MenuItem[] {
@@ -184,6 +227,8 @@ export default function PosScreen({
 
           {closedNow && <p className="tt-offline-banner">{t("pos.closedNow")}</p>}
 
+          <PosPickup ready={pickup.ready} onHandOver={p => void pickup.handOver(p)} />
+
           <div className="tt-pos">
             <PosMenu
               sections={sections}
@@ -192,7 +237,9 @@ export default function PosScreen({
               onSearch={setSearch}
               sending={sending}
               currency={restaurant.currency}
-              onOpenItem={setOpenItem}
+              onOpenItem={tap}
+              bestSellers={topItems}
+              inSale={held}
               onOpenCombo={setOpenCombo}
             />
             <PosSalePanel
@@ -207,6 +254,7 @@ export default function PosScreen({
               onEdit={setEditing}
               onCharge={setPending}
               onChargeAccount={account => charge("account", account)}
+              onRepeat={lines.length === 0 && lastSale.length > 0 ? repeat : undefined}
             />
           </div>
         </div>

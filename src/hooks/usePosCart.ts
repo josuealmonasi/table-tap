@@ -1,5 +1,6 @@
 "use client";
 
+import { plainTwin } from "@/lib/pos-quick";
 import { useEffect, useRef, useState } from "react";
 import type { CartItem } from "@/hooks/useCart";
 import type { OrderLineItem } from "@/lib/types";
@@ -72,5 +73,18 @@ export function usePosCart(restaurantId: string, remember = true) {
     );
   }
 
-  return { lines, add, replace, changeQty, clear: () => setLines([]) };
+  /**
+   * One tap of a dish with nothing to choose: one more of it. A plain line of
+   * the same dish already in the sale grows, so three lattes read as "3 ×"
+   * rather than three lines to scan on the ticket.
+   */
+  function addOne(line: OrderLineItem): void {
+    setLines(prev => {
+      const twin = plainTwin(prev, line.itemId);
+      if (!twin) return [...prev, { ...line, cartId: nextCartId.current++ }];
+      return prev.map(l => (l.cartId === twin.cartId ? { ...l, qty: Math.min(l.qty + 1, 99) } : l));
+    });
+  }
+
+  return { lines, add, addOne, replace, changeQty, clear: () => setLines([]) };
 }

@@ -22,6 +22,8 @@ interface PosSalePanelProps {
   onEdit: (line: CartItem) => void;
   onCharge: (method: "cash" | "card") => void;
   onChargeAccount: (account: AccountListItem) => Promise<void>;
+  /** Rings the sale before this one again; absent when there is none to ring. */
+  onRepeat?: () => void;
 }
 
 /** The sale itself: its lines, its total, and the ways to take the money. */
@@ -37,6 +39,7 @@ export default function PosSalePanel({
   onEdit,
   onCharge,
   onChargeAccount,
+  onRepeat,
 }: PosSalePanelProps) {
   const t = useT();
   return (
@@ -46,7 +49,14 @@ export default function PosSalePanel({
       </h3>
 
       {lines.length === 0 ? (
-        <p className="tt-muted">{t("pos.empty")}</p>
+        <>
+          <p className="tt-muted">{t("pos.empty")}</p>
+          {onRepeat && (
+            <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={onRepeat}>
+              {t("pos.repeatLast")}
+            </button>
+          )}
+        </>
       ) : (
         <div className="tt-pos-lines">
           {lines.map(line => (
