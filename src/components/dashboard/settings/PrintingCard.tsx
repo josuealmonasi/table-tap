@@ -63,7 +63,7 @@ export default function PrintingCard({
   }
 
   return (
-    <div className="tt-section">
+    <div className="tt-section" id="impresion">
       <div className="tt-section-head">
         <h3 className="tt-serif" style={{ margin: 0 }}>
           {t("dash.printingTitle")}

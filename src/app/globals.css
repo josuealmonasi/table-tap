@@ -831,6 +831,55 @@ a.tt-btn {
   color: var(--tt-danger);
 }
 
+/* The owner's setup checklist on the dashboard home. */
+.tt-setup-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tt-setup-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--tt-line);
+}
+.tt-setup-mark {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--tt-line);
+  display: grid;
+  place-items: center;
+  color: var(--tt-white);
+}
+.tt-setup-done .tt-setup-mark {
+  border-color: var(--tt-success);
+  background: var(--tt-success);
+}
+/* The words take what is left and wrap; the mark and the button never shrink. */
+.tt-setup-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
+}
+.tt-setup-hint {
+  font-size: 13px;
+}
+.tt-setup-state {
+  flex: none;
+  font-size: 13px;
+}
+.tt-setup-step > .tt-btn {
+  flex: none;
+}
+
 .tt-till-figures {
   display: flex;
   flex-wrap: wrap;
