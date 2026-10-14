@@ -52,7 +52,9 @@ export type LogAction =
   | "redeemed"
   /** Put on a customer's account: delivered, not yet paid. */
   | "charged"
-  | "closed";
+  | "closed"
+  /** A shift at the cash drawer started. */
+  | "opened";
 
 export interface LogEvent {
   restaurantId: string;

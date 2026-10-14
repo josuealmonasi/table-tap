@@ -3762,8 +3762,8 @@ grant execute on function public.account_checkout_release(uuid) to service_role;
 -- what it started with, plus the cash taken, minus what was taken out. Card
 -- and online money has no float, so only cash has these.
 --
--- An opening is set again by writing a new one; the day's latest is the one
--- that counts, and the earlier ones stay as the record of who changed it.
+-- Openings now belong to cash_shifts: the 'opening' kind is no longer
+-- written. Withdrawals carry the shift they were taken in.
 -- Written and read only by the server, scoped to the restaurant there.
 create table if not exists cash_movements (
   id            uuid primary key default gen_random_uuid(),
@@ -3783,6 +3783,42 @@ alter table cash_movements enable row level security;
 revoke all on cash_movements from anon;
 revoke all on cash_movements from authenticated;
 grant all on cash_movements to service_role;
+
+-- A shift at the cash drawer: opened with the cash it starts with, closed by
+-- somebody who counted it. The count is entered before the expected amount is
+-- shown and cannot be changed afterwards — a count adjusted after seeing the
+-- answer is not a count. A difference is explained, by the person who closed
+-- or a manager, and the explanation stays with the shift.
+--
+-- One open shift per restaurant: there is one drawer. Withdrawals belong to
+-- the open shift (cash_movements.shift_id). The expected amount is worked out
+-- by the server at the moment of the count and stored, so a record struck off
+-- or a payment refunded later cannot rewrite what the shift was closed on.
+-- Server-only, like the drawer's movements.
+create table if not exists cash_shifts (
+  id              uuid primary key default gen_random_uuid(),
+  restaurant_id   uuid not null references restaurants(id) on delete cascade,
+  opened_by       text not null,
+  opened_at       timestamptz not null default now(),
+  opening_amount  numeric not null check (opening_amount >= 0 and opening_amount <= 1000000),
+  closed_by       text,
+  closed_at       timestamptz,
+  counted_cash    numeric check (counted_cash >= 0 and counted_cash <= 1000000),
+  expected_cash   numeric,
+  difference      numeric,
+  difference_note text check (difference_note is null or char_length(difference_note) <= 280),
+  explained_by    text,
+  check ((closed_at is null) = (closed_by is null)),
+  check ((closed_at is null) = (counted_cash is null))
+);
+create unique index if not exists cash_shifts_one_open on cash_shifts(restaurant_id) where closed_at is null;
+create index if not exists cash_shifts_day_idx on cash_shifts(restaurant_id, opened_at desc);
+alter table cash_shifts enable row level security;
+revoke all on cash_shifts from anon;
+revoke all on cash_shifts from authenticated;
+grant all on cash_shifts to service_role;
+alter table cash_movements add column if not exists shift_id uuid references cash_shifts(id) on delete cascade;
+create index if not exists cash_movements_shift_idx on cash_movements(shift_id);
 
 -- ── Last, on purpose ────────────────────────────────────────────────────────
 -- The table-shaping privileges, taken from every table once more. The revoke

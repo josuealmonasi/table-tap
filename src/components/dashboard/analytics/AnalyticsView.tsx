@@ -8,7 +8,7 @@ import CorteCard from "./CorteCard";
 import LoyaltyStatsCard from "./LoyaltyStatsCard";
 import type { LoyaltyStats } from "@/lib/loyalty/analytics";
 import type { Corte } from "@/lib/corte";
-import type { Drawer } from "@/lib/cash-drawer";
+import type { ShiftView } from "@/lib/cash-shift";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import OrderHistory from "@/components/dashboard/OrderHistory";
 
@@ -29,8 +29,8 @@ interface AnalyticsViewProps {
   rated: RatedDish[];
   /** Today's register close, whatever period the charts are showing. */
   corte: Corte;
-  /** Today's cash drawer: opening, cash taken, withdrawals. */
-  drawer: Drawer;
+  /** Today's shifts at the cash drawer. */
+  shifts: ShiftView[];
   /** The restaurant's own clock, for the times a withdrawal was made. */
   timeZone: string;
   restaurantName: string;
@@ -54,7 +54,7 @@ export default function AnalyticsView({
   restaurantId,
   rated,
   corte,
-  drawer,
+  shifts,
   timeZone,
   restaurantName,
   dayLabel,
@@ -103,7 +103,7 @@ export default function AnalyticsView({
             below it is always today, whatever period the charts are showing. */}
         <CorteCard
           corte={corte}
-          drawer={drawer}
+          shifts={shifts}
           currency={currency}
           restaurantName={restaurantName}
           day={dayLabel}

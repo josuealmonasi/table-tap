@@ -1,15 +1,10 @@
 import { round2 } from "@/lib/money";
 
 /**
- * The cash drawer through one day: what it started with, the cash taken, and
- * what was taken out — so the register close can say what it should hold.
+ * Cash taken out of the drawer, and how an amount of cash is read as typed.
+ * What the drawer should hold is worked out per shift: see cash-shift.ts.
  *
- * Asked for by a restaurant: "if we start the day with 250 pesos, the close is
- * the opening plus what was sold, and a withdrawal has to be recorded." Only
- * cash has a float. Card and online money never sits in a drawer, so neither
- * starts anywhere or is taken out of one.
- *
- * Pure. The rows come from `cash_movements`, the cash from the corte.
+ * Pure.
  */
 
 export const MAX_CASH_AMOUNT = 1_000_000;
@@ -22,47 +17,6 @@ export interface CashMovement {
   note: string | null;
   actor_email: string;
   created_at: string;
-}
-
-export interface Drawer {
-  /** What the day started with: the latest opening set today, or nothing. */
-  opening: number;
-  /** Whether anybody set one today. A drawer that starts at 0 says so too. */
-  openingSet: boolean;
-  /** Cash taken today, net of cash handed back — the corte's cash column. */
-  cashSales: number;
-  /** Taken out of the drawer today, oldest first. */
-  withdrawals: CashMovement[];
-  withdrawn: number;
-  /** What should be in the drawer now: opening + cash sales − withdrawals. */
-  expected: number;
-}
-
-export const EMPTY_DRAWER: Drawer = {
-  opening: 0,
-  openingSet: false,
-  cashSales: 0,
-  withdrawals: [],
-  withdrawn: 0,
-  expected: 0,
-};
-
-/** The drawer for a day, from its movements and the cash the corte counted. */
-export function drawerFrom(movements: CashMovement[], cashSales: number): Drawer {
-  const byTime = [...movements].sort((a, b) => a.created_at.localeCompare(b.created_at));
-  const openings = byTime.filter(m => m.kind === "opening");
-  const withdrawals = byTime.filter(m => m.kind === "withdrawal");
-  const opening = round2(Number(openings.at(-1)?.amount ?? 0));
-  const withdrawn = round2(withdrawals.reduce((sum, m) => sum + Number(m.amount), 0));
-  const cash = round2(cashSales);
-  return {
-    opening,
-    openingSet: openings.length > 0,
-    cashSales: cash,
-    withdrawals,
-    withdrawn,
-    expected: round2(opening + cash - withdrawn),
-  };
 }
 
 /**

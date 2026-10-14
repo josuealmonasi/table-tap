@@ -14,6 +14,7 @@
 -- you add a table there, add it here.
 -- ============================================================================
 drop table if exists cash_movements      cascade;
+drop table if exists cash_shifts         cascade;
 drop table if exists stock_reservations cascade;
 drop table if exists account_checkouts   cascade;
 drop table if exists customer_accounts   cascade;

@@ -53,6 +53,7 @@ export default function PosScreen({
   canEmailReceipt,
   loyalty = false,
   canChargeAccount = false,
+  shiftOpen = false,
 }: {
   restaurant: Restaurant;
   categories: Category[];
@@ -71,6 +72,8 @@ export default function PosScreen({
   loyalty?: boolean;
   /** The plan carries customer accounts: a sale can go on one. */
   canChargeAccount?: boolean;
+  /** A shift is open at the cash drawer. */
+  shiftOpen?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -175,7 +178,7 @@ export default function PosScreen({
                 onFound={id => router.push(`/dashboard/bills?order=${id}`)}
               />
               {loyalty && <StampCard />}
-              <PosCashDrawer />
+              <PosCashDrawer shiftOpen={shiftOpen} currency={restaurant.currency} />
             </div>
           </header>
 
