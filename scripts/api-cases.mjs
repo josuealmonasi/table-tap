@@ -1130,12 +1130,18 @@ export function cases(fx) {
     // The terminal's deposits, on a day the demo took cards on its terminal.
     { name: "POST /api/terminal/deposits (a day's deposit arrived short)", as: "manager", method: "POST",
       path: "/api/terminal/deposits",
+      // The most recent day the terminal took cards that nobody has marked
+      // yet — the seed marks the older ones, as a café that reconciles would.
       arrange: async f => {
         const since = new Date(Date.now() - 10 * 86_400_000).toISOString();
-        const { data } = await f.admin.from("payments").select("created_at").eq("restaurant_id", r).eq("method", "card")
-          .is("stripe_payment_intent", null).gte("created_at", since).order("created_at").limit(1);
         const day = (iso) => new Intl.DateTimeFormat("en-CA", { timeZone: f.restaurant.timezone ?? "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
-        f.depositDay = data?.[0] ? day(data[0].created_at) : "";
+        const [{ data: paid }, { data: marked }] = await Promise.all([
+          f.admin.from("payments").select("created_at").eq("restaurant_id", r).eq("method", "card")
+            .is("stripe_payment_intent", null).gte("created_at", since).order("created_at", { ascending: false }),
+          f.admin.from("terminal_deposits").select("sales_day").eq("restaurant_id", r),
+        ]);
+        const taken = new Set((marked ?? []).map(d => d.sales_day));
+        f.depositDay = (paid ?? []).map(p => day(p.created_at)).find(d => !taken.has(d)) ?? "";
       },
       body: f => ({ day: f.depositDay, received: "100.00", note: `${MARK} deposit` }),
       expect: [200],
