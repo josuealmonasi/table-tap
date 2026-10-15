@@ -7991,3 +7991,98 @@ a.tt-user-plan:hover {
     grid-template-areas: "ingredient quantity remove";
   }
 }
+/* Five tabs do not fit one line on a phone: they wrap rather than run off it. */
+.tt-costs-tabs {
+  flex-wrap: wrap;
+}
+/* A row that is a record rather than a button: same shape, nothing to press
+   but its own small action. */
+.tt-costs-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  padding: 12px;
+  border: 1px solid var(--tt-line);
+  border-radius: var(--tt-radius-sm);
+  background: var(--tt-white);
+}
+/* The name and its details on the left, the figure and the action on the
+   right, whichever of the two a row has. */
+.tt-costs-entry > .tt-costs-product-name,
+.tt-costs-entry > .tt-costs-product-meta {
+  grid-column: 1;
+}
+.tt-costs-entry > .tt-costs-margin {
+  grid-column: 2;
+  grid-row: 1;
+  text-align: right;
+}
+.tt-costs-entry > .tt-costs-entry-remove {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: end;
+  align-self: center;
+}
+.tt-costs-supplier + .tt-costs-supplier {
+  margin-top: 16px;
+}
+.tt-costs-supplier .tt-section-head {
+  margin: 12px 0 0;
+}
+.tt-costs-count-list,
+.tt-costs-count-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tt-costs-count-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 9rem);
+  align-items: center;
+  gap: 10px;
+}
+.tt-costs-count-row > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+.tt-costs-count-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.tt-costs-count-input .tt-input {
+  min-width: 0;
+}
+.tt-costs-count-input .tt-muted {
+  min-width: 2.5ch;
+  font-size: 13px;
+}
+.tt-costs-count-results li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.tt-waste-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 560px;
+}
+.tt-waste-reasons {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.tt-waste-reasons .tt-station-filter {
+  margin: 6px 0 0;
+}

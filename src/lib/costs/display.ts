@@ -36,3 +36,15 @@ export function change(before: number, after: number): string {
 export function amount(n: number): string {
   return String(Math.round(n * 1000) / 1000);
 }
+
+/** A quantity in the unit people count a shelf in: 3200 ml is 3.2 l. */
+export function inShown(quantity: number, unit: IngredientUnit): { amount: number; unit: ShownUnit } {
+  if (unit === "g") return { amount: quantity / 1000, unit: "kg" };
+  if (unit === "ml") return { amount: quantity / 1000, unit: "l" };
+  return { amount: quantity, unit: "pza" };
+}
+
+/** Back from what was typed in kg, l or pieces to the ingredient's own unit. */
+export function fromShown(amount: number, unit: IngredientUnit): number {
+  return unit === "pza" ? amount : Math.round(amount * 1000 * 1000) / 1000;
+}

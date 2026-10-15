@@ -14,6 +14,7 @@ export type NavItem = {
     | "Orders"
     | "Analytics"
     | "Costs"
+    | "Waste"
     | "Promotions"
     | "Loyalty"
     | "Table"
@@ -97,6 +98,15 @@ export const NAV_ITEMS: NavItem[] = [
     feature: "costs",
   },
   {
+    // What was thrown away, recorded by whoever threw it. The team's screen:
+    // the owner and the managers read it, with what it cost, on Costos.
+    href: "/dashboard/waste",
+    icon: "Waste",
+    titleKey: "nav.waste",
+    descKey: "nav.wasteDesc",
+    feature: "costs",
+  },
+  {
     href: "/dashboard/promotions",
     icon: "Promotions",
     titleKey: "nav.promos",
@@ -169,6 +179,9 @@ export type DashboardRole =
 // Staff logins and the subscription are both the owner's alone: a manager runs
 // the restaurant, but hiring and the card are not theirs to change.
 const OWNER_ONLY = ["/dashboard/staff", "/dashboard/plan"];
+// The team's own screens, which owners and managers reach from their own:
+// waste is recorded here and read, with its cost, on the costs screen.
+const TEAM_ONLY = ["/dashboard/waste"];
 
 /**
  * The dashboard areas a role may see (drawer links and home tiles).
@@ -209,23 +222,25 @@ export function navItemsFor(
   // The kitchen only gets its board. Waiter and cashier also get open bills:
   // one asks for a discount on a table, the other collects at the till, and
   // both need the same screen to do it.
-  if (role === "kitchen") return allowed(NAV_ITEMS.filter(i => i.href === "/dashboard/orders"));
+  if (role === "kitchen") {
+    return allowed(NAV_ITEMS.filter(i => ["/dashboard/orders", "/dashboard/waste"].includes(i.href)));
+  }
   // The till is the cashier's own screen; a waiter carries a card machine to a
   // table, which is a different job and a different screen.
   if (role === "cashier") {
     return allowed(
       NAV_ITEMS.filter(i =>
-        ["/dashboard/orders", "/dashboard/bills", "/dashboard/pos", "/dashboard/accounts"].includes(i.href),
+        ["/dashboard/orders", "/dashboard/bills", "/dashboard/pos", "/dashboard/accounts", "/dashboard/waste"].includes(i.href),
       ),
     );
   }
   if (role === "waiter") {
     return allowed(
       NAV_ITEMS.filter(i =>
-        ["/dashboard/orders", "/dashboard/bills", "/dashboard/table-order", "/dashboard/accounts"].includes(i.href),
+        ["/dashboard/orders", "/dashboard/bills", "/dashboard/table-order", "/dashboard/accounts", "/dashboard/waste"].includes(i.href),
       ),
     );
   }
-  if (role === "manager") return allowed(NAV_ITEMS.filter(i => !OWNER_ONLY.includes(i.href)));
-  return allowed(NAV_ITEMS);
+  if (role === "manager") return allowed(NAV_ITEMS.filter(i => !OWNER_ONLY.includes(i.href) && !TEAM_ONLY.includes(i.href)));
+  return allowed(NAV_ITEMS.filter(i => !TEAM_ONLY.includes(i.href)));
 }

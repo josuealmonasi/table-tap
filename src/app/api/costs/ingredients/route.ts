@@ -6,15 +6,15 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { actingManager } from "@/lib/api-guard";
 import { costsBlocks, uuidOf } from "@/lib/costs/guard";
-import { ingredientName, ingredientUnit, MAX_INGREDIENTS, packPrice, packSize, supplierName, type IngredientUnit } from "@/lib/costs/input";
+import { ingredientName, ingredientUnit, leadDays, MAX_INGREDIENTS, packPrice, packSize, supplierName, type IngredientUnit } from "@/lib/costs/input";
 
 export const runtime = "nodejs";
 
 // /api/costs/ingredients — the restaurant's ingredients, for the owner and the
 // managers on a tier with costs.
 //
-// POST   { name, unit, packSize, packUnit, packPrice, supplier? }   add one
-// PATCH  { id, name, packSize, packUnit, packPrice, supplier? }     change one
+// POST   { name, unit, packSize, packUnit, packPrice, supplier?, leadDays? }   add one
+// PATCH  { id, name, packSize, packUnit, packPrice, supplier?, leadDays? }     change one
 // DELETE { id }                                                      archive it
 //
 // A unit is fixed once the ingredient exists: 18 in a recipe means 18 g, and
@@ -23,9 +23,10 @@ export const runtime = "nodejs";
 
 interface IngredientBody {
   id?: unknown; name?: unknown; unit?: unknown; packSize?: unknown; packUnit?: unknown; packPrice?: unknown; supplier?: unknown;
+  leadDays?: unknown;
 }
 
-type Fields = { name: string; pack_size: number; pack_price: number; supplier: string | null };
+type Fields = { name: string; pack_size: number; pack_price: number; supplier: string | null; lead_days?: number };
 
 async function fieldsOf(body: IngredientBody, unit: IngredientUnit): Promise<Fields | NextResponse> {
   const name = ingredientName(body.name);
@@ -36,7 +37,11 @@ async function fieldsOf(body: IngredientBody, unit: IngredientUnit): Promise<Fie
   if (price === null) return await apiError("apiErr.packPrice", 400);
   const supplier = supplierName(body.supplier);
   if (supplier === "bad") return await apiError("apiErr.supplierName", 400);
-  return { name, pack_size: size, pack_price: price, supplier };
+  // Absent keeps what it was (2 days for a new one).
+  if (body.leadDays === undefined) return { name, pack_size: size, pack_price: price, supplier };
+  const lead = leadDays(body.leadDays);
+  if (lead === null) return await apiError("apiErr.leadDays", 400);
+  return { name, pack_size: size, pack_price: price, supplier, lead_days: lead };
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {

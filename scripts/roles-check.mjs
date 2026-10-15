@@ -74,6 +74,8 @@ const PAGES = {
   "/dashboard/promotions": { allow: MANAGES, marker: "Nuevo combo" },
   // The restaurant's private books: what each product costs and leaves.
   "/dashboard/costs": { allow: MANAGES, marker: "Comisión de cobro:" },
+  // What was thrown away: the whole team records it.
+  "/dashboard/waste": { allow: ALL, marker: "¿Qué se tiró?" },
   "/dashboard/loyalty": { allow: MANAGES, marker: "Buscar una tarjeta" },
   "/dashboard/settings": {
     allow: MANAGES,
@@ -138,6 +140,12 @@ const ROUTES = [
   { m: "DELETE", p: "/api/costs/ingredients", body: {}, allow: MANAGES, passes: 400 },
   { m: "PUT", p: "/api/costs/recipe", body: {}, allow: MANAGES, passes: 400 },
   { m: "PATCH", p: "/api/costs/settings", body: {}, allow: MANAGES, passes: 400 },
+  // Waste: anyone on the team records it, a manager takes it back; deliveries
+  // and counts are the managers'. All refused on shape: nothing is written.
+  { m: "POST", p: "/api/costs/waste", body: {}, allow: ALL, passes: 400 },
+  { m: "DELETE", p: "/api/costs/waste", body: {}, allow: MANAGES, passes: 400 },
+  { m: "POST", p: "/api/costs/purchases", body: {}, allow: MANAGES, passes: 400 },
+  { m: "POST", p: "/api/costs/counts", body: {}, allow: MANAGES, passes: 400 },
   // What that console calls — moving a restaurant between plans, deleting
   // one, managing any login — is the platform admin's alone. Each checks who
   // is asking first and answers the platform admin 400 for an empty body.

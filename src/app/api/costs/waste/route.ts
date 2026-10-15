@@ -1,0 +1,92 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { logEvent } from "@/lib/activity-log";
+import { logDetail } from "@/lib/log-detail";
+import { actingManager, actingStaff } from "@/lib/api-guard";
+import { costsBlocks, uuidOf } from "@/lib/costs/guard";
+import { dishCount, recipeQuantity, wasteNote } from "@/lib/costs/input";
+import { defaultChoices, dishCost, recipeBook, unitCosts, type RecipeLine } from "@/lib/costs/recipe-cost";
+import { WASTE_REASONS, type WasteReason } from "@/lib/costs/usage";
+import type { Modifier } from "@/lib/types";
+
+export const runtime = "nodejs";
+
+// /api/costs/waste — what was thrown away, and why.
+//
+// POST   { ingredientId | itemId, quantity, reason, note? }   anyone on the team
+// DELETE { id }                                                a manager, for an entry made by mistake
+//
+// The barista who spills the milk is the one who knows, so the whole team
+// records; only a manager takes an entry back. Its cost is fixed now, at
+// today's prices, and a dish whose stock is counted loses the units too —
+// in the same transaction, by `record_waste`. Taking an entry back does not
+// return them: the dish's count is corrected on the menu, where it is kept.
+
+/** What it cost to throw away, at today's prices; null for a dish with no recipe. */
+async function costOf(restaurantId: string, ingredientId: string | null, itemId: string | null, quantity: number): Promise<number | null> {
+  const db = createAdminClient();
+  if (ingredientId) {
+    const { data } = await db.from("ingredients").select("unit_cost").eq("id", ingredientId).eq("restaurant_id", restaurantId).maybeSingle();
+    return data ? Math.round(Number(data.unit_cost) * quantity * 100) / 100 : null;
+  }
+  const [{ data: item }, { data: lines }] = await Promise.all([
+    db.from("menu_items").select("modifiers").eq("id", itemId!).eq("restaurant_id", restaurantId).maybeSingle(),
+    db.from("recipe_lines").select("item_id, ingredient_id, quantity, mod_label, mod_option").eq("item_id", itemId!).eq("restaurant_id", restaurantId),
+  ]);
+  if (!item || !lines?.length) return null;
+  const ids = [...new Set(lines.map(l => l.ingredient_id))];
+  const { data: ingredients } = await db.from("ingredients").select("id, unit_cost").in("id", ids).eq("restaurant_id", restaurantId);
+  const unit = dishCost(itemId!, defaultChoices(item.modifiers as Modifier[]), recipeBook(lines as RecipeLine[]), unitCosts(ingredients ?? []));
+  return unit === null ? null : Math.round(unit * quantity * 100) / 100;
+}
+
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  const actor = await actingStaff();
+  if (!actor) return await apiError("apiErr.forbidden", 403);
+  const blocked = await costsBlocks(actor.restaurantId);
+  if (blocked) return blocked;
+  const body = await jsonBody<{ ingredientId?: unknown; itemId?: unknown; quantity?: unknown; reason?: unknown; note?: unknown }>(req);
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const ingredientId = uuidOf(body.ingredientId);
+  const itemId = uuidOf(body.itemId);
+  if (!ingredientId === !itemId) return await apiError("apiErr.wasteWhat", 400);
+  // A dish goes in the bin whole; an ingredient by the gram.
+  const quantity = itemId ? dishCount(body.quantity) : recipeQuantity(body.quantity);
+  if (quantity === null) return await apiError("apiErr.wasteQuantity", 400);
+  const reason = WASTE_REASONS.includes(body.reason as WasteReason) ? (body.reason as WasteReason) : null;
+  if (!reason) return await apiError("apiErr.wasteReason", 400);
+
+  const cost = await costOf(actor.restaurantId, ingredientId, itemId, quantity);
+  const { data: id, error } = await createAdminClient().rpc("record_waste", {
+    p_restaurant: actor.restaurantId, p_ingredient: ingredientId, p_item: itemId, p_quantity: quantity,
+    p_reason: reason, p_note: wasteNote(body.note), p_cost: cost, p_actor: actor.email,
+  });
+  if (error) return await apiError("apiErr.generic", 500);
+  if (!id) return await apiError("apiErr.notFound", 404);
+  const { data: entry } = await createAdminClient().from("waste_entries").select("name").eq("id", id).maybeSingle();
+  await logEvent({
+    restaurantId: actor.restaurantId, actor: actor.email, entity: "costs", action: "written_off",
+    detail: logDetail({ note: `${entry?.name ?? ""} × ${quantity}` }),
+  });
+  return NextResponse.json({ ok: true, id, cost });
+}
+
+export async function DELETE(req: NextRequest): Promise<NextResponse> {
+  const actor = await actingManager();
+  if (!actor) return await apiError("apiErr.forbidden", 403);
+  const blocked = await costsBlocks(actor.restaurantId);
+  if (blocked) return blocked;
+  const id = uuidOf((await jsonBody<{ id?: unknown }>(req))?.id);
+  if (!id) return await apiError("apiErr.invalidRequest", 400);
+  const { data, error } = await createAdminClient().from("waste_entries")
+    .delete().eq("id", id).eq("restaurant_id", actor.restaurantId).select("name");
+  if (error) return await apiError("apiErr.generic", 500);
+  if (!data?.length) return await apiError("apiErr.notFound", 404);
+  await logEvent({
+    restaurantId: actor.restaurantId, actor: actor.email, entity: "costs", action: "deleted",
+    detail: logDetail({ note: data[0].name }),
+  });
+  return NextResponse.json({ ok: true });
+}

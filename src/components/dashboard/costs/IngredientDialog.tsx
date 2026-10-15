@@ -47,6 +47,7 @@ function IngredientForm({ ingredient, currency, onClose, onArchive }: Omit<Ingre
   const [packUnit, setPackUnit] = useState<PackUnit>(start?.unit ?? "kg");
   const [price, setPrice] = useState(ingredient ? String(ingredient.pack_price) : "");
   const [supplier, setSupplier] = useState(ingredient?.supplier ?? "");
+  const [lead, setLead] = useState(String(ingredient?.lead_days ?? 2));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,7 +64,7 @@ function IngredientForm({ ingredient, currency, onClose, onArchive }: Omit<Ingre
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const body = { name, packSize: size, packUnit, packPrice: price, supplier: supplier.trim() || undefined };
+    const body = { name, packSize: size, packUnit, packPrice: price, supplier: supplier.trim() || undefined, leadDays: lead };
     const failed = ingredient
       ? await send("/api/costs/ingredients", "PATCH", { id: ingredient.id, ...body })
       : await send("/api/costs/ingredients", "POST", { ...body, unit });
@@ -111,6 +112,10 @@ function IngredientForm({ ingredient, currency, onClose, onArchive }: Omit<Ingre
       <label className="tt-field">
         <span className="tt-mod-label">{t("costs.supplier")} <span className="tt-muted">{t("common.optional")}</span></span>
         <input className="tt-input" value={supplier} onChange={e => setSupplier(e.target.value)} maxLength={80} />
+      </label>
+      <label className="tt-field">
+        <span className="tt-mod-label">{t("costs.leadDays")}</span>
+        <input className="tt-input" inputMode="numeric" value={lead} onChange={e => setLead(e.target.value)} />
       </label>
       {error && <p className="tt-field-error" role="alert">{error}</p>}
       <div className="tt-prodform-actions">

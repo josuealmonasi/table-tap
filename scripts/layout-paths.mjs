@@ -23,6 +23,9 @@ export const CREW = [
       "/dashboard/analytics?period=30d",
       "/dashboard/costs",
       "/dashboard/costs?tab=ingredients",
+      "/dashboard/costs?tab=waste",
+      "/dashboard/costs?tab=stock",
+      "/dashboard/costs?tab=buy",
       "/dashboard/promotions",
       "/dashboard/loyalty",
       "/dashboard/accounts",
@@ -45,6 +48,8 @@ export const CREW = [
       "/dashboard/tables",
       "/dashboard/analytics",
       "/dashboard/costs",
+      "/dashboard/costs?tab=stock",
+      "/dashboard/waste",
       "/dashboard/promotions",
       "/dashboard/loyalty",
       "/dashboard/accounts",
@@ -52,9 +57,9 @@ export const CREW = [
       "/dashboard/profile",
     ],
   },
-  { role: "waiter", email: "demo-waiter@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/table-order", "/dashboard/bills", "/dashboard/accounts", "/dashboard/profile"] },
-  { role: "cashier", email: "demo-cashier@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/bills", "/dashboard/pos", "/dashboard/accounts", "/dashboard/profile"] },
-  { role: "kitchen", email: "demo-kitchen@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/profile"] },
+  { role: "waiter", email: "demo-waiter@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/table-order", "/dashboard/bills", "/dashboard/accounts", "/dashboard/waste", "/dashboard/profile"] },
+  { role: "cashier", email: "demo-cashier@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/bills", "/dashboard/pos", "/dashboard/accounts", "/dashboard/waste", "/dashboard/profile"] },
+  { role: "kitchen", email: "demo-kitchen@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/waste", "/dashboard/profile"] },
   // The platform admin runs the whole business from one screen and was in no
   // check at all: at 390px its five columns gave the name 31px, so every
   // restaurant came out one letter per line and the headers overlapped.

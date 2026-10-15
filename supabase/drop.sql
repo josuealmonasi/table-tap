@@ -13,6 +13,9 @@
 -- Generated from the `create table if not exists` lines in schema.sql; when
 -- you add a table there, add it here.
 -- ============================================================================
+drop table if exists waste_entries       cascade;
+drop table if exists ingredient_purchases cascade;
+drop table if exists ingredient_counts   cascade;
 drop table if exists recipe_lines        cascade;
 drop table if exists ingredient_prices   cascade;
 drop table if exists ingredients         cascade;
@@ -120,3 +123,5 @@ drop function if exists public.record_ingredient_price();
 drop function if exists public.recipe_line_same_restaurant();
 drop function if exists public.replace_recipe(uuid, uuid, jsonb);
 drop function if exists public.archive_ingredient(uuid, uuid, text);
+drop function if exists public.record_waste(uuid, uuid, uuid, numeric, text, text, numeric, text);
+drop function if exists public.record_purchase(uuid, uuid, numeric, numeric, text);
