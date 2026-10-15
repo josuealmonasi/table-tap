@@ -110,6 +110,46 @@ function modsStillValid(item: MenuItem, mods: OrderLineItem["mods"]): boolean {
   return satisfiesRequired(item.modifiers ?? [], mods);
 }
 
+/** A line as remembered: what was chosen, by id, not what it cost then. */
+export interface RememberedLine {
+  itemId: string;
+  qty: number;
+  mods?: OrderLineItem["mods"];
+  /** Extra ids. */
+  extras: string[];
+  notes?: string;
+}
+
+/**
+ * A remembered line rebuilt from the menu loaded now: today's price, and only
+ * if the dish, every extra and every option chosen are still on it — a line
+ * that can no longer be made as it was is left out (null) rather than changed.
+ */
+export function rebuildLine(
+  line: RememberedLine,
+  itemById: Map<string, MenuItem>,
+  extraById: Map<string, MenuItem>,
+  extrasByProduct: Record<string, string[]>,
+): OrderLineItem | null {
+  const item = itemById.get(line.itemId);
+  if (!item || !item.available) return null;
+  const allowed = new Set(extrasByProduct[item.id] ?? []);
+  const chosen = line.extras.map(id => extraById.get(id));
+  if (chosen.some((e, i) => !e || !e.available || !allowed.has(line.extras[i]))) return null;
+  if (!modsStillValid(item, line.mods ?? {})) return null;
+  return {
+    itemId: item.id,
+    name: item.name,
+    emoji: item.emoji,
+    price: item.price,
+    discountPct: item.discount_pct ?? 0,
+    qty: Math.max(1, Math.floor(line.qty) || 1),
+    mods: line.mods ?? {},
+    extras: (chosen as MenuItem[]).map(e => ({ id: e.id, name: e.name, emoji: e.emoji, price: e.price })),
+    notes: line.notes,
+  };
+}
+
 /**
  * The lines to offer, built from the menu the page loaded: the most ordered
  * habits first, at today's prices, and only those that can be made exactly as
@@ -128,23 +168,9 @@ export function resolveUsual(
     .filter(e => e.count >= USUAL_MIN_COUNT)
     .sort((a, b) => b.count - a.count || b.last - a.last);
   for (const entry of ranked) {
-    const item = itemById.get(entry.itemId);
-    if (!item || !item.available) continue;
-    const allowed = new Set(extrasByProduct[item.id] ?? []);
-    const chosen = entry.extras.map(id => extraById.get(id));
-    if (chosen.some((e, i) => !e || !e.available || !allowed.has(entry.extras[i]))) continue;
-    if (!modsStillValid(item, entry.mods)) continue;
-    out.push({
-      itemId: item.id,
-      name: item.name,
-      emoji: item.emoji,
-      price: item.price,
-      discountPct: item.discount_pct ?? 0,
-      qty: Math.max(1, Math.floor(entry.qty) || 1),
-      mods: entry.mods ?? {},
-      extras: (chosen as MenuItem[]).map(e => ({ id: e.id, name: e.name, emoji: e.emoji, price: e.price })),
-      notes: entry.notes,
-    });
+    const line = rebuildLine(entry, itemById, extraById, extrasByProduct);
+    if (!line) continue;
+    out.push(line);
     if (out.length === USUAL_MAX_LINES) break;
   }
   return out;
