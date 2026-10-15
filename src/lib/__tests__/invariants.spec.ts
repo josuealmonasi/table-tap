@@ -2108,6 +2108,29 @@ describe("a restaurant's plan has one writer at a time", () => {
   });
 });
 
+describe("the stylesheet parses", () => {
+  it("closes every block it opens", () => {
+    // A merge that kept both sides of a conflict in globals.css dropped one
+    // closing brace. tsc, lint and every unit test passed; the dev server
+    // could not compile the stylesheet and every page answered 500. Counted
+    // outside comments, the braces must balance and never go below zero.
+    const css = read("src/app/globals.css").replace(/\/\*[\s\S]*?\*\//g, "");
+    let depth = 0;
+    let line = 1;
+    const negative: number[] = [];
+    for (const ch of css) {
+      if (ch === "\n") line++;
+      else if (ch === "{") depth++;
+      else if (ch === "}" && --depth < 0) {
+        negative.push(line);
+        depth = 0;
+      }
+    }
+    expect(negative, "a } with no block to close, near these lines").toEqual([]);
+    expect(depth, "blocks opened and never closed").toBe(0);
+  });
+});
+
 describe("a gate can run against production's CSP", () => {
   it("never waits with waitForFunction, which evals inside the page", () => {
     // Playwright runs a waitForFunction predicate through `eval` in the page,

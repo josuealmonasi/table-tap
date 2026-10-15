@@ -18,6 +18,7 @@ import DietaryPanel from "./DietaryPanel";
 import { DietaryTagsProvider } from "@/components/DietaryTagsContext";
 import AddSectionForm from "./AddSectionForm";
 import SectionEditor from "./SectionEditor";
+import ImportMenuDialog from "./ImportMenuDialog";
 import EditorHeader from "./EditorHeader";
 import { OrdersIcon } from "@/components/ui/icons";
 
@@ -53,6 +54,8 @@ export default function MenuEditor({
   const currency = restaurant.currency;
   const router = useRouter();
   const [search, setSearch] = useState("");
+  // The import dialog: shut, open on a file, or open on the café template.
+  const [importing, setImporting] = useState<"file" | "template" | null>(null);
   const bulk = useBulkSelect();
 
   // If this menu was deleted from another tab, bounce back to the dashboard
@@ -100,6 +103,14 @@ export default function MenuEditor({
       <IconGroupsProvider groups={iconGroups}>
         <div className="tt-dash">
           <div className="container">
+            <ImportMenuDialog
+              open={importing !== null}
+              withTemplate={importing === "template"}
+              currency={currency}
+              existingNames={menuProducts.map(p => p.name)}
+              onClose={() => setImporting(null)}
+              onImport={rows => editor.importRows(menuId, rows)}
+            />
             <EditorHeader
               menus={editor.menus}
               menuId={menuId}
@@ -134,6 +145,16 @@ export default function MenuEditor({
                     {t("menu.addFirstSectionHint", { name: liveName })}
                   </p>
                   <AddSectionForm onAdd={addSection} autoFocus />
+                  {/* Or the whole menu at once: a café switching over brings
+                      the spreadsheet it already keeps, or starts from ours. */}
+                  <div className="tt-import-links" style={{ marginTop: 12, justifyContent: "center" }}>
+                    <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => setImporting("file")}>
+                      {t("menuImport.open")}
+                    </button>
+                    <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => setImporting("template")}>
+                      {t("menuImport.template")}
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -145,6 +166,9 @@ export default function MenuEditor({
                       <h3 className="tt-serif" style={{ margin: 0 }}>
                         {t("menu.sections")}
                       </h3>
+                      <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => setImporting("file")}>
+                        {t("menuImport.open")}
+                      </button>
                     </div>
                     <p className="tt-muted" style={{ fontSize: 13, marginTop: 0 }}>
                       {t("menu.sectionsHint")}

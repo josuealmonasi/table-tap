@@ -8,6 +8,8 @@ import { navItemsFor, type DashboardRole } from "@/lib/nav";
 import { menuSlug } from "@/lib/slug";
 import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
+import SetupChecklist from "./SetupChecklist";
+import type { SetupStep } from "@/lib/setup-steps";
 import { Skeleton } from "@/components/ui/Skeleton";
 import MenusPanel from "@/components/dashboard/menu/MenusPanel";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
@@ -21,10 +23,12 @@ interface DashboardHomeProps {
   role: DashboardRole;
   /** Whether this tier carries menu schedules (decided on the server). */
   schedules: ScheduleAccess;
+  /** What is left to set up — the owner's; empty for anybody else. */
+  setup?: SetupStep[];
 }
 
 /** Restaurant dashboard landing — the restaurant's menus, plus other areas. */
-export default function DashboardHome({ restaurant, role, schedules }: DashboardHomeProps) {
+export default function DashboardHome({ restaurant, role, schedules, setup = [] }: DashboardHomeProps) {
   const t = useT();
   const editor = useMenuEditor(restaurant.id);
   const menuRows = useRowMemory(
@@ -55,6 +59,8 @@ export default function DashboardHome({ restaurant, role, schedules }: Dashboard
             </Link>
           </div>
         )}
+
+        <SetupChecklist steps={setup} />
 
         {editor.loading ? (
           <div

@@ -769,6 +769,118 @@ a.tt-btn {
   max-width: 420px;
 }
 
+/* Importing a menu from a spreadsheet: the source, then the plan. */
+.tt-import-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+}
+.tt-import-source .tt-field {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.tt-import-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tt-import-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+.tt-import-scroll {
+  overflow-x: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.tt-import-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.tt-import-table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tt-muted);
+  padding: 0 12px 6px 0;
+  border-bottom: 1px solid var(--tt-line);
+}
+.tt-import-table td {
+  padding: 6px 12px 6px 0;
+  border-bottom: 1px solid var(--tt-line);
+  overflow-wrap: anywhere;
+}
+/* Prices line up on the right edge, like every column of figures here. */
+.tt-import-table th:last-child,
+.tt-import-table td:last-child {
+  text-align: right;
+  padding-right: 0;
+  white-space: nowrap;
+}
+.tt-import-problems {
+  font-size: 13px;
+}
+.tt-import-problems ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--tt-danger);
+}
+
+/* The owner's setup checklist on the dashboard home. */
+.tt-setup-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tt-setup-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--tt-line);
+}
+.tt-setup-mark {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--tt-line);
+  display: grid;
+  place-items: center;
+  color: var(--tt-white);
+}
+.tt-setup-done .tt-setup-mark {
+  border-color: var(--tt-success);
+  background: var(--tt-success);
+}
+/* The words take what is left and wrap; the mark and the button never shrink. */
+.tt-setup-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
+}
+.tt-setup-hint {
+  font-size: 13px;
+}
+.tt-setup-state {
+  flex: none;
+  font-size: 13px;
+}
+.tt-setup-step > .tt-btn {
+  flex: none;
+}
+
 .tt-till-figures {
   display: flex;
   flex-wrap: wrap;

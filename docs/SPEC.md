@@ -500,6 +500,28 @@ Platform: sign-up, five plans (Carta, Caja, Servicio, Casa, Grupo), founding
 prices, the admin console, legal documents generated as PDFs from the same
 source the app renders.
 
+## Switching over
+
+A café that already keeps its menu in a spreadsheet brings it in at once.
+The menu editor's "Importar desde una hoja de cálculo" reads a CSV in the
+browser (`src/lib/csv.ts`: commas or the semicolons Spanish Excel writes,
+quotes, CRLF, a byte order mark) and plans it (`src/lib/menu-import.ts`):
+headers in Spanish or English, only name and price required, prices read as
+people type them. Before anything is written it shows what will be added,
+the sections it will make, and every line that will not go in and why. The
+write is the editor's own, through the dashboard's Supabase client like
+adding a product: the missing sections, then every product in one insert, so
+the plan's dish limit — a trigger — refuses all of it or none; refused, the
+sections made for it are taken back. "Empezar con un menú de cafetería" is
+the same import fed a template kept in the copy (`menuImport.cafeCsv`), so it
+is in the owner's language and doubles as the file to download.
+
+The owner's home opens with "Para empezar" until it is done: a menu with
+dishes, tables, Stripe taking cards, and — optional — a printer and a team
+(`src/lib/setup-steps.ts`). Each step is read from what the restaurant has,
+never ticked, and links to the screen that does it. The owner may hide it in
+their browser.
+
 ## How it is kept honest
 
 The gate, all of which must pass before anything ships:

@@ -9,6 +9,7 @@ import type { Category, Menu, MenuItem } from "@/lib/types";
 import { makeWriter } from "./menu-editor/writer";
 import { menuActions } from "./menu-editor/menus";
 import { productActions } from "./menu-editor/products";
+import { importActions } from "./menu-editor/import";
 import { addonActions } from "./menu-editor/addons";
 
 export type { AddonInput, ProductInput } from "./menu-editor/types";
@@ -76,5 +77,6 @@ export function useMenuEditor(restaurantId: string) {
     ...menuActions(ctx),
     ...productActions(ctx),
     ...addonActions(ctx),
+    ...importActions(ctx),
   };
 }

@@ -8,6 +8,7 @@ import { messagesFor, translate } from "@/lib/i18n";
 import { currentUser } from "@/lib/current-user";
 import { allPlans, getPlan } from "@/lib/plan-server";
 import { can, cheapestWith } from "@/lib/plan";
+import { restaurantSetup } from "@/lib/setup-steps-server";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +46,14 @@ export default async function DashboardPage() {
 
   return (
     <ConfirmProvider>
-      <DashboardHome restaurant={membership.restaurant} role={membership.role} schedules={schedules} />
+      <DashboardHome
+        restaurant={membership.restaurant}
+        role={membership.role}
+        schedules={schedules}
+        // What is left to set up is the owner's to see: the payments and
+        // staff steps open screens only the owner may use.
+        setup={membership.role === "owner" ? await restaurantSetup(membership.restaurant.id) : []}
+      />
     </ConfirmProvider>
   );
 }
