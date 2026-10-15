@@ -29,7 +29,9 @@ export type LogEntity =
   /** A customer account: opened, charged, collected, its ceiling moved. */
   | "account"
   /** The cash drawer: its opening balance set, money taken out of it. */
-  | "cash";
+  | "cash"
+  /** Ingredients, recipes and the fee rate the margins are worked out with. */
+  | "costs";
 
 /** What happened to it. Deliberately plain words: this list is read by owners. */
 export type LogAction =

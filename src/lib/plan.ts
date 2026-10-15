@@ -55,6 +55,8 @@ export interface PlanLimits {
   allows_kitchen_board?: boolean;
   /** Customer accounts: food now, paid later in one go. Every paid tier. */
   allows_open_accounts?: boolean;
+  /** Ingredients, recipes and what each product leaves. Casa and above. */
+  allows_costs?: boolean;
   allows_staff_discounts: boolean;
   analytics_days: number;
   log_days: number;
@@ -76,7 +78,8 @@ export type PlanFeature =
   | "loyalty"
   | "onlineOrdering"
   | "kitchenBoard"
-  | "openAccounts";
+  | "openAccounts"
+  | "costs";
 
 const FEATURE_COLUMN: Record<PlanFeature, keyof PlanLimits> = {
   dineIn: "allows_dine_in",
@@ -92,6 +95,7 @@ const FEATURE_COLUMN: Record<PlanFeature, keyof PlanLimits> = {
   onlineOrdering: "allows_online_ordering",
   kitchenBoard: "allows_kitchen_board",
   openAccounts: "allows_open_accounts",
+  costs: "allows_costs",
 };
 
 /**

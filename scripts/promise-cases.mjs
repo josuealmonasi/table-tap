@@ -339,6 +339,25 @@ export const STATES = [
     offers: /guardar cambios|save changes/i,
   },
   {
+    // The control for the case after it: on the demo's own tier the costs
+    // screen lists the ingredients and offers to add one.
+    name: "costs · the ingredients",
+    as: "owner",
+    path: "/dashboard/costs?tab=ingredients",
+    says: /tus ingredientes|your ingredients/i,
+    keeps: /agregar ingrediente|add ingredient/i,
+  },
+  {
+    // Costs come with Casa: below it the page names the tier and offers
+    // nothing to save, rather than an editor whose every save is refused.
+    name: "a plan without costs · its page",
+    as: "owner",
+    path: "/dashboard/costs?tab=ingredients",
+    apply: (admin, c) => admin.from("restaurants").update({ plan: "servicio", plan_status: "active" }).eq("id", c.restaurantId),
+    says: /costos y márgenes vienen con|costs and margins come with/i,
+    offers: /agregar ingrediente|add ingredient|guardar cambios|save changes/i,
+  },
+  {
     // Customer accounts: the page lists who owes what and opens new ones.
     name: "customer accounts · the page",
     as: "owner",

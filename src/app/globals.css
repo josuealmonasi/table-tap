@@ -7761,3 +7761,233 @@ a.tt-user-plan:hover {
     display: none !important;
   }
 }
+
+/* ── Costs: what each product leaves ─────────────────────────────────────── */
+.tt-costs-intro {
+  margin: 0;
+  font-size: 13px;
+  max-width: 72ch;
+}
+.tt-costs-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 17px;
+  min-width: 0;
+}
+.tt-costs-hint {
+  margin: 0;
+  font-size: 12px;
+}
+.tt-costs-start {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+.tt-costs-start p {
+  margin: 0;
+  min-width: 0;
+  flex: 1 1 260px;
+}
+.tt-costs-warning {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--tt-radius-sm);
+  background: var(--tt-warning-wash);
+  color: var(--tt-warning);
+  font-size: 13px;
+}
+.tt-costs-gain {
+  color: var(--tt-success);
+}
+.tt-costs-loss {
+  color: var(--tt-danger);
+}
+.tt-costs-rise-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tt-costs-rise-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.tt-costs-rise-list .tt-muted {
+  font-size: 13px;
+}
+.tt-costs-fee p {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+.tt-costs-fee-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+.tt-costs-fee-form .tt-field {
+  flex: 0 1 260px;
+  min-width: 0;
+}
+.tt-costs-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+.tt-costs-filters .tt-input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.tt-costs-products {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tt-costs-product {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 12px;
+  padding: 12px;
+  border: 1px solid var(--tt-line);
+  border-radius: var(--tt-radius-sm);
+  background: var(--tt-white);
+  color: var(--tt-ink);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.tt-costs-product:hover {
+  background: var(--tt-surface);
+}
+.tt-costs-product-name {
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tt-costs-product-name small {
+  font-weight: 400;
+  font-size: 12px;
+}
+.tt-costs-margin {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+.tt-costs-product-meta {
+  flex-basis: 100%;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tt-costs-chip {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--tt-warning-wash);
+  color: var(--tt-warning);
+  white-space: nowrap;
+}
+.tt-costs-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--tt-radius-sm);
+  background: var(--tt-surface);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.tt-costs-preview .tt-muted {
+  font-size: 12px;
+}
+.tt-recipe-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* Ingredient across the top, then amount, choice and remove: four controls
+   in one row leave the ingredient's name a few letters wide on a phone. */
+.tt-recipe-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto;
+  grid-template-areas:
+    "ingredient ingredient ingredient"
+    "quantity when remove";
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--tt-line);
+}
+.tt-recipe-ingredient {
+  grid-area: ingredient;
+  min-width: 0;
+}
+.tt-recipe-quantity {
+  grid-area: quantity;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.tt-recipe-quantity .tt-input {
+  min-width: 0;
+}
+.tt-recipe-quantity .tt-muted {
+  font-size: 13px;
+  min-width: 2.5ch;
+}
+.tt-recipe-when {
+  grid-area: when;
+  min-width: 0;
+}
+.tt-recipe-remove {
+  grid-area: remove;
+  align-self: center;
+}
+.tt-recipe-line:not(:has(.tt-recipe-when)) {
+  grid-template-areas:
+    "ingredient ingredient ingredient"
+    "quantity quantity remove";
+}
+.tt-costs-pack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 7rem);
+  gap: 8px;
+}
+.tt-costs-archive {
+  margin-left: auto;
+  color: var(--tt-danger);
+}
+@media (min-width: 700px) {
+  .tt-recipe-line {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.6fr) auto;
+    grid-template-areas: "ingredient quantity when remove";
+  }
+  .tt-recipe-line:not(:has(.tt-recipe-when)) {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+    grid-template-areas: "ingredient quantity remove";
+  }
+}

@@ -21,6 +21,8 @@ export const CREW = [
       // The longer periods have the longer figures: a month's takings pushed
       // the tiles off a phone while "today" measured clean.
       "/dashboard/analytics?period=30d",
+      "/dashboard/costs",
+      "/dashboard/costs?tab=ingredients",
       "/dashboard/promotions",
       "/dashboard/loyalty",
       "/dashboard/accounts",
@@ -42,6 +44,7 @@ export const CREW = [
       "/dashboard/bills",
       "/dashboard/tables",
       "/dashboard/analytics",
+      "/dashboard/costs",
       "/dashboard/promotions",
       "/dashboard/loyalty",
       "/dashboard/accounts",

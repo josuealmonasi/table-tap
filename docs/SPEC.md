@@ -377,7 +377,7 @@ dishes on a bill the restaurant has just cancelled.
 ## Data model
 
 `supabase/schema.sql` is one idempotent script; git history is the changelog.
-Thirty-four tables, RLS on every one of them, in groups:
+Forty-three tables, RLS on every one of them, in groups:
 
 - **The restaurant** — `restaurants`, `staff`, `profiles`, `platform_admins`,
   `plan_limits`, `user_logs`
@@ -390,6 +390,8 @@ Thirty-four tables, RLS on every one of them, in groups:
 - **Money asked for** — `discount_requests`, `write_off_requests`
 - **Coming back** — `loyalty_programs`, `loyalty_cards`, `loyalty_visits`,
   `loyalty_redemptions`
+- **The drawer** — `cash_shifts`, `cash_movements`
+- **Costs** — `ingredients`, `ingredient_prices`, `recipe_lines`
 - **Telling people** — `notifications`
 - **Keeping the door shut** — `rate_limits`
 
@@ -489,8 +491,8 @@ check and pay, a scan button for TableTap's own codes, ES/EN.
 Restaurant: multiple menus with schedules, full menu editing, dietary tags and
 icon groups, tables with printable QR codes, the orders board, open bills,
 discounts and write-offs with approval, promotions and coupons, inventory with
-low-stock alerts and live counts on the selling screens, analytics, corte de
-caja, staff and roles, plan and billing, Stripe onboarding, activity log,
+low-stock alerts and live counts on the selling screens, analytics, costs and
+the margin each product leaves, corte de caja, staff and roles, plan and billing, Stripe onboarding, activity log,
 notifications bell, the counter till, the waiter's pad, kitchen tickets on
 paper, the visit card (stamping, rewards, its ladder), customer accounts (open,
 charge, collect), and the switches that decide what the diner is offered —
@@ -521,6 +523,55 @@ dishes, tables, Stripe taking cards, and — optional — a printer and a team
 (`src/lib/setup-steps.ts`). Each step is read from what the restaurant has,
 never ticked, and links to the screen that does it. The owner may hide it in
 their browser.
+
+## Costs: what each product leaves
+
+A café asked to know what it makes on each product. `/dashboard/costs`, for
+the owner and the managers on Casa and above (`allows_costs`), answers with a
+contribution margin: the price without IVA, less what went into it, less what
+taking the money cost. Rent, wages and electricity are not in it, and the
+screen says so — it is what each sale leaves to pay them with, never the
+business's profit.
+
+- **Ingredients** are bought in packs and used in units: a 1 kg bag at
+  MX$380 is MX$0.38 a gram. The pack's size may be typed in kg or l and is
+  stored in g, ml or pieces; what one unit costs is a generated column
+  (`pack_price / pack_size`), never typed. A unit is fixed once the
+  ingredient exists — 18 in a recipe means 18 g. Removing one archives it
+  (`archive_ingredient`), and takes it out of every recipe in the same
+  transaction: a recipe counting an ingredient nobody buys is a made-up cost.
+- **Every change of price is kept** (`ingredient_prices`), written by a
+  trigger on `ingredients` so no path that changes a price can forget to.
+  "Precios que subieron" compares each ingredient's price with what it cost
+  before the last 30 days' first change, and names every product with it in
+  its recipe and what one now leaves less (`src/lib/costs/price-rises.ts`).
+- **A recipe** (`recipe_lines`) says how much of each ingredient one product
+  goes out with. A line may hold only on a choice — the oat milk belongs to
+  "Leche: Avena" — and the route refuses a choice the product does not
+  offer. Extras are products, with recipes of their own; a combo costs the
+  dishes inside it. A recipe is replaced whole (`replace_recipe`), and a
+  trigger refuses a line joining a product and an ingredient of different
+  restaurants, whoever writes it.
+- **One unit's margin** is costed with the first option of each single
+  choice, which is how a menu lists its default. **The last 30 days** are
+  costed from what was actually sold, choices and extras included, with an
+  order's own discounts shared across its lines by value
+  (`src/lib/costs/margins.ts`). A line with any dish or extra lacking a recipe
+  is left out of the totals and named apart — counted at nothing, a mostly
+  uncosted menu would show a margin of nearly everything.
+- **The fee** is the restaurant's own mix over the last 30 days, from the
+  ledger: cash costs nothing; a card through TableTap pays Stripe's Mexican
+  rate (3.6% + MX$3, IVA on the fee) and TableTap's per-order fee
+  (`orders.platform_fee`); a card on the restaurant's terminal pays
+  `restaurants.terminal_fee_pct`, which the owner sets (3.5% until they do).
+  Fees over takings is one rate, applied to each product's price
+  (`src/lib/costs/fees.ts`).
+
+The tables are server-only — revoked from `anon` and `authenticated`, read and
+written with the secret key scoped to the restaurant — and every read the
+screen makes pages through every row (`src/lib/paged.ts`): PostgREST stops at
+a fixed number of rows per request and says nothing, and a month of a busy
+café's orders read in one request is the first thousand of them.
 
 ## How it is kept honest
 

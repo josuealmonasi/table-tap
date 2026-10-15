@@ -72,6 +72,8 @@ const PAGES = {
     sections: { "Busca por código": MANAGES, "Lo mejor calificado": MANAGES },
   },
   "/dashboard/promotions": { allow: MANAGES, marker: "Nuevo combo" },
+  // The restaurant's private books: what each product costs and leaves.
+  "/dashboard/costs": { allow: MANAGES, marker: "Comisión de cobro:" },
   "/dashboard/loyalty": { allow: MANAGES, marker: "Buscar una tarjeta" },
   "/dashboard/settings": {
     allow: MANAGES,
@@ -129,6 +131,13 @@ const ROUTES = [
   { m: "DELETE", p: "/api/cash-drawer", body: {}, allow: MANAGES, passes: 400 },
   // Its shifts: opened, closed on a count, explained — by those who run it.
   { m: "POST", p: "/api/cash-shift", body: {}, allow: ["owner", "manager", "cashier"], passes: 400 },
+  // Costs: owner and managers. Refused on shape — no unit, no id, no lines,
+  // no rate — so no ingredient, recipe or rate is written anywhere.
+  { m: "POST", p: "/api/costs/ingredients", body: {}, allow: MANAGES, passes: 400 },
+  { m: "PATCH", p: "/api/costs/ingredients", body: {}, allow: MANAGES, passes: 400 },
+  { m: "DELETE", p: "/api/costs/ingredients", body: {}, allow: MANAGES, passes: 400 },
+  { m: "PUT", p: "/api/costs/recipe", body: {}, allow: MANAGES, passes: 400 },
+  { m: "PATCH", p: "/api/costs/settings", body: {}, allow: MANAGES, passes: 400 },
   // What that console calls — moving a restaurant between plans, deleting
   // one, managing any login — is the platform admin's alone. Each checks who
   // is asking first and answers the platform admin 400 for an empty body.
