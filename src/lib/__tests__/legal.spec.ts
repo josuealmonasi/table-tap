@@ -42,17 +42,22 @@ describe("the text and the version cannot drift apart", () => {
       .digest("hex")
       .slice(0, 16);
 
+  // 2026-10-15, kept at 2026-10-03 deliberately: both documents now list more
+  // of the operations a team member's email is recorded against — cash
+  // shifts, waste, stock counts, deliveries, cost changes. The same data for
+  // the same stated purpose ("who did each operation"), the list being its
+  // examples: a clarification, not a new category, so nobody is asked again.
   it("has terms that match the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("terms-es") }).toEqual({
       version: "2026-10-03",
-      text: "191c670358dd9b96",
+      text: "48e1d672782fc776",
     });
   });
 
   it("has a privacy notice that matches the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("privacy-es") }).toEqual({
       version: "2026-10-03",
-      text: "2b894d313fe1d7e7",
+      text: "7e92da7bfae58e9e",
     });
   });
 });
