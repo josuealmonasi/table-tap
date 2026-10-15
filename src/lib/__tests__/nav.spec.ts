@@ -15,8 +15,19 @@ describe("navItemsFor", () => {
     expect(hrefs("manager")).toContain("/dashboard/settings");
   });
 
-  it("the kitchen only gets the orders board", () => {
-    expect(hrefs("kitchen")).toEqual(["/dashboard/orders"]);
+  it("the kitchen gets the orders board, and where it records waste", () => {
+    expect(hrefs("kitchen")).toEqual(["/dashboard/orders", "/dashboard/waste"]);
+  });
+
+  it("gives waste to the team, and its costs to the owner and managers", () => {
+    // The team records what it throws away; the owner and the managers read
+    // it, with what it cost, on the costs screen — not a second nav entry.
+    for (const role of ["kitchen", "waiter", "cashier"] as const) expect(hrefs(role)).toContain("/dashboard/waste");
+    for (const role of ["owner", "manager"] as const) {
+      expect(hrefs(role)).not.toContain("/dashboard/waste");
+      expect(hrefs(role)).toContain("/dashboard/costs");
+    }
+    expect(navItemsFor("kitchen", f => f !== "costs").map(i => i.href)).toEqual(["/dashboard/orders"]);
   });
 
   it("a waiter gets the board, open bills, and their own order screen", () => {
@@ -27,6 +38,7 @@ describe("navItemsFor", () => {
     expect(hrefs("waiter")).toEqual([
       "/dashboard/orders",
       "/dashboard/table-order",
+      "/dashboard/waste",
       "/dashboard/bills",
       "/dashboard/accounts",
     ]);
@@ -55,7 +67,7 @@ describe("an area the tier does not include", () => {
   it("leaves the cashier their other screens", () => {
     // Customer accounts stay on every tier: one opened on a paid plan still
     // owes after a move down, and its page collects it (opening is locked).
-    expect(withoutPos("cashier")).toEqual(["/dashboard/orders", "/dashboard/bills", "/dashboard/accounts"]);
+    expect(withoutPos("cashier")).toEqual(["/dashboard/orders", "/dashboard/waste", "/dashboard/bills", "/dashboard/accounts"]);
   });
 
   it("never offers the till to a waiter or the kitchen", () => {

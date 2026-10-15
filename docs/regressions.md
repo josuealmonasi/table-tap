@@ -1678,3 +1678,26 @@ success only when every order was accepted. Refused or offline handovers stay
 visible. Hook tests cover success, a refusal, a network failure and a partly
 accepted handover; the browser probe confirms the refused pickup stays on the
 till without a delivered message.
+
+
+## A waste response that told the kitchen its cost
+
+The staff waste screen hid costs, but recording waste returned the calculated
+cost in its API response. A kitchen or cashier login could inspect that answer
+and recover an ingredient's unit price despite the costs page and tables being
+restricted to management. The mutation response only needs the new entry's id;
+its private cost stays in the server's record for the owner's view.
+
+The API cases for kitchen ingredient waste and cashier product waste now
+require that the response has no cost field. The kitchen case still reads the
+stored record with the service key and verifies its cost, so hiding the answer
+cannot silently stop recording it.
+
+## A server page that read a browser-only tab list
+
+The expanded costs page imported its tab list from a `use client` component.
+Next.js exposes that export to the server as a client reference, not an array,
+so calling `includes` failed before any cost panel rendered. Shared tab values
+now live in a plain module that both the page and its client frame can import.
+The live roles check opens the costs page as owner and manager; the Phase 2
+browser walk also opens every new tab at phone and desktop sizes.

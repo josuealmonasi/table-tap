@@ -247,13 +247,25 @@ export async function plantNeighbour(admin, restaurantId) {
       restaurant_id: restaurantId, item_id: item.id, ingredient_id: ingredientId, quantity: 1,
     });
   }
+  // What they threw away, what came in and what they counted.
+  if (ingredientId) {
+    await keep("waste", "waste_entries", {
+      restaurant_id: restaurantId, ingredient_id: ingredientId, name: MARK, quantity: 1, reason: "spoiled", recorded_by: ACTOR,
+    });
+    await keep("purchase", "ingredient_purchases", {
+      restaurant_id: restaurantId, ingredient_id: ingredientId, quantity: 1000, total: 1, recorded_by: ACTOR,
+    });
+    await keep("count", "ingredient_counts", {
+      restaurant_id: restaurantId, ingredient_id: ingredientId, counted: 1, counted_by: ACTOR,
+    });
+  }
 
   return {
     planted,
     /** Children first, so nothing is left holding a reference. */
     remove: async () => {
       const order = [
-        "recipeLine", "ingredient", "withdrawal", "shift",
+        "waste", "purchase", "count", "recipeLine", "ingredient", "withdrawal", "shift",
         "accountCheckout", "account",
         "loyaltyRedemption", "loyaltyVisit", "loyaltyCard", "loyaltyProgram",
         "split", "sitting", "request", "notification", "iconGroup", "log", "colleague",

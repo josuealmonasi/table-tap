@@ -36,7 +36,8 @@ export const MAX_TERMINAL_FEE_PCT = 15;
  */
 export function decimal(raw: unknown, max: number, decimals: number): number | null {
   const text = typeof raw === "number" ? String(raw) : typeof raw === "string" ? raw.trim().replace(/,/g, "") : "";
-  if (!new RegExp(`^\\d+(\\.\\d{1,${decimals}})?$`).test(text)) return null;
+  const shape = decimals > 0 ? new RegExp(`^\\d+(\\.\\d{1,${decimals}})?$`) : /^\d+$/;
+  if (!shape.test(text)) return null;
   const value = Number(text);
   return Number.isFinite(value) && value <= max ? value : null;
 }
@@ -98,4 +99,28 @@ export function terminalFeePct(raw: unknown): number | null {
 export function packLabel(size: number, unit: IngredientUnit): { size: number; unit: PackUnit } {
   if (unit !== "pza" && size >= 1000 && size % 1000 === 0) return { size: size / 1000, unit: unit === "g" ? "kg" : "l" };
   return { size, unit };
+}
+
+/** Days a supplier takes to deliver: a whole number, 0–60. */
+export function leadDays(raw: unknown): number | null {
+  const days = decimal(raw, 60, 0);
+  return days === null ? null : days;
+}
+
+/** Days of use a purchase should cover: a whole number, 1–60. */
+export function coverDays(raw: unknown): number | null {
+  const days = decimal(raw, 60, 0);
+  return days === null || days < 1 ? null : days;
+}
+
+/** How many of a dish were thrown away: whole ones, at least one. */
+export function dishCount(raw: unknown): number | null {
+  const n = decimal(raw, MAX_RECIPE_QUANTITY, 0);
+  return n !== null && n >= 1 ? n : null;
+}
+
+/** A waste entry's note: trimmed, at most 140 characters, or nothing. */
+export function wasteNote(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  return raw.trim().slice(0, 140) || null;
 }

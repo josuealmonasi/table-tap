@@ -358,6 +358,24 @@ export const STATES = [
     offers: /agregar ingrediente|add ingredient|guardar cambios|save changes/i,
   },
   {
+    // The team's waste screen, on the demo's tier: it asks what, how much
+    // and why, and records it.
+    name: "waste · the kitchen's screen",
+    as: "kitchen",
+    path: "/dashboard/waste",
+    says: /qué se tiró|what was thrown away/i,
+    keeps: /^\s*(registrar|record)\s*$/i,
+  },
+  {
+    // Below Casa it names the tier, and records nothing.
+    name: "a plan without costs · the waste screen",
+    as: "kitchen",
+    path: "/dashboard/waste",
+    apply: (admin, c) => admin.from("restaurants").update({ plan: "servicio", plan_status: "active" }).eq("id", c.restaurantId),
+    says: /costos y márgenes vienen con|costs and margins come with/i,
+    offers: /^\s*(registrar|record)\s*$/i,
+  },
+  {
     // Customer accounts: the page lists who owes what and opens new ones.
     name: "customer accounts · the page",
     as: "owner",

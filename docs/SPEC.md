@@ -377,7 +377,7 @@ dishes on a bill the restaurant has just cancelled.
 ## Data model
 
 `supabase/schema.sql` is one idempotent script; git history is the changelog.
-Forty-three tables, RLS on every one of them, in groups:
+Forty-six tables, RLS on every one of them, in groups:
 
 - **The restaurant** — `restaurants`, `staff`, `profiles`, `platform_admins`,
   `plan_limits`, `user_logs`
@@ -391,7 +391,8 @@ Forty-three tables, RLS on every one of them, in groups:
 - **Coming back** — `loyalty_programs`, `loyalty_cards`, `loyalty_visits`,
   `loyalty_redemptions`
 - **The drawer** — `cash_shifts`, `cash_movements`
-- **Costs** — `ingredients`, `ingredient_prices`, `recipe_lines`
+- **Costs** — `ingredients`, `ingredient_prices`, `recipe_lines`,
+  `waste_entries`, `ingredient_purchases`, `ingredient_counts`
 - **Telling people** — `notifications`
 - **Keeping the door shut** — `rate_limits`
 
@@ -566,6 +567,42 @@ business's profit.
   `restaurants.terminal_fee_pct`, which the owner sets (3.5% until they do).
   Fees over takings is one rate, applied to each product's price
   (`src/lib/costs/fees.ts`).
+
+### Waste, the shelf, and what to buy
+
+The same café asked what it wastes and what it needs to buy. Three more tabs
+on the costs screen, and one screen for the whole team:
+
+- **Waste** is recorded by whoever threw it away, on `/dashboard/waste` — the
+  barista who spilled the milk, the cook whose plate came back — as an
+  ingredient (in kg, l or pieces) or a product (whole ones), with a reason:
+  went off, not sold, made wrong, eaten by the staff. Its cost is fixed when
+  it is recorded, at that day's prices; a product with no recipe has none. A
+  product whose stock is counted loses the units in the same transaction
+  (`record_waste`): an unsold croissant in the bin must not stay on the menu.
+  The team sees what it recorded today; what it cost is the owner's and the
+  managers', on the Merma tab, by reason. Recording waste returns no cost
+  to the staff's browser. A manager can take back an
+  entry made by mistake (the stock is not given back — it is corrected on the
+  menu, where it is kept).
+- **A delivery** (`record_purchase`) adds what came in, and the price per
+  pack it came at becomes the ingredient's price — so a supplier's rise is
+  noticed where it happens, and the price trigger keeps it for the margins.
+- **A count** of the shelf is blind, like the drawer's: the counter sees the
+  names and empty boxes, the expected figures are worked out at the moment
+  the count lands and kept beside it, and only then shown. An ingredient's
+  first count has nothing to compare with.
+- **What the shelf should hold** is each ingredient's last count, plus the
+  deliveries since, less what the orders made since and the waste since took
+  (`src/lib/costs/stock.ts`). An order takes what its recipe says whether or
+  not it is paid yet — the food was made. Never counted, the answer is
+  unknown rather than zero.
+- **What to buy**: what a day took over the last 14 days, times the
+  supplier's delivery days plus the days the restaurant buys for (7 unless it
+  says otherwise), less what the shelf should hold, rounded up to whole packs
+  and grouped by supplier, each list ready to copy into a message. One that
+  runs out before a delivery ordered today would arrive says "Pídelo hoy"; one
+  never counted is listed as though the shelf were empty, and says so.
 
 The tables are server-only — revoked from `anon` and `authenticated`, read and
 written with the secret key scoped to the restaurant — and every read the

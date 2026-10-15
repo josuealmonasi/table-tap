@@ -20,6 +20,8 @@ export interface Ingredient {
   pack_price: number;
   unit_cost: number;
   supplier: string | null;
+  /** Days the supplier takes to deliver; read where purchases are worked out. */
+  lead_days?: number;
 }
 
 export interface RecipeLine {

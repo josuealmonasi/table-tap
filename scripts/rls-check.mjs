@@ -59,6 +59,11 @@ for (const table of [
   "customer_accounts", "account_checkouts",
   // The drawer's shifts and what was taken out of it; the restaurant's costs.
   "cash_shifts", "cash_movements", "ingredients", "ingredient_prices", "recipe_lines",
+  "waste_entries", "ingredient_purchases", "ingredient_counts",
+  // The ledger and everything around it, the bell, the kitchen's paper, a
+  // table's division, and what the routes keep for themselves.
+  "payments", "refunds_due", "notifications", "print_jobs", "bill_splits", "bill_split_claims",
+  "service_requests", "dish_ratings", "plan_limits", "stock_reservations",
 ]) {
   verdict(`cannot read ${table}`, await anon.from(table).select("*").limit(1));
 }
@@ -475,7 +480,8 @@ if (!signIn.error && theirs) {
     "staff", "table_sessions", "user_logs", "write_off_requests",
     "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions",
     "customer_accounts", "account_checkouts",
-    "cash_shifts", "cash_movements", "ingredients", "ingredient_prices", "recipe_lines"];
+    "cash_shifts", "cash_movements", "ingredients", "ingredient_prices", "recipe_lines",
+    "waste_entries", "ingredient_purchases", "ingredient_counts"];
   const TEAM = [["anon", null], ["owner", "demo@tabletap.dev"], ["manager", "demo-manager@tabletap.dev"],
     ["waiter", "demo-waiter@tabletap.dev"], ["cashier", "demo-cashier@tabletap.dev"],
     ["kitchen", "demo-kitchen@tabletap.dev"]];

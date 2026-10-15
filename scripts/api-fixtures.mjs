@@ -672,11 +672,14 @@ export async function setup(env, base) {
 export async function teardown(fx) {
   const { admin, restaurant } = fx;
   // The costs cases' ingredients — in this restaurant and the neighbour's —
-  // with their recipe lines and price history, the product they made for
-  // their recipe, and the terminal's rate as the demo had it.
+  // with their recipe lines, price history, counts, deliveries and waste; the
+  // product they made for their recipe, with the waste recorded against it;
+  // and the terminal's rate and the days to buy for, as the demo had them.
   await admin.from("ingredients").delete().like("name", `${MARK}%`);
   await admin.from("menu_items").delete().eq("restaurant_id", restaurant.id).like("name", `${MARK} costs%`);
-  await admin.from("restaurants").update({ terminal_fee_pct: restaurant.terminal_fee_pct }).eq("id", restaurant.id);
+  await admin.from("restaurants").update({
+    terminal_fee_pct: restaurant.terminal_fee_pct, purchase_cover_days: restaurant.purchase_cover_days,
+  }).eq("id", restaurant.id);
   // The drawer's shifts and withdrawals the cases wrote — the seed's are
   // older — and then the seed's open shift, set aside at setup, put back.
   if (fx.startedAt) {

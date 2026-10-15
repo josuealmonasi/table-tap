@@ -64,6 +64,26 @@ describe("a new table decides whether the world can read it", () => {
   });
 });
 
+describe("the RLS gate asks about every table", () => {
+  it("names every table in the public-key sweep, unless a diner reads it on purpose", () => {
+    // The cash drawer's shifts and withdrawals shipped in no list of the RLS
+    // gate. Their grants were right; nothing would have said so if they had
+    // not, because the sweep asks only about the tables it names and nothing
+    // made a new table be named. Six more private tables were found missing
+    // the day this was written — all refused, none asked.
+    const tables = [...schema.matchAll(/create table if not exists ([a-z_]+)/g)].map(m => m[1]);
+    const src = read("scripts/rls-check.mjs");
+    const start = src.indexOf(`console.log("The key on every diner's phone");`);
+    expect(start, "the public-key sweep moved or was renamed").toBeGreaterThan(0);
+    const listed = new Set([...src.slice(start, src.indexOf("]) {", start)).matchAll(/"([a-z_]+)"/g)].map(m => m[1]));
+    // The menu hangs off a QR: a diner with no login reads these, and
+    // `restaurants` is checked column by column right below the list.
+    const PUBLIC = ["restaurants", "menus", "categories", "menu_items", "item_addons", "promotions", "promotion_items", "dietary_tags"];
+    const unasked = tables.filter(t => !listed.has(t) && !PUBLIC.includes(t));
+    expect(unasked, `tables the RLS gate never asks the public key about — add them to its first list:\n${unasked.join("\n")}`).toEqual([]);
+  });
+});
+
 describe("dialogs do not stack", () => {
   it("never renders a dialog inside another dialog", () => {
     // Two open dialogs run two focus traps against each other and take two

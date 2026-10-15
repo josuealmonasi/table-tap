@@ -76,4 +76,57 @@ export async function seedCosts(pg, rid) {
       [rid, itemId, ingredientId, quantity],
     );
   }
+  await seedStock(pg, rid, ids, products);
+}
+
+// The dairy and the market deliver in a day or two; the roaster takes five.
+const LEAD_DAYS = { "Coffee beans": 5, "Whole milk": 1, "Oat milk": 1, "Takeaway cup": 3, "Lid": 3 };
+
+/**
+ * Two counts of the milk — the second short of what the books expected, so
+ * the stock tab has a difference to show — one of the coffee, deliveries
+ * since, and a month of waste for every reason, one of it a product with no
+ * recipe (its cost unknown).
+ */
+async function seedStock(pg, rid, ids, products) {
+  for (const [name, days] of Object.entries(LEAD_DAYS)) {
+    await pg.query(`update ingredients set lead_days = $2 where id = $1`, [ids.get(name), days]);
+  }
+  const at = days => `now() - interval '${days} days'`;
+  const count = (name, counted, expected, days, who) => pg.query(
+    `insert into ingredient_counts (restaurant_id, ingredient_id, counted, expected, counted_by, created_at)
+     values ($1, $2, $3, $4, $5, ${at(days)})`,
+    [rid, ids.get(name), counted, expected, who],
+  );
+  await count("Whole milk", 12000, null, 10, "demo-manager@tabletap.dev");
+  await count("Whole milk", 6100, 6500, 3, "demo-manager@tabletap.dev");
+  await count("Coffee beans", 2400, null, 3, "demo@tabletap.dev");
+
+  const buy = (name, quantity, total, days) => pg.query(
+    `insert into ingredient_purchases (restaurant_id, ingredient_id, quantity, total, recorded_by, created_at)
+     values ($1, $2, $3, $4, 'demo-manager@tabletap.dev', ${at(days)})`,
+    [rid, ids.get(name), quantity, total],
+  );
+  await buy("Whole milk", 12000, 15.6, 2);
+  await buy("Takeaway cup", 100, 12, 4);
+
+  const dish = name => products.find(p => p.name === name)?.id ?? null;
+  const { rows: [pie] } = await pg.query(
+    `select id from menu_items where restaurant_id = $1 and name = 'Apple Pie' limit 1`, [rid],
+  );
+  const waste = [
+    [ids.get("Whole milk"), null, "Whole milk", 500, "spoiled", 0.65, "demo-kitchen@tabletap.dev", 8],
+    [null, dish("Iced Latte"), "Iced Latte", 1, "mistake", 0.77, "demo-cashier@tabletap.dev", 2],
+    [null, dish("French Fries"), "French Fries", 2, "unsold", 0.62, "demo-kitchen@tabletap.dev", 1],
+    [ids.get("Lemon"), null, "Lemon", 3, "staff", 0.24, "demo-cashier@tabletap.dev", 4],
+    [null, pie?.id ?? null, "Apple Pie", 1, "unsold", null, "demo-kitchen@tabletap.dev", 1],
+  ];
+  for (const [ingredientId, itemId, name, quantity, reason, cost, who, days] of waste) {
+    if (!ingredientId && !itemId) continue;
+    await pg.query(
+      `insert into waste_entries (restaurant_id, ingredient_id, item_id, name, quantity, reason, cost, recorded_by, created_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, ${at(days)})`,
+      [rid, ingredientId, itemId, name, quantity, reason, cost, who],
+    );
+  }
 }

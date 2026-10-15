@@ -38,7 +38,7 @@ export async function readCosts(restaurantId: string, now = new Date()): Promise
   const [restaurant, ingredients, recipes, items, menus, changes, orders, payments] = await Promise.all([
     db.from("restaurants").select("tax_pct, terminal_fee_pct").eq("id", restaurantId).single(),
     everyRow<Ingredient>((a, b) => db.from("ingredients")
-      .select("id, name, unit, pack_size, pack_price, unit_cost, supplier")
+      .select("id, name, unit, pack_size, pack_price, unit_cost, supplier, lead_days")
       .eq("restaurant_id", restaurantId).is("archived_at", null).order("id").range(a, b), "the ingredients"),
     everyRow<RecipeLine>((a, b) => db.from("recipe_lines")
       .select("item_id, ingredient_id, quantity, mod_label, mod_option")

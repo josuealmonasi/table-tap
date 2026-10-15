@@ -4232,6 +4232,150 @@ $$;
 revoke all on function public.archive_ingredient(uuid, uuid, text) from public, anon, authenticated;
 grant execute on function public.archive_ingredient(uuid, uuid, text) to service_role;
 
+-- ── Waste, purchases and counts: what is used, and what to buy ─────────────
+-- The second half of costs. What was thrown away and why; what came in from
+-- a supplier and at what price; what a person counted on the shelf. With the
+-- recipes and the orders, these say what the shelf should hold — and so what
+-- to buy before it runs out. Server-only, like the rest of the books.
+
+-- How many days a supplier takes to deliver it, and how many days of use a
+-- purchase should cover.
+alter table ingredients add column if not exists lead_days int not null default 2;
+alter table ingredients drop constraint if exists ingredients_lead_days_check;
+alter table ingredients add constraint ingredients_lead_days_check check (lead_days between 0 and 60);
+alter table restaurants add column if not exists purchase_cover_days int not null default 7;
+alter table restaurants drop constraint if exists restaurants_purchase_cover_days_check;
+alter table restaurants add constraint restaurants_purchase_cover_days_check
+  check (purchase_cover_days between 1 and 60);
+
+-- Something thrown away: an ingredient (spoiled milk) or a dish (an unsold
+-- croissant, a latte made wrong, the staff's lunch). Its cost is fixed when it
+-- is recorded, so a later price never rewrites what was lost; null when the
+-- dish has no recipe. The name is kept for the same reason.
+create table if not exists waste_entries (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  ingredient_id uuid references ingredients(id) on delete cascade,
+  item_id       uuid references menu_items(id) on delete cascade,
+  name          text not null check (char_length(name) <= 160),
+  quantity      numeric not null check (quantity > 0 and quantity <= 100000),
+  reason        text not null check (reason in ('spoiled', 'unsold', 'mistake', 'staff')),
+  note          text check (note is null or char_length(note) <= 140),
+  cost          numeric check (cost is null or cost >= 0),
+  recorded_by   text not null,
+  created_at    timestamptz not null default now(),
+  check ((ingredient_id is null) <> (item_id is null))
+);
+create index if not exists waste_entries_recent_idx on waste_entries(restaurant_id, created_at desc);
+alter table waste_entries enable row level security;
+revoke all on waste_entries from anon;
+revoke all on waste_entries from authenticated;
+grant all on waste_entries to service_role;
+
+-- What came in: how much (in the ingredient's own unit) and what it cost.
+create table if not exists ingredient_purchases (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  ingredient_id uuid not null references ingredients(id) on delete cascade,
+  quantity      numeric not null check (quantity > 0 and quantity <= 10000000),
+  total         numeric not null check (total >= 0 and total <= 10000000),
+  recorded_by   text not null,
+  created_at    timestamptz not null default now()
+);
+create index if not exists ingredient_purchases_recent_idx on ingredient_purchases(restaurant_id, created_at desc);
+alter table ingredient_purchases enable row level security;
+revoke all on ingredient_purchases from anon;
+revoke all on ingredient_purchases from authenticated;
+grant all on ingredient_purchases to service_role;
+
+-- What somebody counted on the shelf, and what the books said it should be at
+-- that moment. Counted before the expected figure is shown, like the drawer:
+-- a count adjusted after seeing the answer is not a count. Null expected on an
+-- ingredient's first count — there was nothing to compare with.
+create table if not exists ingredient_counts (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  ingredient_id uuid not null references ingredients(id) on delete cascade,
+  counted       numeric not null check (counted >= 0 and counted <= 10000000),
+  expected      numeric,
+  counted_by    text not null,
+  created_at    timestamptz not null default now()
+);
+create index if not exists ingredient_counts_latest_idx on ingredient_counts(restaurant_id, ingredient_id, created_at desc);
+alter table ingredient_counts enable row level security;
+revoke all on ingredient_counts from anon;
+revoke all on ingredient_counts from authenticated;
+grant all on ingredient_counts to service_role;
+
+-- A waste entry, and — for a dish whose stock is counted — the units it
+-- takes off the shelf, in one transaction: a croissant in the bin must not
+-- stay on the menu. Under the dish's lock, like an order taking stock, and
+-- never below zero; reaching zero takes the dish off the way a sale would.
+-- Returns the entry's id, or null when the ingredient or dish is not this
+-- restaurant's (or the ingredient is archived).
+create or replace function public.record_waste(
+  p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric,
+  p_reason text, p_note text, p_cost numeric, p_actor text
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_name text;
+  v_stock int;
+  v_id uuid;
+begin
+  if (p_ingredient is null) = (p_item is null) then return null; end if;
+  if p_ingredient is not null then
+    select name into v_name from ingredients
+     where id = p_ingredient and restaurant_id = p_restaurant and archived_at is null;
+  else
+    select name, stock into v_name, v_stock from menu_items
+     where id = p_item and restaurant_id = p_restaurant for update;
+  end if;
+  if v_name is null then return null; end if;
+  if v_stock is not null then
+    update menu_items
+       set stock          = greatest(v_stock - ceil(p_quantity)::int, 0),
+           available      = case when v_stock - ceil(p_quantity)::int <= 0 then false else available end,
+           stock_auto_off = case when v_stock - ceil(p_quantity)::int <= 0 and available then true else stock_auto_off end
+     where id = p_item;
+  end if;
+  insert into waste_entries (restaurant_id, ingredient_id, item_id, name, quantity, reason, note, cost, recorded_by)
+  values (p_restaurant, p_ingredient, p_item, v_name, p_quantity, p_reason, p_note, p_cost, p_actor)
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+revoke all on function public.record_waste(uuid, uuid, uuid, numeric, text, text, numeric, text) from public, anon, authenticated;
+grant execute on function public.record_waste(uuid, uuid, uuid, numeric, text, text, numeric, text) to service_role;
+
+-- A delivery, and the price it came at: when a pack cost something different
+-- this time, that is the ingredient's price now, and the price trigger keeps
+-- the change. Returns the purchase's id, or null when the ingredient is not
+-- this restaurant's.
+create or replace function public.record_purchase(
+  p_restaurant uuid, p_ingredient uuid, p_packs numeric, p_total numeric, p_actor text
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_ingredient ingredients%rowtype;
+  v_pack_price numeric;
+  v_id uuid;
+begin
+  if p_packs <= 0 then return null; end if;
+  select * into v_ingredient from ingredients
+   where id = p_ingredient and restaurant_id = p_restaurant and archived_at is null for update;
+  if v_ingredient.id is null then return null; end if;
+  v_pack_price := round(p_total / p_packs, 2);
+  if v_pack_price is distinct from v_ingredient.pack_price then
+    update ingredients set pack_price = v_pack_price, updated_by = p_actor where id = p_ingredient;
+  end if;
+  insert into ingredient_purchases (restaurant_id, ingredient_id, quantity, total, recorded_by)
+  values (p_restaurant, p_ingredient, p_packs * v_ingredient.pack_size, p_total, p_actor)
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+revoke all on function public.record_purchase(uuid, uuid, numeric, numeric, text) from public, anon, authenticated;
+grant execute on function public.record_purchase(uuid, uuid, numeric, numeric, text) to service_role;
+
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 
 -- The status guard and legacy handback share one transaction. New orders are
