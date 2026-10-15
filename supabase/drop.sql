@@ -126,3 +126,5 @@ drop function if exists public.replace_recipe(uuid, uuid, jsonb);
 drop function if exists public.archive_ingredient(uuid, uuid, text);
 drop function if exists public.record_waste(uuid, uuid, uuid, numeric, text, text, numeric, text);
 drop function if exists public.record_purchase(uuid, uuid, numeric, numeric, text);
+drop function if exists public.settle_offline_sale(uuid, uuid, text, text, timestamptz);
+drop function if exists public.take_stock_floor(uuid, jsonb);

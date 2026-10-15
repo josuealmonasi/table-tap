@@ -21,6 +21,7 @@ import { startOfLocalDay } from "@/lib/day-window";
 import { corteFrom, EMPTY_CORTE, type CorteAdjustment, type CortePayment } from "@/lib/corte";
 import { todaysShiftViews } from "@/lib/cash-shift-server";
 import { readTerminal } from "@/lib/terminal-server";
+import type { OfflineSaleRow } from "@/components/dashboard/analytics/OfflineSalesCard";
 
 export const dynamic = "force-dynamic";
 
@@ -168,6 +169,15 @@ export default async function AnalyticsPage({
   // and what the bank should deposit. A failed read throws to the error
   // screen, like the corte — a deposit shown as missing is a wrong number.
   const terminal = plan && can(plan.limits, "pos") ? await readTerminal(membership.restaurant.id, timeZone) : null;
+  // The till's sales rung without a connection, newest first, so a manager
+  // sees any whose amount the menu would not have charged.
+  const offlineRows = unwrap(
+    await admin.from("orders").select("id, offline_at, total, offline_drift")
+      .eq("restaurant_id", membership.restaurant.id).not("offline_at", "is", null)
+      .gte("offline_at", new Date(Date.now() - 14 * 86_400_000).toISOString())
+      .order("offline_at", { ascending: false }).limit(200),
+    "the sales rung without a connection",
+  ) as OfflineSaleRow[] | null;
 
   // The drawer's withdrawals are struck off through a confirm dialog.
   return (
@@ -185,6 +195,9 @@ export default async function AnalyticsPage({
       dayLabel={dayLabel}
       loyalty={loyalty}
       terminal={terminal}
+      offlineSales={(offlineRows ?? []).map(o => ({
+        ...o, total: Number(o.total), offline_drift: o.offline_drift === null ? null : Number(o.offline_drift),
+      }))}
     />
     </ConfirmProvider>
   );

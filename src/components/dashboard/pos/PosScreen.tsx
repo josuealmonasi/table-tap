@@ -25,6 +25,8 @@ import { posSections } from "@/lib/pos-sections";
 import PosMenu from "./PosMenu";
 import PosSalePanel from "./PosSalePanel";
 import PosAsk from "./PosAsk";
+import OfflineTillBanner from "./OfflineTillBanner";
+import { useOfflineSales } from "@/hooks/useOfflineSales";
 import PosTicketModal from "./PosTicketModal";
 import PosPickup from "./PosPickup";
 import { useToast } from "@/components/ui/Toast";
@@ -43,8 +45,9 @@ import { readLastSale } from "@/lib/pos-last-sale";
  * and holds no stock.
  *
  * The total shown here runs the same `priceCart` the server re-runs from the
- * database. It is a quote, never the charge — the amount taken is whatever the
- * server prices, and the two agreeing is the point of sharing the function.
+ * database. Online it is a quote, never the charge — the amount taken is
+ * whatever the server prices, and the two agreeing is the point of sharing the
+ * function. Offline it is what was charged, and the server keeps it as such.
  */
 export default function PosScreen({
   restaurant,
@@ -96,24 +99,12 @@ export default function PosScreen({
   const cart = usePosCart(restaurant.id);
   const { lines } = cart;
   const details = usePosSaleDetails();
-  const { charge, busy, pending, setPending, ticket, setTicket } = usePosCharge({
-    restaurant,
-    cart,
-    details,
-    canEmailReceipt,
-  });
+  // The connection, and the sales this device is holding until it returns.
+  const offline = useOfflineSales(restaurant.id);
   const [editing, setEditing] = useState<CartItem | null>(null);
   const [openItem, setOpenItem] = useState<MenuItem | null>(null);
   const [openCombo, setOpenCombo] = useState<Combo | null>(null);
   const [search, setSearch] = useState("");
-  /**
-   * The till is not to be typed into.
-   *
-   * While the sale is in flight, and while the ticket is still up: `busy` goes
-   * false the instant the route answers, and a dish tapped into that gap lands
-   * in a sale the cashier believes they have already rung up.
-   */
-  const sending = busy || ticket !== null;
   const { tipPct, tipCustom } = details;
 
   /** The same arithmetic the server will redo from the database. */
@@ -137,6 +128,22 @@ export default function PosScreen({
       tipCustom,
     ],
   );
+  const { charge, busy, pending, setPending, ticket, setTicket } = usePosCharge({
+    restaurant,
+    cart,
+    details,
+    canEmailReceipt,
+    pricing,
+    offline,
+  });
+  /**
+   * The till is not to be typed into.
+   *
+   * While the sale is in flight, and while the ticket is still up: `busy` goes
+   * false the instant the route answers, and a dish tapped into that gap lands
+   * in a sale the cashier believes they have already rung up.
+   */
+  const sending = busy || ticket !== null;
 
   // Whether this sale is finished the moment it is charged: everything in it
   // comes off a shelf, so it goes in the customer's hand rather than to a
@@ -221,9 +228,11 @@ export default function PosScreen({
                 onFound={id => router.push(`/dashboard/bills?order=${id}`)}
               />
               {loyalty && <StampCard />}
-              <PosCashDrawer shiftOpen={shiftOpen} currency={restaurant.currency} />
+              <PosCashDrawer shiftOpen={shiftOpen} currency={restaurant.currency} heldSales={offline.held.length} />
             </div>
           </header>
+
+          <OfflineTillBanner online={offline.online} held={offline.held} onRetry={() => void offline.flush()} />
 
           {closedNow && <p className="tt-offline-banner">{t("pos.closedNow")}</p>}
 

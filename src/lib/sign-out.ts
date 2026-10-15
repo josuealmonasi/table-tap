@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { readHeld } from "@/lib/offline-sales";
 
 /**
  * Ends the session and leaves nothing of it behind.
@@ -12,7 +13,15 @@ import { createClient } from "@/lib/supabase/client";
  * their own copy, so a change like this one would have had to be remembered in
  * both.
  */
-export async function signOutEverywhere(): Promise<void> {
+export async function signOutEverywhere(onHeld?: (count: number) => void): Promise<void> {
+  // Sales the till rang offline and has not sent live only on this device,
+  // and signing out is how a shared tablet gets handed over and cleared.
+  // They are the record of money already taken: they go first.
+  const held = readHeld().length;
+  if (held > 0) {
+    onHeld?.(held);
+    return;
+  }
   await createClient().auth.signOut();
 
   // Best effort, and never allowed to keep somebody signed in: if the worker

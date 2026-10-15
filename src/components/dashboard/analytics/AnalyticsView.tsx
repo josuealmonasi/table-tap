@@ -13,6 +13,7 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 import OrderHistory from "@/components/dashboard/OrderHistory";
 import type { TerminalView } from "@/lib/terminal-server";
 import TerminalDeposits from "./TerminalDeposits";
+import OfflineSalesCard, { type OfflineSaleRow } from "./OfflineSalesCard";
 
 /** A dish with its star average and how many people rated it. */
 export interface RatedDish {
@@ -41,6 +42,8 @@ interface AnalyticsViewProps {
   loyalty?: LoyaltyStats | null;
   /** The restaurant's own card terminal and its deposits, on a tier with the till. */
   terminal?: TerminalView | null;
+  /** Sales the till rang without a connection, over the last two weeks. */
+  offlineSales?: OfflineSaleRow[];
 }
 
 /** Read-only analytics dashboard: stat tiles, revenue-by-day, top items, hours. */
@@ -64,6 +67,7 @@ export default function AnalyticsView({
   dayLabel,
   loyalty = null,
   terminal = null,
+  offlineSales = [],
 }: AnalyticsViewProps) {
   const t = useT();
   const maxDay = Math.max(1, ...data.byDay.map(d => d.revenue));
@@ -119,6 +123,8 @@ export default function AnalyticsView({
             the money the counter took, one in the drawer and one on its way
             to the bank. */}
         {terminal && <TerminalDeposits terminal={terminal} currency={currency} timeZone={timeZone} />}
+
+        {offlineSales.length > 0 && <OfflineSalesCard sales={offlineSales} currency={currency} timeZone={timeZone} />}
 
         {loyalty && <LoyaltyStatsCard stats={loyalty} />}
 

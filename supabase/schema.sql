@@ -4414,6 +4414,78 @@ revoke all on terminal_deposits from anon;
 revoke all on terminal_deposits from authenticated;
 grant all on terminal_deposits to service_role;
 
+-- ── A till that keeps selling when the connection drops ────────────────────
+-- A counter's sales cannot wait for the wifi. With the connection gone the
+-- till keeps a cash or own-terminal sale on its device, under the reference
+-- it made for it, and sends it when the connection returns — the same
+-- reference, so a sale sent twice is rung once. The money was taken when it
+-- happened, so the server records it then, as it was taken.
+--
+-- When it happened, for a sale rung without a connection; null otherwise.
+alter table orders add column if not exists offline_at timestamptz;
+-- What was collected less what today's menu prices it at, when the menu
+-- moved during the outage: the corte follows the drawer, and a manager is
+-- shown the difference. Null when nothing could be compared.
+alter table orders add column if not exists offline_drift numeric;
+
+-- An offline sale's money, dated when it was taken: the drawer it went into
+-- is that shift's, and the corte it belongs to is that day's. It arrives
+-- finished — the kitchen worked from the ticket at the time — so it is
+-- completed, never a new ticket on the board. Same guard as settle_sale:
+-- only an unpaid sale awaiting its payment, once.
+create or replace function public.settle_offline_sale(
+  p_restaurant uuid, p_order uuid, p_method text, p_actor text, p_at timestamptz
+) returns boolean language plpgsql security definer set search_path = public as $$
+declare
+  v_total numeric;
+begin
+  if p_method not in ('cash', 'card') then
+    raise exception 'settle_offline_sale: unknown method %', p_method;
+  end if;
+  update orders
+     set paid = true, pay_method = p_method, status = 'completed'
+   where id = p_order and restaurant_id = p_restaurant and paid = false and status = 'pending_payment'
+  returning total into v_total;
+  if not found then
+    raise exception 'not_owed';
+  end if;
+  if v_total > 0 then
+    insert into payments (restaurant_id, order_id, amount, method, actor_email, created_at)
+    values (p_restaurant, p_order, round(v_total, 2), p_method, p_actor, p_at);
+  end if;
+  return true;
+end;
+$$;
+revoke all on function public.settle_offline_sale(uuid, uuid, text, text, timestamptz) from public, anon, authenticated;
+grant execute on function public.settle_offline_sale(uuid, uuid, text, text, timestamptz) to service_role;
+
+-- The stock an offline sale took. It already happened, so it is never
+-- refused: a dish whose count is short goes to nought, off the menu the way
+-- a sale would take it, and no further. Under each dish's lock, in id order.
+create or replace function public.take_stock_floor(p_restaurant uuid, p_demand jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_row record;
+begin
+  for v_row in
+    select m.id, m.stock, m.available, (d.qty)::int as want
+      from jsonb_to_recordset(p_demand) as d(item_id uuid, qty int)
+      join menu_items m on m.id = d.item_id and m.restaurant_id = p_restaurant
+     where m.stock is not null
+     order by m.id
+       for update of m
+  loop
+    update menu_items
+       set stock          = greatest(v_row.stock - v_row.want, 0),
+           available      = case when v_row.stock - v_row.want <= 0 then false else available end,
+           stock_auto_off = case when v_row.stock - v_row.want <= 0 and v_row.available then true else stock_auto_off end
+     where id = v_row.id;
+  end loop;
+end;
+$$;
+revoke all on function public.take_stock_floor(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.take_stock_floor(uuid, jsonb) to service_role;
+
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 
 -- The status guard and legacy handback share one transaction. New orders are

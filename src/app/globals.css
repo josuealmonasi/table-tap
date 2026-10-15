@@ -8178,3 +8178,34 @@ a.tt-user-plan:hover {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+/* The till with no connection: what it is doing, and what it could not send. */
+.tt-offline-till {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--tt-radius-sm);
+  background: var(--tt-warning-wash);
+  color: var(--tt-warning);
+  font-size: 14px;
+}
+.tt-offline-till p {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tt-offline-till > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.tt-offline-till > svg {
+  flex: none;
+  margin-top: 2px;
+}
+.tt-offline-till-refused {
+  background: color-mix(in srgb, var(--tt-danger) 10%, transparent);
+  color: var(--tt-danger);
+}

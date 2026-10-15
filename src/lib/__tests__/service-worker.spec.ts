@@ -122,7 +122,7 @@ describe("the worker that keeps the kitchen board through a drop", () => {
     vi.stubGlobal("fetch", async () => new Response("<board/>", { status: 200 }));
     handlers.get("fetch")!({ request, respondWith: (p: Promise<Response>) => responses.push(p) });
     await responses[0];
-    expect(stores.get("tt-v1")?.has("/dashboard/orders")).toBe(true);
+    expect(stores.get("tt-v2")?.has("/dashboard/orders")).toBe(true);
 
     // Then the connection drops.
     vi.stubGlobal("fetch", async () => {
@@ -132,6 +132,45 @@ describe("the worker that keeps the kitchen board through a drop", () => {
     const served = await responses[1];
     expect(await served.text()).toBe("<board/>");
     expect(served.headers.get("x-tt-offline"), "the page must know it is reading history").toBe("1");
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps the till too, so it can sell through a drop", async () => {
+    const { handlers, caches: stores } = loadWorker();
+    const responses: Promise<Response>[] = [];
+    const request = navigation("https://x.dev/dashboard/pos");
+    vi.stubGlobal("fetch", async () => new Response("<till/>", { status: 200 }));
+    handlers.get("fetch")!({ request, respondWith: (p: Promise<Response>) => responses.push(p) });
+    await responses[0];
+    expect(stores.get("tt-v2")?.has("/dashboard/pos")).toBe(true);
+
+    vi.stubGlobal("fetch", async () => {
+      throw new TypeError("offline");
+    });
+    handlers.get("fetch")!({ request, respondWith: (p: Promise<Response>) => responses.push(p) });
+    const served = await responses[1];
+    expect(await served.text()).toBe("<till/>");
+    expect(served.headers.get("x-tt-offline")).toBe("1");
+    vi.unstubAllGlobals();
+  });
+
+  it("serves Next's content-named scripts from the cache once it has them", async () => {
+    const { handlers } = loadWorker();
+    const responses: Promise<Response>[] = [];
+    const asset = { url: "https://x.dev/_next/static/chunks/app-1a2b3c.js", method: "GET", mode: "no-cors" };
+    let calls = 0;
+    vi.stubGlobal("fetch", async () => {
+      calls++;
+      return new Response("chunk", { status: 200 });
+    });
+    handlers.get("fetch")!({ request: asset, respondWith: (p: Promise<Response>) => responses.push(p) });
+    await responses[0];
+    vi.stubGlobal("fetch", async () => {
+      throw new TypeError("offline");
+    });
+    handlers.get("fetch")!({ request: asset, respondWith: (p: Promise<Response>) => responses.push(p) });
+    expect(await (await responses[1]).text(), "a stored page that cannot load its scripts is no page").toBe("chunk");
+    expect(calls).toBe(1);
     vi.unstubAllGlobals();
   });
 
@@ -148,7 +187,7 @@ describe("the worker that keeps the kitchen board through a drop", () => {
     });
     await responses[0];
     expect(
-      stores.get("tt-v1")?.has("/dashboard/orders") ?? false,
+      stores.get("tt-v2")?.has("/dashboard/orders") ?? false,
       "caching the login page would show it to somebody who is signed in",
     ).toBe(false);
     vi.unstubAllGlobals();

@@ -1175,6 +1175,84 @@ export function cases(fx) {
     { name: "PATCH /api/terminal/deposits (eleven days)", as: "manager", method: "PATCH",
       path: "/api/terminal/deposits", body: { settleDays: "11" }, expect: [400],
       expectError: /de 0 a 10|from 0 to 10/i },
+    // ── A till sale rung without a connection, sent once it returns ───────
+    // Recorded as it happened: at its own time, for what was collected,
+    // finished. On a dish whose stock is not counted, because a stock taken
+    // offline is not given back when the case's sale is deleted at teardown.
+    { name: "POST /api/pos/order (an offline cash sale, sent an hour later)", as: "cashier", method: "POST",
+      path: "/api/pos/order",
+      arrange: async f => {
+        const { data } = await f.admin.from("menu_items").select("id, name, price, emoji")
+          .eq("restaurant_id", r).is("stock", null).eq("is_addon", false).eq("available", true)
+          .eq("modifiers", "[]").eq("discount_pct", 0).limit(1).single();
+        f.offlineDish = data;
+        f.offlineRef = crypto.randomUUID();
+        f.offlineAt = new Date(Date.now() - 3600_000).toISOString();
+        const sub = Number(data.price);
+        const fee = f.restaurant.service_enabled ? Math.round(sub * Number(f.restaurant.service_pct)) / 100 : 0;
+        f.offlineCharge = { at: f.offlineAt, subtotal: sub, serviceFee: fee, tip: 0, discount: 0, total: Math.round((sub + fee) * 100) / 100 };
+      },
+      body: f => ({
+        posRef: f.offlineRef, method: "cash", note: `${MARK} offline`, noReceipt: true, offline: f.offlineCharge,
+        items: [{ itemId: f.offlineDish.id, name: f.offlineDish.name, price: Number(f.offlineDish.price), qty: 1, emoji: "🍽️", mods: {} }],
+      }),
+      expect: [200],
+      check: async (d, f) => {
+        const [{ data: o }, { data: pays }] = await Promise.all([
+          f.admin.from("orders").select("id, status, paid, total, created_at, offline_at, offline_drift").eq("id", f.offlineRef).maybeSingle(),
+          f.admin.from("payments").select("amount, method, created_at, actor_email").eq("order_id", f.offlineRef),
+        ]);
+        const sameTime = (iso) => Math.abs(Date.parse(iso) - Date.parse(f.offlineAt)) < 1000;
+        if (d.orderId !== f.offlineRef) return `the sale's id is ${d.orderId}, not its reference`;
+        if (!(o?.status === "completed" && o.paid && sameTime(o.created_at) && sameTime(o.offline_at) && Number(o.offline_drift) === 0)) {
+          return `the order is ${JSON.stringify(o)}`;
+        }
+        return pays?.length === 1 && Number(pays[0].amount) === Number(o.total) && sameTime(pays[0].created_at)
+          && pays[0].method === "cash" && pays[0].actor_email === "demo-cashier@tabletap.dev" || `paid ${JSON.stringify(pays)}`;
+      } },
+    { name: "POST /api/pos/order (the same offline sale sent again)", as: "cashier", method: "POST",
+      path: "/api/pos/order",
+      body: f => ({
+        posRef: f.offlineRef, method: "cash", note: `${MARK} offline`, noReceipt: true, offline: f.offlineCharge,
+        items: [{ itemId: f.offlineDish.id, name: f.offlineDish.name, price: Number(f.offlineDish.price), qty: 1, emoji: "🍽️", mods: {} }],
+      }),
+      expect: [200],
+      check: async (d, f) => {
+        const { count } = await f.admin.from("payments").select("id", { count: "exact", head: true }).eq("order_id", f.offlineRef);
+        return d.repeat === true && count === 1 || `answered ${JSON.stringify(d)}, ${count} payment(s)`;
+      } },
+    { name: "POST /api/pos/order (offline, collected more than today's menu)", as: "cashier", method: "POST",
+      path: "/api/pos/order",
+      body: f => ({
+        posRef: crypto.randomUUID(), method: "card", note: `${MARK} offline drift`, noReceipt: true, terminalRef: "AUT 7",
+        offline: { ...f.offlineCharge, subtotal: f.offlineCharge.subtotal + 5, total: Math.round((f.offlineCharge.total + 5) * 100) / 100 },
+        items: [{ itemId: f.offlineDish.id, name: f.offlineDish.name, price: Number(f.offlineDish.price), qty: 1, emoji: "🍽️", mods: {} }],
+      }),
+      expect: [200],
+      check: async (d, f) => {
+        const [{ data: o }, { data: p }] = await Promise.all([
+          f.admin.from("orders").select("offline_drift, total").eq("id", d.orderId).single(),
+          f.admin.from("payments").select("amount, terminal_ref").eq("order_id", d.orderId).single(),
+        ]);
+        return Number(o.offline_drift) === 5 && Number(p.amount) === Number(o.total) && p.terminal_ref === "AUT 7"
+          || `order ${JSON.stringify(o)}, payment ${JSON.stringify(p)}`;
+      } },
+    { name: "POST /api/pos/order (offline, on an account)", as: "cashier", method: "POST",
+      path: "/api/pos/order",
+      body: f => ({ posRef: crypto.randomUUID(), method: "account", accountId: fx.accountId, offline: f.offlineCharge,
+        items: [{ itemId: f.offlineDish.id, name: "x", price: 1, qty: 1, mods: {} }] }),
+      expect: [400], expectError: /efectivo o con tu terminal|cash and card-on-terminal/i },
+    { name: "POST /api/pos/order (offline, forty days ago)", as: "cashier", method: "POST",
+      path: "/api/pos/order",
+      body: f => ({ posRef: crypto.randomUUID(), method: "cash",
+        offline: { ...f.offlineCharge, at: new Date(Date.now() - 40 * 86_400_000).toISOString() },
+        items: [{ itemId: f.offlineDish.id, name: "x", price: 1, qty: 1, mods: {} }] }),
+      expect: [400], expectError: /sin conexión no se puede registrar|offline sale cannot be recorded/i },
+    { name: "POST /api/pos/order (offline, a waiter refused)", as: "waiter", method: "POST",
+      path: "/api/pos/order",
+      body: f => ({ posRef: crypto.randomUUID(), method: "cash", offline: f.offlineCharge,
+        items: [{ itemId: f.offlineDish.id, name: "x", price: 1, qty: 1, mods: {} }] }),
+      expect: [403] },
     { name: "POST /api/pos/order (no cart)", as: "cashier", method: "POST",
       path: "/api/pos/order",
       body: { posRef: "00000000-0000-4000-8000-000000000003", method: "cash", items: [] },

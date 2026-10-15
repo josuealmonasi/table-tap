@@ -681,6 +681,15 @@ export async function teardown(fx) {
     terminal_fee_pct: restaurant.terminal_fee_pct, purchase_cover_days: restaurant.purchase_cover_days,
     terminal_settle_days: restaurant.terminal_settle_days,
   }).eq("id", restaurant.id);
+  // The till's offline sales the cases sent, with their money: the payment
+  // first, since `payments.order_id` is `on delete set null`.
+  const { data: offlineSales } = await admin.from("orders").select("id")
+    .eq("restaurant_id", restaurant.id).like("note", `${MARK} offline%`);
+  const offlineIds = (offlineSales ?? []).map(o => o.id);
+  if (offlineIds.length) {
+    await admin.from("payments").delete().in("order_id", offlineIds);
+    await admin.from("orders").delete().in("id", offlineIds);
+  }
   // A terminal deposit a case marked and did not get to take back.
   await admin.from("terminal_deposits").delete().eq("restaurant_id", restaurant.id).like("note", `${MARK}%`);
   // The drawer's shifts and withdrawals the cases wrote — the seed's are
