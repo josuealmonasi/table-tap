@@ -16,6 +16,19 @@ export interface PosSaleBody {
   tipAmount?: number;
   /** The customer declined the ticket: build nothing. */
   noReceipt?: boolean;
+  /**
+   * With `method: "card"`: the voucher's authorization or folio number, to
+   * find the sale it paid. Never anything from the card itself — the privacy
+   * notice says no card data is stored, and the field asks for none.
+   */
+  terminalRef?: string;
+}
+
+/** A voucher reference as typed: trimmed, 1–40 characters, or nothing. */
+export function terminalRef(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const ref = raw.trim().replace(/\s+/g, " ");
+  return ref.length >= 1 && ref.length <= 40 ? ref : null;
 }
 
 /**

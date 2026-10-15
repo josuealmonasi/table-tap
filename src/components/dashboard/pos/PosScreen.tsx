@@ -262,6 +262,7 @@ export default function PosScreen({
         {pending && (
           <PosAsk
             details={details}
+            method={pending}
             total={pricing.total}
             subtotal={pricing.subtotal}
             currency={restaurant.currency}

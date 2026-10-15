@@ -97,6 +97,7 @@ export function usePosCharge({ restaurant, cart, details, canEmailReceipt }: Pos
               ? details.email.trim() || undefined
               : undefined,
           noReceipt: details.noTicket || undefined,
+          terminalRef: method === "card" ? details.terminalRef.trim() || undefined : undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));

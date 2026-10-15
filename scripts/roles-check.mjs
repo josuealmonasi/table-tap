@@ -146,6 +146,11 @@ const ROUTES = [
   { m: "DELETE", p: "/api/costs/waste", body: {}, allow: MANAGES, passes: 400 },
   { m: "POST", p: "/api/costs/purchases", body: {}, allow: MANAGES, passes: 400 },
   { m: "POST", p: "/api/costs/counts", body: {}, allow: MANAGES, passes: 400 },
+  // The terminal's deposits: the owner's and the managers'. Refused on shape —
+  // no day, no number of days — so nothing is marked or changed anywhere.
+  { m: "POST", p: "/api/terminal/deposits", body: {}, allow: MANAGES, passes: 400 },
+  { m: "DELETE", p: "/api/terminal/deposits", body: {}, allow: MANAGES, passes: 400 },
+  { m: "PATCH", p: "/api/terminal/deposits", body: {}, allow: MANAGES, passes: 400 },
   // What that console calls — moving a restaurant between plans, deleting
   // one, managing any login — is the platform admin's alone. Each checks who
   // is asking first and answers the platform admin 400 for an empty body.

@@ -20,6 +20,7 @@ import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { startOfLocalDay } from "@/lib/day-window";
 import { corteFrom, EMPTY_CORTE, type CorteAdjustment, type CortePayment } from "@/lib/corte";
 import { todaysShiftViews } from "@/lib/cash-shift-server";
+import { readTerminal } from "@/lib/terminal-server";
 
 export const dynamic = "force-dynamic";
 
@@ -163,6 +164,11 @@ export default async function AnalyticsPage({
       ? await readLoyaltyStats(admin, membership.restaurant.id, start, end)
       : null;
 
+  // The restaurant's own card terminal, on a tier with the till: what it took
+  // and what the bank should deposit. A failed read throws to the error
+  // screen, like the corte — a deposit shown as missing is a wrong number.
+  const terminal = plan && can(plan.limits, "pos") ? await readTerminal(membership.restaurant.id, timeZone) : null;
+
   // The drawer's withdrawals are struck off through a confirm dialog.
   return (
     <ConfirmProvider>
@@ -178,6 +184,7 @@ export default async function AnalyticsPage({
       restaurantName={membership.restaurant.name}
       dayLabel={dayLabel}
       loyalty={loyalty}
+      terminal={terminal}
     />
     </ConfirmProvider>
   );

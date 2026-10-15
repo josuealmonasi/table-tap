@@ -25,6 +25,7 @@ import { TERMS_VERSION } from "./terms-version.mjs";
 import { seedLoyalty } from "./mock-loyalty.mjs";
 import { seedAccounts } from "./mock-accounts.mjs";
 import { seedCosts } from "./mock-costs.mjs";
+import { seedTerminal } from "./mock-terminal.mjs";
 import { bulkInsert, randInt, sample } from "./menu-catalog.mjs";
 
 export const DEMO_RESTAURANT = "Demo Bistro";
@@ -912,6 +913,8 @@ export async function seedMock(pg) {
   await seedAccounts(pg, rid);
   // Ingredients, recipes and a supplier's rise, for the costs screen.
   await seedCosts(pg, rid);
+  // Deposits from the restaurant's own card terminal, and voucher numbers.
+  await seedTerminal(pg, rid);
 
   // Nothing seeded may have happened later than now. Orders from the future
   // filled the board and today's numbers for a morning before anybody saw

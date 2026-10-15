@@ -777,6 +777,36 @@ view shows which stations are done. The kitchen ticket prints each station's
 lines under its name, the bar first, when an order needs both, so one printer
 serves both.
 
+## The restaurant's own card terminal
+
+Most cafés already have a terminal (Clip, Mercado Pago Point, a bank's), and
+they keep using it by hand. The café asked not to type a total twice without
+being shown it, to match each payment to its sale, to see the tips apart, and
+to know what should reach the bank and when.
+
+- **At the till**, a card sale's last step shows the amount to key into the
+  terminal, tip included, in large type, and asks for the voucher's
+  authorization or folio number (optional). It is kept on the payment
+  (`payments.terminal_ref`, 1–40 characters) after the money is recorded,
+  never from the card: the privacy notice says no card data is stored, and the
+  field asks for none.
+- **In Analytics**, under the corte, on every tier with the till: the last 14
+  days of card payments that did not go through Stripe, by the restaurant's
+  calendar day. Each day shows what was taken (and the tips inside it — a
+  counter sale keeps its tip on the order), the fee at `terminal_fee_pct`,
+  and the deposit expected `terminal_settle_days` business days later
+  (weekends skipped; bank holidays are not known, so a deposit due after one
+  reads late a day early). A day opens to its payments with their voucher
+  numbers and sale codes (`src/lib/terminal.ts`, `src/lib/terminal-server.ts`).
+- **Marking a deposit** (`POST /api/terminal/deposits`, managers) stores what
+  the bank paid beside what the server worked out the day should pay at that
+  moment — never a figure from the browser — in `terminal_deposits`, one per
+  day. Within MX$0.50 it is received; otherwise it came in short or over, and
+  the difference is shown. A day marked wrong is taken back and marked again.
+  Unmarked, a day is coming, due today, or late.
+
+Sending the amount to the terminal itself waits for a provider choice.
+
 ## Tickets on paper
 
 Two printers, two different documents, two different ways of reaching them.

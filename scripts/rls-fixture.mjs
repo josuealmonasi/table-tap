@@ -80,6 +80,7 @@ async function sweepLeftovers(admin) {
   // planting its own; deleting it takes its recipe line and price history.
   const { count: shifts } = await admin
     .from("cash_shifts").delete({ count: "exact" }).eq("opened_by", ACTOR);
+  await admin.from("terminal_deposits").delete().eq("recorded_by", ACTOR);
   const { count: ingredients } = await admin
     .from("ingredients").delete({ count: "exact" }).eq("updated_by", ACTOR);
 
@@ -260,12 +261,17 @@ export async function plantNeighbour(admin, restaurantId) {
     });
   }
 
+  // A day of their terminal marked as deposited: what their bank paid them.
+  await keep("deposit", "terminal_deposits", {
+    restaurant_id: restaurantId, sales_day: "2001-01-01", expected: 1, received: 1, note: MARK, recorded_by: ACTOR,
+  });
+
   return {
     planted,
     /** Children first, so nothing is left holding a reference. */
     remove: async () => {
       const order = [
-        "waste", "purchase", "count", "recipeLine", "ingredient", "withdrawal", "shift",
+        "deposit", "waste", "purchase", "count", "recipeLine", "ingredient", "withdrawal", "shift",
         "accountCheckout", "account",
         "loyaltyRedemption", "loyaltyVisit", "loyaltyCard", "loyaltyProgram",
         "split", "sitting", "request", "notification", "iconGroup", "log", "colleague",

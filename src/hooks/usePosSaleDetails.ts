@@ -17,6 +17,8 @@ export function usePosSaleDetails() {
   const [noTicket, setNoTicket] = useState(false);
   const [tipPct, setTipPct] = useState(0);
   const [tipCustom, setTipCustom] = useState<number | null>(null);
+  // The terminal voucher's reference, on a card sale. Optional.
+  const [terminalRef, setTerminalRef] = useState("");
 
   /** Ready for the next customer. */
   function reset(): void {
@@ -26,6 +28,7 @@ export function usePosSaleDetails() {
     setNoTicket(false);
     setTipPct(0);
     setTipCustom(null);
+    setTerminalRef("");
   }
 
   return {
@@ -41,6 +44,8 @@ export function usePosSaleDetails() {
     setTipPct,
     tipCustom,
     setTipCustom,
+    terminalRef,
+    setTerminalRef,
     reset,
   };
 }

@@ -679,7 +679,10 @@ export async function teardown(fx) {
   await admin.from("menu_items").delete().eq("restaurant_id", restaurant.id).like("name", `${MARK} costs%`);
   await admin.from("restaurants").update({
     terminal_fee_pct: restaurant.terminal_fee_pct, purchase_cover_days: restaurant.purchase_cover_days,
+    terminal_settle_days: restaurant.terminal_settle_days,
   }).eq("id", restaurant.id);
+  // A terminal deposit a case marked and did not get to take back.
+  await admin.from("terminal_deposits").delete().eq("restaurant_id", restaurant.id).like("note", `${MARK}%`);
   // The drawer's shifts and withdrawals the cases wrote — the seed's are
   // older — and then the seed's open shift, set aside at setup, put back.
   if (fx.startedAt) {
