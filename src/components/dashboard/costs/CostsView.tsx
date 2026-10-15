@@ -3,9 +3,7 @@
 import Link from "next/link";
 import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
-
-export const COSTS_TABS = ["margins", "ingredients", "waste", "stock", "buy"] as const;
-export type CostsTab = (typeof COSTS_TABS)[number];
+import { COSTS_TABS, type CostsTab } from "@/lib/costs/tabs";
 
 const LABEL: Record<CostsTab, string> = {
   margins: "costs.tabMargins",

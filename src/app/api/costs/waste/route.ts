@@ -70,7 +70,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     restaurantId: actor.restaurantId, actor: actor.email, entity: "costs", action: "written_off",
     detail: logDetail({ note: `${entry?.name ?? ""} × ${quantity}` }),
   });
-  return NextResponse.json({ ok: true, id, cost });
+  return NextResponse.json({ ok: true, id });
 }
 
 export async function DELETE(req: NextRequest): Promise<NextResponse> {

@@ -679,6 +679,7 @@ export function cases(fx) {
       expect: [200],
       check: async (d, f) => {
         const { data } = await f.admin.from("waste_entries").select("quantity, reason, cost, recorded_by").eq("id", d.id).single();
+        if (Object.hasOwn(d, "cost")) return "the kitchen received a private waste cost";
         return Number(data.quantity) === 500 && data.reason === "spoiled" && Number(data.cost) === 12.5
           && data.recorded_by === "demo-kitchen@tabletap.dev" || `stored ${JSON.stringify(data)}`;
       } },
@@ -702,6 +703,7 @@ export function cases(fx) {
       check: async (d, f) => {
         f.wasteId = d.id;
         const { data } = await f.admin.from("menu_items").select("stock").eq("id", f.costItem).single();
+        if (Object.hasOwn(d, "cost")) return "the cashier received a private waste cost";
         return data.stock === 1 || `stock is ${data.stock}, not 1`;
       } },
     { name: "POST /api/costs/waste (no reason)", as: "kitchen", method: "POST",

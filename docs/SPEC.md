@@ -581,7 +581,8 @@ on the costs screen, and one screen for the whole team:
   product whose stock is counted loses the units in the same transaction
   (`record_waste`): an unsold croissant in the bin must not stay on the menu.
   The team sees what it recorded today; what it cost is the owner's and the
-  managers', on the Merma tab, by reason, where a manager can take back an
+  managers', on the Merma tab, by reason. Recording waste returns no cost
+  to the staff's browser. A manager can take back an
   entry made by mistake (the stock is not given back — it is corrected on the
   menu, where it is kept).
 - **A delivery** (`record_purchase`) adds what came in, and the price per
