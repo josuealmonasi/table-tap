@@ -13,6 +13,7 @@ export type NavItem = {
   icon:
     | "Orders"
     | "Analytics"
+    | "Costs"
     | "Promotions"
     | "Loyalty"
     | "Table"
@@ -84,6 +85,16 @@ export const NAV_ITEMS: NavItem[] = [
     icon: "Analytics",
     titleKey: "nav.analytics",
     descKey: "nav.analyticsDesc",
+  },
+  {
+    // What each product leaves: ingredients, recipes, the fee for taking the
+    // money. The restaurant's private books, so owner and manager only, and
+    // only on the tiers that carry it.
+    href: "/dashboard/costs",
+    icon: "Costs",
+    titleKey: "nav.costs",
+    descKey: "nav.costsDesc",
+    feature: "costs",
   },
   {
     href: "/dashboard/promotions",

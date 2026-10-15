@@ -66,6 +66,7 @@ import { User } from "@phosphor-icons/react/dist/ssr/User";
 import { X } from "@phosphor-icons/react/dist/ssr/X";
 import { Warning } from "@phosphor-icons/react/dist/ssr/Warning";
 import { Clock } from "@phosphor-icons/react/dist/ssr/Clock";
+import { Coins } from "@phosphor-icons/react/dist/ssr/Coins";
 
 /**
  * Named for the job, not the picture — swapping which glyph plays a role is a
@@ -106,6 +107,7 @@ export const PausedIcon = PauseCircle;
 export const RatingIcon = Star;
 export const OrdersIcon = ClipboardText;
 export const AnalyticsIcon = ChartBar;
+export const CostsIcon = Coins;
 export const PromotionsIcon = Gift;
 /** The visit card: a stamp per visit. */
 export const LoyaltyIcon = Stamp;
@@ -164,6 +166,7 @@ export const NAV_ICONS = {
   Menu: MenuIcon,
   Orders: OrdersIcon,
   Analytics: AnalyticsIcon,
+  Costs: CostsIcon,
   Promotions: PromotionsIcon,
   Loyalty: LoyaltyIcon,
   Table: TableIcon,

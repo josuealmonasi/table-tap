@@ -4075,6 +4075,163 @@ $$;
 revoke all on function public.recover_stock_reservations(uuid) from public, anon, authenticated;
 grant execute on function public.recover_stock_reservations(uuid) to service_role;
 
+-- ── Costs: what each product actually leaves ───────────────────────────────
+-- A café asked to know what it makes on each product: the coffee, the milk,
+-- the cup and the lid behind a latte, and what the card took. That is a
+-- contribution margin — what a sale leaves towards rent and wages — and never
+-- the business's net profit, which has costs no recipe knows about.
+--
+-- On Casa and above. The tables are the restaurant's private books: written
+-- and read only by the server, scoped to the restaurant there.
+alter table plan_limits add column if not exists allows_costs boolean not null default false;
+update plan_limits set allows_costs = (plan in ('casa', 'grupo'));
+
+-- What the restaurant's own card terminal charges, as a share of the sale.
+-- Stripe's own rate is known; a terminal's is whatever the owner signed for.
+alter table restaurants add column if not exists terminal_fee_pct numeric not null default 3.5;
+alter table restaurants drop constraint if exists restaurants_terminal_fee_pct_check;
+alter table restaurants add constraint restaurants_terminal_fee_pct_check
+  check (terminal_fee_pct >= 0 and terminal_fee_pct <= 15);
+
+-- An ingredient is bought in packs (a 1 kg bag, a 1 l carton, a sleeve of 50
+-- cups) and used in units (g, ml, pieces). What one unit costs follows from
+-- the pack's price and size, so it is worked out here and never typed twice.
+-- Removing one archives it: what was recorded against it stays true.
+create table if not exists ingredients (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  name          text not null check (char_length(btrim(name)) between 1 and 80),
+  unit          text not null check (unit in ('g', 'ml', 'pza')),
+  pack_size     numeric not null check (pack_size > 0 and pack_size <= 1000000),
+  pack_price    numeric not null check (pack_price >= 0 and pack_price <= 1000000),
+  unit_cost     numeric generated always as (pack_price / pack_size) stored,
+  supplier      text check (supplier is null or char_length(supplier) <= 80),
+  updated_by    text not null,
+  created_at    timestamptz not null default now(),
+  archived_at   timestamptz
+);
+create unique index if not exists ingredients_one_name
+  on ingredients(restaurant_id, lower(btrim(name))) where archived_at is null;
+create index if not exists ingredients_restaurant_idx on ingredients(restaurant_id);
+alter table ingredients enable row level security;
+revoke all on ingredients from anon;
+revoke all on ingredients from authenticated;
+grant all on ingredients to service_role;
+
+-- Every change of what a unit costs, kept, so a supplier's rise can be shown
+-- with what it did to each product. Written by the trigger below, so no path
+-- that changes a price can forget to.
+create table if not exists ingredient_prices (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  ingredient_id uuid not null references ingredients(id) on delete cascade,
+  previous_cost numeric,
+  unit_cost     numeric not null,
+  changed_by    text not null,
+  created_at    timestamptz not null default now()
+);
+create index if not exists ingredient_prices_recent_idx on ingredient_prices(restaurant_id, created_at desc);
+alter table ingredient_prices enable row level security;
+revoke all on ingredient_prices from anon;
+revoke all on ingredient_prices from authenticated;
+grant all on ingredient_prices to service_role;
+
+create or replace function public.record_ingredient_price()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' or new.unit_cost is distinct from old.unit_cost then
+    insert into ingredient_prices (restaurant_id, ingredient_id, previous_cost, unit_cost, changed_by)
+    values (new.restaurant_id, new.id, case when tg_op = 'UPDATE' then old.unit_cost end, new.unit_cost, new.updated_by);
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.record_ingredient_price() from public, anon, authenticated;
+drop trigger if exists ingredient_price_history on ingredients;
+create trigger ingredient_price_history after insert or update on ingredients
+  for each row execute function public.record_ingredient_price();
+
+-- A product's recipe: how much of each ingredient one goes out with. A line
+-- with a choice applies only when that choice was made — the 200 ml of oat
+-- milk belongs to "Leche: Avena" and not to every latte.
+create table if not exists recipe_lines (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  item_id       uuid not null references menu_items(id) on delete cascade,
+  ingredient_id uuid not null references ingredients(id) on delete cascade,
+  quantity      numeric not null check (quantity > 0 and quantity <= 100000),
+  mod_label     text check (mod_label is null or char_length(mod_label) <= 80),
+  mod_option    text check (mod_option is null or char_length(mod_option) <= 80),
+  check ((mod_label is null) = (mod_option is null))
+);
+create index if not exists recipe_lines_item_idx on recipe_lines(item_id);
+create index if not exists recipe_lines_restaurant_idx on recipe_lines(restaurant_id);
+alter table recipe_lines enable row level security;
+revoke all on recipe_lines from anon;
+revoke all on recipe_lines from authenticated;
+grant all on recipe_lines to service_role;
+
+-- A recipe joins a product and an ingredient of the SAME restaurant. The
+-- routes check it; this makes it true for any writer the routes do not know.
+create or replace function public.recipe_line_same_restaurant()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from menu_items where id = new.item_id and restaurant_id = new.restaurant_id)
+     or not exists (select 1 from ingredients where id = new.ingredient_id and restaurant_id = new.restaurant_id) then
+    raise exception 'A recipe line belongs to one restaurant';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.recipe_line_same_restaurant() from public, anon, authenticated;
+drop trigger if exists recipe_line_same_restaurant on recipe_lines;
+create trigger recipe_line_same_restaurant before insert or update on recipe_lines
+  for each row execute function public.recipe_line_same_restaurant();
+
+-- A product's recipe is replaced whole, in one transaction: a recipe half
+-- written is a margin that is wrong without anybody knowing. Returns how many
+-- lines it holds, -1 when the product is not this restaurant's, -2 when an
+-- ingredient is not (or is archived).
+create or replace function public.replace_recipe(p_restaurant uuid, p_item uuid, p_lines jsonb)
+returns int language plpgsql security definer set search_path = public as $$
+declare v_count int;
+begin
+  perform 1 from menu_items where id = p_item and restaurant_id = p_restaurant for update;
+  if not found then return -1; end if;
+  if exists (
+    select 1 from jsonb_to_recordset(p_lines) as l(ingredient_id uuid)
+      left join ingredients i
+        on i.id = l.ingredient_id and i.restaurant_id = p_restaurant and i.archived_at is null
+     where i.id is null
+  ) then return -2; end if;
+  delete from recipe_lines where item_id = p_item and restaurant_id = p_restaurant;
+  insert into recipe_lines (restaurant_id, item_id, ingredient_id, quantity, mod_label, mod_option)
+  select p_restaurant, p_item, l.ingredient_id, l.quantity, l.mod_label, l.mod_option
+    from jsonb_to_recordset(p_lines) as l(ingredient_id uuid, quantity numeric, mod_label text, mod_option text);
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$$;
+revoke all on function public.replace_recipe(uuid, uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.replace_recipe(uuid, uuid, jsonb) to service_role;
+
+-- Archiving an ingredient takes it out of every recipe at the same moment: a
+-- recipe still counting an ingredient nobody buys any more is a cost made up.
+create or replace function public.archive_ingredient(p_restaurant uuid, p_ingredient uuid, p_actor text)
+returns int language plpgsql security definer set search_path = public as $$
+declare v_lines int;
+begin
+  update ingredients set archived_at = now(), updated_by = p_actor
+   where id = p_ingredient and restaurant_id = p_restaurant and archived_at is null;
+  if not found then return -1; end if;
+  delete from recipe_lines where ingredient_id = p_ingredient and restaurant_id = p_restaurant;
+  get diagnostics v_lines = row_count;
+  return v_lines;
+end;
+$$;
+revoke all on function public.archive_ingredient(uuid, uuid, text) from public, anon, authenticated;
+grant execute on function public.archive_ingredient(uuid, uuid, text) to service_role;
+
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 
 -- The status guard and legacy handback share one transaction. New orders are

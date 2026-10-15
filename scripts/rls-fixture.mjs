@@ -75,7 +75,15 @@ async function sweepLeftovers(admin) {
   const { count: programs } = await admin
     .from("loyalty_programs").delete({ count: "exact" }).eq("reward", MARK);
 
-  return ids.length + (orphans?.length ?? 0) + (cards ?? 0) + (programs ?? 0);
+  // The drawer shift and the ingredient, by who planted them. The ingredient's
+  // name is unique per restaurant, so one left behind would stop the next run
+  // planting its own; deleting it takes its recipe line and price history.
+  const { count: shifts } = await admin
+    .from("cash_shifts").delete({ count: "exact" }).eq("opened_by", ACTOR);
+  const { count: ingredients } = await admin
+    .from("ingredients").delete({ count: "exact" }).eq("updated_by", ACTOR);
+
+  return ids.length + (orphans?.length ?? 0) + (cards ?? 0) + (programs ?? 0) + (shifts ?? 0) + (ingredients ?? 0);
 }
 
 /** One row in each tenant-scoped table, belonging to the neighbour. */
@@ -218,11 +226,34 @@ export async function plantNeighbour(admin, restaurantId) {
     });
   }
 
+  // A closed shift at their drawer with a withdrawal in it: what their cashier
+  // counted and what was taken out are their books, not anybody else's.
+  const { id: shiftId } = await keep("shift", "cash_shifts", {
+    restaurant_id: restaurantId, opened_by: ACTOR, opening_amount: 1,
+    closed_by: ACTOR, closed_at: new Date().toISOString(), counted_cash: 1, expected_cash: 1, difference: 0,
+  });
+  if (shiftId) {
+    await keep("withdrawal", "cash_movements", {
+      restaurant_id: restaurantId, kind: "withdrawal", amount: 1, note: MARK, actor_email: ACTOR, shift_id: shiftId,
+    });
+  }
+  // An ingredient of theirs in a recipe of theirs, with the price it was
+  // created at kept by the trigger: what a dish costs them to make is theirs.
+  const { id: ingredientId } = await keep("ingredient", "ingredients", {
+    restaurant_id: restaurantId, name: MARK, unit: "g", pack_size: 1000, pack_price: 1, updated_by: ACTOR,
+  });
+  if (ingredientId && item?.id) {
+    await keep("recipeLine", "recipe_lines", {
+      restaurant_id: restaurantId, item_id: item.id, ingredient_id: ingredientId, quantity: 1,
+    });
+  }
+
   return {
     planted,
     /** Children first, so nothing is left holding a reference. */
     remove: async () => {
       const order = [
+        "recipeLine", "ingredient", "withdrawal", "shift",
         "accountCheckout", "account",
         "loyaltyRedemption", "loyaltyVisit", "loyaltyCard", "loyaltyProgram",
         "split", "sitting", "request", "notification", "iconGroup", "log", "colleague",
