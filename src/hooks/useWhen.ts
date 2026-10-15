@@ -19,3 +19,24 @@ export function useWhen(timeZone?: string): (iso: string) => string {
     [locale, timeZone],
   );
 }
+
+/** A calendar day, YYYY-MM-DD, as "jue 15 oct" in the reader's language. */
+export function useDayLabel(): (day: string) => string {
+  const { locale } = useLocale();
+  return useCallback(
+    (day: string) =>
+      new Date(`${day}T12:00:00Z`).toLocaleDateString(dateLocale(locale), {
+        timeZone: "UTC", weekday: "short", day: "numeric", month: "short",
+      }),
+    [locale],
+  );
+}
+
+/** "09:30", on the restaurant's clock. */
+export function useTimeLabel(timeZone?: string): (iso: string) => string {
+  const { locale } = useLocale();
+  return useCallback(
+    (iso: string) => new Date(iso).toLocaleTimeString(dateLocale(locale), { timeZone, hour: "2-digit", minute: "2-digit" }),
+    [locale, timeZone],
+  );
+}

@@ -1105,6 +1105,70 @@ export function cases(fx) {
           ? true
           : `recorded ${JSON.stringify(rows[0])} for a MX$${data.total} sale`;
       } },
+    // A card on the restaurant's own terminal, with the voucher's
+    // authorization number kept on the payment to find the sale later. The
+    // sale and its money go again after the case, the payment first.
+    { name: "POST /api/pos/order (a card on the terminal, with its voucher)", as: "cashier", method: "POST",
+      path: "/api/pos/order",
+      arrange: f => async () => {
+        const { data: sales } = await f.admin.from("orders").select("id")
+          .eq("restaurant_id", f.restaurant.id).eq("note", `${MARK} terminal`);
+        const ids = (sales ?? []).map(o => o.id);
+        if (ids.length) {
+          await f.admin.from("payments").delete().in("order_id", ids);
+          await f.admin.from("orders").delete().in("id", ids);
+        }
+      },
+      body: { posRef: crypto.randomUUID(), method: "card", note: `${MARK} terminal`, terminalRef: "  AUTH 482913 ",
+        items: [{ itemId: dish.id, name: dish.name, price: Number(dish.price), qty: 1, emoji: "🍽️", mods: {} }] },
+      expect: [200],
+      check: async (d, f) => {
+        const { data } = await f.admin.from("payments").select("method, terminal_ref, stripe_payment_intent").eq("order_id", d.orderId);
+        return data?.length === 1 && data[0].method === "card" && data[0].terminal_ref === "AUTH 482913"
+          && data[0].stripe_payment_intent === null || `recorded ${JSON.stringify(data)}`;
+      } },
+    // The terminal's deposits, on a day the demo took cards on its terminal.
+    { name: "POST /api/terminal/deposits (a day's deposit arrived short)", as: "manager", method: "POST",
+      path: "/api/terminal/deposits",
+      arrange: async f => {
+        const since = new Date(Date.now() - 10 * 86_400_000).toISOString();
+        const { data } = await f.admin.from("payments").select("created_at").eq("restaurant_id", r).eq("method", "card")
+          .is("stripe_payment_intent", null).gte("created_at", since).order("created_at").limit(1);
+        const day = (iso) => new Intl.DateTimeFormat("en-CA", { timeZone: f.restaurant.timezone ?? "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+        f.depositDay = data?.[0] ? day(data[0].created_at) : "";
+      },
+      body: f => ({ day: f.depositDay, received: "100.00", note: `${MARK} deposit` }),
+      expect: [200],
+      check: async (d, f) => {
+        const { data } = await f.admin.from("terminal_deposits").select("expected, received, recorded_by")
+          .eq("restaurant_id", r).eq("sales_day", f.depositDay).single();
+        return Number(data.received) === 100 && Number(data.expected) === Number(d.expected) && Number(d.expected) > 0
+          && data.recorded_by === "demo-manager@tabletap.dev" || `stored ${JSON.stringify(data)}, answered ${JSON.stringify(d)}`;
+      } },
+    { name: "POST /api/terminal/deposits (the same day twice)", as: "owner", method: "POST",
+      path: "/api/terminal/deposits", body: f => ({ day: f.depositDay, received: "1" }),
+      expect: [409], expectError: /ya está marcado|already marked/i },
+    { name: "POST /api/terminal/deposits (a day with no terminal sales)", as: "owner", method: "POST",
+      path: "/api/terminal/deposits", body: { day: "2001-01-01", received: "1" },
+      expect: [404], expectError: /no hubo cobros|no card payments/i },
+    { name: "POST /api/terminal/deposits (a cashier refused)", as: "cashier", method: "POST",
+      path: "/api/terminal/deposits", body: f => ({ day: f.depositDay, received: "1" }), expect: [403] },
+    { name: "DELETE /api/terminal/deposits (taken back)", as: "manager", method: "DELETE",
+      path: "/api/terminal/deposits", body: f => ({ day: f.depositDay }), expect: [200],
+      check: async (_d, f) => {
+        const { count } = await f.admin.from("terminal_deposits").select("id", { count: "exact", head: true })
+          .eq("restaurant_id", r).eq("sales_day", f.depositDay);
+        return count === 0 || "the deposit is still marked";
+      } },
+    { name: "PATCH /api/terminal/deposits (the bank takes two business days)", as: "owner", method: "PATCH",
+      path: "/api/terminal/deposits", body: { settleDays: "2" }, expect: [200],
+      check: async (_d, f) => {
+        const { data } = await f.admin.from("restaurants").select("terminal_settle_days").eq("id", r).single();
+        return data.terminal_settle_days === 2 || `stored ${data.terminal_settle_days}`;
+      } },
+    { name: "PATCH /api/terminal/deposits (eleven days)", as: "manager", method: "PATCH",
+      path: "/api/terminal/deposits", body: { settleDays: "11" }, expect: [400],
+      expectError: /de 0 a 10|from 0 to 10/i },
     { name: "POST /api/pos/order (no cart)", as: "cashier", method: "POST",
       path: "/api/pos/order",
       body: { posRef: "00000000-0000-4000-8000-000000000003", method: "cash", items: [] },

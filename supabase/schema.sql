@@ -4376,6 +4376,44 @@ $$;
 revoke all on function public.record_purchase(uuid, uuid, numeric, numeric, text) from public, anon, authenticated;
 grant execute on function public.record_purchase(uuid, uuid, numeric, numeric, text) to service_role;
 
+-- ── The restaurant's own card terminal: what it should deposit ─────────────
+-- A café charges cards on its own terminal (Clip, Mercado Pago Point, a
+-- bank's) and the money arrives days later, less the terminal's fee. It asked
+-- to match each payment to its sale, see the tips apart, and know what should
+-- land in the bank and when — while it keeps using the terminal by hand.
+--
+-- A card payment the till takes can carry the voucher's reference, to find
+-- the sale a voucher belongs to. Written by the server after the payment.
+alter table payments add column if not exists terminal_ref text;
+alter table payments drop constraint if exists payments_terminal_ref_check;
+alter table payments add constraint payments_terminal_ref_check
+  check (terminal_ref is null or (char_length(terminal_ref) between 1 and 40));
+
+-- How many business days the terminal's bank takes to deposit a day's sales.
+alter table restaurants add column if not exists terminal_settle_days int not null default 1;
+alter table restaurants drop constraint if exists restaurants_terminal_settle_days_check;
+alter table restaurants add constraint restaurants_terminal_settle_days_check
+  check (terminal_settle_days between 0 and 10);
+
+-- A day's terminal sales, marked as deposited: what the bank actually paid,
+-- against what was expected at the moment it was marked. One per day; taken
+-- back and marked again if it was marked wrong. Server-only.
+create table if not exists terminal_deposits (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  sales_day     date not null,
+  expected      numeric not null check (expected >= 0 and expected <= 100000000),
+  received      numeric not null check (received >= 0 and received <= 100000000),
+  note          text check (note is null or char_length(note) <= 140),
+  recorded_by   text not null,
+  created_at    timestamptz not null default now(),
+  unique (restaurant_id, sales_day)
+);
+alter table terminal_deposits enable row level security;
+revoke all on terminal_deposits from anon;
+revoke all on terminal_deposits from authenticated;
+grant all on terminal_deposits to service_role;
+
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 
 -- The status guard and legacy handback share one transaction. New orders are

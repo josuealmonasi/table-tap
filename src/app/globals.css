@@ -8086,3 +8086,95 @@ a.tt-user-plan:hover {
 .tt-waste-reasons .tt-station-filter {
   margin: 6px 0 0;
 }
+
+/* ── The restaurant's own card terminal ──────────────────────────────────── */
+/* At the till: the figure to key into the terminal, big, then its voucher. */
+.tt-pos-terminal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 12px;
+  padding: 12px;
+  border-radius: var(--tt-radius-sm);
+  background: var(--tt-accent-wash);
+}
+.tt-pos-terminal > span {
+  font-size: 13px;
+  color: var(--tt-muted);
+}
+.tt-pos-terminal > strong {
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tt-accent);
+}
+.tt-pos-terminal .tt-field {
+  margin-top: 6px;
+}
+/* In analytics: a day per row, opening to its payments. */
+.tt-terminal-day {
+  border: 1px solid var(--tt-line);
+  border-radius: var(--tt-radius-sm);
+  background: var(--tt-white);
+}
+.tt-terminal-day-head {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  padding: 12px;
+  border: 0;
+  background: transparent;
+  color: var(--tt-ink);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.tt-terminal-day-head > .tt-costs-product-meta {
+  grid-column: 1 / -1;
+}
+.tt-terminal-received {
+  background: var(--tt-success-wash);
+  color: var(--tt-success);
+}
+.tt-terminal-due,
+.tt-terminal-pending {
+  background: var(--tt-surface);
+  color: var(--tt-muted);
+}
+.tt-terminal-overdue,
+.tt-terminal-short,
+.tt-terminal-over {
+  background: color-mix(in srgb, var(--tt-danger) 10%, transparent);
+  color: var(--tt-danger);
+}
+.tt-terminal-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+.tt-terminal-payments {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.tt-terminal-payments li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--tt-line);
+}
+.tt-terminal-payments li > span:last-child {
+  grid-column: 1 / -1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

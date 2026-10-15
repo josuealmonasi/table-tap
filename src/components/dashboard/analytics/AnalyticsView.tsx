@@ -11,6 +11,8 @@ import type { Corte } from "@/lib/corte";
 import type { ShiftView } from "@/lib/cash-shift";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import OrderHistory from "@/components/dashboard/OrderHistory";
+import type { TerminalView } from "@/lib/terminal-server";
+import TerminalDeposits from "./TerminalDeposits";
 
 /** A dish with its star average and how many people rated it. */
 export interface RatedDish {
@@ -37,6 +39,8 @@ interface AnalyticsViewProps {
   dayLabel: string;
   /** The visit card over the same period, where the restaurant runs one. */
   loyalty?: LoyaltyStats | null;
+  /** The restaurant's own card terminal and its deposits, on a tier with the till. */
+  terminal?: TerminalView | null;
 }
 
 /** Read-only analytics dashboard: stat tiles, revenue-by-day, top items, hours. */
@@ -59,6 +63,7 @@ export default function AnalyticsView({
   restaurantName,
   dayLabel,
   loyalty = null,
+  terminal = null,
 }: AnalyticsViewProps) {
   const t = useT();
   const maxDay = Math.max(1, ...data.byDay.map(d => d.revenue));
@@ -109,6 +114,11 @@ export default function AnalyticsView({
           day={dayLabel}
           timeZone={timeZone}
         />
+
+        {/* What the terminal should deposit sits under the corte: both are
+            the money the counter took, one in the drawer and one on its way
+            to the bank. */}
+        {terminal && <TerminalDeposits terminal={terminal} currency={currency} timeZone={timeZone} />}
 
         {loyalty && <LoyaltyStatsCard stats={loyalty} />}
 

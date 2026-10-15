@@ -18,7 +18,7 @@ import { logDetail } from "@/lib/log-detail";
 import { orderCode } from "@/lib/types";
 import { ringOnAccount } from "@/lib/account-sale";
 import { saleReceipt } from "@/lib/pos-receipt";
-import { existingTicket, type PosSaleBody } from "@/lib/pos-sale";
+import { existingTicket, terminalRef, type PosSaleBody } from "@/lib/pos-sale";
 import { orderableNow } from "@/lib/checkout/orderable-now";
 import { verifiedLines } from "@/lib/checkout/verified-lines";
 
@@ -242,6 +242,15 @@ export async function POST(req: NextRequest) {
     await db.from("orders").delete().eq("id", order.id).eq("restaurant_id", actor.restaurantId);
     await releaseStock(actor.restaurantId, reservation.reservationId);
     return await apiError("apiErr.orderCreate", 500);
+  }
+
+  // The voucher's reference, kept on the card payment so a voucher can be
+  // matched to the sale it paid. The money is already recorded above; a
+  // reference that failed to save leaves a sale that is found by its time.
+  const ref = method === "card" ? terminalRef(body.terminalRef) : null;
+  if (ref) {
+    await db.from("payments").update({ terminal_ref: ref })
+      .eq("restaurant_id", actor.restaurantId).eq("order_id", order.id).eq("method", "card");
   }
 
   if (restaurant.low_stock_alerts_enabled) {

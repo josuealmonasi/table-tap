@@ -6,6 +6,8 @@ import TipPicker from "@/components/customer/TipPicker";
 import type { PosSaleDetails } from "@/hooks/usePosSaleDetails";
 
 interface PosAskProps {
+  /** How the money is taken: a card means the restaurant's own terminal. */
+  method: "cash" | "card";
   details: PosSaleDetails;
   total: number;
   /** The most a tip may be: the food. */
@@ -28,6 +30,7 @@ interface PosAskProps {
  * click must never take money.
  */
 export default function PosAsk({
+  method,
   details,
   total,
   subtotal,
@@ -65,6 +68,27 @@ export default function PosAsk({
             }}
           />
         </div>
+
+        {/* What to key into the terminal, tip included — the one figure the
+            cashier types twice, so it is the one they must not have to
+            work out. And the voucher's reference, to find this sale from
+            the voucher later. */}
+        {method === "card" && (
+          <div className="tt-pos-terminal">
+            <span>{t("pos.terminalCharge")}</span>
+            <strong>{formatMoney(total, currency)}</strong>
+            <label className="tt-field">
+              <span className="tt-mod-label">{t("pos.terminalRef")} <span className="tt-muted">{t("common.optional")}</span></span>
+              <input
+                className="tt-input"
+                value={d.terminalRef}
+                maxLength={40}
+                onChange={e => d.setTerminalRef(e.target.value)}
+                placeholder={t("pos.terminalRefHint")}
+              />
+            </label>
+          </div>
+        )}
 
         <label className="tt-field">
           <span className="tt-mod-label">{t("pos.customerName")}</span>

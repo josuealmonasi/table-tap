@@ -13,6 +13,7 @@
 -- Generated from the `create table if not exists` lines in schema.sql; when
 -- you add a table there, add it here.
 -- ============================================================================
+drop table if exists terminal_deposits   cascade;
 drop table if exists waste_entries       cascade;
 drop table if exists ingredient_purchases cascade;
 drop table if exists ingredient_counts   cascade;

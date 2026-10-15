@@ -31,7 +31,9 @@ export type LogEntity =
   /** The cash drawer: its opening balance set, money taken out of it. */
   | "cash"
   /** Ingredients, recipes and the fee rate the margins are worked out with. */
-  | "costs";
+  | "costs"
+  /** The restaurant's own card terminal: a day's deposit marked as arrived. */
+  | "terminal";
 
 /** What happened to it. Deliberately plain words: this list is read by owners. */
 export type LogAction =
