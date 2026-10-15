@@ -800,7 +800,6 @@ a.tt-btn {
 }
 .tt-import-table {
   width: 100%;
-  min-width: 320px;
   border-collapse: collapse;
   font-variant-numeric: tabular-nums;
 }
