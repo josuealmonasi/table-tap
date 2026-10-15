@@ -42,22 +42,24 @@ describe("the text and the version cannot drift apart", () => {
       .digest("hex")
       .slice(0, 16);
 
-  // 2026-10-15, kept at 2026-10-03 deliberately: both documents now list more
-  // of the operations a team member's email is recorded against — cash
-  // shifts, waste, stock counts, deliveries, cost changes. The same data for
-  // the same stated purpose ("who did each operation"), the list being its
-  // examples: a clarification, not a new category, so nobody is asked again.
+  // 2026-10-15, bumped from 2026-10-03: the till now keeps selling without a
+  // connection, holding cash and own-terminal sales on the device until they
+  // are sent. The terms' "nothing is recorded during an outage" stopped being
+  // true, and the privacy notice gained what the device stores meanwhile —
+  // new handling of data, so every restaurant is asked again. (The same day's
+  // earlier change, naming more operations a staff email is recorded against,
+  // kept the version as a clarification.)
   it("has terms that match the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("terms-es") }).toEqual({
-      version: "2026-10-03",
-      text: "48e1d672782fc776",
+      version: "2026-10-15",
+      text: "10b05f445a4af689",
     });
   });
 
   it("has a privacy notice that matches the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("privacy-es") }).toEqual({
-      version: "2026-10-03",
-      text: "7e92da7bfae58e9e",
+      version: "2026-10-15",
+      text: "38e771f940bae131",
     });
   });
 });

@@ -1,22 +1,31 @@
 // ============================================================================
-// The kitchen board survives a dropped connection.
+// The kitchen board and the till survive a dropped connection.
 //
 // Every dashboard page is rendered per request, so losing the wifi mid-service
-// used to blank the screen the pass works from. This keeps the last board that
-// loaded and serves it when the network does not answer.
+// used to blank the screens a restaurant works from. This keeps the last board
+// and the last till that loaded, and serves them when the network does not
+// answer.
 //
-// ONE page is cached, deliberately: /dashboard/orders. It carries tickets, not
-// money. A stale bills screen showing a paid table as still owing is how the
-// same money gets collected twice, so nothing under /dashboard/bills, and no
-// API response at all, is ever stored here.
+// TWO pages are cached, deliberately. /dashboard/orders carries tickets.
+// /dashboard/pos carries the menu the till sells from — with no connection it
+// keeps taking cash and own-terminal sales, holding them on the device until
+// they can be sent (see src/lib/offline-sales.ts). Neither page holds a bill:
+// a stale bills screen showing a paid table as still owing is how the same
+// money gets collected twice, so nothing under /dashboard/bills, and no API
+// response at all, is ever stored here.
 //
-// The cache holds an authenticated page, so it is dropped on sign-out — see
-// the CLEAR message below. It is also versioned: bumping VERSION discards
+// The scripts and styles those pages need are stored too: Next names each one
+// after its contents, so a stored file can never be an old version of a new
+// one, and without them a stored page is HTML that cannot run.
+//
+// The cache holds authenticated pages, so it is dropped on sign-out — see the
+// CLEAR message below. It is also versioned: bumping VERSION discards
 // everything a previous deploy stored.
 // ============================================================================
 
-const VERSION = "tt-v1";
-const BOARD = "/dashboard/orders";
+const VERSION = "tt-v2";
+const PAGES = ["/dashboard/orders", "/dashboard/pos"];
+const ASSETS = "/_next/static/";
 
 self.addEventListener("install", () => self.skipWaiting());
 
@@ -37,43 +46,60 @@ self.addEventListener("message", event => {
   }
 });
 
-/** Only the board itself, and only a plain page load of it. */
-function isBoard(request) {
-  if (request.method !== "GET" || request.mode !== "navigate") return false;
-  return new URL(request.url).pathname === BOARD;
+/** A plain page load of the board or the till, and nothing else. */
+function pageOf(request) {
+  if (request.method !== "GET" || request.mode !== "navigate") return null;
+  const path = new URL(request.url).pathname;
+  return PAGES.includes(path) ? path : null;
+}
+
+/** One of Next's own content-named scripts or styles. */
+function isAsset(request) {
+  return request.method === "GET" && new URL(request.url).pathname.startsWith(ASSETS);
 }
 
 self.addEventListener("fetch", event => {
-  if (!isBoard(event.request)) return;
+  const page = pageOf(event.request);
+  if (page) {
+    event.respondWith(
+      (async () => {
+        try {
+          const fresh = await fetch(event.request);
+          if (fresh.ok && !fresh.redirected) {
+            const cache = await caches.open(VERSION);
+            await cache.put(page, fresh.clone());
+          }
+          return fresh;
+        } catch {
+          const cached = await caches.match(page);
+          if (cached) {
+            const headers = new Headers(cached.headers);
+            headers.set("x-tt-offline", "1");
+            return new Response(await cached.blob(), {
+              status: cached.status,
+              statusText: cached.statusText,
+              headers,
+            });
+          }
+          throw new Error("offline and nothing cached");
+        }
+      })(),
+    );
+    return;
+  }
 
-  // Network first, always: the board is live data and a cached one is a
-  // fallback, never a shortcut. Next's own RSC payloads carry a different
-  // Accept header and are left alone.
-  event.respondWith(
-    (async () => {
-      try {
+  if (isAsset(event.request)) {
+    event.respondWith(
+      (async () => {
+        const cached = await caches.match(event.request.url);
+        if (cached) return cached;
         const fresh = await fetch(event.request);
-        // A redirect to /login is the session ending; storing it would serve
-        // the login page to somebody who is signed in on the next drop.
-        if (fresh.ok && !fresh.redirected) {
+        if (fresh.ok) {
           const cache = await caches.open(VERSION);
-          await cache.put(BOARD, fresh.clone());
+          await cache.put(event.request.url, fresh.clone());
         }
         return fresh;
-      } catch {
-        const cached = await caches.match(BOARD);
-        if (cached) {
-          // Marked so the page knows it is reading history, not the kitchen.
-          const headers = new Headers(cached.headers);
-          headers.set("x-tt-offline", "1");
-          return new Response(await cached.blob(), {
-            status: cached.status,
-            statusText: cached.statusText,
-            headers,
-          });
-        }
-        throw new Error("offline and nothing cached");
-      }
-    })(),
-  );
+      })(),
+    );
+  }
 });

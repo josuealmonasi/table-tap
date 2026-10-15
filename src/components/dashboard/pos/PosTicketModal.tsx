@@ -10,6 +10,8 @@ export interface PosTicket {
   total: number;
   /** Nothing to make: it went in their hand, not on the pass. */
   handedOver: boolean;
+  /** Rung with no connection: kept on this device until it can be sent. */
+  offline?: boolean;
 }
 
 interface PosTicketModalProps {
@@ -52,7 +54,7 @@ export default function PosTicketModal({
               with their drink in their hand is the screen not knowing what
               just happened. */}
           <p className="tt-muted tt-pos-ticket-hint">
-            {ticket.handedOver ? t("pos.handedOver") : t("pos.calledOut")}
+            {ticket.offline ? t("pos.offlineHeld") : ticket.handedOver ? t("pos.handedOver") : t("pos.calledOut")}
           </p>
           <button type="button" className="tt-btn tt-btn-primary" onClick={onClose}>
             {t("pos.newSale")}

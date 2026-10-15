@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { PlanFeature } from "@/lib/plan";
 import { navItemsFor } from "@/lib/nav";
-import { signOutEverywhere } from "@/lib/sign-out";
+import { useSignOut } from "@/hooks/useSignOut";
 import { useT } from "@/lib/i18n/context";
 import { CloseIcon, DashboardIcon, SignOutIcon, NAV_ICONS } from "@/components/ui/icons";
 import RestaurantMark from "@/components/ui/RestaurantMark";
@@ -31,6 +31,7 @@ export default function NavDrawer({
   features?: PlanFeature[];
 }) {
   const t = useT();
+  const signOut = useSignOut();
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
@@ -135,7 +136,7 @@ export default function NavDrawer({
             <button
               type="button"
               className="tt-drawer-link tt-drawer-signout"
-              onClick={signOutEverywhere}
+              onClick={signOut}
             >
               <SignOutIcon size={18} className="tt-drawer-emoji" /> {t("nav.signOut")}
             </button>

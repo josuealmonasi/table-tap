@@ -19,6 +19,7 @@ import { orderCode } from "@/lib/types";
 import { ringOnAccount } from "@/lib/account-sale";
 import { saleReceipt } from "@/lib/pos-receipt";
 import { existingTicket, terminalRef, type PosSaleBody } from "@/lib/pos-sale";
+import { ringOffline } from "@/lib/pos-offline";
 import { orderableNow } from "@/lib/checkout/orderable-now";
 import { verifiedLines } from "@/lib/checkout/verified-lines";
 
@@ -56,8 +57,12 @@ export async function POST(req: NextRequest) {
   const blocked = await planBlocks(actor.restaurantId, "pos");
   if (blocked) return blocked;
 
-  const body = await jsonBody<PosSaleBody>(req);
+  const body = await jsonBody<PosSaleBody & { offline?: unknown }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
+  // Rung while the connection was gone and sent now: it already happened, so
+  // it is recorded as it was taken rather than checked against the menu as a
+  // new sale would be. Same role, freeze and plan checks as above.
+  if (body.offline !== undefined) return await ringOffline(actor, body);
   const { posRef, items, method } = body;
 
   if (!posRef || !Array.isArray(items) || items.length === 0) {

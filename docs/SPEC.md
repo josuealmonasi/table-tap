@@ -1065,37 +1065,66 @@ priced in the cart. The tab lives in a row of fixed height, so appearing after
 hydration moves nothing. `pnpm promises` seeds a usual into the browser and
 checks the tab is offered, and that it is not once its dish sells out.
 
-## The connection is a requirement
+## The connection is a requirement — except at the till
 
 TableTap runs online, and the terms say so rather than implying it. Without a
-connection the dashboard, the till and the diner's menu are all unavailable,
-and nothing — an order, a charge, a corte — is recorded until it returns. The
-restaurant is responsible for that connection in its own premises.
+connection the dashboard and the diner's menu are unavailable. Two screens
+keep working, deliberately, and the terms say which and how (version
+2026-10-15):
 
-The kitchen board is the one exception, and deliberately so: it keeps showing
-the tickets it already had, because losing sight of what is cooking is worse
-than the alternative. Everything else refuses rather than pretending.
+- **The kitchen board** keeps showing the tickets it already had, because
+  losing sight of what is cooking is worse than the alternative.
+- **The counter till** keeps selling — cash, and cards on the restaurant's own
+  terminal — and holds each sale on the device until it can be sent.
+
+Everything else refuses rather than pretending. The restaurant is responsible
+for its connection.
 
 ## Losing the connection
 
-The kitchen board keeps working when the wifi does not. A service worker holds
-the last board that loaded and serves it when the network does not answer, and
-a banner says the screen is reading history rather than the kitchen.
+A service worker (`public/sw.js`) keeps the last board and the last till that
+loaded, and Next's content-named scripts and styles so a stored page can run.
+A banner says the screen is working without the network.
 
-**One page is cached, deliberately.** The board carries tickets. A stale bills
-screen showing a paid table as still owing is how the same money gets collected
-twice, so nothing under `/dashboard/bills`, and no API response at all, is ever
-stored. The cache holds a signed-in page, so signing out empties it — most
-restaurant tablets are shared.
+**Two pages are cached, deliberately.** The board carries tickets; the till
+carries the menu it sells from. A stale bills screen showing a paid table as
+still owing is how the same money gets collected twice, so nothing under
+`/dashboard/bills`, and no API response at all, is ever stored. The cache holds
+signed-in pages, so signing out empties it — most restaurant tablets are
+shared.
 
-**Status moves are held; money is refused.** A move made on a dead connection
-is kept and sent when the connection returns, folded so three taps on one
-ticket are one change. Settling, cancelling and approving refuse offline and
-say why: replaying them charges a table twice. Each held move carries the
-status it began at, and the server applies it only if nothing has happened
-since — stale work never overwrites live work.
+**Status moves are held; money is refused — except a sale at the till.** A
+board move made on a dead connection is kept and sent when the connection
+returns, folded so three taps on one ticket are one change; settling,
+cancelling and approving refuse offline and say why, because replaying them
+charges a table twice. Each held move carries the status it began at, and the
+server applies it only if nothing has happened since.
 
-Available on every plan.
+**A sale at the till is the exception**, because it is money already in hand:
+
+- With no connection (or a request that never came back), the till keeps the
+  sale on the device (`src/lib/offline-sales.ts`, `localStorage`) under the
+  reference it made for it, prints the receipt in the browser with the same
+  `buildReceipt` the server uses, and tells the cashier it is held. Cash and
+  card on the restaurant's own terminal only; an account's ceiling cannot be
+  checked offline, so "a cuenta" refuses, and nothing goes through Stripe.
+- It is sent when the connection returns, oldest first, and every 30 seconds
+  while any are left (`useOfflineSales`). The reference becomes the sale's id,
+  so the code on the offline receipt is the sale's code, and a sale sent twice
+  is rung once.
+- The server records it as it happened (`ringOffline`, `settle_offline_sale`):
+  at its own time — so it lands in that day's corte and that shift's drawer —
+  for what was collected, finished (the kitchen worked from the ticket; it
+  never appears on the board as new), with its stock taken down to nought at
+  most (`take_stock_floor`). It is never refused for what the menu says today.
+  Today's menu prices it only to store the difference (`orders.offline_drift`;
+  null when a dish is gone), which Analytics lists under "Ventas sin conexión"
+  for a manager.
+- While the device holds unsent sales, it cannot close the shift or sign out:
+  they are the only record of money in the drawer. One the server refuses is
+  kept with the reason, never thrown away.
+
+Available on every plan with the till.
 
 ## What the browser is allowed to do
 

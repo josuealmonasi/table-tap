@@ -4,7 +4,7 @@ import type { PlanFeature } from "@/lib/plan";
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { signOutEverywhere } from "@/lib/sign-out";
+import { useSignOut } from "@/hooks/useSignOut";
 import { useT } from "@/lib/i18n/context";
 import { planLabel } from "@/lib/plan";
 import LanguageToggle from "@/components/customer/LanguageToggle";
@@ -36,6 +36,7 @@ export default function Navbar({
   features?: PlanFeature[];
 }) {
   const t = useT();
+  const signOut = useSignOut();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -161,7 +162,7 @@ export default function Navbar({
                   </Link>
                 )}
                 <div className="tt-user-divider" />
-                <button type="button" className="tt-user-item" onClick={signOutEverywhere}>
+                <button type="button" className="tt-user-item" onClick={signOut}>
                   {t("nav.signOut")}
                 </button>
               </div>
