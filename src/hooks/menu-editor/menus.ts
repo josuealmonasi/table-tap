@@ -91,6 +91,13 @@ export function menuActions(ctx: EditorContext) {
       name,
       sort_order: sections.filter(s => s.menu_id === menuId).length,
     });
+  /** Where a section's dishes are made; new orders carry it to the board. */
+  const setSectionStation = (id: string, station: "kitchen" | "bar") =>
+    run(
+      "write.sectionStation",
+      supabase.from("categories").update({ station }).eq("id", id),
+      "done.sectionStation",
+    );
   const renameSection = (id: string, name: string) =>
     run(
       "write.renameSection",
@@ -121,6 +128,7 @@ export function menuActions(ctx: EditorContext) {
     setMenuActive,
     duplicateMenu,
     addSection,
+    setSectionStation,
     renameSection,
     deleteSection,
     moveSection,

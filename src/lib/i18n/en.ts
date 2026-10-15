@@ -80,6 +80,7 @@ export const en = {
     },
   },
   done: {
+    sectionStation: "Station saved",
     menuDuplicatedAs: "Duplicated as “{name}”",
     profileSaved: "Profile saved",
     emailConfirmSent: "Check your new inbox to confirm the change",
@@ -159,6 +160,7 @@ export const en = {
     cafeCsv: "category,name,price,description,emoji\nCoffee,Americano,35,,☕\nCoffee,Espresso,30,,☕\nCoffee,Cappuccino,45,,☕\nCoffee,Latte,48,,☕\nCoffee,Mocha,52,,☕\nCoffee,Café de olla,38,With cinnamon and piloncillo,☕\nCold drinks,Coffee frappé,58,,🧋\nCold drinks,Iced tea,38,,🧊\nOther drinks,Hot chocolate,45,,🍫\nOther drinks,Tea,32,,🍵\nBakery,Croissant,38,,🥐\nBakery,Concha,22,,🍞\nBakery,Muffin,35,,🧁\nTo eat,Ham and cheese sandwich,75,,🥪\nTo eat,Chilaquiles,95,Green or red,🍳",
   },
   write: {
+    sectionStation: "Couldn't save where the section is made",
     createTable: "Couldn't add the table",
     renameTable: "Couldn't rename the table",
     deleteTable: "Couldn't delete the table",
@@ -1076,7 +1078,19 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     blocked: "Taking payment, cancelling and approving all need a connection.",
   },
   // What a thermal printer puts on paper in the kitchen.
+  stations: {
+    label: "Station",
+    all: "Everything",
+    kitchen: "Kitchen",
+    bar: "Bar",
+    done: "ready",
+    making: "making",
+    waiting: "Waiting for the other station",
+    madeAt: "Made at",
+  },
   ticket: {
+    stationBar: "BAR",
+    stationKitchen: "KITCHEN",
     table: "Table {label}",
     counter: "Counter",
     counterFor: "Counter · {name}",
@@ -1153,6 +1167,8 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     noExtras: "This dish takes no extras.",
   },
   apiErr: {
+    orderMovedOn: "That order has already moved on.",
+    stationNotInOrder: "That station has nothing to make in this order.",
     planUnknown: "That plan does not exist.",
     planHasSubscription: "This restaurant pays for its plan with a Stripe subscription. Change or cancel it in Stripe: the next charge would bring the old plan back.",
     planChangedMeanwhile: "This restaurant's plan changed in the meantime. Reload the page and check it before moving it.",

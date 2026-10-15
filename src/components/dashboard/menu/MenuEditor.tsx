@@ -197,6 +197,7 @@ export default function MenuEditor({
                       links={editor.links}
                       currency={currency}
                       onRename={editor.renameSection}
+                      onSetStation={editor.setSectionStation}
                       onDelete={editor.deleteSection}
                       onAddProduct={addProductWithAddons}
                       onUpdateProduct={updateProductWithAddons}

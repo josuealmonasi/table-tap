@@ -53,7 +53,12 @@ export interface VerifiableItem {
   category_id: string | null;
   /** Needs no preparation. Absent on rows fetched before this existed. */
   skips_kitchen?: boolean | null;
+  /** Its section, embedded: where the dish is made. Absent = the kitchen. */
+  categories?: { station?: string | null } | null;
 }
+
+/** Where a dish is made, from its section: the bar, or (by default) the kitchen. */
+const madeAtBar = (item: VerifiableItem | undefined): boolean => item?.categories?.station === "bar";
 
 export interface VerifyCartInput {
   /** The client's cart, trusted only for *what* was asked for. */
@@ -179,6 +184,10 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
       combo.components.every(c => priceMap.get(c.itemId)?.skips_kitchen)
         ? { skipsKitchen: true }
         : {}),
+      // A bundle goes to the bar only when all of it is made there.
+      ...(combo.components.length > 0 && combo.components.every(c => madeAtBar(priceMap.get(c.itemId)))
+        ? { station: "bar" as const }
+        : {}),
     });
   }
 
@@ -223,6 +232,8 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
       // From the DB, like the name and the price: the ticket has to say what
       // was true when the order was placed, not what the menu says today.
       ...(db.skips_kitchen ? { skipsKitchen: true } : {}),
+      // Where it is made, from its section at the time — the same reason.
+      ...(madeAtBar(db) ? { station: "bar" as const } : {}),
     });
   }
 

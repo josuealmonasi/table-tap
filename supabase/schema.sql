@@ -3819,6 +3819,48 @@ revoke all on cash_shifts from authenticated;
 grant all on cash_shifts to service_role;
 alter table cash_movements add column if not exists shift_id uuid references cash_shifts(id) on delete cascade;
 create index if not exists cash_movements_shift_idx on cash_movements(shift_id);
+-- Stations: where a section's dishes are made. A café makes drinks at the
+-- bar and food in the kitchen, and one ticket holds both — so each order line
+-- carries its station (copied from its section when the order is written,
+-- like `skipsKitchen`), each station marks its own part ready, and the order
+-- is ready when every station it needs has. Splitting the order instead would
+-- split the bill.
+alter table categories add column if not exists station text not null default 'kitchen';
+alter table categories drop constraint if exists categories_station_check;
+alter table categories add constraint categories_station_check check (station in ('kitchen', 'bar'));
+alter table orders add column if not exists stations_ready text[] not null default '{}';
+
+-- One station's part of an order is ready. Under the order's lock, so the bar
+-- and the kitchen finishing at the same moment both count. The order itself
+-- becomes ready once every station its lines need is in.
+create or replace function public.mark_station_ready(p_restaurant uuid, p_order uuid, p_station text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_order  orders;
+  v_needed text[];
+  v_ready  text[];
+begin
+  if p_station not in ('kitchen', 'bar') then return jsonb_build_object('outcome', 'invalid'); end if;
+  select * into v_order from orders where id = p_order and restaurant_id = p_restaurant for update;
+  if v_order.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if v_order.status not in ('received', 'preparing') then
+    return jsonb_build_object('outcome', 'moved', 'status', v_order.status);
+  end if;
+  select coalesce(array_agg(distinct coalesce(i->>'station', 'kitchen')), '{}') into v_needed
+    from jsonb_array_elements(coalesce(v_order.items, '[]'::jsonb)) i
+   where not coalesce((i->>'skipsKitchen')::boolean, false);
+  if not (p_station = any(v_needed)) then return jsonb_build_object('outcome', 'notHere'); end if;
+  v_ready := array(select distinct unnest(v_order.stations_ready || p_station) order by 1);
+  update orders
+     set stations_ready = v_ready,
+         status = case when v_needed <@ v_ready then 'ready' else 'preparing' end
+   where id = p_order;
+  return jsonb_build_object('outcome', 'ok', 'stations_ready', v_ready,
+                            'status', case when v_needed <@ v_ready then 'ready' else 'preparing' end);
+end;
+$$;
+revoke all on function public.mark_station_ready(uuid, uuid, text) from public, anon, authenticated;
+grant execute on function public.mark_station_ready(uuid, uuid, text) to service_role;
 
 -- ── Last, on purpose ────────────────────────────────────────────────────────
 -- The table-shaping privileges, taken from every table once more. The revoke

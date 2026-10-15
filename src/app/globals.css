@@ -2475,6 +2475,31 @@ a.tt-btn {
   cursor: pointer;
   font-family: inherit;
 }
+/* A section's station, beside its rename and delete: sized to its words. */
+.tt-station-select {
+  width: auto;
+  padding: 5px 8px;
+  font-size: 13px;
+}
+/* The board's stations: everything, the kitchen, the bar. */
+.tt-station-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+/* On a card made by more than one station: which have finished. */
+.tt-order-stations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.tt-order-station-done {
+  color: var(--tt-success);
+  font-weight: 700;
+}
 .tt-chip-on {
   border-color: var(--tt-accent);
   background: color-mix(in srgb, var(--tt-accent) 8%, transparent);

@@ -43,7 +43,7 @@ export async function verifiedLines(
 
   const { data: dbItems, error } = await supabase
     .from("menu_items")
-    .select("id, name, price, emoji, available, discount_pct, modifiers, category_id, skips_kitchen")
+    .select("id, name, price, emoji, available, discount_pct, modifiers, category_id, skips_kitchen, categories(station)")
     .in("id", refs.ids)
     .eq("restaurant_id", restaurantId);
   if (error || !dbItems) return { ok: false, rejection: null };

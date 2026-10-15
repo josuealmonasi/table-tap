@@ -80,7 +80,7 @@ export default async function OrdersPage() {
   // restaurant id and its midnight, which we already have. In a row they were
   // three round trips with the kitchen waiting in front of the screen.
   // The day's till figure is still skipped when the viewer cannot see it.
-  const [ordersRes, requestsRes, todayRes] = await Promise.all([
+  const [ordersRes, requestsRes, todayRes, barRes] = await Promise.all([
     // Every order still on the board, however many came after it. This was
     // the newest 100 of ANY status, filtered to the live ones afterwards — so
     // after a busy stretch an order the kitchen had not started was simply not
@@ -110,6 +110,13 @@ export default async function OrdersPage() {
           .neq("status", "cancelled")
           .gte("created_at", todayStart.toISOString())
       : Promise.resolve({ data: null }),
+    // Whether anything is made at the bar: only then does the board offer
+    // its stations. A restaurant with one kitchen sees the board it always had.
+    supabase
+      .from("categories")
+      .select("id", { count: "exact", head: true })
+      .eq("restaurant_id", r.id)
+      .eq("station", "bar"),
   ]);
   const orders = ordersRes.data;
   const requests = requestsRes.data;
@@ -143,6 +150,7 @@ export default async function OrdersPage() {
         showRevenue={showRevenue}
         revenueBase={revenueBase}
         todayStartMs={todayStart.getTime()}
+        hasStations={(barRes.count ?? 0) > 0}
       />
     </ConfirmProvider>
   );

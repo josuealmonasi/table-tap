@@ -82,6 +82,7 @@ export const es: Messages = {
     },
   },
   done: {
+    sectionStation: "Estación guardada",
     menuDuplicatedAs: "Duplicado como “{name}”",
     profileSaved: "Perfil guardado",
     emailConfirmSent: "Revisa tu nuevo correo para confirmar el cambio",
@@ -161,6 +162,7 @@ export const es: Messages = {
     cafeCsv: "categoria,nombre,precio,descripcion,emoji\nCafés,Americano,35,,☕\nCafés,Espresso,30,,☕\nCafés,Capuchino,45,,☕\nCafés,Latte,48,,☕\nCafés,Moka,52,,☕\nCafés,Café de olla,38,Con canela y piloncillo,☕\nBebidas frías,Frappé de café,58,,🧋\nBebidas frías,Té helado,38,,🧊\nOtras bebidas,Chocolate caliente,45,,🍫\nOtras bebidas,Té,32,,🍵\nPanadería,Croissant,38,,🥐\nPanadería,Concha,22,,🍞\nPanadería,Muffin,35,,🧁\nPara comer,Sándwich de jamón y queso,75,,🥪\nPara comer,Chilaquiles,95,Verdes o rojos,🍳",
   },
   write: {
+    sectionStation: "No se pudo guardar dónde se prepara la sección",
     createTable: "No se pudo agregar la mesa",
     renameTable: "No se pudo renombrar la mesa",
     deleteTable: "No se pudo eliminar la mesa",
@@ -1070,7 +1072,19 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     blocked: "Necesitas conexión para cobrar, cancelar o aprobar.",
   },
   // What a thermal printer puts on paper in the kitchen.
+  stations: {
+    label: "Estación",
+    all: "Todo",
+    kitchen: "Cocina",
+    bar: "Barra",
+    done: "listo",
+    making: "preparando",
+    waiting: "Esperando a la otra estación",
+    madeAt: "Se prepara en",
+  },
   ticket: {
+    stationBar: "BARRA",
+    stationKitchen: "COCINA",
     table: "Mesa {label}",
     counter: "Mostrador",
     counterFor: "Mostrador · {name}",
@@ -1147,6 +1161,8 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     noExtras: "Este platillo no lleva extras.",
   },
   apiErr: {
+    orderMovedOn: "Ese pedido ya avanzó.",
+    stationNotInOrder: "Esa estación no tiene nada que preparar en este pedido.",
     planUnknown: "Ese plan no existe.",
     planHasSubscription: "Este restaurante paga su plan con una suscripción de Stripe. Cámbiala o cancélala en Stripe: el próximo cobro devolvería el plan anterior.",
     planChangedMeanwhile: "El plan de este restaurante cambió mientras tanto. Vuelve a cargar la página y revísalo antes de moverlo.",

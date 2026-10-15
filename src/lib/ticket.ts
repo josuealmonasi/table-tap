@@ -113,33 +113,46 @@ export function kitchenTicket(
   // the customer walks away without the water they paid for. So: made above
   // the line, handed over below it.
   const all = order.items ?? [];
-  const toMake = all.filter(i => !i.skipsKitchen);
   const handedOver = all.filter(i => i.skipsKitchen);
+  // Made at more than one station: each station's lines under its own name,
+  // the bar first (a drink is quicker, and goes out while the plate cooks),
+  // so one printer serves both and each tears off its own part.
+  const atBar = all.filter(i => !i.skipsKitchen && i.station === "bar");
+  const inKitchen = all.filter(i => !i.skipsKitchen && i.station !== "bar");
+  const groups = atBar.length > 0 && inKitchen.length > 0
+    ? [{ title: t("ticket.stationBar"), lines: atBar }, { title: t("ticket.stationKitchen"), lines: inKitchen }]
+    : [{ title: null, lines: [...atBar, ...inKitchen] }];
 
-  for (const item of toMake) {
-    out.push(...wrap(`${item.qty} x ${item.name}`));
-    const mods = modsOf(item);
-    if (mods) out.push(...wrap(mods, 3));
-
-    if (item.components?.length) {
-      // A bundle is several plates sold as one line, so the ticket lists the
-      // plates. Its extras are NOT printed here: they are copied onto the
-      // parent line for pricing, and printing both would tell the kitchen to
-      // add the same cheese twice.
-      for (const part of item.components) {
-        out.push(...wrap(`- ${part.qty} x ${part.name}`, 3));
-        const partMods = modsOf(part);
-        if (partMods) out.push(...wrap(partMods, 5));
-        for (const extra of part.extras ?? []) out.push(...wrap(`+ ${extra.name}`, 5));
-      }
-    } else {
-      for (const extra of item.extras ?? []) out.push(...wrap(`+ ${extra.name}`, 3));
+  for (const { title, lines } of groups) {
+    if (title) {
+      out.push(...wrap(`[ ${title} ]`));
+      out.push("");
     }
+    for (const item of lines) {
+      out.push(...wrap(`${item.qty} x ${item.name}`));
+      const mods = modsOf(item);
+      if (mods) out.push(...wrap(mods, 3));
 
-    // The thing somebody actually asked for. Marked, because a cook scanning
-    // a ticket is looking for exactly this and everything else is routine.
-    if (item.notes) out.push(...wrap(`>> ${item.notes}`, 3));
-    out.push("");
+      if (item.components?.length) {
+        // A bundle is several plates sold as one line, so the ticket lists the
+        // plates. Its extras are NOT printed here: they are copied onto the
+        // parent line for pricing, and printing both would tell the kitchen to
+        // add the same cheese twice.
+        for (const part of item.components) {
+          out.push(...wrap(`- ${part.qty} x ${part.name}`, 3));
+          const partMods = modsOf(part);
+          if (partMods) out.push(...wrap(partMods, 5));
+          for (const extra of part.extras ?? []) out.push(...wrap(`+ ${extra.name}`, 5));
+        }
+      } else {
+        for (const extra of item.extras ?? []) out.push(...wrap(`+ ${extra.name}`, 3));
+      }
+
+      // The thing somebody actually asked for. Marked, because a cook scanning
+      // a ticket is looking for exactly this and everything else is routine.
+      if (item.notes) out.push(...wrap(`>> ${item.notes}`, 3));
+      out.push("");
+    }
   }
 
   if (handedOver.length > 0) {

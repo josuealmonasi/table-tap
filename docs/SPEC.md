@@ -668,6 +668,27 @@ A café judges the till by how fast a new employee serves a queue
   ready. A refused handover stays visible to retry and never reports delivery.
   Live, quietly — the till does not ping for its own sales.
 
+### Stations: the bar and the kitchen
+
+A café makes drinks at the bar and food in the kitchen, and one order holds
+both (`src/lib/stations.ts`). A section is made at the kitchen (default) or
+the bar (`categories.station`, set in the menu editor beside the section's
+name). When an order is written each line copies its section's station —
+like `skipsKitchen`, so the board says what was true when it was ordered —
+and the order is never split, because the bill would split with it.
+
+The orders board offers "Todo / Cocina / Barra" once any section is made at
+the bar, remembered per device (the bar's tablet stays on the bar). A
+station's view shows only orders it makes something in, only its own lines,
+and its "Listo" finishes its own part (`POST /api/orders/station`, the people
+who move orders): `mark_station_ready` records it under the order's lock and
+makes the order ready when every station it needs has finished — the bar and
+the kitchen finishing in the same second both count. In a station's view an
+order whose part is done sits in Listos, waiting for the other; the whole
+view shows which stations are done. The kitchen ticket prints each station's
+lines under its name, the bar first, when an order needs both, so one printer
+serves both.
+
 ## Tickets on paper
 
 Two printers, two different documents, two different ways of reaching them.
