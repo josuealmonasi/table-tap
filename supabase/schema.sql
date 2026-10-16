@@ -2839,6 +2839,43 @@ revoke all on function public.settle_split_share(uuid, int, numeric, numeric, te
 grant execute on function public.settle_split_share(uuid, int, numeric, numeric, text)
   to service_role;
 
+-- A share already paid, charged again by a different payment: two checkouts
+-- for one share, both paid. `settle_split_share` claimed nothing the second
+-- time and the money was recorded nowhere — the diner paid twice and nobody
+-- was told. The second charge is a refund due, like a table paid twice.
+-- 'repeat' when this very charge is already in the ledger (Stripe sending it
+-- again); 'duplicate' once the refund due is written; 'none' otherwise.
+create or replace function public.record_duplicate_share(p_split uuid, p_intent text, p_amount numeric)
+returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_rest uuid;
+  v_label text;
+  v_currency text;
+begin
+  if p_intent is null then return 'none'; end if;
+  if exists (select 1 from payments where stripe_payment_intent = p_intent) then return 'repeat'; end if;
+  if exists (select 1 from refunds_due where stripe_payment_intent = p_intent) then return 'duplicate'; end if;
+  if coalesce(p_amount, 0) <= 0 then return 'none'; end if;
+  select s.restaurant_id, t.label, r.currency into v_rest, v_label, v_currency
+    from bill_splits s
+    join restaurants r on r.id = s.restaurant_id
+    left join table_sessions ts on ts.id = s.session_id
+    left join restaurant_tables t on t.id = ts.table_id
+   where s.id = p_split;
+  if v_rest is null then return 'none'; end if;
+  insert into refunds_due (restaurant_id, stripe_payment_intent, amount, order_ids, table_label)
+  values (v_rest, p_intent, round(p_amount, 2), '{}', v_label)
+  on conflict (stripe_payment_intent) do nothing;
+  if found then
+    insert into notifications (restaurant_id, kind, data)
+    values (v_rest, 'refund_due', jsonb_build_object('amount', round(p_amount, 2), 'currency', v_currency, 'table', v_label));
+  end if;
+  return 'duplicate';
+end;
+$$;
+revoke all on function public.record_duplicate_share(uuid, text, numeric) from public, anon, authenticated;
+grant execute on function public.record_duplicate_share(uuid, text, numeric) to service_role;
+
 -- A sale rung at the till, settled with the money it took.
 --
 -- The till inserted the order already paid and then wrote the ledger; a failed

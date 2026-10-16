@@ -91,14 +91,28 @@ async function settleSplitShare(session: Stripe.Checkout.Session): Promise<void>
     // charged the share AND the gratuity on it, and the payment carries both:
     // recording only the share said a smaller number arrived than did.
     const tip = Math.max(0, Number(session.metadata?.settle_tip ?? 0));
-    const { error: claimError } = await db.rpc("settle_split_share", {
+    const intent = typeof session.payment_intent === "string" ? session.payment_intent : null;
+    const { data: claimed, error: claimError } = await db.rpc("settle_split_share", {
       p_split: splitId,
       p_share: shareNo,
       p_amount: shareAmount,
       p_tip: tip,
-      p_intent: typeof session.payment_intent === "string" ? session.payment_intent : null,
+      p_intent: intent,
     });
     if (claimError) throw new Error(`settling a share: could not mark it paid: ${claimError.message}`);
+
+    // Claimed already. The same charge delivered again carries on below, its
+    // steps safe to repeat; a DIFFERENT charge is a second payment for the
+    // same share — the whole of it is the diner's money, owed back.
+    if (claimed === false) {
+      const { data: outcome, error: dupError } = await db.rpc("record_duplicate_share", {
+        p_split: splitId,
+        p_intent: intent,
+        p_amount: charged(session),
+      });
+      if (dupError) throw new Error(`settling a share: could not record a second payment: ${dupError.message}`);
+      if (outcome === "duplicate") return;
+    }
 
     // Retry all remaining steps even if the share was already recorded.
     // Both fee assignment and order settlement are idempotent.

@@ -131,6 +131,28 @@ describe("one diner's share of a divided bill", () => {
     expect(writes("bill_split_claims")).toEqual([]);
   });
 
+  // Two checkouts for one share, both paid: the second claims nothing, and its
+  // money used to be recorded nowhere. Now it is owed back, whole.
+  it("owes back a second, different charge on a share already paid, and settles nothing else with it", async () => {
+    const withFood = session({ ...share.metadata, settle_order_ids: "o2" });
+    script["bill_splits:select"] = [{ data: SPLIT, error: null }];
+    script["rpc:settle_split_share"] = [{ data: false, error: null }];
+    script["rpc:record_duplicate_share"] = [{ data: "duplicate", error: null }];
+    await settleCheckout(withFood);
+    expect(rpcs.find(r => r.fn === "record_duplicate_share")?.args).toMatchObject({ p_split: "s1", p_intent: "pi_test" });
+    expect(rpcs.some(r => r.fn === "settle_card_orders")).toBe(false);
+  });
+
+  it("carries on when the charge it claimed is the same one delivered again", async () => {
+    script["bill_splits:select"] = [{ data: SPLIT, error: null }];
+    script["rpc:settle_split_share"] = [{ data: false, error: null }];
+    script["rpc:record_duplicate_share"] = [{ data: "repeat", error: null }];
+    script["bill_split_claims:select"] = [{ count: 0, error: null }];
+    await settleCheckout(share);
+    expect(rpcs.map(r => r.fn)).toEqual(["settle_split_share", "record_duplicate_share"]);
+    expect(writes("orders").length).toBeGreaterThan(0);
+  });
+
   it("throws when the share cannot be claimed", async () => {
     script["bill_splits:select"] = [{ data: SPLIT, error: null }];
     script["rpc:settle_split_share"] = [down];

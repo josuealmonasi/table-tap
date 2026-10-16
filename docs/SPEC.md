@@ -319,16 +319,17 @@ dishes on a bill the restaurant has just cancelled.
   `reserve_platform_fee`, which locks the restaurant and charges
   `min(per-order fee, ceiling − what the month holds)`. A divided bill still
   pays one fee: each share carries its slice of it, reserved under its own
-  `ref`; a share reopened expires its earlier session first, so a share
-  never has two payable sessions. The session carries the row as `fee_id`
+  `ref`; a share reopened expires its earlier session first, and a share
+  whose fee is still held by a checkout being opened is refused (409), so a
+  share never has two payable sessions — and a second charge on a share
+  already paid is a refund due (`record_duplicate_share`), never lost. The session carries the row as `fee_id`
   (with `fee_cents` and `restaurant_id`); the settling webhook marks it
   taken; it is released only when Stripe refused the session outright (a 4xx
   other than 409) or expired it — a dropped connection, a 5xx or an
   idempotency conflict may still be a session. A session with no reservation
-  to take (opened before the ledger, or whose row is gone) is recorded from
-  what it carries, once, under the key of the order the old code wrote its
-  fee on — the backfill's key — and a read that fails throws so Stripe
-  retries. A refund records the share of the fee that went
+  to take (its row gone) is recorded from what it carries, once. None from
+  before the ledger can be open: no restaurant could take cards when it went
+  live, and its migration refuses to apply while one can. A refund records the share of the fee that went
   back, rounded down and once per refund id. A month is the UTC month the
   fee was reserved in. What nobody confirms keeps counting: a little over,
   never under. The costs screen reads the same ledger

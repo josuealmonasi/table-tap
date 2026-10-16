@@ -425,6 +425,30 @@ export function cases(fx) {
           .eq("restaurant_id", f.otherRestaurant).gte("created_at", since);
         return count === 0 || `${count} fee(s) reserved against the other restaurant`;
       } },
+    // A share whose checkout another tab is opening right now: its slice of
+    // the fee is reserved and its session not yet noted. A second checkout
+    // used to open beside it fee-free, and a diner who paid both paid twice.
+    { name: "POST /api/split/pay (a share whose checkout is already being opened)", as: "diner", method: "POST",
+      path: "/api/split/pay",
+      arrange: async f => {
+        const lend = await f.withCardReader();
+        const { data: food } = await f.admin.from("orders").insert({
+          restaurant_id: r, table_id: f.splitTableId, session_id: f.splitSessionId, items: [], subtotal: 50,
+          service_fee: 0, tip: 0, tax_pct: 0, discount: 0, total: 50, note: MARK, status: "received",
+        }).select("id").single();
+        const month = new Date().toISOString().slice(0, 7) + "-01";
+        const { data: held } = await f.admin.from("platform_fees").insert({
+          restaurant_id: r, period: month, cents: 1, status: "open", source: "split", ref: `split:${f.lockedSplitId}:1`,
+        }).select("id").single();
+        return async () => {
+          if (held?.id) await f.admin.from("platform_fees").delete().eq("id", held.id);
+          if (food?.id) await f.admin.from("orders").delete().eq("id", food.id);
+          await lend();
+        };
+      },
+      body: async f => ({ splitId: f.lockedSplitId, sessionId: f.splitSessionId,
+        diner: `${MARK}-unpaid`, restaurantId: r, tableId: f.splitTableId }),
+      expect: [409], expectError: /pago en línea en curso para tu parte|already in progress/i },
     { name: "POST /api/split/pay (a share already paid)", as: "diner", method: "POST",
       path: "/api/split/pay", arrange: f => f.withCardReader(),
       body: async f => ({ splitId: f.lockedSplitId, sessionId: f.splitSessionId,

@@ -66,15 +66,8 @@ describe("a fee recorded from the session when there is no reservation to take",
     expect(rpcs.at(-1)).toMatchObject({ fn: "record_session_fee", args: { p_restaurant: "r-1", p_cents: 75, p_ref: "session:cs_1" } });
   });
 
-  it("keys a table bill from before the ledger by the order its fee was written on, as the backfill does", async () => {
-    answers.orders = { data: { restaurant_id: "r-1", platform_fee: 0 }, error: null };
-    await takeFee(session({ settle_order_ids: "o-1", settle_fee: "0.75" }), {});
-    expect(rpcs.at(-1)).toMatchObject({ fn: "record_session_fee", args: { p_cents: 75, p_ref: "order:o-1" } });
-  });
-
-  it("throws when a read it needs fails, so Stripe sends the event again instead of the fee being dropped", async () => {
-    answers.orders = { data: null, error: { message: "timeout" } };
-    await expect(takeFee(session({ order_id: "o-1" }), {})).rejects.toThrow(/timeout/);
+  it("records nothing for a session that carries no fee — a plan without one, or a ceiling reached", async () => {
+    await takeFee(session({ order_id: "o-1" }), {});
     expect(rpcs.some(r => r.fn === "record_session_fee")).toBe(false);
   });
 });

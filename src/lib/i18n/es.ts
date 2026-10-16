@@ -1244,6 +1244,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     accountBillChanged: "La cuenta cambió desde que la abriste. Revísala y vuelve a intentarlo.",
     accountNothingOwed: "Esta cuenta no debe nada.",
     accountPayingOnline: "Hay un pago en línea en curso para esta cuenta. Espera a que termine o a que caduque.",
+    sharePayingOnline: "Ya hay un pago en línea en curso para tu parte. Termínalo o espera unos minutos a que caduque.",
     accountBalanceChanged: "Lo que debe esta cuenta cambió: ahora debe {owed}. Revísalo con el cliente.",
     accountStatementChanged: "Tu cuenta cambió mientras la veías. Revísala y vuelve a intentarlo.",
     mailOff: "El envío por correo no está disponible.",

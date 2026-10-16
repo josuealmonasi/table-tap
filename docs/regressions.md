@@ -1859,3 +1859,16 @@ not code: no production restaurant has a Stripe account, so no session from
 before the ledger can be open, and the migration refuses to apply while one
 does. Each fix has a test in `platform-fee.spec.ts` that fails with it undone.
 
+A fourth review (Codex) closed the 409, failed-read and cutover findings and
+found one more that was diner money, older than the ledger: two checkouts for
+the same share could both be open — a second request saw no session to retire
+while the first was still waiting on Stripe — and a diner who paid both paid
+twice, the second charge claimed nothing and was recorded nowhere. A share
+whose fee is still held is refused now (409, `sharePayingOnline`), and a
+second, different charge on a paid share is written as a refund due with the
+restaurant told (`record_duplicate_share`; probed on dev: one refund due of
+MX$55.50, the same charge again adds nothing, a charge already in the ledger
+is a repeat). It also flagged that rebuilding a pre-ledger session's fee from
+order history mis-keys some charges; that rebuilding is gone — no pre-ledger
+session can exist, which the migration enforces.
+

@@ -2,7 +2,6 @@ import type Stripe from "stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { everyRow } from "@/lib/paged";
 import { orderFeeCents, type PlanLimits } from "@/lib/plan";
-import { unpackOrderIds } from "@/lib/stripe-limits";
 
 /**
  * Our per-order fee, kept in its own ledger (`platform_fees`), one row per
@@ -111,9 +110,8 @@ export interface SessionFee {
  * A session's payment landed: its fee is ours. Throws on failure, so the
  * webhook answers Stripe with an error and Stripe sends the event again.
  *
- * A session with no reservation to take — opened before the ledger existed,
- * or whose row is gone — still charged what it charged: the fee is recorded
- * from the session itself, once per order or session.
+ * A session whose reservation row is gone still charged what it charged: the
+ * fee is recorded from what the session carries, once.
  */
 export async function takeFee(session: Stripe.Checkout.Session, fee: SessionFee): Promise<void> {
   const db = createAdminClient();
@@ -127,7 +125,7 @@ export async function takeFee(session: Stripe.Checkout.Session, fee: SessionFee)
     if (error) throw new Error(`Could not record the platform fee: ${error.message}`);
     if (data === true) return;
   }
-  const charged = await feeChargedBy(session, fee);
+  const charged = feeChargedBy(session, fee);
   if (!charged) return;
   const { error } = await db.rpc("record_session_fee", {
     p_restaurant: charged.restaurantId,
@@ -140,61 +138,26 @@ export async function takeFee(session: Stripe.Checkout.Session, fee: SessionFee)
 }
 
 /**
- * The fee a session charged, and the key it is counted under once. A session
- * we wrote carries it whole (`fee_cents`, `restaurant_id`), so nothing has to
- * be read. One opened before the ledger carried `settle_fee` (a table's bill,
- * a share), or left it on the order (a diner's own order) or on its account
- * checkout; that fee is keyed by the order the old code wrote it on, the
- * same `order:<id>` the backfill uses, so a session replayed after its fee
- * was copied in is never counted twice. A read that fails throws: Stripe
- * sends the event again, rather than the fee being dropped.
+ * The fee a session charged when there is no reservation to take: only what
+ * the session itself carries (`fee_cents`, `restaurant_id`), counted once
+ * under `session:<id>`. A session opened before the ledger carries neither,
+ * and none can be open: no restaurant could take cards when the ledger went
+ * live, and its migration refuses to apply while one can.
  */
-async function feeChargedBy(
+function feeChargedBy(
   session: Stripe.Checkout.Session,
   fee: SessionFee,
-): Promise<{ restaurantId: string; cents: number; ref: string } | null> {
-  if (fee.feeCents && fee.restaurantId) {
-    const cents = Number(fee.feeCents);
-    return cents > 0 ? { restaurantId: fee.restaurantId, cents, ref: `session:${session.id}` } : null;
-  }
-  const db = createAdminClient();
-  const meta = session.metadata ?? {};
-  const pesos = (v: unknown) => Math.round(Number(v ?? 0) * 100);
-  const read = async <T>(q: PromiseLike<{ data: T | null; error: { message: string } | null }>, what: string): Promise<T | null> => {
-    const { data, error } = await q;
-    if (error) throw new Error(`Could not read ${what} to record its fee: ${error.message}`);
-    return data;
-  };
-  const carried = (restaurantId: string, cents: number, orderId: string | null) =>
-    cents > 0 ? { restaurantId, cents, ref: orderId ? `order:${orderId}` : `session:${session.id}` } : null;
+): { restaurantId: string; cents: number; ref: string } | null {
+  const cents = Number(fee.feeCents ?? 0);
+  return fee.restaurantId && cents > 0 ? { restaurantId: fee.restaurantId, cents, ref: `session:${session.id}` } : null;
+}
 
-  if (meta.account_checkout) {
-    const checkout = await read<{ restaurant_id: string; fee: number; order_ids: string[] | null }>(db.from("account_checkouts").select("restaurant_id, fee, order_ids")
-      .eq("id", meta.account_checkout).maybeSingle(), "the account checkout");
-    if (!checkout || pesos(checkout.fee) <= 0) return null;
-    // `account_checkout_settle` wrote it on the newest order it paid.
-    const newest = await read<{ id: string }>(db.from("orders").select("id").in("id", checkout.order_ids ?? [])
-      .neq("status", "cancelled").order("created_at", { ascending: false }).limit(1).maybeSingle(), "the account's orders");
-    return carried(checkout.restaurant_id, pesos(checkout.fee), newest?.id ?? null);
-  }
-  if (meta.split_id) {
-    const split = await read<{ restaurant_id: string; session_id: string }>(db.from("bill_splits").select("restaurant_id, session_id")
-      .eq("id", meta.split_id).maybeSingle(), "the divided bill");
-    if (!split || pesos(meta.settle_fee) <= 0) return null;
-    // The old settle wrote it on the sitting's first live order.
-    const first = await read<{ id: string }>(db.from("orders").select("id").eq("session_id", split.session_id)
-      .neq("status", "cancelled").neq("status", "pending_payment").eq("written_off", false)
-      .order("created_at", { ascending: true }).limit(1).maybeSingle(), "the sitting's first order");
-    return carried(split.restaurant_id, pesos(meta.settle_fee), first?.id ?? null);
-  }
-  const billOrders = unpackOrderIds(meta);
-  const orderId = billOrders[0] ?? meta.order_id;
-  if (!orderId) return null;
-  const order = await read<{ restaurant_id: string; platform_fee: number }>(db.from("orders").select("restaurant_id, platform_fee")
-    .eq("id", orderId).maybeSingle(), "the order");
-  if (!order) return null;
-  // A table's bill wrote it on the first order it settled; a diner's own on itself.
-  return carried(order.restaurant_id, billOrders.length ? pesos(meta.settle_fee) : pesos(order.platform_fee), orderId);
+/** Whether a fee under `ref` is still reserved: a checkout for it is open or being opened. */
+export async function feeRefOpen(restaurantId: string, ref: string): Promise<boolean> {
+  const { data, error } = await createAdminClient().from("platform_fees").select("id")
+    .eq("restaurant_id", restaurantId).eq("ref", ref).eq("status", "open").limit(1);
+  if (error) throw new Error(`Could not read the share's fee: ${error.message}`);
+  return (data ?? []).length > 0;
 }
 
 /**

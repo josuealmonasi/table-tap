@@ -10,7 +10,8 @@ import { fetchTableBill } from "@/lib/bill-data";
 import { tableBill } from "@/lib/table-bill";
 import { getPlan } from "@/lib/plan-server";
 import {
-  NO_FEE, attachFeeSession, feeMetadata, releaseFee, reserveFeeCents, retirePriorShareSession, stripeRefusedOutright,
+  NO_FEE, attachFeeSession, feeMetadata, feeRefOpen, releaseFee, reserveFeeCents, retirePriorShareSession,
+  stripeRefusedOutright,
 } from "@/lib/platform-fee";
 import { orderFeeCents } from "@/lib/plan";
 import { round2 } from "@/lib/money";
@@ -144,6 +145,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
       if (prior === "paid") return await apiError("apiErr.splitAlreadyPaid", 409);
       fee = await reserveFeeCents(restaurantId, feePlan.limits, slice, "split", ref);
+      // Nothing reserved while the share's fee is still held: another request
+      // is opening its checkout right now, or opened one whose session was
+      // never noted. A second, fee-free session would be payable beside it —
+      // and a diner who paid both paid for their share twice.
+      if (!fee.id && await feeRefOpen(restaurantId, ref)) return await apiError("apiErr.sharePayingOnline", 409);
     }
   } catch {
     return await apiError("apiErr.generic", 502);

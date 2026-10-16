@@ -133,4 +133,5 @@ drop function if exists public.reserve_platform_fee(uuid, integer, integer, text
 drop function if exists public.take_platform_fee(uuid, text, integer);
 drop function if exists public.release_platform_fee(uuid);
 drop function if exists public.record_session_fee(uuid, text, integer, text, integer);
+drop function if exists public.record_duplicate_share(uuid, text, numeric);
 drop function if exists public.refund_platform_fee(uuid, text, integer, text);
