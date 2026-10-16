@@ -9,6 +9,7 @@ import { actingManager } from "@/lib/api-guard";
 import { summarise } from "@/lib/cancel-plan";
 import { legacyStockDemand } from "@/lib/legacy-stock";
 import { readCancel } from "@/lib/cancel-read";
+import { refundFee } from "@/lib/platform-fee";
 
 export const runtime = "nodejs";
 
@@ -85,6 +86,11 @@ export async function POST(req: NextRequest) {
           },
         );
         refundId ??= refund.id;
+        // The share of our fee that went back with it, so the month's ceiling
+        // counts only what we kept. Once per refund; if this fails the fee
+        // stays counted, which never charges anybody more.
+        await refundFee(actor.restaurantId, r.paymentIntent, Math.round(r.amount * 100), refund.id)
+          .catch(err => console.error("cancel: the fee refund stays uncounted", err));
       }
     } catch (err) {
       console.error("refund error", err);

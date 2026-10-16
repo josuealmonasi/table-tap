@@ -8,9 +8,8 @@ import { staffOpenedBill } from "@/lib/table-session";
 import { splitInProgress } from "@/lib/split-service";
 import { isRoomLimited, isTableLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { orderFeeCents } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
-import { feesTakenThisMonth } from "@/lib/fee-month";
+import { NO_FEE, releaseFee, reserveFee } from "@/lib/platform-fee";
 import { applyCoupon } from "@/lib/pricing";
 import {
   claimCoupon,
@@ -173,12 +172,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // against the food rather than the amount charged, so a generous tip never
   // raises what we take.
   const feePlan = await getPlan(restaurantId);
-  const takenThisMonth = feePlan?.limits.fee_cap
-    ? await feesTakenThisMonth(restaurantId)
-    : 0;
-  const appFee = feePlan
-    ? orderFeeCents(feePlan.limits, Math.round(payable * 100), takenThisMonth)
-    : 0;
   if (cents <= 0) {
     if (coupon) await releaseCoupon(coupon.id);
     return await apiError("apiErr.billSettled", 409);
@@ -200,6 +193,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const origin = req.headers.get("origin") ?? new URL(req.url).origin;
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+
+  // Reserved under the month's ceiling before Stripe is asked; given back
+  // below when the session is never created, and by Stripe's expiry when it
+  // is never paid (`releaseSessionFee`).
+  let fee = NO_FEE;
+  try {
+    fee = feePlan ? await reserveFee(restaurantId, feePlan.limits, Math.round(payable * 100), "bill") : NO_FEE;
+  } catch {
+    if (coupon) await releaseCoupon(coupon.id);
+    return await apiError("apiErr.checkoutFailed", 502);
+  }
+  const appFee = fee.cents;
 
   try {
     const session = await stripe.checkout.sessions.create(
@@ -233,11 +238,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           settle_tip: String(tip),
           settle_coupon: coupon?.code ?? "",
           settle_discount: String(discount),
-          // Recorded on the settled order once Stripe confirms, so the monthly
-          // ceiling is summed from what was actually taken.
+          // Recorded on the settled order once Stripe confirms, for the
+          // order's own history; the ceiling reads the ledger (`fee_id`).
           settle_fee: String(appFee / 100),
+          ...(fee.id ? { fee_id: fee.id } : {}),
         },
         payment_intent_data: {
+          metadata: fee.id ? { fee_id: fee.id } : {},
           // Same as in /api/checkout: zero is not sent. Stripe refuses an application
           // fee of 0, so a restaurant with no per-order fee — the Grupo plan, or a
           // pilot we do not charge — could order by card and then be unable to pay the
@@ -268,8 +275,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ url: session.url });
   } catch {
-    // The charge never happened, so the reserved use goes back.
+    // The charge never happened, so the reserved use and fee go back.
     if (coupon) await releaseCoupon(coupon.id);
+    await releaseFee(fee.id).catch(err => console.error("bill pay: the fee reservation stays counted", err));
     return await apiError("apiErr.checkoutFailed", 502);
   }
 }

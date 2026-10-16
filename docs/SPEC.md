@@ -311,6 +311,20 @@ dishes on a bill the restaurant has just cancelled.
   and our fee on it returned. Its log line carries no `method`, because the
   corte takes `refunded` rows with one out of the day's takings and this money
   was never in them. The bell's notice opens Cuentas abiertas.
+- **The month's fee ceiling lives in its own ledger.** Each plan caps our
+  per-order fee in a month (`plan_limits.fee_cap`; "never more than X" on the
+  plan card). Every checkout that carries a fee — a diner's order, a table's
+  bill, a divided bill (once per bill, `ref`), a customer account —
+  *reserves* it in `platform_fees` before Stripe is asked, through
+  `reserve_platform_fee`, which locks the restaurant and charges
+  `min(per-order fee, ceiling − what the month holds)`. The session carries
+  the row as `fee_id`; the settling webhook marks it taken; only a session
+  that was never created, or Stripe's expiry, releases it; a refund records
+  the share of the fee that went back, rounded down and once per refund id.
+  A month is the UTC month the fee was reserved in. What nobody confirms
+  keeps counting: a little over, never under. The costs screen reads the same
+  ledger (`src/lib/platform-fee.ts`). `orders.platform_fee` is the order's own
+  history only.
 - **Two Stripe accounts, so two webhooks.** A diner's food is a DIRECT charge
   on the restaurant's own Stripe account: Stripe's processing fee comes out of
   their balance and our per-order fee comes to us clean. As a destination

@@ -13,6 +13,7 @@
 -- Generated from the `create table if not exists` lines in schema.sql; when
 -- you add a table there, add it here.
 -- ============================================================================
+drop table if exists platform_fees       cascade;
 drop table if exists terminal_deposits   cascade;
 drop table if exists waste_entries       cascade;
 drop table if exists ingredient_purchases cascade;
@@ -128,3 +129,7 @@ drop function if exists public.record_waste(uuid, uuid, uuid, numeric, text, tex
 drop function if exists public.record_purchase(uuid, uuid, numeric, numeric, text);
 drop function if exists public.settle_offline_sale(uuid, uuid, text, text, timestamptz);
 drop function if exists public.take_stock_floor(uuid, jsonb);
+drop function if exists public.reserve_platform_fee(uuid, integer, integer, text, text);
+drop function if exists public.take_platform_fee(uuid, text, integer);
+drop function if exists public.release_platform_fee(uuid);
+drop function if exists public.refund_platform_fee(uuid, text, integer, text);

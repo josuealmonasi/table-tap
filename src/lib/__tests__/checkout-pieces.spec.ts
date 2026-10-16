@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/i18n/server", () => ({ getLocale: async () => "en" }));
-const feesTaken = vi.fn(async () => 0);
-vi.mock("@/lib/fee-month", () => ({ feesTakenThisMonth: () => feesTaken() }));
+const reserve = vi.fn(async (...args: unknown[]) => (args.length ? { id: "fee-1", cents: 500 } : { id: null, cents: 0 }));
+vi.mock("@/lib/platform-fee", () => ({ NO_FEE: { id: null, cents: 0 }, reserveFee: (...args: unknown[]) => reserve(...args) }));
 
 import type { PlanLimits } from "@/lib/plan";
 import type { RestaurantPlan } from "@/lib/plan-server";
@@ -10,7 +10,7 @@ import type { PricedCart } from "@/lib/pricing";
 import type { OrderLineItem } from "@/lib/types";
 import { checkoutTip } from "@/lib/checkout/checkout-body";
 import { payLaterAllowed } from "@/lib/checkout/pay-later";
-import { checkoutFeeCents } from "@/lib/checkout/app-fee";
+import { checkoutFee } from "@/lib/checkout/app-fee";
 import { checkoutOrderRow } from "@/lib/checkout/order-row";
 import { refuseCart, refuseShortStock } from "@/lib/checkout/cart-error";
 import { verifiedLines } from "@/lib/checkout/verified-lines";
@@ -44,18 +44,17 @@ describe("pay later", () => {
 });
 
 describe("our fee on a diner's order", () => {
-  beforeEach(() => feesTaken.mockClear());
+  beforeEach(() => reserve.mockClear());
 
-  it("is nothing on a pay-later order or without a plan", async () => {
-    expect(await checkoutFeeCents("r", plan({}), true, 200)).toBe(0);
-    expect(await checkoutFeeCents("r", null, false, 200)).toBe(0);
+  it("reserves nothing on a pay-later order or without a plan", async () => {
+    expect(await checkoutFee("r", plan({}), true, 200)).toEqual({ id: null, cents: 0 });
+    expect(await checkoutFee("r", null, false, 200)).toEqual({ id: null, cents: 0 });
+    expect(reserve).not.toHaveBeenCalled();
   });
 
-  it("is judged on the food and only looks up the month when there is a ceiling", async () => {
-    expect(await checkoutFeeCents("r", plan({}), false, 200)).toBe(500);
-    expect(feesTaken).not.toHaveBeenCalled();
-    feesTaken.mockResolvedValueOnce(9_800);
-    expect(await checkoutFeeCents("r", plan({ fee_cap: 100 }), false, 200)).toBe(200);
+  it("reserves the fee on the food, under the month's ceiling", async () => {
+    expect(await checkoutFee("r", plan({ fee_cap: 100 }), false, 200)).toEqual({ id: "fee-1", cents: 500 });
+    expect(reserve).toHaveBeenCalledWith("r", expect.objectContaining({ order_fee: 5, fee_cap: 100 }), 20000, "order");
   });
 });
 

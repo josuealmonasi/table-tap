@@ -17,6 +17,8 @@ export interface CardSessionInput {
   tableId: string | null;
   /** Our cut, in cents. Zero sends none. */
   appFee: number;
+  /** The reserved fee's ledger row, so the webhook can take or release it. */
+  feeId?: string | null;
 }
 
 /**
@@ -75,9 +77,9 @@ export async function openCardSession(
       // of a dish off the menu for a day. Thirty minutes is Stripe's floor and
       // longer than anyone is still deciding.
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-      metadata: { order_id: p.orderId },
+      metadata: { order_id: p.orderId, ...(p.feeId ? { fee_id: p.feeId } : {}) },
       payment_intent_data: {
-        metadata: { order_id: p.orderId },
+        metadata: { order_id: p.orderId, ...(p.feeId ? { fee_id: p.feeId } : {}) },
         ...(p.appFee > 0 ? { application_fee_amount: p.appFee } : {}),
       },
     },

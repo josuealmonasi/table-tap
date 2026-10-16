@@ -4513,3 +4513,146 @@ end;
 $$;
 revoke all on function public.cancel_order(uuid, uuid, text, jsonb) from public, anon, authenticated;
 grant execute on function public.cancel_order(uuid, uuid, text, jsonb) to service_role;
+
+-- ── Platform fees: one row per charge, the ledger the monthly ceiling reads ──
+-- Each plan promises "never more than X" in per-order fees a month. The
+-- ceiling used to be summed from orders.platform_fee, which says neither when
+-- a charge happened, whether it went through, nor how much of it was given
+-- back — so it counted abandoned checkouts, missed a divided bill's fee until
+-- every share landed, filed a fee under the month its food was ordered, and
+-- lost a fee whose write failed. Here every checkout RESERVES its fee before
+-- Stripe is asked, under a lock per restaurant, so two diners at once never
+-- both fit under one ceiling; the payment marks it taken; only Stripe's
+-- expiry (or a session that was never created) releases it; a refund records
+-- the share of the fee that went back. A reservation nobody confirms keeps
+-- counting: a little over, never under.
+create table if not exists platform_fees (
+  id                    uuid primary key default gen_random_uuid(),
+  restaurant_id         uuid not null references restaurants(id) on delete cascade,
+  -- The UTC month the fee was reserved in: the month whose ceiling it uses.
+  period                date not null,
+  cents                 integer not null check (cents > 0),
+  refunded_cents        integer not null default 0 check (refunded_cents >= 0 and refunded_cents <= cents),
+  -- Stripe refund ids already counted, so a retried refund is counted once.
+  refund_ids            text[] not null default '{}',
+  status                text not null default 'open' check (status in ('open', 'taken', 'released')),
+  source                text not null check (source in ('order', 'bill', 'split', 'account', 'backfill')),
+  -- One fee per thing that pays one fee: a divided bill pays it once.
+  ref                   text,
+  stripe_payment_intent text,
+  charge_cents          integer check (charge_cents is null or charge_cents > 0),
+  created_at            timestamptz not null default now(),
+  settled_at            timestamptz
+);
+create index if not exists platform_fees_period_idx on platform_fees(restaurant_id, period);
+create index if not exists platform_fees_intent_idx on platform_fees(restaurant_id, stripe_payment_intent)
+  where stripe_payment_intent is not null;
+create unique index if not exists platform_fees_ref_idx on platform_fees(restaurant_id, ref)
+  where ref is not null and status <> 'released';
+alter table platform_fees enable row level security;
+revoke all on platform_fees from anon;
+revoke all on platform_fees from authenticated;
+grant all on platform_fees to service_role;
+
+-- Reserve this checkout's fee under the month's ceiling. `p_cents` is the
+-- per-order fee; `p_cap_cents` the month's ceiling, null for none. Returns
+-- no row when nothing is to be charged: the ceiling is reached, or `p_ref`
+-- already carries a fee that is not released.
+create or replace function public.reserve_platform_fee(
+  p_restaurant uuid, p_cents integer, p_cap_cents integer, p_source text, p_ref text
+) returns table (fee_id uuid, fee_cents integer)
+language plpgsql security definer set search_path = public as $$
+declare
+  v_period date := date_trunc('month', now() at time zone 'utc')::date;
+  v_used integer;
+  v_cents integer;
+begin
+  if p_cents is null or p_cents <= 0 then return; end if;
+  perform pg_advisory_xact_lock(hashtextextended('platform_fee:' || p_restaurant::text, 0));
+  if p_ref is not null and exists (
+    select 1 from platform_fees f
+     where f.restaurant_id = p_restaurant and f.ref = p_ref and f.status <> 'released'
+  ) then
+    return;
+  end if;
+  if p_cap_cents is null then
+    v_cents := p_cents;
+  else
+    select coalesce(sum(f.cents - f.refunded_cents), 0) into v_used
+      from platform_fees f
+     where f.restaurant_id = p_restaurant and f.period = v_period and f.status <> 'released';
+    v_cents := greatest(0, least(p_cents, p_cap_cents - v_used));
+  end if;
+  if v_cents <= 0 then return; end if;
+  return query
+    insert into platform_fees (restaurant_id, period, cents, source, ref)
+    values (p_restaurant, v_period, v_cents, p_source, p_ref)
+    returning platform_fees.id, platform_fees.cents;
+end;
+$$;
+revoke all on function public.reserve_platform_fee(uuid, integer, integer, text, text) from public, anon, authenticated;
+grant execute on function public.reserve_platform_fee(uuid, integer, integer, text, text) to service_role;
+
+-- The money landed: the fee is ours. Whatever it was before — a late
+-- completion after an expiry still means Stripe took the fee.
+create or replace function public.take_platform_fee(
+  p_fee uuid, p_intent text, p_charge_cents integer
+) returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  update platform_fees
+     set status = 'taken',
+         settled_at = coalesce(settled_at, now()),
+         stripe_payment_intent = coalesce(stripe_payment_intent, p_intent),
+         charge_cents = coalesce(charge_cents, nullif(p_charge_cents, 0))
+   where id = p_fee;
+  return found;
+end;
+$$;
+revoke all on function public.take_platform_fee(uuid, text, integer) from public, anon, authenticated;
+grant execute on function public.take_platform_fee(uuid, text, integer) to service_role;
+
+-- Nobody paid it — Stripe's expiry, or a session that was never created.
+-- Only an open reservation is released; a taken fee never is.
+create or replace function public.release_platform_fee(p_fee uuid)
+returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  update platform_fees set status = 'released' where id = p_fee and status = 'open';
+  return found;
+end;
+$$;
+revoke all on function public.release_platform_fee(uuid) from public, anon, authenticated;
+grant execute on function public.release_platform_fee(uuid) to service_role;
+
+-- A refund on a charge that carried our fee: Stripe returns the fee in
+-- proportion to what was refunded. Rounded down, so the fee we kept is never
+-- counted short; once per Stripe refund id, so a retried refund counts once.
+create or replace function public.refund_platform_fee(
+  p_restaurant uuid, p_intent text, p_refund_cents integer, p_refund_id text
+) returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  update platform_fees
+     set refunded_cents = least(cents, refunded_cents + floor(cents::numeric * p_refund_cents / charge_cents)::integer),
+         refund_ids = refund_ids || p_refund_id
+   where restaurant_id = p_restaurant and stripe_payment_intent = p_intent
+     and status = 'taken' and charge_cents > 0 and p_refund_cents > 0
+     and not (p_refund_id = any(refund_ids));
+  return found;
+end;
+$$;
+revoke all on function public.refund_platform_fee(uuid, text, integer, text) from public, anon, authenticated;
+grant execute on function public.refund_platform_fee(uuid, text, integer, text) to service_role;
+
+-- This month's fees from before the ledger: counted, so the ceiling does not
+-- forget what was already taken. Once, while the month has no ledger rows.
+insert into platform_fees (restaurant_id, period, cents, status, source, created_at, settled_at)
+select o.restaurant_id, date_trunc('month', now() at time zone 'utc')::date,
+       round(o.platform_fee * 100)::integer, 'taken', 'backfill', o.created_at, o.created_at
+  from orders o
+ where o.platform_fee > 0
+   and o.created_at >= date_trunc('month', now() at time zone 'utc')
+   and not exists (
+     select 1 from platform_fees f
+      where f.period = date_trunc('month', now() at time zone 'utc')::date
+   );
+
+revoke truncate, references, trigger on all tables in schema public from authenticated;

@@ -8,9 +8,8 @@ import { normalizeCode } from "@/lib/accounts";
 import { accountByCode } from "@/lib/accounts-server";
 import { releaseAccountCheckout } from "@/lib/account-checkout";
 import { stripeProductName } from "@/lib/stripe-limits";
-import { orderFeeCents } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
-import { feesTakenThisMonth } from "@/lib/fee-month";
+import { NO_FEE, releaseFee, reserveFee } from "@/lib/platform-fee";
 import { round2 } from "@/lib/money";
 
 export const runtime = "nodejs";
@@ -53,9 +52,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // One card payment for one account: the single fee an order carries,
   // capped against the food and not the tip.
+  // Reserved under the month's ceiling before the checkout opens, and given
+  // back on every way it does not reach Stripe.
   const plan = await getPlan(restaurant.id);
-  const taken = plan?.limits.fee_cap ? await feesTakenThisMonth(restaurant.id) : 0;
-  const feeCents = plan ? orderFeeCents(plan.limits, Math.round(expected * 100), taken) : 0;
+  let fee = NO_FEE;
+  try {
+    fee = plan ? await reserveFee(restaurant.id, plan.limits, Math.round(expected * 100), "account") : NO_FEE;
+  } catch {
+    return await apiError("apiErr.generic", 500);
+  }
+  const feeCents = fee.cents;
+  const refused = async (key: string, status: number) => {
+    await releaseFee(fee.id).catch(err => console.error("account pay: the fee reservation stays counted", err));
+    return await apiError(key, status);
+  };
 
   const { data: opened, error: openError } = await db.rpc("account_checkout_open", {
     p_restaurant: restaurant.id,
@@ -64,12 +74,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     p_tip: tip,
     p_fee: feeCents / 100,
   });
-  if (openError) return await apiError("apiErr.generic", 500);
+  if (openError) return await refused("apiErr.generic", 500);
   const r = opened as { outcome: string; checkout?: string; amount?: number; tip?: number };
-  if (r.outcome === "paying") return await apiError("apiErr.accountPayingOnline", 409);
-  if (r.outcome === "nothing") return await apiError("apiErr.accountNothingOwed", 409);
-  if (r.outcome === "changed") return await apiError("apiErr.accountStatementChanged", 409);
-  if (r.outcome !== "open" || !r.checkout) return await apiError("apiErr.generic", 500);
+  if (r.outcome === "paying") return await refused("apiErr.accountPayingOnline", 409);
+  if (r.outcome === "nothing") return await refused("apiErr.accountNothingOwed", 409);
+  if (r.outcome === "changed") return await refused("apiErr.accountStatementChanged", 409);
+  if (r.outcome !== "open" || !r.checkout) return await refused("apiErr.generic", 500);
 
   const origin = req.headers.get("origin") ?? new URL(req.url).origin;
   const cents = Math.round(round2(Number(r.amount) + Number(r.tip)) * 100);
@@ -89,8 +99,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         ],
         // The webhook settles exactly this checkout. A returning browser
         // proves nothing about whether money moved.
-        metadata: { account_checkout: r.checkout },
-        payment_intent_data: feeCents > 0 ? { application_fee_amount: feeCents } : {},
+        metadata: { account_checkout: r.checkout, ...(fee.id ? { fee_id: fee.id } : {}) },
+        payment_intent_data: {
+          metadata: fee.id ? { fee_id: fee.id } : {},
+          ...(feeCents > 0 ? { application_fee_amount: feeCents } : {}),
+        },
         success_url: `${origin}/cuenta/${code}?paid=1`,
         cancel_url: `${origin}/cuenta/${code}?cancelled=1`,
         expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
@@ -103,6 +116,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // The charge never happened: the till may collect this account again. If
     // even that fails, the hold simply runs out — the safe way round.
     await releaseAccountCheckout(r.checkout).catch(e => console.error("account checkout release failed:", e));
-    return await apiError("apiErr.checkoutFailed", 502);
+    return await refused("apiErr.checkoutFailed", 502);
   }
 }

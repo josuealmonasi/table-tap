@@ -22,7 +22,8 @@ import { checkoutTip, type CheckoutBody } from "@/lib/checkout/checkout-body";
 import { verifiedLines } from "@/lib/checkout/verified-lines";
 import { checkoutOrderRow } from "@/lib/checkout/order-row";
 import { payLaterAllowed } from "@/lib/checkout/pay-later";
-import { checkoutFeeCents } from "@/lib/checkout/app-fee";
+import { checkoutFee } from "@/lib/checkout/app-fee";
+import { NO_FEE, releaseFee, type FeeHold } from "@/lib/platform-fee";
 import { checkoutHold } from "@/lib/checkout/hold";
 
 export const runtime = "nodejs";
@@ -158,15 +159,19 @@ export async function POST(req: NextRequest) {
 
     /** Set once the stock is ours, so the undo below knows to hand it back. */
     let stockReservationId: string | null = null;
+    /** Our fee, reserved under the month's ceiling: given back with the rest. */
+    let fee: FeeHold = NO_FEE;
 
     /** Give back what this checkout reserved when it doesn't complete. */
     const undoClaim = async () => {
       if (coupon) await releaseCoupon(coupon.id);
       if (stockReservationId) await releaseStock(restaurantId, stockReservationId);
+      await releaseFee(fee.id);
     };
     held.hold(undoClaim);
 
-    const appFee = await checkoutFeeCents(restaurantId, plan, deferred, pricing.subtotal);
+    fee = await checkoutFee(restaurantId, plan, deferred, pricing.subtotal);
+    const appFee = fee.cents;
 
     // Which sitting this order belongs to. A dine-in order joins whoever is
     // already at the table; a counter order has no table and no sitting.
@@ -271,6 +276,7 @@ export async function POST(req: NextRequest) {
         restaurantId,
         tableId,
         appFee,
+        feeId: fee.id,
       });
     } catch (err) {
       // Stripe refused the session — the pending order will never be paid, so

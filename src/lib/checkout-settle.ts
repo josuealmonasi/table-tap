@@ -4,6 +4,7 @@ import { unpackOrderIds } from "@/lib/stripe-limits";
 import type Stripe from "stripe";
 import { settleAccountCheckout } from "@/lib/account-checkout";
 import { charged, settleCardOrders } from "@/lib/card-settle";
+import { takeFee } from "@/lib/platform-fee";
 
 // Abandoning a checkout lives beside it; the webhooks import both from here.
 export { abandonCheckout } from "@/lib/checkout-abandon";
@@ -39,6 +40,11 @@ export async function settleCheckout(session: Stripe.Checkout.Session): Promise<
   // Only here is a payment believed. A browser coming back from Stripe proves
   // nothing: it is the signature on this request that does.
   if (session.payment_status !== "paid") return;
+
+  // Our fee on this charge is real now, whichever shape it settles. First,
+  // and thrown on failure, so a fee is never taken unrecorded: Stripe asks
+  // again, and taking it twice changes nothing.
+  await takeFee(session.metadata?.fee_id, session);
 
   if (session.metadata?.account_checkout) return await settleAccountCheckout(session);
   if (session.metadata?.split_id) return await settleSplitShare(session);
@@ -229,7 +235,8 @@ async function settleBill(session: Stripe.Checkout.Session): Promise<void> {
   // ceiling is summed from, so it has to land only once a payment is real.
   const fee = Number(session.metadata?.settle_fee ?? 0);
   if (fee > 0) {
-    await db.from("orders").update({ platform_fee: fee }).eq("id", settleIds[0]);
+    const { error: feeError } = await db.from("orders").update({ platform_fee: fee }).eq("id", settleIds[0]);
+    if (feeError) throw new Error(`settling a bill: could not record its fee: ${feeError.message}`);
   }
 
   // The coupon use was reserved when the bill was sent to Stripe; the

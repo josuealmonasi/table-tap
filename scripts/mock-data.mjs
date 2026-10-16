@@ -915,6 +915,18 @@ export async function seedMock(pg) {
   await seedCosts(pg, rid);
   // Deposits from the restaurant's own card terminal, and voucher numbers.
   await seedTerminal(pg, rid);
+  // Our fee on every order the demo was paid for online, in the ledger the
+  // month's ceiling reads — what the schema's backfill does once for real
+  // restaurants. Taken, in the month each was paid.
+  await pg.query(
+    `insert into platform_fees (restaurant_id, period, cents, status, source, stripe_payment_intent, charge_cents, created_at, settled_at)
+     select o.restaurant_id, date_trunc('month', o.created_at at time zone 'utc')::date,
+            round(o.platform_fee * 100)::integer, 'taken', 'order', o.stripe_payment_intent,
+            nullif(round(o.total * 100)::integer, 0), o.created_at, o.created_at
+       from orders o
+      where o.restaurant_id = $1 and o.platform_fee > 0 and o.paid and o.status <> 'cancelled'`,
+    [rid],
+  );
 
   // Nothing seeded may have happened later than now. Orders from the future
   // filled the board and today's numbers for a morning before anybody saw

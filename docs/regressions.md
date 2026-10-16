@@ -21,6 +21,7 @@ us, and what now catches each one.
 | Nobody hands `paymentOptions` a hardcoded `atTable` | The cart passed `true` always, so paying at the till could never be offered |
 | No route parses a request body by hand | Malformed JSON reached a money route as an exception and came back a 500 |
 | A time-windowed read of a growing table pages through every row | Analytics said "1000 Pedidos" for a day of 1100: the server stops each read at 1000 rows and says nothing |
+| Every fee we charge Stripe carries the ledger row that reserved it | Summed from orders, the month's fee ceiling missed divided bills, late webhooks, account payments, a fee filed under the month its food was ordered, and two diners at once |
 | The month's fee ceiling counts only fees we took, or a checkout still open | It counted abandoned checkouts and refunded cancellations, and orders past the early ceiling paid no fee |
 | Every read of the extras each dish offers pages, or is one dish's | Past 1000 links the menu editor read the first thousand, and saving a dish's extras deleted the ones it never saw |
 | Server code takes only components from a `"use client"` module | The costs page imported its tab list from a client component and every tab failed to render |
@@ -1793,4 +1794,33 @@ alone; a shared charge, or one never written on the order (a table's bill
 settles without one), still counts. Probed on dev: a cancelled table-bill fee
 order and a cancelled own checkout at MX$0.75 each now add 75 cents, the
 table's.
+
+## The fee ceiling, reviewed: kept in a ledger of its own
+
+A second review (Codex, at the user's request) of the two fixes above found
+the ceiling could still count short — the direction that charges a restaurant
+past "never more than X" — in five more ways, all because it was summed from
+`orders.platform_fee`, which records neither when a charge happened, whether
+it went through, nor how much of it went back:
+
+- a paid checkout whose webhook was late read as abandoned after 35 minutes;
+- a divided bill's fee, written on an order that stays unpaid until the last
+  share lands, was not counted at all;
+- two checkouts reading the month at once both fit under one ceiling, a table
+  bill's fee was written only on settlement and an account's lived in
+  `account_checkouts`, and two shares opened at once each charged the fee;
+- a fee was filed under the month its food was ordered, so a September order
+  paid in October never counted in October;
+- a table bill's fee write ignored its error.
+
+The ceiling is now its own ledger, `platform_fees`, one row per charge. Every
+checkout reserves its fee there before Stripe is asked, under a lock per
+restaurant; the session carries the row as `fee_id`; the webhook takes it,
+expiry releases it, and refunds record the share that went back, once per
+refund id. Probed on dev: twelve reservations at once with room for two —
+two fit; a refund retried counts once; a taken fee cannot be released. `pnpm
+attack` runs those, the api gate checks that a checkout Stripe refuses gives
+its fee back, and an invariant fails on any Stripe session that charges our
+fee without its `fee_id`. `src/lib/fee-month.ts` and its order-based rules
+are gone.
 

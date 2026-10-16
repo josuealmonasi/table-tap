@@ -9,8 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchTableBill } from "@/lib/bill-data";
 import { tableBill } from "@/lib/table-bill";
 import { getPlan } from "@/lib/plan-server";
-import { orderFeeCents } from "@/lib/plan";
-import { feesTakenThisMonth } from "@/lib/fee-month";
+import { NO_FEE, releaseFee, reserveFee } from "@/lib/platform-fee";
 import { round2 } from "@/lib/money";
 
 export const runtime = "nodejs";
@@ -119,11 +118,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // share and charges the restaurant for the table twice.
   if (paidError) return await apiError("apiErr.verifyOrders", 503);
   const feePlan = await getPlan(restaurantId);
-  const takenThisMonth = feePlan?.limits.fee_cap ? await feesTakenThisMonth(restaurantId) : 0;
-  const appFee =
-    (alreadyPaid ?? 0) === 0 && feePlan
-      ? orderFeeCents(feePlan.limits, Math.round(payable * 100), takenThisMonth)
-      : 0;
+  // Reserved once per divided bill (`ref`): two diners opening their shares
+  // at the same moment both read "nobody has paid", and each session used to
+  // carry the fee — the restaurant paid it twice for one table. The second
+  // now finds the first's reservation and carries none.
+  let fee = NO_FEE;
+  try {
+    fee = (alreadyPaid ?? 0) === 0 && feePlan
+      ? await reserveFee(restaurantId, feePlan.limits, Math.round(payable * 100), "split", `split:${splitId}`)
+      : NO_FEE;
+  } catch {
+    return await apiError("apiErr.generic", 502);
+  }
+  const appFee = fee.cents;
+  const giveBackFee = () => releaseFee(fee.id).catch(err => console.error("split pay: the fee reservation stays counted", err));
 
   const origin = req.headers.get("origin") ?? new URL(req.url).origin;
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -150,8 +158,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           ...packOrderIds(own.map(o => o.id)),
           settle_tip: String(tip),
           settle_fee: String(appFee / 100),
+          ...(fee.id ? { fee_id: fee.id } : {}),
         },
         payment_intent_data: {
+          metadata: fee.id ? { fee_id: fee.id } : {},
           ...(appFee > 0 ? { application_fee_amount: appFee } : {}),
         },
         // Half an hour, for the same reason a cart gets one: a share left
@@ -163,9 +173,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { stripeAccount: restaurant.stripe_account_id },
     );
 
-    if (!session.url) return await apiError("apiErr.generic", 502);
+    if (!session.url) {
+      await giveBackFee();
+      return await apiError("apiErr.generic", 502);
+    }
     return NextResponse.json({ url: session.url });
   } catch {
+    await giveBackFee();
     return await apiError("apiErr.generic", 502);
   }
 }

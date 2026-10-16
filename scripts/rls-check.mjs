@@ -65,7 +65,7 @@ for (const table of [
   // table's division, and what the routes keep for themselves.
   "payments", "refunds_due", "notifications", "print_jobs", "bill_splits", "bill_split_claims",
   "service_requests", "dish_ratings", "plan_limits", "stock_reservations",
-  "terminal_deposits",
+  "terminal_deposits", "platform_fees",
 ]) {
   verdict(`cannot read ${table}`, await anon.from(table).select("*").limit(1));
 }
@@ -483,7 +483,7 @@ if (!signIn.error && theirs) {
     "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions",
     "customer_accounts", "account_checkouts",
     "cash_shifts", "cash_movements", "ingredients", "ingredient_prices", "recipe_lines",
-    "waste_entries", "ingredient_purchases", "ingredient_counts", "terminal_deposits"];
+    "waste_entries", "ingredient_purchases", "ingredient_counts", "terminal_deposits", "platform_fees"];
   const TEAM = [["anon", null], ["owner", "demo@tabletap.dev"], ["manager", "demo-manager@tabletap.dev"],
     ["waiter", "demo-waiter@tabletap.dev"], ["cashier", "demo-cashier@tabletap.dev"],
     ["kitchen", "demo-kitchen@tabletap.dev"]];

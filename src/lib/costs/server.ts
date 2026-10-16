@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { feesKeptSince } from "@/lib/platform-fee";
 import { everyRow } from "@/lib/paged";
 import type { Modifier, OrderLineItem } from "@/lib/types";
 import { recipeBook, unitCosts, type Ingredient, type RecipeLine } from "./recipe-cost";
@@ -51,8 +52,8 @@ export async function readCosts(restaurantId: string, now = new Date()): Promise
     everyRow<PriceChange>((a, b) => db.from("ingredient_prices")
       .select("ingredient_id, previous_cost, unit_cost, created_at")
       .eq("restaurant_id", restaurantId).gte("created_at", since).order("id").range(a, b), "the price changes"),
-    everyRow<{ items: OrderLineItem[]; subtotal: number; tax_pct: number; platform_fee: number }>((a, b) => db.from("orders")
-      .select("items, subtotal, tax_pct, platform_fee")
+    everyRow<{ items: OrderLineItem[]; subtotal: number; tax_pct: number }>((a, b) => db.from("orders")
+      .select("items, subtotal, tax_pct")
       .eq("restaurant_id", restaurantId).eq("paid", true).neq("status", "cancelled")
       .gte("created_at", since).order("id").range(a, b), "the period's sales"),
     everyRow<FeePayment>((a, b) => db.from("payments")
@@ -75,7 +76,9 @@ export async function readCosts(restaurantId: string, now = new Date()): Promise
   const lines = recipes.map(l => ({ ...l, quantity: Number(l.quantity) }));
   const book = recipeBook(lines);
   const costs = unitCosts(typed);
-  const platformFees = orders.reduce((s, o) => s + (Number(o.platform_fee) || 0), 0);
+  // What we kept, from the same ledger the month's ceiling reads: net of
+  // whatever a refund gave back, on payments settled in the window.
+  const platformFees = await feesKeptSince(restaurantId, since);
   const fees = feeRate(payments, platformFees, terminalFeePct);
 
   return {

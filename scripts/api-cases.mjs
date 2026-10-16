@@ -419,7 +419,20 @@ export function cases(fx) {
       path: "/api/checkout", arrange: f => f.withCardReader(),
       body: { restaurantId: r, tableId: null, note: MARK, items: [{ itemId: dish.id,
         name: dish.name, price: Number(dish.price), qty: 3, emoji: "🍽️", mods: {} }] },
-      expect: [500], expectError: /pago falló|payment failed/i },
+      expect: [500], expectError: /pago falló|payment failed/i,
+      // Its fee was reserved under the month's ceiling before Stripe was
+      // asked; Stripe refused the session, so it has to be given back — an
+      // open reservation would count a fee nobody will ever pay. The released
+      // row is removed after, like everything else a case leaves.
+      effect: async f => {
+        const since = new Date(Date.now() - 120_000).toISOString();
+        const { data } = await f.admin.from("platform_fees").select("id, status")
+          .eq("restaurant_id", r).eq("source", "order").gte("created_at", since);
+        const rows = data ?? [];
+        await f.admin.from("platform_fees").delete().in("id", rows.filter(x => x.status === "released").map(x => x.id));
+        return (rows.some(x => x.status === "released") && !rows.some(x => x.status === "open"))
+          || `the fee it reserved was left ${JSON.stringify(rows.map(x => x.status))}`;
+      } },
     // A charge that fails must give the coupon use back. It is reserved before
     // Stripe is called — so a coupon on its last use cannot be spent twice by
     // two diners at once — and a reservation nobody releases burns that use
