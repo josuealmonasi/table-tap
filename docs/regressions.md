@@ -21,6 +21,7 @@ us, and what now catches each one.
 | Nobody hands `paymentOptions` a hardcoded `atTable` | The cart passed `true` always, so paying at the till could never be offered |
 | No route parses a request body by hand | Malformed JSON reached a money route as an exception and came back a 500 |
 | A time-windowed read of a growing table pages through every row | Analytics said "1000 Pedidos" for a day of 1100: the server stops each read at 1000 rows and says nothing |
+| The month's fee ceiling counts only fees we took, or a checkout still open | It counted abandoned checkouts and refunded cancellations, and orders past the early ceiling paid no fee |
 | Every read of the extras each dish offers pages, or is one dish's | Past 1000 links the menu editor read the first thousand, and saving a dish's extras deleted the ones it never saw |
 | Server code takes only components from a `"use client"` module | The costs page imported its tab list from a client component and every tab failed to render |
 | A cancelled terminal sale leaves the deposit it never reaches | The terminal deposits expected a voided sale, and read the bank short for money correctly given back |
@@ -1764,4 +1765,21 @@ editor now ticks all 12 of Grilled Salmon's menu's extras where the old read
 held 7, and the diner is offered all 12. An invariant fails on any read of
 `item_addons` that neither pages nor is one dish's; it named `menu-data.ts`
 when the old read was put back.
+
+## A fee ceiling reached with fees we never had
+
+Each plan promises "never more than X" in per-order fees a month, and the
+ceiling is summed from `orders.platform_fee`. The fee is written on the order
+when the checkout opens, before the diner pays — and the sum took every order
+carrying one. An abandoned checkout stays behind until Stripe's expiry event
+deletes it, and production has no Connect webhook yet, so there it stays for
+ever; a sale cancelled after it was paid gets its fee back with the refund.
+Both counted. Reproduced on dev by planting one of each at MX$0.75: the
+month's sum rose by 150 cents for money that never arrived, and orders past
+the early ceiling would have paid no fee. The costs screen already summed
+only paid, uncancelled orders, so the two disagreed. `feeCounts` now takes a
+fee when the order was paid and not cancelled, or while its checkout is still
+open (`CHECKOUT_HOLD_MINUTES`) — two diners paying at once must never both be
+priced under a ceiling only one of them fits under. `fee-month.spec.ts`
+covers each case; the same probe now adds nothing.
 
