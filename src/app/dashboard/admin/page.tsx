@@ -1,4 +1,5 @@
-import { unwrap } from "@/lib/ordering-data";
+import { everyRow } from "@/lib/paged";
+import { everyLogin } from "@/lib/logins";
 import { redirect } from "next/navigation";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -18,40 +19,41 @@ export default async function AdminPage() {
   if (!admin) redirect("/dashboard");
 
   const db = createAdminClient();
-  const [
-    restaurantsRes,
-    staffRes,
-    adminsRes,
-    profilesRes,
-    users,
-  ] = await Promise.all([
-    db
-      .from("restaurants")
-      .select("id, name, logo, owner_id, created_at, plan, stripe_subscription_id")
-      .order("created_at"),
-    db.from("staff").select("user_id, restaurant_id, role"),
-    db.from("platform_admins").select("user_id"),
-    db.from("profiles").select("user_id, full_name"),
-    db.auth.admin.listUsers({ perPage: 1000 }),
+  // Every row of each, paged: these grow with the platform, and a read that
+  // stopped at the server's thousand rows showed owners as nobody and teams
+  // as empty. A failed read throws, like every dashboard page — a failed read
+  // here showed no restaurants and no logins on the one page that manages
+  // logins — and the error screen offers a retry instead.
+  const [restaurants, staff, admins, profiles, logins] = await Promise.all([
+    everyRow<{ id: string; name: string; logo: string | null; owner_id: string | null; created_at: string; plan: string; stripe_subscription_id: string | null }>(
+      (a, b) => db.from("restaurants")
+        .select("id, name, logo, owner_id, created_at, plan, stripe_subscription_id")
+        .order("created_at").order("id").range(a, b),
+      "the restaurants",
+    ),
+    everyRow<{ user_id: string; restaurant_id: string; role: string }>(
+      (a, b) => db.from("staff").select("user_id, restaurant_id, role").order("id").range(a, b),
+      "the teams",
+    ),
+    everyRow<{ user_id: string }>(
+      (a, b) => db.from("platform_admins").select("user_id").order("user_id").range(a, b),
+      "the platform admins",
+    ),
+    everyRow<{ user_id: string; full_name: string | null }>(
+      (a, b) => db.from("profiles").select("user_id, full_name").order("user_id").range(a, b),
+      "the names",
+    ),
+    everyLogin(db),
   ]);
 
-  // Unwrapped, like every dashboard page: a failed read here showed no
-  // restaurants and no logins, or an admin as nobody in particular on the one
-  // page that manages logins. The error screen offers a retry instead.
-  const restaurants = unwrap(restaurantsRes, "the restaurants");
-  const staff = unwrap(staffRes, "the teams");
-  const admins = unwrap(adminsRes, "the platform admins");
-  const profiles = unwrap(profilesRes, "the names");
-  if (users.error) throw new Error(`Could not load the logins: ${users.error.message}`);
+  const restaurantById = new Map(restaurants.map(r => [r.id, r]));
+  const staffByUser = new Map(staff.map(s => [s.user_id, s]));
+  const adminIds = new Set(admins.map(a => a.user_id));
+  const nameByUser = new Map(profiles.map(p => [p.user_id, p.full_name]));
+  const foundingByUser = new Map(restaurants.map(r => [r.owner_id, r]));
+  const emailByUser = new Map(logins.map(u => [u.id, u.email ?? "—"]));
 
-  const restaurantById = new Map((restaurants ?? []).map(r => [r.id, r]));
-  const staffByUser = new Map((staff ?? []).map(s => [s.user_id, s]));
-  const adminIds = new Set((admins ?? []).map(a => a.user_id));
-  const nameByUser = new Map((profiles ?? []).map(p => [p.user_id, p.full_name]));
-  const foundingByUser = new Map((restaurants ?? []).map(r => [r.owner_id, r]));
-  const emailByUser = new Map(users.data.users.map(u => [u.id, u.email ?? "—"]));
-
-  const userRows: AdminUserRow[] = users.data.users
+  const userRows: AdminUserRow[] = logins
     .map(u => {
       const membership = staffByUser.get(u.id);
       const founded = foundingByUser.get(u.id);
@@ -76,10 +78,10 @@ export default async function AdminPage() {
     .sort((a, b) => a.email.localeCompare(b.email));
 
   const staffCounts = new Map<string, number>();
-  for (const s of staff ?? []) {
+  for (const s of staff) {
     staffCounts.set(s.restaurant_id, (staffCounts.get(s.restaurant_id) ?? 0) + 1);
   }
-  const restaurantRows: AdminRestaurantRow[] = (restaurants ?? []).map(r => ({
+  const restaurantRows: AdminRestaurantRow[] = restaurants.map(r => ({
     id: r.id,
     name: `${r.logo ?? "🍱"} ${r.name}`,
     owner_email: r.owner_id ? (emailByUser.get(r.owner_id) ?? "—") : "—",
@@ -89,7 +91,7 @@ export default async function AdminPage() {
     created_at: r.created_at,
   }));
 
-  const restaurantOptions = (restaurants ?? []).map(r => ({ id: r.id, name: r.name }));
+  const restaurantOptions = restaurants.map(r => ({ id: r.id, name: r.name }));
 
   return (
     <ConfirmProvider>

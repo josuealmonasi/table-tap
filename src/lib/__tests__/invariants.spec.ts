@@ -2632,3 +2632,19 @@ describe("a visit card is made only from inside the restaurant", () => {
     expect(read("src/components/customer/LoyaltyOffer.tsx")).toMatch(/pass: offer\.pass/);
   });
 });
+
+describe("every list of logins reads every page", () => {
+  it("lists logins only through the helpers that page", () => {
+    // `auth.admin.listUsers` answers one page and says nothing about the rest.
+    // The platform admin's list stopped at the thousandth login, and the
+    // checks looked a login up among the first 200 — about forty cafés —
+    // after which prod-check would report the demo logins missing and the api
+    // gate would leave its signup's test login behind.
+    const helpers = ["src/lib/logins.ts", "scripts/logins.mjs"];
+    const files = [...walk("src"), ...walkAll("scripts")].filter(f => /\.(ts|tsx|mjs|cjs|js)$/.test(f) && !f.includes("__tests__"));
+    const callers = files.filter(f => /\.listUsers\(/.test(read(f)));
+    expect(callers.filter(f => helpers.includes(f)).sort(), "the paging helpers no longer list logins").toEqual([...helpers].sort());
+    expect(callers.filter(f => !helpers.includes(f)), "list logins with everyLogin / loginByEmail, which read every page").toEqual([]);
+  });
+});
+
