@@ -64,6 +64,55 @@ describe("a new table decides whether the world can read it", () => {
   });
 });
 
+describe("server code takes only components from a client module", () => {
+  it("never imports a runtime value from a \"use client\" file into server code", () => {
+    // The costs page — a server component — imported its tab list, an array,
+    // from a "use client" component. Next hands the server a client reference
+    // in its place, so `COSTS_TABS.includes(...)` threw and every costs tab
+    // failed to render; caught by a browser walk before release (#486). A
+    // client module's components may cross into server code (React renders
+    // them); its values, functions and hooks may not. Type imports are erased.
+    const isClient = (f: string) => /^\s*["']use client["']/.test(read(f));
+    const resolve = (from: string, spec: string): string | null => {
+      const base = spec.startsWith("@/") ? path.join("src", spec.slice(2))
+        : spec.startsWith(".") ? path.join(path.dirname(from), spec) : null;
+      if (!base) return null;
+      for (const c of [base, `${base}.ts`, `${base}.tsx`, path.join(base, "index.ts"), path.join(base, "index.tsx")]) {
+        if (fs.existsSync(c) && fs.statSync(c).isFile()) return c;
+      }
+      return null;
+    };
+    const servers = walk("src").filter(f => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__")
+      && (f.startsWith("src/app/") || f.startsWith("src/lib/")) && !isClient(f));
+    const offenders: string[] = [];
+    let crossings = 0;
+    for (const f of servers) {
+      const source = ts.createSourceFile(f, read(f), ts.ScriptTarget.Latest, true);
+      for (const node of source.statements) {
+        if (!ts.isImportDeclaration(node) || !ts.isStringLiteral(node.moduleSpecifier)) continue;
+        const clause = node.importClause;
+        if (!clause || clause.isTypeOnly) continue;
+        const target = resolve(f, node.moduleSpecifier.text);
+        if (!target || !isClient(target)) continue;
+        crossings++;
+        const bindings = clause.namedBindings;
+        if (bindings && ts.isNamespaceImport(bindings)) {
+          offenders.push(`${f}: * as ${bindings.name.text} from ${node.moduleSpecifier.text}`);
+          continue;
+        }
+        for (const el of bindings && ts.isNamedImports(bindings) ? bindings.elements : []) {
+          if (el.isTypeOnly) continue;
+          const name = (el.propertyName ?? el.name).text;
+          // A component is PascalCase; a constant, a function or a hook is not.
+          if (!/^[A-Z][a-z0-9]/.test(name)) offenders.push(`${f}: { ${name} } from ${node.moduleSpecifier.text}`);
+        }
+      }
+    }
+    expect(crossings, "the scan found no server import of a client module").toBeGreaterThan(10);
+    expect(offenders, `values imported from "use client" modules into server code — move them to a plain module:\n${offenders.join("\n")}`).toEqual([]);
+  });
+});
+
 describe("a read that grows with time reads every row", () => {
   it("pages every time-windowed read of a table that keeps growing", () => {
     // PostgREST stops each read at its row cap — 1000 on Supabase — and says

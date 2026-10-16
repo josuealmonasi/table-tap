@@ -21,6 +21,7 @@ us, and what now catches each one.
 | Nobody hands `paymentOptions` a hardcoded `atTable` | The cart passed `true` always, so paying at the till could never be offered |
 | No route parses a request body by hand | Malformed JSON reached a money route as an exception and came back a 500 |
 | A time-windowed read of a growing table pages through every row | Analytics said "1000 Pedidos" for a day of 1100: the server stops each read at 1000 rows and says nothing |
+| Server code takes only components from a `"use client"` module | The costs page imported its tab list from a client component and every tab failed to render |
 | A refusal always carries a sentence, and every `CartRejection` has one | `/api/table-order` answered `{ rejection }`, which the waiter's screen read as "network error" |
 | Stripe payloads stay inside Stripe's limits | A table of fourteen could not pay by card: `settle_order_ids` passed 500 characters |
 | No screen offers a refund the till cannot give | A cash sale offered "Cancelar y reembolsar" and the route refused it for ever |
@@ -1702,6 +1703,9 @@ so calling `includes` failed before any cost panel rendered. Shared tab values
 now live in a plain module that both the page and its client frame can import.
 The live roles check opens the costs page as owner and manager; the Phase 2
 browser walk also opens every new tab at phone and desktop sizes.
+An invariant now parses every server file's imports and fails on any
+value, function or hook (anything not PascalCase) taken from a `use client`
+module; type imports are erased and pass.
 
 ## Reports that stopped at the thousandth row
 
