@@ -21,6 +21,7 @@ import { startOfLocalDay } from "@/lib/day-window";
 import { corteFrom, EMPTY_CORTE, type CorteAdjustment, type CortePayment } from "@/lib/corte";
 import { todaysShiftViews } from "@/lib/cash-shift-server";
 import { readTerminal } from "@/lib/terminal-server";
+import { everyRow } from "@/lib/paged";
 import type { OfflineSaleRow } from "@/components/dashboard/analytics/OfflineSalesCard";
 
 export const dynamic = "force-dynamic";
@@ -43,20 +44,21 @@ export default async function AnalyticsPage({
   // Unwrapped, like every read on this page: a failed read taken as empty
   // told the owner they had sold nothing and the drawer held nothing. The error
   // screen offers a retry instead, which is the honest answer.
-  const rows = unwrap(
-    await supabase
-      .from("orders")
-      .select("total, tip, created_at, items")
-      .eq("restaurant_id", membership.restaurant.id)
-      .eq("paid", true)
-      .neq("status", "cancelled")
-      .gte("created_at", start.toISOString())
-      .lt("created_at", end.toISOString()),
-    "the period's sales",
-  );
+  // Every row of the period: one read stops at the server's row cap without
+  // saying so, and a month of a busy café read at once is its first thousand
+  // orders. A failed page throws to the error screen, like any failed read.
+  const rows = await everyRow<AnalyticsOrder>((a, b) => supabase
+    .from("orders")
+    .select("total, tip, created_at, items")
+    .eq("restaurant_id", membership.restaurant.id)
+    .eq("paid", true)
+    .neq("status", "cancelled")
+    .gte("created_at", start.toISOString())
+    .lt("created_at", end.toISOString())
+    .order("id").range(a, b), "the period's sales");
 
   const locale = await getLocale();
-  const data = computeAnalytics((rows as AnalyticsOrder[]) ?? [], period, timeZone, new Date(), locale);
+  const data = computeAnalytics(rows, period, timeZone, new Date(), locale);
 
   // The register close is always TODAY, whatever period the charts are showing.
   // A corte is the thing somebody signs at the end of a shift; a corte "for the
@@ -73,13 +75,14 @@ export default async function AnalyticsPage({
   const admin = createAdminClient();
   const since = dayStart.toISOString();
 
-  const [paidRes, givenUpRes, owedRes] = await Promise.all([
-    admin
+  const [paidRows, givenUp, owedRows] = await Promise.all([
+    everyRow<CortePayment>((a, b) => admin
       .from("payments")
       .select("actor_email, amount, method")
       .eq("restaurant_id", membership.restaurant.id)
-      .gte("created_at", since),
-    admin
+      .gte("created_at", since)
+      .order("id").range(a, b), "today's takings"),
+    everyRow<CorteAdjustment>((a, b) => admin
       .from("user_logs")
       .select("action, detail")
       .eq("restaurant_id", membership.restaurant.id)
@@ -88,20 +91,18 @@ export default async function AnalyticsPage({
       // "charged" is food put on a customer's account: out of the kitchen,
       // owed, and in nobody's drawer.
       .in("action", ["written_off", "discounted", "refunded", "charged"])
-      .gte("created_at", since),
+      .gte("created_at", since)
+      .order("id").range(a, b), "today's write-offs and discounts"),
     // What customers owe on their accounts right now, however old.
-    admin
+    everyRow<{ total: number }>((a, b) => admin
       .from("orders")
       .select("total")
       .eq("restaurant_id", membership.restaurant.id)
       .not("account_id", "is", null)
       .eq("paid", false)
-      .neq("status", "cancelled"),
+      .neq("status", "cancelled")
+      .order("id").range(a, b), "what customer accounts owe"),
   ]);
-
-  const paidRows = unwrap(paidRes, "today's takings");
-  const givenUp = unwrap(givenUpRes, "today's write-offs and discounts");
-  const owedRows = unwrap(owedRes, "what customer accounts owe") as { total: number }[] | null;
   const corte = paidRows
     ? {
         ...corteFrom(paidRows as CortePayment[], (givenUp ?? []) as CorteAdjustment[]),

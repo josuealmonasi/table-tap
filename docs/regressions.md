@@ -20,6 +20,7 @@ us, and what now catches each one.
 | Every API route has a guard or a rate limit | `order-status` was public and unlimited from the day it was written |
 | Nobody hands `paymentOptions` a hardcoded `atTable` | The cart passed `true` always, so paying at the till could never be offered |
 | No route parses a request body by hand | Malformed JSON reached a money route as an exception and came back a 500 |
+| A time-windowed read of a growing table pages through every row | Analytics said "1000 Pedidos" for a day of 1100: the server stops each read at 1000 rows and says nothing |
 | A refusal always carries a sentence, and every `CartRejection` has one | `/api/table-order` answered `{ rejection }`, which the waiter's screen read as "network error" |
 | Stripe payloads stay inside Stripe's limits | A table of fourteen could not pay by card: `settle_order_ids` passed 500 characters |
 | No screen offers a refund the till cannot give | A cash sale offered "Cancelar y reembolsar" and the route refused it for ever |
@@ -1701,3 +1702,19 @@ so calling `includes` failed before any cost panel rendered. Shared tab values
 now live in a plain module that both the page and its client frame can import.
 The live roles check opens the costs page as owner and manager; the Phase 2
 browser walk also opens every new tab at phone and desktop sizes.
+
+## Reports that stopped at the thousandth row
+
+PostgREST returns at most 1000 rows per request on Supabase and says nothing
+when it stops. Analytics read a period's paid orders in one request, so a day
+with 1100 paid orders showed "1000 Pedidos" and MX$1,000.00 against MX$1,100.00
+in the database — reproduced on dev with planted orders. The same shape sat
+under today's corte and each shift's expected cash (the figure a blind count
+is compared with), the cashier's own takings on the bills screen, every
+customer account's balance, the visit card's numbers (whose `.limit(10000)`
+changed nothing: the cap wins), the month's platform fees behind the fee
+ceiling, and the money gate itself, which would have reconciled only the
+first thousand payments and reported success. Each now pages through
+`everyRow`, and an invariant fails on any time-windowed read of a growing
+table that neither pages, says how few rows it wants, nor only counts.
+

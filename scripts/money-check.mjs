@@ -25,14 +25,32 @@ const bad = w => { failed++; console.log(`    BAD      ${w}`); };
 
 console.log(`\nMoney — ${prod ? "production" : "development"}\n`);
 
-const { data: orders, error: oErr } = await db
+/**
+ * Every row of a read, page by page until one comes back empty.
+ *
+ * The server stops each read at its row cap and says nothing: a ledger read
+ * whole is the first thousand payments of it, and a reconciliation of part of
+ * the ledger reports success over what it never looked at. Each read is
+ * ordered on its id so the pages do not overlap.
+ */
+async function all(build) {
+  const rows = [];
+  for (;;) {
+    const { data, error } = await build().order("id").range(rows.length, rows.length + 999);
+    if (error) return { data: null, error };
+    if (!data?.length) return { data: rows, error: null };
+    rows.push(...data);
+  }
+}
+
+const { data: orders, error: oErr } = await all(() => db
   .from("orders")
-  .select("id, restaurant_id, total, paid, written_off, status, session_id, account_id");
+  .select("id, restaurant_id, total, paid, written_off, status, session_id, account_id"));
 if (oErr) { console.log(`  cannot read orders: ${oErr.message}`); process.exit(1); }
 
-const { data: payments, error: pErr } = await db
+const { data: payments, error: pErr } = await all(() => db
   .from("payments")
-  .select("id, order_id, session_id, account_id, amount");
+  .select("id, order_id, session_id, account_id, amount"));
 if (pErr) { console.log(`  cannot read payments: ${pErr.message}`); process.exit(1); }
 
 const paidFor = new Map();
@@ -186,11 +204,11 @@ nonsense.length === 0
 // Only from the moment the ledger began naming who took the money. Everything
 // before that is the backfill, which was built from `orders` and could not know
 // an actor; that history is not recoverable and is not this check's business.
-const { data: staffPaid, error: sErr } = await db
+const { data: staffPaid, error: sErr } = await all(() => db
   .from("payments")
   .select("actor_email, method, amount, created_at")
   .not("actor_email", "is", null)
-  .order("created_at");
+  .order("created_at"));
 if (sErr) { console.log(`  cannot read payments: ${sErr.message}`); process.exit(1); }
 
 const era = staffPaid[0]?.created_at;
@@ -198,7 +216,7 @@ const era = staffPaid[0]?.created_at;
 if (!era) {
   console.log("    –        no staff-taken payment yet — nothing to reconcile");
 } else {
-  const { data: logs, error: lErr } = await db
+  const { data: logs, error: lErr } = await all(() => db
     .from("user_logs")
     .select("actor_email, detail, created_at")
     // A customer account collected in person is money in a drawer too.
@@ -208,16 +226,16 @@ if (!era) {
     // closes it. Counting only the last would say the waiter's drawer holds
     // one payment where it holds four.
     .in("action", ["paid", "collected"])
-    .gte("created_at", era);
+    .gte("created_at", era));
   if (lErr) { console.log(`  cannot read user_logs: ${lErr.message}`); process.exit(1); }
 
   // 5. Cash is handed to a person, so the ledger must name them.
   const anonCash = staffPaid.filter(p => p.method === "cash" && !p.actor_email);
-  const { data: allSince } = await db
+  const { data: allSince } = await all(() => db
     .from("payments")
     .select("method, actor_email")
     .eq("method", "cash")
-    .gte("created_at", era);
+    .gte("created_at", era));
   const nameless = (allSince ?? []).filter(p => !p.actor_email);
   nameless.length === 0 && anonCash.length === 0
     ? ok("every cash payment says who took it")
@@ -272,9 +290,9 @@ if (!era) {
 // left alone rather than guessed at.
 const REFUND_ERA = "2026-09-22T00:00:00Z";
 {
-  const { data: cancelLogs, error: gErr } = await db
+  const { data: cancelLogs, error: gErr } = await all(() => db
     .from("user_logs").select("restaurant_id, action, detail")
-    .eq("entity", "order").in("action", ["refunded", "cancelled"]).gte("created_at", REFUND_ERA);
+    .eq("entity", "order").in("action", ["refunded", "cancelled"]).gte("created_at", REFUND_ERA));
 
   if (gErr) {
     bad(`cannot read the cancel log: ${gErr.message}`);
@@ -326,10 +344,10 @@ const REFUND_ERA = "2026-09-22T00:00:00Z";
 // right and the paperwork was missing, which is the kind of gap nobody finds
 // until an owner asks where MX$19.50 went.
 {
-  const { data: discounted, error: dErr } = await db
-    .from("orders").select("id, coupon_code, discount").not("coupon_code", "is", null);
-  const { data: redemptions, error: rErr } = await db
-    .from("coupon_redemptions").select("order_id, amount");
+  const { data: discounted, error: dErr } = await all(() => db
+    .from("orders").select("id, coupon_code, discount").not("coupon_code", "is", null));
+  const { data: redemptions, error: rErr } = await all(() => db
+    .from("coupon_redemptions").select("order_id, amount"));
 
   if (dErr || rErr) {
     bad(`cannot read the coupon records: ${(dErr ?? rErr).message}`);
