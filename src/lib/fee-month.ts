@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { everyRow } from "@/lib/paged";
+import { everyRow, everyRowIn } from "@/lib/paged";
 import { CHECKOUT_HOLD_MINUTES } from "@/lib/service-reprice";
 
 /** An order's recorded fee, and what decides whether we really have it. */
@@ -9,6 +9,7 @@ export interface FeeRow {
   status: string;
   created_at: string;
   card_checkout_at: string | null;
+  stripe_payment_intent: string | null;
 }
 
 /**
@@ -22,8 +23,18 @@ export interface FeeRow {
  * the refund. Each brought the ceiling early, and orders past it paid
  * nothing. A checkout still open counts, so two diners paying at once are
  * never both priced under a ceiling only one of them fits under.
+ *
+ * A cancelled sale gives its fee back only when its charge was its own. A
+ * table's bill pays one fee for the whole sitting, written on its first
+ * order; cancelling that order refunds its share of the charge and the same
+ * share of the fee, and the rest stays ours. Not counting it would let the
+ * month pass the ceiling, so a fee whose charge covered other orders, or
+ * whose charge is not known, still counts — `sharedCharges` names them.
  */
-export function feeCounts(o: FeeRow, now = Date.now()): boolean {
+export function feeCounts(o: FeeRow, now = Date.now(), sharedCharges: ReadonlySet<string> = new Set()): boolean {
+  if (o.paid && o.status === "cancelled") {
+    return !o.stripe_payment_intent || sharedCharges.has(o.stripe_payment_intent);
+  }
   if (o.status === "cancelled") return false;
   if (o.paid) return true;
   if (o.status !== "pending_payment") return false;
@@ -55,12 +66,26 @@ export async function feesTakenThisMonth(restaurantId: string, now = new Date())
   const db = createAdminClient();
   const data = await everyRow<FeeRow>((a, b) => db
     .from("orders")
-    .select("platform_fee, paid, status, created_at, card_checkout_at")
+    .select("platform_fee, paid, status, created_at, card_checkout_at, stripe_payment_intent")
     .eq("restaurant_id", restaurantId)
     .gt("platform_fee", 0)
     .gte("created_at", since.toISOString())
     .order("id").range(a, b), "this month's fees");
 
-  const pesos = data.filter(o => feeCounts(o, now.getTime())).reduce((sum, o) => sum + Number(o.platform_fee ?? 0), 0);
+  // The charges behind this month's cancelled sales that also paid for other
+  // orders: their fee was only partly refunded. A handful of rows a month.
+  const intents = data.filter(o => o.paid && o.status === "cancelled" && o.stripe_payment_intent)
+    .map(o => o.stripe_payment_intent as string);
+  const covered = await everyRowIn<{ stripe_payment_intent: string }>(intents, (slice, from, to) => db
+    .from("orders")
+    .select("stripe_payment_intent")
+    .eq("restaurant_id", restaurantId)
+    .in("stripe_payment_intent", slice)
+    .order("id").range(from, to), "the charges behind cancelled sales");
+  const ordersPerCharge = new Map<string, number>();
+  for (const o of covered) ordersPerCharge.set(o.stripe_payment_intent, (ordersPerCharge.get(o.stripe_payment_intent) ?? 0) + 1);
+  const shared = new Set([...ordersPerCharge].filter(([, n]) => n > 1).map(([intent]) => intent));
+
+  const pesos = data.filter(o => feeCounts(o, now.getTime(), shared)).reduce((sum, o) => sum + Number(o.platform_fee ?? 0), 0);
   return Math.round(pesos * 100);
 }

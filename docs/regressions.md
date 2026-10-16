@@ -1783,3 +1783,14 @@ open (`CHECKOUT_HOLD_MINUTES`) — two diners paying at once must never both be
 priced under a ceiling only one of them fits under. `fee-month.spec.ts`
 covers each case; the same probe now adds nothing.
 
+The first version of that fix dropped every cancelled sale's fee, which was
+right only for a diner's own checkout. A table's bill pays one fee for the
+whole sitting, written on its first order, and cancelling that order refunds
+only its share: dropping the whole fee counted the month short, the one
+direction that could charge a restaurant past its ceiling. A cancelled fee
+now stops counting only when its charge is known to have covered that order
+alone; a shared charge, or one never written on the order (a table's bill
+settles without one), still counts. Probed on dev: a cancelled table-bill fee
+order and a cancelled own checkout at MX$0.75 each now add 75 cents, the
+table's.
+
