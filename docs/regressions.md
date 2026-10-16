@@ -1847,3 +1847,15 @@ Probed on dev through the real `takeFee`: a pre-ledger table bill delivered
 twice is counted once; a session whose row is gone is counted from what it
 carries; an order the backfill counted is not counted again.
 
+A third review (Codex) closed the tenancy finding and found five more, fixed:
+a 409 (an idempotency key still being worked on) was read as "no session"
+and released its fee; the fallback swallowed a failed read and dropped the
+fee — it throws now, and a session we wrote needs no read at all; a legacy
+table bill or share replayed after its fee was backfilled was counted twice —
+it is keyed now by the order the old code wrote the fee on, the backfill's
+key; and a share reopened by the same diner opened a fee-free second session
+— the earlier one is expired at Stripe first. The cutover is closed by fact,
+not code: no production restaurant has a Stripe account, so no session from
+before the ledger can be open, and the migration refuses to apply while one
+does. Each fix has a test in `platform-fee.spec.ts` that fails with it undone.
+

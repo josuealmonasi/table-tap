@@ -9,7 +9,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchTableBill } from "@/lib/bill-data";
 import { tableBill } from "@/lib/table-bill";
 import { getPlan } from "@/lib/plan-server";
-import { NO_FEE, feeMetadata, releaseFee, reserveFeeCents, stripeRefusedOutright } from "@/lib/platform-fee";
+import {
+  NO_FEE, attachFeeSession, feeMetadata, releaseFee, reserveFeeCents, retirePriorShareSession, stripeRefusedOutright,
+} from "@/lib/platform-fee";
 import { orderFeeCents } from "@/lib/plan";
 import { round2 } from "@/lib/money";
 
@@ -127,11 +129,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const billFee = feePlan ? orderFeeCents(feePlan.limits, Math.round(Number(split.amount) * 100)) : 0;
   const shares = Math.max(1, Number(split.shares) || 1);
   const slice = Math.floor(billFee / shares) + (claim.share_no === 1 ? billFee % shares : 0);
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+  const onTheirAccount = { stripeAccount: restaurant.stripe_account_id };
+  const ref = `split:${splitId}:${claim.share_no}`;
   let fee = NO_FEE;
   try {
-    fee = feePlan && slice > 0
-      ? await reserveFeeCents(restaurantId, feePlan.limits, slice, "split", `split:${splitId}:${claim.share_no}`)
-      : NO_FEE;
+    if (feePlan && slice > 0) {
+      // The share reopened: its earlier session is expired first, so the new
+      // one carries the slice and the old can no longer be paid fee-free.
+      const prior = await retirePriorShareSession(
+        restaurantId, ref,
+        id => stripe.checkout.sessions.expire(id, {}, onTheirAccount),
+        id => stripe.checkout.sessions.retrieve(id, {}, onTheirAccount),
+      );
+      if (prior === "paid") return await apiError("apiErr.splitAlreadyPaid", 409);
+      fee = await reserveFeeCents(restaurantId, feePlan.limits, slice, "split", ref);
+    }
   } catch {
     return await apiError("apiErr.generic", 502);
   }
@@ -139,7 +152,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const giveBackFee = () => releaseFee(fee.id).catch(err => console.error("split pay: the fee reservation stays counted", err));
 
   const origin = req.headers.get("origin") ?? new URL(req.url).origin;
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
   try {
     const session = await stripe.checkout.sessions.create(
@@ -177,6 +189,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { stripeAccount: restaurant.stripe_account_id },
     );
 
+    await attachFeeSession(fee, session.id);
     // A session with no page is still a session: its fee waits for expiry.
     if (!session.url) return await apiError("apiErr.generic", 502);
     return NextResponse.json({ url: session.url });

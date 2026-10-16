@@ -83,12 +83,14 @@ export function feeMetadata(hold: FeeHold, restaurantId: string): Record<string,
 
 /**
  * Stripe answered that it made nothing: a 4xx. A dropped connection or a 5xx
- * may have made the session anyway (Stripe calls those indeterminate), so its
- * fee stays counted until Stripe's expiry says otherwise.
+ * may have made the session anyway (Stripe calls those indeterminate), and so
+ * may a 409 — the same idempotency key still being worked on, which the SDK's
+ * own retries can run into — so their fee stays counted until Stripe's expiry
+ * says otherwise.
  */
 export function stripeRefusedOutright(err: unknown): boolean {
   const status = err && typeof err === "object" && "statusCode" in err ? Number((err as { statusCode?: unknown }).statusCode) : NaN;
-  return status >= 400 && status < 500;
+  return status >= 400 && status < 500 && status !== 409;
 }
 
 /** Give back a reservation whose session was never created, or that expired. */
@@ -138,42 +140,100 @@ export async function takeFee(session: Stripe.Checkout.Session, fee: SessionFee)
 }
 
 /**
- * The fee a session charged, from the session and the rows it names: what we
- * now write on it (`fee_cents`), or what a session opened before the ledger
- * carried — `settle_fee` on a table's bill or a share, the order's own
- * `platform_fee`, an account checkout's `fee`.
+ * The fee a session charged, and the key it is counted under once. A session
+ * we wrote carries it whole (`fee_cents`, `restaurant_id`), so nothing has to
+ * be read. One opened before the ledger carried `settle_fee` (a table's bill,
+ * a share), or left it on the order (a diner's own order) or on its account
+ * checkout; that fee is keyed by the order the old code wrote it on, the
+ * same `order:<id>` the backfill uses, so a session replayed after its fee
+ * was copied in is never counted twice. A read that fails throws: Stripe
+ * sends the event again, rather than the fee being dropped.
  */
 async function feeChargedBy(
   session: Stripe.Checkout.Session,
   fee: SessionFee,
 ): Promise<{ restaurantId: string; cents: number; ref: string } | null> {
+  if (fee.feeCents && fee.restaurantId) {
+    const cents = Number(fee.feeCents);
+    return cents > 0 ? { restaurantId: fee.restaurantId, cents, ref: `session:${session.id}` } : null;
+  }
   const db = createAdminClient();
   const meta = session.metadata ?? {};
   const pesos = (v: unknown) => Math.round(Number(v ?? 0) * 100);
-  const ref = `session:${session.id}`;
+  const read = async <T>(q: PromiseLike<{ data: T | null; error: { message: string } | null }>, what: string): Promise<T | null> => {
+    const { data, error } = await q;
+    if (error) throw new Error(`Could not read ${what} to record its fee: ${error.message}`);
+    return data;
+  };
+  const carried = (restaurantId: string, cents: number, orderId: string | null) =>
+    cents > 0 ? { restaurantId, cents, ref: orderId ? `order:${orderId}` : `session:${session.id}` } : null;
+
   if (meta.account_checkout) {
-    const { data } = await db.from("account_checkouts").select("restaurant_id, fee").eq("id", meta.account_checkout).maybeSingle();
-    const cents = fee.feeCents ? Number(fee.feeCents) : pesos(data?.fee);
-    return data && cents > 0 ? { restaurantId: fee.restaurantId ?? data.restaurant_id, cents, ref } : null;
+    const checkout = await read<{ restaurant_id: string; fee: number; order_ids: string[] | null }>(db.from("account_checkouts").select("restaurant_id, fee, order_ids")
+      .eq("id", meta.account_checkout).maybeSingle(), "the account checkout");
+    if (!checkout || pesos(checkout.fee) <= 0) return null;
+    // `account_checkout_settle` wrote it on the newest order it paid.
+    const newest = await read<{ id: string }>(db.from("orders").select("id").in("id", checkout.order_ids ?? [])
+      .neq("status", "cancelled").order("created_at", { ascending: false }).limit(1).maybeSingle(), "the account's orders");
+    return carried(checkout.restaurant_id, pesos(checkout.fee), newest?.id ?? null);
   }
   if (meta.split_id) {
-    const { data } = await db.from("bill_splits").select("restaurant_id").eq("id", meta.split_id).maybeSingle();
-    const cents = fee.feeCents ? Number(fee.feeCents) : pesos(meta.settle_fee);
-    return data && cents > 0 ? { restaurantId: fee.restaurantId ?? data.restaurant_id, cents, ref } : null;
+    const split = await read<{ restaurant_id: string; session_id: string }>(db.from("bill_splits").select("restaurant_id, session_id")
+      .eq("id", meta.split_id).maybeSingle(), "the divided bill");
+    if (!split || pesos(meta.settle_fee) <= 0) return null;
+    // The old settle wrote it on the sitting's first live order.
+    const first = await read<{ id: string }>(db.from("orders").select("id").eq("session_id", split.session_id)
+      .neq("status", "cancelled").neq("status", "pending_payment").eq("written_off", false)
+      .order("created_at", { ascending: true }).limit(1).maybeSingle(), "the sitting's first order");
+    return carried(split.restaurant_id, pesos(meta.settle_fee), first?.id ?? null);
   }
   const billOrders = unpackOrderIds(meta);
   const orderId = billOrders[0] ?? meta.order_id;
   if (!orderId) return null;
-  const { data } = await db.from("orders").select("restaurant_id, platform_fee").eq("id", orderId).maybeSingle();
-  if (!data) return null;
-  if (billOrders.length) {
-    const cents = fee.feeCents ? Number(fee.feeCents) : pesos(meta.settle_fee);
-    return cents > 0 ? { restaurantId: fee.restaurantId ?? data.restaurant_id, cents, ref } : null;
+  const order = await read<{ restaurant_id: string; platform_fee: number }>(db.from("orders").select("restaurant_id, platform_fee")
+    .eq("id", orderId).maybeSingle(), "the order");
+  if (!order) return null;
+  // A table's bill wrote it on the first order it settled; a diner's own on itself.
+  return carried(order.restaurant_id, billOrders.length ? pesos(meta.settle_fee) : pesos(order.platform_fee), orderId);
+}
+
+/**
+ * Before a share opens a new session carrying its slice of the fee: the one
+ * it opened before is expired at Stripe and its reservation released, so a
+ * share never has two payable sessions — one of them fee-free. Answers
+ * "paid" when that session was already paid, and throws when Stripe's answer
+ * is unknown, so no second fee-bearing session is made.
+ */
+export async function retirePriorShareSession(
+  restaurantId: string,
+  ref: string,
+  expire: (sessionId: string) => Promise<{ status: string | null }>,
+  retrieve: (sessionId: string) => Promise<{ status: string | null }>,
+): Promise<"none" | "retired" | "paid"> {
+  const db = createAdminClient();
+  const { data: prior, error } = await db.from("platform_fees").select("id, stripe_session_id")
+    .eq("restaurant_id", restaurantId).eq("ref", ref).eq("status", "open").maybeSingle();
+  if (error) throw new Error(`Could not read the share's fee: ${error.message}`);
+  if (!prior?.stripe_session_id) return "none";
+  let status: string | null;
+  try {
+    status = (await expire(prior.stripe_session_id)).status;
+  } catch {
+    // Not open any more — read what it became instead.
+    status = (await retrieve(prior.stripe_session_id)).status;
   }
-  // A diner's own order: keyed by the order, the same key the backfill uses,
-  // so an order counted from its own history is never counted twice.
-  const cents = fee.feeCents ? Number(fee.feeCents) : pesos(data.platform_fee);
-  return cents > 0 ? { restaurantId: fee.restaurantId ?? data.restaurant_id, cents, ref: `order:${orderId}` } : null;
+  if (status === "complete") return "paid";
+  if (status !== "expired") throw new Error(`The share's earlier session is ${status}`);
+  await releaseFee(prior.id);
+  return "retired";
+}
+
+/** Which Stripe session a reservation's fee rides on, so a reopened share can retire it. */
+export async function attachFeeSession(hold: FeeHold, sessionId: string): Promise<void> {
+  if (!hold.id) return;
+  const { error } = await createAdminClient().from("platform_fees")
+    .update({ stripe_session_id: sessionId }).eq("id", hold.id);
+  if (error) console.error("platform fee: its session could not be noted", error);
 }
 
 /** Stripe's expiry for a session nobody paid. */

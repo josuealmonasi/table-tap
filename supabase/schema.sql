@@ -4539,6 +4539,8 @@ create table if not exists platform_fees (
   -- One fee per thing that pays one fee: a divided bill pays it once.
   ref                   text,
   stripe_payment_intent text,
+  -- The Stripe session the fee rides on, so a reopened share can retire it.
+  stripe_session_id     text,
   charge_cents          integer check (charge_cents is null or charge_cents > 0),
   created_at            timestamptz not null default now(),
   settled_at            timestamptz
@@ -4548,6 +4550,7 @@ create index if not exists platform_fees_intent_idx on platform_fees(restaurant_
   where stripe_payment_intent is not null;
 create unique index if not exists platform_fees_ref_idx on platform_fees(restaurant_id, ref)
   where ref is not null and status <> 'released';
+alter table platform_fees add column if not exists stripe_session_id text;
 alter table platform_fees drop constraint if exists platform_fees_source_check;
 alter table platform_fees add constraint platform_fees_source_check
   check (source in ('order', 'bill', 'split', 'account', 'session', 'backfill'));
