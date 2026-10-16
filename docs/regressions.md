@@ -21,6 +21,7 @@ us, and what now catches each one.
 | Nobody hands `paymentOptions` a hardcoded `atTable` | The cart passed `true` always, so paying at the till could never be offered |
 | No route parses a request body by hand | Malformed JSON reached a money route as an exception and came back a 500 |
 | A time-windowed read of a growing table pages through every row | Analytics said "1000 Pedidos" for a day of 1100: the server stops each read at 1000 rows and says nothing |
+| Every read of the extras each dish offers pages, or is one dish's | Past 1000 links the menu editor read the first thousand, and saving a dish's extras deleted the ones it never saw |
 | Server code takes only components from a `"use client"` module | The costs page imported its tab list from a client component and every tab failed to render |
 | A cancelled terminal sale leaves the deposit it never reaches | The terminal deposits expected a voided sale, and read the bank short for money correctly given back |
 | A refusal always carries a sentence, and every `CartRejection` has one | `/api/table-order` answered `{ rejection }`, which the waiter's screen read as "network error" |
@@ -1742,3 +1743,25 @@ The same read passed every order id it had paid in one `in` filter. Dev
 refuses that request somewhere between 300 and 500 ids, about 18 KB of URL,
 which a café taking thirty terminal cards a day reaches inside the 14 days.
 The order now rides along on the payment through its foreign key.
+
+## Extras the editor never saw, deleted when a dish was saved
+
+`item_addons` grows with the menu, not the clock: dishes times extras. Both the
+menu editor and the diner's menu read it in one request, with every dish's id
+in the URL. Reproduced on dev with every Demo extra on every dish (1056
+links): the editor's read, as the owner, came back with exactly 1000; three
+dishes came back short, two with no extras at all; and unticking one extra on
+Grilled Salmon and saving left it with 15 of 24 — the editor replaces a dish's
+whole set with what it holds, so eight extras nobody touched were deleted.
+The editor also swallowed a failed read and showed no extras at all, which a
+save would then make true. Past a few hundred dishes the URL itself is refused
+(dev refuses an `in` filter between 300 and 500 uuids).
+
+`everyRowIn` (`src/lib/paged.ts`) sends the ids in slices of 150 and pages
+each slice; both reads use it, in each link's saved order. The editor throws
+on a failed read, stays locked, and says so. In the same seeded state the
+editor now ticks all 12 of Grilled Salmon's menu's extras where the old read
+held 7, and the diner is offered all 12. An invariant fails on any read of
+`item_addons` that neither pages nor is one dish's; it named `menu-data.ts`
+when the old read was put back.
+

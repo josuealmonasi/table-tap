@@ -154,6 +154,34 @@ describe("a read that grows with time reads every row", () => {
     expect(windows, "the scan found no time-windowed read").toBeGreaterThan(10);
     expect(offenders, `reads that stop at the row cap without saying so — page them with everyRow:\n${offenders.join("\n")}`).toEqual([]);
   });
+
+  it("pages every read of the extras each dish offers", () => {
+    // `item_addons` grows with the menu, not the clock: dishes times extras,
+    // and a coffee shop with a hundred drinks and ten milks, syrups and shots
+    // is past the cap. The menu editor read it in one request and swallowed
+    // any error, and saving a dish's extras replaces its whole set with what
+    // the editor holds — so a set read short is saved short, and the rest are
+    // deleted. Its ids rode in one URL too, which the server refuses past a
+    // few hundred dishes. A read pages (`everyRow`, `everyRowIn`) or is one dish's.
+    const files = walk("src").filter(f => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__"));
+    const offenders: string[] = [];
+    let reads = 0;
+    for (const f of files) {
+      const src = read(f);
+      for (const m of src.matchAll(/\.from\("item_addons"\)/g)) {
+        const end = src.indexOf(";", m.index);
+        const chain = src.slice(m.index, end === -1 ? undefined : end);
+        if (!/^\.from\("item_addons"\)\s*\.select\(/.test(chain)) continue;
+        reads++;
+        const before = src.slice(Math.max(0, m.index - 400), m.index);
+        const call = before.lastIndexOf("everyRow");
+        const paged = call !== -1 && !before.slice(call).includes(".from(") && /\.range\(/.test(chain);
+        if (!paged && !/\.eq\("product_id",/.test(chain)) offenders.push(`${f}: .from("item_addons") read in one request`);
+      }
+    }
+    expect(reads, "the scan found no read of item_addons").toBeGreaterThanOrEqual(2);
+    expect(offenders, `extras reads that stop at the row cap — page them with everyRowIn:\n${offenders.join("\n")}`).toEqual([]);
+  });
 });
 
 describe("the RLS gate asks about every table", () => {

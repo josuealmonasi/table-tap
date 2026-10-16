@@ -356,6 +356,7 @@ myBill: "View my bill",
     dietaryAllergens: "Dietary & allergens",
     shownToCustomers: "(shown to customers)",
     extrasOffered: "Extras offered",
+    loadFailed: "We couldn't load your menu, so nothing can be changed yet. Reload the page to try again.",
     addProduct: "+ Add product",
     saveChanges: "Save changes",
     // Product row
