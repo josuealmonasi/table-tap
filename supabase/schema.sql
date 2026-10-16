@@ -4488,6 +4488,12 @@ grant execute on function public.take_stock_floor(uuid, jsonb) to service_role;
 
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 
+-- When it was cancelled. A sale on the restaurant's own terminal is voided
+-- there by a person: the same day, the bank never pays it; a later day, it
+-- comes out of a deposit still to come. The deposits are dated by this. Null
+-- for orders cancelled before it was kept.
+alter table orders add column if not exists cancelled_at timestamptz;
+
 -- The status guard and legacy handback share one transaction. New orders are
 -- returned by the trigger using their exact reservation, regardless of plan.
 create or replace function public.cancel_order(
@@ -4495,7 +4501,7 @@ create or replace function public.cancel_order(
 ) returns boolean language plpgsql security definer set search_path = public as $$
 declare v_order orders%rowtype;
 begin
-  update orders set status = 'cancelled', stripe_refund_id = p_refund
+  update orders set status = 'cancelled', stripe_refund_id = p_refund, cancelled_at = now()
     where id = p_order and restaurant_id = p_restaurant and status in ('received', 'preparing')
     returning * into v_order;
   if not found then return false; end if;

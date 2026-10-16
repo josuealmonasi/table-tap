@@ -50,6 +50,50 @@ describe("what the terminal should deposit", () => {
     expect(depositDays([], marked(96.5), 3.5, 1, TZ, "2026-10-20")[0]).toMatchObject({ expected: 96.5, status: "received", takings: 0 });
   });
 
+  // A cancelled sale is voided on the terminal by a person, as the cancel
+  // dialog asks. The deposits used to count it anyway, and read short.
+  describe("a sale cancelled and voided on the terminal", () => {
+    const voided = (amount: number, at: string, voidedAt: string) => ({ amount, tip: 0, created_at: at, voided_at: voidedAt });
+
+    it("counts nowhere when voided the day it was taken: the bank never pays it", () => {
+      const days = depositDays(
+        [pay(300, 0, "2026-10-15T15:00:00Z"), voided(100, "2026-10-15T16:00:00Z", "2026-10-15T16:05:00Z")],
+        [], 3.5, 1, TZ, "2026-10-15",
+      );
+      expect(days).toHaveLength(1);
+      expect(days[0]).toMatchObject({ count: 1, takings: 300, fee: 10.5, givenBack: 0, expected: 289.5 });
+    });
+
+    it("comes out of the deposit of the day it was voided, when voided later", () => {
+      const days = depositDays(
+        [voided(100, "2026-10-13T15:00:00Z", "2026-10-15T17:00:00Z"), pay(300, 0, "2026-10-15T15:00:00Z")],
+        [], 3.5, 1, TZ, "2026-10-15",
+      );
+      // The bank paid the 13th's sale; the 15th's deposit gives it back.
+      expect(days.find(d => d.day === "2026-10-13")).toMatchObject({ count: 1, takings: 100, givenBack: 0, expected: 96.5 });
+      expect(days.find(d => d.day === "2026-10-15")).toMatchObject({ count: 1, takings: 300, fee: 10.5, givenBack: 100, expected: 189.5 });
+    });
+
+    it("waits for the next day with sales when the day it was voided had none", () => {
+      const sales = [voided(100, "2026-10-13T15:00:00Z", "2026-10-14T17:00:00Z")];
+      const later = depositDays([...sales, pay(300, 0, "2026-10-15T15:00:00Z")], [], 0, 1, TZ, "2026-10-15");
+      expect(later.map(d => d.day)).toEqual(["2026-10-15", "2026-10-13"]);
+      expect(later[0]).toMatchObject({ givenBack: 100, expected: 200 });
+      // No sale since: it stays on its own day, waiting — never late.
+      const none = depositDays(sales, [], 0, 1, TZ, "2026-10-20");
+      expect(none.find(d => d.day === "2026-10-14")).toMatchObject({ count: 0, givenBack: 100, status: "pending" });
+    });
+
+    it("lists no day before the window, but still takes back a void from it", () => {
+      const days = depositDays(
+        [voided(100, "2026-10-01T15:00:00Z", "2026-10-15T17:00:00Z"), pay(300, 0, "2026-10-15T15:00:00Z")],
+        [], 0, 1, TZ, "2026-10-15", "2026-10-02",
+      );
+      expect(days.map(d => d.day)).toEqual(["2026-10-15"]);
+      expect(days[0]).toMatchObject({ takings: 300, givenBack: 100, expected: 200 });
+    });
+  });
+
   it("lists the newest day first", () => {
     const days = depositDays(
       [pay(1, 0, "2026-10-13T15:00:00Z"), pay(1, 0, "2026-10-15T15:00:00Z"), pay(1, 0, "2026-10-14T15:00:00Z")],

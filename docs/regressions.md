@@ -22,6 +22,7 @@ us, and what now catches each one.
 | No route parses a request body by hand | Malformed JSON reached a money route as an exception and came back a 500 |
 | A time-windowed read of a growing table pages through every row | Analytics said "1000 Pedidos" for a day of 1100: the server stops each read at 1000 rows and says nothing |
 | Server code takes only components from a `"use client"` module | The costs page imported its tab list from a client component and every tab failed to render |
+| A cancelled terminal sale leaves the deposit it never reaches | The terminal deposits expected a voided sale, and read the bank short for money correctly given back |
 | A refusal always carries a sentence, and every `CartRejection` has one | `/api/table-order` answered `{ rejection }`, which the waiter's screen read as "network error" |
 | Stripe payloads stay inside Stripe's limits | A table of fourteen could not pay by card: `settle_order_ids` passed 500 characters |
 | No screen offers a refund the till cannot give | A cash sale offered "Cancelar y reembolsar" and the route refused it for ever |
@@ -1722,3 +1723,22 @@ first thousand payments and reported success. Each now pages through
 `everyRow`, and an invariant fails on any time-windowed read of a growing
 table that neither pages, says how few rows it wants, nor only counts.
 
+## A voided terminal sale the bank was still expected to pay
+
+Cancelling a sale paid on the restaurant's own terminal asks a person to void
+it there, and keeps its payment row — the money did arrive. The terminal's
+deposits read every card payment without Stripe, cancelled or not, so a sale
+voided minutes after it was rung stayed in the day's expected deposit:
+reproduced on dev, a MX$9.90 sale cancelled with "devolver MX$9.90 en la
+terminal" still read "1 cobros, MX$9.90 · MX$9.55 el lun 19 de oct", which
+turns late, then short, for money that was correctly given back. The corte
+had it right all along: it takes a handback out of the drawer the day it is
+handed back. `cancel_order` now stamps `orders.cancelled_at`; a sale voided
+the day it was taken counts nowhere, and one voided later comes out of the
+next deposit from that day on. `terminal.spec.ts` covers each case, and fails
+on all four with the void ignored.
+
+The same read passed every order id it had paid in one `in` filter. Dev
+refuses that request somewhere between 300 and 500 ids, about 18 KB of URL,
+which a café taking thirty terminal cards a day reaches inside the 14 days.
+The order now rides along on the payment through its foreign key.
