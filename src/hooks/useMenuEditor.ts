@@ -36,14 +36,23 @@ export function useMenuEditor(restaurantId: string) {
   const [links, setLinks] = useState<Record<string, string[]>>({});
 
   const reload = useCallback(async () => {
-    const data = await fetchMenuData(supabase, restaurantId);
+    let data: Awaited<ReturnType<typeof fetchMenuData>>;
+    try {
+      data = await fetchMenuData(supabase, restaurantId);
+    } catch (err) {
+      // Left loading, so nothing can be edited: an editor holding part of the
+      // menu would save that part over the whole.
+      console.error(err);
+      toast(t("menu.loadFailed"), "error");
+      return;
+    }
     setMenus(data.menus);
     setSections(data.sections);
     setProducts(data.products);
     setAddons(data.addons);
     setLinks(data.links);
     setLoading(false);
-  }, [restaurantId, supabase]);
+  }, [restaurantId, supabase, toast, t]);
 
   useEffect(() => {
     reload();

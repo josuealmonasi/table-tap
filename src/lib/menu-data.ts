@@ -1,5 +1,6 @@
 import type { createClient } from "@/lib/supabase/client";
 import type { Category, Menu, MenuItem } from "@/lib/types";
+import { everyRowIn } from "@/lib/paged";
 
 type Supabase = ReturnType<typeof createClient>;
 
@@ -39,17 +40,21 @@ export async function fetchMenuData(
   const allItems = (items as MenuItem[]) ?? [];
   const products = allItems.filter(i => !i.is_addon);
 
+  // Every link, or none: saving a dish's extras replaces the whole set with
+  // what the editor holds, so a set read short would be saved short. Thrown,
+  // never swallowed.
   const links: Record<string, string[]> = {};
-  const productIds = products.map(p => p.id);
-  if (productIds.length) {
-    const { data: linkRows } = await supabase
+  const linkRows = await everyRowIn<{ product_id: string; addon_id: string }>(
+    products.map(p => p.id),
+    (slice, from, to) => supabase
       .from("item_addons")
       .select("product_id, addon_id")
-      .in("product_id", productIds);
-    for (const row of (linkRows as { product_id: string; addon_id: string }[]) ?? []) {
-      (links[row.product_id] ??= []).push(row.addon_id);
-    }
-  }
+      .in("product_id", slice)
+      .order("product_id").order("sort_order").order("addon_id")
+      .range(from, to),
+    "the extras each dish offers",
+  );
+  for (const row of linkRows) (links[row.product_id] ??= []).push(row.addon_id);
 
   return {
     menus: (menuRows as Menu[]) ?? [],

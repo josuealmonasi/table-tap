@@ -10,6 +10,7 @@ import type { StoredDietaryTag } from "@/lib/dietary";
 import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
 import { offeredProgram } from "@/lib/menu-shell";
+import { everyRowIn } from "@/lib/paged";
 import { unwrap } from "@/lib/unwrap";
 import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
 import { issueVisitPass } from "@/lib/loyalty/pass";
@@ -175,17 +176,18 @@ export async function loadOrderingData(
 
   // Which extras each product offers (product_id → addon_id[]).
   const extrasByProduct: Record<string, string[]> = {};
-  const productIds = items.map(i => i.id);
-  if (productIds.length) {
-    const linksRes = await supabase
+  const links = await everyRowIn<{ product_id: string; addon_id: string }>(
+    items.map(i => i.id),
+    (slice, from, to) => supabase
       .from("item_addons")
       .select("product_id, addon_id")
-      .in("product_id", productIds);
-    const links =
-      unwrap<{ product_id: string; addon_id: string }[]>(linksRes, "item add-ons") ?? [];
-    for (const { product_id, addon_id } of links) {
-      (extrasByProduct[product_id] ??= []).push(addon_id);
-    }
+      .in("product_id", slice)
+      .order("product_id").order("sort_order").order("addon_id")
+      .range(from, to),
+    "item add-ons",
+  );
+  for (const { product_id, addon_id } of links) {
+    (extrasByProduct[product_id] ??= []).push(addon_id);
   }
 
   // Combos are built against live prices and silently dropped when a component
