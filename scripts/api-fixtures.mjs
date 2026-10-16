@@ -7,6 +7,7 @@
 // calificaciones.)
 // ============================================================================
 import { createClient } from "@supabase/supabase-js";
+import { loginByEmail } from "./logins.mjs";
 
 export const MARK = "apicheck";
 
@@ -369,8 +370,7 @@ export async function setup(env, base) {
   const staffEmail = `${MARK}-crew@tabletap.dev`;
   let staffUserId = null;
   {
-    const { data: existing } = await admin.auth.admin.listUsers({ perPage: 200 });
-    staffUserId = (existing?.users ?? []).find(u => u.email === staffEmail)?.id ?? null;
+    staffUserId = (await loginByEmail(admin, staffEmail))?.id ?? null;
     if (!staffUserId) {
       const { data: made } = await admin.auth.admin.createUser({
         email: staffEmail, password: "demo123", email_confirm: true,

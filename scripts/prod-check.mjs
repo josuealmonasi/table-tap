@@ -189,8 +189,8 @@ async function checkLogins(label, envFile) {
   const env = await envFrom(envFile);
   const { createClient } = await import("@supabase/supabase-js");
   const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY);
-  const { data: users } = await db.auth.admin.listUsers({ perPage: 200 });
-  const ids = Object.fromEntries((users?.users ?? []).map(u => [u.email, u.id]));
+  const { everyLogin } = await import("./logins.mjs");
+  const ids = Object.fromEntries((await everyLogin(db)).map(u => [u.email, u.id]));
   const { data: restaurants } = await db.from("restaurants").select("id, name, owner_id");
   const { data: staff } = await db.from("staff").select("email, restaurant_id");
 

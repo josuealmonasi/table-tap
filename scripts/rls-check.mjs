@@ -20,6 +20,7 @@ import { createClient } from "@supabase/supabase-js";
 import { plantNeighbour } from "./rls-fixture.mjs";
 import { refuseProduction, watchDevWorker } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
+import { everyLogin } from "./logins.mjs";
 
 refuseProduction("rls", "it plants rows, and asks for writes on a real restaurant that must be refused");
 process.loadEnvFile(join(process.cwd(), ".env.development.local"));
@@ -123,7 +124,7 @@ console.log("\nA signed-in restaurant reaching another's data");
 // SKIPPED and ran none of it. Every run, on every machine, for as long as
 // that row happened to sort first.
 const { data: restaurants } = await admin.from("restaurants").select("id, name, owner_id");
-const { data: users } = await admin.auth.admin.listUsers({ perPage: 200 });
+const users = await everyLogin(admin);
 
 const asUser = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -135,7 +136,7 @@ const asUser = createClient(
 let mine = null;
 let signIn = { error: new Error("no restaurant has an owner who can sign in") };
 for (const r of restaurants ?? []) {
-  const owner = users?.users?.find(u => u.id === r.owner_id);
+  const owner = users.find(u => u.id === r.owner_id);
   if (!owner?.email) continue;
   for (const password of ["demo123", "test123"]) {
     const attempt = await asUser.auth.signInWithPassword({ email: owner.email, password });

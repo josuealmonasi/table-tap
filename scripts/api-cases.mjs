@@ -10,6 +10,7 @@
 // (409, 400) — that is working. What is never right is a 500.
 // ============================================================================
 import { MARK, PART_AMOUNT, PART_TIP } from "./api-fixtures.mjs";
+import { loginByEmail } from "./logins.mjs";
 
 /** Creating a coupon answers `{ ok: true }`, so the id is looked up where it lives. */
 async function pendingWriteOff(fx) {
@@ -1826,8 +1827,7 @@ export function cases(fx) {
         f.signupName = `${MARK} signup ${Date.now()}`;
         return async () => {
           await f.admin.from("restaurants").delete().eq("name", f.signupName);
-          const { data } = await f.admin.auth.admin.listUsers({ perPage: 200 });
-          const user = (data?.users ?? []).find(u => u.email === f.signupEmail);
+          const user = await loginByEmail(f.admin, f.signupEmail);
           if (user) await f.admin.auth.admin.deleteUser(user.id).catch(() => {});
         };
       },
@@ -1852,8 +1852,7 @@ export function cases(fx) {
         // And the owner is the person who signed up: `getMembership` reads
         // `restaurants.owner_id` before it looks at the staff table, which is
         // why a founding owner needs no staff row.
-        const { data: users } = await f.admin.auth.admin.listUsers({ perPage: 200 });
-        const user = (users?.users ?? []).find(u => u.email === f.signupEmail);
+        const user = await loginByEmail(f.admin, f.signupEmail);
         if (!user) return "answered ok and created no login";
         if (r.owner_id !== user.id) return "the restaurant belongs to somebody else";
         return true;
