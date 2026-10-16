@@ -798,6 +798,15 @@ to know what should reach the bank and when.
   (weekends skipped; bank holidays are not known, so a deposit due after one
   reads late a day early). A day opens to its payments with their voucher
   numbers and sale codes (`src/lib/terminal.ts`, `src/lib/terminal-server.ts`).
+- **A cancelled sale** was voided on the terminal by a person, as the cancel
+  dialog asks; `cancel_order` stamps `orders.cancelled_at`. Voided the day it
+  was taken, the bank never pays it: it counts in no day, and its payment is
+  listed as voided. Voided on a later day, the bank paid it and takes it back
+  out of a deposit to come: the first day from the void on with sales of its
+  own shows it as voided from earlier days and expects that much less; with no
+  such day yet, the void waits on its own day as coming. A sale from before
+  the 14 days voided inside them is still taken back. Orders cancelled before
+  `cancelled_at` was kept count as voided the same day.
 - **Marking a deposit** (`POST /api/terminal/deposits`, managers) stores what
   the bank paid beside what the server worked out the day should pay at that
   moment — never a figure from the browser — in `terminal_deposits`, one per

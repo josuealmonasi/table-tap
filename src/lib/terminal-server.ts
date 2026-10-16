@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { everyRow } from "@/lib/paged";
 import { orderCode } from "@/lib/types";
-import { depositDays, localDay, type DepositDay, type DepositRecord } from "./terminal";
+import { depositDays, localDay, type DepositDay, type DepositRecord, type TerminalPayment } from "./terminal";
 
 /** How far back the terminal's days are listed. */
 export const TERMINAL_WINDOW_DAYS = 14;
@@ -14,6 +14,8 @@ export interface TerminalPaymentRow {
   ref: string | null;
   /** The sale it paid, as the board names it; null for a bill settled at a table. */
   code: string | null;
+  /** Its sale was cancelled and the charge voided on the terminal. */
+  voided: boolean;
 }
 
 export interface TerminalView {
@@ -24,6 +26,13 @@ export interface TerminalView {
   settleDays: number;
 }
 
+interface OrderRead {
+  tip: number;
+  total: number;
+  status: string;
+  cancelled_at: string | null;
+}
+
 interface PaymentRead {
   id: string;
   amount: number;
@@ -31,6 +40,8 @@ interface PaymentRead {
   order_id: string | null;
   terminal_ref: string | null;
   created_at: string;
+  /** Embedded through the foreign key, so no list of ids rides in the URL. */
+  orders: OrderRead | null;
 }
 
 /**
@@ -41,6 +52,11 @@ interface PaymentRead {
  *
  * A counter sale keeps its tip on the order, not the payment, so a payment
  * that settled a whole order takes the order's tip.
+ *
+ * A cancelled sale's charge was voided on the terminal, dated by when it was
+ * cancelled — before that was kept, by the sale itself, as the same day. A
+ * sale from before the window that was voided inside it is read too: the
+ * bank takes it out of a deposit the window lists.
  */
 export async function readTerminal(restaurantId: string, timeZone: string, now = new Date()): Promise<TerminalView> {
   const db = createAdminClient();
@@ -48,9 +64,11 @@ export async function readTerminal(restaurantId: string, timeZone: string, now =
   const [restaurant, payments, deposits] = await Promise.all([
     db.from("restaurants").select("terminal_fee_pct, terminal_settle_days").eq("id", restaurantId).single(),
     everyRow<PaymentRead>((a, b) => db.from("payments")
-      .select("id, amount, tip, order_id, terminal_ref, created_at")
+      .select("id, amount, tip, order_id, terminal_ref, created_at, orders(tip, total, status, cancelled_at)")
       .eq("restaurant_id", restaurantId).eq("method", "card").is("stripe_payment_intent", null)
-      .gte("created_at", since.toISOString()).order("id").range(a, b), "the terminal's payments"),
+      .eq("orders.restaurant_id", restaurantId)
+      .gte("created_at", since.toISOString()).order("id").range(a, b)
+      .overrideTypes<PaymentRead[], { merge: false }>(), "the terminal's payments"),
     everyRow<DepositRecord>((a, b) => db.from("terminal_deposits")
       .select("sales_day, expected, received, note, recorded_by, created_at")
       .eq("restaurant_id", restaurantId).gte("sales_day", localDay(since, timeZone))
@@ -58,33 +76,50 @@ export async function readTerminal(restaurantId: string, timeZone: string, now =
   ]);
   if (restaurant.error || !restaurant.data) throw new Error(`Could not read the restaurant: ${restaurant.error?.message}`);
 
-  const orderIds = [...new Set(payments.map(p => p.order_id).filter((id): id is string => Boolean(id)))];
-  const orders = orderIds.length
-    ? await everyRow<{ id: string; tip: number; total: number }>((a, b) => db.from("orders")
-        .select("id, tip, total").eq("restaurant_id", restaurantId).in("id", orderIds).order("id").range(a, b), "the orders paid")
-    : [];
-  const orderOf = new Map(orders.map(o => [o.id, o]));
+  const earlierVoids = await voidedSince(restaurantId, since);
+  const voidedAt = (p: PaymentRead): string | null =>
+    p.orders?.status === "cancelled" ? p.orders.cancelled_at ?? p.created_at : null;
   const tipOf = (p: PaymentRead): number => {
     if (Number(p.tip) > 0) return Number(p.tip);
-    const order = p.order_id ? orderOf.get(p.order_id) : undefined;
+    const order = p.orders;
     return order && Math.abs(Number(order.total) - Number(p.amount)) < 0.005 ? Number(order.tip) || 0 : 0;
   };
 
   const feePct = Number(restaurant.data.terminal_fee_pct);
   const settleDays = Number(restaurant.data.terminal_settle_days);
-  const rows = payments.map(p => ({ ...p, tip: tipOf(p) }));
+  const rows = payments.map(p => ({ ...p, tip: tipOf(p), voided_at: voidedAt(p) }));
   const byDay: Record<string, TerminalPaymentRow[]> = {};
   for (const p of rows.sort((a, b) => a.created_at.localeCompare(b.created_at))) {
     const day = localDay(p.created_at, timeZone);
     (byDay[day] ??= []).push({
       id: p.id, at: p.created_at, amount: Number(p.amount), tip: p.tip, ref: p.terminal_ref,
-      code: p.order_id ? orderCode(p.order_id) : null,
+      code: p.order_id ? orderCode(p.order_id) : null, voided: p.voided_at !== null,
     });
   }
   return {
-    days: depositDays(rows, deposits, feePct, settleDays, timeZone, localDay(now, timeZone)),
+    days: depositDays([...rows, ...earlierVoids], deposits, feePct, settleDays, timeZone, localDay(now, timeZone), localDay(since, timeZone)),
     payments: byDay,
     feePct,
     settleDays,
   };
+}
+
+interface VoidRead {
+  amount: number;
+  created_at: string;
+  orders: { cancelled_at: string };
+}
+
+/** Terminal charges taken before `since` whose sale was cancelled after it. */
+async function voidedSince(restaurantId: string, since: Date): Promise<TerminalPayment[]> {
+  const db = createAdminClient();
+  const voided = await everyRow<VoidRead>((a, b) => db.from("payments")
+    .select("amount, created_at, orders!inner(cancelled_at)")
+    .eq("restaurant_id", restaurantId).eq("method", "card").is("stripe_payment_intent", null)
+    .lt("created_at", since.toISOString())
+    .eq("orders.restaurant_id", restaurantId).eq("orders.status", "cancelled")
+    .gte("orders.cancelled_at", since.toISOString())
+    .order("id").range(a, b)
+    .overrideTypes<VoidRead[], { merge: false }>(), "the charges voided");
+  return voided.map(p => ({ amount: Number(p.amount), tip: 0, created_at: p.created_at, voided_at: p.orders.cancelled_at }));
 }

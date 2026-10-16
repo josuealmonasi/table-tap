@@ -81,9 +81,14 @@ export default function TerminalDeposits({ terminal, currency, timeZone }: Termi
                 <span className="tt-costs-product-name">{dayLabel(d.day)}</span>
                 <span className={`tt-costs-chip tt-terminal-${d.status}`}>{t(`terminal.status.${d.status}`)}</span>
                 <span className="tt-costs-product-meta tt-muted">
-                  {t("terminal.taken", { n: d.count, amount: money(d.takings), tips: money(d.tips) })}
-                  {" · "}{t("terminal.fee", { amount: money(d.fee) })}
-                  {" · "}{t("terminal.expected", { amount: money(d.expected), day: dayLabel(d.expectedOn) })}
+                  {d.count === 0 && !d.deposit ? t("terminal.givenBackNext", { amount: money(d.givenBack) }) : (
+                    <>
+                      {t("terminal.taken", { n: d.count, amount: money(d.takings), tips: money(d.tips) })}
+                      {" · "}{t("terminal.fee", { amount: money(d.fee) })}
+                      {d.givenBack > 0 && ` · ${t("terminal.givenBack", { amount: money(d.givenBack) })}`}
+                      {" · "}{t("terminal.expected", { amount: money(d.expected), day: dayLabel(d.expectedOn) })}
+                    </>
+                  )}
                   {d.deposit && ` · ${t("terminal.received", { amount: money(Number(d.deposit.received)) })}`}
                   {d.deposit && d.status !== "received" && ` (${t("terminal.difference", { amount: money(Number(d.deposit.received) - d.expected) })})`}
                 </span>
@@ -94,7 +99,10 @@ export default function TerminalDeposits({ terminal, currency, timeZone }: Termi
                     {(terminal.payments[d.day] ?? []).map(p => (
                       <li key={p.id}>
                         <span>{timeLabel(p.at)}{p.code && ` · ${p.code}`}</span>
-                        <span>{money(p.amount)}{p.tip > 0 && ` · ${t("terminal.tip", { amount: money(p.tip) })}`}</span>
+                        <span>
+                          {money(p.amount)}{p.tip > 0 && ` · ${t("terminal.tip", { amount: money(p.tip) })}`}
+                          {p.voided && ` · ${t("terminal.voided")}`}
+                        </span>
                         <span className="tt-muted">{p.ref ?? t("terminal.noRef")}</span>
                       </li>
                     ))}
