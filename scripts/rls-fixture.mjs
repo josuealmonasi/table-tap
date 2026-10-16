@@ -110,12 +110,15 @@ export async function plantNeighbour(admin, restaurantId) {
       .limit(1).maybeSingle(),
   ]);
 
-  const { id: orderId } = await keep("order", "orders", {
+  const { id: orderId, error: orderError } = await keep("order", "orders", {
     restaurant_id: restaurantId, status: "received", paid: true, subtotal: 11.5,
     service_fee: 0, tip: 0, tax_pct: 0, total: 11.5, currency: "MXN",
     items: [{ itemId: "x", name: "rls fixture", emoji: "x", price: 11.5, qty: 1, mods: {} }],
   });
 
+  // Everything else hangs off this order, so a refusal here is said out loud:
+  // swallowed, it left half the sweep with nothing to attack and no reason.
+  if (!orderId) console.error(`  rls fixture: the neighbour's order was refused — ${orderError?.message ?? "no row came back"}`);
   if (orderId) {
     // Named, like every real cash payment: `pnpm money` fails a cash row with
     // nobody behind it, and a run of this killed part-way through left one
