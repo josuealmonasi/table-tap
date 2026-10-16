@@ -317,14 +317,20 @@ dishes on a bill the restaurant has just cancelled.
   bill, a divided bill (once per bill, `ref`), a customer account —
   *reserves* it in `platform_fees` before Stripe is asked, through
   `reserve_platform_fee`, which locks the restaurant and charges
-  `min(per-order fee, ceiling − what the month holds)`. The session carries
-  the row as `fee_id`; the settling webhook marks it taken; only a session
-  that was never created, or Stripe's expiry, releases it; a refund records
-  the share of the fee that went back, rounded down and once per refund id.
-  A month is the UTC month the fee was reserved in. What nobody confirms
-  keeps counting: a little over, never under. The costs screen reads the same
-  ledger (`src/lib/platform-fee.ts`). `orders.platform_fee` is the order's own
-  history only.
+  `min(per-order fee, ceiling − what the month holds)`. A divided bill still
+  pays one fee: each share carries its slice of it, reserved under its own
+  `ref`. The session carries the row as `fee_id` (with `fee_cents` and
+  `restaurant_id`); the settling webhook marks it taken; it is released only
+  when Stripe refused the session outright (a 4xx) or expired it — a dropped
+  connection or a 5xx may still be a session. A session with no reservation
+  to take (opened before the ledger, or whose row is gone) is recorded from
+  what it carries, once. A refund records the share of the fee that went
+  back, rounded down and once per refund id. A month is the UTC month the
+  fee was reserved in. What nobody confirms keeps counting: a little over,
+  never under. The costs screen reads the same ledger
+  (`src/lib/platform-fee.ts`). `orders.platform_fee` is no longer written: it
+  is the frozen record of fees from before the ledger, which the schema
+  copies in once per order.
 - **Two Stripe accounts, so two webhooks.** A diner's food is a DIRECT charge
   on the restaurant's own Stripe account: Stripe's processing fee comes out of
   their balance and our per-order fee comes to us clean. As a destination

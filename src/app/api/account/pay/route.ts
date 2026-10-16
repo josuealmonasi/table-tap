@@ -9,7 +9,7 @@ import { accountByCode } from "@/lib/accounts-server";
 import { releaseAccountCheckout } from "@/lib/account-checkout";
 import { stripeProductName } from "@/lib/stripe-limits";
 import { getPlan } from "@/lib/plan-server";
-import { NO_FEE, releaseFee, reserveFee } from "@/lib/platform-fee";
+import { NO_FEE, feeMetadata, releaseFee, reserveFee, stripeRefusedOutright } from "@/lib/platform-fee";
 import { round2 } from "@/lib/money";
 
 export const runtime = "nodejs";
@@ -99,9 +99,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         ],
         // The webhook settles exactly this checkout. A returning browser
         // proves nothing about whether money moved.
-        metadata: { account_checkout: r.checkout, ...(fee.id ? { fee_id: fee.id } : {}) },
+        metadata: { account_checkout: r.checkout, ...feeMetadata(fee, restaurant.id) },
         payment_intent_data: {
-          metadata: fee.id ? { fee_id: fee.id } : {},
+          metadata: feeMetadata(fee, restaurant.id),
           ...(feeCents > 0 ? { application_fee_amount: feeCents } : {}),
         },
         success_url: `${origin}/cuenta/${code}?paid=1`,
@@ -112,10 +112,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
     await db.from("account_checkouts").update({ stripe_session_id: session.id }).eq("id", r.checkout);
     return NextResponse.json({ url: session.url });
-  } catch {
+  } catch (err) {
     // The charge never happened: the till may collect this account again. If
-    // even that fails, the hold simply runs out — the safe way round.
+    // even that fails, the hold simply runs out — the safe way round. The fee
+    // goes back only on an outright refusal: an answer that never arrived may
+    // still be a session, and Stripe's expiry will release it.
     await releaseAccountCheckout(r.checkout).catch(e => console.error("account checkout release failed:", e));
-    return await refused("apiErr.checkoutFailed", 502);
+    if (stripeRefusedOutright(err)) return await refused("apiErr.checkoutFailed", 502);
+    return await apiError("apiErr.checkoutFailed", 502);
   }
 }

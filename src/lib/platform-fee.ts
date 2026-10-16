@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { everyRow } from "@/lib/paged";
 import { orderFeeCents, type PlanLimits } from "@/lib/plan";
+import { unpackOrderIds } from "@/lib/stripe-limits";
 
 /**
  * Our per-order fee, kept in its own ledger (`platform_fees`), one row per
@@ -48,7 +49,17 @@ export async function reserveFee(
   source: FeeSource,
   ref: string | null = null,
 ): Promise<FeeHold> {
-  const perOrder = orderFeeCents(limits, totalCents);
+  return reserveFeeCents(restaurantId, limits, orderFeeCents(limits, totalCents), source, ref);
+}
+
+/** Reserve a fee already worked out — a divided bill's share of its one fee. */
+export async function reserveFeeCents(
+  restaurantId: string,
+  limits: PlanLimits,
+  perOrder: number,
+  source: FeeSource,
+  ref: string | null = null,
+): Promise<FeeHold> {
   if (perOrder <= 0) return NO_FEE;
   const cap = limits.fee_cap === null || limits.fee_cap === undefined ? null : Math.round(limits.fee_cap * 100);
   const { data, error } = await createAdminClient().rpc("reserve_platform_fee", {
@@ -65,6 +76,21 @@ export async function reserveFee(
   return row ? { id: row.fee_id, cents: row.fee_cents } : NO_FEE;
 }
 
+/** What a session carries so the webhook can find its fee, and record it without the row. */
+export function feeMetadata(hold: FeeHold, restaurantId: string): Record<string, string> {
+  return hold.id ? { fee_id: hold.id, fee_cents: String(hold.cents), restaurant_id: restaurantId } : {};
+}
+
+/**
+ * Stripe answered that it made nothing: a 4xx. A dropped connection or a 5xx
+ * may have made the session anyway (Stripe calls those indeterminate), so its
+ * fee stays counted until Stripe's expiry says otherwise.
+ */
+export function stripeRefusedOutright(err: unknown): boolean {
+  const status = err && typeof err === "object" && "statusCode" in err ? Number((err as { statusCode?: unknown }).statusCode) : NaN;
+  return status >= 400 && status < 500;
+}
+
 /** Give back a reservation whose session was never created, or that expired. */
 export async function releaseFee(id: string | null | undefined): Promise<void> {
   if (!id) return;
@@ -72,19 +98,82 @@ export async function releaseFee(id: string | null | undefined): Promise<void> {
   if (error) throw new Error(`Could not release the platform fee: ${error.message}`);
 }
 
+/** What the session itself says about its fee, read by the webhook. */
+export interface SessionFee {
+  feeId?: string;
+  feeCents?: string;
+  restaurantId?: string;
+}
+
 /**
  * A session's payment landed: its fee is ours. Throws on failure, so the
  * webhook answers Stripe with an error and Stripe sends the event again.
+ *
+ * A session with no reservation to take — opened before the ledger existed,
+ * or whose row is gone — still charged what it charged: the fee is recorded
+ * from the session itself, once per order or session.
  */
-export async function takeFee(id: string | undefined, session: Stripe.Checkout.Session): Promise<void> {
-  if (!id) return;
+export async function takeFee(session: Stripe.Checkout.Session, fee: SessionFee): Promise<void> {
+  const db = createAdminClient();
   const intent = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id ?? null;
-  const { error } = await createAdminClient().rpc("take_platform_fee", {
-    p_fee: id,
+  if (fee.feeId) {
+    const { data, error } = await db.rpc("take_platform_fee", {
+      p_fee: fee.feeId,
+      p_intent: intent,
+      p_charge_cents: session.amount_total ?? 0,
+    });
+    if (error) throw new Error(`Could not record the platform fee: ${error.message}`);
+    if (data === true) return;
+  }
+  const charged = await feeChargedBy(session, fee);
+  if (!charged) return;
+  const { error } = await db.rpc("record_session_fee", {
+    p_restaurant: charged.restaurantId,
+    p_ref: charged.ref,
+    p_cents: charged.cents,
     p_intent: intent,
     p_charge_cents: session.amount_total ?? 0,
   });
   if (error) throw new Error(`Could not record the platform fee: ${error.message}`);
+}
+
+/**
+ * The fee a session charged, from the session and the rows it names: what we
+ * now write on it (`fee_cents`), or what a session opened before the ledger
+ * carried — `settle_fee` on a table's bill or a share, the order's own
+ * `platform_fee`, an account checkout's `fee`.
+ */
+async function feeChargedBy(
+  session: Stripe.Checkout.Session,
+  fee: SessionFee,
+): Promise<{ restaurantId: string; cents: number; ref: string } | null> {
+  const db = createAdminClient();
+  const meta = session.metadata ?? {};
+  const pesos = (v: unknown) => Math.round(Number(v ?? 0) * 100);
+  const ref = `session:${session.id}`;
+  if (meta.account_checkout) {
+    const { data } = await db.from("account_checkouts").select("restaurant_id, fee").eq("id", meta.account_checkout).maybeSingle();
+    const cents = fee.feeCents ? Number(fee.feeCents) : pesos(data?.fee);
+    return data && cents > 0 ? { restaurantId: fee.restaurantId ?? data.restaurant_id, cents, ref } : null;
+  }
+  if (meta.split_id) {
+    const { data } = await db.from("bill_splits").select("restaurant_id").eq("id", meta.split_id).maybeSingle();
+    const cents = fee.feeCents ? Number(fee.feeCents) : pesos(meta.settle_fee);
+    return data && cents > 0 ? { restaurantId: fee.restaurantId ?? data.restaurant_id, cents, ref } : null;
+  }
+  const billOrders = unpackOrderIds(meta);
+  const orderId = billOrders[0] ?? meta.order_id;
+  if (!orderId) return null;
+  const { data } = await db.from("orders").select("restaurant_id, platform_fee").eq("id", orderId).maybeSingle();
+  if (!data) return null;
+  if (billOrders.length) {
+    const cents = fee.feeCents ? Number(fee.feeCents) : pesos(meta.settle_fee);
+    return cents > 0 ? { restaurantId: fee.restaurantId ?? data.restaurant_id, cents, ref } : null;
+  }
+  // A diner's own order: keyed by the order, the same key the backfill uses,
+  // so an order counted from its own history is never counted twice.
+  const cents = fee.feeCents ? Number(fee.feeCents) : pesos(data.platform_fee);
+  return cents > 0 ? { restaurantId: fee.restaurantId ?? data.restaurant_id, cents, ref: `order:${orderId}` } : null;
 }
 
 /** Stripe's expiry for a session nobody paid. */

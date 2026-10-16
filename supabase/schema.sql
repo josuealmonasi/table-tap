@@ -3725,9 +3725,8 @@ begin
   if v_checkout.tip > 0 and v_ids is not null then
     update orders set tip = tip + v_checkout.tip, total = total + v_checkout.tip where id = v_ids[1];
   end if;
-  if v_checkout.fee > 0 and v_ids is not null then
-    update orders set platform_fee = v_checkout.fee where id = v_ids[1];
-  end if;
+  -- Our fee is taken in `platform_fees` by the webhook; `orders.platform_fee`
+  -- is the frozen record of fees from before that ledger.
   update account_checkouts set status = 'paid' where id = p_checkout;
   update customer_accounts set checkout_until = null where id = v_checkout.account_id;
   return jsonb_build_object('outcome', 'paid', 'orders', coalesce(cardinality(v_ids), 0));
@@ -4536,7 +4535,7 @@ create table if not exists platform_fees (
   -- Stripe refund ids already counted, so a retried refund is counted once.
   refund_ids            text[] not null default '{}',
   status                text not null default 'open' check (status in ('open', 'taken', 'released')),
-  source                text not null check (source in ('order', 'bill', 'split', 'account', 'backfill')),
+  source                text not null,
   -- One fee per thing that pays one fee: a divided bill pays it once.
   ref                   text,
   stripe_payment_intent text,
@@ -4549,6 +4548,9 @@ create index if not exists platform_fees_intent_idx on platform_fees(restaurant_
   where stripe_payment_intent is not null;
 create unique index if not exists platform_fees_ref_idx on platform_fees(restaurant_id, ref)
   where ref is not null and status <> 'released';
+alter table platform_fees drop constraint if exists platform_fees_source_check;
+alter table platform_fees add constraint platform_fees_source_check
+  check (source in ('order', 'bill', 'split', 'account', 'session', 'backfill'));
 alter table platform_fees enable row level security;
 revoke all on platform_fees from anon;
 revoke all on platform_fees from authenticated;
@@ -4601,6 +4603,8 @@ create or replace function public.take_platform_fee(
 begin
   update platform_fees
      set status = 'taken',
+         -- Revived from released: a newer reservation may hold its ref now.
+         ref = case when status = 'released' then null else ref end,
          settled_at = coalesce(settled_at, now()),
          stripe_payment_intent = coalesce(stripe_payment_intent, p_intent),
          charge_cents = coalesce(charge_cents, nullif(p_charge_cents, 0))
@@ -4623,6 +4627,25 @@ $$;
 revoke all on function public.release_platform_fee(uuid) from public, anon, authenticated;
 grant execute on function public.release_platform_fee(uuid) to service_role;
 
+-- A fee Stripe took on a session with no reservation to take — opened before
+-- the ledger existed, or whose row is gone. Recorded from the session, taken,
+-- once per `p_ref` ('order:<id>' for a diner's own order, the same key the
+-- backfill writes; 'session:<id>' otherwise).
+create or replace function public.record_session_fee(
+  p_restaurant uuid, p_ref text, p_cents integer, p_intent text, p_charge_cents integer
+) returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  if p_cents is null or p_cents <= 0 or p_ref is null then return false; end if;
+  insert into platform_fees (restaurant_id, period, cents, status, source, ref, stripe_payment_intent, charge_cents, settled_at)
+  values (p_restaurant, date_trunc('month', now() at time zone 'utc')::date, p_cents, 'taken', 'session', p_ref,
+          p_intent, nullif(p_charge_cents, 0), now())
+  on conflict (restaurant_id, ref) where ref is not null and status <> 'released' do nothing;
+  return found;
+end;
+$$;
+revoke all on function public.record_session_fee(uuid, text, integer, text, integer) from public, anon, authenticated;
+grant execute on function public.record_session_fee(uuid, text, integer, text, integer) to service_role;
+
 -- A refund on a charge that carried our fee: Stripe returns the fee in
 -- proportion to what was refunded. Rounded down, so the fee we kept is never
 -- counted short; once per Stripe refund id, so a retried refund counts once.
@@ -4642,17 +4665,19 @@ $$;
 revoke all on function public.refund_platform_fee(uuid, text, integer, text) from public, anon, authenticated;
 grant execute on function public.refund_platform_fee(uuid, text, integer, text) to service_role;
 
--- This month's fees from before the ledger: counted, so the ceiling does not
--- forget what was already taken. Once, while the month has no ledger rows.
-insert into platform_fees (restaurant_id, period, cents, status, source, created_at, settled_at)
-select o.restaurant_id, date_trunc('month', now() at time zone 'utc')::date,
-       round(o.platform_fee * 100)::integer, 'taken', 'backfill', o.created_at, o.created_at
+-- Fees from before the ledger, from `orders.platform_fee` — which nothing
+-- writes any more, so this set is frozen and the insert is safe to run again:
+-- each order once ('order:<id>', the key a late-settling session records
+-- under too). The last 31 days, the costs screen's window; each in the month
+-- its order was placed. A checkout still waiting to be paid is left to its
+-- webhook, which records it when the money lands.
+insert into platform_fees (restaurant_id, period, cents, status, source, ref, created_at, settled_at)
+select o.restaurant_id, date_trunc('month', o.created_at at time zone 'utc')::date,
+       round(o.platform_fee * 100)::integer, 'taken', 'backfill', 'order:' || o.id, o.created_at, o.created_at
   from orders o
  where o.platform_fee > 0
-   and o.created_at >= date_trunc('month', now() at time zone 'utc')
-   and not exists (
-     select 1 from platform_fees f
-      where f.period = date_trunc('month', now() at time zone 'utc')::date
-   );
+   and o.status <> 'pending_payment'
+   and o.created_at >= now() - interval '31 days'
+on conflict (restaurant_id, ref) where ref is not null and status <> 'released' do nothing;
 
 revoke truncate, references, trigger on all tables in schema public from authenticated;

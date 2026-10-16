@@ -1824,3 +1824,26 @@ its fee back, and an invariant fails on any Stripe session that charges our
 fee without its `fee_id`. `src/lib/fee-month.ts` and its order-based rules
 are gone.
 
+Codex reviewed that ledger too (#497) and found four more, fixed in the same PR:
+
+- **A divided bill's share could be paid into another restaurant's Stripe
+  account.** The split was looked up by its id and sitting, never tied to the
+  restaurant whose account took the money: a diner holding a real share could
+  name another restaurant that takes cards, pay it there, and have the first
+  restaurant's share marked paid with none of the money. The split, its
+  sitting and the table now have to belong to the restaurant asked; an api
+  case pays through another restaurant and expects 403 and no fee reserved.
+- A failed Stripe call released its fee even when Stripe's answer never
+  arrived — and Stripe says such a session may exist. Released now only on an
+  outright refusal (a 4xx).
+- A session opened before the ledger had no `fee_id`, so its fee would never
+  be counted. It is recorded from what the session carries, once; the
+  backfill is now per order and safe to run again, because nothing writes
+  `orders.platform_fee` any more.
+- A share abandoned and reopened after another paid left the whole bill
+  fee-free: the fee rode on one session. Each share now carries its slice.
+
+Probed on dev through the real `takeFee`: a pre-ledger table bill delivered
+twice is counted once; a session whose row is gone is counted from what it
+carries; an order the backfill counted is not counted again.
+

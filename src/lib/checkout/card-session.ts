@@ -1,4 +1,5 @@
 import type Stripe from "stripe";
+import { feeMetadata, type FeeHold } from "@/lib/platform-fee";
 import { stripe } from "@/lib/stripe";
 
 export interface CardSessionInput {
@@ -15,10 +16,8 @@ export interface CardSessionInput {
   orderId: string;
   restaurantId: string;
   tableId: string | null;
-  /** Our cut, in cents. Zero sends none. */
-  appFee: number;
-  /** The reserved fee's ledger row, so the webhook can take or release it. */
-  feeId?: string | null;
+  /** Our fee, reserved under the month's ceiling: what Stripe charges, and the row it is taken from. */
+  fee: FeeHold;
 }
 
 /**
@@ -77,10 +76,10 @@ export async function openCardSession(
       // of a dish off the menu for a day. Thirty minutes is Stripe's floor and
       // longer than anyone is still deciding.
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-      metadata: { order_id: p.orderId, ...(p.feeId ? { fee_id: p.feeId } : {}) },
+      metadata: { order_id: p.orderId, ...feeMetadata(p.fee, p.restaurantId) },
       payment_intent_data: {
-        metadata: { order_id: p.orderId, ...(p.feeId ? { fee_id: p.feeId } : {}) },
-        ...(p.appFee > 0 ? { application_fee_amount: p.appFee } : {}),
+        metadata: { order_id: p.orderId, ...feeMetadata(p.fee, p.restaurantId) },
+        ...(p.fee.cents > 0 ? { application_fee_amount: p.fee.cents } : {}),
       },
     },
     { stripeAccount: p.stripeAccount },

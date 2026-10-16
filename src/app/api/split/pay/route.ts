@@ -9,7 +9,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchTableBill } from "@/lib/bill-data";
 import { tableBill } from "@/lib/table-bill";
 import { getPlan } from "@/lib/plan-server";
-import { NO_FEE, releaseFee, reserveFee } from "@/lib/platform-fee";
+import { NO_FEE, feeMetadata, releaseFee, reserveFeeCents, stripeRefusedOutright } from "@/lib/platform-fee";
+import { orderFeeCents } from "@/lib/plan";
 import { round2 } from "@/lib/money";
 
 export const runtime = "nodejs";
@@ -64,11 +65,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const { data: split } = await db
     .from("bill_splits")
-    .select("id, status, locked_at, session_id, shares")
+    .select("id, status, locked_at, session_id, shares, amount, restaurant_id")
     .eq("id", splitId)
     .eq("session_id", sessionId)
     .maybeSingle();
   if (!split || split.status !== "locked") return await apiError("apiErr.splitNotReady", 409);
+  // The split, its sitting and the table all belong to the restaurant whose
+  // Stripe account takes the money. Nothing tied them before: a diner holding
+  // a real share of one restaurant's split could name another restaurant
+  // that takes cards, pay THAT account, and have the first restaurant's share
+  // marked paid with none of the money.
+  const { data: sitting } = await db
+    .from("table_sessions").select("id")
+    .eq("id", sessionId).eq("restaurant_id", restaurantId).eq("table_id", tableId)
+    .maybeSingle();
+  if (split.restaurant_id !== restaurantId || !sitting) return await apiError("apiErr.splitNotYours", 403);
 
   const { data: claim } = await db
     .from("bill_split_claims")
@@ -107,25 +118,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // Our cut is the table's, not one per person: a bill divided four ways is
   // still one bill, and charging the restaurant four times for the courtesy of
-  // splitting it would be a fee for using the feature. It rides on the first
-  // share to be paid, the same way settling a table puts it on the first order.
-  const { count: alreadyPaid, error: paidError } = await db
-    .from("bill_split_claims")
-    .select("share_no", { count: "exact", head: true })
-    .eq("split_id", splitId)
-    .not("paid_at", "is", null);
-  // Unread is not "nobody has paid yet": that answer puts our fee on a second
-  // share and charges the restaurant for the table twice.
-  if (paidError) return await apiError("apiErr.verifyOrders", 503);
+  // splitting it would be a fee for using the feature. So each share carries
+  // its slice of that one fee (the odd cents on share 1), reserved under its
+  // own `ref`. It used to ride whole on whichever share opened first, and a
+  // share abandoned and reopened after another paid left the bill fee-free;
+  // two shares opened at once each carried the whole fee.
   const feePlan = await getPlan(restaurantId);
-  // Reserved once per divided bill (`ref`): two diners opening their shares
-  // at the same moment both read "nobody has paid", and each session used to
-  // carry the fee — the restaurant paid it twice for one table. The second
-  // now finds the first's reservation and carries none.
+  const billFee = feePlan ? orderFeeCents(feePlan.limits, Math.round(Number(split.amount) * 100)) : 0;
+  const shares = Math.max(1, Number(split.shares) || 1);
+  const slice = Math.floor(billFee / shares) + (claim.share_no === 1 ? billFee % shares : 0);
   let fee = NO_FEE;
   try {
-    fee = (alreadyPaid ?? 0) === 0 && feePlan
-      ? await reserveFee(restaurantId, feePlan.limits, Math.round(payable * 100), "split", `split:${splitId}`)
+    fee = feePlan && slice > 0
+      ? await reserveFeeCents(restaurantId, feePlan.limits, slice, "split", `split:${splitId}:${claim.share_no}`)
       : NO_FEE;
   } catch {
     return await apiError("apiErr.generic", 502);
@@ -157,11 +162,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           split_amount: String(claim.amount),
           ...packOrderIds(own.map(o => o.id)),
           settle_tip: String(tip),
-          settle_fee: String(appFee / 100),
-          ...(fee.id ? { fee_id: fee.id } : {}),
+          ...feeMetadata(fee, restaurantId),
         },
         payment_intent_data: {
-          metadata: fee.id ? { fee_id: fee.id } : {},
+          metadata: feeMetadata(fee, restaurantId),
           ...(appFee > 0 ? { application_fee_amount: appFee } : {}),
         },
         // Half an hour, for the same reason a cart gets one: a share left
@@ -173,13 +177,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { stripeAccount: restaurant.stripe_account_id },
     );
 
-    if (!session.url) {
-      await giveBackFee();
-      return await apiError("apiErr.generic", 502);
-    }
+    // A session with no page is still a session: its fee waits for expiry.
+    if (!session.url) return await apiError("apiErr.generic", 502);
     return NextResponse.json({ url: session.url });
-  } catch {
-    await giveBackFee();
+  } catch (err) {
+    // Released only when Stripe refused outright: an answer that never
+    // arrived may still be a session, which Stripe's expiry releases.
+    if (stripeRefusedOutright(err)) await giveBackFee();
     return await apiError("apiErr.generic", 502);
   }
 }

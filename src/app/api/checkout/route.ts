@@ -23,7 +23,7 @@ import { verifiedLines } from "@/lib/checkout/verified-lines";
 import { checkoutOrderRow } from "@/lib/checkout/order-row";
 import { payLaterAllowed } from "@/lib/checkout/pay-later";
 import { checkoutFee } from "@/lib/checkout/app-fee";
-import { NO_FEE, releaseFee, type FeeHold } from "@/lib/platform-fee";
+import { NO_FEE, releaseFee, stripeRefusedOutright, type FeeHold } from "@/lib/platform-fee";
 import { checkoutHold } from "@/lib/checkout/hold";
 
 export const runtime = "nodejs";
@@ -161,17 +161,18 @@ export async function POST(req: NextRequest) {
     let stockReservationId: string | null = null;
     /** Our fee, reserved under the month's ceiling: given back with the rest. */
     let fee: FeeHold = NO_FEE;
+    /** Stripe's answer was unknown: the session may exist, so its fee stays counted. */
+    let keepFee = false;
 
     /** Give back what this checkout reserved when it doesn't complete. */
     const undoClaim = async () => {
       if (coupon) await releaseCoupon(coupon.id);
       if (stockReservationId) await releaseStock(restaurantId, stockReservationId);
-      await releaseFee(fee.id);
+      if (!keepFee) await releaseFee(fee.id);
     };
     held.hold(undoClaim);
 
     fee = await checkoutFee(restaurantId, plan, deferred, pricing.subtotal);
-    const appFee = fee.cents;
 
     // Which sitting this order belongs to. A dine-in order joins whoever is
     // already at the table; a counter order has no table and no sitting.
@@ -209,7 +210,6 @@ export async function POST(req: NextRequest) {
           deferred,
           pricing,
           taxPct: Number(restaurant.tax_pct) || 0,
-          appFeeCents: appFee,
           couponCode: coupon?.code ?? null,
           currency: restaurant.currency,
           verified,
@@ -275,13 +275,14 @@ export async function POST(req: NextRequest) {
         orderId: order.id,
         restaurantId,
         tableId,
-        appFee,
-        feeId: fee.id,
+        fee,
       });
     } catch (err) {
       // Stripe refused the session — the pending order will never be paid, so
       // remove it instead of leaving an orphan row, and give back the coupon
-      // use we reserved.
+      // use we reserved. A failure that is not a refusal may have made the
+      // session after all: its fee stays reserved until Stripe's expiry.
+      keepFee = !stripeRefusedOutright(err);
       await held.giveBack();
       const code = err && typeof err === "object" && "code" in err ? err.code : undefined;
       if (code === "amount_too_small") {

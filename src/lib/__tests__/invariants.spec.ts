@@ -471,12 +471,13 @@ describe("a zero platform fee is never sent to Stripe", () => {
     // not, and card orders would go through while paying the table's bill died.
     // The diner's checkout opens its session through `openCardSession`.
     expect(read("src/app/api/checkout/route.ts")).toMatch(/await openCardSession\(/);
-    for (const file of ["src/lib/checkout/card-session.ts", "src/app/api/bill/pay/route.ts"]) {
+    for (const file of ["src/lib/checkout/card-session.ts", "src/app/api/bill/pay/route.ts",
+      "src/app/api/split/pay/route.ts", "src/app/api/account/pay/route.ts"]) {
       const body = read(file);
       const uses = body.includes("application_fee_amount");
       expect(uses, `${file} no longer sets an application fee`).toBe(true);
       expect(
-        /appFee > 0 \? \{ application_fee_amount/.test(body),
+        /(appFee|fee\.cents|feeCents) > 0 \? \{ application_fee_amount/.test(body),
         `${file} sends application_fee_amount even when it is zero`,
       ).toBe(true);
     }
@@ -2660,6 +2661,7 @@ describe("every fee we charge is in the ledger", () => {
     // the month counts short — the one way to charge a restaurant past it.
     const charging = walk("src").filter(f => /application_fee_amount/.test(read(f)));
     expect(charging.length, "the scan found no Stripe session carrying our fee").toBeGreaterThanOrEqual(4);
-    expect(charging.filter(f => !/fee_id/.test(read(f))), "a Stripe session charges our fee without its ledger row").toEqual([]);
+    // `feeMetadata` is the one thing that writes `fee_id` onto a session.
+    expect(charging.filter(f => !/fee_id|feeMetadata\(/.test(read(f))), "a Stripe session charges our fee without its ledger row").toEqual([]);
   });
 });

@@ -9,7 +9,7 @@ import { splitInProgress } from "@/lib/split-service";
 import { isRoomLimited, isTableLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPlan } from "@/lib/plan-server";
-import { NO_FEE, releaseFee, reserveFee } from "@/lib/platform-fee";
+import { NO_FEE, feeMetadata, releaseFee, reserveFee, stripeRefusedOutright } from "@/lib/platform-fee";
 import { applyCoupon } from "@/lib/pricing";
 import {
   claimCoupon,
@@ -238,13 +238,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           settle_tip: String(tip),
           settle_coupon: coupon?.code ?? "",
           settle_discount: String(discount),
-          // Recorded on the settled order once Stripe confirms, for the
-          // order's own history; the ceiling reads the ledger (`fee_id`).
-          settle_fee: String(appFee / 100),
-          ...(fee.id ? { fee_id: fee.id } : {}),
+          // Our fee, reserved in the ledger: the webhook takes it by `fee_id`.
+          ...feeMetadata(fee, restaurantId),
         },
         payment_intent_data: {
-          metadata: fee.id ? { fee_id: fee.id } : {},
+          metadata: feeMetadata(fee, restaurantId),
           // Same as in /api/checkout: zero is not sent. Stripe refuses an application
           // fee of 0, so a restaurant with no per-order fee — the Grupo plan, or a
           // pilot we do not charge — could order by card and then be unable to pay the
@@ -274,10 +272,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     return NextResponse.json({ url: session.url });
-  } catch {
-    // The charge never happened, so the reserved use and fee go back.
+  } catch (err) {
+    // The charge never happened, so the reserved use goes back — and the fee,
+    // when Stripe refused outright. An answer that never arrived may still be
+    // a session: its fee stays reserved until Stripe's expiry releases it.
     if (coupon) await releaseCoupon(coupon.id);
-    await releaseFee(fee.id).catch(err => console.error("bill pay: the fee reservation stays counted", err));
+    if (stripeRefusedOutright(err)) {
+      await releaseFee(fee.id).catch(e => console.error("bill pay: the fee reservation stays counted", e));
+    }
     return await apiError("apiErr.checkoutFailed", 502);
   }
 }

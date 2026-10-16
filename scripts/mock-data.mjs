@@ -919,12 +919,13 @@ export async function seedMock(pg) {
   // month's ceiling reads — what the schema's backfill does once for real
   // restaurants. Taken, in the month each was paid.
   await pg.query(
-    `insert into platform_fees (restaurant_id, period, cents, status, source, stripe_payment_intent, charge_cents, created_at, settled_at)
+    `insert into platform_fees (restaurant_id, period, cents, status, source, ref, stripe_payment_intent, charge_cents, created_at, settled_at)
      select o.restaurant_id, date_trunc('month', o.created_at at time zone 'utc')::date,
-            round(o.platform_fee * 100)::integer, 'taken', 'order', o.stripe_payment_intent,
+            round(o.platform_fee * 100)::integer, 'taken', 'order', 'order:' || o.id, o.stripe_payment_intent,
             nullif(round(o.total * 100)::integer, 0), o.created_at, o.created_at
        from orders o
-      where o.restaurant_id = $1 and o.platform_fee > 0 and o.paid and o.status <> 'cancelled'`,
+      where o.restaurant_id = $1 and o.platform_fee > 0 and o.paid and o.status <> 'cancelled'
+     on conflict (restaurant_id, ref) where ref is not null and status <> 'released' do nothing`,
     [rid],
   );
 

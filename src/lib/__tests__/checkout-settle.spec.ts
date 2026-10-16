@@ -49,6 +49,12 @@ vi.mock("@/lib/supabase/admin", () => ({
 const closeSessions = vi.fn();
 vi.mock("@/lib/table-session", () => ({ closeSessionsFor: (...args: unknown[]) => closeSessions(...args) }));
 vi.mock("@/lib/stock-service", () => ({ releaseStock: async () => {} }));
+// Our fee is the ledger's (`platform-fee.spec.ts`, `pnpm attack`); settling only has to ask for it.
+const takeFee = vi.fn<(...args: unknown[]) => Promise<void>>(async () => {});
+vi.mock("@/lib/platform-fee", () => ({
+  takeFee: (...args: unknown[]) => takeFee(...args),
+  releaseSessionFee: async () => {},
+}));
 
 const { settleCheckout } = await import("@/lib/checkout-settle");
 

@@ -65,7 +65,7 @@ describe("the row a checkout writes", () => {
   } as PricedCart;
   const base = {
     restaurantId: "r", tableId: "t", tableLabel: "Mesa 1", sessionId: "s", diner: "phone-1",
-    deferred: false, pricing, taxPct: 16, appFeeCents: 500, couponCode: null, currency: "MXN",
+    deferred: false, pricing, taxPct: 16, couponCode: null, currency: "MXN",
     verified: [] as OrderLineItem[], note: undefined, customerName: "Ana",
   };
 
@@ -83,7 +83,8 @@ describe("the row a checkout writes", () => {
   });
 
   it("records our fee in money and says where a discount came from", () => {
-    expect(checkoutOrderRow(base).platform_fee).toBe(5);
+    // Our fee is in the ledger, not on the order (`platform_fees`).
+    expect(checkoutOrderRow(base).platform_fee).toBe(0);
     expect(checkoutOrderRow(base).promo_detail).toBeNull();
     const discounted = { ...pricing, discount: 8, itemDiscount: 3, promoDiscount: 0, couponDiscount: 5 };
     expect(checkoutOrderRow({ ...base, pricing: discounted }).promo_detail).toEqual({ item: 3, promos: 0, coupon: 5 });

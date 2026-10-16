@@ -44,7 +44,8 @@ export async function settleCheckout(session: Stripe.Checkout.Session): Promise<
   // Our fee on this charge is real now, whichever shape it settles. First,
   // and thrown on failure, so a fee is never taken unrecorded: Stripe asks
   // again, and taking it twice changes nothing.
-  await takeFee(session.metadata?.fee_id, session);
+  const meta = session.metadata ?? {};
+  await takeFee(session, { feeId: meta.fee_id, feeCents: meta.fee_cents, restaurantId: meta.restaurant_id });
 
   if (session.metadata?.account_checkout) return await settleAccountCheckout(session);
   if (session.metadata?.split_id) return await settleSplitShare(session);
@@ -101,13 +102,6 @@ async function settleSplitShare(session: Stripe.Checkout.Session): Promise<void>
 
     // Retry all remaining steps even if the share was already recorded.
     // Both fee assignment and order settlement are idempotent.
-    // Our cut, on the same order. It rides on the first share to be paid —
-    // one bill divided four ways is still one bill — and it is what the
-    // monthly ceiling is summed from, so a share that never recorded it let
-    // us take more this month than the ceiling allows.
-    const shareFee = Number(session.metadata?.settle_fee ?? 0);
-    if (shareFee > 0) await chargeFeeOnSitting(split.session_id as string, shareFee);
-
     // Anything they ordered after the freeze is theirs, and settles now:
     // the orders and their payments in one write.
     const ownIds = unpackOrderIds(session.metadata);
@@ -168,44 +162,6 @@ async function closeDividedBill(splitId: string, sessionId: string, lockedAt: st
 }
 
 /**
- * The oldest order on a sitting, which is the one that carries what belongs to
- * the table rather than to any single dish: the gratuity, and our fee.
- *
- * Settling a whole table puts both on the first of the orders it settled. A
- * divided bill has no such list — the shares belong to the sitting — so it is
- * the same rule stated the only way it can be here.
- */
-async function firstOnSitting(sessionId: string): Promise<{ id: string; tip: number; total: number } | null> {
-  const { data, error } = await createAdminClient()
-    .from("orders")
-    .select("id, tip, total")
-    .eq("session_id", sessionId)
-    .neq("status", "cancelled")
-    .neq("status", "pending_payment")
-    .eq("written_off", false)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(`settling a share: could not read its order: ${error.message}`);
-  if (!data) return null;
-  return { id: data.id as string, tip: Number(data.tip ?? 0), total: Number(data.total ?? 0) };
-}
-
-/** Our cut of a divided bill, recorded once the money is real. */
-async function chargeFeeOnSitting(sessionId: string, fee: number): Promise<void> {
-  const first = await firstOnSitting(sessionId);
-  if (!first) return;
-  // Only if nothing has been recorded yet: the fee rides on the first share to
-  // be paid, and the shares after it must not each add another.
-  const { error } = await createAdminClient()
-    .from("orders")
-    .update({ platform_fee: fee })
-    .eq("id", first.id)
-    .or("platform_fee.is.null,platform_fee.eq.0");
-  if (error) throw new Error(`settling a share: could not record its fee: ${error.message}`);
-}
-
-/**
  * A whole table settled in one payment: several orders, one card.
  */
 async function settleBill(session: Stripe.Checkout.Session): Promise<void> {
@@ -229,15 +185,6 @@ async function settleBill(session: Stripe.Checkout.Session): Promise<void> {
 
   // Paid in full is the ordinary way a table empties.
   await closeSessionsFor(settled.sessions, "paid");
-
-  // Our cut of this settlement, recorded on the first of the settled
-  // orders — the same row that carries the tip. It is what the monthly
-  // ceiling is summed from, so it has to land only once a payment is real.
-  const fee = Number(session.metadata?.settle_fee ?? 0);
-  if (fee > 0) {
-    const { error: feeError } = await db.from("orders").update({ platform_fee: fee }).eq("id", settleIds[0]);
-    if (feeError) throw new Error(`settling a bill: could not record its fee: ${feeError.message}`);
-  }
 
   // The coupon use was reserved when the bill was sent to Stripe; the
   // payment makes it real, and the code is stamped on the order it paid
