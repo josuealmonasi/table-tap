@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { everyRow } from "@/lib/paged";
 
 /**
  * What we have already taken from this restaurant in per-order fees this
@@ -18,13 +19,17 @@ export async function feesTakenThisMonth(restaurantId: string): Promise<number> 
   since.setUTCDate(1);
   since.setUTCHours(0, 0, 0, 0);
 
-  const { data } = await createAdminClient()
+  // Every row: a read stops at the server's row cap without saying so, and a
+  // month summed from its first thousand orders is a ceiling never reached.
+  const db = createAdminClient();
+  const data = await everyRow<{ platform_fee: number }>((a, b) => db
     .from("orders")
     .select("platform_fee")
     .eq("restaurant_id", restaurantId)
     .gt("platform_fee", 0)
-    .gte("created_at", since.toISOString());
+    .gte("created_at", since.toISOString())
+    .order("id").range(a, b), "this month's fees");
 
-  const pesos = (data ?? []).reduce((sum, o) => sum + Number(o.platform_fee ?? 0), 0);
+  const pesos = data.reduce((sum, o) => sum + Number(o.platform_fee ?? 0), 0);
   return Math.round(pesos * 100);
 }

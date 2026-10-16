@@ -64,6 +64,49 @@ describe("a new table decides whether the world can read it", () => {
   });
 });
 
+describe("a read that grows with time reads every row", () => {
+  it("pages every time-windowed read of a table that keeps growing", () => {
+    // PostgREST stops each read at its row cap — 1000 on Supabase — and says
+    // nothing. A period read in one request is its first thousand rows:
+    // analytics showed "1000 Pedidos" and MX$1,000.00 for a day of 1100, the
+    // shift's expected cash and the accounts' balances summed part of their
+    // rows, and `.limit(10000)` on the visit card's numbers changed nothing,
+    // because the cap wins. A window over a growing table pages
+    // (`everyRow`), or says how few it wants (a limit at or under the cap),
+    // or only counts.
+    const GROWING = ["orders", "payments", "user_logs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions",
+      "waste_entries", "ingredient_purchases", "ingredient_counts", "ingredient_prices", "cash_movements",
+      "coupon_redemptions", "dish_ratings", "print_jobs", "notifications", "terminal_deposits"];
+    const files = walk("src").filter(f => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__"));
+    const offenders: string[] = [];
+    let windows = 0;
+    for (const f of files) {
+      const src = read(f);
+      for (const m of src.matchAll(/\.from\("([a-z_]+)"\)/g)) {
+        if (!GROWING.includes(m[1])) continue;
+        const end = src.indexOf(";", m.index);
+        const chain = src.slice(m.index, end === -1 ? undefined : end);
+        if (!/\.(gte|gt|lt|lte)\("(created_at|offline_at|opened_at|sales_day)"/.test(chain)) continue;
+        windows++;
+        // Paged when the nearest `everyRow` before it wraps this read and no
+        // other — a row type's own semicolons make "the statement" useless.
+        const before = src.slice(Math.max(0, m.index - 400), m.index);
+        const call = before.lastIndexOf("everyRow");
+        const limit = /\.limit\((\d[\d_]*)\)/.exec(chain);
+        const paged = call !== -1 && !before.slice(call).includes(".from(") && /\.range\(/.test(chain);
+        // One table's bill, one sitting, one order or one account is a
+        // handful of rows whatever the window says.
+        const oneThing = /\.eq\("(id|table_id|session_id|order_id|account_id|card_id|shift_id)",/.test(chain);
+        const bounded = oneThing || /head:\s*true/.test(chain) || /\.(single|maybeSingle)\(\)/.test(chain)
+          || (limit !== null && Number(limit[1].replace(/_/g, "")) <= 1000);
+        if (!paged && !bounded) offenders.push(`${f}: .from("${m[1]}") over a time window`);
+      }
+    }
+    expect(windows, "the scan found no time-windowed read").toBeGreaterThan(10);
+    expect(offenders, `reads that stop at the row cap without saying so — page them with everyRow:\n${offenders.join("\n")}`).toEqual([]);
+  });
+});
+
 describe("the RLS gate asks about every table", () => {
   it("names every table in the public-key sweep, unless a diner reads it on purpose", () => {
     // The cash drawer's shifts and withdrawals shipped in no list of the RLS

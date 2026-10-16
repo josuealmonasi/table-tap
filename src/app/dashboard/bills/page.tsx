@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { everyRow } from "@/lib/paged";
 import { unwrap } from "@/lib/ordering-data";
 import { MANAGES, OWNS, SETTLES } from "@/lib/membership";
 import { getPlan } from "@/lib/plan-server";
@@ -87,15 +88,15 @@ export default async function BillsPage() {
   const me = await currentUser();
   const dayStart = startOfLocalDay(new Date(), r.timezone ?? DEFAULT_TIME_ZONE);
   const myPayments = me?.email
-    ? unwrap(
-        await db
-          .from("payments")
-          .select("amount, method")
-          .eq("restaurant_id", r.id)
-          .eq("actor_email", me.email)
-          .gte("created_at", dayStart.toISOString()),
-        "your takings today",
-      )
+    // Every row: a busy counter takes more payments in a day than one read
+    // returns, and a till summed from part of them is short money nobody lost.
+    ? await everyRow<{ amount: number; method: "cash" | "card" }>((a, b) => db
+        .from("payments")
+        .select("amount, method")
+        .eq("restaurant_id", r.id)
+        .eq("actor_email", me.email)
+        .gte("created_at", dayStart.toISOString())
+        .order("id").range(a, b), "your takings today")
     : null;
   const till = myPayments ? tillFrom(myPayments) : EMPTY_TILL;
 

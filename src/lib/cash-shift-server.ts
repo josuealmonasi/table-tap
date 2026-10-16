@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { everyRow } from "@/lib/paged";
 import type { CorteAdjustment, CortePayment } from "@/lib/corte";
 import type { CashMovement } from "@/lib/cash-drawer";
 import { shiftSum, type CashShift, type ShiftSum, type ShiftView, type TrailLine } from "@/lib/cash-shift";
@@ -67,34 +68,31 @@ export async function shiftSumOf(restaurantId: string, shift: CashShift, until: 
   const db = createAdminClient();
   const from = shift.opened_at;
   const to = (shift.closed_at ? new Date(shift.closed_at) : until).toISOString();
+  // Every row of the shift: a busy shift has more payments than one read
+  // returns, and a drawer summed from part of them is a shortfall nobody made.
   const [payments, handedBack, withdrawals] = await Promise.all([
-    db.from("payments").select("actor_email, amount, method")
-      .eq("restaurant_id", restaurantId).gte("created_at", from).lte("created_at", to),
-    db.from("user_logs").select("action, detail")
-      .eq("restaurant_id", restaurantId).eq("action", "refunded").gte("created_at", from).lte("created_at", to),
+    everyRow<CortePayment>((a, b) => db.from("payments").select("actor_email, amount, method")
+      .eq("restaurant_id", restaurantId).gte("created_at", from).lte("created_at", to)
+      .order("id").range(a, b), "the shift's payments"),
+    everyRow<CorteAdjustment>((a, b) => db.from("user_logs").select("action, detail")
+      .eq("restaurant_id", restaurantId).eq("action", "refunded").gte("created_at", from).lte("created_at", to)
+      .order("id").range(a, b), "the shift's handbacks"),
     shiftWithdrawals(restaurantId, shift.id),
   ]);
-  if (payments.error) throw new Error(`the shift's payments: ${payments.error.message}`);
-  if (handedBack.error) throw new Error(`the shift's handbacks: ${handedBack.error.message}`);
-  return shiftSum(
-    shift.opening_amount,
-    (payments.data ?? []) as CortePayment[],
-    (handedBack.data ?? []) as CorteAdjustment[],
-    withdrawals,
-  );
+  return shiftSum(shift.opening_amount, payments, handedBack, withdrawals);
 }
 
 /** What happened to the money during a shift: refunds, discounts, cancellations, withdrawals. */
 export async function shiftTrail(restaurantId: string, shift: CashShift): Promise<TrailLine[]> {
   const to = shift.closed_at ?? new Date().toISOString();
-  const { data, error } = await createAdminClient()
+  const db = createAdminClient();
+  const data = await everyRow<TrailLine>((a, b) => db
     .from("user_logs").select("entity, action, detail, actor_email, created_at")
     .eq("restaurant_id", restaurantId)
     .in("entity", Object.keys(TRAIL))
     .gte("created_at", shift.opened_at).lte("created_at", to)
-    .order("created_at", { ascending: true });
-  if (error) throw new Error(`the shift's trail: ${error.message}`);
-  return ((data ?? []) as TrailLine[]).filter(l => TRAIL[l.entity]?.includes(l.action));
+    .order("created_at", { ascending: true }).order("id").range(a, b), "the shift's trail");
+  return data.filter(l => TRAIL[l.entity]?.includes(l.action));
 }
 
 /** Today's shifts as the register close shows them, each with its sum and trail. */
