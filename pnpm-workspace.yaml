@@ -13,8 +13,10 @@ allowBuilds:
 # Next's image optimizer runs in PRODUCTION, on menu photography a restaurant
 # uploads, so this is the one advisory on the list that reaches a running
 # server. Next already supports the patched version; nothing else changes.
+# 0.35.5 since 2026-10-16: 0.35.4 bundles a librsvg with CVE-2026-96889, and
+# an SVG is exactly what a restaurant might upload as its logo.
 overrides:
-  sharp: "^0.35.4"
+  sharp: "^0.35.5"
   # The Stripe SDK asks for `qs: ^6.11.0` and pnpm picked one with two open
   # advisories. 6.16.0 is inside the range Stripe declares, so this raises it
   # without touching the SDK. qs serialises our requests going OUT to Stripe
@@ -37,3 +39,8 @@ overrides:
   "brace-expansion@1": "^1.1.18"
   "brace-expansion@>=3": "^5.0.9"
   js-yaml: "^4.3.2"
+  # A denial-of-service advisory that reaches nothing that ships: postcss
+  # reads our own stylesheets with it at build time. Raised inside its major.
+  # braces carries a similar one through eslint's globbing, and is left: the
+  # advisory names 3.0.4, which was never published (3.0.3 is the latest).
+  source-map-js: "^1.2.2"
