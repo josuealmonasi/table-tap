@@ -5,19 +5,17 @@ import { actingManager } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
-import { applyWriteOff } from "@/lib/apply-write-off";
+import { closeSessionsFor } from "@/lib/table-session";
 import { NOTE_MAX, writableOff, writeOffTotal } from "@/lib/write-off";
-import type { Order } from "@/lib/types";
 
 export const runtime = "nodejs";
 
 /**
  * POST /api/bill/write-off/approve — a manager decides on a waiter's request.
  *
- * What gets cancelled is re-read here rather than trusted from the row. Between
- * the ask and the decision the table may have paid, been written off by someone
- * else, or ordered another round — and approving a stale list would either
- * cancel a debt that was already settled or miss the half that arrived since.
+ * The manager approves the amount shown on the ask. Orders are read again,
+ * then locked and checked in the write transaction, so a changed debt needs
+ * a new request instead of quietly approving a different amount.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingManager();
@@ -26,24 +24,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const body = await jsonBody<{
     requestId?: string;
     approve?: boolean;
+    reviewedAmount?: number;
     note?: string;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
-  const { requestId, approve, note } = body;
+  const { requestId, approve, note, reviewedAmount } = body;
   if (!requestId) return await apiError("apiErr.invalidRequest", 400);
+  if (typeof approve !== "boolean" || (approve &&
+    (typeof reviewedAmount !== "number" || !Number.isFinite(reviewedAmount) || reviewedAmount <= 0))) {
+    return await apiError("apiErr.invalidRequest", 400);
+  }
   const decidedNote = String(note ?? "").trim().slice(0, NOTE_MAX);
 
   const db = createAdminClient();
   const { data: request } = await db
     .from("write_off_requests")
-    .select("id, order_ids, table_label, reason, note, requested_by, status")
+    .select("id, order_ids, table_label, reason, note, requested_by, status, amount")
     .eq("id", requestId)
     .eq("restaurant_id", actor.restaurantId)
     .eq("status", "pending")
     .maybeSingle();
   if (!request) return await apiError("apiErr.requestGone", 409);
 
-  const decide = async (status: "approved" | "rejected", amount?: number) =>
+  const decide = async (status: "rejected") =>
     await db
       .from("write_off_requests")
       .update({
@@ -51,7 +54,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         decided_by: actor.email,
         decided_at: new Date().toISOString(),
         decided_note: decidedNote || null,
-        ...(amount === undefined ? {} : { amount }),
       })
       .eq("id", request.id)
       .eq("status", "pending"); // two managers, one decision
@@ -74,31 +76,36 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: true, approved: false });
   }
 
-  const { data: rows } = await db
+  if (Number(request.amount) !== reviewedAmount) return await apiError("apiErr.approvalChanged", 409);
+
+  const { data: rows, error: readError } = await db
     .from("orders")
-    .select("id, total, paid, written_off, status, table_label")
+    .select("id, total, paid, written_off, status, table_label, session_id")
     .is("account_id", null)
     .eq("restaurant_id", actor.restaurantId)
     .in("id", request.order_ids as string[]);
 
-  const orders = writableOff((rows ?? []) as Order[]);
+  if (readError) return await apiError("apiErr.verifyOrders", 503);
+  const orders = writableOff(rows ?? []);
   if (orders.length === 0) {
     // Settled or already cancelled while the ask was waiting: closing the
     // request is the honest outcome, and nothing is written off twice.
-    await decide("rejected", 0);
+    await decide("rejected");
     return await apiError("apiErr.nothingToWriteOff", 409);
   }
 
   const amount = writeOffTotal(orders);
-  const done = await applyWriteOff({
-    orders,
-    restaurantId: actor.restaurantId,
-    actorEmail: actor.email,
-    reason: request.reason,
-    note: request.note ?? "",
+  // The shown amount, stored ask and current orders must describe one decision.
+  if (amount !== reviewedAmount || orders.length !== request.order_ids.length) {
+    return await apiError("apiErr.approvalChanged", 409);
+  }
+  const { data: outcome, error } = await db.rpc("approve_write_off_request", {
+    p_request: request.id, p_restaurant: actor.restaurantId,
+    p_actor: actor.email, p_amount: reviewedAmount, p_note: decidedNote || null,
   });
-  if (!done) return await apiError("apiErr.generic", 500);
-  await decide("approved", amount);
+  if (error) return await apiError("apiErr.generic", 500);
+  if (outcome !== "approved") return await apiError("apiErr.approvalChanged", 409);
+  await closeSessionsFor(orders, "written_off");
 
   await logEvent({
     restaurantId: actor.restaurantId,

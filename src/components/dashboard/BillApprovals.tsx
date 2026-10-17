@@ -42,13 +42,13 @@ export default function BillApprovals({
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
 
-  async function decideWriteOff(requestId: string, approve: boolean): Promise<void> {
+  async function decideWriteOff(requestId: string, approve: boolean, reviewedAmount: number): Promise<void> {
     setBusy(requestId);
     try {
       const res = await fetch("/api/bill/write-off/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestId, approve }),
+        body: JSON.stringify({ requestId, approve, reviewedAmount }),
       });
       const data = await res.json().catch(() => ({}));
       toast(res.ok ? t(approve ? "writeOff.done" : "dash.rejected") : (data.error ?? ""));
@@ -62,13 +62,13 @@ export default function BillApprovals({
     }
   }
 
-  async function decide(requestId: string, approve: boolean): Promise<void> {
+  async function decide(requestId: string, approve: boolean, reviewedAmount: number): Promise<void> {
     setBusy(requestId);
     try {
       const res = await fetch("/api/bill/discount/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestId, approve }),
+        body: JSON.stringify({ requestId, approve, reviewedAmount }),
       });
       const data = await res.json();
       toast(res.ok ? t(approve ? "dash.approved" : "dash.rejected") : (data.error ?? ""));
@@ -111,14 +111,14 @@ export default function BillApprovals({
             <button
               className="tt-btn tt-btn-danger tt-btn-sm"
               disabled={busy === r.id}
-              onClick={() => decideWriteOff(r.id, true)}
+              onClick={() => decideWriteOff(r.id, true, Number(r.amount))}
             >
               {t("writeOff.approve")}
             </button>
             <button
               className="tt-btn tt-btn-ghost tt-btn-sm"
               disabled={busy === r.id}
-              onClick={() => decideWriteOff(r.id, false)}
+              onClick={() => decideWriteOff(r.id, false, Number(r.amount))}
             >
               {t("dash.reject")}
             </button>
@@ -141,14 +141,14 @@ export default function BillApprovals({
             <button
               className="tt-btn tt-btn-primary tt-btn-sm"
               disabled={busy === r.id}
-              onClick={() => decide(r.id, true)}
+              onClick={() => decide(r.id, true, Number(r.amount))}
             >
               {t("dash.approve")}
             </button>
             <button
               className="tt-btn tt-btn-ghost tt-btn-sm"
               disabled={busy === r.id}
-              onClick={() => decide(r.id, false)}
+              onClick={() => decide(r.id, false, Number(r.amount))}
             >
               {t("dash.reject")}
             </button>

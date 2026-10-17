@@ -7,7 +7,6 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { findCoupon } from "@/lib/coupon-service";
 import { billTotal, discountableOrders } from "@/lib/staff-discount";
-import { applyToOrders } from "@/lib/apply-bill-discount";
 import type { Order } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -15,9 +14,9 @@ export const runtime = "nodejs";
 /**
  * POST /api/bill/discount/approve — a manager decides on a waiter's request.
  *
- * The amount is recomputed here rather than trusted from the row: the table
- * may have ordered more since the ask, and the discount has to match the bill
- * being paid, not the one that existed when someone walked to the till.
+ * The current discount must match what the manager saw. The transaction
+ * checks it again under locks, so approving an old ask cannot silently
+ * discount a different bill.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingManager();
@@ -26,31 +25,36 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const body = await jsonBody<{
     requestId?: string;
     approve?: boolean;
+    reviewedAmount?: number;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
-  const { requestId, approve } = body;
+  const { requestId, approve, reviewedAmount } = body;
   if (!requestId) return await apiError("apiErr.invalidRequest", 400);
 
+  if (typeof approve !== "boolean" || (approve &&
+    (typeof reviewedAmount !== "number" || !Number.isFinite(reviewedAmount) || reviewedAmount <= 0))) {
+    return await apiError("apiErr.invalidRequest", 400);
+  }
   const db = createAdminClient();
   const { data: request } = await db
     .from("discount_requests")
-    .select("id, order_ids, code, status")
+    .select("id, order_ids, code, status, amount")
     .eq("id", requestId)
     .eq("restaurant_id", actor.restaurantId)
     .eq("status", "pending")
     .maybeSingle();
   if (!request) return await apiError("apiErr.requestGone", 409);
 
-  const decide = async (status: "approved" | "rejected", amount?: number) =>
+  const decide = async (status: "rejected") =>
     await db
       .from("discount_requests")
       .update({
         status,
         decided_by: actor.email,
         decided_at: new Date().toISOString(),
-        ...(amount === undefined ? {} : { amount }),
       })
-      .eq("id", request.id);
+      .eq("id", request.id)
+      .eq("status", "pending");
 
   if (!approve) {
     await decide("rejected");
@@ -64,13 +68,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: true, approved: false });
   }
 
-  const { data: rows } = await db
+  if (Number(request.amount) !== reviewedAmount) return await apiError("apiErr.approvalChanged", 409);
+
+  const { data: rows, error: readError } = await db
     .from("orders")
     .select("id, total, paid, written_off, status, coupon_code, discount")
     .is("account_id", null)
     .eq("restaurant_id", actor.restaurantId)
     .in("id", request.order_ids);
 
+  if (readError) return await apiError("apiErr.verifyOrders", 503);
   const orders = discountableOrders((rows ?? []) as Order[]);
   if (orders.length === 0) {
     await decide("rejected");
@@ -89,10 +96,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (couponProblem(coupon, food)) return await apiError("apiErr.couponNotValid", 400);
 
   const amount = applyCoupon(toAppliedCoupon(coupon), food);
-  const applied = await applyToOrders(orders, coupon.id, coupon.code, amount, actor.restaurantId);
-  if (!applied) return await apiError("apiErr.couponNotValid", 409);
+  if (amount !== reviewedAmount || orders.length !== request.order_ids.length) {
+    return await apiError("apiErr.approvalChanged", 409);
+  }
+  // Rechecked under the order and request locks: pricing may have changed since this read.
+  const { data: outcome, error } = await db.rpc("approve_discount_request", {
+    p_request: request.id, p_restaurant: actor.restaurantId,
+    p_actor: actor.email, p_amount: reviewedAmount,
+  });
+  if (error) return await apiError("apiErr.generic", 500);
+  if (outcome !== "approved") return await apiError("apiErr.approvalChanged", 409);
 
-  await decide("approved", amount);
   await logEvent({
     restaurantId: actor.restaurantId,
     actor: actor.email,

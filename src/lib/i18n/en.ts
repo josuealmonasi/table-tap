@@ -1242,6 +1242,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     waiterSettles: "Your waiter is settling this table. Ask them for the bill.",
     nothingToDiscount: "That bill has nothing left to discount.",
     nothingToWriteOff: "That bill has nothing left to write off — it was collected or cancelled first.",
+    approvalChanged: "The bill changed since this request was shown. Reject it and ask for a new request.",
     requestGone: "That request has already been decided.",
     couponNotFound: "We couldn't find that coupon.",
     couponLookupFailed: "We couldn't check the coupon. Try again.",

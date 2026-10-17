@@ -13,6 +13,7 @@ us, and what now catches each one.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| An approval acts on the amount the manager saw, through guarded routes only | A request showing MX$10 carried a MX$1,000 bill's ids |
 | A split freezes its own sitting and closes only with enough collected money | Another table's MX$20 could settle a MX$1,000 bill |
 |---|---|
 | A lost till response never deletes committed money (W1.1) | Deleting a settled order orphaned its payment and let replay record the cash again |
@@ -2069,3 +2070,19 @@ The close transaction checks the sitting's actual unspent ledger credit before
 marking any order paid. `join.react-component.spec.tsx` checks the route and
 SQL contract; `checkout-settle.spec.ts` refuses an underfunded close and keeps
 webhook retries working. Live SQL concurrency checks remain a release gate.
+
+## An approval for ten pesos that erased a thousand
+
+Request rows and manager decisions had to agree, but authenticated staff could
+write every request field directly and approval trusted its order ids. Both
+request tables now allow scoped client reads only; their writes go through the
+role-guarded APIs. The current client already used those APIs, so no client
+mutation needed replacing. It now sends the amount shown to the manager.
+
+Both approval routes compare that amount with the saved ask and re-derived
+amount. Their transactions lock the request and orders and compare again before
+changing any debt, coupon use or decision. Changed requests are refused and
+keep their original displayed amount. `bill-approval.react-component.spec.tsx`
+reproduces forged and stale amounts, transaction refusals, failed reads and
+matching approvals. Claude must verify the effective grants and concurrent
+SQL behavior against the applied schema.

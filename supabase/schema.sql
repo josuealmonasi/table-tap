@@ -874,11 +874,13 @@ create index if not exists discount_requests_open_idx
 alter table discount_requests enable row level security;
 drop policy if exists "team handles discount requests" on discount_requests;
 create policy "team handles discount requests"
-  on discount_requests for all
-  using (has_role(restaurant_id, array['owner', 'manager', 'waiter', 'cashier']))
-  with check (has_role(restaurant_id, array['owner', 'manager', 'waiter', 'cashier']));
+  on discount_requests for select
+  using (has_role(restaurant_id, array['owner', 'manager', 'waiter', 'cashier']));
 -- Never a customer's business: the ask names staff and carries a code.
 revoke all on discount_requests from anon;
+-- Only guarded routes may set the target, shown amount or decision.
+revoke insert, update, delete on discount_requests from authenticated;
+grant select on discount_requests to authenticated;
 
 -- USER LOGS: owners read their restaurant's log; writes happen only
 -- server-side from the user-management API routes (secret key).
@@ -1943,11 +1945,13 @@ create index if not exists write_off_requests_open_idx
 alter table write_off_requests enable row level security;
 drop policy if exists "team handles write off requests" on write_off_requests;
 create policy "team handles write off requests"
-  on write_off_requests for all
-  using (has_role(restaurant_id, array['owner', 'manager', 'waiter', 'cashier']))
-  with check (has_role(restaurant_id, array['owner', 'manager', 'waiter', 'cashier']));
+  on write_off_requests for select
+  using (has_role(restaurant_id, array['owner', 'manager', 'waiter', 'cashier']));
 -- Never a customer's business: it names staff and what a table did not pay.
 revoke all on write_off_requests from anon;
+-- Only guarded routes may set the target, shown amount or decision.
+revoke insert, update, delete on write_off_requests from authenticated;
+grant select on write_off_requests to authenticated;
 
 -- ── Emailed receipts ───────────────────────────────────────────────────────
 -- Only that one was sent, never to whom. The address a diner types is used for
@@ -5000,3 +5004,92 @@ end;
 $$;
 revoke all on function public.ring_pos_account(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int) from public, anon, authenticated;
 grant execute on function public.ring_pos_account(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int) to service_role;
+
+-- A manager approves the shown debt, not whatever the ids happen to owe later.
+create or replace function public.approve_write_off_request(
+  p_request uuid, p_restaurant uuid, p_actor text, p_amount numeric, p_note text
+) returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_request write_off_requests%rowtype;
+  v_count int;
+  v_total numeric;
+begin
+  select * into v_request from write_off_requests
+   where id = p_request and restaurant_id = p_restaurant for update;
+  if not found or v_request.status <> 'pending' then return 'gone'; end if;
+  if p_amount is null or p_amount <= 0 or v_request.amount <> p_amount then return 'changed'; end if;
+  perform 1 from orders where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+   order by id for update;
+  select count(*), coalesce(sum(total), 0) into v_count, v_total from orders
+   where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+     and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
+     -- An order moved onto a customer account is the account's debt now.
+     and account_id is null;
+  if v_count <> cardinality(v_request.order_ids) or round(v_total, 2) <> p_amount then return 'changed'; end if;
+
+  update orders set written_off = true, write_off_reason = v_request.reason,
+    write_off_note = v_request.note, written_off_by = p_actor, written_off_at = now(), status = 'completed'
+   where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+     and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
+     and account_id is null;
+  update write_off_requests set status = 'approved', decided_by = p_actor, decided_at = now(), decided_note = p_note
+   where id = p_request and restaurant_id = p_restaurant and status = 'pending';
+  return 'approved';
+end; $$;
+revoke all on function public.approve_write_off_request(uuid, uuid, text, numeric, text) from public, anon, authenticated;
+grant execute on function public.approve_write_off_request(uuid, uuid, text, numeric, text) to service_role;
+
+-- The coupon, its use and every order change commit with the one decision.
+create or replace function public.approve_discount_request(
+  p_request uuid, p_restaurant uuid, p_actor text, p_amount numeric
+) returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_request discount_requests%rowtype;
+  v_coupon coupons%rowtype;
+  v_count int;
+  v_total numeric;
+  v_amount numeric;
+begin
+  select * into v_request from discount_requests
+   where id = p_request and restaurant_id = p_restaurant for update;
+  if not found or v_request.status <> 'pending' then return 'gone'; end if;
+  if p_amount is null or p_amount <= 0 or v_request.amount <> p_amount then return 'changed'; end if;
+  perform 1 from orders where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+   order by id for update;
+  select count(*), coalesce(sum(total), 0) into v_count, v_total from orders
+   where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+     and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
+     and coupon_code is null and account_id is null;
+  if v_count <> cardinality(v_request.order_ids) or v_total <= 0 then return 'changed'; end if;
+  select * into v_coupon from coupons
+   where restaurant_id = p_restaurant and upper(code) = upper(v_request.code) for update;
+  if not found or not v_coupon.active
+     or v_coupon.starts_at > now() or v_coupon.ends_at <= now()
+     or v_total < v_coupon.min_subtotal
+     or v_coupon.uses_count >= v_coupon.max_uses then return 'changed'; end if;
+  v_amount := greatest(0, least(v_total, round(case when v_coupon.kind = 'percent'
+    then v_total * v_coupon.value / 100 else v_coupon.value end, 2)));
+  if v_amount <> p_amount then return 'changed'; end if;
+  if redeem_coupon(v_coupon.id) is null then return 'changed'; end if;
+
+  -- Keep the rounding remainder on the largest order, as spreadDiscount does.
+  with shares as (
+    select id, total, round(p_amount * total / v_total, 2) amount,
+      row_number() over (order by total desc, id) position
+    from orders where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+     and account_id is null
+  ), amounts as (
+    select id, greatest(0, least(total, amount + case when position = 1
+      then p_amount - sum(amount) over () else 0 end)) amount from shares
+  )
+  update orders o set coupon_code = v_coupon.code,
+    discount = round(coalesce(o.discount, 0) + a.amount, 2), total = round(o.total - a.amount, 2)
+    from amounts a where o.id = a.id and o.restaurant_id = p_restaurant;
+  insert into coupon_redemptions (restaurant_id, coupon_id, order_id, code, amount, confirmed_at)
+  values (p_restaurant, v_coupon.id, v_request.order_ids[1], v_coupon.code, p_amount, now());
+  update discount_requests set status = 'approved', decided_by = p_actor, decided_at = now()
+   where id = p_request and restaurant_id = p_restaurant and status = 'pending';
+  return 'approved';
+end; $$;
+revoke all on function public.approve_discount_request(uuid, uuid, text, numeric) from public, anon, authenticated;
+grant execute on function public.approve_discount_request(uuid, uuid, text, numeric) to service_role;
