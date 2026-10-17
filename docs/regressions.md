@@ -17,6 +17,7 @@ us, and what now catches each one.
 | An approval acts on the amount the manager saw, through guarded routes only | A request showing MX$10 carried a MX$1,000 bill's ids |
 | A split freezes its own sitting and closes only with enough collected money | Another table's MX$20 could settle a MX$1,000 bill |
 |---|---|
+| A replayed sale keeps the lines it was sold with | Replay repriced every line to today's menu and, after a promotion ended, took stock from the deal instead of its dishes |
 | A held sale is recorded in the currency it was charged in, or not at all | A held MX$100 sale replayed after a switch to USD was recorded as US$100 |
 | Each held sale is its own key: one tab's save cannot erase another's | Two till tabs saving at once both read the shared list back as safe, and the later write erased the earlier sale |
 | A till sale is filed under the restaurant whose screen rang it | Another tab signing in under an open till filed restaurant A's cash as restaurant B's takings |
@@ -2191,3 +2192,16 @@ sends it on replay; `ringOffline` refuses a sale whose currency is not the
 restaurant's, with `held: true`, so it stays on the device rather than be
 relabelled. A till from before this sends none and is recorded as before.
 `pos-atomic.spec.tsx` covers the refusal and both ways through.
+
+## A replayed sale rewritten by today's menu
+
+What the till sold and what the order recorded had to agree, and the replay
+replaced the first with the second. When a held sale's cart still matched
+today's menu, its lines were swapped for today's — a MX$100 dish stored at
+today's MX$120, against a total of MX$100. When it no longer matched (a
+promotion had ended), the till's own lines were kept but lost a combo's parts,
+so stock came off the deal's id and the burger and fries stayed at 10 (Codex
+audit A, finding 14). `ringOffline` now always records the till's lines,
+combos with their parts, and uses today's menu only to measure the drift.
+`offline-sale.spec.ts` checks a combo keeps its parts; `pos-atomic.spec.tsx`
+that a replay records the price sold and takes each part from stock.

@@ -1,6 +1,6 @@
 import { round2 } from "@/lib/money";
 import { cashAmount } from "@/lib/cash-drawer";
-import type { OrderExtra, OrderLineItem } from "@/lib/types";
+import type { ComboComponent, OrderExtra, OrderLineItem } from "@/lib/types";
 
 /**
  * A sale the till rang without a connection, as it arrives once one returns.
@@ -81,9 +81,25 @@ export function offlineLines(items: unknown): OrderLineItem[] {
           id: text(e?.id, 64), name: text(e?.name, 80), emoji: text(e?.emoji, 8), price: price(e?.price),
         }))
       : [];
+    // A combo keeps its parts: they are what the kitchen made and what stock
+    // gives up, and the promotion that priced it may be gone by the time the
+    // sale is sent.
+    const components: ComboComponent[] = Array.isArray(l.components)
+      ? (l.components as Record<string, unknown>[]).slice(0, 20).flatMap(c => {
+          const n = Math.trunc(Number(c?.qty));
+          const itemId = text(c?.itemId, 64);
+          return itemId && Number.isFinite(n) && n >= 1 && n <= 99
+            ? [{ itemId, name: text(c?.name, 80) || "—", emoji: text(c?.emoji, 8), qty: n }]
+            : [];
+        })
+      : [];
+    const comboId = text(l.comboId, 64);
+    const discountPct = Number(l.discountPct);
     return [{
       itemId: text(l.itemId, 64), name: text(l.name, 80) || "—", emoji: text(l.emoji, 8),
       price: price(l.price), qty, mods, extras,
+      ...(comboId && components.length > 0 ? { comboId, components } : {}),
+      ...(Number.isFinite(discountPct) && discountPct > 0 && discountPct <= 100 ? { discountPct } : {}),
     }];
   });
 }

@@ -123,6 +123,16 @@ it("a replay in the restaurant's currency, or from a till that sent none, rings 
     expect(res.status).toBe(200);
   }
 });
+it("a replay records the lines as sold and takes a combo's parts from stock", async () => {
+  const items = [{ itemId: "promo-1", name: "Combo", price: 90, qty: 2, mods: {}, emoji: "", comboId: "promo-1",
+    components: [{ itemId: "burger", name: "Burger", emoji: "", qty: 1 }, { itemId: "fries", name: "Fries", emoji: "", qty: 1 }] }];
+  await ringOffline(actor, { ...body(), posRef: crypto.randomUUID(), items });
+  const args = state.calls.find(c => c.name === "ring_pos_sale")?.args as { p_order: { items: { price: number }[] }; p_demand: unknown };
+  expect(args.p_order.items[0].price).toBe(90);
+  expect(args.p_demand).toEqual(expect.arrayContaining([
+    expect.objectContaining({ item_id: "burger", qty: 2 }), expect.objectContaining({ item_id: "fries", qty: 2 }),
+  ]));
+});
 it("a foreign reference conflict reveals no ticket or total", async () => {
   state.reply = { outcome: "conflict" };
   const res = await ringOffline(actor, body());
