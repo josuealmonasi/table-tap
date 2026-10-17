@@ -43,6 +43,14 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
   const { data: restaurant } = await db.from("restaurants")
     .select("currency, tax_pct, service_pct, service_enabled").eq("id", actor.restaurantId).single();
   if (!restaurant) return await apiError("apiErr.forbidden", 403);
+  // Pesos collected yesterday are not dollars because the restaurant switched
+  // currency since: the sale would be recorded as US$100 for MX$100 in the
+  // drawer. Refused and kept on the device until the currency it was charged
+  // in is back. A till from before the currency was recorded sends none.
+  if (typeof body.currency === "string" && body.currency !== restaurant.currency) {
+    return await apiError("apiErr.offlineCurrency", 409,
+      { collected: body.currency, current: restaurant.currency }, { held: true });
+  }
 
   // Today's menu, with "sold out" and "closed" waived: the sale happened.
   const promotions = await promotionsOnSale(db, actor.restaurantId);

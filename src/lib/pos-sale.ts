@@ -8,6 +8,8 @@ export interface PosSaleBody {
   posRef?: string;
   /** The restaurant the till screen was opened for — the drawer the money is in. */
   restaurantId?: unknown;
+  /** A replayed sale: the currency it was charged in. */
+  currency?: unknown;
   /** The money already collected, saved before the first send. */
   collected?: unknown;
   items?: OrderLineItem[];

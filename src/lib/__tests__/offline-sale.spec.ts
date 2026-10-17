@@ -60,11 +60,11 @@ describe("what a held sale sends", () => {
   it("carries its reference, its time and what it charged, and asks for no receipt", () => {
     const sale: HeldSale = {
       posRef: "4f6c2a1e-0d3b-4c7a-9b8e-1a2b3c4d5e6f", restaurantId: "r", at: "2026-10-15T17:30:00.000Z",
-      method: "card", items: [], terminalRef: "AUT 1",
+      method: "card", items: [], terminalRef: "AUT 1", currency: "MXN",
       charge: { subtotal: 100, serviceFee: 10, tip: 5, discount: 0, total: 115 },
     };
     expect(replayBody(sale)).toMatchObject({
-      posRef: sale.posRef, restaurantId: "r", method: "card", terminalRef: "AUT 1", noReceipt: true,
+      posRef: sale.posRef, restaurantId: "r", method: "card", terminalRef: "AUT 1", currency: "MXN", noReceipt: true,
       offline: { at: sale.at, subtotal: 100, serviceFee: 10, tip: 5, discount: 0, total: 115 },
     });
   });

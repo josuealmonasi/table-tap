@@ -1185,7 +1185,9 @@ server applies it only if nothing has happened since.
   for what was collected, finished (the kitchen worked from the ticket; it
   never appears on the board as new), with its stock taken down to nought at
   most (`take_stock_floor`, in the same transaction as the money). It is never
-  refused for what the menu says today.
+  refused for what the menu says today — only for the currency: a sale charged
+  in pesos is kept on the device, not recorded, while the restaurant uses
+  another currency, because recording it would relabel MX$100 as US$100.
   Today's menu prices it only to store the difference (`orders.offline_drift`;
   null when a dish is gone), which Analytics lists under "Ventas sin conexión"
   for a manager.
