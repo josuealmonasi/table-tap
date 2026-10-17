@@ -23,20 +23,22 @@ export interface BillingOutcome {
 export function subscriptionOutcome(
   stripeStatus: string,
   plan: PlanName,
-): BillingOutcome {
+): BillingOutcome | null {
   switch (stripeStatus) {
     case "trialing":
       return { plan, status: "trialing" };
     case "active":
       return { plan, status: "active" };
-    case "past_due":
     case "incomplete":
+    case "incomplete_expired":
+      // No first payment means no new entitlement, even during a local trial.
+      return null;
+    case "past_due":
       return { plan, status: "past_due" };
     case "unpaid":
     case "paused":
       return { plan, status: "locked" };
     case "canceled":
-    case "incomplete_expired":
       return { plan: "carta", status: "active" };
     default:
       // A status Stripe added after this was written. Keeping them working

@@ -1258,6 +1258,7 @@ alter table orders add column if not exists customer_name text;
 --
 -- A null limit means unlimited. Prices are MXN and informational: Stripe is
 -- the authority on what was actually charged; these drive the plan screen.
+-- Subscription currency is independent of the restaurant's menu currency.
 create table if not exists plan_limits (
   plan          text primary key check (plan in ('carta', 'caja', 'servicio', 'casa', 'grupo')),
   rank          int not null,              -- upgrade order, lowest first
@@ -4866,6 +4867,86 @@ select o.restaurant_id, date_trunc('month', o.created_at at time zone 'utc')::da
    and o.status <> 'pending_payment'
    and o.created_at >= now() - interval '31 days'
 on conflict (restaurant_id, ref) where ref is not null and status <> 'released' do nothing;
+
+-- Stripe writes outlive a database transaction. Hold one durable claim across
+-- checkout and deletion so two servers cannot create two billing contracts.
+-- After 15 minutes recovery must first reconcile Stripe, then replace the token.
+-- No FK: a deletion retry must retain billing IDs after its restaurant is gone.
+create table if not exists restaurant_billing_operations (
+  restaurant_id uuid primary key,
+  token uuid,
+  started_at timestamptz,
+  state jsonb not null default '{}'::jsonb
+);
+alter table restaurant_billing_operations enable row level security;
+revoke all on restaurant_billing_operations from anon, authenticated, public;
+grant all on restaurant_billing_operations to service_role;
+
+create or replace function public.claim_restaurant_billing(p_restaurant uuid, p_token uuid)
+returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  -- A completed deletion can be retried even after its restaurant is gone.
+  update restaurant_billing_operations set token = p_token, started_at = now()
+    where restaurant_id = p_restaurant and token is null;
+  if found then return true; end if;
+  insert into restaurant_billing_operations (restaurant_id, token, started_at)
+    select id, p_token, now() from restaurants where id = p_restaurant
+    on conflict (restaurant_id) do nothing;
+  return found;
+end;
+$$;
+revoke all on function public.claim_restaurant_billing(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.claim_restaurant_billing(uuid, uuid) to service_role;
+
+create or replace function public.record_restaurant_billing(p_restaurant uuid, p_token uuid, p_state jsonb)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare
+  v_state jsonb;
+  v_key text;
+begin
+  select state into v_state from restaurant_billing_operations
+    where restaurant_id = p_restaurant and token = p_token
+      and started_at > now() - interval '15 minutes' for update;
+  if not found then return false; end if;
+  -- Keep all observed IDs, including canceled contracts, for deletion retries.
+  foreach v_key in array array['customers', 'sessions', 'subscriptions'] loop
+    p_state := jsonb_set(p_state, array[v_key], (
+      select coalesce(jsonb_agg(distinct value), '[]'::jsonb)
+      from jsonb_array_elements(coalesce(v_state->v_key, '[]'::jsonb) || coalesce(p_state->v_key, '[]'::jsonb))
+    ));
+  end loop;
+  update restaurant_billing_operations set state = v_state || p_state, started_at = now()
+    where restaurant_id = p_restaurant and token = p_token;
+  return found;
+end;
+$$;
+revoke all on function public.record_restaurant_billing(uuid, uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.record_restaurant_billing(uuid, uuid, jsonb) to service_role;
+
+-- Only the service can supply the snapshot it just read from Stripe. Compare
+-- both token and expiry so a heartbeat or a competing takeover wins safely.
+create or replace function public.takeover_restaurant_billing(
+  p_restaurant uuid, p_token uuid, p_previous uuid, p_started_at timestamptz, p_state jsonb
+) returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  update restaurant_billing_operations set token = p_token, started_at = now()
+    where restaurant_id = p_restaurant and token = p_previous and started_at = p_started_at
+      and started_at <= now() - interval '15 minutes';
+  if not found then return false; end if;
+  perform public.record_restaurant_billing(p_restaurant, p_token, p_state);
+  return true;
+end;
+$$;
+revoke all on function public.takeover_restaurant_billing(uuid, uuid, uuid, timestamptz, jsonb) from public, anon, authenticated;
+grant execute on function public.takeover_restaurant_billing(uuid, uuid, uuid, timestamptz, jsonb) to service_role;
+
+create or replace function public.release_restaurant_billing(p_restaurant uuid, p_token uuid)
+returns void language sql security definer set search_path = public as $$
+  update restaurant_billing_operations set token = null, started_at = null
+    where restaurant_id = p_restaurant and token = p_token;
+$$;
+revoke all on function public.release_restaurant_billing(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.release_restaurant_billing(uuid, uuid) to service_role;
 
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 

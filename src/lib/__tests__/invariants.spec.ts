@@ -2688,7 +2688,7 @@ describe("a diner pays by card, and only by card", () => {
     // paid days later completes the session unpaid, `settleCheckout` ignores
     // it, and no handler records the money when it lands. A diner's meal is
     // paid at the table, by card.
-    const sessions = walk("src").filter(f => /checkout\.sessions\.create\(/.test(read(f)) && !f.includes("/billing/"));
+    const sessions = walk("src").filter(f => /checkout\.sessions\.create\(/.test(read(f)) && !f.includes("/billing/") && !/mode:\s*"subscription"/.test(read(f)));
     expect(sessions.length, "the scan found no diner checkout").toBeGreaterThanOrEqual(4);
     expect(sessions.filter(f => !/payment_method_types: \["card"\]/.test(read(f))), "a diner checkout that lets Stripe choose the payment method").toEqual([]);
   });
