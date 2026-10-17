@@ -55,4 +55,14 @@ describe("account money SQL guards", () => {
       expect(accountLock).toBeLessThan(checkoutWrite);
     }
   });
+  it("rechecks debt under the charge lock before lowering a ceiling or closing", () => {
+    const change = fn("account_change");
+    expect(change).toMatch(/from customer_accounts[^;]+restaurant_id = p_restaurant for update;/);
+    expect(change.indexOf("for update;")).toBeLessThan(change.indexOf("public.account_owed"));
+    expect(change).toContain("p_limit < v_owed");
+    expect(change).toContain("v_owed > 0");
+    expect(change).toContain("'limit'");
+    expect(change).toContain("'owes'");
+    expect(schema).toContain("revoke all on function public.account_change(uuid, uuid, text, numeric, text) from public, anon, authenticated;");
+  });
 });

@@ -78,6 +78,7 @@ drop function if exists public.pos_insert_order(uuid, uuid, jsonb, text, timesta
 drop function if exists public.pos_ticket(uuid, uuid);
 
 drop function if exists public.account_owed(uuid);
+drop function if exists public.account_change(uuid, uuid, text, numeric, text);
 drop function if exists public.account_charge(uuid, uuid, uuid[], numeric, text);
 drop function if exists public.account_settle(uuid, uuid, numeric, numeric, text, text, text);
 drop function if exists public.account_checkout_open(uuid, uuid, numeric, numeric, numeric);

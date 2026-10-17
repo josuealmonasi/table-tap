@@ -3622,6 +3622,36 @@ $$;
 revoke all on function public.account_charge(uuid, uuid, uuid[], numeric, text) from public, anon, authenticated;
 grant execute on function public.account_charge(uuid, uuid, uuid[], numeric, text) to service_role;
 
+-- A ceiling or closure must see every charge that won the account lock first.
+create or replace function public.account_change(
+  p_restaurant uuid, p_account uuid, p_action text, p_limit numeric, p_actor text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_account customer_accounts;
+  v_owed numeric;
+begin
+  select * into v_account from customer_accounts
+   where id = p_account and restaurant_id = p_restaurant for update;
+  if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  v_owed := public.account_owed(p_account);
+  if p_action = 'limit' then
+    if p_limit is null or p_limit <= 0 or p_limit > 1000000 then
+      return jsonb_build_object('outcome', 'invalid');
+    end if;
+    if p_limit < v_owed then return jsonb_build_object('outcome', 'limit', 'owed', v_owed); end if;
+    update customer_accounts set credit_limit = p_limit where id = p_account;
+  elsif p_action = 'close' then
+    if v_owed > 0 then return jsonb_build_object('outcome', 'owes', 'owed', v_owed); end if;
+    update customer_accounts set status = 'closed', closed_by = p_actor, closed_at = now() where id = p_account;
+  else
+    return jsonb_build_object('outcome', 'invalid');
+  end if;
+  return jsonb_build_object('outcome', 'changed', 'previous_limit', v_account.credit_limit);
+end;
+$$;
+revoke all on function public.account_change(uuid, uuid, text, numeric, text) from public, anon, authenticated;
+grant execute on function public.account_change(uuid, uuid, text, numeric, text) to service_role;
+
 -- Collects everything an account owes, in person. `p_expected` is the balance
 -- the cashier was shown; `p_ref` makes a retried tap the same collection.
 create or replace function public.account_settle(

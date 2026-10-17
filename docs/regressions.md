@@ -26,6 +26,7 @@ us, and what now catches each one.
 | Only the checkout named on the account may clear its hold | A late checkout A lifted checkout B's hold (W3-5) |
 | Account checkout settlement locks orders before summing debt | A cancellation or discount committed between the read and the paid flag (W3-6) |
 | Table discounts and their approval requests leave account orders alone | Today's discount reached yesterday's customer account (W3-9) |
+| Closing an account or changing its ceiling rechecks debt under the charge lock | A concurrent charge left a closed account owing, or passed a lowered ceiling (W3-10) |
 | Statements page every unpaid order in a unique order | The 1001st charge vanished from the displayed balance (W3-12) |
 | A table created after the blanket `revoke … from anon` locks itself down | `rate_limits` shipped world-readable |
 | No dialog is rendered inside another dialog | Shipped three times — two focus traps, two Escapes to leave |
@@ -1981,6 +1982,7 @@ ticket before atomic credit approval` and `an atomic account refusal never
 causes a second cleanup request` cover that boundary.
 
 
+
 ## W3-2 — cancellation and collection agree on the payment state
 
 The route planned a cancellation while the order was unpaid; `cancel_order`
@@ -1994,7 +1996,6 @@ again. `cancel-race.react-component.spec.tsx` checks the RPC snapshot and refusa
 `accounts-sql.react-component.spec.tsx` checks the database guards and keeps
 the stock gate's direct calls on the new guarded signature.
 
-
 ## W3-4 — waived account food is no longer collectible
 
 Table write-offs and account balances disagreed about waived food. Both the
@@ -2006,7 +2007,6 @@ waived: its excess still follows the existing refund-due path.
 `table-adjustments.react-component.spec.tsx`, `accounts-server.react-component.spec.tsx`,
 `write-off.spec.ts` and `accounts-sql.react-component.spec.tsx` guard both sides.
 
-
 ## W3-5 — a hold belongs to one checkout
 
 A checkout's settlement and the account's current hold disagreed about who
@@ -2015,7 +2015,6 @@ release clear it only when it matches. Existing holds are backfilled from
 their open checkout. Opening, settlement and release all lock the account
 first, so a late event cannot deadlock against a new checkout.
 `accounts-sql.react-component.spec.tsx` guards hold ownership and lock order.
-
 
 ## W3-6 — settlement pays the state it locked
 
@@ -2028,7 +2027,6 @@ adjustments exclude accounts at the write as well as the read.
 These SQL checks inspect the function definitions; Claude must still run the
 concurrency cases against PostgreSQL after applying the schema.
 
-
 ## W3-9 — table discounts stay on the table
 
 A transferred account order kept its table ID. The table discount reader and
@@ -2039,6 +2037,16 @@ old requests are re-read on approval. `staff-discount.spec.ts` verifies the
 MX$30 discount stays on today's MX$50 bill; `table-adjustments.react-component.spec.tsx`
 checks requests and approvals.
 
+## W3-10 — account changes share the charge lock
+
+The PATCH route's balance read and account update were separate transactions.
+`account_change` now locks the restaurant's account and checks its current debt
+before changing a ceiling or closing it. A charge first means a 409 if it no
+longer fits; a closure first makes the later charge find a closed account.
+Management still controls ceilings, and the log uses the previous ceiling
+read under the lock. `accounts-route.react-component.spec.tsx` checks stale
+reads, refusals and failures; `accounts-sql.react-component.spec.tsx` checks the
+transaction guard and service-only grant.
 
 ## W3-12 — the statement agrees with the whole account
 

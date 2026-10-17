@@ -1401,7 +1401,8 @@ lean on who is trusted with what:
   write-offs and their approval requests exclude account orders, even when an
   order kept its table ID. Waived orders never enter account balances or
   collections. Statements page all orders by unique ID; a failed page fails
-  the statement.
+  the statement. Closing or changing the ceiling uses `account_change()` under
+  the same account lock as a charge, and rechecks the debt before writing.
 - **Only the staff charge an account.** The customer asks; the waiter (from
   the bills board's collect dialog, "Cargar a una cuenta de cliente") or the
   cashier (at the till, "A cuenta") picks the account and confirms — that
