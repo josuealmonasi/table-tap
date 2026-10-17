@@ -114,9 +114,14 @@ unbacked.length === 0
 // 1b. And a sitting paid that way was paid in full: the orders it covers add
 // up to no more than the money against it. Per-order attribution cannot say
 // this, which is exactly why it has to be said here.
+//
+// An order moved onto a customer account keeps the sitting it was ordered at,
+// but it is the account's debt and is paid through the account (1d below).
+// Counted here, every table that sent an order to an account read short by
+// exactly that order.
 const sittingOwed = new Map();
 for (const o of settled) {
-  if (!o.session_id || paidFor.has(o.id)) continue;
+  if (!o.session_id || paidFor.has(o.id) || o.account_id) continue;
   sittingOwed.set(o.session_id, (sittingOwed.get(o.session_id) ?? 0) + Number(o.total));
 }
 const shortSittings = [...sittingOwed.entries()].filter(
@@ -140,7 +145,7 @@ shortSittings.length === 0
 // that was written off after paying something still had food to pay for.
 const sittingHolds = new Map();
 for (const o of orders) {
-  if (!o.session_id || paidFor.has(o.id)) continue;
+  if (!o.session_id || paidFor.has(o.id) || o.account_id) continue;
   sittingHolds.set(o.session_id, (sittingHolds.get(o.session_id) ?? 0) + Number(o.total));
 }
 const overpaid = [...paidForSitting.entries()].filter(
