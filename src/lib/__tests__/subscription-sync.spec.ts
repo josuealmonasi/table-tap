@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type Stripe from "stripe";
 
+vi.mock("@/lib/subscription-price", () => ({ subscriptionPlan: async () => "casa" }));
 const retrieve = vi.fn();
 const rpc = vi.fn();
 const reads: unknown[] = [];

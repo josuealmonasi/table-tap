@@ -14,6 +14,14 @@ us, and what now catches each one.
 
 | Rule | The bug it came from |
 |---|---|
+| The actual Stripe Price and the entitlement tier agree (W6 D5) | A portal Price change kept the former metadata tier |
+| Ceiling counts and inserts share a restaurant lock (W6 D6) | Concurrent creates each took the last table, menu, dish or staff seat |
+| Dish updates and inserts count the same membership (W6 D7) | Add-ons became dishes, or dishes moved restaurants, past the ceiling |
+| Frozen management writes and dashboard controls agree (W6 D8) | Direct authenticated menu and table edits, and loyalty edits, remained open |
+| Database trial checks and the app clock agree (W6 D9) | A direct write kept an expired local trial's features and ceilings |
+| Table orders and waiter calls require dine-in on the server (W6 D10) | A retained table bypassed a downgrade, while old debts still needed paying |
+| A trial entitlement and a paid subscription are different (W6 D12) | The current trial tier could not be purchased from its own card |
+| Reporting limits and the plan's promise agree (W6 D13) | Unused catalogue windows implied restrictions the plan cards never promised |
 | The money gate reads an order on a customer account as the account's, not its table's | An order sent from a table to an account and paid there read as a sitting paid for more than was collected |
 | Every board move checks the current live stage, restaurant and write-off flag | A kitchen login revived cancelled, refunded food |
 | An approval acts on the amount the manager saw, through guarded routes only | A request showing MX$10 carried a MX$1,000 bill's ids |
@@ -2319,3 +2327,71 @@ date and monthly price together with the plan under the same revision guard,
 clearing obsolete values. The cancel API uses that sync. `subscription-sync.spec.ts`
 checks cancellation, resume and termination; `billing-cancel.spec.ts` reproduces
 a portal resume overtaking an older cancellation response.
+
+
+## W6 D5 — Stripe Prices and entitlement tiers
+
+A subscription's metadata kept its checkout tier after its Price changed.
+`subscriptionPlan` now resolves the actual item Price through a server-owned
+registry or the configured catalogue Price. Checkout registers generated Prices
+before use, preserving founding Prices across later catalogue changes. Metadata
+mismatches are reported; unknown Prices preserve the local plan and retry.
+`subscription-price-sync.spec.ts` reproduced the stale tier before the fix;
+`subscription-price.spec.ts` checks unknown and configured Prices too.
+Before deployment, register existing inline Prices after verifying their tiers
+against Stripe billing records. Never infer an unknown tier from metadata alone.
+
+## W6 D6 — Concurrent ceiling allocation
+
+The trigger counted without locking; staff only had a route precheck. All four
+counts now run under a restaurant row lock held through insertion. A staff invite
+that loses the last seat is rolled back and returns the translated limit.
+`entitlement-schema.spec.ts` checks that the lock and staff trigger exist.
+Claude must verify concurrent creates with PostgreSQL; unit checks do not run it.
+
+## W6 D7 — Dish conversions and restaurant moves
+
+The insert-only trigger missed an add-on becoming a counted dish and a dish
+moving into a restaurant at its ceiling. Updates that increase membership now
+check the destination, while unchanged dishes and stock writes skip allocation.
+`entitlement-schema.spec.ts` checks the update trigger and membership guards.
+
+## W6 D8 — Freeze where management data is written
+
+Authenticated menu, dish and table writes had role checks without a freeze
+check. A dedicated trigger now refuses inserts, updates and deletes for locked
+restaurants without changing tenant policies. Secret-key stock changes remain
+available; no settlement, refund or kitchen table has this trigger. Loyalty's
+management route also checks the freeze. `entitlement-schema.spec.ts` checks
+trigger coverage; `loyalty-freeze.spec.ts` reproduces the route bypass.
+
+## W6 D9 — Expiry without an app request
+
+Ceilings and inventory/schedule feature checks trusted the stored trial tier
+until `getPlan` ran. Both now read `effective_restaurant_plan`, which resolves
+an expired local trial to Carta without touching a linked Stripe subscription.
+`entitlement-schema.spec.ts` checks both consumers; live direct writes across
+expiry still need Claude's PostgreSQL checks.
+
+## W6 D10 — Dine-in beyond the page
+
+Retained table IDs still opened new diner orders and waiter requests after a
+downgrade. Both routes now check dine-in before creating anything. Bill and pay
+requests remain open so existing debts can be collected. Settlement and refund
+routes are unchanged. `dine-in-entitlement.spec.ts` reproduced both bypasses and
+checks that requests for the bill and payment still succeed.
+`waiter-order-entitlement.spec.ts` covers the waiter's table-order route too.
+
+## W6 D12 — Buying the trial's tier
+
+The current-tier card disabled purchase even during a trial. `PlanPanel` now
+passes trial status to `PlanTiers`, which leaves that tier's purchase enabled.
+`trial-subscribe.spec.tsx` reproduced the disabled card and checks its markup.
+
+## W6 D13 — The reporting promise
+
+Neither plan cards nor their translated copy promise a reporting lookback.
+History remains unrestricted, and the unused catalogue columns and TypeScript
+fields are removed instead of introducing a new restriction after a downgrade.
+`entitlement-schema.spec.ts` checks the removal on existing databases; analytics
+and log reads retain their existing behavior and tenant scope.

@@ -45,6 +45,9 @@ export async function POST(req: NextRequest) {
   const frozen = await frozenBlocks(actor.restaurantId);
   if (frozen) return frozen;
 
+  const dineInBlocked = await planBlocks(actor.restaurantId, "dineIn");
+  if (dineInBlocked) return dineInBlocked;
+
   const blocked = await planBlocks(actor.restaurantId, "waiterService");
   if (blocked) return blocked;
 

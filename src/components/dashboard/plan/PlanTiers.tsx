@@ -47,12 +47,14 @@ function includes(limits: PlanLimits, t: (k: string, v?: Record<string, string |
 export default function PlanTiers({
   catalog,
   current,
+  trialing = false,
   currency,
   foundingNumber,
   foundersTaken,
 }: {
   catalog: PlanLimits[];
   current: PlanName;
+  trialing?: boolean;
   currency: string;
   foundingNumber: number | null;
   foundersTaken: number;
@@ -188,7 +190,7 @@ export default function PlanTiers({
                 ))}
               </ul>
 
-              {isCurrent ? (
+              {isCurrent && !trialing ? (
                 <button className="tt-btn tt-btn-ghost" disabled>
                   {t("plan.current")}
                 </button>

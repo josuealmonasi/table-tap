@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
+import { subscriptionPlan } from "@/lib/subscription-price";
 import { applySubscription } from "@/lib/subscription-sync";
 import { BillingError, withRestaurantBilling } from "@/lib/billing-operation";
 import { restaurantBilling } from "@/lib/billing-state";
@@ -46,7 +47,7 @@ export async function startRestaurantBilling(
       }
       // Old open sessions could create another contract even after this update.
       for (const session of sessions) await operation.write(() => stripe.checkout.sessions.expire(session.id));
-      if (subscription.metadata.plan !== limits.plan) {
+      if (await subscriptionPlan(subscription) !== limits.plan) {
         const line = await checkoutPrice(limits, taken);
         let item: Stripe.SubscriptionUpdateParams.Item = { id: subscription.items.data[0].id, quantity: 1 };
         if (line.price) item.price = line.price;

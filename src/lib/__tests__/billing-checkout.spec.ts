@@ -1,6 +1,9 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 
+vi.mock("@/lib/subscription-price", () => ({
+  subscriptionPlan: async () => "servicio", registerSubscriptionPrice: async () => {},
+}));
 const customerCreate = vi.fn();
 const customerList = vi.fn();
 let saved: Record<string, unknown>;
@@ -11,6 +14,7 @@ const subscriptionList = vi.fn();
 const subscriptionRetrieve = vi.fn();
 const subscriptionUpdate = vi.fn();
 const productCreate = vi.fn();
+const priceCreate = vi.fn();
 const invoiceRetrieve = vi.fn();
 const portalCreate = vi.fn();
 const sync = vi.fn();
@@ -56,6 +60,7 @@ vi.mock("@/lib/stripe", () => ({ stripe: {
     retrieve: (...args: unknown[]) => subscriptionRetrieve(...args),
     update: (...args: unknown[]) => subscriptionUpdate(...args),
   },
+  prices: { create: (...args: unknown[]) => priceCreate(...args) },
   products: { create: (...args: unknown[]) => productCreate(...args) },
 } }));
 const { POST } = await import("@/app/api/billing/checkout/route");
@@ -88,6 +93,7 @@ beforeEach(() => {
   subscriptionUpdate.mockResolvedValue(subscription());
   invoiceRetrieve.mockResolvedValue({ hosted_invoice_url: "https://invoice/pay" });
   portalCreate.mockResolvedValue({ url: "https://portal/pay" });
+  priceCreate.mockResolvedValue({ id: "price_generated" });
   productCreate.mockResolvedValue({ id: "prod_casa" });
 });
 it("changes the existing subscription item instead of starting a second checkout", async () => {
@@ -115,7 +121,8 @@ it("serializes concurrent first checkouts before creating a customer", async () 
 });
 it("bills the MXN catalog amount even when the menu is in USD", async () => {
   await post("servicio");
-  expect(sessionCreate.mock.calls[0][0].line_items[0].price_data).toMatchObject({ currency: "mxn", unit_amount: 69900 });
+  expect(priceCreate.mock.calls[0][0]).toMatchObject({ currency: "mxn", unit_amount: 69900 });
+  expect(sessionCreate.mock.calls[0][0].line_items[0]).toMatchObject({ price: "price_generated" });
 });
 it("refuses duplicate live contracts instead of forgetting one", async () => {
   subscriptionList.mockResolvedValue({ data: [subscription(), subscription("sub_2")], has_more: false });

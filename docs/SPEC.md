@@ -154,12 +154,30 @@ dishes on a bill the restaurant has just cancelled.
 - **Trials.** Signing up opens thirty days of `servicio` with `plan_status`
   'trialing' and a `trial_ends_at`. Nothing runs at night to end it: `getPlan`
   drops a lapsed trial to `carta` the first time anybody asks, and changes the
-  ROW rather than only its answer, because the database triggers that enforce
-  the limits read `restaurants.plan`. The two columns go together —
+  row rather than only its answer. Database ceilings and feature guards also
+  resolve expired local trials themselves, so direct writes cannot extend one.
+  The two columns go together —
   `plan_status` defaults to 'trialing' and `trial_ends_at` to nothing, so an
   insert naming neither is a trial that can never end. A restaurant opened from
   the admin screen starts on `carta`, active. The invariant "a trial has an end"
   reads every insert into `restaurants`.
+- **Entitlements at the write boundary.** Tables, menus, counted dishes and
+  invited staff share a restaurant row lock before a ceiling count and insert.
+  Dish conversions and restaurant moves check the destination's ceiling too;
+  ordinary edits and server stock changes do not allocate another place.
+  Frozen restaurants cannot insert, edit or delete menus, dishes or tables
+  through authenticated database writes. Existing RLS still scopes every row.
+  Settlement, refunds and kitchen work stay available. New diner table orders
+  and waiter calls require dine-in; requests to pay an existing bill stay open.
+- **Subscription Prices grant tiers.** `restaurant_subscription_prices` keeps
+  each issued Stripe Price's tier, including past founding prices. Checkout
+  registers generated Prices before offering a URL or changing a subscription.
+  Sync resolves the actual subscription item Price and reports stale metadata;
+  unknown Prices are retried for reconciliation without replacing entitlements.
+  The plan screen lets an owner subscribe to the tier of their local trial.
+- **Reporting history stays readable on every tier.** The plan cards promise
+  no reporting lookback window. The unused `analytics_days` and `log_days`
+  columns are removed; changing plans does not hide analytics or activity logs.
 - **Founding price**: the first restaurants on a paid tier keep the price they
   came in at. `claim_founding_price` serialises the assignment with an advisory
   lock so two simultaneous subscribers cannot take the same place.

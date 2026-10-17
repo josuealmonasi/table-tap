@@ -37,8 +37,6 @@ const CATALOG: PlanLimits[] = [
     allows_promotions: false,
     allows_coupons: false,
     allows_staff_discounts: false,
-    analytics_days: 1,
-    log_days: 1,
     fee_cap: 699,
   },
   {
@@ -54,8 +52,6 @@ const CATALOG: PlanLimits[] = [
     allows_promotions: true,
     allows_coupons: false,
     allows_staff_discounts: false,
-    analytics_days: 30,
-    log_days: 30,
   },
   {
     plan: "casa",
@@ -70,8 +66,6 @@ const CATALOG: PlanLimits[] = [
     allows_promotions: true,
     allows_coupons: true,
     allows_staff_discounts: true,
-    analytics_days: 365,
-    log_days: 365,
   },
 ];
 
@@ -248,7 +242,7 @@ describe("launch pricing", () => {
 describe("Caja: the register on its own", () => {
   // Trimmed from the seed: the flags these questions turn on.
   const base = {
-    order_fee: 0, max_menus: 3, max_items: null, analytics_days: 30, log_days: 30,
+    order_fee: 0, max_menus: 3, max_items: null,
     allows_coupons: false, allows_staff_discounts: false,
   };
   const tiers: PlanLimits[] = [

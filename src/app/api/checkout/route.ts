@@ -81,6 +81,12 @@ export async function POST(req: NextRequest) {
       return await apiError("apiErr.orderAtRegister", 409);
     }
 
+    // A retained table after a downgrade does not grant new table orders.
+    // Existing bills use separate settlement routes and stay payable.
+    if (tableId && (!plan || !can(plan.limits, "dineIn"))) {
+      return await apiError("plan.needs.dineIn", 403, { plan: "Servicio" });
+    }
+
     // A menu switched off — or outside its opening hours — stops being
     // orderable, not just invisible (`orderableNow`).
     const { closedNow, onOpenMenu } = await orderableNow(supabase, restaurantId);

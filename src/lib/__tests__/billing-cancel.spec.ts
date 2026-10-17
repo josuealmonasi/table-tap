@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextResponse } from "next/server";
 
+vi.mock("@/lib/subscription-price", () => ({ subscriptionPlan: async () => "casa" }));
 const update = vi.fn();
 const retrieve = vi.fn();
 const patches: Record<string, unknown>[] = [];

@@ -3,6 +3,8 @@ import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isRoomLimited, isTableLimited } from "@/lib/rate-limit";
+import { getPlan } from "@/lib/plan-server";
+import { can } from "@/lib/plan";
 
 export const runtime = "nodejs";
 
@@ -43,6 +45,14 @@ export async function POST(req: NextRequest) {
     .eq("restaurant_id", restaurantId)
     .single();
   if (!table) return await apiError("apiErr.tableNotFound", 404);
+
+  // Bill and payment calls collect existing debt even after a downgrade.
+  if (kind === "waiter") {
+    const plan = await getPlan(restaurantId);
+    if (!plan || !can(plan.limits, "dineIn") || !can(plan.limits, "waiterService")) {
+      return await apiError("plan.needs.dineIn", 403, { plan: "Servicio" });
+    }
+  }
 
   // Don't stack duplicates: one open request per table+kind is enough.
   const { data: existing } = await admin
