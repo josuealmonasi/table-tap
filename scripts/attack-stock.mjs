@@ -107,11 +107,11 @@ export async function attackStock({ admin, ok, bad }) {
     const legacy = (await db.query("insert into orders(restaurant_id,status) values($1,'received') returning id", [restaurant])).rows[0].id;
     const oldDemand = JSON.stringify([{ item_id: item, qty: 2 }]);
     const outcomes = await Promise.all([db, peer].map(c => c.query(
-      "select cancel_order($1,$2,null,$3) as moved", [restaurant, legacy, oldDemand])));
+      "select cancel_order($1,$2,null,$3,false,null,null,null) as moved", [restaurant, legacy, oldDemand])));
     assert.equal(outcomes.filter(r => r.rows[0].moved).length, 1);
     assert.equal(await count(), 7);
     const managed = (await db.query("insert into orders(restaurant_id,status,stock_managed) values($1,'received',true) returning id", [restaurant])).rows[0].id;
-    await db.query("select cancel_order($1,$2,null,$3)", [restaurant, managed, oldDemand]);
+    await db.query("select cancel_order($1,$2,null,$3,false,null,null,null)", [restaurant, managed, oldDemand]);
     assert.equal(await count(), 7);
     ok("legacy cancellation is atomic; new untracked orders cannot invent stock");
 
@@ -125,7 +125,7 @@ export async function attackStock({ admin, ok, bad }) {
 
     for (const signature of [
       "reserve_stock(uuid,jsonb,integer,uuid)", "release_stock_reservation(uuid,uuid)",
-      "abandon_checkout(uuid,boolean,jsonb)", "cancel_order(uuid,uuid,text,jsonb)",
+      "abandon_checkout(uuid,boolean,jsonb)", "cancel_order(uuid,uuid,text,jsonb,boolean,uuid,timestamptz,uuid)",
       "recover_stock_reservations(uuid)",
     ]) {
       const { rows } = await db.query(

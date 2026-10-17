@@ -2711,7 +2711,7 @@ declare
 begin
   -- Held for the rest of the call, so the choice below and the update after it
   -- see the same orders: a waiter settling one in between waits for this.
-  perform 1 from orders where id = any(p_orders) for update;
+  perform 1 from orders where id = any(p_orders) order by id for update;
 
   -- Which order carries the gratuity: the one asked for if this call settles
   -- it, otherwise the first that it does settle.
@@ -3535,11 +3535,18 @@ create table if not exists account_checkouts (
 alter table account_checkouts enable row level security;
 revoke all on account_checkouts from anon, authenticated;
 
--- What an account owes: its orders not yet paid, cancelled ones aside.
+alter table customer_accounts add column if not exists checkout_id uuid;
+-- Keep a hold opened before this column was added, without extending it.
+update customer_accounts a set checkout_id = (
+  select c.id from account_checkouts c where c.account_id = a.id and c.status = 'open'
+   order by c.created_at desc, c.id desc limit 1
+) where a.checkout_until is not null and a.checkout_id is null;
+
+-- Waived food is no longer debt, even if an older write-off left it on an account.
 create or replace function public.account_owed(p_account uuid)
 returns numeric language sql stable security definer set search_path = public as $$
   select coalesce(sum(total), 0) from orders
-   where account_id = p_account and paid = false and status <> 'cancelled';
+   where account_id = p_account and paid = false and written_off = false and status <> 'cancelled';
 $$;
 revoke all on function public.account_owed(uuid) from public, anon, authenticated;
 grant execute on function public.account_owed(uuid) to service_role;
@@ -3571,7 +3578,7 @@ begin
     return jsonb_build_object('outcome', 'stale');
   end if;
 
-  perform 1 from orders where id = any(p_orders) for update;
+  perform 1 from orders where id = any(p_orders) order by id for update;
 
   -- A card checkout open on any of them: the diner is paying it right now.
   if exists (select 1 from orders where id = any(p_orders)
@@ -3615,6 +3622,36 @@ $$;
 revoke all on function public.account_charge(uuid, uuid, uuid[], numeric, text) from public, anon, authenticated;
 grant execute on function public.account_charge(uuid, uuid, uuid[], numeric, text) to service_role;
 
+-- A ceiling or closure must see every charge that won the account lock first.
+create or replace function public.account_change(
+  p_restaurant uuid, p_account uuid, p_action text, p_limit numeric, p_actor text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_account customer_accounts;
+  v_owed numeric;
+begin
+  select * into v_account from customer_accounts
+   where id = p_account and restaurant_id = p_restaurant for update;
+  if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  v_owed := public.account_owed(p_account);
+  if p_action = 'limit' then
+    if p_limit is null or p_limit <= 0 or p_limit > 1000000 then
+      return jsonb_build_object('outcome', 'invalid');
+    end if;
+    if p_limit < v_owed then return jsonb_build_object('outcome', 'limit', 'owed', v_owed); end if;
+    update customer_accounts set credit_limit = p_limit where id = p_account;
+  elsif p_action = 'close' then
+    if v_owed > 0 then return jsonb_build_object('outcome', 'owes', 'owed', v_owed); end if;
+    update customer_accounts set status = 'closed', closed_by = p_actor, closed_at = now() where id = p_account;
+  else
+    return jsonb_build_object('outcome', 'invalid');
+  end if;
+  return jsonb_build_object('outcome', 'changed', 'previous_limit', v_account.credit_limit);
+end;
+$$;
+revoke all on function public.account_change(uuid, uuid, text, numeric, text) from public, anon, authenticated;
+grant execute on function public.account_change(uuid, uuid, text, numeric, text) to service_role;
+
 -- Collects everything an account owes, in person. `p_expected` is the balance
 -- the cashier was shown; `p_ref` makes a retried tap the same collection.
 create or replace function public.account_settle(
@@ -3643,10 +3680,10 @@ begin
     return jsonb_build_object('outcome', 'paying');
   end if;
 
-  perform 1 from orders where account_id = p_account and paid = false and status <> 'cancelled' for update;
+  perform 1 from orders where account_id = p_account and paid = false and written_off = false and status <> 'cancelled' order by id for update;
   select coalesce(sum(total), 0), array_agg(id order by created_at desc)
     into v_owed, v_ids
-    from orders where account_id = p_account and paid = false and status <> 'cancelled';
+    from orders where account_id = p_account and paid = false and written_off = false and status <> 'cancelled';
   if v_owed <= 0 then return jsonb_build_object('outcome', 'nothing'); end if;
   if abs(v_owed - p_expected) > 0.005 then
     return jsonb_build_object('outcome', 'changed', 'owed', v_owed);
@@ -3689,9 +3726,11 @@ begin
   if v_account.checkout_until is not null and v_account.checkout_until > now() then
     return jsonb_build_object('outcome', 'paying');
   end if;
+  perform 1 from orders where account_id = p_account and paid = false
+    and written_off = false and status <> 'cancelled' order by id for update;
   select coalesce(sum(total), 0), array_agg(id order by created_at desc)
     into v_owed, v_ids
-    from orders where account_id = p_account and paid = false and status <> 'cancelled';
+    from orders where account_id = p_account and paid = false and written_off = false and status <> 'cancelled';
   if v_owed <= 0 then return jsonb_build_object('outcome', 'nothing'); end if;
   if abs(v_owed - p_expected) > 0.005 then
     return jsonb_build_object('outcome', 'changed', 'owed', v_owed);
@@ -3705,7 +3744,7 @@ begin
   v_tip := least(v_tip, v_owed);
   insert into account_checkouts (restaurant_id, account_id, order_ids, amount, tip, fee)
   values (p_restaurant, p_account, v_ids, v_owed, v_tip, greatest(coalesce(p_fee, 0), 0)) returning id into v_id;
-  update customer_accounts set checkout_until = now() + interval '35 minutes' where id = p_account;
+  update customer_accounts set checkout_until = now() + interval '35 minutes', checkout_id = v_id where id = p_account;
   return jsonb_build_object('outcome', 'open', 'checkout', v_id, 'amount', v_owed, 'tip', v_tip);
 end;
 $$;
@@ -3728,16 +3767,23 @@ declare
   v_tip      numeric;
   v_twice    numeric;
 begin
-  select * into v_checkout from account_checkouts where id = p_checkout for update;
+  select * into v_checkout from account_checkouts where id = p_checkout;
   if v_checkout.id is null then return jsonb_build_object('outcome', 'missing'); end if;
-  if v_checkout.status = 'paid' then return jsonb_build_object('outcome', 'duplicate'); end if;
+  -- Opening the next checkout holds the account first too.
   select * into v_account from customer_accounts where id = v_checkout.account_id for update;
+  select * into v_checkout from account_checkouts where id = p_checkout for update;
+  if v_checkout.status = 'paid' then return jsonb_build_object('outcome', 'duplicate'); end if;
+
+  -- Freeze each order before summing it: a cancel or discount must not commit
+  -- between the amount read and the paid flag written below.
+  perform 1 from orders where id = any(v_checkout.order_ids)
+    and paid = false and written_off = false and status <> 'cancelled' order by id for update;
 
   -- The ones still owed. The hold keeps the till off them while the customer
   -- is on Stripe's page, but a payment whose webhook arrives after the hold
   -- ran out can find the till collected some or all of them meanwhile.
   select array_agg(id order by created_at desc), coalesce(sum(total), 0) into v_ids, v_still
-    from orders where id = any(v_checkout.order_ids) and paid = false and status <> 'cancelled';
+    from orders where id = any(v_checkout.order_ids) and paid = false and written_off = false and status <> 'cancelled';
   v_food := least(v_checkout.amount, v_still);
   v_tip := case when v_ids is null then 0 else v_checkout.tip end;
   if v_food + v_tip > 0 then
@@ -3766,7 +3812,8 @@ begin
   -- Our fee is taken in `platform_fees` by the webhook; `orders.platform_fee`
   -- is the frozen record of fees from before that ledger.
   update account_checkouts set status = 'paid' where id = p_checkout;
-  update customer_accounts set checkout_until = null where id = v_checkout.account_id;
+  update customer_accounts set checkout_until = null, checkout_id = null
+   where id = v_checkout.account_id and checkout_id = p_checkout;
   return jsonb_build_object('outcome', 'paid', 'orders', coalesce(cardinality(v_ids), 0));
 end;
 $$;
@@ -3782,11 +3829,14 @@ returns void language plpgsql security definer set search_path = public as $$
 declare
   v_account uuid;
 begin
+  select account_id into v_account from account_checkouts where id = p_checkout;
+  if v_account is null then return; end if;
+  perform 1 from customer_accounts where id = v_account for update;
   update account_checkouts set status = 'expired'
-   where id = p_checkout and status = 'open'
-   returning account_id into v_account;
-  if v_account is not null then
-    update customer_accounts set checkout_until = null where id = v_account;
+   where id = p_checkout and status = 'open';
+  if found then
+    update customer_accounts set checkout_until = null, checkout_id = null
+     where id = v_account and checkout_id = p_checkout;
   end if;
 end;
 $$;
@@ -4533,11 +4583,29 @@ alter table orders add column if not exists cancelled_at timestamptz;
 
 -- The status guard and legacy handback share one transaction. New orders are
 -- returned by the trigger using their exact reservation, regardless of plan.
+drop function if exists public.cancel_order(uuid, uuid, text, jsonb);
 create or replace function public.cancel_order(
-  p_restaurant uuid, p_order uuid, p_refund text, p_legacy_demand jsonb
+  p_restaurant uuid, p_order uuid, p_refund text, p_legacy_demand jsonb,
+  p_expected_paid boolean, p_expected_account uuid, p_expected_hold timestamptz, p_expected_checkout uuid
 ) returns boolean language plpgsql security definer set search_path = public as $$
-declare v_order orders%rowtype;
+declare
+  v_order orders%rowtype;
+  v_account customer_accounts;
 begin
+  -- Collection holds the account first. Recheck the plan under that lock so
+  -- an unpaid cancel cannot silently erase food that was just collected.
+  if p_expected_account is not null then
+    select * into v_account from customer_accounts
+     where id = p_expected_account and restaurant_id = p_restaurant for update;
+    if v_account.id is null or v_account.checkout_until is distinct from p_expected_hold
+       or v_account.checkout_id is distinct from p_expected_checkout then
+      return false;
+    end if;
+    if not p_expected_paid and v_account.checkout_until > now() then return false; end if;
+  end if;
+  select * into v_order from orders where id = p_order and restaurant_id = p_restaurant for update;
+  if v_order.id is null or v_order.paid is distinct from p_expected_paid
+     or v_order.account_id is distinct from p_expected_account then return false; end if;
   update orders set status = 'cancelled', stripe_refund_id = p_refund, cancelled_at = now()
     where id = p_order and restaurant_id = p_restaurant and status in ('received', 'preparing')
     returning * into v_order;
@@ -4548,8 +4616,8 @@ begin
   return true;
 end;
 $$;
-revoke all on function public.cancel_order(uuid, uuid, text, jsonb) from public, anon, authenticated;
-grant execute on function public.cancel_order(uuid, uuid, text, jsonb) to service_role;
+revoke all on function public.cancel_order(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) from public, anon, authenticated;
+grant execute on function public.cancel_order(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) to service_role;
 
 -- ── Platform fees: one row per charge, the ledger the monthly ceiling reads ──
 -- Each plan promises "never more than X" in per-order fees a month. The

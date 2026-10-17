@@ -48,7 +48,7 @@ export function noteProblem(reason: WriteOffReason, note: string): "missing" | "
  */
 export function writableOff(orders: Order[]): Order[] {
   return orders.filter(
-    o => !o.paid && !o.written_off && o.status !== "cancelled" && o.status !== "pending_payment",
+    o => !o.account_id && !o.paid && !o.written_off && o.status !== "cancelled" && o.status !== "pending_payment",
   );
 }
 

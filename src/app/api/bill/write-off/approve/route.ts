@@ -77,6 +77,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { data: rows } = await db
     .from("orders")
     .select("id, total, paid, written_off, status, table_label")
+    .is("account_id", null)
     .eq("restaurant_id", actor.restaurantId)
     .in("id", request.order_ids as string[]);
 

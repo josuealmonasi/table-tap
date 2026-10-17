@@ -31,7 +31,13 @@ export async function applyToOrders(
         discount: round2(Number(order.discount ?? 0) + share.amount),
         total: share.total,
       })
-      .eq("id", share.orderId);
+      .eq("id", share.orderId)
+      // A charge can move it off the table after the discount was read.
+      .is("account_id", null)
+      .eq("restaurant_id", restaurantId)
+      .eq("paid", false)
+      .eq("written_off", false)
+      .neq("status", "cancelled");
   }
 
   await logRedemption({

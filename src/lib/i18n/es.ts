@@ -1368,6 +1368,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     ordersLoad: "No se pudieron cargar los pedidos",
     orderCreate: "No se pudo crear el pedido",
     orderData: "Faltan datos del pedido",
+    cancelChanged: "Este pedido o su pago cambió. Revísalo antes de cancelarlo.",
     cancelStatus: "Solo se pueden cancelar pedidos nuevos o en preparación.",
     cashNoRefund: "Este pedido se pagó en efectivo, así que no hay nada que reembolsar por la app. Devuelve el efectivo en la caja — cancelar una venta en efectivo todavía no se puede hacer desde esta pantalla.",
     refundFailed: "El reembolso falló — el pedido NO se canceló. Inténtalo de nuevo.",

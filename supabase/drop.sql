@@ -78,6 +78,7 @@ drop function if exists public.pos_insert_order(uuid, uuid, jsonb, text, timesta
 drop function if exists public.pos_ticket(uuid, uuid);
 
 drop function if exists public.account_owed(uuid);
+drop function if exists public.account_change(uuid, uuid, text, numeric, text);
 drop function if exists public.account_charge(uuid, uuid, uuid[], numeric, text);
 drop function if exists public.account_settle(uuid, uuid, numeric, numeric, text, text, text);
 drop function if exists public.account_checkout_open(uuid, uuid, numeric, numeric, numeric);
@@ -126,6 +127,7 @@ drop function if exists public.recover_stock_reservations();
 
 drop function if exists public.abandon_checkout(uuid, boolean, jsonb);
 drop function if exists public.cancel_order(uuid, uuid, text, jsonb);
+drop function if exists public.cancel_order(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid);
 drop function if exists public.recover_stock_reservations(uuid);
 drop function if exists public.record_ingredient_price();
 drop function if exists public.recipe_line_same_restaurant();

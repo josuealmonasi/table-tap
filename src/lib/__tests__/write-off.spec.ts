@@ -67,6 +67,10 @@ describe("cancelling what a table owes", () => {
     expect(writableOff(orders).map(o => o.id)).toEqual(["a"]);
   });
 
+  it("refuses account debt even when it still names the table", () => {
+    expect(writableOff([order({ account_id: "a1" })])).toEqual([]);
+  });
+
   it("adds up what the restaurant is losing", () => {
     expect(writeOffTotal([order({ total: 18.36 }), order({ total: 4.2 })])).toBe(22.56);
   });

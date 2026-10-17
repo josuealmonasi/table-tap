@@ -35,6 +35,7 @@ export interface DiscountShare {
 export function discountableOrders(orders: Order[]): Order[] {
   return orders.filter(
     o =>
+      !o.account_id &&
       !o.paid &&
       !o.written_off &&
       o.status !== "cancelled" &&

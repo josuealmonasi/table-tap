@@ -106,20 +106,24 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     if (!MANAGES(actor.role)) return await apiError("apiErr.forbidden", 403);
     const limit = cleanLimit(body.limit);
     if (limit === null) return await apiError("apiErr.accountLimitAmount", 400);
-    const { owed } = (await listAccounts(actor.restaurantId)).find(a => a.id === account.id) ?? { owed: 0 };
     // Below what is already owed the account could never be charged again,
     // and would read as though it were over its limit through nobody's doing.
-    if (limit < owed) {
+    // Checked under the account's lock, so a charge cannot land in between.
+    const { data, error } = await db.rpc("account_change", {
+      p_restaurant: actor.restaurantId, p_account: account.id,
+      p_action: "limit", p_limit: limit, p_actor: actor.email,
+    });
+    if (error || !data) return await apiError("apiErr.generic", 500);
+    if (data.outcome === "missing") return await apiError("apiErr.notFound", 404);
+    if (data.outcome === "limit") {
       return await apiError("apiErr.accountLimitBelowOwed", 409, {
-        owed: formatMoney(owed, await currencyOf(actor.restaurantId)),
+        owed: formatMoney(Number(data.owed), await currencyOf(actor.restaurantId)),
       });
     }
-    const { error } = await db.from("customer_accounts").update({ credit_limit: limit })
-      .eq("id", account.id).eq("restaurant_id", actor.restaurantId);
-    if (error) return await apiError("apiErr.generic", 500);
+    if (data.outcome !== "changed") return await apiError("apiErr.generic", 500);
     await logEvent({
       restaurantId: actor.restaurantId, actor: actor.email, entity: "account", action: "updated",
-      detail: logDetail({ name: account.name, from: Number(account.credit_limit).toFixed(2), to: limit.toFixed(2) }),
+      detail: logDetail({ name: account.name, from: Number(data.previous_limit).toFixed(2), to: limit.toFixed(2) }),
     });
     return NextResponse.json({ ok: true });
   }
@@ -141,12 +145,15 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
   }
 
   if (body.action === "close") {
-    const { owed } = (await listAccounts(actor.restaurantId)).find(a => a.id === account.id) ?? { owed: 0 };
-    if (owed > 0) return await apiError("apiErr.accountStillOwes", 409);
-    const { error } = await db.from("customer_accounts")
-      .update({ status: "closed", closed_by: actor.email, closed_at: new Date().toISOString() })
-      .eq("id", account.id).eq("restaurant_id", actor.restaurantId);
-    if (error) return await apiError("apiErr.generic", 500);
+    // Only once nothing is owed — read under the same lock a charge takes.
+    const { data, error } = await db.rpc("account_change", {
+      p_restaurant: actor.restaurantId, p_account: account.id,
+      p_action: "close", p_limit: null, p_actor: actor.email,
+    });
+    if (error || !data) return await apiError("apiErr.generic", 500);
+    if (data.outcome === "missing") return await apiError("apiErr.notFound", 404);
+    if (data.outcome === "owes") return await apiError("apiErr.accountStillOwes", 409);
+    if (data.outcome !== "changed") return await apiError("apiErr.generic", 500);
     await logEvent({
       restaurantId: actor.restaurantId, actor: actor.email, entity: "account", action: "closed",
       detail: logDetail({ name: account.name }),

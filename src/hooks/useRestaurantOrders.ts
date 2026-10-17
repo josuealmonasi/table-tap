@@ -187,9 +187,9 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
 
   /**
    * Cancels (and refunds, if paid) an order. NOT optimistic — money moves, so
-   * we wait for the server. Returns an error message to show, or null on success.
+   * we wait for the server. A conflict needs a fresh offer, confirmed again.
    */
-  async function cancelOrder(id: string): Promise<string | null> {
+  async function cancelOrder(id: string): Promise<{ error: string; stale: boolean } | null> {
     try {
       const res = await fetch("/api/orders/cancel", {
         method: "POST",
@@ -197,7 +197,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
         body: JSON.stringify({ id }),
       });
       const data = await res.json();
-      if (!res.ok) return data.error ?? t("apiErr.orderCancel");
+      if (!res.ok) return { error: data.error ?? t("apiErr.orderCancel"), stale: res.status === 409 };
       badgesChanged();
       setOrders(prev => prev.map(o => (o.id === id ? { ...o, status: "cancelled" } : o)));
       return null;
@@ -205,7 +205,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
       // Cancelling refunds money, so it is never queued and never optimistic:
       // a refund replayed on reconnect is a refund given twice.
       markOffline();
-      return t("offline.blocked");
+      return { error: t("offline.blocked"), stale: false };
     }
   }
 

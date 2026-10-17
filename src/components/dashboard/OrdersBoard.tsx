@@ -129,21 +129,26 @@ export default function OrdersBoard({
     // `pay_method`. Cash, a charge on the restaurant's own terminal and a share
     // of a table's bill cannot be refunded by an app; guessing offered "Cancel
     // & refund" on all of them, and the cancel then refused, for ever.
-    const plan = await cancelPlanFor(order.id);
-    if (typeof plan === "string") {
-      toast(plan, "error");
-      return;
+    for (;;) {
+      const plan = await cancelPlanFor(order.id);
+      if (typeof plan === "string") {
+        toast(plan, "error");
+        return;
+      }
+      const words = cancelWording(plan, n => formatMoney(n, restaurant.currency), t);
+      const ok = await confirm({
+        title: t("orders.cancelConfirm", { code: orderCode(order.id) }),
+        message: words.message,
+        confirmLabel: t(words.confirmKey),
+        danger: true,
+      });
+      if (!ok) return;
+      const result = await cancelOrder(order.id);
+      toast(result?.error ?? words.done, result ? "error" : undefined);
+      if (!result?.stale) return;
+      // Collection can win while the dialog is open. Ask again with its new
+      // refund plan; never replay the confirmation that promised no refund.
     }
-    const words = cancelWording(plan, n => formatMoney(n, restaurant.currency), t);
-    const ok = await confirm({
-      title: t("orders.cancelConfirm", { code: orderCode(order.id) }),
-      message: words.message,
-      confirmLabel: t(words.confirmKey),
-      danger: true,
-    });
-    if (!ok) return;
-    const error = await cancelOrder(order.id);
-    toast(error ?? words.done, error ? "error" : undefined);
   }
 
   return (

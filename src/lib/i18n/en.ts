@@ -1373,6 +1373,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     ordersLoad: "Could not load orders",
     orderCreate: "Could not create order",
     orderData: "Missing order data",
+    cancelChanged: "This order or its payment changed. Review it before cancelling.",
     cancelStatus: "Only new or preparing orders can be cancelled.",
     cashNoRefund: "This order was paid in cash, so there is nothing to refund through the app. Give the cash back at the till — voiding a cash sale is not something this screen can do yet.",
     refundFailed: "Refund failed — the order was NOT cancelled. Try again.",

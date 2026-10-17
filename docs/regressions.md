@@ -21,6 +21,13 @@ us, and what now catches each one.
 | The held receipt and server ticket agree (W1.5) | Online settlement used another id and amount, and replay discarded the difference |
 | Offline stock and money commit together (W1.6) | A failed stock call was acknowledged and replay could never repair it |
 | Credit approval and the kitchen ticket commit together (W1.7) | An account sale reached the pass before the account owed it |
+| A cancellation still matches its paid state and account hold under the collection locks | An unpaid cancel won after collection and left no refund obligation (W3-2) |
+| Table write-offs refuse accounts, and every account balance excludes waived orders | Written-off account food could still be collected (W3-4) |
+| Only the checkout named on the account may clear its hold | A late checkout A lifted checkout B's hold (W3-5) |
+| Account checkout settlement locks orders before summing debt | A cancellation or discount committed between the read and the paid flag (W3-6) |
+| Table discounts and their approval requests leave account orders alone | Today's discount reached yesterday's customer account (W3-9) |
+| Closing an account or changing its ceiling rechecks debt under the charge lock | A concurrent charge left a closed account owing, or passed a lowered ceiling (W3-10) |
+| Statements page every unpaid order in a unique order | The 1001st charge vanished from the displayed balance (W3-12) |
 | A table created after the blanket `revoke … from anon` locks itself down | `rate_limits` shipped world-readable |
 | No dialog is rendered inside another dialog | Shipped three times — two focus traps, two Escapes to leave |
 | Anything marking an order paid or written off closes the sitting | A sitting that never closes holds the table and the diner forever |
@@ -1974,3 +1981,77 @@ back its unpublished order and stock together. `W1.7 never publishes an account
 ticket before atomic credit approval` and `an atomic account refusal never
 causes a second cleanup request` cover that boundary.
 
+
+
+## W3-2 — cancellation and collection agree on the payment state
+
+The route planned a cancellation while the order was unpaid; `cancel_order`
+checked only its kitchen status. A collection in between left cancelled food
+paid, without a refund. The read now carries the account hold into SQL, which
+locks the account before the order and compares both the paid state and hold.
+A conflict answers 409. The board fetches a fresh plan and asks for confirmation
+again. `cancel-race.spec.tsx` checks the RPC snapshot and refusal;
+`cancel-dialog.spec.tsx` checks the conflict signal,
+`cancel-board.spec.tsx` verifies the second offer and confirmation, and
+`accounts-sql.spec.tsx` checks the database guards and keeps
+the stock gate's direct calls on the new guarded signature.
+
+## W3-4 — waived account food is no longer collectible
+
+Table write-offs and account balances disagreed about waived food. Both the
+request and approval routes now leave accounts out; the write also checks
+account membership so a charge winning the race cannot be waived afterward.
+The statement, staff list, Analytics balance and all account collection SQL
+exclude `written_off`. That includes a checkout opened before the food was
+waived: its excess still follows the existing refund-due path.
+`table-adjustments.spec.tsx`, `accounts-server.spec.tsx`,
+`write-off.spec.ts` and `accounts-sql.spec.tsx` guard both sides.
+
+## W3-5 — a hold belongs to one checkout
+
+A checkout's settlement and the account's current hold disagreed about who
+could lift it. `checkout_id` now names the owner. Open sets it; settlement and
+release clear it only when it matches. Existing holds are backfilled from
+their open checkout. Opening, settlement and release all lock the account
+first, so a late event cannot deadlock against a new checkout.
+`accounts-sql.spec.tsx` guards hold ownership and lock order.
+
+## W3-6 — settlement pays the state it locked
+
+Settlement's sum and its paid update disagreed when another financial write
+committed between them. Checkout settlement now locks collectible orders in
+ID order before calculating the amount owed. Checkout opening locks its
+snapshot too. Cancellation uses the account-then-order lock order, and table
+adjustments exclude accounts at the write as well as the read.
+`accounts-sql.spec.tsx` checks that the lock precedes the sum.
+These SQL checks inspect the function definitions; Claude must still run the
+concurrency cases against PostgreSQL after applying the schema.
+
+## W3-9 — table discounts stay on the table
+
+A transferred account order kept its table ID. The table discount reader and
+the account boundary disagreed, spreading today's discount onto yesterday's
+debt. Both discount routes exclude account orders, the shared selector agrees,
+and the write rechecks membership. Pending requests contain only table orders;
+old requests are re-read on approval. `staff-discount.spec.ts` verifies the
+MX$30 discount stays on today's MX$50 bill; `table-adjustments.spec.tsx`
+checks requests and approvals.
+
+## W3-10 — account changes share the charge lock
+
+The PATCH route's balance read and account update were separate transactions.
+`account_change` now locks the restaurant's account and checks its current debt
+before changing a ceiling or closing it. A charge first means a 409 if it no
+longer fits; a closure first makes the later charge find a closed account.
+Management still controls ceilings, and the log uses the previous ceiling
+read under the lock. `accounts-route.spec.tsx` checks stale
+reads, refusals and failures; `accounts-sql.spec.tsx` checks the
+transaction guard and service-only grant.
+
+## W3-12 — the statement agrees with the whole account
+
+The SQL balance saw every charge, while the statement read stopped at the
+server's row cap. `statementOf` now uses `everyRow`, ordered by the unique order
+ID, and fails if any page fails. `accounts-server.spec.tsx`
+checks 1001 charges of MX$100 total MX$100,100 and a failed second page never
+returns a partial statement. The same statement feeds staff, customers and email.
