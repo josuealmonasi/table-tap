@@ -17,6 +17,7 @@ us, and what now catches each one.
 | An approval acts on the amount the manager saw, through guarded routes only | A request showing MX$10 carried a MX$1,000 bill's ids |
 | A split freezes its own sitting and closes only with enough collected money | Another table's MX$20 could settle a MX$1,000 bill |
 |---|---|
+| Every offline sale with a difference reaches the review, however late it arrived | The review read 14 days by the sale's own date, newest 200: a sale sent 20 days late never appeared |
 | A replayed sale keeps the lines it was sold with | Replay repriced every line to today's menu and, after a promotion ended, took stock from the deal instead of its dishes |
 | A held sale is recorded in the currency it was charged in, or not at all | A held MX$100 sale replayed after a switch to USD was recorded as US$100 |
 | Each held sale is its own key: one tab's save cannot erase another's | Two till tabs saving at once both read the shared list back as safe, and the later write erased the earlier sale |
@@ -2205,3 +2206,15 @@ audit A, finding 14). `ringOffline` now always records the till's lines,
 combos with their parts, and uses today's menu only to measure the drift.
 `offline-sale.spec.ts` checks a combo keeps its parts; `pos-atomic.spec.tsx`
 that a replay records the price sold and takes each part from stock.
+
+## An offline sale's difference that never reached the review
+
+The replay window and the review window had to agree, and they did not. A
+held sale is accepted up to 30 days late, dated when it happened; Analytics'
+review read only sales dated in the last 14 days, newest 200 first. A sale
+sent 20 days late with a MX$50 difference was outside the window the moment
+it arrived, and 200 ordinary sales could push a flagged one off the end
+(Codex audit A, finding 16). The review now counts the last 44 days (30 to
+arrive plus 14 to see it) and lists every sale with a difference over them,
+paged rather than capped. The demo seed now has two such sales, so the layout
+and dialog gates render the card at all — with none seeded, nothing ever did.

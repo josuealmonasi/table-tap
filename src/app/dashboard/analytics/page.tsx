@@ -22,7 +22,11 @@ import { corteFrom, EMPTY_CORTE, type CorteAdjustment, type CortePayment } from 
 import { todaysShiftViews } from "@/lib/cash-shift-server";
 import { readTerminal } from "@/lib/terminal-server";
 import { everyRow } from "@/lib/paged";
+import { OFFLINE_MAX_AGE_DAYS } from "@/lib/offline-sale";
 import type { OfflineSaleRow } from "@/components/dashboard/analytics/OfflineSalesCard";
+
+/** How long a sale rung offline stays in the review after the last day it could arrive. */
+const OFFLINE_REVIEW_DAYS = 14;
 
 export const dynamic = "force-dynamic";
 
@@ -170,15 +174,21 @@ export default async function AnalyticsPage({
   // and what the bank should deposit. A failed read throws to the error
   // screen, like the corte — a deposit shown as missing is a wrong number.
   const terminal = plan && can(plan.limits, "pos") ? await readTerminal(membership.restaurant.id, timeZone) : null;
-  // The till's sales rung without a connection, newest first, so a manager
-  // sees any whose amount the menu would not have charged.
-  const offlineRows = unwrap(
-    await admin.from("orders").select("id, offline_at, total, offline_drift")
-      .eq("restaurant_id", membership.restaurant.id).not("offline_at", "is", null)
-      .gte("offline_at", new Date(Date.now() - 14 * 86_400_000).toISOString())
-      .order("offline_at", { ascending: false }).limit(200),
-    "the sales rung without a connection",
-  ) as OfflineSaleRow[] | null;
+  // The till's sales rung without a connection, so a manager sees every one
+  // whose amount the menu would not have charged. Over the whole window a
+  // held sale can still arrive in, plus two weeks to see it: a sale sent 20
+  // days late is dated 20 days ago, and a 14-day window by that date hid it
+  // the moment it arrived. Every flagged one, paged — never the newest 200.
+  const offlineSince = new Date(Date.now() - (OFFLINE_MAX_AGE_DAYS + OFFLINE_REVIEW_DAYS) * 86_400_000).toISOString();
+  const [offlineCountRes, offlineFlagged] = await Promise.all([
+    admin.from("orders").select("id", { count: "exact", head: true })
+      .eq("restaurant_id", membership.restaurant.id).not("offline_at", "is", null).gte("offline_at", offlineSince),
+    everyRow<OfflineSaleRow>((a, b) => admin.from("orders").select("id, offline_at, total, offline_drift")
+      .eq("restaurant_id", membership.restaurant.id).not("offline_at", "is", null).gte("offline_at", offlineSince)
+      .or("offline_drift.is.null,offline_drift.gte.0.01,offline_drift.lte.-0.01")
+      .order("id").range(a, b), "the sales rung without a connection"),
+  ]);
+  if (offlineCountRes.error) throw new Error(`the sales rung without a connection: ${offlineCountRes.error.message}`);
 
   // The drawer's withdrawals are struck off through a confirm dialog.
   return (
@@ -196,9 +206,11 @@ export default async function AnalyticsPage({
       dayLabel={dayLabel}
       loyalty={loyalty}
       terminal={terminal}
-      offlineSales={(offlineRows ?? []).map(o => ({
-        ...o, total: Number(o.total), offline_drift: o.offline_drift === null ? null : Number(o.offline_drift),
-      }))}
+      offlineCount={offlineCountRes.count ?? 0}
+      offlineDays={OFFLINE_MAX_AGE_DAYS + OFFLINE_REVIEW_DAYS}
+      offlineSales={offlineFlagged
+        .map(o => ({ ...o, total: Number(o.total), offline_drift: o.offline_drift === null ? null : Number(o.offline_drift) }))
+        .sort((x, y) => y.offline_at.localeCompare(x.offline_at))}
     />
     </ConfirmProvider>
   );

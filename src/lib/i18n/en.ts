@@ -2307,7 +2307,7 @@ votes: "Votes",
   },
   offlineSales: {
     title: "Sales rung offline",
-    hint: "{n} sale(s) in the last 14 days were charged without a connection and sent later, at the time they happened.",
+    hint: "{n} sale(s) in the last {days} days were charged without a connection and sent later, at the time they happened.",
     flagged: "{n} were charged at a different price from today's menu: look at them.",
     unpriced: "not compared: a product is no longer on the menu",
     drift: "against the menu: {amount}",

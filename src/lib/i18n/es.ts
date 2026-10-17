@@ -2288,7 +2288,7 @@ votes: "Votos",
   },
   offlineSales: {
     title: "Ventas sin conexión",
-    hint: "{n} venta(s) de los últimos 14 días se cobraron sin conexión y se enviaron después, con la hora en que ocurrieron.",
+    hint: "{n} venta(s) de los últimos {days} días se cobraron sin conexión y se enviaron después, con la hora en que ocurrieron.",
     flagged: "{n} se cobraron a un precio distinto del menú actual: revísalas.",
     unpriced: "sin comparar: un producto ya no está en el menú",
     drift: "contra el menú: {amount}",

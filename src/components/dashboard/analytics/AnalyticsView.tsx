@@ -42,7 +42,10 @@ interface AnalyticsViewProps {
   loyalty?: LoyaltyStats | null;
   /** The restaurant's own card terminal and its deposits, on a tier with the till. */
   terminal?: TerminalView | null;
-  /** Sales the till rang without a connection, over the last two weeks. */
+  /** How many sales the till rang without a connection over `offlineDays`. */
+  offlineCount?: number;
+  offlineDays?: number;
+  /** Of those, every one a manager should look at. */
   offlineSales?: OfflineSaleRow[];
 }
 
@@ -67,6 +70,8 @@ export default function AnalyticsView({
   dayLabel,
   loyalty = null,
   terminal = null,
+  offlineCount = 0,
+  offlineDays = 0,
   offlineSales = [],
 }: AnalyticsViewProps) {
   const t = useT();
@@ -124,7 +129,9 @@ export default function AnalyticsView({
             to the bank. */}
         {terminal && <TerminalDeposits terminal={terminal} currency={currency} timeZone={timeZone} />}
 
-        {offlineSales.length > 0 && <OfflineSalesCard sales={offlineSales} currency={currency} timeZone={timeZone} />}
+        {offlineCount > 0 && (
+          <OfflineSalesCard count={offlineCount} days={offlineDays} sales={offlineSales} currency={currency} timeZone={timeZone} />
+        )}
 
         {loyalty && <LoyaltyStatsCard stats={loyalty} />}
 
