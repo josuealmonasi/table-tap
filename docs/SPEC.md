@@ -1570,3 +1570,33 @@ the end of an expired trial write only over the revision they read, and bump
 it. A move that loses answers 409 and changes nothing; a trial ending that
 loses reads the plan again, and a trial is never ended for a restaurant
 Stripe already bills.
+
+
+### One restaurant, one billing contract
+
+Owner subscription checkout, cancellation and platform deletion share a
+service-only claim in `restaurant_billing_operations`. Its durable Stripe IDs
+survive restaurant deletion. A claim older than 15 minutes can be taken over
+only after listing Stripe's open Checkout sessions and non-final subscriptions,
+including customers lost before their local save, and recording all recovered
+IDs under a token/expiry compare-and-swap. Every write checks its token again.
+See [billing recovery](billing-reconciliation.md).
+
+Setup reuses a pending checkout for the requested tier and expires a previous
+tier's open link before replacing it. Existing active/trialing contracts change
+their existing item with immediate prorations; a refused payment leaves the
+old contract and entitlement. An unsettled contract offers its invoice or the
+billing portal. Subscription prices are monthly MXN, independent of the menu
+currency. A configured Stripe Price must match that currency and interval.
+
+An active or trialing first subscription activates its tier. Failed first
+payments preserve local entitlements and the trial deadline without linking an
+unpaid contract or claiming a founding place. Linked renewals retain their
+existing grace behavior. Sync stores cancellation dates and billing prices
+under the same revision guard as the plan, clearing obsolete values. The
+cancel/resume API goes through that same sync.
+
+Platform deletion expires open subscription checkouts, cancels live contracts
+immediately, and confirms termination before deleting staff or the restaurant.
+It retains a durable intent and Stripe IDs for retries. Unknown billing state
+preserves local data. Owner cancellation still keeps the paid period.

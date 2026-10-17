@@ -142,7 +142,7 @@ export default function PlanPanel({
               <strong>
                 {paidPrice === 0
                   ? t("plan.free")
-                  : formatMoney(paidPrice, currency)}
+                  : formatMoney(paidPrice, "MXN")}
               </strong>
               {paidPrice > 0 && <span>{t("plan.perMonth")}</span>}
             </div>

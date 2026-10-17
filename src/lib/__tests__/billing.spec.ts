@@ -19,11 +19,11 @@ describe("what a Stripe status means here", () => {
       plan: "casa",
       status: "past_due",
     });
-    expect(subscriptionOutcome("incomplete", "casa").status).toBe("past_due");
+    expect(subscriptionOutcome("incomplete", "casa")).toBeNull();
   });
 
   it("freezes only once Stripe has given up", () => {
-    expect(subscriptionOutcome("unpaid", "casa").status).toBe("locked");
+    expect(subscriptionOutcome("unpaid", "casa")?.status).toBe("locked");
   });
 
   it("treats cancelling as leaving, not as owing", () => {
@@ -33,16 +33,13 @@ describe("what a Stripe status means here", () => {
       plan: "carta",
       status: "active",
     });
-    expect(subscriptionOutcome("incomplete_expired", "servicio")).toEqual({
-      plan: "carta",
-      status: "active",
-    });
+    expect(subscriptionOutcome("incomplete_expired", "servicio")).toBeNull();
   });
 
   it("errs towards leaving them working on a status it doesn't know", () => {
     // Stripe adds statuses. Freezing a restaurant that has paid is the worse
     // way to be wrong.
-    expect(subscriptionOutcome("something_new", "casa").status).toBe("past_due");
+    expect(subscriptionOutcome("something_new", "casa")?.status).toBe("past_due");
   });
 });
 

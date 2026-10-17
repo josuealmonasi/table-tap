@@ -65,7 +65,7 @@ for (const table of [
   // table's division, and what the routes keep for themselves.
   "payments", "refunds_due", "notifications", "print_jobs", "bill_splits", "bill_split_claims",
   "service_requests", "dish_ratings", "plan_limits", "stock_reservations",
-  "terminal_deposits", "platform_fees",
+  "terminal_deposits", "platform_fees", "restaurant_billing_operations",
 ]) {
   verdict(`cannot read ${table}`, await anon.from(table).select("*").limit(1));
 }

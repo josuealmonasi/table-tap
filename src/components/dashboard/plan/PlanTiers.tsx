@@ -141,7 +141,7 @@ export default function PlanTiers({
                 )}
                 {tier.monthly_price === 0
                   ? t("plan.free")
-                  : formatMoney(currentPrice(tier, foundersTaken), currency)}
+                  : formatMoney(currentPrice(tier, foundersTaken), "MXN")}
                 {tier.monthly_price > 0 && (
                   <span className="tt-tier-per">{t("plan.perMonth")}</span>
                 )}
@@ -153,7 +153,7 @@ export default function PlanTiers({
                   a number invented to make the one above look cheap. */}
               {stillOpen && launchSaving(tier) > 0 && (
                 <p className="tt-tier-launch">
-                  <s>{formatMoney(tier.list_price ?? 0, currency)}</s>{" "}
+                  <s>{formatMoney(tier.list_price ?? 0, "MXN")}</s>{" "}
                   <span className="tt-save">
                     {isFounder ? t("plan.foundingLocked") : t("plan.foundingPrice")}
                   </span>

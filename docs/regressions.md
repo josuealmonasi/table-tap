@@ -2256,3 +2256,66 @@ the account's; the two sitting checks now skip account orders the same way,
 and the account check (1d) is where they are reconciled. Reproduced on dev
 with a probe that made the order, ran the gate as it was (BAD) and as it is
 (ok), and deleted what it made.
+
+
+## Billing regression checks
+
+| Rule | The bug it came from |
+|---|---|
+| One restaurant has one billing contract | Tier changes and concurrent first checkouts created duplicate subscriptions and customers |
+| Expired billing claims reconcile before takeover | A crashed checkout worker permanently blocked paying and deletion |
+| Deletion ends Stripe billing first | Deleted restaurants kept paying after their local billing IDs vanished |
+| Subscription pesos remain pesos | A USD menu charged the MXN catalog number in dollars |
+| First-payment failure keeps the previous entitlement | An incomplete first subscription unlocked a paid tier without payment |
+| Billing dates and prices follow the plan revision | Portal cancellation/resume and termination left stale dates and monthly prices |
+
+### One restaurant, one contract
+
+The tier selector and Stripe's contracts had to agree. Checkout now claims the
+restaurant before reading or writing Stripe, reuses its pending link, and
+updates the existing subscription item when changing tiers. A different pending
+tier's link expires first; an unsettled contract offers its invoice or portal.
+`billing-checkout.spec.ts` reproduces concurrent setup, duplicate purchase,
+pending checkout reuse, and refused upgrades.
+
+### A crashed request can be recovered
+
+The local claim and Stripe's actual records had to agree. After 15 minutes,
+recovery lists customers, open subscription sessions and non-final contracts,
+records all recovered IDs, then takes over the exact expired token. Every write
+checks that token, so a resumed old worker cannot charge again.
+`billing-recovery.spec.ts` covers empty and previously unrecorded Stripe state,
+recent claims, failed reads, competing recovery and resumed workers.
+
+### Deletion ends billing before erasing its owner
+
+Restaurant deletion and Stripe's lifecycle had to agree. Deletion records its
+intent, expires checkout links, cancels live contracts and confirms termination
+before deleting staff or the restaurant. The service-only record survives
+without a cascading foreign key. `billing-delete.spec.ts` checks ordering,
+failed cancellation, a completing checkout, and retry after local deletion
+fails. `billing-lock.spec.ts` checks SQL declarations; live gates verify them.
+
+### Catalog pesos stay pesos
+
+Menu currency and subscription pricing had to agree about whose numbers they
+described. Subscription checkout and monthly price displays now always use MXN.
+`billing-checkout.spec.ts` reproduces a USD menu buying Servicio for 69,900
+centavos; `billing-price.spec.ts` checks configured monthly MXN prices.
+
+### First payment is not renewal grace
+
+Stripe's first invoice and our feature entitlement had to agree. An incomplete
+first subscription now preserves the previous plan and trial deadline without
+linking the unpaid contract or claiming a founding place. Active or trialing
+subscriptions can activate their tier; previously activated contracts retain
+renewal grace. `subscription-sync.spec.ts` covers these transitions and expired
+first attempts.
+
+### Dates and prices move with the plan
+
+Stripe's current state and the plan screen had to agree. Sync writes the end
+date and monthly price together with the plan under the same revision guard,
+clearing obsolete values. The cancel API uses that sync. `subscription-sync.spec.ts`
+checks cancellation, resume and termination; `billing-cancel.spec.ts` reproduces
+a portal resume overtaking an older cancellation response.

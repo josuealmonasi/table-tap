@@ -52,24 +52,38 @@ export async function applySubscription(sub: Stripe.Subscription): Promise<void>
     if (current.stripe_subscription_id && current.stripe_subscription_id !== latest.id) {
       const active = await stripe.subscriptions.retrieve(current.stripe_subscription_id);
       // A late cancellation from the previous subscription must not replace
-      // the newer contract. Equal creation seconds keep the active contract.
-      if (active.created > latest.created ||
-          (active.created === latest.created && !["canceled", "incomplete_expired"].includes(active.status))) return;
+      // the newer contract. Equal creation seconds keep the active contract;
+      // two live contracts need review rather than silently forgetting one.
+      const activeFinished = ["canceled", "incomplete_expired"].includes(active.status);
+      if (!activeFinished) {
+        if (["canceled", "incomplete_expired"].includes(latest.status)) return;
+        throw new Error(`Restaurant ${restaurantId} already has a live subscription ${active.id}; reconcile ${latest.id}`);
+      }
+      if (active.created > latest.created) return;
     }
     const latestPlan = readPlanName(latest.metadata?.plan);
     if (!latestPlan || latest.metadata?.restaurant_id !== restaurantId) {
       throw new Error(`Subscription ${latest.id} has inconsistent metadata`);
     }
-    await claimFounder(db, latest, latestPlan);
     const outcome = subscriptionOutcome(latest.status, latestPlan);
-    const charged = latest.items?.data?.[0]?.price?.unit_amount;
+    // Do not link an unpaid first contract: getPlan must still be able to
+    // expire the local trial. Customer lookup in checkout finds it for retries.
+    const pending = !outcome || (current.stripe_subscription_id !== latest.id && !["active", "trialing"].includes(latest.status));
+    if (!pending) await claimFounder(db, latest, latestPlan);
+    const item = latest.items?.data?.[0];
+    const ended = ["canceled", "incomplete_expired"].includes(latest.status);
+    const endsAt = latest.cancel_at ?? (latest.cancel_at_period_end ? item?.current_period_end : null);
+    const charged = item?.price?.unit_amount;
     const { data: updated, error } = await db.from("restaurants").update({
-      plan: outcome.plan,
-      plan_status: outcome.status,
-      stripe_subscription_id: latest.id,
       subscription_sync_revision: current.subscription_sync_revision + 1,
-      ...(typeof charged === "number" ? { subscribed_price: charged / 100 } : {}),
-      trial_ends_at: null,
+      ...(!pending && outcome ? {
+        plan: outcome.plan,
+        plan_status: outcome.status,
+        stripe_subscription_id: latest.id,
+        subscribed_price: !ended && typeof charged === "number" ? charged / 100 : null,
+        plan_ends_at: !ended && endsAt ? new Date(endsAt * 1000).toISOString() : null,
+        trial_ends_at: null,
+      } : {}),
     }).eq("id", restaurantId)
       .eq("subscription_sync_revision", current.subscription_sync_revision).select("id");
     if (error) throw new Error(`Subscription update failed: ${error.message}`);
@@ -86,7 +100,7 @@ async function claimFounder(
   // The founding place is taken on subscribing, not on signing up: if signup
   // counted, free registrations would eat the places without anyone ever
   // having paid. If they are already a founder they keep their number.
-  if (outcome.status === "active" || outcome.status === "trialing") {
+  if (outcome?.status === "active") {
     const { data: number, error: claimError } = await db.rpc("claim_founding_price", {
       p_restaurant: restaurantId,
       p_limit: FOUNDING_SLOTS,

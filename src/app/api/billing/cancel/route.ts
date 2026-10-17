@@ -4,6 +4,8 @@ import { jsonBody } from "@/lib/json-body";
 import { actingOwner } from "@/lib/api-guard";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { applySubscription } from "@/lib/subscription-sync";
+import { BillingError, billingFailure, withRestaurantBilling } from "@/lib/billing-operation";
 
 export const runtime = "nodejs";
 
@@ -29,28 +31,23 @@ export async function POST(req: Request): Promise<NextResponse> {
   const { resume } = body;
 
   const db = createAdminClient();
-  const { data } = await db
-    .from("restaurants")
-    .select("stripe_subscription_id")
-    .eq("id", actor.restaurantId)
-    .single();
-
-  const subscriptionId = data?.stripe_subscription_id as string | null;
-  if (!subscriptionId) return await apiError("apiErr.noBilling", 400);
-
-  const sub = await stripe.subscriptions.update(subscriptionId, {
-    cancel_at_period_end: !resume,
-  });
-
-  // Remembered so the screen can say when it ends without asking Stripe again.
-  await db
-    .from("restaurants")
-    .update({
-      plan_ends_at: sub.cancel_at_period_end
-        ? new Date(sub.items.data[0].current_period_end * 1000).toISOString()
-        : null,
-    })
-    .eq("id", actor.restaurantId);
-
-  return NextResponse.json({ ok: true, endsAt: sub.cancel_at_period_end });
+  try {
+    return await withRestaurantBilling(db, actor.restaurantId, async operation => {
+      const { data, error } = await db.from("restaurants").select("stripe_subscription_id")
+        .eq("id", actor.restaurantId).single();
+      if (error) throw new Error(`Billing lookup failed: ${error.message}`);
+      const subscriptionId = data?.stripe_subscription_id as string | null;
+      if (!subscriptionId) throw new BillingError("apiErr.noBilling", 400);
+      const sub = await operation.write(() => stripe.subscriptions.update(subscriptionId, {
+        cancel_at_period_end: !resume,
+      }, { timeout: 30000, maxNetworkRetries: 1, idempotencyKey: `billing-cancel-${operation.token}` }));
+      // Remembered so the screen can say when it ends without asking Stripe again.
+      // Use the same current-state read and revision guard as webhooks. A
+      // delayed response must not put back a date the portal just cleared.
+      await applySubscription(sub);
+      return NextResponse.json({ ok: true, endsAt: sub.cancel_at_period_end });
+    });
+  } catch (err) {
+    return await billingFailure(err);
+  }
 }

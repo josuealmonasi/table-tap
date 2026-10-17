@@ -112,3 +112,62 @@ it("fails after bounded concurrent updates rather than acknowledging unfinished 
   await expect(applySubscription(sub())).rejects.toThrow("retry required");
   expect(retrieve).toHaveBeenCalledTimes(3);
 });
+
+it("preserves the local trial and deadline after a failed first payment", async () => {
+  reads.push({ data: { stripe_subscription_id: null, subscription_sync_revision: 0,
+    plan: "servicio", plan_status: "trialing", trial_ends_at: "2026-11-01T00:00:00Z" }, error: null });
+  retrieve.mockResolvedValue(sub("sub_new", 200, "incomplete"));
+  await applySubscription(sub());
+  expect(patches[0]).not.toHaveProperty("plan");
+  expect(patches[0]).not.toHaveProperty("plan_status");
+  expect(patches[0]).not.toHaveProperty("trial_ends_at");
+  expect(rpc).not.toHaveBeenCalled();
+});
+it("does not replace a live contract with a newer duplicate", async () => {
+  reads.push(current("sub_old"));
+  retrieve.mockResolvedValueOnce(sub()).mockResolvedValueOnce(sub("sub_old", 100));
+  await expect(applySubscription(sub())).rejects.toThrow(/live subscription/);
+  expect(patches).toEqual([]);
+});
+it("stores a scheduled cancellation date in the same revision as the price", async () => {
+  reads.push(current());
+  retrieve.mockResolvedValue({ ...sub(), cancel_at_period_end: true,
+    items: { data: [{ current_period_end: 1800000000, price: { unit_amount: 149900 } }] } });
+  await applySubscription(sub());
+  expect(patches[0]).toMatchObject({ plan_ends_at: new Date(1800000000000).toISOString(), subscribed_price: 1499, subscription_sync_revision: 1 });
+});
+it("clears a resumed cancellation date and an ended subscription price", async () => {
+  reads.push(current());
+  await applySubscription(sub());
+  expect(patches[0]).toHaveProperty("plan_ends_at", null);
+  reads.push(current("sub_new", 1)); writes.push({ data: [{ id: "r1" }], error: null });
+  retrieve.mockResolvedValue(sub("sub_new", 200, "canceled"));
+  await applySubscription(sub());
+  expect(patches[1]).toMatchObject({ plan_ends_at: null, subscribed_price: null });
+});
+
+it("does not link the unpaid contract, so the local trial can still expire", async () => {
+  reads.push({ data: { stripe_subscription_id: null, subscription_sync_revision: 0 }, error: null });
+  retrieve.mockResolvedValue(sub("sub_new", 200, "incomplete"));
+  await applySubscription(sub());
+  expect(patches[0]).not.toHaveProperty("stripe_subscription_id");
+  expect(patches[0]).not.toHaveProperty("subscribed_price");
+});
+it("keeps renewal grace for a contract that was already activated", async () => {
+  reads.push(current()); retrieve.mockResolvedValue(sub("sub_new", 200, "past_due"));
+  await applySubscription(sub());
+  expect(patches[0]).toMatchObject({ plan: "casa", plan_status: "past_due", subscribed_price: 1499 });
+});
+it("leaves the local entitlement alone when an unpaid first contract expires", async () => {
+  reads.push({ data: { stripe_subscription_id: null, subscription_sync_revision: 0 }, error: null });
+  retrieve.mockResolvedValue(sub("sub_new", 200, "incomplete_expired"));
+  await applySubscription(sub());
+  expect(patches).toEqual([]);
+});
+it("activates a new tier when Stripe grants a trial", async () => {
+  reads.push({ data: { stripe_subscription_id: null, subscription_sync_revision: 0 }, error: null });
+  retrieve.mockResolvedValue(sub("sub_new", 200, "trialing"));
+  await applySubscription(sub());
+  expect(patches[0]).toMatchObject({ plan: "casa", plan_status: "trialing", stripe_subscription_id: "sub_new" });
+  expect(rpc).not.toHaveBeenCalled();
+});

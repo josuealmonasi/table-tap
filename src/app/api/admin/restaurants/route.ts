@@ -4,6 +4,8 @@ import { jsonBody } from "@/lib/json-body";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { moveRestaurantPlan } from "@/lib/admin-plan";
+import { billingFailure, withRestaurantBilling } from "@/lib/billing-operation";
+import { endRestaurantBilling } from "@/lib/billing-delete";
 
 export const runtime = "nodejs";
 
@@ -17,24 +19,30 @@ export async function DELETE(req: NextRequest) {
   const body = await jsonBody<Record<string, unknown>>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { id } = body;
-  if (!id) return await apiError("apiErr.invalidRequest", 400);
+  if (typeof id !== "string" || !id) return await apiError("apiErr.invalidRequest", 400);
 
   const db = createAdminClient();
-
-  // Staff logins would be orphaned auth users once their rows cascade — remove
-  // the logins themselves first.
-  const { data: members } = await db
-    .from("staff")
-    .select("user_id")
-    .eq("restaurant_id", id);
-  for (const m of members ?? []) {
-    await db.auth.admin.deleteUser(m.user_id);
+  try {
+    return await withRestaurantBilling(db, id, async operation => {
+      // Keep the IDs and staff until Stripe confirms nothing can charge.
+      // Scheduling cancellation is still a live contract until its paid end.
+      await endRestaurantBilling(db, id, operation);
+      // Staff logins would be orphaned auth users once their rows cascade — remove
+      // the logins themselves first.
+      const { data: members, error: staffError } = await db.from("staff").select("user_id").eq("restaurant_id", id);
+      if (staffError) throw new Error(`Staff lookup failed: ${staffError.message}`);
+      for (const m of members ?? []) {
+        const { error } = await db.auth.admin.deleteUser(m.user_id);
+        if (error) throw new Error(`Staff deletion failed: ${error.message}`);
+      }
+      const { error } = await operation.write(async () => await db.from("restaurants").delete().eq("id", id));
+      if (error) return await apiError("apiErr.restaurantDelete", 500);
+      await operation.record({ deleted: true });
+      return NextResponse.json({ ok: true });
+    });
+  } catch (err) {
+    return await billingFailure(err);
   }
-
-  const { error } = await db.from("restaurants").delete().eq("id", id);
-  if (error) return await apiError("apiErr.restaurantDelete", 500);
-
-  return NextResponse.json({ ok: true });
 }
 
 // PATCH /api/admin/restaurants — a platform admin moves a restaurant to
