@@ -5093,3 +5093,18 @@ begin
 end; $$;
 revoke all on function public.approve_discount_request(uuid, uuid, text, numeric) from public, anon, authenticated;
 grant execute on function public.approve_discount_request(uuid, uuid, text, numeric) to service_role;
+
+-- Refunded food cannot return to the pass after its stock has been returned.
+create or replace function public.keep_order_terminal()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if (old.status = 'cancelled' or old.written_off)
+     and new.status is distinct from old.status then
+    raise exception 'A cancelled or written-off order cannot change status';
+  end if;
+  return new;
+end; $$;
+drop trigger if exists orders_keep_terminal on orders;
+create trigger orders_keep_terminal before update of status on orders
+  for each row execute function public.keep_order_terminal();
+revoke all on function public.keep_order_terminal() from public, anon, authenticated;

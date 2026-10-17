@@ -16,6 +16,7 @@
  * "preparing" must not drag back an order the kitchen has already called ready.
  */
 import type { OrderStatus } from "@/lib/types";
+import { LIVE_FLOW } from "@/lib/order-flow";
 
 const KEY = "tt-offline-queue";
 
@@ -28,20 +29,18 @@ export interface QueuedMove {
   at: number;
 }
 
-/**
- * Adds a move, or folds it into the one already waiting for that order.
- *
- * Three taps on one ticket while the wifi is out are one change to send: keep
- * the status it started at and the status it ended at, and drop the middle. A
- * queue that replays every tap makes the board flicker through states nobody
- * chose on the way to the one they did.
- */
+/** Keep each step: the server only accepts a live stage's next step or undo. */
 export function enqueue(queue: QueuedMove[], move: QueuedMove): QueuedMove[] {
-  const existing = queue.find(m => m.id === move.id);
-  if (!existing) return [...queue, move];
-  // Back where it started: there is nothing left to send.
-  if (existing.from === move.to) return queue.filter(m => m.id !== move.id);
-  return queue.map(m => (m.id === move.id ? { ...m, to: move.to, at: move.at } : m));
+  return move.from === move.to ? queue : [...queue, ...forwardSteps(move)];
+}
+
+/** Old clients saved one jump for several taps. Replay its permitted steps. */
+function forwardSteps(move: QueuedMove): QueuedMove[] {
+  const flow: OrderStatus[] = [...LIVE_FLOW, "completed"];
+  const from = flow.indexOf(move.from);
+  const to = flow.indexOf(move.to);
+  if (from < 0 || to <= from + 1) return [move];
+  return flow.slice(from, to).map((stage, i) => ({ ...move, from: stage, to: flow[from + i + 1] }));
 }
 
 /** Reads the queue, tolerating a browser that will not give us storage. */
@@ -54,7 +53,7 @@ export function readQueue(): QueuedMove[] {
     return parsed.filter(
       (m): m is QueuedMove =>
         typeof m === "object" && m !== null && typeof (m as QueuedMove).id === "string",
-    );
+    ).flatMap(forwardSteps);
   } catch {
     return [];
   }

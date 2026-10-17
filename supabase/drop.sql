@@ -147,3 +147,4 @@ drop function if exists public.record_duplicate_share(uuid, text, numeric);
 drop function if exists public.refund_platform_fee(uuid, text, integer, text);
 drop function if exists public.approve_write_off_request(uuid, uuid, text, numeric, text);
 drop function if exists public.approve_discount_request(uuid, uuid, text, numeric);
+drop function if exists public.keep_order_terminal();

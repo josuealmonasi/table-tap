@@ -13,6 +13,7 @@ us, and what now catches each one.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| Every board move checks the current live stage, restaurant and write-off flag | A kitchen login revived cancelled, refunded food |
 | An approval acts on the amount the manager saw, through guarded routes only | A request showing MX$10 carried a MX$1,000 bill's ids |
 | A split freezes its own sitting and closes only with enough collected money | Another table's MX$20 could settle a MX$1,000 bill |
 |---|---|
@@ -2086,3 +2087,21 @@ keep their original displayed amount. `bill-approval.react-component.spec.tsx`
 reproduces forged and stale amounts, transaction refusals, failed reads and
 matching approvals. Claude must verify the effective grants and concurrent
 SQL behavior against the applied schema.
+
+## Cancelled food sent back to the kitchen
+
+The board's stages and the server's accepted updates had to agree. The API
+checked only whether staff could read the ticket, and an omitted `from` meant
+any status could replace any other. A kitchen login could revive refunded food
+after its stock had already been returned. Every update now compares the
+current status, restaurant and write-off flag atomically. Only the next live
+stage is accepted; kitchen staff retain the earlier-stage undo already offered
+by the board, and the floor hands over ready food. Cancelled, completed,
+pending-payment and written-off tickets cannot move through this route.
+A database trigger also keeps cancelled and written-off status final.
+
+`status.react-component.spec.tsx` reproduces revival and cancellation races and
+checks the legitimate moves. The offline queue keeps each step and expands
+older collapsed queues on read, so reconnect follows the same allowed path.
+A failed step keeps that ticket's later steps waiting. `offline-queue.spec.ts`
+and `useRestaurantOrders.react-component.spec.tsx` cover replay and undo.

@@ -87,21 +87,17 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
     };
   }, [restaurantId]);
 
-  /**
-   * Sends what has been waiting, oldest first.
-   *
-   * Each move carries the status it started from, so the server drops anything
-   * a live connection has already overtaken. A move that fails to send stays in
-   * the queue; one the server refuses as superseded does not, because the board
-   * it was arguing with is newer than it is.
-   */
+  // Replay oldest first; stale or refused work leaves the queue.
   const flush = useCallback(async () => {
     const queue = readQueue();
     if (queue.length === 0) return;
 
     const stuck: QueuedMove[] = [];
     let refused = 0;
+    const blocked = new Set<string>();
     for (const move of queue) {
+      // A later step cannot overtake one that still needs to be sent.
+      if (blocked.has(move.id)) { stuck.push(move); continue; }
       try {
         const res = await fetch("/api/orders", {
           method: "PATCH",
@@ -111,10 +107,13 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
         // A server that is failing may answer differently later; one that
         // refused has answered. Kept, a refused move was retried on every
         // reconnect and the board said "saved, will be sent" for ever.
-        if (res.status >= 500) stuck.push(move);
-        else if (!res.ok) refused++;
+        if (res.status >= 500) {
+          stuck.push(move);
+          blocked.add(move.id);
+        } else if (!res.ok) refused++;
       } catch {
         stuck.push(move); // still no connection: keep it for next time
+        blocked.add(move.id);
       }
     }
     writeQueue(stuck);
@@ -138,12 +137,10 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
       res = await fetch("/api/orders", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status }),
+        body: JSON.stringify({ id, status, from: was }),
       });
     } catch {
-      // The tap used to be fired and forgotten: on a dropped connection the
-      // ticket showed as moved to whoever moved it and untouched to everybody
-      // else. Hold it instead, and say so on the board.
+      // Keep a dropped tap so this board cannot quietly disagree with the kitchen.
       if (was) {
         const queue = enqueue(readQueue(), { id, from: was, to: status, at: Date.now() });
         writeQueue(queue);
@@ -154,10 +151,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
       return;
     }
 
-    // Answered, and refused: not a dropped connection. It was held as one — a
-    // board that was online told "saved, will be sent", the ticket moved here
-    // and nowhere else, the move refused again on every reconnect. It goes
-    // back to where it was, with the server's reason.
+    // A refusal restores the ticket; it must never be saved as offline work.
     if (!res.ok) {
       if (was) setOrders(prev => prev.map(o => (o.id === id ? { ...o, status: was } : o)));
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -168,12 +162,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
     badgesChanged();
   }
 
-  /**
-   * What cancelling would give back, and who would give it — asked before the
-   * dialog opens, so its offer is the server's own. Returns an error message
-   * instead when it cannot be told: offering a refund on a guess is how the
-   * dialog promised money back that the cancel then refused to give.
-   */
+  // Ask the server before offering a refund: its ledger decides what is owed.
   async function cancelPlanFor(id: string): Promise<CancelSummary | string> {
     try {
       const res = await fetch(`/api/orders/cancel?id=${encodeURIComponent(id)}`);
