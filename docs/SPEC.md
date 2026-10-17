@@ -1158,7 +1158,8 @@ server applies it only if nothing has happened since.
 **A sale at the till is the exception**, because it is money already in hand:
 
 - Every cash or own-terminal sale is saved on the device
-  (`src/lib/offline-sales.ts`, `localStorage`) before its first request
+  (`src/lib/offline-sales.ts`, `localStorage`, one key per sale so two till
+  tabs on one tablet can never overwrite each other) before its first request
   leaves, and let go only when the server answers that this sale, at this
   amount, is settled. If the browser will not save it, it is not sent. With no
   connection, a request that never came back, a 5xx, or a refusal that says
