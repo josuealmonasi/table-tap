@@ -149,7 +149,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // is opening its checkout right now, or opened one whose session was
       // never noted. A second, fee-free session would be payable beside it —
       // and a diner who paid both paid for their share twice.
-      if (!fee.id && await feeRefOpen(restaurantId, ref)) return await apiError("apiErr.sharePayingOnline", 409);
+      if (!fee.id) {
+        if (await feeRefOpen(restaurantId, ref)) return await apiError("apiErr.sharePayingOnline", 409);
+        // Nothing held either: the ceiling is reached — or the other request
+        // gave its reservation back between the two reads. Asked once more,
+        // so a slice released a moment ago is still charged.
+        fee = await reserveFeeCents(restaurantId, feePlan.limits, slice, "split", ref);
+        if (!fee.id && await feeRefOpen(restaurantId, ref)) return await apiError("apiErr.sharePayingOnline", 409);
+      }
     }
   } catch {
     return await apiError("apiErr.generic", 502);

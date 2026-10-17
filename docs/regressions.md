@@ -1872,3 +1872,10 @@ is a repeat). It also flagged that rebuilding a pre-ledger session's fee from
 order history mis-keys some charges; that rebuilding is gone — no pre-ledger
 session can exist, which the migration enforces.
 
+A fifth review (Codex) found no must-fix left: no path that counts the fees
+we kept short, and none that leaves a share charged twice without a refund
+due. Its one should-fix, a revenue race — a share's reservation released
+between "nothing reserved" and "is it still held?" let the share open
+fee-free — is closed by asking once more: a ceiling that is really reached
+answers the same way twice.
+
