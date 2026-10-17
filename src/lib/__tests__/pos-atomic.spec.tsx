@@ -31,7 +31,10 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
     return { data: { outcome: "settled", orderId: args.p_ref, total: 100, settled: true, ...(name === "ring_pos_account" ? { onAccount: { name: "Guest", owed: 100 } } : {}) }, error: null };
   },
 }) }));
-vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => Response.json({ error }, { status }) }));
+vi.mock("@/lib/api-error", () => ({
+  apiError: async (error: string, status: number, _vars?: unknown, extra?: Record<string, unknown>) =>
+    Response.json({ ...extra, error }, { status }),
+}));
 vi.mock("@/lib/api-guard", () => ({ actingStaff: async () => ({ restaurantId: "r1", email: "cashier", role: "owner" }) }));
 vi.mock("@/lib/plan-guard", () => ({ frozenBlocks: async () => null, planBlocks: async () => null }));
 vi.mock("@/lib/plan-server", () => ({ getPlan: async () => ({ limits: {} }) }));
@@ -87,6 +90,26 @@ it("refuses an online collected amount that differs before recording money", asy
   }) }));
   expect(res.status).toBe(409);
   expect(state.calls).toEqual([]);
+});
+it("a till opened for another restaurant is refused and kept, online or replayed", async () => {
+  const { offline: collected, ...online } = body();
+  for (const sent of [{ ...online, collected }, body()]) {
+    const res = await POST(new NextRequest("http://localhost/api/pos/order", { method: "POST", body: JSON.stringify({
+      ...sent, restaurantId: "r2",
+    }) }));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "apiErr.posOtherRestaurant", held: true });
+  }
+  expect(state.calls).toEqual([]);
+});
+it("a till that names its own restaurant, or none (opened before this check), rings as before", async () => {
+  const { offline: collected, ...online } = body();
+  for (const restaurantId of ["r1", undefined]) {
+    const res = await POST(new NextRequest("http://localhost/api/pos/order", { method: "POST", body: JSON.stringify({
+      ...online, collected, posRef: crypto.randomUUID(), restaurantId,
+    }) }));
+    expect(res.status).toBe(200);
+  }
 });
 it("a foreign reference conflict reveals no ticket or total", async () => {
   state.reply = { outcome: "conflict" };

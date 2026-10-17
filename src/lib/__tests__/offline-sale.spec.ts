@@ -64,7 +64,7 @@ describe("what a held sale sends", () => {
       charge: { subtotal: 100, serviceFee: 10, tip: 5, discount: 0, total: 115 },
     };
     expect(replayBody(sale)).toMatchObject({
-      posRef: sale.posRef, method: "card", terminalRef: "AUT 1", noReceipt: true,
+      posRef: sale.posRef, restaurantId: "r", method: "card", terminalRef: "AUT 1", noReceipt: true,
       offline: { at: sale.at, subtotal: 100, serviceFee: 10, tip: 5, discount: 0, total: 115 },
     });
   });

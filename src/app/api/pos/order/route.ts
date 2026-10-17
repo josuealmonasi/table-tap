@@ -20,7 +20,7 @@ import { chargeRefusal, type ChargeResult } from "@/lib/account-charge";
 import { offlineCharge } from "@/lib/offline-sale";
 import { stockDemand, toDemandPayload, parseReserveResult } from "@/lib/stock";
 import { saleReceipt } from "@/lib/pos-receipt";
-import { existingTicket, terminalRef, type PosSaleBody } from "@/lib/pos-sale";
+import { existingTicket, otherRestaurant, terminalRef, type PosSaleBody } from "@/lib/pos-sale";
 import { ringOffline } from "@/lib/pos-offline";
 import { orderableNow } from "@/lib/checkout/orderable-now";
 import { verifiedLines } from "@/lib/checkout/verified-lines";
@@ -65,6 +65,8 @@ export async function POST(req: NextRequest) {
 
   const body = await jsonBody<PosSaleBody & { offline?: unknown }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const elsewhere = await otherRestaurant(body, actor.restaurantId);
+  if (elsewhere) return elsewhere;
   // Rung while the connection was gone and sent now: it already happened, so
   // it is recorded as it was taken rather than checked against the menu as a
   // new sale would be. Same role, freeze and plan checks as above.

@@ -17,6 +17,7 @@ us, and what now catches each one.
 | An approval acts on the amount the manager saw, through guarded routes only | A request showing MX$10 carried a MX$1,000 bill's ids |
 | A split freezes its own sitting and closes only with enough collected money | Another table's MX$20 could settle a MX$1,000 bill |
 |---|---|
+| A till sale is filed under the restaurant whose screen rang it | Another tab signing in under an open till filed restaurant A's cash as restaurant B's takings |
 | A lost till response never deletes committed money (W1.1) | Deleting a settled order orphaned its payment and let replay record the cash again |
 | A till repeat proves settlement before the device forgets it (W1.2) | An unpaid shell answered success and erased the held sale |
 | A till reference belongs to its restaurant (W1.3) | A cashier could read another restaurant's ticket and silently lose their own sale |
@@ -2105,3 +2106,19 @@ checks the legitimate moves. The offline queue keeps each step and expands
 older collapsed queues on read, so reconnect follows the same allowed path.
 A failed step keeps that ticket's later steps waiting. `offline-queue.spec.ts`
 and `useRestaurantOrders.spec.tsx` cover replay and undo.
+
+## A till sale filed under the wrong restaurant
+
+The till screen and the session cookie had to agree about which restaurant
+the money belonged to, and nothing checked that they did. A till tab opened
+for restaurant A kept running after another tab signed in to restaurant B;
+its next sale, or its held offline sales on reconnect, went out under B's
+cookie, and the server filed A's cash as B's takings — while A's device,
+told the sale was settled, let go of its copy. Every sale now names the
+restaurant its screen was opened for (`restaurantId`, online and in
+`replayBody`), and the route refuses one that differs from the signed-in
+restaurant, before reading anything, with `held: true`: the sale stays on the
+device until A signs in again. A till that names no restaurant is one still
+running the code from before this check and is let through as before, so an
+open till is not left holding every sale after a deploy. `pos-atomic.spec.tsx`
+covers both paths and both exceptions; `offline-sale.spec.ts` the replay body.

@@ -6,6 +6,8 @@ import { orderCode, type OrderLineItem } from "@/lib/types";
 /** What the till sends when a cashier rings a sale. */
 export interface PosSaleBody {
   posRef?: string;
+  /** The restaurant the till screen was opened for — the drawer the money is in. */
+  restaurantId?: unknown;
   /** The money already collected, saved before the first send. */
   collected?: unknown;
   items?: OrderLineItem[];
@@ -32,6 +34,21 @@ export function terminalRef(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const ref = raw.trim().replace(/\s+/g, " ");
   return ref.length >= 1 && ref.length <= 40 ? ref : null;
+}
+
+/**
+ * A till screen opened for one restaurant, sending while the browser is now
+ * signed in to another. Another tab signing in replaces the session cookie
+ * under an open till, and the server used to file the sale under whoever was
+ * signed in: restaurant A's cash recorded as restaurant B's takings, and A's
+ * device told the sale was safe. Refused, and kept on the device (`held`)
+ * until A signs in again. A till that sends no restaurant is one still running
+ * the code from before this check, open since the deploy: it is let through,
+ * as it always was, rather than holding every sale it rings.
+ */
+export async function otherRestaurant(body: PosSaleBody, actorRestaurant: string): Promise<NextResponse | null> {
+  if (body.restaurantId === undefined || body.restaurantId === actorRestaurant) return null;
+  return await apiError("apiErr.posOtherRestaurant", 409, undefined, { held: true });
 }
 
 /**
