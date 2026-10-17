@@ -106,6 +106,9 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     if (!MANAGES(actor.role)) return await apiError("apiErr.forbidden", 403);
     const limit = cleanLimit(body.limit);
     if (limit === null) return await apiError("apiErr.accountLimitAmount", 400);
+    // Below what is already owed the account could never be charged again,
+    // and would read as though it were over its limit through nobody's doing.
+    // Checked under the account's lock, so a charge cannot land in between.
     const { data, error } = await db.rpc("account_change", {
       p_restaurant: actor.restaurantId, p_account: account.id,
       p_action: "limit", p_limit: limit, p_actor: actor.email,
@@ -142,6 +145,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
   }
 
   if (body.action === "close") {
+    // Only once nothing is owed — read under the same lock a charge takes.
     const { data, error } = await db.rpc("account_change", {
       p_restaurant: actor.restaurantId, p_account: account.id,
       p_action: "close", p_limit: null, p_actor: actor.email,

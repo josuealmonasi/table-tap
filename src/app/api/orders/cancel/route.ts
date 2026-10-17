@@ -98,8 +98,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Status, paid state and account hold must still match the plan. Otherwise
-  // a collection could turn an unpaid cancel into paid food with no refund.
+  // Conditional on everything read above, so of two cancels racing only one
+  // moves the order — the other would write a second handback, and the corte
+  // would take the sale out of the drawer twice. And on the paid state and
+  // the account's hold as they were read: a collection that lands while the
+  // dialog is open turns an unpaid cancel into paid food with no refund, so a
+  // changed order is refused and the manager is asked again with its new plan.
   const { data: moved, error } = await admin.rpc("cancel_order", {
     p_restaurant: actor.restaurantId,
     p_order: id,

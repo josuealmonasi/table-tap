@@ -1990,10 +1990,10 @@ checked only its kitchen status. A collection in between left cancelled food
 paid, without a refund. The read now carries the account hold into SQL, which
 locks the account before the order and compares both the paid state and hold.
 A conflict answers 409. The board fetches a fresh plan and asks for confirmation
-again. `cancel-race.react-component.spec.tsx` checks the RPC snapshot and refusal;
-`cancel-dialog.react-component.spec.tsx` checks the conflict signal,
-`cancel-board.react-component.spec.tsx` verifies the second offer and confirmation, and
-`accounts-sql.react-component.spec.tsx` checks the database guards and keeps
+again. `cancel-race.spec.tsx` checks the RPC snapshot and refusal;
+`cancel-dialog.spec.tsx` checks the conflict signal,
+`cancel-board.spec.tsx` verifies the second offer and confirmation, and
+`accounts-sql.spec.tsx` checks the database guards and keeps
 the stock gate's direct calls on the new guarded signature.
 
 ## W3-4 — waived account food is no longer collectible
@@ -2004,8 +2004,8 @@ account membership so a charge winning the race cannot be waived afterward.
 The statement, staff list, Analytics balance and all account collection SQL
 exclude `written_off`. That includes a checkout opened before the food was
 waived: its excess still follows the existing refund-due path.
-`table-adjustments.react-component.spec.tsx`, `accounts-server.react-component.spec.tsx`,
-`write-off.spec.ts` and `accounts-sql.react-component.spec.tsx` guard both sides.
+`table-adjustments.spec.tsx`, `accounts-server.spec.tsx`,
+`write-off.spec.ts` and `accounts-sql.spec.tsx` guard both sides.
 
 ## W3-5 — a hold belongs to one checkout
 
@@ -2014,7 +2014,7 @@ could lift it. `checkout_id` now names the owner. Open sets it; settlement and
 release clear it only when it matches. Existing holds are backfilled from
 their open checkout. Opening, settlement and release all lock the account
 first, so a late event cannot deadlock against a new checkout.
-`accounts-sql.react-component.spec.tsx` guards hold ownership and lock order.
+`accounts-sql.spec.tsx` guards hold ownership and lock order.
 
 ## W3-6 — settlement pays the state it locked
 
@@ -2023,7 +2023,7 @@ committed between them. Checkout settlement now locks collectible orders in
 ID order before calculating the amount owed. Checkout opening locks its
 snapshot too. Cancellation uses the account-then-order lock order, and table
 adjustments exclude accounts at the write as well as the read.
-`accounts-sql.react-component.spec.tsx` checks that the lock precedes the sum.
+`accounts-sql.spec.tsx` checks that the lock precedes the sum.
 These SQL checks inspect the function definitions; Claude must still run the
 concurrency cases against PostgreSQL after applying the schema.
 
@@ -2034,7 +2034,7 @@ the account boundary disagreed, spreading today's discount onto yesterday's
 debt. Both discount routes exclude account orders, the shared selector agrees,
 and the write rechecks membership. Pending requests contain only table orders;
 old requests are re-read on approval. `staff-discount.spec.ts` verifies the
-MX$30 discount stays on today's MX$50 bill; `table-adjustments.react-component.spec.tsx`
+MX$30 discount stays on today's MX$50 bill; `table-adjustments.spec.tsx`
 checks requests and approvals.
 
 ## W3-10 — account changes share the charge lock
@@ -2044,14 +2044,14 @@ The PATCH route's balance read and account update were separate transactions.
 before changing a ceiling or closing it. A charge first means a 409 if it no
 longer fits; a closure first makes the later charge find a closed account.
 Management still controls ceilings, and the log uses the previous ceiling
-read under the lock. `accounts-route.react-component.spec.tsx` checks stale
-reads, refusals and failures; `accounts-sql.react-component.spec.tsx` checks the
+read under the lock. `accounts-route.spec.tsx` checks stale
+reads, refusals and failures; `accounts-sql.spec.tsx` checks the
 transaction guard and service-only grant.
 
 ## W3-12 — the statement agrees with the whole account
 
 The SQL balance saw every charge, while the statement read stopped at the
 server's row cap. `statementOf` now uses `everyRow`, ordered by the unique order
-ID, and fails if any page fails. `accounts-server.react-component.spec.tsx`
+ID, and fails if any page fails. `accounts-server.spec.tsx`
 checks 1001 charges of MX$100 total MX$100,100 and a failed second page never
 returns a partial statement. The same statement feeds staff, customers and email.
