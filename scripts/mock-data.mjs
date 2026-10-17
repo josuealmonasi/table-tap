@@ -461,7 +461,7 @@ export async function seedMock(pg) {
     await bulkInsert(
       pg,
       "payments",
-      ["restaurant_id", "order_id", "session_id", "amount", "method", "actor_email", "created_at"],
+      ["restaurant_id", "order_id", "session_id", "amount", "method", "actor_email", "created_at", "recorded_at"],
       settled.map((o, i) => {
         const cash = o.pay_method === "cash";
         return [
@@ -470,7 +470,9 @@ export async function seedMock(pg) {
           // Chosen by position rather than at random, so the log written below
           // can name the same person without a second roll of the dice.
           cash ? takers[i % takers.length] : null,
-          o.created_at,
+          // Recorded when it was taken: left to the default, every past sale
+          // would read as having arrived after its day's deposit was marked.
+          o.created_at, o.created_at,
         ];
       }),
     );
@@ -572,10 +574,14 @@ export async function seedMock(pg) {
   // left the menu and could not be compared. With none seeded, no gate ever
   // rendered that card. The third matches the menu and is dated inside the
   // closed shift seeded below, after its count — the late arrival the shift
-  // record has to show. Paid in cash at the till, so each names the cashier
-  // who took it, in the ledger and in the log — cash nobody took, or a log
-  // that disagrees with the ledger, is what `pnpm money` refuses.
-  for (const [minutesAgo, drift] of [[30 * 60, 2.5], [54 * 60, null], [45, 0]]) {
+  // record has to show. A fourth, by card on the restaurant's own terminal
+  // three days ago, arrived after that day's deposit was marked (seeded just
+  // below) — the late sale the deposit has to show. Each names the cashier who
+  // took it, in the ledger and in the log — money nobody took, or a log that
+  // disagrees with the ledger, is what `pnpm money` refuses. Arrived now, so
+  // their `recorded_at` is now, later than the moment each happened.
+  let lateCard = null;
+  for (const [minutesAgo, drift, method] of [[30 * 60, 2.5, "cash"], [54 * 60, null, "cash"], [45, 0, "cash"], [72 * 60, 0, "card"]]) {
     const lines = buildLines(products);
     const subtotal = round2(
       lines.reduce((sum, l) => sum + (l.price + l.extras.reduce((x, e) => x + e.price, 0)) * l.qty, 0),
@@ -586,32 +592,49 @@ export async function seedMock(pg) {
     } = await pg.query(
       `insert into orders (restaurant_id, status, subtotal, service_fee, tip, total, currency, items,
          paid, pay_method, created_at, offline_at, offline_drift)
-       values ($1, 'completed', $2, 0, 0, $2, 'MXN', $3, true, 'cash', $4, $4, $5) returning id`,
-      [rid, subtotal, JSON.stringify(lines), at, drift],
+       values ($1, 'completed', $2, 0, 0, $2, 'MXN', $3, true, $6, $4, $4, $5) returning id`,
+      [rid, subtotal, JSON.stringify(lines), at, drift, method],
     );
     await pg.query(
       `insert into payments (restaurant_id, order_id, amount, method, actor_email, created_at)
-       values ($1, $2, $3, 'cash', 'demo-cashier@tabletap.dev', $4)`,
-      [rid, sale.id, subtotal, at],
+       values ($1, $2, $3, $5, 'demo-cashier@tabletap.dev', $4)`,
+      [rid, sale.id, subtotal, at, method],
     );
+    if (method === "card") lateCard = { at, amount: subtotal };
     // Logged as money taken, as `ringOffline` does: the corte reads the log,
     // and `pnpm money` holds it to the ledger.
     await pg.query(
       `insert into user_logs (restaurant_id, actor_email, entity, action, detail, created_at)
        values ($1, 'demo-cashier@tabletap.dev', 'bill', 'paid', $2, $3)`,
-      [rid, `code=ORD-${sale.id.replace(/-/g, "").slice(0, 4).toUpperCase()} amount=${subtotal.toFixed(2)} method=cash`, at],
+      [rid, `code=ORD-${sale.id.replace(/-/g, "").slice(0, 4).toUpperCase()} amount=${subtotal.toFixed(2)} method=${method}`, at],
+    );
+  }
+  // That card sale's day, marked deposited the evening after — before the
+  // sale arrived. Received is what the bank paid: what was expected when it
+  // was marked, plus the late sale net of the 3.5% terminal fee.
+  {
+    const day = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(new Date(lateCard.at));
+    const expected = 500;
+    const lateNet = round2(lateCard.amount * (1 - 3.5 / 100));
+    await pg.query(
+      `insert into terminal_deposits (restaurant_id, sales_day, expected, received, recorded_by, created_at)
+       values ($1, $2, $3, $4, 'demo-manager@tabletap.dev', $5)
+       on conflict (restaurant_id, sales_day) do nothing`,
+      [rid, day, expected, round2(expected + lateNet), new Date(Date.parse(lateCard.at) + 30 * 3600000).toISOString()],
     );
   }
 
   // ── The ledger for everything already settled ─────────────────────────
   // The demo has to look like a restaurant that has been trading, and money
   // received is part of that: the till card and the daily count both read from
-  // what was actually taken, not from which orders are ticked.
+  // what was actually taken, not from which orders are ticked. Recorded when
+  // it was taken: a seed that left `recorded_at` at the moment it ran made
+  // every past card sale look like it arrived after its deposit.
   await pg.query(
-    `insert into payments (restaurant_id, order_id, session_id, amount, method, created_at)
+    `insert into payments (restaurant_id, order_id, session_id, amount, method, created_at, recorded_at)
      select o.restaurant_id, o.id, o.session_id, o.total,
             case when coalesce(o.pay_method, '') = 'cash' then 'cash' else 'card' end,
-            o.created_at
+            o.created_at, o.created_at
        from orders o
       where o.restaurant_id = $1
         and o.paid

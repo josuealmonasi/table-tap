@@ -16,6 +16,8 @@ export interface TerminalPayment {
   /** The tip inside `amount`. */
   tip: number;
   created_at: string;
+  /** When the server recorded it; later than `created_at` for a sale held offline. */
+  recorded_at?: string | null;
   /** When its sale was cancelled and it was voided on the terminal; null when it stands. */
   voided_at?: string | null;
 }
@@ -41,6 +43,12 @@ export interface DepositDay {
   /** Voided on the terminal for sales of earlier days: comes out of this deposit. */
   givenBack: number;
   expected: number;
+  /**
+   * On a day already marked deposited: what arrived after it was marked —
+   * card sales the till held offline, net of the fee. The deposit is judged
+   * against `expected + late`; `expected` stays what was reconciled.
+   */
+  late: number;
   /** The business day the bank should pay it, YYYY-MM-DD. */
   expectedOn: string;
   deposit: DepositRecord | null;
@@ -103,12 +111,13 @@ export function depositDays(
   today: string,
   firstDay = "",
 ): DepositDay[] {
-  const byDay = new Map<string, { count: number; takings: number; tips: number; givenBack: number }>();
+  const byDay = new Map<string, { count: number; takings: number; tips: number; givenBack: number; late: number }>();
   const rowOf = (day: string) => {
-    const row = byDay.get(day) ?? { count: 0, takings: 0, tips: 0, givenBack: 0 };
+    const row = byDay.get(day) ?? { count: 0, takings: 0, tips: 0, givenBack: 0, late: 0 };
     byDay.set(day, row);
     return row;
   };
+  const markedAt = new Map(deposits.map(d => [d.sales_day, d.created_at]));
   const voidedLater: { day: string; amount: number }[] = [];
   for (const p of payments) {
     const day = localDay(p.created_at, timeZone);
@@ -119,6 +128,11 @@ export function depositDays(
       row.count += 1;
       row.takings += Number(p.amount);
       row.tips += Number(p.tip) || 0;
+      // Recorded after its day was marked deposited: the bank paid it with
+      // that day, and the figure reconciled then could not include it. Only
+      // an arrival counts here — a later void is booked to a later day.
+      const marked = markedAt.get(day);
+      if (marked && p.recorded_at && p.recorded_at > marked) row.late += Number(p.amount);
     }
     if (voidDay) voidedLater.push({ day: voidDay, amount: Number(p.amount) });
   }
@@ -133,10 +147,11 @@ export function depositDays(
       const fee = round2(row.takings * (feePct / 100));
       const givenBack = round2(row.givenBack);
       const expected = deposit ? Number(deposit.expected) : round2(row.takings - fee - givenBack);
+      const late = deposit ? round2(row.late - row.late * (feePct / 100)) : 0;
       const expectedOn = addBusinessDays(day, settleDays);
       return {
-        day, count: row.count, takings: round2(row.takings), tips: round2(row.tips), fee, givenBack, expected, expectedOn,
-        deposit, status: statusOf(expected, expectedOn, deposit, today, row.count),
+        day, count: row.count, takings: round2(row.takings), tips: round2(row.tips), fee, givenBack, expected, late, expectedOn,
+        deposit, status: statusOf(round2(expected + late), expectedOn, deposit, today, row.count),
       };
     })
     .sort((a, b) => b.day.localeCompare(a.day));

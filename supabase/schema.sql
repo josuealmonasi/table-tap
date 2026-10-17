@@ -4546,6 +4546,14 @@ alter table payments drop constraint if exists payments_terminal_ref_check;
 alter table payments add constraint payments_terminal_ref_check
   check (terminal_ref is null or (char_length(terminal_ref) between 1 and 40));
 
+-- When the server recorded the money, as opposed to when it was taken
+-- (`created_at`, which a sale the till held offline backdates to the moment it
+-- happened). A day reconciled before a late sale arrived reads it from here.
+-- Null on rows from before this column, which were recorded when dated; the
+-- default is set separately so adding it rewrites no existing row.
+alter table payments add column if not exists recorded_at timestamptz;
+alter table payments alter column recorded_at set default now();
+
 -- How many business days the terminal's bank takes to deposit a day's sales.
 alter table restaurants add column if not exists terminal_settle_days int not null default 1;
 alter table restaurants drop constraint if exists restaurants_terminal_settle_days_check;

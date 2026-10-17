@@ -40,6 +40,7 @@ interface PaymentRead {
   order_id: string | null;
   terminal_ref: string | null;
   created_at: string;
+  recorded_at: string | null;
   /** Embedded through the foreign key, so no list of ids rides in the URL. */
   orders: OrderRead | null;
 }
@@ -64,7 +65,7 @@ export async function readTerminal(restaurantId: string, timeZone: string, now =
   const [restaurant, payments, deposits] = await Promise.all([
     db.from("restaurants").select("terminal_fee_pct, terminal_settle_days").eq("id", restaurantId).single(),
     everyRow<PaymentRead>((a, b) => db.from("payments")
-      .select("id, amount, tip, order_id, terminal_ref, created_at, orders(tip, total, status, cancelled_at)")
+      .select("id, amount, tip, order_id, terminal_ref, created_at, recorded_at, orders(tip, total, status, cancelled_at)")
       .eq("restaurant_id", restaurantId).eq("method", "card").is("stripe_payment_intent", null)
       .eq("orders.restaurant_id", restaurantId)
       .gte("created_at", since.toISOString()).order("id").range(a, b)
