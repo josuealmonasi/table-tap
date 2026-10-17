@@ -4,6 +4,7 @@ import { jsonBody } from "@/lib/json-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { actingOwner } from "@/lib/api-guard";
 import { frozenBlocks, seatBlocks } from "@/lib/plan-guard";
+import { parsePlanLimit, planLimitText } from "@/lib/plan-error";
 import { logUserChange } from "@/lib/user-log";
 import { getPlan, allPlans } from "@/lib/plan-server";
 import { assignableRoles, cheapestWith, planLabel, type TeamRole } from "@/lib/plan";
@@ -110,6 +111,11 @@ export async function POST(req: NextRequest) {
   });
   if (staffErr) {
     await admin.auth.admin.deleteUser(invited.user.id); // roll back the invite
+    const hit = parsePlanLimit(staffErr.message);
+    if (hit) {
+      const text = planLimitText(hit);
+      return await apiError(text.key, 403, { ...text.vars, plan: planLabel(hit.plan) });
+    }
     return await apiError("apiErr.staffAdd", 500);
   }
 

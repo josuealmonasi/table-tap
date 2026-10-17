@@ -45,7 +45,7 @@ vi.mock("@/lib/rate-limit", () => ({
   isTableLimited: async () => false,
 }));
 vi.mock("@/lib/plan-server", () => ({
-  getPlan: async () => ({ limits: { allows_deferred_payment: true, order_fee: 0, fee_cap: null } }),
+  getPlan: async () => ({ limits: { allows_deferred_payment: true, allows_dine_in: true, order_fee: 0, fee_cap: null } }),
 }));
 vi.mock("@/lib/checkout/orderable-now", () => ({
   orderableNow: async () => ({ closedNow: false, onOpenMenu: () => true }),

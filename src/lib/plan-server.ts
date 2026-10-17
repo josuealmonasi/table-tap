@@ -42,9 +42,9 @@ async function readPlan(restaurantId: string, again = true): Promise<RestaurantP
   if (!data?.plan_limits) return null;
 
   // A trial that ran out is settled here rather than by a nightly job. The
-  // database triggers read `restaurants.plan` directly, so a plan that expired
-  // only in the app's head would still let a lapsed trial add tables — the row
-  // itself has to change, and this is the moment someone asked.
+  // database triggers independently resolve expired trials too; updating the
+  // row here keeps the screens and billing status in agreement with that
+  // entitlement, and this is the moment someone asked.
   //
   // Only the app's own trial, never one Stripe is running for a subscription.
   if (data.plan_status === "trialing" && expired(data.trial_ends_at) && !data.stripe_subscription_id) {

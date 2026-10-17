@@ -206,6 +206,7 @@ export default function PlanPanel({
         <PlanTiers
           catalog={catalog}
           current={plan.limits.plan}
+          trialing={plan.status === "trialing"}
           currency={currency}
           foundingNumber={foundingNumber}
           foundersTaken={foundersTaken}

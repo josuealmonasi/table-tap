@@ -1,14 +1,17 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type { PlanLimits } from "@/lib/plan";
 
+const register = vi.fn();
+const create = vi.fn();
+vi.mock("@/lib/subscription-price", () => ({ registerSubscriptionPrice: (...a: unknown[]) => register(...a) }));
 const retrieve = vi.fn();
-vi.mock("@/lib/stripe", () => ({ stripe: { prices: { retrieve: (...a: unknown[]) => retrieve(...a) } } }));
+vi.mock("@/lib/stripe", () => ({ stripe: { prices: { create: (...a: unknown[]) => create(...a), retrieve: (...a: unknown[]) => retrieve(...a) } } }));
 const { checkoutPrice } = await import("@/lib/billing-price");
 const limits: PlanLimits = {
   plan: "casa", rank: 3, monthly_price: 1499, order_fee: 0.75,
   max_tables: null, max_staff: null, max_menus: null, max_items: null,
   allows_dine_in: true, allows_promotions: true, allows_coupons: true,
-  allows_staff_discounts: true, analytics_days: 365, log_days: 365, stripe_price_id: "price_mxn",
+  allows_staff_discounts: true, stripe_price_id: "price_mxn",
 };
 beforeEach(() => {
   vi.resetAllMocks();
@@ -25,4 +28,10 @@ it("rejects a configured Stripe price in a different currency", async () => {
 it("rejects a configured price that charges every two months", async () => {
   retrieve.mockResolvedValue({ currency: "mxn", active: true, recurring: { interval: "month", interval_count: 2 } });
   await expect(checkoutPrice(limits, 0)).rejects.toThrow("monthly MXN");
+});
+
+it("registers generated founding Prices before offering checkout", async () => {
+  create.mockResolvedValue({ id: "price_founder" });
+  expect(await checkoutPrice({ ...limits, stripe_price_id: null }, 0)).toEqual({ price: "price_founder", quantity: 1 });
+  expect(register).toHaveBeenCalledWith("price_founder", "casa");
 });

@@ -1,7 +1,8 @@
 import { stripe } from "@/lib/stripe";
+import { subscriptionPlan } from "@/lib/subscription-price";
 import { FOUNDING_SLOTS } from "@/lib/founding";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { readPlanName, subscriptionOutcome } from "@/lib/billing";
+import { subscriptionOutcome } from "@/lib/billing";
 import type Stripe from "stripe";
 import type { PlanName } from "@/lib/plan";
 
@@ -19,17 +20,16 @@ import type { PlanName } from "@/lib/plan";
 /**
  * Writes a subscription's state onto the restaurant that owns it.
  *
- * The metadata set at checkout is the only thing trusted here: a webhook is
- * unauthenticated apart from its signature, so which restaurant and which tier
- * must come from what we ourselves stamped on the subscription.
+ * Checkout metadata identifies the restaurant; the actual subscription Price
+ * identifies its tier through our server-owned registry. A portal or operator
+ * can change the Price without updating the older subscription metadata.
  *
  * `deleted` events arrive with status `canceled`, which the mapping already
  * turns into a free customer rather than a locked one.
  */
 export async function applySubscription(sub: Stripe.Subscription): Promise<void> {
   const restaurantId = sub.metadata?.restaurant_id;
-  const plan = readPlanName(sub.metadata?.plan);
-  if (!restaurantId || !plan) {
+  if (!restaurantId) {
     console.error("subscription without our metadata", sub.id);
     return;
   }
@@ -61,17 +61,19 @@ export async function applySubscription(sub: Stripe.Subscription): Promise<void>
       }
       if (active.created > latest.created) return;
     }
-    const latestPlan = readPlanName(latest.metadata?.plan);
-    if (!latestPlan || latest.metadata?.restaurant_id !== restaurantId) {
+    if (latest.metadata?.restaurant_id !== restaurantId) {
       throw new Error(`Subscription ${latest.id} has inconsistent metadata`);
     }
+    const ended = ["canceled", "incomplete_expired"].includes(latest.status);
+    // Ending a contract or failing its first invoice grants no paid tier;
+    // an old unregistered Price must not prevent recording that outcome.
+    const latestPlan = ended || latest.status === "incomplete" ? "carta" : await subscriptionPlan(latest);
     const outcome = subscriptionOutcome(latest.status, latestPlan);
     // Do not link an unpaid first contract: getPlan must still be able to
     // expire the local trial. Customer lookup in checkout finds it for retries.
     const pending = !outcome || (current.stripe_subscription_id !== latest.id && !["active", "trialing"].includes(latest.status));
     if (!pending) await claimFounder(db, latest, latestPlan);
     const item = latest.items?.data?.[0];
-    const ended = ["canceled", "incomplete_expired"].includes(latest.status);
     const endsAt = latest.cancel_at ?? (latest.cancel_at_period_end ? item?.current_period_end : null);
     const charged = item?.price?.unit_amount;
     const { data: updated, error } = await db.from("restaurants").update({

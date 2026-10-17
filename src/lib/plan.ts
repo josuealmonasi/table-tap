@@ -58,10 +58,8 @@ export interface PlanLimits {
   /** Ingredients, recipes and what each product leaves. Casa and above. */
   allows_costs?: boolean;
   allows_staff_discounts: boolean;
-  analytics_days: number;
-  log_days: number;
-  /** A real Stripe Price, once the tier has one; checkout falls back to
-   *  monthly_price so a tier is buyable with no setup in Stripe. */
+  /** A configured Stripe Price; otherwise checkout creates and registers one
+   *  from monthly_price so a tier is buyable with no setup in Stripe. */
   stripe_price_id?: string | null;
 }
 

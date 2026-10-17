@@ -1271,9 +1271,7 @@ create table if not exists plan_limits (
   allows_dine_in         boolean not null default false,
   allows_promotions      boolean not null default false,
   allows_coupons         boolean not null default false,
-  allows_staff_discounts boolean not null default false,
-  analytics_days int not null default 1,
-  log_days       int not null default 1
+  allows_staff_discounts boolean not null default false
 );
 
 -- Seeded with on-conflict-update so re-running this script revises prices and
@@ -1281,16 +1279,15 @@ create table if not exists plan_limits (
 insert into plan_limits (
   plan, rank, monthly_price, order_fee,
   max_tables, max_staff, max_menus, max_items,
-  allows_dine_in, allows_promotions, allows_coupons, allows_staff_discounts,
-  analytics_days, log_days
+  allows_dine_in, allows_promotions, allows_coupons, allows_staff_discounts
 ) values
   -- Counter and to-go: one QR for the whole place, no tables. Free, because
   -- it costs us almost nothing and it is how a restaurant tries us.
-  ('carta',    0,    0, 3.00,    0,    2,    1,   30, false, false, false, false,   1,   1),
+  ('carta',    0,    0, 3.00,    0,    2,    1,   30, false, false, false, false),
   -- Dine-in: tables, open bills, pay later, call the waiter. The value moment.
-  ('servicio', 2,  699, 1.50,   25,   10,    3, null,  true,  true, false, false,  30,  30),
-  ('casa',     3, 1499, 0.75, null, null, null, null,  true,  true,  true,  true, 365, 365),
-  ('grupo',    4, 3499, 0.00, null, null, null, null,  true,  true,  true,  true, 365, 365)
+  ('servicio', 2,  699, 1.50,   25,   10,    3, null,  true,  true, false, false),
+  ('casa',     3, 1499, 0.75, null, null, null, null,  true,  true,  true,  true),
+  ('grupo',    4, 3499, 0.00, null, null, null, null,  true,  true,  true,  true)
 on conflict (plan) do update set
   rank                   = excluded.rank,
   monthly_price          = excluded.monthly_price,
@@ -1302,9 +1299,7 @@ on conflict (plan) do update set
   allows_dine_in         = excluded.allows_dine_in,
   allows_promotions      = excluded.allows_promotions,
   allows_coupons         = excluded.allows_coupons,
-  allows_staff_discounts = excluded.allows_staff_discounts,
-  analytics_days         = excluded.analytics_days,
-  log_days               = excluded.log_days;
+  allows_staff_discounts = excluded.allows_staff_discounts;
 
 -- ── Inventory, on the paid tiers ────────────────────────────────────────────
 -- Counting stock is the difference between a menu and a kitchen that knows what
@@ -1417,6 +1412,16 @@ alter table restaurants add column if not exists stripe_subscription_id text;
 -- The ceiling for one restaurant, or null for unlimited. security definer so
 -- it can read plan_limits, which the dashboard's role cannot write and the
 -- customer's cannot see at all.
+-- Local trial expiry is an entitlement fact even before an app request ends it.
+create or replace function public.effective_restaurant_plan(p_restaurant_id uuid)
+returns text language sql stable security definer set search_path = public as $$
+  select case when r.plan_status = 'trialing' and r.stripe_subscription_id is null
+                   and r.trial_ends_at <= now() then 'carta' else r.plan end
+    from restaurants r where r.id = p_restaurant_id;
+$$;
+revoke all on function public.effective_restaurant_plan(uuid) from public, anon, authenticated;
+grant execute on function public.effective_restaurant_plan(uuid) to service_role;
+
 create or replace function public.plan_ceiling(p_restaurant_id uuid, p_what text)
 returns int language sql stable security definer set search_path = public as $$
   select case p_what
@@ -1426,7 +1431,7 @@ returns int language sql stable security definer set search_path = public as $$
            when 'staff'  then l.max_staff
          end
     from restaurants r
-    join plan_limits l on l.plan = r.plan
+    join plan_limits l on l.plan = public.effective_restaurant_plan(r.id)
    where r.id = p_restaurant_id;
 $$;
 -- Nobody with a browser key, in either hand.
@@ -1441,7 +1446,7 @@ $$;
 revoke all on function public.plan_ceiling(uuid, text) from public, anon, authenticated;
 grant execute on function public.plan_ceiling(uuid, text) to service_role;
 
--- One guard for all three, told by its trigger argument which thing it is
+-- One guard for all four, told by its trigger argument which thing it is
 -- counting. The message is a parseable sentinel rather than a sentence:
 -- Postgres has no idea what language the owner reads, so the dashboard turns
 -- `tt_plan_limit tables servicio 25` into "Tu plan Servicio incluye 25 mesas".
@@ -1453,7 +1458,17 @@ declare
   v_max  int;
   v_used bigint;
 begin
-  select r.plan, public.plan_ceiling(r.id, v_what)
+  if tg_op = 'UPDATE' then
+    if old.restaurant_id = new.restaurant_id then
+      if v_what <> 'items' then return new; end if;
+      if not old.is_addon or new.is_addon then return new; end if;
+    end if;
+  end if;
+  -- Lock before counting, including secret-key staff invites. The weaker row
+  -- lock lets foreign-key checks proceed while competing creates wait.
+  -- Ordinary stock updates never need this lock and must not delay selling.
+  perform 1 from restaurants where id = new.restaurant_id for no key update;
+  select public.effective_restaurant_plan(r.id), public.plan_ceiling(r.id, v_what)
     into v_plan, v_max
     from restaurants r
    where r.id = new.restaurant_id;
@@ -1464,6 +1479,8 @@ begin
     select count(*) into v_used from restaurant_tables where restaurant_id = new.restaurant_id;
   elsif v_what = 'menus' then
     select count(*) into v_used from menus where restaurant_id = new.restaurant_id;
+  elsif v_what = 'staff' then
+    select count(*) into v_used from staff where restaurant_id = new.restaurant_id;
   else
     -- "30 dishes" means dishes. An add-on rides along with the product that
     -- offers it and is not what an owner is counting when they read the limit.
@@ -1488,16 +1505,56 @@ end $$;
 revoke all on function public.enforce_plan_limit() from public, anon, authenticated;
 
 drop trigger if exists tables_plan_limit on restaurant_tables;
-create trigger tables_plan_limit before insert on restaurant_tables
+create trigger tables_plan_limit before insert or update on restaurant_tables
   for each row execute function public.enforce_plan_limit('tables');
 
 drop trigger if exists menus_plan_limit on menus;
-create trigger menus_plan_limit before insert on menus
+create trigger menus_plan_limit before insert or update on menus
   for each row execute function public.enforce_plan_limit('menus');
 
 drop trigger if exists items_plan_limit on menu_items;
-create trigger items_plan_limit before insert on menu_items
+create trigger items_plan_limit before insert or update on menu_items
   for each row execute function public.enforce_plan_limit('items');
+
+drop trigger if exists staff_plan_limit on staff;
+create trigger staff_plan_limit before insert or update on staff
+  for each row execute function public.enforce_plan_limit('staff');
+grant execute on function public.enforce_plan_limit() to service_role;
+
+-- RLS still decides whose row may be edited. This extra guard freezes only
+-- authenticated management writes, never server stock, kitchen or settlement.
+create or replace function public.enforce_dashboard_write()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+  if tg_op <> 'INSERT' then
+    if exists (select 1 from restaurants where id = old.restaurant_id and plan_status = 'locked') then
+      raise exception 'tt_plan_frozen' using errcode = 'check_violation';
+    end if;
+  end if;
+  if tg_op <> 'DELETE' then
+    if exists (select 1 from restaurants where id = new.restaurant_id and plan_status = 'locked') then
+      raise exception 'tt_plan_frozen' using errcode = 'check_violation';
+    end if;
+    return new;
+  end if;
+  return old;
+end $$;
+revoke all on function public.enforce_dashboard_write() from public, anon, authenticated;
+grant execute on function public.enforce_dashboard_write() to service_role;
+
+drop trigger if exists menus_dashboard_write on menus;
+create trigger menus_dashboard_write before insert or update or delete on menus
+  for each row execute function public.enforce_dashboard_write();
+drop trigger if exists items_dashboard_write on menu_items;
+create trigger items_dashboard_write before insert or update or delete on menu_items
+  for each row execute function public.enforce_dashboard_write();
+drop trigger if exists tables_dashboard_write on restaurant_tables;
+create trigger tables_dashboard_write before insert or update or delete on restaurant_tables
+  for each row execute function public.enforce_dashboard_write();
 
 -- A paid feature has to be paid for in the database too.
 --
@@ -1541,7 +1598,7 @@ begin
   -- Unchanged, or being cleared: nothing is being taken that was not paid for.
   if v_after is null or v_after is not distinct from v_before then return new; end if;
 
-  execute format('select l.%I from restaurants r join plan_limits l on l.plan = r.plan where r.id = $1', v_allows)
+  execute format('select l.%I from restaurants r join plan_limits l on l.plan = public.effective_restaurant_plan(r.id) where r.id = $1', v_allows)
     into v_allowed using new.restaurant_id;
 
   if v_allowed is distinct from true then
@@ -1551,6 +1608,7 @@ begin
 end $$;
 
 revoke all on function public.enforce_plan_feature() from public, anon, authenticated;
+grant execute on function public.enforce_plan_feature() to service_role;
 
 drop trigger if exists items_plan_feature_stock on menu_items;
 create trigger items_plan_feature_stock before insert or update on menu_items
@@ -3181,16 +3239,14 @@ insert into plan_limits (
   allows_dine_in, allows_waiter_service, allows_deferred_payment,
   allows_online_ordering, allows_kitchen_board, allows_pos,
   allows_promotions, allows_coupons, allows_staff_discounts,
-  allows_menu_schedules, allows_inventory, allows_loyalty,
-  analytics_days, log_days
+  allows_menu_schedules, allows_inventory, allows_loyalty
 ) values (
   'caja', 1, 399, 399, 0, 0,
   0, 5, 3, null,
   false, false, false,
   false, false, true,
   true, false, false,
-  false, true, true,
-  30, 30
+  false, true, true
 )
 on conflict (plan) do update set
   rank = excluded.rank, monthly_price = excluded.monthly_price,
@@ -3207,8 +3263,7 @@ on conflict (plan) do update set
   allows_staff_discounts = excluded.allows_staff_discounts,
   allows_menu_schedules = excluded.allows_menu_schedules,
   allows_inventory = excluded.allows_inventory,
-  allows_loyalty = excluded.allows_loyalty,
-  analytics_days = excluded.analytics_days, log_days = excluded.log_days;
+  allows_loyalty = excluded.allows_loyalty;
 
 -- One per restaurant. `goal` is how many visits earn the reward.
 create table if not exists loyalty_programs (
@@ -5197,3 +5252,24 @@ drop trigger if exists orders_keep_terminal on orders;
 create trigger orders_keep_terminal before update of status on orders
   for each row execute function public.keep_order_terminal();
 revoke all on function public.keep_order_terminal() from public, anon, authenticated;
+
+-- The plan cards promise no reporting retention window. History stays readable
+-- on every tier; remove the unused limits instead of hiding existing records.
+alter table plan_limits drop column if exists analytics_days;
+alter table plan_limits drop column if exists log_days;
+
+-- Every price ever issued keeps its tier, including older founding prices.
+-- Only the server registers prices; metadata on a subscription cannot grant a tier.
+create table if not exists restaurant_subscription_prices (
+  price_id text primary key,
+  plan text not null references plan_limits(plan)
+);
+alter table restaurant_subscription_prices enable row level security;
+revoke all on restaurant_subscription_prices from anon;
+revoke all on restaurant_subscription_prices from public, authenticated;
+grant select, insert on restaurant_subscription_prices to service_role;
+insert into restaurant_subscription_prices (price_id, plan)
+  select stripe_price_id, plan from plan_limits where stripe_price_id is not null
+  on conflict (price_id) do nothing;
+
+revoke truncate, references, trigger on all tables in schema public from authenticated;

@@ -25,6 +25,7 @@ const seeder = fs.readdirSync("scripts")
 const NOT_DEMO_DATA = new Set([
   "restaurants", // the seeder creates it directly
   "plan_limits", // the price catalogue, shared by everyone
+  "restaurant_subscription_prices", // historical Price-to-tier map, shared by everyone
   "platform_admins", // not a restaurant's data
   "profiles", // created with the logins
   "rate_limits", // throttling counters

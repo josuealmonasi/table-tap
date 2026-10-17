@@ -153,3 +153,7 @@ drop function if exists public.refund_platform_fee(uuid, text, integer, text);
 drop function if exists public.approve_write_off_request(uuid, uuid, text, numeric, text);
 drop function if exists public.approve_discount_request(uuid, uuid, text, numeric);
 drop function if exists public.keep_order_terminal();
+
+drop table if exists restaurant_subscription_prices cascade;
+drop function if exists public.effective_restaurant_plan(uuid);
+drop function if exists public.enforce_dashboard_write();

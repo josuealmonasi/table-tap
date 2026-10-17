@@ -3,6 +3,7 @@ import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { actingManager } from "@/lib/api-guard";
 import { getPlan } from "@/lib/plan-server";
+import { frozenBlocks } from "@/lib/plan-guard";
 import { can } from "@/lib/plan";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
@@ -23,6 +24,9 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
+
+  const frozen = await frozenBlocks(actor.restaurantId);
+  if (frozen) return frozen;
 
   const plan = await getPlan(actor.restaurantId);
   if (!plan || !can(plan.limits, "loyalty")) return await apiError("apiErr.loyaltyPlan", 403);
