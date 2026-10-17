@@ -3539,7 +3539,7 @@ revoke all on account_checkouts from anon, authenticated;
 create or replace function public.account_owed(p_account uuid)
 returns numeric language sql stable security definer set search_path = public as $$
   select coalesce(sum(total), 0) from orders
-   where account_id = p_account and paid = false and status <> 'cancelled';
+   where account_id = p_account and paid = false and written_off = false and status <> 'cancelled';
 $$;
 revoke all on function public.account_owed(uuid) from public, anon, authenticated;
 grant execute on function public.account_owed(uuid) to service_role;
@@ -3643,10 +3643,10 @@ begin
     return jsonb_build_object('outcome', 'paying');
   end if;
 
-  perform 1 from orders where account_id = p_account and paid = false and status <> 'cancelled' for update;
+  perform 1 from orders where account_id = p_account and paid = false and written_off = false and status <> 'cancelled' for update;
   select coalesce(sum(total), 0), array_agg(id order by created_at desc)
     into v_owed, v_ids
-    from orders where account_id = p_account and paid = false and status <> 'cancelled';
+    from orders where account_id = p_account and paid = false and written_off = false and status <> 'cancelled';
   if v_owed <= 0 then return jsonb_build_object('outcome', 'nothing'); end if;
   if abs(v_owed - p_expected) > 0.005 then
     return jsonb_build_object('outcome', 'changed', 'owed', v_owed);
@@ -3691,7 +3691,7 @@ begin
   end if;
   select coalesce(sum(total), 0), array_agg(id order by created_at desc)
     into v_owed, v_ids
-    from orders where account_id = p_account and paid = false and status <> 'cancelled';
+    from orders where account_id = p_account and paid = false and written_off = false and status <> 'cancelled';
   if v_owed <= 0 then return jsonb_build_object('outcome', 'nothing'); end if;
   if abs(v_owed - p_expected) > 0.005 then
     return jsonb_build_object('outcome', 'changed', 'owed', v_owed);
@@ -3737,7 +3737,7 @@ begin
   -- is on Stripe's page, but a payment whose webhook arrives after the hold
   -- ran out can find the till collected some or all of them meanwhile.
   select array_agg(id order by created_at desc), coalesce(sum(total), 0) into v_ids, v_still
-    from orders where id = any(v_checkout.order_ids) and paid = false and status <> 'cancelled';
+    from orders where id = any(v_checkout.order_ids) and paid = false and written_off = false and status <> 'cancelled';
   v_food := least(v_checkout.amount, v_still);
   v_tip := case when v_ids is null then 0 else v_checkout.tip end;
   if v_food + v_tip > 0 then

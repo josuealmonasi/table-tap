@@ -59,6 +59,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let query = db
     .from("orders")
     .select("id, total, paid, written_off, status, coupon_code, table_id, table_label")
+    .is("account_id", null)
     .eq("restaurant_id", actor.restaurantId);
   query = orderId ? query.eq("id", orderId) : query.eq("table_id", tableId!);
 

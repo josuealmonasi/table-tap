@@ -21,6 +21,9 @@ us, and what now catches each one.
 | The held receipt and server ticket agree (W1.5) | Online settlement used another id and amount, and replay discarded the difference |
 | Offline stock and money commit together (W1.6) | A failed stock call was acknowledged and replay could never repair it |
 | Credit approval and the kitchen ticket commit together (W1.7) | An account sale reached the pass before the account owed it |
+| Table write-offs refuse accounts, and every account balance excludes waived orders | Written-off account food could still be collected (W3-4) |
+| Table discounts and their approval requests leave account orders alone | Today's discount reached yesterday's customer account (W3-9) |
+| Statements page every unpaid order in a unique order | The 1001st charge vanished from the displayed balance (W3-12) |
 | A table created after the blanket `revoke … from anon` locks itself down | `rate_limits` shipped world-readable |
 | No dialog is rendered inside another dialog | Shipped three times — two focus traps, two Escapes to leave |
 | Anything marking an order paid or written off closes the sitting | A sitting that never closes holds the table and the diner forever |
@@ -1974,3 +1977,34 @@ back its unpublished order and stock together. `W1.7 never publishes an account
 ticket before atomic credit approval` and `an atomic account refusal never
 causes a second cleanup request` cover that boundary.
 
+
+## W3-4 — waived account food is no longer collectible
+
+Table write-offs and account balances disagreed about waived food. Both the
+request and approval routes now leave accounts out; the write also checks
+account membership so a charge winning the race cannot be waived afterward.
+The statement, staff list, Analytics balance and all account collection SQL
+exclude `written_off`. That includes a checkout opened before the food was
+waived: its excess still follows the existing refund-due path.
+`table-adjustments.react-component.spec.tsx`, `accounts-server.react-component.spec.tsx`,
+`write-off.spec.ts` and `accounts-sql.react-component.spec.tsx` guard both sides.
+
+
+## W3-9 — table discounts stay on the table
+
+A transferred account order kept its table ID. The table discount reader and
+the account boundary disagreed, spreading today's discount onto yesterday's
+debt. Both discount routes exclude account orders, the shared selector agrees,
+and the write rechecks membership. Pending requests contain only table orders;
+old requests are re-read on approval. `staff-discount.spec.ts` verifies the
+MX$30 discount stays on today's MX$50 bill; `table-adjustments.react-component.spec.tsx`
+checks requests and approvals.
+
+
+## W3-12 — the statement agrees with the whole account
+
+The SQL balance saw every charge, while the statement read stopped at the
+server's row cap. `statementOf` now uses `everyRow`, ordered by the unique order
+ID, and fails if any page fails. `accounts-server.react-component.spec.tsx`
+checks 1001 charges of MX$100 total MX$100,100 and a failed second page never
+returns a partial statement. The same statement feeds staff, customers and email.

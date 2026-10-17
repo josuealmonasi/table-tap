@@ -99,7 +99,7 @@ export default async function AnalyticsPage({
       .select("total")
       .eq("restaurant_id", membership.restaurant.id)
       .not("account_id", "is", null)
-      .eq("paid", false)
+      .eq("paid", false).eq("written_off", false)
       .neq("status", "cancelled")
       .order("id").range(a, b), "what customer accounts owe"),
   ]);

@@ -28,6 +28,11 @@ function order(id: string, total: number, over: Partial<Order> = {}): Order {
 }
 
 describe("which orders a staff discount may touch", () => {
+  it("leaves yesterday's account out of today's table discount", () => {
+    const eligible = discountableOrders([order("today", 50), order("yesterday", 100, { account_id: "a1" })]);
+    expect(spreadDiscount(eligible, 30)).toEqual([{ orderId: "today", amount: 30, total: 20 }]);
+  });
+
   it("leaves paid, written-off, cancelled and already-discounted orders alone", () => {
     const orders = [
       order("keep", 100),

@@ -48,6 +48,8 @@ export async function applyWriteOff({
     )
     .eq("restaurant_id", restaurantId)
     .eq("written_off", false)
+    .eq("paid", false)
+    .is("account_id", null)
     // A cancelled order stays cancelled: it was refunded under that name.
     .neq("status", "cancelled")
     .select("session_id");

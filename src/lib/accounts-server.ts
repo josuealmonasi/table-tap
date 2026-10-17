@@ -48,7 +48,7 @@ export async function listAccounts(restaurantId: string): Promise<AccountSummary
     everyRow<{ account_id: string; total: number; created_at: string; charged_at: string | null }>((a, b) => db
       .from("orders").select("account_id, total, created_at, charged_at")
       .eq("restaurant_id", restaurantId).not("account_id", "is", null)
-      .eq("paid", false).neq("status", "cancelled")
+      .eq("paid", false).eq("written_off", false).neq("status", "cancelled")
       .order("id").range(a, b), "what the accounts owe"),
   ]);
   const owed = new Map<string, { sum: number; last: string | null }>();
@@ -95,20 +95,26 @@ export interface Statement {
   chargedBy: Record<string, string | null>;
 }
 
+interface StatementOrder {
+  id: string;
+  items: unknown;
+  total: number;
+  table_label: string | null;
+  created_at: string;
+  charged_at: string | null;
+  charged_by: string | null;
+}
+
 /** An account's statement: its unpaid orders by the restaurant's day, and its payments. */
 export async function statementOf(account: AccountRow, timeZone?: string | null): Promise<Statement> {
   const db = createAdminClient();
-  const [ordersRes, paymentsRes] = await Promise.all([
-    db.from("orders").select("id, items, total, table_label, created_at, charged_at, charged_by")
-      .eq("account_id", account.id).eq("paid", false).neq("status", "cancelled")
-      .order("created_at"),
+  const [orders, paymentsRes] = await Promise.all([
+    everyRow<StatementOrder>((a, b) => db.from("orders").select("id, items, total, table_label, created_at, charged_at, charged_by")
+      .eq("account_id", account.id).eq("paid", false).eq("written_off", false).neq("status", "cancelled")
+      .order("id").range(a, b), "the account's orders"),
     db.from("payments").select("amount, tip, method, created_at")
       .eq("account_id", account.id).order("created_at", { ascending: false }).limit(20),
   ]);
-  const orders = (unwrap(ordersRes, "the account's orders") ?? []) as {
-    id: string; items: unknown; total: number; table_label: string | null;
-    created_at: string; charged_at: string | null; charged_by: string | null;
-  }[];
   const charges: StatementCharge[] = orders.map(o => ({
     orderId: o.id,
     at: o.charged_at ?? o.created_at,
