@@ -14,9 +14,12 @@ export const runtime = "nodejs";
 /**
  * POST /api/bill/discount/approve — a manager decides on a waiter's request.
  *
- * The current discount must match what the manager saw. The transaction
- * checks it again under locks, so approving an old ask cannot silently
- * discount a different bill.
+ * The amount is recomputed here rather than trusted from the row: the table
+ * may have ordered more since the ask, and the discount has to match the bill
+ * being paid, not the one that existed when someone walked to the till. And it
+ * must match what the manager saw: the transaction checks it again under the
+ * orders' locks, so approving an old ask cannot silently discount a different
+ * bill.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingManager();

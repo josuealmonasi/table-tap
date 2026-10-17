@@ -13,9 +13,12 @@ export const runtime = "nodejs";
 /**
  * POST /api/bill/write-off/approve — a manager decides on a waiter's request.
  *
- * The manager approves the amount shown on the ask. Orders are read again,
- * then locked and checked in the write transaction, so a changed debt needs
- * a new request instead of quietly approving a different amount.
+ * What gets written off is re-read here rather than trusted from the row.
+ * Between the ask and the decision the table may have paid, been written off
+ * by someone else, or ordered another round. The manager approves the amount
+ * shown on the ask: the orders are locked and checked again in the write's own
+ * transaction, and a debt that changed needs a new request rather than quietly
+ * approving a different amount.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingManager();

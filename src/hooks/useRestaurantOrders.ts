@@ -87,7 +87,15 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
     };
   }, [restaurantId]);
 
-  // Replay oldest first; stale or refused work leaves the queue.
+  /**
+   * Sends what has been waiting, oldest first.
+   *
+   * Each move carries the status it started from, so the server drops anything
+   * a live connection has already overtaken. A move that fails to send stays in
+   * the queue, and so does every later step for that order: a later step cannot
+   * overtake one that still has to be sent. One the server refuses does not
+   * stay, because the board it was arguing with is newer than it is.
+   */
   const flush = useCallback(async () => {
     const queue = readQueue();
     if (queue.length === 0) return;
@@ -140,7 +148,9 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
         body: JSON.stringify({ id, status, from: was }),
       });
     } catch {
-      // Keep a dropped tap so this board cannot quietly disagree with the kitchen.
+      // The tap used to be fired and forgotten: on a dropped connection the
+      // ticket showed as moved to whoever moved it and untouched to everybody
+      // else. Hold it instead, and say so on the board.
       if (was) {
         const queue = enqueue(readQueue(), { id, from: was, to: status, at: Date.now() });
         writeQueue(queue);
@@ -151,7 +161,10 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
       return;
     }
 
-    // A refusal restores the ticket; it must never be saved as offline work.
+    // Answered, and refused: not a dropped connection. It was held as one — a
+    // board that was online told "saved, will be sent", the ticket moved here
+    // and nowhere else, the move refused again on every reconnect. It goes
+    // back to where it was, with the server's reason.
     if (!res.ok) {
       if (was) setOrders(prev => prev.map(o => (o.id === id ? { ...o, status: was } : o)));
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -162,7 +175,12 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
     badgesChanged();
   }
 
-  // Ask the server before offering a refund: its ledger decides what is owed.
+  /**
+   * What cancelling would give back, and who would give it — asked before the
+   * dialog opens, so its offer is the server's own. Returns an error message
+   * instead when it cannot be told: offering a refund on a guess is how the
+   * dialog promised money back that the cancel then refused to give.
+   */
   async function cancelPlanFor(id: string): Promise<CancelSummary | string> {
     try {
       const res = await fetch(`/api/orders/cancel?id=${encodeURIComponent(id)}`);

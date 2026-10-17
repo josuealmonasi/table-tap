@@ -29,7 +29,15 @@ export interface QueuedMove {
   at: number;
 }
 
-/** Keep each step: the server only accepts a live stage's next step or undo. */
+/**
+ * Adds a move, one stage at a time.
+ *
+ * Three taps on one ticket while the wifi is out used to fold into one jump:
+ * where it started and where it ended. The server now accepts only the next
+ * stage or a step back — a jump is how a stale board reopened a ticket — so
+ * every step is kept and sent in order. A tap that ends where it began is
+ * nothing to send.
+ */
 export function enqueue(queue: QueuedMove[], move: QueuedMove): QueuedMove[] {
   return move.from === move.to ? queue : [...queue, ...forwardSteps(move)];
 }

@@ -9,7 +9,10 @@ import { canMoveOrder } from "@/lib/order-flow";
 
 export const runtime = "nodejs";
 
-// Ordinary board moves never release a checkout or reopen a terminal order.
+// PATCH /api/orders — move an order along the board. Staff of its own
+// restaurant only, one stage at a time: the next stage or a step back, never a
+// cancelled or written-off order, and never `pending_payment`, which only a
+// payment moves. Cancelling has its own route, so a paid order is refunded.
 export async function PATCH(req: NextRequest) {
   const body = await jsonBody<{ id?: string; status?: string; from?: string }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
@@ -33,6 +36,9 @@ export async function PATCH(req: NextRequest) {
     return await apiError("apiErr.notYourStage", 403);
   }
 
+  // Read through the staff session, so RLS is the first check: only the
+  // restaurant's own team can SELECT an order. Seeing it is not enough to move
+  // it any more — the move must be one the board itself would offer.
   const { data: order, error: readError } = await supabase
     .from("orders")
     .select("id, status, written_off")
@@ -47,8 +53,14 @@ export async function PATCH(req: NextRequest) {
     return await apiError("apiErr.orderMoveChanged", 409);
   }
 
-  // Every move compares the current status, including older clients without
-  // `from`. A cancellation or write-off that wins this race must stay final.
+  // Orders have no client UPDATE policy (writes are server-only), so the
+  // write uses the secret key, scoped to the actor's restaurant.
+  //
+  // Every move is a compare-and-set on the status just read, whether or not
+  // the client sent `from`. A queued move flushed on reconnect must not drag
+  // back an order the kitchen has already called ready — stale work quietly
+  // beating live work, which is the whole risk of holding anything offline —
+  // and a cancellation or write-off that wins the race must stay final.
   const { data: moved, error } = await createAdminClient()
     .from("orders").update({ status })
     .eq("id", id).eq("restaurant_id", actor.restaurantId)

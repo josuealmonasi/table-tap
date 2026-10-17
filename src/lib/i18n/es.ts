@@ -1224,7 +1224,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     iconGroupSave: "No se pudo guardar el grupo de iconos. Inténtalo de nuevo.",
     pickPlan: "Elige un plan para suscribirte.",
     noBilling: "Este restaurante todavía no tiene suscripción.",
-    orderMoveChanged: "Este pedido ya no puede pasar a esa etapa. Actualiza el tablero.",
+    orderMoveChanged: "Este pedido ya cambió de etapa. Actualiza el tablero para ver dónde está.",
     notYourStage: "Solo la cocina puede mover un pedido entre etapas.",
     closedNow:
       "La cocina no está sirviendo en este momento. Inténtalo durante el horario de servicio.",

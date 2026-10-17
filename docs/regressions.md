@@ -2068,7 +2068,7 @@ sitting could freeze an expensive split, and counting paid seats then erased
 the larger debt. The join transaction now checks all sitting capabilities,
 sums its own locked orders and writes every share before exposing the lock.
 The close transaction checks the sitting's actual unspent ledger credit before
-marking any order paid. `join.react-component.spec.tsx` checks the route and
+marking any order paid. `join.spec.tsx` checks the route and
 SQL contract; `checkout-settle.spec.ts` refuses an underfunded close and keeps
 webhook retries working. Live SQL concurrency checks remain a release gate.
 
@@ -2083,7 +2083,7 @@ mutation needed replacing. It now sends the amount shown to the manager.
 Both approval routes compare that amount with the saved ask and re-derived
 amount. Their transactions lock the request and orders and compare again before
 changing any debt, coupon use or decision. Changed requests are refused and
-keep their original displayed amount. `bill-approval.react-component.spec.tsx`
+keep their original displayed amount. `bill-approval.spec.tsx`
 reproduces forged and stale amounts, transaction refusals, failed reads and
 matching approvals. Claude must verify the effective grants and concurrent
 SQL behavior against the applied schema.
@@ -2100,8 +2100,8 @@ by the board, and the floor hands over ready food. Cancelled, completed,
 pending-payment and written-off tickets cannot move through this route.
 A database trigger also keeps cancelled and written-off status final.
 
-`status.react-component.spec.tsx` reproduces revival and cancellation races and
+`status.spec.tsx` reproduces revival and cancellation races and
 checks the legitimate moves. The offline queue keeps each step and expands
 older collapsed queues on read, so reconnect follows the same allowed path.
 A failed step keeps that ticket's later steps waiting. `offline-queue.spec.ts`
-and `useRestaurantOrders.react-component.spec.tsx` cover replay and undo.
+and `useRestaurantOrders.spec.tsx` cover replay and undo.
