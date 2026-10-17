@@ -13,10 +13,11 @@ us, and what now catches each one.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+|---|---|
+| The money gate reads an order on a customer account as the account's, not its table's | An order sent from a table to an account and paid there read as a sitting paid for more than was collected |
 | Every board move checks the current live stage, restaurant and write-off flag | A kitchen login revived cancelled, refunded food |
 | An approval acts on the amount the manager saw, through guarded routes only | A request showing MX$10 carried a MX$1,000 bill's ids |
 | A split freezes its own sitting and closes only with enough collected money | Another table's MX$20 could settle a MX$1,000 bill |
-|---|---|
 | A closed shift shows cash that arrived after its count, and what the count means now | A late offline sale left a closed shift saying "MX$100 over" for a drawer that was exact |
 | Every offline sale with a difference reaches the review, however late it arrived | The review read 14 days by the sale's own date, newest 200: a sale sent 20 days late never appeared |
 | A replayed sale keeps the lines it was sold with | Replay repriced every line to today's menu and, after a promotion ended, took stock from the deal instead of its dishes |
@@ -2242,3 +2243,16 @@ takes the time a payment was recorded, so payments now keep it
 late sales are shown beside its deposit and judged with it; the reconciled
 figure stays. `terminal.spec.ts` covers a late sale, the same deposit without
 it, and an old row, and the seed marks one day before a late card sale.
+
+## The money gate's false shortage for orders sent to an account
+
+Two of `pnpm money`'s checks had to agree on whose debt an order is, and
+one of them never asked. An order moved from a table onto a customer
+account keeps the sitting it was ordered at; once paid through the account
+it was counted towards its sitting too, so the sitting read as "marked paid
+for more than was collected" by exactly that order (Codex audit B, finding
+11). The check that every settled order has a payment already treated it as
+the account's; the two sitting checks now skip account orders the same way,
+and the account check (1d) is where they are reconciled. Reproduced on dev
+with a probe that made the order, ran the gate as it was (BAD) and as it is
+(ok), and deleted what it made.
