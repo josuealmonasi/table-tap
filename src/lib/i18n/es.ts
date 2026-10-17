@@ -1148,6 +1148,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     offlineRetry: "Intentar de nuevo",
     offlineCloseBlocked: "Antes de cerrar el turno se envían las {n} venta(s) guardadas sin conexión. Espera a que vuelva la conexión.",
     offlineSignOutBlocked: "En este dispositivo hay {n} venta(s) por enviar. Espera a que vuelva la conexión para cerrar sesión.",
+    signOutFailed: "No se pudo terminar de cerrar sesión. Inténtalo de nuevo.",
     terminalCharge: "Cobra esto en tu terminal",
     terminalRef: "Autorización del voucher",
     terminalRefHint: "Número de autorización o folio",

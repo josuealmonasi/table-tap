@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { readHeld } from "@/lib/offline-sales";
+import { clearPrivateCache } from "@/lib/private-cache";
 
 /**
  * Ends the session and leaves nothing of it behind.
@@ -22,15 +23,9 @@ export async function signOutEverywhere(onHeld?: (count: number) => void): Promi
     onHeld?.(held);
     return;
   }
-  await createClient().auth.signOut();
-
-  // Best effort, and never allowed to keep somebody signed in: if the worker
-  // cannot be reached, the sign-out still happens.
-  try {
-    navigator.serviceWorker?.controller?.postMessage("CLEAR");
-  } catch {
-    // No worker registered, or a browser that does not support one.
-  }
+  await clearPrivateCache();
+  const { error } = await createClient().auth.signOut();
+  if (error) throw error;
 
   window.location.assign("/login");
 }
