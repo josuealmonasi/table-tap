@@ -46,7 +46,9 @@ export function noteProblem(reason: WriteOffReason, note: string): "missing" | "
  * a different act with its own record, and one already written off would be
  * cancelled twice — doubling what the reports say the restaurant lost.
  */
-export function writableOff<T extends Pick<Order, "paid" | "written_off" | "status">>(orders: T[]): T[] {
+export function writableOff<T extends Pick<Order, "paid" | "written_off" | "status"> & { account_id?: string | null }>(
+  orders: T[],
+): T[] {
   return orders.filter(
     o => !o.account_id && !o.paid && !o.written_off && o.status !== "cancelled" && o.status !== "pending_payment",
   );

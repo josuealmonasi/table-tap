@@ -68,14 +68,14 @@ describe("table adjustment routes leave account orders alone", () => {
   });
   it("rechecks account membership when an old discount request is approved", async () => {
     actor.role = "manager";
-    tables.discount_requests = [{ id: "ask", restaurant_id: "r1", status: "pending", order_ids: ["yesterday"], code: "SAVE" }];
-    expect((await approveDiscount.POST(request({ requestId: "ask", approve: true }))).status).toBe(409);
+    tables.discount_requests = [{ id: "ask", restaurant_id: "r1", status: "pending", order_ids: ["yesterday"], code: "SAVE", amount: 30 }];
+    expect((await approveDiscount.POST(request({ requestId: "ask", approve: true, reviewedAmount: 30 }))).status).toBe(409);
     expect(applied).toEqual([]);
   });
   it("rechecks account membership when an old write-off request is approved", async () => {
     actor.role = "manager";
-    tables.write_off_requests = [{ id: "ask", restaurant_id: "r1", status: "pending", order_ids: ["yesterday"], reason: "walkout" }];
-    expect((await approveWriteOff.POST(request({ requestId: "ask", approve: true }))).status).toBe(409);
+    tables.write_off_requests = [{ id: "ask", restaurant_id: "r1", status: "pending", order_ids: ["yesterday"], reason: "walkout", amount: 100 }];
+    expect((await approveWriteOff.POST(request({ requestId: "ask", approve: true, reviewedAmount: 100 }))).status).toBe(409);
     expect(tables.orders[1].written_off).toBe(false);
   });
   it("cannot discount an order moved to an account after the read", async () => {

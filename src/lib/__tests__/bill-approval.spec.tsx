@@ -24,7 +24,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
       ? { data: state.missing ? [] : [{ id: "o1", total: state.total, paid: false, written_off: false, status: "received", session_id: "s1" }], error: state.readError ? { message: "down" } : null }
       : { data: { id: "ask", order_ids: ["o1"], amount: state.amount, code: "FREE", reason: "walkout", status: "pending" }, error: null };
     const q: Record<string, unknown> = {};
-    for (const m of ["select", "eq", "in", "update"]) q[m] = () => q;
+    for (const m of ["select", "eq", "in", "is", "update"]) q[m] = () => q;
     q.maybeSingle = async () => answer();
     q.then = (resolve: (a: unknown) => unknown) => Promise.resolve(answer()).then(resolve);
     return q;
