@@ -1154,6 +1154,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     offlineRetry: "Try again",
     offlineCloseBlocked: "The {n} sale(s) kept while offline are sent before the shift closes. Wait for the connection to return.",
     offlineSignOutBlocked: "This device still has {n} sale(s) to send. Wait for the connection to return before signing out.",
+    signOutFailed: "Could not finish signing out. Please try again.",
     terminalCharge: "Charge this on your terminal",
     terminalRef: "Voucher authorization number",
     terminalRefHint: "Authorization or folio number",

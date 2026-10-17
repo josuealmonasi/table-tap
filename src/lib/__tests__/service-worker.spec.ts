@@ -1,195 +1,151 @@
-import { readFileSync } from "node:fs";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { label, loadWorker, navigation, offline, page } from "./service-worker-harness";
 
-/**
- * The worker, run rather than read.
- *
- * It cannot be exercised in the preview browser — service workers do not
- * register there at all, a one-line worker fails the same way — so the choices
- * that matter are made against a stand-in global scope here: what it caches,
- * what it refuses to cache, and what it does when the network does not answer.
- *
- * These are the rules a stale screen would break, and a stale screen showing a
- * paid table as still owing is how the same money gets collected twice.
- */
-type Handler = (event: Record<string, unknown>) => void;
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
-function loadWorker(): { handlers: Map<string, Handler>; caches: Map<string, Map<string, Response>> } {
-  const handlers = new Map<string, Handler>();
-  const stores = new Map<string, Map<string, Response>>();
-
-  const cacheApi = {
-    open: async (name: string) => {
-      const store = stores.get(name) ?? new Map<string, Response>();
-      stores.set(name, store);
-      return { put: async (key: string, res: Response) => void store.set(key, res) };
-    },
-    keys: async () => [...stores.keys()],
-    delete: async (name: string) => stores.delete(name),
-    match: async (key: string) => {
-      for (const store of stores.values()) if (store.has(key)) return store.get(key);
-      return undefined;
-    },
-  };
-
-  const scope = {
-    addEventListener: (type: string, fn: Handler) => handlers.set(type, fn),
-    skipWaiting: () => undefined,
-    clients: { claim: async () => undefined },
-    caches: cacheApi,
-  };
-
-  const source = readFileSync("public/sw.js", "utf8");
-  // Dispatch through globalThis at CALL time, not load time. Capturing the
-  // function by value handed the worker the real fetch, so every stub in these
-  // tests went unused and two of them passed for the wrong reason.
-  const liveFetch = (...args: Parameters<typeof fetch>) => globalThis.fetch(...args);
-  new Function("self", "caches", "fetch", "Response", "Headers", "URL", source)(
-    scope,
-    cacheApi,
-    liveFetch,
-    Response,
-    Headers,
-    URL,
-  );
-  return { handlers, caches: stores };
-}
-
-/** A page navigation, which is the only thing the worker may touch. */
-const navigation = (url: string) => ({ url, method: "GET", mode: "navigate" as const });
-
-describe("the worker that keeps the kitchen board through a drop", () => {
-  it("takes over only page loads of the board", () => {
-    const { handlers } = loadWorker();
-    const seen: string[] = [];
-    const fetchEvent = (request: ReturnType<typeof navigation>) => ({
-      request,
-      respondWith: (p: Promise<Response>) => seen.push(request.url) && void p.catch(() => {}),
-    });
-
-    handlers.get("fetch")!(fetchEvent(navigation("https://x.dev/dashboard/orders")));
-    expect(seen, "the board is the page it exists for").toEqual([
-      "https://x.dev/dashboard/orders",
-    ]);
+// Preview browsers cannot register workers. Execute the real sw.js instead.
+describe("private pages belong to one live session", () => {
+  it("never serves the previous board after a login redirect", async () => {
+    const worker = loadWorker();
+    vi.stubGlobal("fetch", async () => page("owner's MX$1,200 board"));
+    await worker.request();
+    const login = new Response("login");
+    Object.defineProperty(login, "redirected", { value: true });
+    Object.defineProperty(login, "url", { value: "https://x.dev/login" });
+    vi.stubGlobal("fetch", async () => login);
+    await worker.request();
+    offline();
+    await expect(worker.request()).rejects.toThrow("offline");
   });
 
-  it("never touches the bills screen", () => {
-    // The one rule that is about money: a cached bill showing a paid table as
-    // still owing is how the same money gets collected twice.
-    const { handlers } = loadWorker();
-    let claimed = false;
-    handlers.get("fetch")!({
-      request: navigation("https://x.dev/dashboard/bills"),
-      respondWith: () => (claimed = true),
-    });
-    expect(claimed).toBe(false);
+  it.each(["/dashboard/orders", "/dashboard/pos"])("keeps %s for its session through a drop and worker restart", async path => {
+    const worker = loadWorker();
+    vi.stubGlobal("fetch", async () => page("private page"));
+    await worker.request(navigation(path));
+    expect(worker.stores.get(`tt-v3-private-${label().split(":").slice(0, 4).join(":")}`)?.has(path)).toBe(true);
+    offline();
+    const restarted = loadWorker(worker.stores);
+    const response = await restarted.request(navigation(path));
+    expect(await response?.text()).toContain("private page");
+    expect(response?.headers.get("x-tt-offline")).toBe("1");
   });
 
-  it("never touches an API call", () => {
-    const { handlers } = loadWorker();
-    let claimed = false;
-    handlers.get("fetch")!({
-      request: { url: "https://x.dev/api/orders", method: "PATCH", mode: "cors" },
-      respondWith: () => (claimed = true),
-    });
-    expect(claimed).toBe(false);
+  it.each([
+    ["bob", "session-b", "restaurant-a", "owner"],
+    ["alice", "session-b", "restaurant-a", "owner"],
+    ["alice", "session-a", "restaurant-b", "owner"],
+    ["alice", "session-a", "restaurant-a", "cashier"],
+  ])("retires pages when identity changes to %s / %s / %s / %s", async (user, session, restaurant, role) => {
+    const worker = loadWorker();
+    vi.stubGlobal("fetch", async () => page());
+    await worker.request();
+    await worker.message({ type: "IDENTITY", identity: label(user, session, restaurant, role) });
+    offline();
+    await expect(worker.request()).rejects.toThrow("offline");
   });
 
-  it("throws away every cache when the session ends", async () => {
-    const { handlers, caches: stores } = loadWorker();
-    stores.set("tt-v1", new Map([["/dashboard/orders", new Response("board")]]));
-
-    const waits: Promise<unknown>[] = [];
-    handlers.get("message")!({ data: "CLEAR", waitUntil: (p: Promise<unknown>) => waits.push(p) });
-    await Promise.all(waits);
-
-    expect(stores.size, "a signed-in board must not outlive the session").toBe(0);
+  it("replaces the previous owner's pages with a fresh server identity", async () => {
+    const worker = loadWorker();
+    vi.stubGlobal("fetch", async () => page("alice"));
+    await worker.request();
+    vi.stubGlobal("fetch", async () => page("bob", label("bob", "session-b")));
+    await worker.request(navigation("/dashboard/pos"));
+    offline();
+    await expect(worker.request()).rejects.toThrow("offline");
+    expect(await (await worker.request(navigation("/dashboard/pos")))?.text()).toContain("bob");
+    expect([...worker.stores.keys()].some(n => n.includes("alice"))).toBe(false);
   });
 
-  it("ignores a message that is not the clear instruction", async () => {
-    const { handlers, caches: stores } = loadWorker();
-    stores.set("tt-v1", new Map());
-    handlers.get("message")!({ data: "something else", waitUntil: () => undefined });
-    expect(stores.size).toBe(1);
+  it("expires a saved session without needing an open tab", async () => {
+    vi.useFakeTimers();
+    const worker = loadWorker();
+    vi.stubGlobal("fetch", async () => page());
+    await worker.request();
+    vi.setSystemTime(Date.now() + 12 * 3600_000 + 61_000);
+    offline();
+    await expect(loadWorker(worker.stores).request()).rejects.toThrow("offline");
   });
 
-  it("stores a board it fetched, and serves it when the network is gone", async () => {
-    const { handlers, caches: stores } = loadWorker();
-    const responses: Promise<Response>[] = [];
-    const request = navigation("https://x.dev/dashboard/orders");
-
-    // First load: the network answers, so the board is kept.
-    vi.stubGlobal("fetch", async () => new Response("<board/>", { status: 200 }));
-    handlers.get("fetch")!({ request, respondWith: (p: Promise<Response>) => responses.push(p) });
-    await responses[0];
-    expect(stores.get("tt-v2")?.has("/dashboard/orders")).toBe(true);
-
-    // Then the connection drops.
-    vi.stubGlobal("fetch", async () => {
-      throw new TypeError("offline");
-    });
-    handlers.get("fetch")!({ request, respondWith: (p: Promise<Response>) => responses.push(p) });
-    const served = await responses[1];
-    expect(await served.text()).toBe("<board/>");
-    expect(served.headers.get("x-tt-offline"), "the page must know it is reading history").toBe("1");
-    vi.unstubAllGlobals();
+  it.each([401, 302])("clears old pages when any navigation answers %s", async status => {
+    const worker = loadWorker();
+    vi.stubGlobal("fetch", async () => page());
+    await worker.request();
+    vi.stubGlobal("fetch", async () => new Response("login", { status, headers: { location: "/login" } }));
+    await worker.request(navigation("/dashboard/bills"));
+    offline();
+    await expect(worker.request()).rejects.toThrow("offline");
   });
 
-  it("keeps the till too, so it can sell through a drop", async () => {
-    const { handlers, caches: stores } = loadWorker();
-    const responses: Promise<Response>[] = [];
-    const request = navigation("https://x.dev/dashboard/pos");
-    vi.stubGlobal("fetch", async () => new Response("<till/>", { status: 200 }));
-    handlers.get("fetch")!({ request, respondWith: (p: Promise<Response>) => responses.push(p) });
-    await responses[0];
-    expect(stores.get("tt-v2")?.has("/dashboard/pos")).toBe(true);
-
-    vi.stubGlobal("fetch", async () => {
-      throw new TypeError("offline");
-    });
-    handlers.get("fetch")!({ request, respondWith: (p: Promise<Response>) => responses.push(p) });
-    const served = await responses[1];
-    expect(await served.text()).toBe("<till/>");
-    expect(served.headers.get("x-tt-offline")).toBe("1");
-    vi.unstubAllGlobals();
+  it("can cache an authorized destination after a role redirect in the same session", async () => {
+    const worker = loadWorker();
+    vi.stubGlobal("fetch", async () => page());
+    await worker.request();
+    vi.stubGlobal("fetch", async () => new Response(null, { status: 302, headers: { location: "/dashboard/orders" } }));
+    await worker.request(navigation("/dashboard/pos"));
+    vi.stubGlobal("fetch", async () => page("authorized board"));
+    await worker.request();
+    offline();
+    expect(await (await worker.request())?.text()).toContain("authorized board");
   });
 
-  it("serves Next's content-named scripts from the cache once it has them", async () => {
-    const { handlers } = loadWorker();
-    const responses: Promise<Response>[] = [];
-    const asset = { url: "https://x.dev/_next/static/chunks/app-1a2b3c.js", method: "GET", mode: "no-cors" };
-    let calls = 0;
-    vi.stubGlobal("fetch", async () => {
-      calls++;
-      return new Response("chunk", { status: 200 });
-    });
-    handlers.get("fetch")!({ request: asset, respondWith: (p: Promise<Response>) => responses.push(p) });
-    await responses[0];
-    vi.stubGlobal("fetch", async () => {
-      throw new TypeError("offline");
-    });
-    handlers.get("fetch")!({ request: asset, respondWith: (p: Promise<Response>) => responses.push(p) });
-    expect(await (await responses[1]).text(), "a stored page that cannot load its scripts is no page").toBe("chunk");
-    expect(calls).toBe(1);
-    vi.unstubAllGlobals();
+  it("clears on direct login navigation and missing server identity", async () => {
+    for (const path of ["/login", "/dashboard/orders"]) {
+      const worker = loadWorker();
+      vi.stubGlobal("fetch", async () => page());
+      await worker.request();
+      vi.stubGlobal("fetch", async () => new Response("public page"));
+      await worker.request(navigation(path));
+      offline();
+      await expect(worker.request()).rejects.toThrow("offline");
+    }
   });
 
-  it("does not store a redirect, which is the session ending", async () => {
-    const { handlers, caches: stores } = loadWorker();
-    const responses: Promise<Response>[] = [];
-    const redirected = new Response("login", { status: 200 });
-    Object.defineProperty(redirected, "redirected", { value: true });
+  it("never caches bills, API calls, or pages without a server identity", async () => {
+    const worker = loadWorker();
+    vi.stubGlobal("fetch", async () => new Response("public page"));
+    expect(worker.request({ url: "https://x.dev/api/orders", method: "PATCH", mode: "cors" })).toBeUndefined();
+    await worker.request(navigation("/dashboard/bills"));
+    await worker.request();
+    offline();
+    await expect(worker.request(navigation("/dashboard/bills"))).rejects.toThrow("offline");
+    await expect(worker.request()).rejects.toThrow("offline");
+  });
 
-    vi.stubGlobal("fetch", async () => redirected);
-    handlers.get("fetch")!({
-      request: navigation("https://x.dev/dashboard/orders"),
-      respondWith: (p: Promise<Response>) => responses.push(p),
-    });
-    await responses[0];
-    expect(
-      stores.get("tt-v2")?.has("/dashboard/orders") ?? false,
-      "caching the login page would show it to somebody who is signed in",
-    ).toBe(false);
-    vi.unstubAllGlobals();
+  it("keeps the board on transient server failures, without caching the error", async () => {
+    const worker = loadWorker();
+    vi.stubGlobal("fetch", async () => page("board"));
+    await worker.request();
+    vi.stubGlobal("fetch", async () => new Response("unavailable", { status: 503 }));
+    expect((await worker.request())?.status).toBe(503);
+    offline();
+    expect(await (await worker.request())?.text()).toContain("board");
+  });
+
+  it("keeps static scripts and held sales when clearing private pages", async () => {
+    const worker = loadWorker();
+    worker.stores.set("tt-offline-sales", new Map([["sale", new Response("MX$100")]]));
+    worker.stores.set("tt-v2", new Map([["/dashboard/orders", new Response("legacy")]]));
+    const asset = { url: "https://x.dev/_next/static/chunks/app-123.js", method: "GET", mode: "no-cors" };
+    vi.stubGlobal("fetch", async () => new Response("script"));
+    await worker.request(asset);
+    const ack = await worker.message("CLEAR");
+    expect(ack).toHaveBeenCalledWith("CLEARED");
+    offline();
+    expect(await (await worker.request(asset))?.text()).toBe("script");
+    expect(await worker.stores.get("tt-offline-sales")?.get("sale")?.text()).toBe("MX$100");
+    expect(worker.stores.has("tt-v2")).toBe(false);
+  });
+
+  it("activation drops tt-v2 but preserves current sessions and held sales", async () => {
+    const worker = loadWorker();
+    worker.stores.set("tt-v2", new Map());
+    worker.stores.set("tt-offline-sales", new Map());
+    vi.stubGlobal("fetch", async () => page());
+    await worker.request();
+    await worker.activate();
+    expect(worker.stores.has("tt-v2")).toBe(false);
+    expect(worker.stores.has("tt-offline-sales")).toBe(true);
+    offline();
+    expect(await (await loadWorker(worker.stores).request())?.text()).toContain("board");
   });
 });

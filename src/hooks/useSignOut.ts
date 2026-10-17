@@ -13,6 +13,7 @@ export function useSignOut(): () => void {
   const t = useT();
   const toast = useToast();
   return useCallback(() => {
-    void signOutEverywhere(n => toast(t("pos.offlineSignOutBlocked", { n }), "error"));
+    void signOutEverywhere(n => toast(t("pos.offlineSignOutBlocked", { n }), "error"))
+      .catch(() => toast(t("pos.signOutFailed"), "error"));
   }, [t, toast]);
 }

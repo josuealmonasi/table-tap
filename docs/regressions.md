@@ -32,6 +32,7 @@ us, and what now catches each one.
 | Table discounts and their approval requests leave account orders alone | Today's discount reached yesterday's customer account (W3-9) |
 | Closing an account or changing its ceiling rechecks debt under the charge lock | A concurrent charge left a closed account owing, or passed a lowered ceiling (W3-10) |
 | Statements page every unpaid order in a unique order | The 1001st charge vanished from the displayed balance (W3-12) |
+| A private offline page belongs to one unexpired user, session and restaurant | The worker kept a pathname-only board after a login redirect, and sign-out never waited for its deletion. A shared tablet could show the previous person's orders |
 | A table created after the blanket `revoke … from anon` locks itself down | `rate_limits` shipped world-readable |
 | No dialog is rendered inside another dialog | Shipped three times — two focus traps, two Escapes to leave |
 | Anything marking an order paid or written off closes the sitting | A sitting that never closes holds the table and the diner forever |
@@ -2122,3 +2123,41 @@ device until A signs in again. A till that names no restaurant is one still
 running the code from before this check and is let through as before, so an
 open till is not left holding every sale after a deploy. `pos-atomic.spec.tsx`
 covers both paths and both exceptions; `offline-sale.spec.ts` the replay body.
+
+## A private offline page ends with its session (W2)
+
+The server's private render and the worker's disk cache had to agree about
+whose board they held. They did not: `/dashboard/orders` and `/dashboard/pos`
+were stored by pathname in `tt-v2`, survived a login redirect, and were served
+to whoever next lost the connection on that tablet. Sign-out and the worker
+also had to agree that deletion had finished; sending `CLEAR` proved nothing.
+
+`tt-v3` stores private pages under the server render's user, Supabase
+`session_id`, restaurant and role, with the token's expiry. The auth watcher
+runs on login too. An identity change, expiry, login navigation, redirect or
+401 retires those pages. Static scripts remain available; `tt-offline-sales`
+is never cleared. Only a fresh server render can establish a cache identity;
+an old open tab cannot restore one. Writes and clears share a queue, and a
+generation check refuses responses and disk reads that overlapped a clear.
+A persisted retirement marker also refuses a new response from the ended
+identity while Supabase is still finishing sign-out, even after a worker restart.
+Sign-out waits for `CLEARED` before ending auth or redirecting, and offers a
+translated retry message if deletion cannot be confirmed.
+
+`service-worker.spec.ts` reproduces the owner's board after a login redirect;
+`service-worker-races.spec.tsx` delays network responses, disk writes and reads
+across invalidation. `sign-out.spec.tsx` withholds the acknowledgement and checks
+that neither auth nor the redirect happens. All use memory, with no live DB.
+
+Claude should run Vitest first. Service workers cannot register in Claude's
+preview browser, so a preview is not evidence of offline safety. In a real
+localhost or HTTPS browser, load both pages online, go offline and reopen the
+till as the same user. Then repeat after expiry, a login redirect, sign-out,
+and a different user or restaurant signing in; the old board must not appear.
+Throttle a navigation while signing out and check that no private entry returns
+in Cache Storage after `CLEARED`. Check the sign-out retry copy in English and
+Spanish. Hold an offline sale and confirm it remains on the device and still
+blocks ordinary sign-out. No schema change is needed.
+
+The cache label uses Supabase's stable session claim rather than an access
+token, which rotates on refresh ([session documentation](https://supabase.com/docs/guides/auth/sessions)).

@@ -17,6 +17,10 @@ import { getLocale } from "@/lib/i18n/server";
 import { NAV_FEATURES } from "@/lib/nav";
 import { getPlan } from "@/lib/plan-server";
 import { can, type PlanFeature } from "@/lib/plan";
+import ServiceWorkerRegistrar from "@/components/pwa/ServiceWorkerRegistrar";
+import { createClient } from "@/lib/supabase/server";
+import { currentUser } from "@/lib/current-user";
+import { privateCacheIdentity } from "@/lib/private-cache-identity";
 
 // One family, weight carries the hierarchy. next/font self-hosts the files at
 // build time, so there's no request to a font CDN at runtime and no swap flash.
@@ -43,6 +47,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const admin = await getPlatformAdmin().catch(() => null);
   const membership = admin ? null : await getMembership().catch(() => null);
   const locale = await getLocale();
+  const user = membership ? await currentUser() : null;
+  const session = membership ? (await (await createClient()).auth.getSession()).data.session : null;
+  // Membership was checked with getUser. A cookie alone cannot label a private page.
+  const cacheIdentity = membership && user?.id === session?.user.id
+    ? privateCacheIdentity(session, membership.restaurant.id, membership.role)
+    : null;
 
   // Which areas this tier includes at all. Read once here so the drawer, the
   // section bar and the home tiles cannot disagree about what exists.
@@ -57,6 +67,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={locale} className={archivo.variable}>
       <body>
+        {cacheIdentity && <meta name="tt-private-cache" content={cacheIdentity} />}
+        <ServiceWorkerRegistrar identity={cacheIdentity} />
         <LocaleProvider locale={locale}>
           <ToastProvider>
             {admin && (
