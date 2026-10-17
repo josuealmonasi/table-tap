@@ -50,6 +50,18 @@ describe("what the terminal should deposit", () => {
     expect(depositDays([], marked(96.5), 3.5, 1, TZ, "2026-10-20")[0]).toMatchObject({ expected: 96.5, status: "received", takings: 0 });
   });
 
+  it("reads a card sale that arrived offline after the deposit was marked, keeping what was reconciled", () => {
+    const marked = [{ sales_day: "2026-10-15", expected: 96.5, received: 193, note: null, recorded_by: "x", created_at: "2026-10-16T18:00:00Z" }];
+    const onTime = { amount: 100, tip: 0, created_at: "2026-10-15T15:00:00Z", recorded_at: "2026-10-15T15:00:01Z" };
+    const late = { amount: 100, tip: 0, created_at: "2026-10-15T16:00:00Z", recorded_at: "2026-10-17T09:00:00Z" };
+    const old = { amount: 100, tip: 0, created_at: "2026-10-15T16:00:00Z", recorded_at: null };
+    // The bank paid both; the deposit was marked against the one it knew.
+    expect(depositDays([onTime, late], marked, 3.5, 1, TZ, "2026-10-20")[0]).toMatchObject({ expected: 96.5, late: 96.5, status: "received" });
+    // Without the late sale the same deposit is over; a row from before the column is never late.
+    expect(depositDays([onTime], marked, 3.5, 1, TZ, "2026-10-20")[0]).toMatchObject({ late: 0, status: "over" });
+    expect(depositDays([onTime, old], marked, 3.5, 1, TZ, "2026-10-20")[0]).toMatchObject({ late: 0 });
+  });
+
   // A cancelled sale is voided on the terminal by a person, as the cancel
   // dialog asks. The deposits used to count it anyway, and read short.
   describe("a sale cancelled and voided on the terminal", () => {

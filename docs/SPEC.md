@@ -860,7 +860,11 @@ to know what should reach the bank and when.
   moment — never a figure from the browser — in `terminal_deposits`, one per
   day. Within MX$0.50 it is received; otherwise it came in short or over, and
   the difference is shown. A day marked wrong is taken back and marked again.
-  Unmarked, a day is coming, due today, or late.
+  Unmarked, a day is coming, due today, or late. A card sale from a marked
+  day that reached the server after it was marked (`payments.recorded_at`
+  later than the mark — a sale the till held offline) is shown beside it, and
+  the deposit is judged against what was marked plus that sale; the figure
+  that was reconciled is kept.
 
 Sending the amount to the terminal itself waits for a provider choice.
 

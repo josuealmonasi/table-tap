@@ -90,7 +90,8 @@ export default function TerminalDeposits({ terminal, currency, timeZone }: Termi
                     </>
                   )}
                   {d.deposit && ` · ${t("terminal.received", { amount: money(Number(d.deposit.received)) })}`}
-                  {d.deposit && d.status !== "received" && ` (${t("terminal.difference", { amount: money(Number(d.deposit.received) - d.expected) })})`}
+                  {d.late > 0 && ` · ${t("terminal.late", { amount: money(d.late) })}`}
+                  {d.deposit && d.status !== "received" && ` (${t("terminal.difference", { amount: money(Number(d.deposit.received) - d.expected - d.late) })})`}
                 </span>
               </button>
               {open === d.day && (

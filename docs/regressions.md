@@ -2234,7 +2234,11 @@ refunds and withdrawals are logged at their own time, outside a closed
 shift's window, so only late arrivals move it. The seed has one late offline
 sale inside its closed shift, so every gate renders the lines.
 
-Still open: the terminal deposit freezes its expected figure when the deposit
-is marked, and a late card sale from that day shows as "over". Telling a late
-arrival from a later void booked to that day needs the time a payment was
-recorded, which payments do not keep yet.
+The terminal deposit had the same fault: a day marked deposited keeps the
+expected figure from when it was marked, so a late card sale from that day
+read as "over". Telling a late arrival from a later void booked to that day
+takes the time a payment was recorded, so payments now keep it
+(`recorded_at`, null on older rows, which were recorded when dated). A day's
+late sales are shown beside its deposit and judged with it; the reconciled
+figure stays. `terminal.spec.ts` covers a late sale, the same deposit without
+it, and an old row, and the seed marks one day before a late card sale.
