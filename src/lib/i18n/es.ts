@@ -1201,6 +1201,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
   },
   apiErr: {
     posUnsettled: "La venta aún no está confirmada. Sigue en este dispositivo y se enviará de nuevo sola.",
+    posOtherRestaurant: "Ahora tienes sesión en otro restaurante. La venta sigue en este dispositivo hasta que este restaurante vuelva a iniciar sesión.",
     posMismatch: "El precio del menú cambió mientras cobrabas. La venta sigue en este dispositivo y se registra por lo que cobraste.",
     orderMovedOn: "Ese pedido ya avanzó.",
     stationNotInOrder: "Esa estación no tiene nada que preparar en este pedido.",

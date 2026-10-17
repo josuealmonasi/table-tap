@@ -141,6 +141,7 @@ export function usePosCharge({ restaurant, cart, details, canEmailReceipt, prici
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             posRef,
+            restaurantId: restaurant.id,
             collected: sale ? { at: sale.at, ...sale.charge } : undefined,
             items: lines,
             method,

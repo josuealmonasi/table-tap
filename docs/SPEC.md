@@ -1170,6 +1170,10 @@ server applies it only if nothing has happened since.
   checked offline, so "a cuenta" refuses, and nothing goes through Stripe.
   Any other refusal — out of stock, the menu closed — is the sale not
   happening: the saved copy goes and the cart stays, as it always did.
+- Every sale names the restaurant its till screen was opened for. One sent
+  while the browser is signed in to a different restaurant (another tab
+  signed in under it) is refused and kept on the device until that
+  restaurant signs in again, never filed under the other one.
 - It is sent when the connection returns, oldest first, and every 30 seconds
   while any are left (`useOfflineSales`). The reference becomes the sale's id,
   so the code on the offline receipt is the sale's code, and a sale sent twice

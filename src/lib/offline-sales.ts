@@ -75,7 +75,7 @@ export function markHeldError(posRef: string, restaurantId: string, error: strin
 /** What the server is sent for a held sale. */
 export function replayBody(sale: HeldSale): Record<string, unknown> {
   return {
-    posRef: sale.posRef, items: sale.items, method: sale.method,
+    posRef: sale.posRef, restaurantId: sale.restaurantId, items: sale.items, method: sale.method,
     tipPct: sale.tipPct, tipAmount: sale.tipAmount, customerName: sale.customerName, note: sale.note,
     terminalRef: sale.terminalRef, noReceipt: true,
     offline: { at: sale.at, ...sale.charge },

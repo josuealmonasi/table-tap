@@ -1207,6 +1207,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
   },
   apiErr: {
     posUnsettled: "The sale is not confirmed yet. It stays on this device and is sent again by itself.",
+    posOtherRestaurant: "You are signed in to a different restaurant now. The sale stays on this device until this restaurant signs in again.",
     posMismatch: "The menu's price changed while you were charging. The sale stays on this device and is recorded at what you charged.",
     orderMovedOn: "That order has already moved on.",
     stationNotInOrder: "That station has nothing to make in this order.",
