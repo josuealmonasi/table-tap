@@ -71,6 +71,12 @@ drop policy if exists "team manages its own menu images" on storage.objects;
 -- Policy and service functions (schema.sql recreates them). Dropped after the
 -- tables and the storage policies, because anything that mentions one of these
 -- holds it open.
+-- The till transactions depend on the stock and account helpers below.
+drop function if exists public.ring_pos_account(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int);
+drop function if exists public.ring_pos_sale(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int);
+drop function if exists public.pos_insert_order(uuid, uuid, jsonb, text, timestamptz, uuid);
+drop function if exists public.pos_ticket(uuid, uuid);
+
 drop function if exists public.account_owed(uuid);
 drop function if exists public.account_charge(uuid, uuid, uuid[], numeric, text);
 drop function if exists public.account_settle(uuid, uuid, numeric, numeric, text, text, text);

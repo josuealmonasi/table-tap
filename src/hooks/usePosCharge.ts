@@ -29,7 +29,12 @@ interface PosChargeInput {
   /** What the till prices the sale at: offline, it is also what is charged. */
   pricing: { subtotal: number; serviceFee: number; tip: number; discount: number; total: number };
   /** The device's own store, for a sale rung with no connection. */
-  offline: { hold: (sale: HeldSale) => boolean; setOnline: (online: boolean) => void };
+  offline: {
+    hold: (sale: HeldSale) => boolean;
+    acknowledge: (sale: HeldSale, data: unknown) => boolean;
+    discard: (sale: HeldSale) => void;
+    setOnline: (online: boolean) => void;
+  };
 }
 
 /**
@@ -37,6 +42,9 @@ interface PosChargeInput {
  *
  * Nothing reaches the server until the money is in the drawer, and then it is
  * one request that creates the order already paid and already on the pass.
+ * The sale is saved on the device before that request leaves, and let go only
+ * when the server says it is settled — a hung request or a restarted tablet
+ * must not erase money already taken.
  */
 export function usePosCharge({ restaurant, cart, details, canEmailReceipt, pricing, offline }: PosChargeInput) {
   const t = useT();
@@ -79,40 +87,20 @@ export function usePosCharge({ restaurant, cart, details, canEmailReceipt, prici
   }
 
   /**
-   * The connection is gone: keep the sale on this device, give the customer
-   * their ticket, and send it when the connection returns. Only money already
-   * in hand — an account's ceiling cannot be checked without the server.
+   * The sale stays on this device: give the customer their ticket, and send it
+   * when the connection returns. It is already saved, with the time it was
+   * taken, so a late send records it as it happened. Only money already in
+   * hand — an account's ceiling cannot be checked without the server.
    */
-  function holdOffline(posRef: string, method: "cash" | "card" | "account"): void {
-    offline.setOnline(false);
-    if (method === "account") {
-      toast(t("pos.offlineNoAccount"), "error");
-      return;
-    }
-    const at = new Date().toISOString();
-    const charge = {
-      subtotal: pricing.subtotal, serviceFee: pricing.serviceFee, tip: pricing.tip,
-      discount: pricing.discount, total: pricing.total,
-    };
-    const kept = offline.hold({
-      posRef, restaurantId: restaurant.id, at, method, items: cart.lines, charge,
-      tipPct: tipCustom === null ? tipPct : undefined, tipAmount: tipCustom ?? undefined,
-      customerName: details.customerName.trim() || undefined, note: details.note.trim() || undefined,
-      terminalRef: method === "card" ? details.terminalRef.trim() || undefined : undefined,
-    });
-    if (!kept) {
-      toast(t("pos.offlineNoStorage"), "error");
-      return;
-    }
+  function showHeld(sale: HeldSale, answered = false): void {
     if (!details.noTicket) {
       printReceipt(offlineReceipt(
-        { posRef, at, lines: cart.lines, charge, method, currency: restaurant.currency },
-        { name: restaurant.name, timeZone: restaurant.timezone ?? "America/Mexico_City", locale: dateLocale(locale) },
-        t,
+        { posRef: sale.posRef, at: sale.at, lines: sale.items, charge: sale.charge, method: sale.method, currency: restaurant.currency },
+        { name: restaurant.name, timeZone: restaurant.timezone ?? "America/Mexico_City", locale: dateLocale(locale) }, t,
       ));
     }
-    setTicket({ code: orderCode(posRef), total: charge.total, handedOver: true, offline: true });
-    rememberLastSale(restaurant.id, cart.lines);
+    setTicket({ code: orderCode(sale.posRef), total: sale.charge.total, handedOver: true, offline: true, answered });
+    rememberLastSale(restaurant.id, sale.items);
     cart.clear();
     details.reset();
   }
@@ -127,7 +115,23 @@ export function usePosCharge({ restaurant, cart, details, canEmailReceipt, prici
     // One reference per sale, made before anything is sent: a request that
     // dies on the way and is held and sent again is the same sale, rung once.
     const posRef = crypto.randomUUID();
-    if (!navigator.onLine) return holdOffline(posRef, method);
+    const sale: HeldSale | null = method === "account" ? null : {
+      posRef, restaurantId: restaurant.id, at: new Date().toISOString(), method, items: lines,
+      charge: { ...pricing }, tipPct: tipCustom === null ? tipPct : undefined, tipAmount: tipCustom ?? undefined,
+      customerName: details.customerName.trim() || undefined, note: details.note.trim() || undefined,
+      terminalRef: method === "card" ? details.terminalRef.trim() || undefined : undefined,
+    };
+    // Save before fetch: a hung request and a tablet restart must not erase collected money.
+    if (sale && !offline.hold(sale)) {
+      toast(t("pos.offlineNoStorage"), "error");
+      return;
+    }
+    if (!navigator.onLine) {
+      offline.setOnline(false);
+      if (sale) showHeld(sale);
+      else toast(t("pos.offlineNoAccount"), "error");
+      return;
+    }
     setBusy(true);
     try {
       let res: Response;
@@ -137,6 +141,7 @@ export function usePosCharge({ restaurant, cart, details, canEmailReceipt, prici
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             posRef,
+            collected: sale ? { at: sale.at, ...sale.charge } : undefined,
             items: lines,
             method,
             accountId: account?.id,
@@ -157,11 +162,23 @@ export function usePosCharge({ restaurant, cart, details, canEmailReceipt, prici
         // The request never came back. If it never arrived, holding it is the
         // only record of the sale; if it did, sending it again is answered
         // with the sale it already rang.
-        holdOffline(posRef, method);
+        offline.setOnline(false);
+        if (sale) showHeld(sale);
+        else toast(t("done.networkError"), "error");
         return;
       }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        // A refusal is the sale not happening — out of stock, the menu closed,
+        // an account at its ceiling. The held copy goes and the cart stays, so
+        // the cashier fixes it or hands the money back, as before the till
+        // held sales. Kept, the copy would be sent again through the offline
+        // path, which floors stock instead of refusing, and ring the very sale
+        // that was refused. Only an answer that says nothing (a 5xx), or one
+        // that says the money is already in the drawer (`held`), keeps the
+        // sale on this device.
+        if (sale && (res.status >= 500 || data.held)) showHeld(sale, true);
+        else if (sale) offline.discard(sale);
         if (data.code === "outOfStock") {
           // With the numbers in it. The refusal has always known how many are
           // left and every screen dropped them, so the answer to "how many can
@@ -170,6 +187,11 @@ export function usePosCharge({ restaurant, cart, details, canEmailReceipt, prici
         } else {
           toast(data.error ?? t("done.networkError"), "error");
         }
+        return;
+      }
+      if (sale && !offline.acknowledge(sale, data)) {
+        showHeld(sale, true);
+        toast(t("pos.saleNeedsReview"), "error");
         return;
       }
       if (data.onAccount) {
@@ -196,6 +218,7 @@ export function usePosCharge({ restaurant, cart, details, canEmailReceipt, prici
       // The kitchen board and the badges have a new ticket to show.
       router.refresh();
     } catch {
+      if (sale) showHeld(sale);
       toast(t("done.networkError"), "error");
     } finally {
       setBusy(false);

@@ -30,6 +30,8 @@ export interface HeldSale {
   charge: { subtotal: number; serviceFee: number; tip: number; discount: number; total: number };
   /** The server's last refusal, in words; absent until one comes back. */
   error?: string;
+  /** Keep a contradictory ticket for the manager; retrying cannot erase the evidence. */
+  acknowledgement?: { orderId: string | null; total: number | null };
 }
 
 export function readHeld(): HeldSale[] {
@@ -55,19 +57,19 @@ function write(sales: HeldSale[]): boolean {
 /** Keeps a sale; false when the browser would not store it. */
 export function holdSale(sale: HeldSale): boolean {
   const held = readHeld();
-  if (held.some(s => s.posRef === sale.posRef)) return true;
+  if (held.some(s => s.posRef === sale.posRef && s.restaurantId === sale.restaurantId)) return true;
   if (!write([...held, sale])) return false;
   // Read back: a storage that accepts the write and keeps nothing is no storage.
-  return readHeld().some(s => s.posRef === sale.posRef);
+  return readHeld().some(s => s.posRef === sale.posRef && s.restaurantId === sale.restaurantId);
 }
 
 /** The server has it: it is no longer this device's to keep. */
-export function dropHeld(posRef: string): void {
-  write(readHeld().filter(s => s.posRef !== posRef));
+export function dropHeld(posRef: string, restaurantId: string): boolean {
+  return write(readHeld().filter(s => s.posRef !== posRef || s.restaurantId !== restaurantId));
 }
 
-export function markHeldError(posRef: string, error: string): void {
-  write(readHeld().map(s => (s.posRef === posRef ? { ...s, error } : s)));
+export function markHeldError(posRef: string, restaurantId: string, error: string): void {
+  write(readHeld().map(s => (s.posRef === posRef && s.restaurantId === restaurantId ? { ...s, error } : s)));
 }
 
 /** What the server is sent for a held sale. */
@@ -78,4 +80,24 @@ export function replayBody(sale: HeldSale): Record<string, unknown> {
     terminalRef: sale.terminalRef, noReceipt: true,
     offline: { at: sale.at, ...sale.charge },
   };
+}
+
+/** HTTP success alone does not prove the money was recorded for this sale. */
+export function saleAcknowledgement(sale: HeldSale, raw: unknown): "settled" | "unsettled" | "mismatch" {
+  if (!raw || typeof raw !== "object") return "unsettled";
+  const ack = raw as { settled?: unknown; orderId?: unknown; total?: unknown; onAccount?: unknown };
+  if (ack.settled !== true) return "unsettled";
+  if (ack.orderId !== sale.posRef || typeof ack.total !== "number" || !Number.isFinite(ack.total)
+      || Math.abs(ack.total - sale.charge.total) > 0.005 || ack.onAccount) return "mismatch";
+  return "settled";
+}
+
+export function keepAcknowledgement(sale: HeldSale, raw: unknown): void {
+  const ack = (raw ?? {}) as { orderId?: unknown; total?: unknown };
+  const acknowledgement = {
+    orderId: typeof ack.orderId === "string" ? ack.orderId : null,
+    total: typeof ack.total === "number" && Number.isFinite(ack.total) ? ack.total : null,
+  };
+  write(readHeld().map(s => s.posRef === sale.posRef && s.restaurantId === sale.restaurantId
+    ? { ...s, acknowledgement: s.acknowledgement ?? acknowledgement } : s));
 }

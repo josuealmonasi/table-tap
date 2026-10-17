@@ -14,6 +14,13 @@ us, and what now catches each one.
 
 | Rule | The bug it came from |
 |---|---|
+| A lost till response never deletes committed money (W1.1) | Deleting a settled order orphaned its payment and let replay record the cash again |
+| A till repeat proves settlement before the device forgets it (W1.2) | An unpaid shell answered success and erased the held sale |
+| A till reference belongs to its restaurant (W1.3) | A cashier could read another restaurant's ticket and silently lose their own sale |
+| Collected money is saved before the first send (W1.4) | A hung first request and a tablet restart erased the only sale record |
+| The held receipt and server ticket agree (W1.5) | Online settlement used another id and amount, and replay discarded the difference |
+| Offline stock and money commit together (W1.6) | A failed stock call was acknowledged and replay could never repair it |
+| Credit approval and the kitchen ticket commit together (W1.7) | An account sale reached the pass before the account owed it |
 | A table created after the blanket `revoke … from anon` locks itself down | `rate_limits` shipped world-readable |
 | No dialog is rendered inside another dialog | Shipped three times — two focus traps, two Escapes to leave |
 | Anything marking an order paid or written off closes the sitting | A sitting that never closes holds the table and the diner forever |
@@ -1892,4 +1899,78 @@ owed, no payment, no refund due. Found by a read-only Codex audit of customer
 accounts; it applied to every diner checkout. Each now asks for cards only —
 wallets are cards — and an invariant fails on any diner checkout that lets
 Stripe choose (sabotaged: it named `account/pay`).
+
+
+## A lost till response never deletes committed money (W1.1)
+
+The route and ledger had to agree about cleanup. `ring_pos_sale` now inserts,
+settles and takes stock in one transaction. A route error never deletes the
+order: its payment may already have committed. `W1.1 keeps a committed offline
+sale when its response is lost` verifies that replay returns that ticket
+without another settlement call.
+
+## A till repeat proves settlement before the device forgets it (W1.2)
+
+The retry lookup and device queue had to agree on what success proves. Both
+retry paths refuse unpaid shells; the device requires an explicit settled
+acknowledgement for its own id and amount. `W1.2 refuses an unsettled repeat`
+and `W1.2 keeps a repeat that has no settled acknowledgement` cover both ends.
+Legacy unpaid shells stay held for manager review, never deleted to guess
+whether money committed.
+
+## A till reference belongs to its restaurant (W1.3)
+
+The admin lookup and uniqueness constraint had to agree on the tenant. Lookups
+now include the actor's restaurant; the index covers `(restaurant_id, pos_ref)`.
+The transaction locks the reference and refuses foreign references or id
+collisions without ticket fields. `W1.3 scopes the retry lookup to its
+restaurant` and `a foreign reference conflict reveals no ticket or total`
+cover those boundaries.
+
+## Collected money is saved before the first send (W1.4)
+
+The request and storage had to agree on when a sale begins. Cash and own-terminal
+sales are now written and read back before fetch, with their original time,
+amounts and reference. Failed storage prevents sending; a missing answer, a
+5xx, or a refusal that says the money is already in the drawer (`held: true`:
+a changed price, an unsettled ticket) keeps one held sale and clears its cart
+to prevent charging it again. Any other refusal — out of stock, the menu
+closed, an account at its ceiling — is the sale not happening: the held copy is
+discarded and the cart stays. Kept, it would have been replayed through the
+offline path, which floors stock instead of refusing, and rung the very sale
+the server refused. `W1.4 holds the complete sale before the first request
+starts`, `never sends collected money if device storage refuses the write`,
+`a refused sale leaves nothing held and keeps the cart` and `a refusal that
+says the money is in the drawer keeps the sale held` cover these cases.
+Account credit still requires a connection and is never queued as cash.
+
+## The held receipt and server ticket agree (W1.5)
+
+Online settlement and replay had to agree on identity and collected money. Both
+now use `posRef` as the order id. The first request carries the saved collected
+snapshot; a changed price is refused before recording money and remains held
+for offline ingestion with its drift. A contradictory acknowledgement stays on
+the device with the server id and amount; the banner names both amounts for
+manager reconciliation. `W1.5 uses the device reference as the online order
+identity`, `W1.5 keeps a differing acknowledgement for reconciliation`, and
+`refuses an online collected amount that differs before recording money`
+cover that agreement.
+
+## Offline stock and money commit together (W1.6)
+
+Settlement and stock had to agree on one commit. The stock floor and payment
+now run inside `ring_pos_sale`; either both commit or neither does. A repeat
+returns before taking stock again. The original time, collected amount, drift,
+completed status and cash/own-terminal restriction are preserved. `W1.6 commits
+offline stock and money in the same RPC` verifies that the route no longer
+sends independent writes.
+
+## Credit approval and the kitchen ticket commit together (W1.7)
+
+The credit ceiling and kitchen board had to agree on publication.
+`ring_pos_account` locks the account, reserves stock, inserts the order and
+runs the existing `account_charge` approval in one transaction. Refusal rolls
+back its unpublished order and stock together. `W1.7 never publishes an account
+ticket before atomic credit approval` and `an atomic account refusal never
+causes a second cleanup request` cover that boundary.
 

@@ -15,12 +15,16 @@ import { getLocale } from "@/lib/i18n/server";
  * @param key    an i18n key, e.g. "apiErr.comboPrice"
  * @param status HTTP status, defaulting to 400 — these are mostly validation
  * @param vars   substitutions for the message
+ * @param extra  facts the client acts on besides showing the message — never
+ *               a second copy of it: the till's `held`, for a refusal whose
+ *               money is already in the drawer
  */
 export async function apiError(
   key: string,
   status = 400,
   vars?: Record<string, string | number>,
+  extra?: Record<string, unknown>,
 ): Promise<NextResponse> {
   const messages = messagesFor(await getLocale());
-  return NextResponse.json({ error: translate(messages, key, vars) }, { status });
+  return NextResponse.json({ ...extra, error: translate(messages, key, vars) }, { status });
 }
