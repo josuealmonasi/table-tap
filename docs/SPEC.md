@@ -411,7 +411,9 @@ dishes on a bill the restaurant has just cancelled.
   is still open. Each closed shift shows its count, difference and why, a
   trail of what happened to the money in it (withdrawals, refunds, discounts,
   cancellations, write-offs — the activity log's own wording), and prints as
-  a handover sheet with two signatures. Owners and managers run it from the
+  a handover sheet with two signatures. Cash dated inside a closed shift that
+  arrived after its count (a sale the till held offline) is shown under the
+  sign-off, with the verdict as it stands now; the sign-off itself is kept. Owners and managers run it from the
   corte; the cashier opens, withdraws and closes from the till's header,
   never seeing the expected amount before counting. `/api/cash-shift` and
   `/api/cash-drawer`, for owner, manager and cashier. Card and online money

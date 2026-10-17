@@ -566,19 +566,21 @@ export async function seedMock(pg) {
     }
   }
 
-  // ── Two sales the till rang without a connection ───────────────────────
+  // ── Three sales the till rang without a connection ─────────────────────
   // So Analytics' review of offline sales has something to show: one charged
   // at an older price (MX$2.50 over today's menu), one whose dish has since
   // left the menu and could not be compared. With none seeded, no gate ever
-  // rendered that card. Paid in cash at the till, so each names the cashier
+  // rendered that card. The third matches the menu and is dated inside the
+  // closed shift seeded below, after its count — the late arrival the shift
+  // record has to show. Paid in cash at the till, so each names the cashier
   // who took it, in the ledger and in the log — cash nobody took, or a log
   // that disagrees with the ledger, is what `pnpm money` refuses.
-  for (const [hoursAgo, drift] of [[30, 2.5], [54, null]]) {
+  for (const [minutesAgo, drift] of [[30 * 60, 2.5], [54 * 60, null], [45, 0]]) {
     const lines = buildLines(products);
     const subtotal = round2(
       lines.reduce((sum, l) => sum + (l.price + l.extras.reduce((x, e) => x + e.price, 0)) * l.qty, 0),
     );
-    const at = new Date(Date.now() - hoursAgo * 3600000).toISOString();
+    const at = new Date(Date.now() - minutesAgo * 60000).toISOString();
     const {
       rows: [sale],
     } = await pg.query(
@@ -879,7 +881,8 @@ export async function seedMock(pg) {
   );
 
   // ── The cash drawer ───────────────────────────────────────────────────
-  // A shift closed earlier — counted 20 short, and explained — and one open
+  // A shift closed earlier — counted 20 short, and explained, with one offline
+  // sale from inside it that arrived after the count (seeded above) — and one open
   // now, which started with 250 and had 120 taken out for a supplier. So the
   // register close shows both kinds of shift, the till offers to close one,
   // and every gate measures them full.

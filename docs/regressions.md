@@ -17,6 +17,7 @@ us, and what now catches each one.
 | An approval acts on the amount the manager saw, through guarded routes only | A request showing MX$10 carried a MX$1,000 bill's ids |
 | A split freezes its own sitting and closes only with enough collected money | Another table's MX$20 could settle a MX$1,000 bill |
 |---|---|
+| A closed shift shows cash that arrived after its count, and what the count means now | A late offline sale left a closed shift saying "MX$100 over" for a drawer that was exact |
 | Every offline sale with a difference reaches the review, however late it arrived | The review read 14 days by the sale's own date, newest 200: a sale sent 20 days late never appeared |
 | A replayed sale keeps the lines it was sold with | Replay repriced every line to today's menu and, after a promotion ended, took stock from the deal instead of its dishes |
 | A held sale is recorded in the currency it was charged in, or not at all | A held MX$100 sale replayed after a switch to USD was recorded as US$100 |
@@ -2218,3 +2219,22 @@ it arrived, and 200 ordinary sales could push a flagged one off the end
 arrive plus 14 to see it) and lists every sale with a difference over them,
 paged rather than capped. The demo seed now has two such sales, so the layout
 and dialog gates render the card at all — with none seeded, nothing ever did.
+
+## A closed shift that went on reporting a difference that was gone
+
+The signed-off count and the money dated inside the shift had to agree, and
+a late offline sale broke them apart. A shift is counted and closed with the
+expected cash it had at that moment; a sale the till held offline, dated
+inside the shift, can arrive afterwards. The record kept saying "MX$100
+over" for a drawer that, with that sale, was exactly right (Codex audit A,
+finding 12). The record now keeps the sign-off as it was and, when the cash
+dated inside the shift has changed since, shows what arrived after the count
+and the verdict as it stands now — on screen and on the printed sheet. Later
+refunds and withdrawals are logged at their own time, outside a closed
+shift's window, so only late arrivals move it. The seed has one late offline
+sale inside its closed shift, so every gate renders the lines.
+
+Still open: the terminal deposit freezes its expected figure when the deposit
+is marked, and a late card sale from that day shows as "over". Telling a late
+arrival from a later void booked to that day needs the time a payment was
+recorded, which payments do not keep yet.
