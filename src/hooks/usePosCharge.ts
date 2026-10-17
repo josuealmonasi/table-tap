@@ -92,14 +92,14 @@ export function usePosCharge({ restaurant, cart, details, canEmailReceipt, prici
    * taken, so a late send records it as it happened. Only money already in
    * hand — an account's ceiling cannot be checked without the server.
    */
-  function showHeld(sale: HeldSale): void {
+  function showHeld(sale: HeldSale, answered = false): void {
     if (!details.noTicket) {
       printReceipt(offlineReceipt(
         { posRef: sale.posRef, at: sale.at, lines: sale.items, charge: sale.charge, method: sale.method, currency: restaurant.currency },
         { name: restaurant.name, timeZone: restaurant.timezone ?? "America/Mexico_City", locale: dateLocale(locale) }, t,
       ));
     }
-    setTicket({ code: orderCode(sale.posRef), total: sale.charge.total, handedOver: true, offline: true });
+    setTicket({ code: orderCode(sale.posRef), total: sale.charge.total, handedOver: true, offline: true, answered });
     rememberLastSale(restaurant.id, sale.items);
     cart.clear();
     details.reset();
@@ -177,7 +177,7 @@ export function usePosCharge({ restaurant, cart, details, canEmailReceipt, prici
         // that was refused. Only an answer that says nothing (a 5xx), or one
         // that says the money is already in the drawer (`held`), keeps the
         // sale on this device.
-        if (sale && (res.status >= 500 || data.held)) showHeld(sale);
+        if (sale && (res.status >= 500 || data.held)) showHeld(sale, true);
         else if (sale) offline.discard(sale);
         if (data.code === "outOfStock") {
           // With the numbers in it. The refusal has always known how many are
@@ -190,7 +190,7 @@ export function usePosCharge({ restaurant, cart, details, canEmailReceipt, prici
         return;
       }
       if (sale && !offline.acknowledge(sale, data)) {
-        showHeld(sale);
+        showHeld(sale, true);
         toast(t("pos.saleNeedsReview"), "error");
         return;
       }

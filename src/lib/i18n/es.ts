@@ -1140,6 +1140,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     saleUnsettled: "Aún sin confirmar: la venta sigue en este dispositivo y se enviará de nuevo sola.",
     offlineNoStorage: "Este navegador no guardó la venta, así que no se envió. Cóbrala de nuevo; si sigue pasando, revisa la configuración de almacenamiento del navegador.",
     offlineHeld: "Sin conexión: la venta quedó guardada en este dispositivo y se enviará sola al volver la conexión.",
+    heldAnswered: "La venta quedó guardada en este dispositivo y se enviará de nuevo sola.",
     offlineBanner: "Sin conexión. Puedes seguir cobrando en efectivo o con tu terminal: las ventas se guardan en este dispositivo y se envían solas al volver la conexión.",
     offlineSending: "Enviando {n} venta(s) guardada(s) sin conexión…",
     offlineHeldCount: "{n} venta(s) guardada(s) en este dispositivo.",

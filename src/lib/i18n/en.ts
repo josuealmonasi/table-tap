@@ -1146,6 +1146,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     saleUnsettled: "Not confirmed yet: the sale stays on this device and is sent again by itself.",
     offlineNoStorage: "This browser would not save the sale, so it was not sent. Charge it again; if it keeps happening, check the browser's storage settings.",
     offlineHeld: "No connection: the sale is kept on this device and will be sent by itself when the connection returns.",
+    heldAnswered: "The sale is kept on this device and will be sent again by itself.",
     offlineBanner: "No connection. You can keep charging cash or on your terminal: sales are kept on this device and sent by themselves when the connection returns.",
     offlineSending: "Sending {n} sale(s) kept while offline…",
     offlineHeldCount: "{n} sale(s) kept on this device.",
