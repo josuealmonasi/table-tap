@@ -17,6 +17,7 @@ us, and what now catches each one.
 | An approval acts on the amount the manager saw, through guarded routes only | A request showing MX$10 carried a MX$1,000 bill's ids |
 | A split freezes its own sitting and closes only with enough collected money | Another table's MX$20 could settle a MX$1,000 bill |
 |---|---|
+| Each held sale is its own key: one tab's save cannot erase another's | Two till tabs saving at once both read the shared list back as safe, and the later write erased the earlier sale |
 | A till sale is filed under the restaurant whose screen rang it | Another tab signing in under an open till filed restaurant A's cash as restaurant B's takings |
 | A lost till response never deletes committed money (W1.1) | Deleting a settled order orphaned its payment and let replay record the cash again |
 | A till repeat proves settlement before the device forgets it (W1.2) | An unpaid shell answered success and erased the held sale |
@@ -2161,3 +2162,19 @@ blocks ordinary sign-out. No schema change is needed.
 
 The cache label uses Supabase's stable session claim rather than an access
 token, which rotates on refresh ([session documentation](https://supabase.com/docs/guides/auth/sessions)).
+
+## Two till tabs erased each other's held sales
+
+Two writers had to agree on one shared list, and nothing made them take
+turns. Every held-sale change read the whole `tt-offline-sales` list and
+wrote it back. Two till tabs on one tablet saving at the same moment each
+read the list, each added their own sale, each read it back as safe — and the
+later write erased the earlier sale, the only record of money already in the
+drawer (Codex audit A, finding 5). Each sale is now its own key,
+`tt-offline-sale:<restaurant>:<reference>`, and every change — holding,
+marking a refusal, keeping a contradictory receipt, letting go — writes only
+that key. The old list is still read, so a sale held by a till running the
+code from before is not lost, and is only ever rewritten to take out a sale
+that was sent. `offline-sales-storage.spec.ts` checks that holding writes one
+key, that a sale survives another tab rewriting the old list, and that old
+sales are marked and dropped one at a time.

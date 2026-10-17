@@ -20,7 +20,11 @@ function useTill() {
 }
 beforeEach(() => {
   state.storage.clear(); state.fetch.mockReset(); state.toast.mockReset(); state.clear.mockReset();
-  vi.stubGlobal("localStorage", { getItem: (k: string) => state.storage.get(k) ?? null, setItem: (k: string, v: string) => state.storage.set(k, v) });
+  vi.stubGlobal("localStorage", {
+    getItem: (k: string) => state.storage.get(k) ?? null, setItem: (k: string, v: string) => state.storage.set(k, v),
+    removeItem: (k: string) => state.storage.delete(k), key: (i: number) => [...state.storage.keys()][i] ?? null,
+    get length() { return state.storage.size; },
+  });
   vi.stubGlobal("navigator", { onLine: true }); vi.stubGlobal("fetch", state.fetch);
 });
 it("W1.4 holds the complete sale before the first request starts", async () => {
@@ -56,7 +60,7 @@ it("keeps the contradictory server ticket durably for a manager", async () => {
   expect(readHeld()[0]).toMatchObject({ acknowledgement: { orderId: "other-ticket", total: 120 }, error: "pos.saleMismatch" });
 });
 it("never sends collected money if device storage refuses the write", async () => {
-  vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => { throw new Error("full"); } });
+  vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => { throw new Error("full"); }, removeItem: () => {}, key: () => null, length: 0 });
   await useTill().charge("cash");
   expect(state.fetch).not.toHaveBeenCalled();
   expect(state.toast).toHaveBeenCalledWith("pos.offlineNoStorage", "error");
