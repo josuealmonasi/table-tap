@@ -117,7 +117,7 @@ export function usePosCharge({ restaurant, cart, details, canEmailReceipt, prici
     const posRef = crypto.randomUUID();
     const sale: HeldSale | null = method === "account" ? null : {
       posRef, restaurantId: restaurant.id, at: new Date().toISOString(), method, items: lines,
-      charge: { ...pricing }, tipPct: tipCustom === null ? tipPct : undefined, tipAmount: tipCustom ?? undefined,
+      charge: { ...pricing }, currency: restaurant.currency, tipPct: tipCustom === null ? tipPct : undefined, tipAmount: tipCustom ?? undefined,
       customerName: details.customerName.trim() || undefined, note: details.note.trim() || undefined,
       terminalRef: method === "card" ? details.terminalRef.trim() || undefined : undefined,
     };

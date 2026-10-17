@@ -37,6 +37,11 @@ export interface HeldSale {
   customerName?: string;
   note?: string;
   terminalRef?: string;
+  /**
+   * The currency it was charged in. Absent on a sale held by a till from
+   * before this was recorded.
+   */
+  currency?: string;
   /** What the till charged, from its own copy of the menu. */
   charge: { subtotal: number; serviceFee: number; tip: number; discount: number; total: number };
   /** The server's last refusal, in words; absent until one comes back. */
@@ -132,7 +137,7 @@ export function replayBody(sale: HeldSale): Record<string, unknown> {
   return {
     posRef: sale.posRef, restaurantId: sale.restaurantId, items: sale.items, method: sale.method,
     tipPct: sale.tipPct, tipAmount: sale.tipAmount, customerName: sale.customerName, note: sale.note,
-    terminalRef: sale.terminalRef, noReceipt: true,
+    terminalRef: sale.terminalRef, currency: sale.currency, noReceipt: true,
     offline: { at: sale.at, ...sale.charge },
   };
 }

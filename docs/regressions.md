@@ -17,6 +17,7 @@ us, and what now catches each one.
 | An approval acts on the amount the manager saw, through guarded routes only | A request showing MX$10 carried a MX$1,000 bill's ids |
 | A split freezes its own sitting and closes only with enough collected money | Another table's MX$20 could settle a MX$1,000 bill |
 |---|---|
+| A held sale is recorded in the currency it was charged in, or not at all | A held MX$100 sale replayed after a switch to USD was recorded as US$100 |
 | Each held sale is its own key: one tab's save cannot erase another's | Two till tabs saving at once both read the shared list back as safe, and the later write erased the earlier sale |
 | A till sale is filed under the restaurant whose screen rang it | Another tab signing in under an open till filed restaurant A's cash as restaurant B's takings |
 | A lost till response never deletes committed money (W1.1) | Deleting a settled order orphaned its payment and let replay record the cash again |
@@ -2178,3 +2179,15 @@ code from before is not lost, and is only ever rewritten to take out a sale
 that was sent. `offline-sales-storage.spec.ts` checks that holding writes one
 key, that a sale survives another tab rewriting the old list, and that old
 sales are marked and dropped one at a time.
+
+## A held sale relabelled in today's currency
+
+The held sale and the restaurant's settings had to agree on what the money
+was, and the replay never asked. A sale held offline carried only amounts;
+the server recorded it in whatever currency the restaurant used when it
+arrived, so MX$100 taken before a switch to USD became US$100 in the ledger
+(Codex audit A, finding 10). The till now saves the currency with the sale and
+sends it on replay; `ringOffline` refuses a sale whose currency is not the
+restaurant's, with `held: true`, so it stays on the device rather than be
+relabelled. A till from before this sends none and is recorded as before.
+`pos-atomic.spec.tsx` covers the refusal and both ways through.

@@ -1330,6 +1330,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     restaurantNotFound: "Restaurante no encontrado",
     cashAmount: "Eso no es una cantidad de efectivo: escribe un número como 250 o 250.50.",
     offlineSale: "Esa venta sin conexión no se puede registrar: su hora o sus montos no son válidos.",
+    offlineCurrency: "Esta venta se cobró en {collected}, pero el restaurante ahora usa {current}. Se queda en este dispositivo hasta que la moneda vuelva a ser {collected}.",
     offlineMethod: "Sin conexión solo se cobran ventas en efectivo o con tu terminal.",
     depositDay: "Eso no es un día: usa la fecha de las ventas.",
     depositAmount: "Escribe lo que depositó el banco, como 1250 o 1250.50.",

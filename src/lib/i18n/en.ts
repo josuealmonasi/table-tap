@@ -1336,6 +1336,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     cashAmount: "That is not an amount of cash: use a number like 250 or 250.50.",
     offlineSale: "That offline sale cannot be recorded: its time or its amounts are not valid.",
     offlineMethod: "Only cash and card-on-terminal sales can be rung without a connection.",
+    offlineCurrency: "This sale was charged in {collected}, but the restaurant now uses {current}. It stays on this device until the currency is {collected} again.",
     depositDay: "That is not a day: use the date of the sales.",
     depositAmount: "Write what the bank deposited, like 1250 or 1250.50.",
     depositNoSales: "There were no card payments on your terminal that day.",

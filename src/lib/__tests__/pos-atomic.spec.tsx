@@ -111,6 +111,18 @@ it("a till that names its own restaurant, or none (opened before this check), ri
     expect(res.status).toBe(200);
   }
 });
+it("a replay charged in another currency is refused and kept, never relabelled", async () => {
+  const res = await ringOffline(actor, { ...body(), currency: "USD" });
+  expect(res.status).toBe(409);
+  expect(await res.json()).toEqual({ error: "apiErr.offlineCurrency", held: true });
+  expect(state.calls).toEqual([]);
+});
+it("a replay in the restaurant's currency, or from a till that sent none, rings as before", async () => {
+  for (const currency of ["MXN", undefined]) {
+    const res = await ringOffline(actor, { ...body(), posRef: crypto.randomUUID(), currency });
+    expect(res.status).toBe(200);
+  }
+});
 it("a foreign reference conflict reveals no ticket or total", async () => {
   state.reply = { outcome: "conflict" };
   const res = await ringOffline(actor, body());
