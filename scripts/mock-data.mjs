@@ -461,7 +461,7 @@ export async function seedMock(pg) {
     await bulkInsert(
       pg,
       "payments",
-      ["restaurant_id", "order_id", "session_id", "amount", "method", "actor_email", "created_at"],
+      ["restaurant_id", "order_id", "session_id", "amount", "method", "actor_email", "created_at", "recorded_at"],
       settled.map((o, i) => {
         const cash = o.pay_method === "cash";
         return [
@@ -470,7 +470,9 @@ export async function seedMock(pg) {
           // Chosen by position rather than at random, so the log written below
           // can name the same person without a second roll of the dice.
           cash ? takers[i % takers.length] : null,
-          o.created_at,
+          // Recorded when it was taken: left to the default, every past sale
+          // would read as having arrived after its day's deposit was marked.
+          o.created_at, o.created_at,
         ];
       }),
     );
