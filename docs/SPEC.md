@@ -1424,7 +1424,11 @@ lean on who is trusted with what:
   whole balance, the tip on the latest order, the orders marked paid, a
   retried tap answered as the same payment. Online: the statement's "Pagar en
   línea" opens `account_checkout_open()`, which snapshots exactly the orders
-  owed and holds the account against the till for 35 minutes; Stripe's
+  owed and holds the account against the till for 35 minutes. The
+  hold names its checkout with `checkout_id`; only that checkout's settlement
+  or release can clear it. Settlement locks orders before summing what is owed.
+  A cancellation rechecks its planned paid state and hold under account/order
+  locks; a 409 makes the dialog fetch and confirm a fresh plan. Stripe's
   webhook settles that checkout with `account_checkout_settle()` (once, and a
   failure throws so Stripe retries), and an abandoned session lifts the hold
   through `account_checkout_release()` — only an open checkout's, and opening

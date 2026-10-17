@@ -98,20 +98,23 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Conditional on the status read above, so of two cancels racing only one
-  // moves the order. The other would write a second handback, and the corte
-  // would take the sale out of the drawer twice.
+  // Status, paid state and account hold must still match the plan. Otherwise
+  // a collection could turn an unpaid cancel into paid food with no refund.
   const { data: moved, error } = await admin.rpc("cancel_order", {
     p_restaurant: actor.restaurantId,
     p_order: id,
     p_refund: refundId,
+    p_expected_paid: order.paid,
+    p_expected_account: order.account_id ?? null,
+    p_expected_hold: read.hold,
+    p_expected_checkout: read.holdId,
     p_legacy_demand: await legacyStockDemand(actor.restaurantId, order),
   });
   if (error) {
     console.error("cancel failed:", error.message);
     return await apiError("apiErr.orderCancel", 500);
   }
-  if (!moved) return await apiError("apiErr.cancelStatus", 409);
+  if (!moved) return await apiError("apiErr.cancelChanged", 409);
 
   // The order trigger returned its reservation in the status transaction.
   // A failed stock return rolls that transaction back, so retrying is safe.

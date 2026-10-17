@@ -23,7 +23,7 @@ export interface CancelTarget {
 }
 
 export type CancelRead =
-  | { order: CancelTarget; plan: CancelPlan }
+  | { order: CancelTarget; plan: CancelPlan; hold: string | null; holdId: string | null }
   | { error: string; status: number };
 
 export async function readCancel(
@@ -54,10 +54,12 @@ export async function readCancel(
   // the orders the payment was opened for, this one among them, and a dish
   // cancelled in between would be paid for anyway. Wait for it to land or
   // run out — the hold is half an hour at most.
-  if (!order.paid && order.account_id) {
+  let hold: string | null = null;
+  let holdId: string | null = null;
+  if (order.account_id) {
     const { data: account, error: accountErr } = await admin
       .from("customer_accounts")
-      .select("checkout_until")
+      .select("checkout_until, checkout_id")
       .eq("id", order.account_id)
       .eq("restaurant_id", restaurantId)
       .maybeSingle();
@@ -65,7 +67,9 @@ export async function readCancel(
       console.error("cancel: account read failed:", accountErr.message);
       return { error: "apiErr.orderCancel", status: 500 };
     }
-    if (account?.checkout_until && new Date(account.checkout_until) > new Date()) {
+    hold = account?.checkout_until ?? null;
+    holdId = account?.checkout_id ?? null;
+    if (!order.paid && hold && new Date(hold) > new Date()) {
       return { error: "apiErr.accountPayingOnline", status: 409 };
     }
   }
@@ -86,5 +90,5 @@ export async function readCancel(
     payments = data ?? [];
   }
 
-  return { order, plan: cancelPlan(order, payments) };
+  return { order, plan: cancelPlan(order, payments), hold, holdId };
 }

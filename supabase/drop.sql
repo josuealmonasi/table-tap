@@ -126,6 +126,7 @@ drop function if exists public.recover_stock_reservations();
 
 drop function if exists public.abandon_checkout(uuid, boolean, jsonb);
 drop function if exists public.cancel_order(uuid, uuid, text, jsonb);
+drop function if exists public.cancel_order(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid);
 drop function if exists public.recover_stock_reservations(uuid);
 drop function if exists public.record_ingredient_price();
 drop function if exists public.recipe_line_same_restaurant();
