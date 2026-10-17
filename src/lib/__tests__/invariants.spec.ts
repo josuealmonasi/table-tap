@@ -471,12 +471,13 @@ describe("a zero platform fee is never sent to Stripe", () => {
     // not, and card orders would go through while paying the table's bill died.
     // The diner's checkout opens its session through `openCardSession`.
     expect(read("src/app/api/checkout/route.ts")).toMatch(/await openCardSession\(/);
-    for (const file of ["src/lib/checkout/card-session.ts", "src/app/api/bill/pay/route.ts"]) {
+    for (const file of ["src/lib/checkout/card-session.ts", "src/app/api/bill/pay/route.ts",
+      "src/app/api/split/pay/route.ts", "src/app/api/account/pay/route.ts"]) {
       const body = read(file);
       const uses = body.includes("application_fee_amount");
       expect(uses, `${file} no longer sets an application fee`).toBe(true);
       expect(
-        /appFee > 0 \? \{ application_fee_amount/.test(body),
+        /(appFee|fee\.cents|feeCents) > 0 \? \{ application_fee_amount/.test(body),
         `${file} sends application_fee_amount even when it is zero`,
       ).toBe(true);
     }
@@ -1327,9 +1328,12 @@ describe("every fact sent to Stripe is read back", () => {
 
   it("is read by the function that settles it", () => {
     const settle = read("src/lib/checkout-settle.ts");
+    // What `settleCheckout` reads before it dispatches — our fee's ledger row —
+    // is read for every shape, so it counts as read by each.
+    const everyShape = bodyOf(settle, "settleCheckout");
     const orphans: string[] = [];
     for (const [route, fn] of PAIRS) {
-      const body = bodyOf(settle, fn);
+      const body = bodyOf(settle, fn) + everyShape;
       // A file that writes no metadata would pass this by saying nothing.
       expect(keysWritten(route).length, `${route} writes no Stripe metadata — has the session moved?`).toBeGreaterThan(0);
       for (const key of keysWritten(route)) {
@@ -2648,3 +2652,16 @@ describe("every list of logins reads every page", () => {
   });
 });
 
+
+describe("every fee we charge is in the ledger", () => {
+  it("sends Stripe no application fee without the ledger row that reserved it", () => {
+    // The month's ceiling is read from `platform_fees`, one row per charge,
+    // reserved before Stripe is asked. A session carrying our fee without its
+    // `fee_id` is a fee the ceiling never saw: the webhook cannot take it, so
+    // the month counts short — the one way to charge a restaurant past it.
+    const charging = walk("src").filter(f => /application_fee_amount/.test(read(f)));
+    expect(charging.length, "the scan found no Stripe session carrying our fee").toBeGreaterThanOrEqual(4);
+    // `feeMetadata` is the one thing that writes `fee_id` onto a session.
+    expect(charging.filter(f => !/fee_id|feeMetadata\(/.test(read(f))), "a Stripe session charges our fee without its ledger row").toEqual([]);
+  });
+});

@@ -12,8 +12,6 @@ interface CheckoutOrderInput {
   deferred: boolean;
   pricing: PricedCart;
   taxPct: number;
-  /** What we take from this order, in cents. */
-  appFeeCents: number;
   couponCode: string | null;
   currency: string;
   verified: OrderLineItem[];
@@ -43,7 +41,9 @@ export function checkoutOrderRow(o: CheckoutOrderInput) {
     tip: pricing.tip,
     tax_pct: o.taxPct,
     discount: pricing.discount,
-    platform_fee: o.appFeeCents / 100,
+    // Our fee lives in `platform_fees`, reserved before this row is written;
+    // `orders.platform_fee` is the frozen record of fees from before it.
+    platform_fee: 0,
     coupon_code: o.couponCode,
     // Where the discount came from, so the owner can tell a menu sale from
     // a quantity deal from a coupon when reviewing an order later.

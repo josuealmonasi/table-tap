@@ -3,6 +3,7 @@ import { stripe } from "@/lib/stripe";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
+import { refundFee } from "@/lib/platform-fee";
 
 type Db = ReturnType<typeof createAdminClient>;
 
@@ -109,6 +110,13 @@ export async function refundDue(
     await returnOurFee(client, intent, stripeAccount, cents, id).catch(e =>
       console.error("refund due: our fee could not be returned", e),
     );
+  }
+
+  // The share of our fee that went back with it. A charge refunded by hand
+  // in Stripe is left counted: the safe way round for the month's ceiling.
+  if (refundId) {
+    await refundFee(restaurantId, intent, cents, refundId)
+      .catch(err => console.error("refund due: the fee refund stays uncounted", err));
   }
 
   // Only the request that writes the row says so in the log, so a retry that

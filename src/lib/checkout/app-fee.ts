@@ -1,12 +1,9 @@
-import { feesTakenThisMonth } from "@/lib/fee-month";
-import { orderFeeCents } from "@/lib/plan";
+import { NO_FEE, reserveFee, type FeeHold } from "@/lib/platform-fee";
 import type { RestaurantPlan } from "@/lib/plan-server";
 
 /**
- * What we take from a diner's order, in cents.
- *
- * Worked out before the row is written so it can be recorded on it — the
- * ceiling for the month is summed from these.
+ * The fee we take from a diner's order, reserved under the month's ceiling
+ * before the order is written and Stripe is asked (`reserveFee`).
  *
  * Capped against the food rather than the amount charged: the tip is the
  * diner's money on its way to the person who served them, and letting it
@@ -14,13 +11,12 @@ import type { RestaurantPlan } from "@/lib/plan-server";
  * order. A deferred order pays nothing here — it settles later, and the
  * fee is taken then.
  */
-export async function checkoutFeeCents(
+export async function checkoutFee(
   restaurantId: string,
   plan: RestaurantPlan | null,
   deferred: boolean,
   subtotal: number,
-): Promise<number> {
-  if (!plan || deferred) return 0;
-  const takenThisMonth = plan.limits.fee_cap ? await feesTakenThisMonth(restaurantId) : 0;
-  return orderFeeCents(plan.limits, Math.round(subtotal * 100), takenThisMonth);
+): Promise<FeeHold> {
+  if (!plan || deferred) return NO_FEE;
+  return reserveFee(restaurantId, plan.limits, Math.round(subtotal * 100), "order");
 }

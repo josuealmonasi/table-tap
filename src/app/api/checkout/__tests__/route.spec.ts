@@ -69,7 +69,13 @@ vi.mock("@/lib/stock-service", () => ({
   releaseStock: (r: string, lines: unknown) => releaseStock(r, lines),
   raiseStockNotifications: () => step.notify(),
 }));
-vi.mock("@/lib/checkout/app-fee", () => ({ checkoutFeeCents: async () => 0 }));
+vi.mock("@/lib/checkout/app-fee", () => ({ checkoutFee: async () => ({ id: null, cents: 0 }) }));
+vi.mock("@/lib/platform-fee", () => ({
+  NO_FEE: { id: null, cents: 0 },
+  releaseFee: async () => {},
+  feeMetadata: () => ({}),
+  stripeRefusedOutright: () => true,
+}));
 vi.mock("@/lib/checkout/card-session", () => ({ openCardSession: () => step.openCard() }));
 vi.mock("@/lib/checkout/cart-error", () => ({
   refuseCart: async () => NextResponse.json({ error: "cart" }, { status: 400 }),

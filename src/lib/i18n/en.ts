@@ -1250,6 +1250,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     accountBillChanged: "The bill changed since you opened it. Check it and try again.",
     accountNothingOwed: "This account owes nothing.",
     accountPayingOnline: "An online payment is under way for this account. Wait for it to finish or run out.",
+    sharePayingOnline: "An online payment for your share is already in progress. Finish it, or wait a few minutes for it to expire.",
     accountBalanceChanged: "What this account owes changed: it now owes {owed}. Check it with the customer.",
     accountStatementChanged: "Your account changed while you were looking at it. Check it and try again.",
     mailOff: "Sending by email isn't available.",

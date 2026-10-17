@@ -81,6 +81,7 @@ async function sweepLeftovers(admin) {
   const { count: shifts } = await admin
     .from("cash_shifts").delete({ count: "exact" }).eq("opened_by", ACTOR);
   await admin.from("terminal_deposits").delete().eq("recorded_by", ACTOR);
+  await admin.from("platform_fees").delete().eq("ref", `${MARK}:fee`);
   const { count: ingredients } = await admin
     .from("ingredients").delete({ count: "exact" }).eq("updated_by", ACTOR);
 
@@ -109,12 +110,15 @@ export async function plantNeighbour(admin, restaurantId) {
       .limit(1).maybeSingle(),
   ]);
 
-  const { id: orderId } = await keep("order", "orders", {
+  const { id: orderId, error: orderError } = await keep("order", "orders", {
     restaurant_id: restaurantId, status: "received", paid: true, subtotal: 11.5,
     service_fee: 0, tip: 0, tax_pct: 0, total: 11.5, currency: "MXN",
     items: [{ itemId: "x", name: "rls fixture", emoji: "x", price: 11.5, qty: 1, mods: {} }],
   });
 
+  // Everything else hangs off this order, so a refusal here is said out loud:
+  // swallowed, it left half the sweep with nothing to attack and no reason.
+  if (!orderId) console.error(`  rls fixture: the neighbour's order was refused — ${orderError?.message ?? "no row came back"}`);
   if (orderId) {
     // Named, like every real cash payment: `pnpm money` fails a cash row with
     // nobody behind it, and a run of this killed part-way through left one
@@ -266,12 +270,18 @@ export async function plantNeighbour(admin, restaurantId) {
     restaurant_id: restaurantId, sales_day: "2001-01-01", expected: 1, received: 1, note: MARK, recorded_by: ACTOR,
   });
 
+  // One of our fees on their ledger: what decides how much more we may charge
+  // them this month. Released and in 2001, so no real ceiling moves.
+  await keep("platformFee", "platform_fees", {
+    restaurant_id: restaurantId, period: "2001-01-01", cents: 1, status: "released", source: "order", ref: `${MARK}:fee`,
+  });
+
   return {
     planted,
     /** Children first, so nothing is left holding a reference. */
     remove: async () => {
       const order = [
-        "deposit", "waste", "purchase", "count", "recipeLine", "ingredient", "withdrawal", "shift",
+        "platformFee", "deposit", "waste", "purchase", "count", "recipeLine", "ingredient", "withdrawal", "shift",
         "accountCheckout", "account",
         "loyaltyRedemption", "loyaltyVisit", "loyaltyCard", "loyaltyProgram",
         "split", "sitting", "request", "notification", "iconGroup", "log", "colleague",

@@ -21,6 +21,7 @@ us, and what now catches each one.
 | Nobody hands `paymentOptions` a hardcoded `atTable` | The cart passed `true` always, so paying at the till could never be offered |
 | No route parses a request body by hand | Malformed JSON reached a money route as an exception and came back a 500 |
 | A time-windowed read of a growing table pages through every row | Analytics said "1000 Pedidos" for a day of 1100: the server stops each read at 1000 rows and says nothing |
+| Every fee we charge Stripe carries the ledger row that reserved it | Summed from orders, the month's fee ceiling missed divided bills, late webhooks, account payments, a fee filed under the month its food was ordered, and two diners at once |
 | The month's fee ceiling counts only fees we took, or a checkout still open | It counted abandoned checkouts and refunded cancellations, and orders past the early ceiling paid no fee |
 | Every read of the extras each dish offers pages, or is one dish's | Past 1000 links the menu editor read the first thousand, and saving a dish's extras deleted the ones it never saw |
 | Server code takes only components from a `"use client"` module | The costs page imported its tab list from a client component and every tab failed to render |
@@ -1793,4 +1794,88 @@ alone; a shared charge, or one never written on the order (a table's bill
 settles without one), still counts. Probed on dev: a cancelled table-bill fee
 order and a cancelled own checkout at MX$0.75 each now add 75 cents, the
 table's.
+
+## The fee ceiling, reviewed: kept in a ledger of its own
+
+A second review (Codex, at the user's request) of the two fixes above found
+the ceiling could still count short — the direction that charges a restaurant
+past "never more than X" — in five more ways, all because it was summed from
+`orders.platform_fee`, which records neither when a charge happened, whether
+it went through, nor how much of it went back:
+
+- a paid checkout whose webhook was late read as abandoned after 35 minutes;
+- a divided bill's fee, written on an order that stays unpaid until the last
+  share lands, was not counted at all;
+- two checkouts reading the month at once both fit under one ceiling, a table
+  bill's fee was written only on settlement and an account's lived in
+  `account_checkouts`, and two shares opened at once each charged the fee;
+- a fee was filed under the month its food was ordered, so a September order
+  paid in October never counted in October;
+- a table bill's fee write ignored its error.
+
+The ceiling is now its own ledger, `platform_fees`, one row per charge. Every
+checkout reserves its fee there before Stripe is asked, under a lock per
+restaurant; the session carries the row as `fee_id`; the webhook takes it,
+expiry releases it, and refunds record the share that went back, once per
+refund id. Probed on dev: twelve reservations at once with room for two —
+two fit; a refund retried counts once; a taken fee cannot be released. `pnpm
+attack` runs those, the api gate checks that a checkout Stripe refuses gives
+its fee back, and an invariant fails on any Stripe session that charges our
+fee without its `fee_id`. `src/lib/fee-month.ts` and its order-based rules
+are gone.
+
+Codex reviewed that ledger too (#497) and found four more, fixed in the same PR:
+
+- **A divided bill's share could be paid into another restaurant's Stripe
+  account.** The split was looked up by its id and sitting, never tied to the
+  restaurant whose account took the money: a diner holding a real share could
+  name another restaurant that takes cards, pay it there, and have the first
+  restaurant's share marked paid with none of the money. The split, its
+  sitting and the table now have to belong to the restaurant asked; an api
+  case pays through another restaurant and expects 403 and no fee reserved.
+- A failed Stripe call released its fee even when Stripe's answer never
+  arrived — and Stripe says such a session may exist. Released now only on an
+  outright refusal (a 4xx).
+- A session opened before the ledger had no `fee_id`, so its fee would never
+  be counted. It is recorded from what the session carries, once; the
+  backfill is now per order and safe to run again, because nothing writes
+  `orders.platform_fee` any more.
+- A share abandoned and reopened after another paid left the whole bill
+  fee-free: the fee rode on one session. Each share now carries its slice.
+
+Probed on dev through the real `takeFee`: a pre-ledger table bill delivered
+twice is counted once; a session whose row is gone is counted from what it
+carries; an order the backfill counted is not counted again.
+
+A third review (Codex) closed the tenancy finding and found five more, fixed:
+a 409 (an idempotency key still being worked on) was read as "no session"
+and released its fee; the fallback swallowed a failed read and dropped the
+fee — it throws now, and a session we wrote needs no read at all; a legacy
+table bill or share replayed after its fee was backfilled was counted twice —
+it is keyed now by the order the old code wrote the fee on, the backfill's
+key; and a share reopened by the same diner opened a fee-free second session
+— the earlier one is expired at Stripe first. The cutover is closed by fact,
+not code: no production restaurant has a Stripe account, so no session from
+before the ledger can be open, and the migration refuses to apply while one
+does. Each fix has a test in `platform-fee.spec.ts` that fails with it undone.
+
+A fourth review (Codex) closed the 409, failed-read and cutover findings and
+found one more that was diner money, older than the ledger: two checkouts for
+the same share could both be open — a second request saw no session to retire
+while the first was still waiting on Stripe — and a diner who paid both paid
+twice, the second charge claimed nothing and was recorded nowhere. A share
+whose fee is still held is refused now (409, `sharePayingOnline`), and a
+second, different charge on a paid share is written as a refund due with the
+restaurant told (`record_duplicate_share`; probed on dev: one refund due of
+MX$55.50, the same charge again adds nothing, a charge already in the ledger
+is a repeat). It also flagged that rebuilding a pre-ledger session's fee from
+order history mis-keys some charges; that rebuilding is gone — no pre-ledger
+session can exist, which the migration enforces.
+
+A fifth review (Codex) found no must-fix left: no path that counts the fees
+we kept short, and none that leaves a share charged twice without a refund
+due. Its one should-fix, a revenue race — a share's reservation released
+between "nothing reserved" and "is it still held?" let the share open
+fee-free — is closed by asking once more: a ceiling that is really reached
+answers the same way twice.
 

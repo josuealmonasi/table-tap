@@ -311,6 +311,31 @@ dishes on a bill the restaurant has just cancelled.
   and our fee on it returned. Its log line carries no `method`, because the
   corte takes `refunded` rows with one out of the day's takings and this money
   was never in them. The bell's notice opens Cuentas abiertas.
+- **The month's fee ceiling lives in its own ledger.** Each plan caps our
+  per-order fee in a month (`plan_limits.fee_cap`; "never more than X" on the
+  plan card). Every checkout that carries a fee — a diner's order, a table's
+  bill, a divided bill (once per bill, `ref`), a customer account —
+  *reserves* it in `platform_fees` before Stripe is asked, through
+  `reserve_platform_fee`, which locks the restaurant and charges
+  `min(per-order fee, ceiling − what the month holds)`. A divided bill still
+  pays one fee: each share carries its slice of it, reserved under its own
+  `ref`; a share reopened expires its earlier session first, and a share
+  whose fee is still held by a checkout being opened is refused (409), so a
+  share never has two payable sessions — and a second charge on a share
+  already paid is a refund due (`record_duplicate_share`), never lost. The session carries the row as `fee_id`
+  (with `fee_cents` and `restaurant_id`); the settling webhook marks it
+  taken; it is released only when Stripe refused the session outright (a 4xx
+  other than 409) or expired it — a dropped connection, a 5xx or an
+  idempotency conflict may still be a session. A session with no reservation
+  to take (its row gone) is recorded from what it carries, once. None from
+  before the ledger can be open: no restaurant could take cards when it went
+  live, and its migration refuses to apply while one can. A refund records the share of the fee that went
+  back, rounded down and once per refund id. A month is the UTC month the
+  fee was reserved in. What nobody confirms keeps counting: a little over,
+  never under. The costs screen reads the same ledger
+  (`src/lib/platform-fee.ts`). `orders.platform_fee` is no longer written: it
+  is the frozen record of fees from before the ledger, which the schema
+  copies in once per order.
 - **Two Stripe accounts, so two webhooks.** A diner's food is a DIRECT charge
   on the restaurant's own Stripe account: Stripe's processing fee comes out of
   their balance and our per-order fee comes to us clean. As a destination

@@ -395,6 +395,60 @@ export function cases(fx) {
         diner: "nobody-here", restaurantId: r, tableId: f.splitTableId }),
       // 403: the split is real and locked, and this device has no claim on it.
       expect: [403], expectError: /no tienes una parte|do not have a share/i },
+    // A real share of this restaurant's split, paid through ANOTHER
+    // restaurant that takes cards: nothing tied the split to the restaurant
+    // whose Stripe account took the money, so the share would have been
+    // marked paid here with the money there. Refused before any fee is
+    // reserved or Stripe is asked.
+    { name: "POST /api/split/pay (a share paid through another restaurant)", as: "diner", method: "POST",
+      path: "/api/split/pay",
+      arrange: async f => {
+        const { data: other } = await f.admin.from("restaurants").select("id, stripe_account_id, stripe_charges_enabled")
+          .neq("id", r).order("name").limit(1).single();
+        const { data: otherTable } = await f.admin.from("restaurant_tables").select("id")
+          .eq("restaurant_id", other.id).order("label").limit(1).single();
+        f.otherRestaurant = other.id;
+        f.otherTable = otherTable.id;
+        await f.admin.from("restaurants").update({ stripe_account_id: "acct_api_check", stripe_charges_enabled: true }).eq("id", other.id);
+        return async () => {
+          await f.admin.from("restaurants").update({
+            stripe_account_id: other.stripe_account_id, stripe_charges_enabled: other.stripe_charges_enabled,
+          }).eq("id", other.id);
+        };
+      },
+      body: async f => ({ splitId: f.lockedSplitId, sessionId: f.splitSessionId,
+        diner: `${MARK}-unpaid`, restaurantId: f.otherRestaurant, tableId: f.otherTable }),
+      expect: [403], expectError: /no tienes una parte|do not have a share/i,
+      effect: async f => {
+        const since = new Date(Date.now() - 120_000).toISOString();
+        const { count } = await f.admin.from("platform_fees").select("id", { count: "exact", head: true })
+          .eq("restaurant_id", f.otherRestaurant).gte("created_at", since);
+        return count === 0 || `${count} fee(s) reserved against the other restaurant`;
+      } },
+    // A share whose checkout another tab is opening right now: its slice of
+    // the fee is reserved and its session not yet noted. A second checkout
+    // used to open beside it fee-free, and a diner who paid both paid twice.
+    { name: "POST /api/split/pay (a share whose checkout is already being opened)", as: "diner", method: "POST",
+      path: "/api/split/pay",
+      arrange: async f => {
+        const lend = await f.withCardReader();
+        const { data: food } = await f.admin.from("orders").insert({
+          restaurant_id: r, table_id: f.splitTableId, session_id: f.splitSessionId, items: [], subtotal: 50,
+          service_fee: 0, tip: 0, tax_pct: 0, discount: 0, total: 50, note: MARK, status: "received",
+        }).select("id").single();
+        const month = new Date().toISOString().slice(0, 7) + "-01";
+        const { data: held } = await f.admin.from("platform_fees").insert({
+          restaurant_id: r, period: month, cents: 1, status: "open", source: "split", ref: `split:${f.lockedSplitId}:1`,
+        }).select("id").single();
+        return async () => {
+          if (held?.id) await f.admin.from("platform_fees").delete().eq("id", held.id);
+          if (food?.id) await f.admin.from("orders").delete().eq("id", food.id);
+          await lend();
+        };
+      },
+      body: async f => ({ splitId: f.lockedSplitId, sessionId: f.splitSessionId,
+        diner: `${MARK}-unpaid`, restaurantId: r, tableId: f.splitTableId }),
+      expect: [409], expectError: /pago en línea en curso para tu parte|already in progress/i },
     { name: "POST /api/split/pay (a share already paid)", as: "diner", method: "POST",
       path: "/api/split/pay", arrange: f => f.withCardReader(),
       body: async f => ({ splitId: f.lockedSplitId, sessionId: f.splitSessionId,
@@ -419,7 +473,20 @@ export function cases(fx) {
       path: "/api/checkout", arrange: f => f.withCardReader(),
       body: { restaurantId: r, tableId: null, note: MARK, items: [{ itemId: dish.id,
         name: dish.name, price: Number(dish.price), qty: 3, emoji: "🍽️", mods: {} }] },
-      expect: [500], expectError: /pago falló|payment failed/i },
+      expect: [500], expectError: /pago falló|payment failed/i,
+      // Its fee was reserved under the month's ceiling before Stripe was
+      // asked; Stripe refused the session, so it has to be given back — an
+      // open reservation would count a fee nobody will ever pay. The released
+      // row is removed after, like everything else a case leaves.
+      effect: async f => {
+        const since = new Date(Date.now() - 120_000).toISOString();
+        const { data } = await f.admin.from("platform_fees").select("id, status")
+          .eq("restaurant_id", r).eq("source", "order").gte("created_at", since);
+        const rows = data ?? [];
+        await f.admin.from("platform_fees").delete().in("id", rows.filter(x => x.status === "released").map(x => x.id));
+        return (rows.some(x => x.status === "released") && !rows.some(x => x.status === "open"))
+          || `the fee it reserved was left ${JSON.stringify(rows.map(x => x.status))}`;
+      } },
     // A charge that fails must give the coupon use back. It is reserved before
     // Stripe is called — so a coupon on its last use cannot be spent twice by
     // two diners at once — and a reservation nobody releases burns that use

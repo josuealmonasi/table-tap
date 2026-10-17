@@ -24,6 +24,7 @@ import { attackLoyalty } from "./attack-loyalty.mjs";
 import { attackAccounts } from "./attack-accounts.mjs";
 import { attackStock } from "./attack-stock.mjs";
 import { attackRefunds } from "./attack-refunds.mjs";
+import { attackFeeCeiling } from "./attack-fees.mjs";
 import { refuseProduction, watchDevWorker } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
 
@@ -823,6 +824,10 @@ try {
   // restaurant it belongs to, and only by somebody who may move money.
   console.log("\n  Refunds due\n");
   await attackRefunds({ admin, post, who, home, neighbour, ok, bad });
+
+  // The month's fee ceiling: diners at once never take more than it allows.
+  console.log("\n  The month's fee ceiling\n");
+  await attackFeeCeiling({ admin, home, ok, bad });
 } finally {
   await sweep();
   if (raced) {

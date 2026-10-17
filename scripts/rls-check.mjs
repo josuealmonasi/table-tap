@@ -65,7 +65,7 @@ for (const table of [
   // table's division, and what the routes keep for themselves.
   "payments", "refunds_due", "notifications", "print_jobs", "bill_splits", "bill_split_claims",
   "service_requests", "dish_ratings", "plan_limits", "stock_reservations",
-  "terminal_deposits",
+  "terminal_deposits", "platform_fees",
 ]) {
   verdict(`cannot read ${table}`, await anon.from(table).select("*").limit(1));
 }
@@ -123,7 +123,13 @@ console.log("\nA signed-in restaurant reaching another's data");
 // whole section below — eight cross-tenant reads and a write — printed
 // SKIPPED and ran none of it. Every run, on every machine, for as long as
 // that row happened to sort first.
-const { data: restaurants } = await admin.from("restaurants").select("id, name, owner_id");
+// Ordered, Demo Bistro first — the same restaurant the every-table sweep
+// calls home. Unordered, Postgres returns rows in whatever order an update
+// last left them: an api case that touched another restaurant made it "mine"
+// and Demo "theirs", the fixture was planted into the sweep's own home, and
+// half the sweep had nothing to attack.
+const { data: unordered } = await admin.from("restaurants").select("id, name, owner_id").order("name");
+const restaurants = [...(unordered ?? [])].sort((a, b) => Number(b.name === "Demo Bistro") - Number(a.name === "Demo Bistro"));
 const users = await everyLogin(admin);
 
 const asUser = createClient(
@@ -483,7 +489,7 @@ if (!signIn.error && theirs) {
     "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions",
     "customer_accounts", "account_checkouts",
     "cash_shifts", "cash_movements", "ingredients", "ingredient_prices", "recipe_lines",
-    "waste_entries", "ingredient_purchases", "ingredient_counts", "terminal_deposits"];
+    "waste_entries", "ingredient_purchases", "ingredient_counts", "terminal_deposits", "platform_fees"];
   const TEAM = [["anon", null], ["owner", "demo@tabletap.dev"], ["manager", "demo-manager@tabletap.dev"],
     ["waiter", "demo-waiter@tabletap.dev"], ["cashier", "demo-cashier@tabletap.dev"],
     ["kitchen", "demo-kitchen@tabletap.dev"]];

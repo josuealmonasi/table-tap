@@ -27,6 +27,8 @@ export const PART_TIP = 0.45;
 const PART_TOTAL = (PART_AMOUNT + PART_TIP).toFixed(2);
 
 export async function setup(env, base) {
+  // When this run began: what it reserved in the fee ledger is removed after.
+  const startedAt = new Date().toISOString();
   const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY);
   const ref = new URL(env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0];
 
@@ -581,6 +583,7 @@ export async function setup(env, base) {
   const kitchenOnlyOrder = await stationMake([{ itemId: "y", name: `${MARK} sandwich`, emoji: "", price: 20, qty: 1, mods: {} }]);
 
   return {
+    startedAt,
     admin, base, who, restaurant, dish, menu, serviceRequestBefore,
     withServicedOrder, servicedOrder,
     onCaja,
@@ -671,6 +674,10 @@ export async function setup(env, base) {
 /** Everything marked goes, whatever happened to the tests. */
 export async function teardown(fx) {
   const { admin, restaurant } = fx;
+  // The fees its checkouts reserved and gave back when Stripe refused the
+  // fake card reader: released rows count for nothing, but they are litter.
+  await admin.from("platform_fees").delete()
+    .eq("restaurant_id", restaurant.id).eq("status", "released").gte("created_at", fx.startedAt);
   // The costs cases' ingredients — in this restaurant and the neighbour's —
   // with their recipe lines, price history, counts, deliveries and waste; the
   // product they made for their recipe, with the waste recorded against it;
