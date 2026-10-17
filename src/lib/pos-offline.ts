@@ -52,10 +52,16 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
       { collected: body.currency, current: restaurant.currency }, { held: true });
   }
 
-  // Today's menu, with "sold out" and "closed" waived: the sale happened.
+  // What the till sold, as it sold it: the lines, their prices and a combo's
+  // parts. Recorded as they are, because the sale happened — today's menu
+  // repriced every line and, once a promotion had ended, dropped a combo's
+  // parts, so stock came off the deal instead of the burger and the fries.
+  const lines: OrderLineItem[] = offlineLines(body.items);
+
+  // Today's menu, with "sold out" and "closed" waived, only measures the
+  // difference (`offline_drift`) for a manager to see.
   const promotions = await promotionsOnSale(db, actor.restaurantId);
   const refs = cartReferences(body.items, promotions);
-  let lines: OrderLineItem[] = offlineLines(body.items);
   let serverTotal: number | null = null;
   if (refs.ok) {
     const { data: dbItems } = await db.from("menu_items")
@@ -69,7 +75,6 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
         })
       : null;
     if (verified?.ok) {
-      lines = verified.lines;
       serverTotal = priceCart({
         items: verified.lines, servicePct: restaurant.service_pct, serviceEnabled: restaurant.service_enabled,
         tipPct: Number(body.tipPct) || 0, tipAmount: typeof body.tipAmount === "number" ? body.tipAmount : undefined,

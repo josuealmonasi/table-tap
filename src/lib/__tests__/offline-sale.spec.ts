@@ -54,6 +54,15 @@ describe("the till's own lines, for a dish the menu no longer has", () => {
     expect(lines[1].name).toHaveLength(80);
     expect(lines[1].price).toBe(0);
   });
+
+  it("keeps a combo's parts as sold, and drops parts that are not dishes", () => {
+    const [combo] = offlineLines([{
+      itemId: "promo-1", name: "Combo", price: 150, qty: 2, mods: {}, comboId: "promo-1", discountPct: 10,
+      components: [{ itemId: "burger", name: "Burger", qty: 1 }, { itemId: "fries", name: "Fries", qty: 1 }, { itemId: "", qty: 1 }, { itemId: "soda", qty: 0 }],
+    }]);
+    expect(combo).toMatchObject({ comboId: "promo-1", discountPct: 10 });
+    expect(combo.components?.map(c => c.itemId)).toEqual(["burger", "fries"]);
+  });
 });
 
 describe("what a held sale sends", () => {

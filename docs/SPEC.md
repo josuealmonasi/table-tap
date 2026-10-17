@@ -1188,6 +1188,8 @@ server applies it only if nothing has happened since.
   refused for what the menu says today — only for the currency: a sale charged
   in pesos is kept on the device, not recorded, while the restaurant uses
   another currency, because recording it would relabel MX$100 as US$100.
+  Its lines are stored as the till sold them — their prices, and a combo's
+  parts, which are what stock gives up even after the promotion has ended.
   Today's menu prices it only to store the difference (`orders.offline_drift`;
   null when a dish is gone), which Analytics lists under "Ventas sin conexión"
   for a manager.
