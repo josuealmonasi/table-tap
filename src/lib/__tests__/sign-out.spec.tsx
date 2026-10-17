@@ -32,7 +32,7 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 const dispatched = async () => { await Promise.resolve(); await Promise.resolve(); };
 
-describe("sign-out waits for the worker to clear disk", () => {
+describe("sign-out waits for the worker to clear disk, but never on it", () => {
   it("does not end auth or redirect before the CLEAR acknowledgement", async () => {
     const signingOut = signOutEverywhere();
     await dispatched();
@@ -45,23 +45,25 @@ describe("sign-out waits for the worker to clear disk", () => {
     expect(assign).toHaveBeenCalledWith("/login");
   });
 
-  it.each(["FAILED", "unexpected"])("stays on the page when clearing answers %s", async answer => {
+  // A worker that cannot clear must never keep somebody signed in: the
+  // navigation to /login retires their pages anyway.
+  it.each(["FAILED", "unexpected"])("still signs out when clearing answers %s", async answer => {
     const signingOut = signOutEverywhere();
-    const rejected = expect(signingOut).rejects.toThrow("private cache clear failed");
     await dispatched();
     acknowledge(answer);
-    await rejected;
-    expect(signOut).not.toHaveBeenCalled();
-    expect(assign).not.toHaveBeenCalled();
+    await signingOut;
+    expect(signOut).toHaveBeenCalledOnce();
+    expect(assign).toHaveBeenCalledWith("/login");
   });
 
-  it("offers retry if the worker never acknowledges", async () => {
+  it("still signs out when the worker never acknowledges", async () => {
     const signingOut = signOutEverywhere();
-    const rejected = expect(signingOut).rejects.toThrow("timed out");
-    await vi.advanceTimersByTimeAsync(5000);
-    await rejected;
+    await dispatched();
     expect(signOut).not.toHaveBeenCalled();
-    expect(assign).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5000);
+    await signingOut;
+    expect(signOut).toHaveBeenCalledOnce();
+    expect(assign).toHaveBeenCalledWith("/login");
   });
 
   it("does not redirect if Supabase sign-out fails", async () => {

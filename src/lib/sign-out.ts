@@ -23,7 +23,10 @@ export async function signOutEverywhere(onHeld?: (count: number) => void): Promi
     onHeld?.(held);
     return;
   }
-  await clearPrivateCache();
+  // Best effort, and never allowed to keep somebody signed in: a worker that
+  // does not answer still forgets this person — the navigation to /login below
+  // retires their pages, and they were bound to this session in any case.
+  await clearPrivateCache().catch(() => {});
   const { error } = await createClient().auth.signOut();
   if (error) throw error;
 

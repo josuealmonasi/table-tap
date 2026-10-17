@@ -2145,8 +2145,8 @@ Sign-out waits for `CLEARED` before ending auth or redirecting, and offers a
 translated retry message if deletion cannot be confirmed.
 
 `service-worker.spec.ts` reproduces the owner's board after a login redirect;
-`service-worker-races.react-component.spec.tsx` delays network responses, disk writes and reads
-across invalidation. `sign-out.react-component.spec.tsx` withholds the acknowledgement and checks
+`service-worker-races.spec.tsx` delays network responses, disk writes and reads
+across invalidation. `sign-out.spec.tsx` withholds the acknowledgement and checks
 that neither auth nor the redirect happens. All use memory, with no live DB.
 
 Claude should run Vitest first. Service workers cannot register in Claude's

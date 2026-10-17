@@ -61,7 +61,7 @@ describe("private pages belong to one live session", () => {
     const worker = loadWorker();
     vi.stubGlobal("fetch", async () => page());
     await worker.request();
-    vi.setSystemTime(Date.now() + 3601_000);
+    vi.setSystemTime(Date.now() + 12 * 3600_000 + 61_000);
     offline();
     await expect(loadWorker(worker.stores).request()).rejects.toThrow("offline");
   });

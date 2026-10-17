@@ -23,6 +23,9 @@ const mount = (identity = privateCacheIdentity(session(), "restaurant-a", "owner
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  // Labels are counted to the minute: pin the clock so two reads agree.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-17T12:00:30Z"));
   register.mockResolvedValue({});
   subscribe.mockImplementation(callback => {
     authChange = callback;
@@ -33,7 +36,7 @@ beforeEach(() => {
     addEventListener: (_name: string, listener: () => void) => { controlChange = listener; },
   } });
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("auth and the worker agree about the private render", () => {
   it("does not mistake pending auth for sign-out when a worker takes control", () => {
@@ -81,6 +84,9 @@ describe("auth and the worker agree about the private render", () => {
 
   it("refuses expired, malformed or missing session labels", () => {
     expect(privateCacheIdentity(null, "restaurant-a", "owner")).toBeNull();
+    // A live session opens a service-long window, not the token's hour.
+    const until = Number(privateCacheIdentity(session(), "restaurant-a", "owner")?.split(":")[4]);
+    expect(until * 1000 - Date.now()).toBeGreaterThan(11 * 3600_000);
     expect(privateCacheIdentity(session("alice", "session-a", 1), "restaurant-a", "owner")).toBeNull();
     expect(privateCacheIdentity({ ...session(), access_token: "broken" }, "restaurant-a", "owner")).toBeNull();
     expect(privateCacheIdentity(session(), "restaurant-a\" bad", "owner")).toBeNull();

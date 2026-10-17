@@ -1,5 +1,34 @@
-// Only the board and till survive a drop. Bills and APIs must stay live:
-// an old bill can collect the same money twice.
+// ============================================================================
+// The kitchen board and the till survive a dropped connection.
+//
+// Every dashboard page is rendered per request, so losing the wifi mid-service
+// used to blank the screens a restaurant works from. This keeps the last board
+// and the last till that loaded, and serves them when the network does not
+// answer.
+//
+// TWO pages are cached, deliberately. /dashboard/orders carries tickets.
+// /dashboard/pos carries the menu the till sells from — with no connection it
+// keeps taking cash and own-terminal sales, holding them on the device until
+// they can be sent (see src/lib/offline-sales.ts). Neither page holds a bill:
+// a stale bills screen showing a paid table as still owing is how the same
+// money gets collected twice, so nothing under /dashboard/bills, and no API
+// response at all, is ever stored here.
+//
+// The scripts and styles those pages need are stored too: Next names each one
+// after its contents, so a stored file can never be an old version of a new
+// one, and without them a stored page is HTML that cannot run.
+//
+// Those pages are somebody's signed-in screens, and restaurant tablets are
+// shared. So they are kept per person, under the label the server rendered
+// into the page itself (`tt-private-cache`: user, session, restaurant, role and
+// how long it may be opened offline — see src/lib/private-cache-identity.ts),
+// never under a label a browser message claims. A different person's page is
+// never searched for, a session that signed out (CLEAR, a 401, or any landing
+// on /login) is retired for good, and a label past its window is not served.
+// Deletion and writes share one queue, so a page still being saved when
+// sign-out arrives cannot outlive it. Bumping VERSION discards everything a
+// previous deploy stored.
+// ============================================================================
 const VERSION = "tt-v3";
 const ASSETS = `${VERSION}-assets`;
 const META = `${VERSION}-session`;
