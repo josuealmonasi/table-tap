@@ -1970,8 +1970,9 @@ alter table orders drop column if exists receipt_email;
 -- two tickets on the pass. Null for every order that did not come from a till,
 -- so the index has to ignore those.
 alter table orders add column if not exists pos_ref uuid;
-create unique index if not exists orders_pos_ref_once
-  on orders (pos_ref) where pos_ref is not null;
+create unique index if not exists orders_restaurant_pos_ref_once
+  on orders (restaurant_id, pos_ref) where pos_ref is not null;
+drop index if exists orders_pos_ref_once;
 
 -- When a card checkout for this order last went to Stripe. A table's bill is
 -- priced from its orders' totals when the diner opens Stripe, and the webhook
@@ -4721,3 +4722,142 @@ select o.restaurant_id, date_trunc('month', o.created_at at time zone 'utc')::da
 on conflict (restaurant_id, ref) where ref is not null and status <> 'released' do nothing;
 
 revoke truncate, references, trigger on all tables in schema public from authenticated;
+
+-- A retry and a new sale share the same lock, including a foreign reference.
+-- Never reveal a different restaurant's ticket or acknowledge an unpaid shell.
+create or replace function public.pos_ticket(p_restaurant uuid, p_ref uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_order orders%rowtype;
+  v_name text;
+begin
+  perform pg_advisory_xact_lock(hashtextextended(p_ref::text, 1));
+  select * into v_order from orders
+   where restaurant_id = p_restaurant and pos_ref = p_ref for update;
+  if not found then
+    if exists (select 1 from orders where pos_ref = p_ref or id = p_ref) then
+      return jsonb_build_object('outcome', 'conflict');
+    end if;
+    return null;
+  end if;
+  if v_order.status = 'pending_payment' or (not v_order.paid
+      and (v_order.account_id is null or v_order.charged_at is null)) then
+    return jsonb_build_object('outcome', 'unsettled');
+  end if;
+  if v_order.account_id is not null then
+    select name into v_name from customer_accounts
+     where id = v_order.account_id and restaurant_id = p_restaurant;
+  end if;
+  return jsonb_build_object('outcome', 'settled', 'settled', true, 'repeat', true,
+    'orderId', v_order.id, 'total', v_order.total, 'handedOver', v_order.status = 'completed')
+    || case when v_order.account_id is null then '{}'::jsonb
+       else jsonb_build_object('onAccount', jsonb_build_object('name', v_name)) end;
+end;
+$$;
+revoke all on function public.pos_ticket(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.pos_ticket(uuid, uuid) to service_role;
+
+-- Keep the writable fields explicit: the caller cannot smuggle paid or tenant fields.
+create or replace function public.pos_insert_order(
+  p_restaurant uuid, p_ref uuid, p_order jsonb, p_status text, p_at timestamptz, p_reservation uuid
+) returns void language plpgsql security definer set search_path = public as $$
+begin
+  insert into orders (id, restaurant_id, pos_ref, status, paid, stock_managed, stock_reservation_id,
+    subtotal, service_fee, tip, discount, total, tax_pct, platform_fee, promo_detail,
+    currency, items, note, customer_name, created_at, offline_at, offline_drift)
+  values (p_ref, p_restaurant, p_ref, p_status, false, p_at is null, p_reservation,
+    (p_order->>'subtotal')::numeric, (p_order->>'service_fee')::numeric,
+    (p_order->>'tip')::numeric, (p_order->>'discount')::numeric, (p_order->>'total')::numeric,
+    (p_order->>'tax_pct')::numeric, 0, p_order->'promo_detail',
+    p_order->>'currency', p_order->'items', p_order->>'note', p_order->>'customer_name',
+    coalesce(p_at, now()), p_at, (p_order->>'offline_drift')::numeric);
+end;
+$$;
+revoke all on function public.pos_insert_order(uuid, uuid, jsonb, text, timestamptz, uuid) from public, anon, authenticated;
+grant execute on function public.pos_insert_order(uuid, uuid, jsonb, text, timestamptz, uuid) to service_role;
+
+-- Insert, stock, ledger and voucher commit together. A lost response needs only a retry.
+create or replace function public.ring_pos_sale(
+  p_restaurant uuid, p_ref uuid, p_order jsonb, p_method text, p_actor text,
+  p_status text, p_at timestamptz, p_terminal text, p_demand jsonb,
+  p_inventory boolean, p_threshold int
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_ticket jsonb;
+  v_stock jsonb := '{"ok":true,"low":[]}'::jsonb;
+  v_reservation uuid;
+begin
+  if p_method not in ('cash', 'card') or p_status not in ('received', 'completed') then
+    raise exception 'Invalid till sale';
+  end if;
+  v_ticket := public.pos_ticket(p_restaurant, p_ref);
+  if v_ticket is not null then return v_ticket; end if;
+  if p_at is not null then
+    perform public.take_stock_floor(p_restaurant, p_demand);
+  elsif p_inventory then
+    v_reservation := p_ref;
+    v_stock := public.reserve_stock(p_restaurant, p_demand, p_threshold, v_reservation);
+    if not (v_stock->>'ok')::boolean then
+      return v_stock || jsonb_build_object('outcome', 'stock');
+    end if;
+  end if;
+  perform public.pos_insert_order(p_restaurant, p_ref, p_order, 'pending_payment', p_at, v_reservation);
+  if p_at is not null then
+    perform public.settle_offline_sale(p_restaurant, p_ref, p_method, p_actor, p_at);
+  else
+    perform public.settle_sale(p_restaurant, p_ref, p_method, p_actor, p_status);
+  end if;
+  if p_method = 'card' and p_terminal is not null then
+    update payments set terminal_ref = p_terminal
+     where restaurant_id = p_restaurant and order_id = p_ref and method = 'card';
+  end if;
+  return jsonb_build_object('outcome', 'settled', 'settled', true, 'orderId', p_ref,
+    'total', (p_order->>'total')::numeric, 'low', v_stock->'low',
+    'handedOver', p_at is not null or p_status = 'completed');
+end;
+$$;
+revoke all on function public.ring_pos_sale(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int) from public, anon, authenticated;
+grant execute on function public.ring_pos_sale(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int) to service_role;
+
+-- A refused account charge rolls back its stock and unpublished ticket together.
+create or replace function public.ring_pos_account(
+  p_restaurant uuid, p_ref uuid, p_order jsonb, p_account uuid, p_actor text,
+  p_status text, p_demand jsonb, p_inventory boolean, p_threshold int
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_ticket jsonb;
+  v_charge jsonb;
+  v_stock jsonb := '{"ok":true,"low":[]}'::jsonb;
+  v_reservation uuid;
+  v_name text;
+begin
+  if p_status not in ('received', 'completed') then raise exception 'Invalid till status'; end if;
+  v_ticket := public.pos_ticket(p_restaurant, p_ref);
+  if v_ticket is not null then return v_ticket; end if;
+  -- Lock the account before stock, as every credit decision must see its latest debt.
+  select name into v_name from customer_accounts
+   where id = p_account and restaurant_id = p_restaurant for update;
+  if not found then return jsonb_build_object('outcome', 'closed'); end if;
+  begin
+    if p_inventory then
+      v_reservation := p_ref;
+      v_stock := public.reserve_stock(p_restaurant, p_demand, p_threshold, v_reservation);
+      if not (v_stock->>'ok')::boolean then
+        return v_stock || jsonb_build_object('outcome', 'stock');
+      end if;
+    end if;
+    perform public.pos_insert_order(p_restaurant, p_ref, p_order, p_status, null, v_reservation);
+    v_charge := public.account_charge(p_restaurant, p_account, array[p_ref], (p_order->>'total')::numeric, p_actor);
+    if v_charge->>'outcome' <> 'charged' then
+      raise exception using errcode = 'PT001', message = 'Account refused the sale';
+    end if;
+  exception when sqlstate 'PT001' then
+    return v_charge;
+  end;
+  return jsonb_build_object('outcome', 'settled', 'settled', true, 'orderId', p_ref,
+    'total', (p_order->>'total')::numeric, 'low', v_stock->'low', 'handedOver', p_status = 'completed',
+    'onAccount', jsonb_build_object('name', v_name, 'owed', v_charge->'owed'));
+end;
+$$;
+revoke all on function public.ring_pos_account(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int) from public, anon, authenticated;
+grant execute on function public.ring_pos_account(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int) to service_role;

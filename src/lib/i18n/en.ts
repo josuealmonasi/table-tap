@@ -1141,7 +1141,10 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
 
   pos: {
     offlineNoAccount: "Without a connection a sale cannot go on an account: take cash or use your terminal.",
-    offlineNoStorage: "This browser will not keep the sale without a connection. Charge it once the connection is back.",
+    saleNeedsReview: "The sale is kept on this device. Ask a manager to review its acknowledgement.",
+    saleMismatch: "Collected: {collected}. Server ticket: {settled}. Keep this device and ask a manager to reconcile the sale before retrying.",
+    saleUnsettled: "This sale has no settled acknowledgement. It is still kept on this device.",
+    offlineNoStorage: "This browser could not save the sale. Keep this screen open and ask a manager to restore device storage before sending it.",
     offlineHeld: "No connection: the sale is kept on this device and will be sent by itself when the connection returns.",
     offlineBanner: "No connection. You can keep charging cash or on your terminal: sales are kept on this device and sent by themselves when the connection returns.",
     offlineSending: "Sending {n} sale(s) kept while offline…",
@@ -1202,6 +1205,8 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     noExtras: "This dish takes no extras.",
   },
   apiErr: {
+    posUnsettled: "The sale could not be confirmed as settled. Keep it on the device and ask a manager to review it.",
+    posMismatch: "Today’s price differs from the amount collected. The sale is kept for replay and review.",
     orderMovedOn: "That order has already moved on.",
     stationNotInOrder: "That station has nothing to make in this order.",
     planUnknown: "That plan does not exist.",

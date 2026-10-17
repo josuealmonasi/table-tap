@@ -37,7 +37,7 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
   if (!posRef || !Array.isArray(body.items) || body.items.length === 0) return await apiError("apiErr.invalidRequest", 400);
 
   const db = createAdminClient();
-  const already = await existingTicket(db, posRef);
+  const already = await existingTicket(db, posRef, actor.restaurantId);
   if (already) return already;
 
   const { data: restaurant } = await db.from("restaurants")
@@ -71,44 +71,26 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
   }
   if (lines.length === 0) return await apiError("apiErr.invalidRequest", 400);
 
-  const { error } = await db.from("orders").insert({
-    id: posRef, pos_ref: posRef, restaurant_id: actor.restaurantId,
-    status: "pending_payment", paid: false, pay_method: null, stock_managed: false,
-    subtotal: charge.subtotal, service_fee: charge.serviceFee, tip: charge.tip, discount: charge.discount, total: charge.total,
-    tax_pct: Number(restaurant.tax_pct) || 0, platform_fee: 0, currency: restaurant.currency, items: lines,
-    note: capNote(body.note) ?? null, customer_name: capName(body.customerName) ?? null,
-    created_at: charge.at, offline_at: charge.at, offline_drift: offlineDrift(charge.total, serverTotal),
+  const { data: ticket, error } = await db.rpc("ring_pos_sale", {
+    p_restaurant: actor.restaurantId, p_ref: posRef, p_method: body.method, p_actor: actor.email,
+    p_status: "completed", p_at: charge.at, p_threshold: 0, p_inventory: false,
+    p_terminal: body.method === "card" ? terminalRef(body.terminalRef) : null,
+    p_demand: toDemandPayload(stockDemand(lines)),
+    p_order: {
+      subtotal: charge.subtotal, service_fee: charge.serviceFee, tip: charge.tip,
+      discount: charge.discount, total: charge.total, tax_pct: Number(restaurant.tax_pct) || 0,
+      currency: restaurant.currency, items: lines, note: capNote(body.note) ?? null,
+      customer_name: capName(body.customerName) ?? null, offline_drift: offlineDrift(charge.total, serverTotal),
+    },
   });
-  if (error) {
-    // Two sends racing: the other one rang it.
-    if (error.code === "23505") return (await existingTicket(db, posRef)) ?? (await apiError("apiErr.orderCreate", 500));
-    return await apiError("apiErr.orderCreate", 500);
-  }
-
-  const { error: settleError } = await db.rpc("settle_offline_sale", {
-    p_restaurant: actor.restaurantId, p_order: posRef, p_method: body.method, p_actor: actor.email, p_at: charge.at,
-  });
-  if (settleError) {
-    console.error("an offline sale failed to settle:", settleError.message);
-    await db.from("orders").delete().eq("id", posRef).eq("restaurant_id", actor.restaurantId);
-    return await apiError("apiErr.orderCreate", 500);
-  }
-
-  // The money is recorded. Stock and the voucher are best effort after it: a
-  // sale that happened stands even if its count could not be moved.
-  const { error: stockError } = await db.rpc("take_stock_floor", {
-    p_restaurant: actor.restaurantId, p_demand: toDemandPayload(stockDemand(lines)),
-  });
-  if (stockError) console.error("an offline sale's stock:", stockError.message);
-  const ref = body.method === "card" ? terminalRef(body.terminalRef) : null;
-  if (ref) {
-    await db.from("payments").update({ terminal_ref: ref })
-      .eq("restaurant_id", actor.restaurantId).eq("order_id", posRef).eq("method", "card");
-  }
+  // An error may be a lost response after commit. Deleting would orphan its money.
+  if (error || !ticket) return await apiError("apiErr.orderCreate", 503);
+  if (ticket.outcome !== "settled") return await apiError("apiErr.posUnsettled", 409);
+  if (ticket.repeat) return NextResponse.json({ ...ticket, code: orderCode(ticket.orderId) });
 
   await logEvent({
     restaurantId: actor.restaurantId, actor: actor.email, entity: "bill", action: "paid",
     detail: logDetail({ code: orderCode(posRef), amount: charge.total.toFixed(2), method: body.method }),
   });
-  return NextResponse.json({ orderId: posRef, code: orderCode(posRef), total: charge.total, offline: true });
+  return NextResponse.json({ orderId: posRef, code: orderCode(posRef), total: charge.total, offline: true, settled: true });
 }

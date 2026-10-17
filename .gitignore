@@ -33,3 +33,7 @@ yarn-error.log*
 *.tsbuildinfo
 .claude/launch.json
 TEST-ACCOUNTS.txt
+
+# Local verification and sandbox-only branch history
+/.cache/
+/.local-history/

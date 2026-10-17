@@ -1135,7 +1135,10 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
 
   pos: {
     offlineNoAccount: "Sin conexión no se puede cargar a una cuenta: cobra en efectivo o con tu terminal.",
-    offlineNoStorage: "Este navegador no guarda la venta sin conexión. Cóbrala cuando vuelva la conexión.",
+    saleNeedsReview: "La venta sigue guardada en este dispositivo. Pide a un gerente que revise su confirmación.",
+    saleMismatch: "Cobrado: {collected}. Ticket del servidor: {settled}. Conserva este dispositivo y pide a un gerente que concilie la venta antes de reintentar.",
+    saleUnsettled: "Esta venta no tiene confirmación de liquidación. Sigue guardada en este dispositivo.",
+    offlineNoStorage: "No se pudo guardar la venta en este navegador. Mantén esta pantalla abierta y pide a un gerente que restablezca el almacenamiento antes de enviarla.",
     offlineHeld: "Sin conexión: la venta quedó guardada en este dispositivo y se enviará sola al volver la conexión.",
     offlineBanner: "Sin conexión. Puedes seguir cobrando en efectivo o con tu terminal: las ventas se guardan en este dispositivo y se envían solas al volver la conexión.",
     offlineSending: "Enviando {n} venta(s) guardada(s) sin conexión…",
@@ -1196,6 +1199,8 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     noExtras: "Este platillo no lleva extras.",
   },
   apiErr: {
+    posUnsettled: "No se pudo confirmar la liquidación de la venta. Consérvala en el dispositivo y pide a un gerente que la revise.",
+    posMismatch: "El precio actual difiere del importe cobrado. La venta se conserva para enviarla y revisarla.",
     orderMovedOn: "Ese pedido ya avanzó.",
     stationNotInOrder: "Esa estación no tiene nada que preparar en este pedido.",
     planUnknown: "Ese plan no existe.",

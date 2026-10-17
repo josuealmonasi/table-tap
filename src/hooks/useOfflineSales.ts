@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useT } from "@/lib/i18n/context";
 import { useRouter } from "next/navigation";
-import { dropHeld, holdSale, markHeldError, readHeld, replayBody, type HeldSale } from "@/lib/offline-sales";
+import { dropHeld, keepAcknowledgement, saleAcknowledgement, holdSale, markHeldError, readHeld, replayBody, type HeldSale } from "@/lib/offline-sales";
 
 /** How often held sales are tried again while the till is online. */
 const RETRY_MS = 30_000;
@@ -18,6 +19,7 @@ const RETRY_MS = 30_000;
  */
 export function useOfflineSales(restaurantId: string) {
   const router = useRouter();
+  const t = useT();
   const [online, setOnline] = useState(true);
   const [held, setHeld] = useState<HeldSale[]>([]);
   const sending = useRef(false);
@@ -38,12 +40,16 @@ export function useOfflineSales(restaurantId: string) {
         } catch {
           break; // still no connection: try again later, in the same order
         }
-        if (res.ok) {
-          dropHeld(sale.posRef);
-          sent++;
+        const data = await res.json().catch(() => null);
+        const acknowledgement = saleAcknowledgement(sale, data);
+        if (res.ok && acknowledgement === "settled") {
+          if (dropHeld(sale.posRef, restaurantId)) sent++;
         } else {
-          const data = await res.json().catch(() => ({}));
-          markHeldError(sale.posRef, typeof data.error === "string" ? data.error : `HTTP ${res.status}`);
+          if (res.ok && acknowledgement === "mismatch") keepAcknowledgement(sale, data);
+          const reason = res.ok
+            ? t(acknowledgement === "mismatch" ? "pos.saleMismatch" : "pos.saleUnsettled", { collected: sale.charge.total, settled: data?.total ?? "—" })
+            : typeof data?.error === "string" ? data.error : `HTTP ${res.status}`;
+          markHeldError(sale.posRef, restaurantId, reason);
         }
       }
     } finally {
@@ -51,7 +57,7 @@ export function useOfflineSales(restaurantId: string) {
       refresh();
       if (sent > 0) router.refresh();
     }
-  }, [restaurantId, refresh, router]);
+  }, [restaurantId, refresh, router, t]);
 
   useEffect(() => {
     refresh();
@@ -83,5 +89,19 @@ export function useOfflineSales(restaurantId: string) {
     return kept;
   }, [refresh]);
 
-  return { online, held, hold, flush, setOnline };
+  const acknowledge = useCallback((sale: HeldSale, data: unknown): boolean => {
+    const result = saleAcknowledgement(sale, data);
+    if (result !== "settled") {
+      if (result === "mismatch") keepAcknowledgement(sale, data);
+      const total = (data as { total?: unknown } | null)?.total;
+      markHeldError(sale.posRef, restaurantId, t(result === "mismatch" ? "pos.saleMismatch" : "pos.saleUnsettled", { collected: sale.charge.total, settled: typeof total === "number" ? total : "—" }));
+      refresh();
+      return false;
+    }
+    const removed = dropHeld(sale.posRef, restaurantId);
+    refresh();
+    return removed;
+  }, [restaurantId, refresh, t]);
+
+  return { online, held, hold, acknowledge, flush, setOnline };
 }
