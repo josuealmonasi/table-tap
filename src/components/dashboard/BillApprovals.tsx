@@ -51,7 +51,7 @@ export default function BillApprovals({
         body: JSON.stringify({ requestId, approve, reviewedAmount }),
       });
       const data = await res.json().catch(() => ({}));
-      toast(res.ok ? t(approve ? "writeOff.done" : "dash.rejected") : (data.error ?? ""));
+      toast(res.ok ? t(approve ? "writeOff.done" : "dash.rejected") : (data.error ?? t("done.networkError")), res.ok ? undefined : "error");
       if (res.ok) {
         // One fewer thing waiting on a decision.
         badgesChanged();
@@ -71,7 +71,7 @@ export default function BillApprovals({
         body: JSON.stringify({ requestId, approve, reviewedAmount }),
       });
       const data = await res.json();
-      toast(res.ok ? t(approve ? "dash.approved" : "dash.rejected") : (data.error ?? ""));
+      toast(res.ok ? t(approve ? "dash.approved" : "dash.rejected") : (data.error ?? t("done.networkError")), res.ok ? undefined : "error");
       if (res.ok) badgesChanged();
       router.refresh();
     } finally {
