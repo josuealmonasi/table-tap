@@ -570,18 +570,26 @@ export async function seedMock(pg) {
   // So Analytics' review of offline sales has something to show: one charged
   // at an older price (MX$2.50 over today's menu), one whose dish has since
   // left the menu and could not be compared. With none seeded, no gate ever
-  // rendered that card. Paid in cash; the ledger step below records them.
+  // rendered that card. Paid in cash at the till, so their payments name the
+  // cashier who took them — cash nobody took is what `pnpm money` refuses.
   for (const [hoursAgo, drift] of [[30, 2.5], [54, null]]) {
     const lines = buildLines(products);
     const subtotal = round2(
       lines.reduce((sum, l) => sum + (l.price + l.extras.reduce((x, e) => x + e.price, 0)) * l.qty, 0),
     );
     const at = new Date(Date.now() - hoursAgo * 3600000).toISOString();
-    await pg.query(
+    const {
+      rows: [sale],
+    } = await pg.query(
       `insert into orders (restaurant_id, status, subtotal, service_fee, tip, total, currency, items,
          paid, pay_method, created_at, offline_at, offline_drift)
-       values ($1, 'completed', $2, 0, 0, $2, 'MXN', $3, true, 'cash', $4, $4, $5)`,
+       values ($1, 'completed', $2, 0, 0, $2, 'MXN', $3, true, 'cash', $4, $4, $5) returning id`,
       [rid, subtotal, JSON.stringify(lines), at, drift],
+    );
+    await pg.query(
+      `insert into payments (restaurant_id, order_id, amount, method, actor_email, created_at)
+       values ($1, $2, $3, 'cash', 'demo-cashier@tabletap.dev', $4)`,
+      [rid, sale.id, subtotal, at],
     );
   }
 
