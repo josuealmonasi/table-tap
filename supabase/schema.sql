@@ -4793,6 +4793,11 @@ begin
   v_ticket := public.pos_ticket(p_restaurant, p_ref);
   if v_ticket is not null then return v_ticket; end if;
   if p_at is not null then
+    -- It already happened, so the count floors at zero rather than refusing.
+    -- In the same transaction as the money: a sale recorded without its stock
+    -- was acknowledged, and nothing ever moved the count again. The floor
+    -- skips dishes that are gone and cannot run short, so what can fail here
+    -- is a lock that timed out, which the device's next send retries whole.
     perform public.take_stock_floor(p_restaurant, p_demand);
   elsif p_inventory then
     v_reservation := p_ref;

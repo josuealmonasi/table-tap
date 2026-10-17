@@ -1931,11 +1931,18 @@ cover those boundaries.
 
 The request and storage had to agree on when a sale begins. Cash and own-terminal
 sales are now written and read back before fetch, with their original time,
-amounts and reference. Failed storage prevents sending; a missing or refused
-answer keeps one held sale and clears its cart to prevent charging it again.
-`W1.4 holds the complete sale before the first request starts` and `never sends
-collected money if device storage refuses the write` cover both cases. Account
-credit still requires a connection and is never queued as cash.
+amounts and reference. Failed storage prevents sending; a missing answer, a
+5xx, or a refusal that says the money is already in the drawer (`held: true`:
+a changed price, an unsettled ticket) keeps one held sale and clears its cart
+to prevent charging it again. Any other refusal — out of stock, the menu
+closed, an account at its ceiling — is the sale not happening: the held copy is
+discarded and the cart stays. Kept, it would have been replayed through the
+offline path, which floors stock instead of refusing, and rung the very sale
+the server refused. `W1.4 holds the complete sale before the first request
+starts`, `never sends collected money if device storage refuses the write`,
+`a refused sale leaves nothing held and keeps the cart` and `a refusal that
+says the money is in the drawer keeps the sale held` cover these cases.
+Account credit still requires a connection and is never queued as cash.
 
 ## The held receipt and server ticket agree (W1.5)
 
@@ -1967,9 +1974,3 @@ back its unpublished order and stock together. `W1.7 never publishes an account
 ticket before atomic credit approval` and `an atomic account refusal never
 causes a second cleanup request` cover that boundary.
 
-W1 verification uses mocked-database Vitest tests, TypeScript and ESLint.
-No schema was applied and no live gate ran. Apply the schema before application
-changes, then verify concurrent replay, lost responses, foreign references,
-stock rollback and refused credit in the isolated gate database. Review any
-pre-existing pending POS shells and orphan payments before repairing them;
-a timeout is never evidence to delete money.

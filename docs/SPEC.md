@@ -289,9 +289,14 @@ dishes on a bill the restaurant has just cancelled.
   order. Each is safe to run twice, and a failure is thrown so Stripe sends the
   event again. The last share closes a divided bill on every delivery, not only
   the one that claimed it, so a close that failed is retried too. The till
-  inserts a paid sale as `pending_payment` — which no board, bill or corte
-  counts — and `settle_sale()` gives it its real status and records its money
-  together; if that fails the order is deleted and its stock put back.
+  rings a sale in one transaction, `ring_pos_sale()`: it takes the stock,
+  inserts the order as `pending_payment` — which no board, bill or corte
+  counts — and `settle_sale()` gives it its real status and records its money,
+  all or nothing. Nothing is ever deleted after the fact: a response that went
+  missing may belong to a sale that committed. A sale on an account is
+  `ring_pos_account()`, which locks the account first and runs the same
+  `account_charge()` approval; a refusal rolls back the order and its stock
+  together, so no ticket reaches the pass before the account owes it.
 - **Money taken twice is kept, not dropped.** A waiter can take cash for a
   table while a diner is on Stripe's page; the card payment then arrives for
   orders already settled. The webhook used to record it nowhere. Now the
@@ -691,7 +696,10 @@ written while the cart is being built, so an order abandoned half-rung leaves
 nothing behind and holds no stock — and there is no async payment to wait for,
 so one request creates the order already paid and already received. `pos_ref`
 makes that request idempotent: sent twice, it answers with the ticket that
-already exists rather than charging again.
+already exists rather than charging again. The reference is the till's own
+random UUID, becomes the order's id, and is unique per restaurant: a retry
+only ever finds this restaurant's ticket, and only once it is settled; a
+reference that belongs to any other order is refused without a word about it.
 
 Because none of that money reaches Stripe there is **no per-order fee** to
 take; the subscription is what pays for the till, and it is on the paid tiers
@@ -1136,21 +1144,30 @@ server applies it only if nothing has happened since.
 
 **A sale at the till is the exception**, because it is money already in hand:
 
-- With no connection (or a request that never came back), the till keeps the
-  sale on the device (`src/lib/offline-sales.ts`, `localStorage`) under the
-  reference it made for it, prints the receipt in the browser with the same
+- Every cash or own-terminal sale is saved on the device
+  (`src/lib/offline-sales.ts`, `localStorage`) before its first request
+  leaves, and let go only when the server answers that this sale, at this
+  amount, is settled. If the browser will not save it, it is not sent. With no
+  connection, a request that never came back, a 5xx, or a refusal that says
+  the money is already in the drawer (`held`: the menu's price changed, the
+  ticket is not settled yet), the till keeps the sale under the reference it
+  made for it, prints the receipt in the browser with the same
   `buildReceipt` the server uses, and tells the cashier it is held. Cash and
   card on the restaurant's own terminal only; an account's ceiling cannot be
   checked offline, so "a cuenta" refuses, and nothing goes through Stripe.
+  Any other refusal — out of stock, the menu closed — is the sale not
+  happening: the saved copy goes and the cart stays, as it always did.
 - It is sent when the connection returns, oldest first, and every 30 seconds
   while any are left (`useOfflineSales`). The reference becomes the sale's id,
   so the code on the offline receipt is the sale's code, and a sale sent twice
   is rung once.
-- The server records it as it happened (`ringOffline`, `settle_offline_sale`):
+- The server records it as it happened (`ringOffline`, through the same
+  `ring_pos_sale()` and its `settle_offline_sale()`):
   at its own time — so it lands in that day's corte and that shift's drawer —
   for what was collected, finished (the kitchen worked from the ticket; it
   never appears on the board as new), with its stock taken down to nought at
-  most (`take_stock_floor`). It is never refused for what the menu says today.
+  most (`take_stock_floor`, in the same transaction as the money). It is never
+  refused for what the menu says today.
   Today's menu prices it only to store the difference (`orders.offline_drift`;
   null when a dish is gone), which Analytics lists under "Ventas sin conexión"
   for a manager.

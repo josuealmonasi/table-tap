@@ -27,7 +27,32 @@ import { verifiedLines } from "@/lib/checkout/verified-lines";
 
 export const runtime = "nodejs";
 
-/** The till validates the cart; one database transaction rings the whole sale. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * POST /api/pos/order — a cashier rings a sale at the counter.
+ *
+ * The money is already in the drawer by the time this is called: the customer
+ * paid cash, or a card on the restaurant's own terminal. Nothing here talks to
+ * Stripe, which is why the order arrives paid and on the pass in one step
+ * rather than waiting for anyone to confirm it.
+ *
+ * The order of work is what keeps it safe:
+ *
+ *   1. Price it from the DATABASE. The till sends what was ordered, never what
+ *      it costs — same `verifyCart` and `priceCart` the diner's own cart runs,
+ *      so a dish cannot be one price at the counter and another on a phone.
+ *   2. Ring it in ONE transaction (`ring_pos_sale`, `ring_pos_account`): the
+ *      stock, the order, the payment and the voucher commit together or not at
+ *      all. If a portion went while the cashier was ringing it up, it refuses
+ *      and names what is short before any payment is recorded — the
+ *      alternative is selling food the kitchen cannot make.
+ *   3. Then the log and the receipt, which a sale that happened survives.
+ *
+ * `pos_ref` makes the whole thing idempotent. A request that times out and is
+ * sent again finds the ticket the first one rang, under the same lock, rather
+ * than charging twice and putting a second ticket on the pass.
+ */
 export async function POST(req: NextRequest) {
   const actor = await actingStaff();
   if (!actor) return await apiError("apiErr.forbidden", 403);
@@ -40,15 +65,23 @@ export async function POST(req: NextRequest) {
 
   const body = await jsonBody<PosSaleBody & { offline?: unknown }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
+  // Rung while the connection was gone and sent now: it already happened, so
+  // it is recorded as it was taken rather than checked against the menu as a
+  // new sale would be. Same role, freeze and plan checks as above.
   if (body.offline !== undefined) return await ringOffline(actor, body);
   const { posRef, items, method } = body;
 
-  if (typeof posRef !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(posRef) || !Array.isArray(items) || items.length === 0) {
+  // The till's own random UUID, never a guessable string: the reference is
+  // what a retry is matched on, and it becomes the order's id.
+  if (typeof posRef !== "string" || !UUID.test(posRef) || !Array.isArray(items) || items.length === 0) {
     return await apiError("apiErr.invalidRequest", 400);
   }
   if (method !== "cash" && method !== "card" && method !== "account") {
     return await apiError("apiErr.invalidRequest", 400);
   }
+  // "Ponlo en mi cuenta": the food goes out now and the account owes it. The
+  // cashier ringing it is the approval; the account's ceiling is checked
+  // under its lock, in the same transaction that creates the sale.
   const onAccount = method === "account";
   if (onAccount) {
     if (typeof body.accountId !== "string") return await apiError("apiErr.invalidRequest", 400);
@@ -58,9 +91,16 @@ export async function POST(req: NextRequest) {
 
   const db = createAdminClient();
 
+  // The same sale, sent twice. Answer with the ticket that already exists
+  // rather than ringing it again — and only this restaurant's ticket.
   const already = await existingTicket(db, posRef, actor.restaurantId);
   if (already) return already;
 
+  // Read with the secret key, not the staff session. `restaurants` grants a
+  // browser only the columns a diner's menu needs, so a cashier's own client
+  // cannot see `service_pct` — and a till that cannot read the service charge
+  // cannot price a sale. Every query below is scoped to the actor's own
+  // restaurant, which is what makes that safe.
   const { data: restaurant } = await db
     .from("restaurants")
     .select("id, name, currency, tax_pct, service_pct, service_enabled, timezone, low_stock_threshold, low_stock_alerts_enabled")
@@ -68,9 +108,14 @@ export async function POST(req: NextRequest) {
     .single();
   if (!restaurant) return await apiError("apiErr.forbidden", 403);
 
+  // Only what the restaurant is actually serving right now: a cashier should
+  // not be able to ring a dish from a menu that closed at lunch. The same
+  // decision the diner's own menu makes, from the same function.
   const { closedNow, onOpenMenu } = await orderableNow(db, actor.restaurantId);
   if (closedNow) return await apiError("apiErr.closedNow", 409);
 
+  // Priced from the database by the same function checkout uses, so a dish
+  // cannot be one price at the counter and another on a phone.
   const promotions = await promotionsOnSale(db, actor.restaurantId);
   const result = await verifiedLines(db, actor.restaurantId, { items, promotions, onOpenMenu });
   if (!result.ok) {
@@ -80,16 +125,32 @@ export async function POST(req: NextRequest) {
   }
   const verified = result.lines;
 
+  // No coupon: a code is the diner's to spend, not the till's to apply. The
+  // tip and the service charge come from the same `priceCart` the diner's own
+  // cart runs — two ways to price the same sale is the bug this shares code to
+  // avoid, and an exact tip is capped there rather than trusted from here.
   const pricing = priceCart({
     items: verified,
     servicePct: restaurant.service_pct,
     serviceEnabled: restaurant.service_enabled,
+    // On an account there is no tip yet: it is left when the account is paid.
     tipPct: onAccount ? 0 : Number(body.tipPct) || 0,
     tipAmount: !onAccount && typeof body.tipAmount === "number" ? body.tipAmount : undefined,
     coupon: null,
     promos: toCartPromos(promotions),
   });
 
+  // Only at the counter. The flag means "needs no preparation", and the
+  // counter is the one place where that also means already delivered — a
+  // bottled water ordered from table 6 still has to be carried to table 6.
+  //
+  // And on Caja, always: it is the register on its own, with no kitchen board
+  // for a sale to wait on, so every sale is served where it is paid.
+  //
+  // A sale of nothing but shelf items was handed over across the counter as
+  // it was rung up, so it is finished, not waiting: no kitchen ticket, nothing
+  // on the pass, no name to call out. One prepared line makes it an ordinary
+  // order again.
   const plan = await getPlan(actor.restaurantId);
   const noBoard = plan ? !can(plan.limits, "kitchenBoard") : false;
   const handedOverAtOnce =
@@ -100,7 +161,9 @@ export async function POST(req: NextRequest) {
   // A changed menu must not settle more than the drawer received.
   const collected = body.collected === undefined ? null : offlineCharge(body.collected);
   if (body.collected !== undefined && (!collected || Math.abs(collected.total - pricing.total) > 0.005)) {
-    return await apiError("apiErr.posMismatch", 409);
+    // The drawer holds what the till charged, not today's price: refused here,
+    // and kept on the device to be recorded as collected (`held`).
+    return await apiError("apiErr.posMismatch", 409, undefined, { held: true });
   }
   const common = {
     p_restaurant: actor.restaurantId, p_ref: posRef, p_actor: actor.email, p_status: finalStatus,
@@ -115,6 +178,8 @@ export async function POST(req: NextRequest) {
       customer_name: capName(body.customerName) ?? null,
     },
   };
+  // Nothing of this reaches Stripe, so there is no application fee to take:
+  // the subscription is what pays for the till (`platform_fee` is 0 in SQL).
   const { data: ticket, error } = onAccount
     ? await db.rpc("ring_pos_account", { ...common, p_account: body.accountId })
     : await db.rpc("ring_pos_sale", {
@@ -130,7 +195,12 @@ export async function POST(req: NextRequest) {
     if (onAccount && ["limit", "closed", "stale", "paying", "partly_paid"].includes(ticket.outcome)) {
       return await chargeRefusal(ticket as Exclude<ChargeResult, { outcome: "charged" }>, restaurant.currency);
     }
-    return await apiError("apiErr.posUnsettled", 409);
+    // A reference that belongs to another order, here or anywhere: refused,
+    // and nothing about that order is said.
+    if (ticket.outcome === "conflict") return await apiError("apiErr.invalidRequest", 409);
+    // A ticket that exists but is not settled yet: not a refusal of the sale —
+    // the device keeps it and sends it again (`held`).
+    return await apiError("apiErr.posUnsettled", 409, undefined, { held: true });
   }
   if (ticket.repeat) return NextResponse.json({ ...ticket, code: orderCode(ticket.orderId) });
   const order = { id: ticket.orderId as string };
@@ -143,6 +213,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ...ticket, code: orderCode(order.id) });
   }
 
+  // Logged as money taken, not as an order created, because that is what it
+  // is — and because the drawer and the ledger are reconciled against each
+  // other. `pnpm money` compares `bill/paid` rows with the payments they
+  // should match; filing a counter sale anywhere else made the two records of
+  // the same cash disagree by exactly the counter's takings.
   await logEvent({
     restaurantId: actor.restaurantId,
     actor: actor.email,
@@ -155,6 +230,8 @@ export async function POST(req: NextRequest) {
     }),
   });
 
+  // "Do you want your receipt sent, or printed?" — whichever they answer,
+  // `saleReceipt` handles it, and keeps no address.
   const { receipt, receiptHtml } = await saleReceipt({
     db,
     order: order as { id: string },
@@ -169,9 +246,12 @@ export async function POST(req: NextRequest) {
     orderId: order.id,
     code: orderCode(order.id as string),
     total: pricing.total,
+    // What the device waits for before it lets go of its held copy.
     settled: true,
     receipt,
     receiptHtml,
+    // So the screen can stop telling a cashier to call somebody who is already
+    // walking away with their drink.
     handedOver: handedOverAtOnce,
   });
 }

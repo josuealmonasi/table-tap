@@ -83,7 +83,10 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
       customer_name: capName(body.customerName) ?? null, offline_drift: offlineDrift(charge.total, serverTotal),
     },
   });
-  // An error may be a lost response after commit. Deleting would orphan its money.
+  // One transaction rings it — the order, the money and the stock — so two
+  // sends racing meet on its lock and the second gets the first one's ticket.
+  // An error may be a lost response after commit: deleting would orphan its
+  // money, so the device simply sends again.
   if (error || !ticket) return await apiError("apiErr.orderCreate", 503);
   if (ticket.outcome !== "settled") return await apiError("apiErr.posUnsettled", 409);
   if (ticket.repeat) return NextResponse.json({ ...ticket, code: orderCode(ticket.orderId) });

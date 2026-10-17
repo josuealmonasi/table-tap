@@ -93,3 +93,21 @@ it("later unreadable replies do not erase a contradictory server ticket", async 
   await offline.flush();
   expect(readHeld()[0].acknowledgement).toEqual({ orderId: "other-ticket", total: 120 });
 });
+
+it("a refused sale leaves nothing held and keeps the cart", async () => {
+  state.fetch.mockResolvedValue(Response.json({ error: "closed", code: "outOfStock", short: [] }, { status: 409 }));
+  await useTill().charge("cash");
+  expect(readHeld()).toEqual([]);
+  expect(state.clear).not.toHaveBeenCalled();
+});
+it("a refusal that says the money is in the drawer keeps the sale held", async () => {
+  state.fetch.mockResolvedValue(Response.json({ error: "mismatch", held: true }, { status: 409 }));
+  await useTill().charge("cash");
+  expect(readHeld()).toHaveLength(1);
+  expect(state.clear).toHaveBeenCalledTimes(1);
+});
+it("a server error keeps the sale held", async () => {
+  state.fetch.mockResolvedValue(Response.json({ error: "boom" }, { status: 500 }));
+  await useTill().charge("cash");
+  expect(readHeld()).toHaveLength(1);
+});

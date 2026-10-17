@@ -1141,10 +1141,10 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
 
   pos: {
     offlineNoAccount: "Without a connection a sale cannot go on an account: take cash or use your terminal.",
-    saleNeedsReview: "The sale is kept on this device. Ask a manager to review its acknowledgement.",
-    saleMismatch: "Collected: {collected}. Server ticket: {settled}. Keep this device and ask a manager to reconcile the sale before retrying.",
-    saleUnsettled: "This sale has no settled acknowledgement. It is still kept on this device.",
-    offlineNoStorage: "This browser could not save the sale. Keep this screen open and ask a manager to restore device storage before sending it.",
+    saleNeedsReview: "The sale is kept on this device. Ask a manager to check it.",
+    saleMismatch: "You charged {collected}; the system recorded {settled}. The sale stays on this device: ask a manager to match the two.",
+    saleUnsettled: "Not confirmed yet: the sale stays on this device and is sent again by itself.",
+    offlineNoStorage: "This browser would not save the sale, so it was not sent. Charge it again; if it keeps happening, check the browser's storage settings.",
     offlineHeld: "No connection: the sale is kept on this device and will be sent by itself when the connection returns.",
     offlineBanner: "No connection. You can keep charging cash or on your terminal: sales are kept on this device and sent by themselves when the connection returns.",
     offlineSending: "Sending {n} sale(s) kept while offline…",
@@ -1205,8 +1205,8 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     noExtras: "This dish takes no extras.",
   },
   apiErr: {
-    posUnsettled: "The sale could not be confirmed as settled. Keep it on the device and ask a manager to review it.",
-    posMismatch: "Today’s price differs from the amount collected. The sale is kept for replay and review.",
+    posUnsettled: "The sale is not confirmed yet. It stays on this device and is sent again by itself.",
+    posMismatch: "The menu's price changed while you were charging. The sale stays on this device and is recorded at what you charged.",
     orderMovedOn: "That order has already moved on.",
     stationNotInOrder: "That station has nothing to make in this order.",
     planUnknown: "That plan does not exist.",

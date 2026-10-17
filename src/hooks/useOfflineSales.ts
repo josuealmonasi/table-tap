@@ -103,5 +103,11 @@ export function useOfflineSales(restaurantId: string) {
     return removed;
   }, [restaurantId, refresh, t]);
 
-  return { online, held, hold, acknowledge, flush, setOnline };
+  /** A sale the server refused outright: it did not happen, so nothing is held. */
+  const discard = useCallback((sale: HeldSale): void => {
+    dropHeld(sale.posRef, restaurantId);
+    refresh();
+  }, [restaurantId, refresh]);
+
+  return { online, held, hold, acknowledge, discard, flush, setOnline };
 }

@@ -34,7 +34,16 @@ export function terminalRef(raw: unknown): string | null {
   return ref.length >= 1 && ref.length <= 40 ? ref : null;
 }
 
-/** A retry may name only a settled sale in the cashier's own restaurant. */
+/**
+ * The sale a till already rang under this `pos_ref`, answered as the ticket it
+ * made — or null when there is none.
+ *
+ * A request that timed out and was sent again must get back the sale it rang,
+ * never ring a second one: the money is in the drawer once. Only a sale in the
+ * cashier's own restaurant, and only once it is settled: an order still
+ * waiting for its money is not an acknowledgement, and the device keeps its
+ * copy (`held`) until it is.
+ */
 export async function existingTicket(
   db: ReturnType<typeof createAdminClient>,
   posRef: string,
@@ -47,7 +56,7 @@ export async function existingTicket(
   if (!data) return null;
   const approved = data.account_id && data.charged_at && data.status !== "pending_payment";
   if (data.status === "pending_payment" || (!data.paid && !approved)) {
-    return await apiError("apiErr.posUnsettled", 409);
+    return await apiError("apiErr.posUnsettled", 409, undefined, { held: true });
   }
   return NextResponse.json({
     orderId: data.id, code: orderCode(data.id as string), total: Number(data.total),
