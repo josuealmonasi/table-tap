@@ -47,6 +47,15 @@ export function backwardOptions(status: OrderStatus): OrderStatus[] {
   return LIVE_FLOW.slice(0, i).reverse();
 }
 
+/** The API uses the board's stages too, so a terminal ticket never reopens. */
+export function canMoveOrder(from: string, to: string, kitchen: boolean): boolean {
+  if (!kitchen) return from === "ready" && to === "completed";
+  const at = LIVE_FLOW.findIndex(stage => stage === from);
+  if (at < 0) return false;
+  const next = LIVE_FLOW[at + 1] ?? "completed";
+  return to === next || backwardOptions(LIVE_FLOW[at]).some(stage => stage === to);
+}
+
 /**
  * Orders for one column, oldest first.
  *

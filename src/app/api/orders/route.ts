@@ -5,11 +5,14 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MOVES_ORDERS } from "@/lib/membership";
 import { actingStaff } from "@/lib/api-guard";
+import { canMoveOrder } from "@/lib/order-flow";
 
 export const runtime = "nodejs";
 
-// PATCH /api/orders  — update an order's status. Owner-only (RLS enforced
-// because we use the user-scoped server client, not the admin client).
+// PATCH /api/orders — move an order along the board. Staff of its own
+// restaurant only, one stage at a time: the next stage or a step back, never a
+// cancelled or written-off order, and never `pending_payment`, which only a
+// payment moves. Cancelling has its own route, so a paid order is refunded.
 export async function PATCH(req: NextRequest) {
   const body = await jsonBody<{ id?: string; status?: string; from?: string }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
@@ -18,7 +21,7 @@ export async function PATCH(req: NextRequest) {
   // "cancelled" is deliberately NOT here: cancelling must go through
   // /api/orders/cancel so a paid order is always refunded first.
   const allowed = ["received", "preparing", "ready", "completed"];
-  if (!id || !status || !allowed.includes(status)) {
+  if (!id || !status || !allowed.includes(status) || (from !== undefined && typeof from !== "string")) {
     return await apiError("apiErr.invalidRequest", 400);
   }
 
@@ -33,40 +36,37 @@ export async function PATCH(req: NextRequest) {
     return await apiError("apiErr.notYourStage", 403);
   }
 
-  // Authorisation is otherwise the RLS read itself: only the owner and their
-  // staff can SELECT an order (works_at policy), so seeing it means they may
-  // advance it.
-  const { data: order } = await supabase
+  // Read through the staff session, so RLS is the first check: only the
+  // restaurant's own team can SELECT an order. Seeing it is not enough to move
+  // it any more — the move must be one the board itself would offer.
+  const { data: order, error: readError } = await supabase
     .from("orders")
-    .select("id")
+    .select("id, status, written_off")
     .eq("id", id)
-    .single();
-  if (!order) {
-    return await apiError("apiErr.forbidden", 403);
+    .eq("restaurant_id", actor.restaurantId)
+    .maybeSingle();
+  if (readError) return await apiError("apiErr.orderData", 500);
+  if (!order) return await apiError("apiErr.forbidden", 403);
+
+  if (order.written_off || (from !== undefined && from !== order.status) ||
+      !canMoveOrder(order.status, status, MOVES_ORDERS(actor.role))) {
+    return await apiError("apiErr.orderMoveChanged", 409);
   }
 
-  // Ownership is verified above. Orders have no client UPDATE policy (writes are
-  // server-only), so perform the update with the secret key.
+  // Orders have no client UPDATE policy (writes are server-only), so the
+  // write uses the secret key, scoped to the actor's restaurant.
   //
-  // `from` is sent by a move that waited out a dropped connection, and it makes
-  // the write a compare-and-set: apply it only if nothing has happened to the
-  // order since. Without it a waiter's queued "preparing", flushed on
-  // reconnect, would drag back an order the kitchen has already called ready —
-  // stale work quietly beating live work, which is the whole risk of holding
-  // anything offline. A live move sends no `from` and overwrites as it always
-  // did.
-  const write = createAdminClient().from("orders").update({ status }).eq("id", id);
-  const { data: moved, error } = await (typeof from === "string"
-    ? write.eq("status", from)
-    : write
-  ).select("id");
+  // Every move is a compare-and-set on the status just read, whether or not
+  // the client sent `from`. A queued move flushed on reconnect must not drag
+  // back an order the kitchen has already called ready — stale work quietly
+  // beating live work, which is the whole risk of holding anything offline —
+  // and a cancellation or write-off that wins the race must stay final.
+  const { data: moved, error } = await createAdminClient()
+    .from("orders").update({ status })
+    .eq("id", id).eq("restaurant_id", actor.restaurantId)
+    .eq("status", order.status).eq("written_off", false)
+    .select("id");
   if (error) return await apiError("apiErr.orderData", 500);
-
-  // Nothing matched, and the order exists: somebody else got there first. Not
-  // an error — the board is simply newer than the tap that has been waiting.
-  if (typeof from === "string" && moved?.length === 0) {
-    return NextResponse.json({ ok: false, superseded: true });
-  }
-
+  if (moved?.length !== 1) return await apiError("apiErr.orderMoveChanged", 409);
   return NextResponse.json({ ok: true });
 }

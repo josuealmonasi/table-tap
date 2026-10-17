@@ -13,6 +13,9 @@ us, and what now catches each one.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| Every board move checks the current live stage, restaurant and write-off flag | A kitchen login revived cancelled, refunded food |
+| An approval acts on the amount the manager saw, through guarded routes only | A request showing MX$10 carried a MX$1,000 bill's ids |
+| A split freezes its own sitting and closes only with enough collected money | Another table's MX$20 could settle a MX$1,000 bill |
 |---|---|
 | A lost till response never deletes committed money (W1.1) | Deleting a settled order orphaned its payment and let replay record the cash again |
 | A till repeat proves settlement before the device forgets it (W1.2) | An unpaid shell answered success and erased the held sale |
@@ -2055,3 +2058,50 @@ server's row cap. `statementOf` now uses `everyRow`, ordered by the unique order
 ID, and fails if any page fails. `accounts-server.spec.tsx`
 checks 1001 charges of MX$100 total MX$100,100 and a failed second page never
 returns a partial statement. The same statement feeds staff, customers and email.
+
+
+## A split frozen at another table's amount
+
+The join route priced the sitting sent by the phone, while the join function
+locked an independently sent split. Those two places had to agree: a cheap
+sitting could freeze an expensive split, and counting paid seats then erased
+the larger debt. The join transaction now checks all sitting capabilities,
+sums its own locked orders and writes every share before exposing the lock.
+The close transaction checks the sitting's actual unspent ledger credit before
+marking any order paid. `join.spec.tsx` checks the route and
+SQL contract; `checkout-settle.spec.ts` refuses an underfunded close and keeps
+webhook retries working. Live SQL concurrency checks remain a release gate.
+
+## An approval for ten pesos that erased a thousand
+
+Request rows and manager decisions had to agree, but authenticated staff could
+write every request field directly and approval trusted its order ids. Both
+request tables now allow scoped client reads only; their writes go through the
+role-guarded APIs. The current client already used those APIs, so no client
+mutation needed replacing. It now sends the amount shown to the manager.
+
+Both approval routes compare that amount with the saved ask and re-derived
+amount. Their transactions lock the request and orders and compare again before
+changing any debt, coupon use or decision. Changed requests are refused and
+keep their original displayed amount. `bill-approval.spec.tsx`
+reproduces forged and stale amounts, transaction refusals, failed reads and
+matching approvals. Claude must verify the effective grants and concurrent
+SQL behavior against the applied schema.
+
+## Cancelled food sent back to the kitchen
+
+The board's stages and the server's accepted updates had to agree. The API
+checked only whether staff could read the ticket, and an omitted `from` meant
+any status could replace any other. A kitchen login could revive refunded food
+after its stock had already been returned. Every update now compares the
+current status, restaurant and write-off flag atomically. Only the next live
+stage is accepted; kitchen staff retain the earlier-stage undo already offered
+by the board, and the floor hands over ready food. Cancelled, completed,
+pending-payment and written-off tickets cannot move through this route.
+A database trigger also keeps cancelled and written-off status final.
+
+`status.spec.tsx` reproduces revival and cancellation races and
+checks the legitimate moves. The offline queue keeps each step and expands
+older collapsed queues on read, so reconnect follows the same allowed path.
+A failed step keeps that ticket's later steps waiting. `offline-queue.spec.ts`
+and `useRestaurantOrders.spec.tsx` cover replay and undo.

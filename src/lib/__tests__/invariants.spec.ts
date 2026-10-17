@@ -1149,13 +1149,17 @@ describe("a repeated webhook cannot record the same money twice", () => {
     // Each `.update({...paid: true...})` must carry the guard that makes the
     // second delivery match nothing.
     const marks = [...settle.matchAll(/\.update\(\{[^}]*paid:\s*true[\s\S]{0,400}?(?=\n\n|;)/g)];
-    expect(marks.length, "found no path that marks an order paid — has the file moved?").toBeGreaterThan(0);
+    expect(settle, "the split close must use the coverage transaction").toContain('rpc("close_divided_bill"');
     // The rest moved into the database, and carry the same guard there: only
     // an order still unpaid is touched, only a share still unclaimed is.
     const schema = read("supabase/schema.sql");
     const body = (fn: string) => schema.slice(schema.indexOf(`function public.${fn}(`), schema.indexOf("$$;", schema.indexOf(`function public.${fn}(`)));
     expect(body("settle_card_orders"), "settle_card_orders lost its paid = false guard").toMatch(/where id = any\(p_orders\)\s+and paid = false/);
     expect(body("settle_split_share"), "settle_split_share lost its paid_at is null guard").toMatch(/and paid_at is null;/);
+    const close = body("close_divided_bill");
+    expect(close).toContain("v_count <> v_split.shares");
+    expect(close).toContain("v_collected - v_spent < v_owed");
+    expect(close).toContain("and paid = false and written_off = false");
 
     const unguarded = marks
       .map(m => m[0])
@@ -1372,7 +1376,7 @@ describe("every route that settles an order records the payment", () => {
   it("calls recordPayment wherever it sets paid", () => {
     for (const [file, complaint] of SETTLES) {
       const lines = read(file).split("\n").filter(l => !l.trimStart().startsWith("import"));
-      const marksPaid = lines.filter(l => /paid:\s*true|"ring_pos_sale"|"settle_(orders|card_orders|sale)"/.test(l)).length;
+      const marksPaid = lines.filter(l => /paid:\s*true|"ring_pos_sale"|"settle_(orders|card_orders|sale)"|"close_divided_bill"/.test(l)).length;
       // `recordPayment`, or the SQL that does the same job under a lock. The
       // calculator moved to `collect_on_sitting` so that reading the balance,
       // capping against it and inserting happen atomically — two waiters on
@@ -2134,7 +2138,7 @@ describe("a refused move is not a dropped connection", () => {
     expect(src, "a refusal is thrown into the offline path").not.toMatch(/if \(!res\.ok\) throw/);
     // And a queued move the server refused is dropped, not kept for ever;
     // only a server that is failing is asked again.
-    expect(src, "a refused queued move is kept and retried for ever").toMatch(/res\.status >= 500\) stuck\.push/);
+    expect(src, "a refused queued move is kept and retried for ever").toMatch(/res\.status >= 500\)\s*\{?\s*stuck\.push/);
   });
 });
 
@@ -2687,5 +2691,14 @@ describe("a diner pays by card, and only by card", () => {
     const sessions = walk("src").filter(f => /checkout\.sessions\.create\(/.test(read(f)) && !f.includes("/billing/"));
     expect(sessions.length, "the scan found no diner checkout").toBeGreaterThanOrEqual(4);
     expect(sessions.filter(f => !/payment_method_types: \["card"\]/.test(read(f))), "a diner checkout that lets Stripe choose the payment method").toEqual([]);
+  });
+});
+
+describe("approval requests are written only by guarded routes", () => {
+  it("has no browser mutation of either request table", () => {
+    const offenders = walkAll("src/components").concat(walkAll("src/hooks")).filter(file =>
+      /\.from\("(?:discount_requests|write_off_requests)"\)\s*\.(?:insert|update|delete)\(/.test(read(file)),
+    );
+    expect(offenders).toEqual([]);
   });
 });

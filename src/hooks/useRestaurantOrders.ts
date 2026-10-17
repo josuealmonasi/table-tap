@@ -92,8 +92,9 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
    *
    * Each move carries the status it started from, so the server drops anything
    * a live connection has already overtaken. A move that fails to send stays in
-   * the queue; one the server refuses as superseded does not, because the board
-   * it was arguing with is newer than it is.
+   * the queue, and so does every later step for that order: a later step cannot
+   * overtake one that still has to be sent. One the server refuses does not
+   * stay, because the board it was arguing with is newer than it is.
    */
   const flush = useCallback(async () => {
     const queue = readQueue();
@@ -101,7 +102,10 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
 
     const stuck: QueuedMove[] = [];
     let refused = 0;
+    const blocked = new Set<string>();
     for (const move of queue) {
+      // A later step cannot overtake one that still needs to be sent.
+      if (blocked.has(move.id)) { stuck.push(move); continue; }
       try {
         const res = await fetch("/api/orders", {
           method: "PATCH",
@@ -111,10 +115,13 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
         // A server that is failing may answer differently later; one that
         // refused has answered. Kept, a refused move was retried on every
         // reconnect and the board said "saved, will be sent" for ever.
-        if (res.status >= 500) stuck.push(move);
-        else if (!res.ok) refused++;
+        if (res.status >= 500) {
+          stuck.push(move);
+          blocked.add(move.id);
+        } else if (!res.ok) refused++;
       } catch {
         stuck.push(move); // still no connection: keep it for next time
+        blocked.add(move.id);
       }
     }
     writeQueue(stuck);
@@ -138,7 +145,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
       res = await fetch("/api/orders", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status }),
+        body: JSON.stringify({ id, status, from: was }),
       });
     } catch {
       // The tap used to be fired and forgotten: on a dropped connection the

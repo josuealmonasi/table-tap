@@ -1230,6 +1230,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     iconGroupSave: "Couldn't save the icon group. Please try again.",
     pickPlan: "Pick a plan to subscribe to.",
     noBilling: "This restaurant has no subscription yet.",
+    orderMoveChanged: "This order has moved on since. Refresh the board to see where it is.",
     notYourStage: "Only the kitchen can move an order between stages.",
     closedNow:
       "The kitchen isn't serving right now. Please try again during opening hours.",
@@ -1242,6 +1243,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     waiterSettles: "Your waiter is settling this table. Ask them for the bill.",
     nothingToDiscount: "That bill has nothing left to discount.",
     nothingToWriteOff: "That bill has nothing left to write off — it was collected or cancelled first.",
+    approvalChanged: "The bill changed since this request was shown. Reject it and ask for a new request.",
     requestGone: "That request has already been decided.",
     couponNotFound: "We couldn't find that coupon.",
     couponLookupFailed: "We couldn't check the coupon. Try again.",

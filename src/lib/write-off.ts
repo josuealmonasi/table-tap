@@ -46,13 +46,15 @@ export function noteProblem(reason: WriteOffReason, note: string): "missing" | "
  * a different act with its own record, and one already written off would be
  * cancelled twice — doubling what the reports say the restaurant lost.
  */
-export function writableOff(orders: Order[]): Order[] {
+export function writableOff<T extends Pick<Order, "paid" | "written_off" | "status"> & { account_id?: string | null }>(
+  orders: T[],
+): T[] {
   return orders.filter(
     o => !o.account_id && !o.paid && !o.written_off && o.status !== "cancelled" && o.status !== "pending_payment",
   );
 }
 
 /** What cancelling these costs the restaurant. */
-export function writeOffTotal(orders: Order[]): number {
+export function writeOffTotal(orders: Pick<Order, "total">[]): number {
   return Math.round(orders.reduce((sum, o) => sum + Number(o.total), 0) * 100) / 100;
 }

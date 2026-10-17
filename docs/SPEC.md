@@ -82,6 +82,11 @@ pending_payment ──(webhook: paid)──▶ received ──▶ preparing ─�
 
 `pending_payment` never reaches the board. An order that is delivered before it
 is paid rides the same track and carries its debt on the bills screen instead.
+The status API accepts the next live stage, plus the kitchen's earlier-stage
+undo. The floor can only complete ready food. Every write compares the current
+status, restaurant and write-off flag. Cancelled, written-off, completed and
+pending-payment tickets cannot move through it. Offline work keeps each step;
+older collapsed queues expand into the same permitted forward steps.
 
 An order paid for while it is `ready` ("Listos") moves to `completed` by
 itself, whichever way the money came (card, cash, the till, a split's last
@@ -161,7 +166,11 @@ dishes on a bill the restaurant has just cancelled.
 - **Coupons and promotions** are reserved and released like stock, for the same
   reason: a code with two uses left must not be spent three times.
 - **Discounts and write-offs** are requests a waiter raises and a manager
-  approves — `discount_requests`, `write_off_requests` — so the person who gives
+  approves — `discount_requests`, `write_off_requests`. Authenticated clients
+  have scoped reads only; request and decision writes use guarded APIs. Approval
+  requires the amount shown on screen, the stored request and the current amount
+  to agree, checked again under request and order locks before anything changes.
+  The person who gives
   money away is never the person who asks. A write-off also FINISHES the orders
   it cancels: `completed`, not `cancelled`, because the food went out and the
   kitchen spent it — that is the whole reason it is a write-off and not a
@@ -226,6 +235,10 @@ dishes on a bill the restaurant has just cancelled.
   finishes expires after 30 minutes and the next read cancels it, so one person
   in the bathroom cannot leave the rest unable to pay; any diner may call a
   proposal off, and nobody may once it has frozen.
+  The join transaction binds the split to its own restaurant, sitting and table,
+  sums its locked orders and writes all shares before exposing the freeze. The
+  final close checks share completeness and the sitting's unspent ledger credit
+  against the covered orders before marking them paid.
 - **A frozen split closes the other doors to the same money.** `/api/bill/pay`
   answers 409 while any sitting behind the table's unpaid orders holds a locked
   split, and `/api/bill` returns `dividing` so that even a phone which scanned

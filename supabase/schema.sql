@@ -874,11 +874,13 @@ create index if not exists discount_requests_open_idx
 alter table discount_requests enable row level security;
 drop policy if exists "team handles discount requests" on discount_requests;
 create policy "team handles discount requests"
-  on discount_requests for all
-  using (has_role(restaurant_id, array['owner', 'manager', 'waiter', 'cashier']))
-  with check (has_role(restaurant_id, array['owner', 'manager', 'waiter', 'cashier']));
+  on discount_requests for select
+  using (has_role(restaurant_id, array['owner', 'manager', 'waiter', 'cashier']));
 -- Never a customer's business: the ask names staff and carries a code.
 revoke all on discount_requests from anon;
+-- Only guarded routes may set the target, shown amount or decision.
+revoke insert, update, delete on discount_requests from authenticated;
+grant select on discount_requests to authenticated;
 
 -- USER LOGS: owners read their restaurant's log; writes happen only
 -- server-side from the user-management API routes (secret key).
@@ -1943,11 +1945,13 @@ create index if not exists write_off_requests_open_idx
 alter table write_off_requests enable row level security;
 drop policy if exists "team handles write off requests" on write_off_requests;
 create policy "team handles write off requests"
-  on write_off_requests for all
-  using (has_role(restaurant_id, array['owner', 'manager', 'waiter', 'cashier']))
-  with check (has_role(restaurant_id, array['owner', 'manager', 'waiter', 'cashier']));
+  on write_off_requests for select
+  using (has_role(restaurant_id, array['owner', 'manager', 'waiter', 'cashier']));
 -- Never a customer's business: it names staff and what a table did not pay.
 revoke all on write_off_requests from anon;
+-- Only guarded routes may set the target, shown amount or decision.
+revoke insert, update, delete on write_off_requests from authenticated;
+grant select on write_off_requests to authenticated;
 
 -- ── Emailed receipts ───────────────────────────────────────────────────────
 -- Only that one was sent, never to whom. The address a diner types is used for
@@ -2388,45 +2392,111 @@ grant select on bill_split_claims to authenticated;
 -- Two phones tapping "join" at the same instant must not take the same seat,
 -- and the last one in is what freezes the amount — so the whole thing is one
 -- statement holding the row, the way a coupon is claimed.
+drop function if exists public.join_bill_split(uuid, text, numeric);
 create or replace function public.join_bill_split(
-  p_split uuid,
-  p_diner text,
-  p_amount numeric
+  p_split uuid, p_diner text, p_restaurant uuid, p_table uuid, p_session uuid
 ) returns int language plpgsql security definer set search_path = public as $$
 declare
+  v_split bill_splits%rowtype;
+  v_sitting table_sessions%rowtype;
   v_taken int;
-  v_shares int;
-  v_status text;
   v_next int;
+  v_amount numeric;
+  v_freeze timestamptz;
 begin
-  -- Hold the split while we look, so two joiners cannot both see the last seat.
-  select shares, status into v_shares, v_status
-    from bill_splits where id = p_split for update;
-  if v_status is null or v_status <> 'proposed' then return null; end if;
+  select * into v_split from bill_splits where id = p_split;
+  if not found then return null; end if;
+  perform pg_advisory_xact_lock(hashtextextended(v_split.session_id::text, 0));
+  select * into v_split from bill_splits where id = p_split for update;
+  select * into v_sitting from table_sessions where id = v_split.session_id for update;
+  -- A split id cannot borrow a cheaper table's sitting or restaurant.
+  if v_split.session_id is distinct from p_session
+     or v_split.restaurant_id is distinct from p_restaurant
+     or v_sitting.restaurant_id is distinct from v_split.restaurant_id
+     or v_sitting.table_id is distinct from p_table
+     or v_split.status <> 'proposed' or v_split.expires_at <= now() then return null; end if;
 
-  select count(*) into v_taken from bill_split_claims where split_id = p_split;
-  -- Already in? Their own seat back, rather than a second one.
   select share_no into v_next from bill_split_claims
    where split_id = p_split and diner = p_diner;
   if v_next is not null then return v_next; end if;
-  if v_taken >= v_shares then return null; end if;
+  select count(*) into v_taken from bill_split_claims where split_id = p_split;
+  if v_taken >= v_split.shares then return null; end if;
+
+  perform 1 from orders where session_id = v_split.session_id
+    and restaurant_id = v_split.restaurant_id and table_id = v_sitting.table_id
+    order by id for update;
+  v_freeze := clock_timestamp();
+  select coalesce(sum(total), 0) into v_amount from orders
+   where session_id = v_split.session_id and restaurant_id = v_split.restaurant_id
+     and table_id = v_sitting.table_id and paid = false and written_off = false
+     and account_id is null and status not in ('cancelled', 'pending_payment')
+     and created_at < v_freeze;
+  if v_amount <= 0 then return null; end if;
 
   v_next := v_taken;
-  insert into bill_split_claims (split_id, share_no, diner)
-  values (p_split, v_next, p_diner);
-
-  -- The last one in freezes it.
-  if v_taken + 1 = v_shares then
-    update bill_splits
-       set status = 'locked', locked_at = now(), amount = p_amount
+  insert into bill_split_claims (split_id, share_no, diner) values (p_split, v_next, p_diner);
+  if v_taken + 1 = v_split.shares then
+    update bill_splits set status = 'locked', locked_at = v_freeze, amount = round(v_amount, 2)
      where id = p_split;
+    -- Shares are ready before the lock becomes visible to a paying phone.
+    update bill_split_claims
+       set amount = (floor(round(v_amount * 100) / v_split.shares)
+         + case when share_no = 0 then mod(round(v_amount * 100), v_split.shares) else 0 end) / 100
+     where split_id = p_split;
   end if;
-
   return v_next;
 end; $$;
+revoke all on function public.join_bill_split(uuid, text, uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.join_bill_split(uuid, text, uuid, uuid, uuid) to service_role;
 
-revoke all on function public.join_bill_split(uuid, text, numeric) from public, anon, authenticated;
-grant execute on function public.join_bill_split(uuid, text, numeric) to service_role;
+-- All seats paid is only a count. The sitting's ledger must cover its food too.
+create or replace function public.close_divided_bill(p_split uuid)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare
+  v_split bill_splits%rowtype;
+  v_count int;
+  v_shares numeric;
+  v_owed numeric;
+  v_collected numeric;
+  v_spent numeric;
+begin
+  select * into v_split from bill_splits where id = p_split;
+  if not found then return false; end if;
+  perform pg_advisory_xact_lock(hashtextextended(v_split.session_id::text, 0));
+  select * into v_split from bill_splits where id = p_split for update;
+  if v_split.status = 'done' then return true; end if;
+  if v_split.status <> 'locked' then return false; end if;
+  perform 1 from bill_split_claims where split_id = p_split order by share_no for update;
+  select count(*), coalesce(sum(amount), 0) into v_count, v_shares
+    from bill_split_claims where split_id = p_split and paid_at is not null;
+  if v_count <> v_split.shares or v_shares < v_split.amount then return false; end if;
+
+  perform 1 from orders where session_id = v_split.session_id
+    and restaurant_id = v_split.restaurant_id order by id for update;
+  select coalesce(sum(total), 0) into v_owed from orders
+   where session_id = v_split.session_id and restaurant_id = v_split.restaurant_id
+     and created_at < v_split.locked_at and paid = false and written_off = false
+     and account_id is null and status not in ('cancelled', 'pending_payment');
+  select coalesce(sum(amount), 0) into v_collected from payments
+   where session_id = v_split.session_id and restaurant_id = v_split.restaurant_id and order_id is null;
+  -- Sitting payments already spent on paid orders cannot cover this pot again.
+  select coalesce(sum(greatest(o.total - coalesce(p.amount, 0), 0)), 0) into v_spent
+    from orders o left join (
+      select order_id, sum(amount) amount from payments
+       where restaurant_id = v_split.restaurant_id and order_id is not null group by order_id
+    ) p on p.order_id = o.id
+   where o.session_id = v_split.session_id and o.restaurant_id = v_split.restaurant_id
+     and o.paid = true and o.written_off = false and o.status not in ('cancelled', 'pending_payment');
+  if v_collected - v_spent < v_owed then return false; end if;
+  update orders set paid = true, pay_method = 'card'
+   where session_id = v_split.session_id and restaurant_id = v_split.restaurant_id
+     and created_at < v_split.locked_at and paid = false and written_off = false
+     and account_id is null and status not in ('cancelled', 'pending_payment');
+  update bill_splits set status = 'done' where id = p_split;
+  return true;
+end; $$;
+revoke all on function public.close_divided_bill(uuid) from public, anon, authenticated;
+grant execute on function public.close_divided_bill(uuid) to service_role;
 
 
 -- ── Collecting part of a bill, atomically ───────────────────────────────────
@@ -4934,3 +5004,107 @@ end;
 $$;
 revoke all on function public.ring_pos_account(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int) from public, anon, authenticated;
 grant execute on function public.ring_pos_account(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int) to service_role;
+
+-- A manager approves the shown debt, not whatever the ids happen to owe later.
+create or replace function public.approve_write_off_request(
+  p_request uuid, p_restaurant uuid, p_actor text, p_amount numeric, p_note text
+) returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_request write_off_requests%rowtype;
+  v_count int;
+  v_total numeric;
+begin
+  select * into v_request from write_off_requests
+   where id = p_request and restaurant_id = p_restaurant for update;
+  if not found or v_request.status <> 'pending' then return 'gone'; end if;
+  if p_amount is null or p_amount <= 0 or v_request.amount <> p_amount then return 'changed'; end if;
+  perform 1 from orders where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+   order by id for update;
+  select count(*), coalesce(sum(total), 0) into v_count, v_total from orders
+   where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+     and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
+     -- An order moved onto a customer account is the account's debt now.
+     and account_id is null;
+  if v_count <> cardinality(v_request.order_ids) or round(v_total, 2) <> p_amount then return 'changed'; end if;
+
+  update orders set written_off = true, write_off_reason = v_request.reason,
+    write_off_note = v_request.note, written_off_by = p_actor, written_off_at = now(), status = 'completed'
+   where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+     and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
+     and account_id is null;
+  update write_off_requests set status = 'approved', decided_by = p_actor, decided_at = now(), decided_note = p_note
+   where id = p_request and restaurant_id = p_restaurant and status = 'pending';
+  return 'approved';
+end; $$;
+revoke all on function public.approve_write_off_request(uuid, uuid, text, numeric, text) from public, anon, authenticated;
+grant execute on function public.approve_write_off_request(uuid, uuid, text, numeric, text) to service_role;
+
+-- The coupon, its use and every order change commit with the one decision.
+create or replace function public.approve_discount_request(
+  p_request uuid, p_restaurant uuid, p_actor text, p_amount numeric
+) returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_request discount_requests%rowtype;
+  v_coupon coupons%rowtype;
+  v_count int;
+  v_total numeric;
+  v_amount numeric;
+begin
+  select * into v_request from discount_requests
+   where id = p_request and restaurant_id = p_restaurant for update;
+  if not found or v_request.status <> 'pending' then return 'gone'; end if;
+  if p_amount is null or p_amount <= 0 or v_request.amount <> p_amount then return 'changed'; end if;
+  perform 1 from orders where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+   order by id for update;
+  select count(*), coalesce(sum(total), 0) into v_count, v_total from orders
+   where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+     and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
+     and coupon_code is null and account_id is null;
+  if v_count <> cardinality(v_request.order_ids) or v_total <= 0 then return 'changed'; end if;
+  select * into v_coupon from coupons
+   where restaurant_id = p_restaurant and upper(code) = upper(v_request.code) for update;
+  if not found or not v_coupon.active
+     or v_coupon.starts_at > now() or v_coupon.ends_at <= now()
+     or v_total < v_coupon.min_subtotal
+     or v_coupon.uses_count >= v_coupon.max_uses then return 'changed'; end if;
+  v_amount := greatest(0, least(v_total, round(case when v_coupon.kind = 'percent'
+    then v_total * v_coupon.value / 100 else v_coupon.value end, 2)));
+  if v_amount <> p_amount then return 'changed'; end if;
+  if redeem_coupon(v_coupon.id) is null then return 'changed'; end if;
+
+  -- Keep the rounding remainder on the largest order, as spreadDiscount does.
+  with shares as (
+    select id, total, round(p_amount * total / v_total, 2) amount,
+      row_number() over (order by total desc, id) position
+    from orders where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+     and account_id is null
+  ), amounts as (
+    select id, greatest(0, least(total, amount + case when position = 1
+      then p_amount - sum(amount) over () else 0 end)) amount from shares
+  )
+  update orders o set coupon_code = v_coupon.code,
+    discount = round(coalesce(o.discount, 0) + a.amount, 2), total = round(o.total - a.amount, 2)
+    from amounts a where o.id = a.id and o.restaurant_id = p_restaurant;
+  insert into coupon_redemptions (restaurant_id, coupon_id, order_id, code, amount, confirmed_at)
+  values (p_restaurant, v_coupon.id, v_request.order_ids[1], v_coupon.code, p_amount, now());
+  update discount_requests set status = 'approved', decided_by = p_actor, decided_at = now()
+   where id = p_request and restaurant_id = p_restaurant and status = 'pending';
+  return 'approved';
+end; $$;
+revoke all on function public.approve_discount_request(uuid, uuid, text, numeric) from public, anon, authenticated;
+grant execute on function public.approve_discount_request(uuid, uuid, text, numeric) to service_role;
+
+-- Refunded food cannot return to the pass after its stock has been returned.
+create or replace function public.keep_order_terminal()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if (old.status = 'cancelled' or old.written_off)
+     and new.status is distinct from old.status then
+    raise exception 'A cancelled or written-off order cannot change status';
+  end if;
+  return new;
+end; $$;
+drop trigger if exists orders_keep_terminal on orders;
+create trigger orders_keep_terminal before update of status on orders
+  for each row execute function public.keep_order_terminal();
+revoke all on function public.keep_order_terminal() from public, anon, authenticated;
