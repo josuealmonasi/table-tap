@@ -21,6 +21,7 @@ us, and what now catches each one.
 | Nobody hands `paymentOptions` a hardcoded `atTable` | The cart passed `true` always, so paying at the till could never be offered |
 | No route parses a request body by hand | Malformed JSON reached a money route as an exception and came back a 500 |
 | A time-windowed read of a growing table pages through every row | Analytics said "1000 Pedidos" for a day of 1100: the server stops each read at 1000 rows and says nothing |
+| Every diner checkout is card only | No checkout named its payment methods, so Stripe offered whatever the restaurant enabled — OXXO among them — and a voucher's money would be recorded nowhere |
 | Every fee we charge Stripe carries the ledger row that reserved it | Summed from orders, the month's fee ceiling missed divided bills, late webhooks, account payments, a fee filed under the month its food was ordered, and two diners at once |
 | The month's fee ceiling counts only fees we took, or a checkout still open | It counted abandoned checkouts and refunded cancellations, and orders past the early ceiling paid no fee |
 | Every read of the extras each dish offers pages, or is one dish's | Past 1000 links the menu editor read the first thousand, and saving a dish's extras deleted the ones it never saw |
@@ -1878,4 +1879,17 @@ due. Its one should-fix, a revenue race — a share's reservation released
 between "nothing reserved" and "is it still held?" let the share open
 fee-free — is closed by asking once more: a ceiling that is really reached
 answers the same way twice.
+
+## A voucher payment the app would never have recorded
+
+No diner checkout named its payment methods, so Stripe offered whatever the
+restaurant's account had enabled — in Mexico, OXXO among them. A voucher paid
+days later completes the Checkout session UNPAID: `settleCheckout` returns on
+anything not paid, and no handler listens for the later
+`checkout.session.async_payment_succeeded`. The diner's money would reach the
+restaurant's Stripe balance and appear nowhere in TableTap: the bill still
+owed, no payment, no refund due. Found by a read-only Codex audit of customer
+accounts; it applied to every diner checkout. Each now asks for cards only —
+wallets are cards — and an invariant fails on any diner checkout that lets
+Stripe choose (sabotaged: it named `account/pay`).
 

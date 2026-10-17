@@ -66,6 +66,11 @@ export async function openCardSession(
   return stripe.checkout.sessions.create(
     {
       mode: "payment",
+      // Cards only — wallets included, they are cards. Left to the account's
+      // defaults, Stripe offers whatever the restaurant enabled, OXXO among
+      // them: a voucher paid days later completes the session UNPAID, settling
+      // ignores it, and the money that arrives later is recorded nowhere.
+      payment_method_types: ["card"],
       line_items: p.lineItems,
       ...(discounts ? { discounts } : {}),
       success_url: `${p.origin}/order/${p.orderId}?paid=1`,

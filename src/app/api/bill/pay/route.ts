@@ -210,6 +210,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const session = await stripe.checkout.sessions.create(
       {
         mode: "payment",
+        // Cards only, as every checkout (see `card-session.ts`).
+        payment_method_types: ["card"],
         line_items: [
           {
             quantity: 1,
