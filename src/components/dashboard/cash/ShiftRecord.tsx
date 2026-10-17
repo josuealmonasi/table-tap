@@ -37,6 +37,20 @@ export default function ShiftRecord({ view, currency, timeZone, restaurantName }
   const difference = Number(shift.difference ?? 0);
   const off = Math.abs(difference) >= 0.01;
   const verdict = !off ? t("shift.exact") : difference > 0 ? t("shift.over") : t("shift.short");
+  // Money dated inside the shift that reached the server after it was
+  // counted — a sale the till held offline and sent later. The sign-off stays
+  // what it was; what it means now is shown under it. Without this the record
+  // went on saying "MX$100 over" for a drawer that, with the late sale, was
+  // exactly right.
+  const saved = shift.expected_cash === null ? null : Number(shift.expected_cash);
+  const late = saved === null ? 0 : Math.round((sum.expected - saved) * 100) / 100;
+  const hasLate = Math.abs(late) >= 0.01;
+  const nowDifference = Math.round((Number(shift.counted_cash ?? 0) - sum.expected) * 100) / 100;
+  const nowOff = Math.abs(nowDifference) >= 0.01;
+  const nowVerdict = t("shift.now", {
+    verdict: !nowOff ? t("shift.exact") : nowDifference > 0 ? t("shift.over") : t("shift.short"),
+  });
+  const lateAmount = `${late > 0 ? "+" : "−"}${money(Math.abs(late))}`;
 
   async function explain(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -83,6 +97,9 @@ export default function ShiftRecord({ view, currency, timeZone, restaurantName }
         row(t("corte.expected"), money(Number(shift.expected_cash ?? sum.expected)), true) +
         row(t("shift.countedLabel"), money(Number(shift.counted_cash ?? 0)), true) +
         row(verdict, off ? money(Math.abs(difference)) : "", true) +
+        (hasLate
+          ? row(t("shift.lateArrived"), lateAmount) + row(nowVerdict, nowOff ? money(Math.abs(nowDifference)) : "", true)
+          : "") +
         `</table>` +
         (shift.difference_note ? `<p style="font-size:14px">${escapeHtml(t("shift.why"))}: ${escapeHtml(shift.difference_note)}</p>` : "") +
         `<h2 style="font-size:15px;margin-top:20px">${escapeHtml(t("shift.trail"))}</h2>` +
@@ -125,6 +142,18 @@ export default function ShiftRecord({ view, currency, timeZone, restaurantName }
           <strong role="cell">{verdict}</strong>
           <strong role="cell">{off ? money(Math.abs(difference)) : ""}</strong>
         </div>
+        {hasLate && (
+          <>
+            <div className="tt-cashbox-line" role="row">
+              <span role="cell">{t("shift.lateArrived")}</span>
+              <span role="cell">{lateAmount}</span>
+            </div>
+            <div className={`tt-cashbox-line tt-cashbox-total${nowOff ? " tt-shift-off" : ""}`} role="row">
+              <strong role="cell">{nowVerdict}</strong>
+              <strong role="cell">{nowOff ? money(Math.abs(nowDifference)) : ""}</strong>
+            </div>
+          </>
+        )}
       </div>
 
       {shift.difference_note && (
