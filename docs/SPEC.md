@@ -1191,8 +1191,9 @@ server applies it only if nothing has happened since.
   Its lines are stored as the till sold them — their prices, and a combo's
   parts, which are what stock gives up even after the promotion has ended.
   Today's menu prices it only to store the difference (`orders.offline_drift`;
-  null when a dish is gone), which Analytics lists under "Ventas sin conexión"
-  for a manager.
+  null when a dish is gone). Analytics' "Ventas sin conexión" counts the
+  offline sales of the last 44 days — the 30 a held sale can arrive late, plus
+  two weeks to see it — and lists every one with a difference, for a manager.
 - While the device holds unsent sales, it cannot close the shift or sign out:
   they are the only record of money in the drawer. One the server refuses is
   kept with the reason, never thrown away.

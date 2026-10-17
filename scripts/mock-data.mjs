@@ -566,6 +566,41 @@ export async function seedMock(pg) {
     }
   }
 
+  // ── Two sales the till rang without a connection ───────────────────────
+  // So Analytics' review of offline sales has something to show: one charged
+  // at an older price (MX$2.50 over today's menu), one whose dish has since
+  // left the menu and could not be compared. With none seeded, no gate ever
+  // rendered that card. Paid in cash at the till, so each names the cashier
+  // who took it, in the ledger and in the log — cash nobody took, or a log
+  // that disagrees with the ledger, is what `pnpm money` refuses.
+  for (const [hoursAgo, drift] of [[30, 2.5], [54, null]]) {
+    const lines = buildLines(products);
+    const subtotal = round2(
+      lines.reduce((sum, l) => sum + (l.price + l.extras.reduce((x, e) => x + e.price, 0)) * l.qty, 0),
+    );
+    const at = new Date(Date.now() - hoursAgo * 3600000).toISOString();
+    const {
+      rows: [sale],
+    } = await pg.query(
+      `insert into orders (restaurant_id, status, subtotal, service_fee, tip, total, currency, items,
+         paid, pay_method, created_at, offline_at, offline_drift)
+       values ($1, 'completed', $2, 0, 0, $2, 'MXN', $3, true, 'cash', $4, $4, $5) returning id`,
+      [rid, subtotal, JSON.stringify(lines), at, drift],
+    );
+    await pg.query(
+      `insert into payments (restaurant_id, order_id, amount, method, actor_email, created_at)
+       values ($1, $2, $3, 'cash', 'demo-cashier@tabletap.dev', $4)`,
+      [rid, sale.id, subtotal, at],
+    );
+    // Logged as money taken, as `ringOffline` does: the corte reads the log,
+    // and `pnpm money` holds it to the ledger.
+    await pg.query(
+      `insert into user_logs (restaurant_id, actor_email, entity, action, detail, created_at)
+       values ($1, 'demo-cashier@tabletap.dev', 'bill', 'paid', $2, $3)`,
+      [rid, `code=ORD-${sale.id.replace(/-/g, "").slice(0, 4).toUpperCase()} amount=${subtotal.toFixed(2)} method=cash`, at],
+    );
+  }
+
   // ── The ledger for everything already settled ─────────────────────────
   // The demo has to look like a restaurant that has been trading, and money
   // received is part of that: the till card and the daily count both read from
