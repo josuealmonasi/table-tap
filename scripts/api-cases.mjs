@@ -955,10 +955,15 @@ export function cases(fx) {
       body: { id: unpaidOrder, status: "preparing" }, expect: [200] },
     // A move that waited out a dropped connection carries the status it began
     // at. The order is "preparing" by now, so a queued "from: received" is
-    // older than the board and must be dropped rather than drag it backwards.
+    // older than the board and must be refused rather than drag it backwards —
+    // and the order must still be where the live board put it.
     { name: "PATCH /api/orders (a stale queued move loses)", as: "kitchen", method: "PATCH",
       path: "/api/orders", body: { id: unpaidOrder, status: "received", from: "received" },
-      expect: [200], check: d => d.superseded === true || "a stale move was applied" },
+      expect: [409], expectError: /ya cambió de etapa|has moved on/i,
+      effect: async f => {
+        const { data } = await f.admin.from("orders").select("status").eq("id", unpaidOrder).single();
+        return data?.status === "preparing" || `a stale move left the order ${data?.status}`;
+      } },
     { name: "POST /api/table-payment (counter)", as: "cashier", method: "POST",
       path: "/api/table-payment", body: { orderId: unpaidOrder, settlement: "cash" },
       expect: [200],
@@ -1479,7 +1484,12 @@ export function cases(fx) {
       expect: [200] },
     { name: "POST /api/bill/discount/approve", as: "manager", method: "POST",
       path: "/api/bill/discount/approve",
-      body: async f => ({ requestId: await pendingDiscount(f), approve: true }),
+      // The manager approves the amount the ask shows, and nothing else.
+      body: async f => {
+        const requestId = await pendingDiscount(f);
+        const { data } = await f.admin.from("discount_requests").select("amount").eq("id", requestId).maybeSingle();
+        return { requestId, approve: true, reviewedAmount: Number(data?.amount) };
+      },
       // There is a request pending now, so this approves one — and a 200 that
       // took nothing off the bill is the failure this gate exists to catch.
       expect: [200],
