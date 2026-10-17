@@ -204,18 +204,59 @@ const { data: loyaltyProgram } = await admin
   .from("loyalty_programs").select("active").eq("restaurant_id", restaurant.id).maybeSingle();
 const ctx = { restaurantId: restaurant.id, tableId: table.id };
 
-async function restore() {
-  await admin.from("restaurants").update({
-    accepting_orders: full.accepting_orders,
-    plan: full.plan,
-    plan_status: full.plan_status,
-    stripe_account_id: full.stripe_account_id,
-    stripe_charges_enabled: full.stripe_charges_enabled,
-  }).eq("id", restaurant.id);
-  for (const m of menuRows ?? []) await admin.from("menus").update({ active: m.active }).eq("id", m.id);
-  if (loyaltyProgram) {
-    await admin.from("loyalty_programs").update({ active: loyaltyProgram.active }).eq("restaurant_id", restaurant.id);
+const RESTORED = {
+  accepting_orders: full.accepting_orders,
+  plan: full.plan,
+  plan_status: full.plan_status,
+  stripe_account_id: full.stripe_account_id,
+  stripe_charges_enabled: full.stripe_charges_enabled,
+};
+
+async function restoreOnce() {
+  const left = [];
+  const { error } = await admin.from("restaurants").update(RESTORED).eq("id", restaurant.id);
+  if (error) left.push(`the restaurant: ${error.message}`);
+  for (const m of menuRows ?? []) {
+    const { error: menuError } = await admin.from("menus").update({ active: m.active }).eq("id", m.id);
+    if (menuError) left.push(`menu ${m.id}: ${menuError.message}`);
   }
+  if (loyaltyProgram) {
+    const { error: cardError } = await admin.from("loyalty_programs")
+      .update({ active: loyaltyProgram.active }).eq("restaurant_id", restaurant.id);
+    if (cardError) left.push(`the visit card: ${cardError.message}`);
+  }
+  // Read back: an update that never reached the database returns no row and,
+  // through some failures, no error either.
+  const [{ data: now }, { data: card }] = await Promise.all([
+    admin.from("restaurants").select(Object.keys(RESTORED).join(", ")).eq("id", restaurant.id).maybeSingle(),
+    admin.from("loyalty_programs").select("active").eq("restaurant_id", restaurant.id).maybeSingle(),
+  ]);
+  for (const [key, value] of Object.entries(RESTORED)) {
+    if (!now || now[key] !== value) left.push(`${key} is ${now?.[key]}, not ${value}`);
+  }
+  if (loyaltyProgram && card?.active !== loyaltyProgram.active) left.push(`the visit card is ${card?.active ? "on" : "off"}`);
+  return left;
+}
+
+/**
+ * Puts the demo back, and makes sure it is back. A restore that ran while the
+ * database could not be reached left the visit card switched off on
+ * 2026-10-17, and the next run reported three screens as broken that were
+ * fine. So it is tried again for half a minute, read back, and if the demo is
+ * still not as it was, the run says exactly what was left and fails.
+ */
+async function restore() {
+  let left = [];
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      left = await restoreOnce();
+    } catch (e) {
+      left = [e.message];
+    }
+    if (left.length === 0) return;
+    await new Promise(resolve => setTimeout(resolve, 5000));
+  }
+  bad(`the demo was LEFT CHANGED (${left.join("; ")}) — run \`pnpm db:mock\` before the next gate`);
 }
 
 /** A throwaway counter order, for the cases that need one to look at. */
