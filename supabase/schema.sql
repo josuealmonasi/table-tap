@@ -2388,45 +2388,111 @@ grant select on bill_split_claims to authenticated;
 -- Two phones tapping "join" at the same instant must not take the same seat,
 -- and the last one in is what freezes the amount — so the whole thing is one
 -- statement holding the row, the way a coupon is claimed.
+drop function if exists public.join_bill_split(uuid, text, numeric);
 create or replace function public.join_bill_split(
-  p_split uuid,
-  p_diner text,
-  p_amount numeric
+  p_split uuid, p_diner text, p_restaurant uuid, p_table uuid, p_session uuid
 ) returns int language plpgsql security definer set search_path = public as $$
 declare
+  v_split bill_splits%rowtype;
+  v_sitting table_sessions%rowtype;
   v_taken int;
-  v_shares int;
-  v_status text;
   v_next int;
+  v_amount numeric;
+  v_freeze timestamptz;
 begin
-  -- Hold the split while we look, so two joiners cannot both see the last seat.
-  select shares, status into v_shares, v_status
-    from bill_splits where id = p_split for update;
-  if v_status is null or v_status <> 'proposed' then return null; end if;
+  select * into v_split from bill_splits where id = p_split;
+  if not found then return null; end if;
+  perform pg_advisory_xact_lock(hashtextextended(v_split.session_id::text, 0));
+  select * into v_split from bill_splits where id = p_split for update;
+  select * into v_sitting from table_sessions where id = v_split.session_id for update;
+  -- A split id cannot borrow a cheaper table's sitting or restaurant.
+  if v_split.session_id is distinct from p_session
+     or v_split.restaurant_id is distinct from p_restaurant
+     or v_sitting.restaurant_id is distinct from v_split.restaurant_id
+     or v_sitting.table_id is distinct from p_table
+     or v_split.status <> 'proposed' or v_split.expires_at <= now() then return null; end if;
 
-  select count(*) into v_taken from bill_split_claims where split_id = p_split;
-  -- Already in? Their own seat back, rather than a second one.
   select share_no into v_next from bill_split_claims
    where split_id = p_split and diner = p_diner;
   if v_next is not null then return v_next; end if;
-  if v_taken >= v_shares then return null; end if;
+  select count(*) into v_taken from bill_split_claims where split_id = p_split;
+  if v_taken >= v_split.shares then return null; end if;
+
+  perform 1 from orders where session_id = v_split.session_id
+    and restaurant_id = v_split.restaurant_id and table_id = v_sitting.table_id
+    order by id for update;
+  v_freeze := clock_timestamp();
+  select coalesce(sum(total), 0) into v_amount from orders
+   where session_id = v_split.session_id and restaurant_id = v_split.restaurant_id
+     and table_id = v_sitting.table_id and paid = false and written_off = false
+     and account_id is null and status not in ('cancelled', 'pending_payment')
+     and created_at < v_freeze;
+  if v_amount <= 0 then return null; end if;
 
   v_next := v_taken;
-  insert into bill_split_claims (split_id, share_no, diner)
-  values (p_split, v_next, p_diner);
-
-  -- The last one in freezes it.
-  if v_taken + 1 = v_shares then
-    update bill_splits
-       set status = 'locked', locked_at = now(), amount = p_amount
+  insert into bill_split_claims (split_id, share_no, diner) values (p_split, v_next, p_diner);
+  if v_taken + 1 = v_split.shares then
+    update bill_splits set status = 'locked', locked_at = v_freeze, amount = round(v_amount, 2)
      where id = p_split;
+    -- Shares are ready before the lock becomes visible to a paying phone.
+    update bill_split_claims
+       set amount = (floor(round(v_amount * 100) / v_split.shares)
+         + case when share_no = 0 then mod(round(v_amount * 100), v_split.shares) else 0 end) / 100
+     where split_id = p_split;
   end if;
-
   return v_next;
 end; $$;
+revoke all on function public.join_bill_split(uuid, text, uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.join_bill_split(uuid, text, uuid, uuid, uuid) to service_role;
 
-revoke all on function public.join_bill_split(uuid, text, numeric) from public, anon, authenticated;
-grant execute on function public.join_bill_split(uuid, text, numeric) to service_role;
+-- All seats paid is only a count. The sitting's ledger must cover its food too.
+create or replace function public.close_divided_bill(p_split uuid)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare
+  v_split bill_splits%rowtype;
+  v_count int;
+  v_shares numeric;
+  v_owed numeric;
+  v_collected numeric;
+  v_spent numeric;
+begin
+  select * into v_split from bill_splits where id = p_split;
+  if not found then return false; end if;
+  perform pg_advisory_xact_lock(hashtextextended(v_split.session_id::text, 0));
+  select * into v_split from bill_splits where id = p_split for update;
+  if v_split.status = 'done' then return true; end if;
+  if v_split.status <> 'locked' then return false; end if;
+  perform 1 from bill_split_claims where split_id = p_split order by share_no for update;
+  select count(*), coalesce(sum(amount), 0) into v_count, v_shares
+    from bill_split_claims where split_id = p_split and paid_at is not null;
+  if v_count <> v_split.shares or v_shares < v_split.amount then return false; end if;
+
+  perform 1 from orders where session_id = v_split.session_id
+    and restaurant_id = v_split.restaurant_id order by id for update;
+  select coalesce(sum(total), 0) into v_owed from orders
+   where session_id = v_split.session_id and restaurant_id = v_split.restaurant_id
+     and created_at < v_split.locked_at and paid = false and written_off = false
+     and account_id is null and status not in ('cancelled', 'pending_payment');
+  select coalesce(sum(amount), 0) into v_collected from payments
+   where session_id = v_split.session_id and restaurant_id = v_split.restaurant_id and order_id is null;
+  -- Sitting payments already spent on paid orders cannot cover this pot again.
+  select coalesce(sum(greatest(o.total - coalesce(p.amount, 0), 0)), 0) into v_spent
+    from orders o left join (
+      select order_id, sum(amount) amount from payments
+       where restaurant_id = v_split.restaurant_id and order_id is not null group by order_id
+    ) p on p.order_id = o.id
+   where o.session_id = v_split.session_id and o.restaurant_id = v_split.restaurant_id
+     and o.paid = true and o.written_off = false and o.status not in ('cancelled', 'pending_payment');
+  if v_collected - v_spent < v_owed then return false; end if;
+  update orders set paid = true, pay_method = 'card'
+   where session_id = v_split.session_id and restaurant_id = v_split.restaurant_id
+     and created_at < v_split.locked_at and paid = false and written_off = false
+     and account_id is null and status not in ('cancelled', 'pending_payment');
+  update bill_splits set status = 'done' where id = p_split;
+  return true;
+end; $$;
+revoke all on function public.close_divided_bill(uuid) from public, anon, authenticated;
+grant execute on function public.close_divided_bill(uuid) to service_role;
 
 
 -- ── Collecting part of a bill, atomically ───────────────────────────────────

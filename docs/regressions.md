@@ -13,6 +13,7 @@ us, and what now catches each one.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| A split freezes its own sitting and closes only with enough collected money | Another table's MX$20 could settle a MX$1,000 bill |
 |---|---|
 | A lost till response never deletes committed money (W1.1) | Deleting a settled order orphaned its payment and let replay record the cash again |
 | A till repeat proves settlement before the device forgets it (W1.2) | An unpaid shell answered success and erased the held sale |
@@ -2055,3 +2056,16 @@ server's row cap. `statementOf` now uses `everyRow`, ordered by the unique order
 ID, and fails if any page fails. `accounts-server.spec.tsx`
 checks 1001 charges of MX$100 total MX$100,100 and a failed second page never
 returns a partial statement. The same statement feeds staff, customers and email.
+
+
+## A split frozen at another table's amount
+
+The join route priced the sitting sent by the phone, while the join function
+locked an independently sent split. Those two places had to agree: a cheap
+sitting could freeze an expensive split, and counting paid seats then erased
+the larger debt. The join transaction now checks all sitting capabilities,
+sums its own locked orders and writes every share before exposing the lock.
+The close transaction checks the sitting's actual unspent ledger credit before
+marking any order paid. `join.react-component.spec.tsx` checks the route and
+SQL contract; `checkout-settle.spec.ts` refuses an underfunded close and keeps
+webhook retries working. Live SQL concurrency checks remain a release gate.

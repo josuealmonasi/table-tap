@@ -99,6 +99,8 @@ drop function if exists public.settle_split_share(uuid, int, numeric, numeric, t
 drop function if exists public.settle_sale(uuid, uuid, text, text, text);
 drop function if exists public.open_table_session(uuid, uuid, int);
 drop function if exists public.join_bill_split(uuid, text, numeric);
+drop function if exists public.join_bill_split(uuid, text, uuid, uuid, uuid);
+drop function if exists public.close_divided_bill(uuid);
 drop function if exists public.reserve_stock(uuid, jsonb, int);
 drop function if exists public.release_stock(uuid, jsonb);
 drop function if exists public.enqueue_kitchen_ticket();

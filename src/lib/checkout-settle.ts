@@ -131,7 +131,7 @@ async function settleSplitShare(session: Stripe.Checkout.Session): Promise<void>
     // not only the one that claimed the share: when closing failed, Stripe
     // sending the event again is what closes it, and that delivery finds the
     // share already claimed.
-    await closeDividedBill(splitId, split.session_id as string, split.locked_at as string);
+    await closeDividedBill(splitId, split.session_id as string);
   }
 }
 
@@ -145,7 +145,7 @@ async function settleSplitShare(session: Stripe.Checkout.Session): Promise<void>
  * the floor sees a part-paid bill, which is the truth. A close that failed is
  * thrown, so Stripe sends the event again.
  */
-async function closeDividedBill(splitId: string, sessionId: string, lockedAt: string): Promise<void> {
+async function closeDividedBill(splitId: string, sessionId: string): Promise<void> {
   const db = createAdminClient();
   const { count: unpaidShares, error: countError } = await db
     .from("bill_split_claims")
@@ -157,19 +157,11 @@ async function closeDividedBill(splitId: string, sessionId: string, lockedAt: st
   }
   if (unpaidShares !== 0) return;
 
-  const { error } = await db
-    .from("orders")
-    .update({ paid: true, pay_method: "card" })
-    .eq("session_id", sessionId)
-    .eq("paid", false)
-    .lt("created_at", lockedAt)
-    .select("session_id");
+  // Counting seats alone let a split frozen too low erase the rest of a bill.
+  // The transaction locks the orders and checks real ledger credit before closing.
+  const { data: covered, error } = await db.rpc("close_divided_bill", { p_split: splitId });
   if (error) throw new Error(`settling a share: could not close the divided bill: ${error.message}`);
-  const { error: doneError } = await db
-    .from("bill_splits")
-    .update({ status: "done" })
-    .eq("id", splitId);
-  if (doneError) throw new Error(`settling a share: could not finish the split: ${doneError.message}`);
+  if (covered !== true) throw new Error("settling a share: shares do not cover the divided bill");
   // On a retry the orders may already be paid, so the UPDATE returns none.
   // The split still tells us which sitting needs its final close attempt.
   await closeSessionsFor([{ session_id: sessionId }], "paid");

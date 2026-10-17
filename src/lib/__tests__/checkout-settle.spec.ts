@@ -28,7 +28,7 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     rpc: async (fn: string, args: Record<string, unknown>) => {
       rpcs.push({ fn, args });
-      return (script[`rpc:${fn}`] ?? []).shift() ?? { data: null, error: null };
+      return (script[`rpc:${fn}`] ?? []).shift() ?? { data: fn === "close_divided_bill" ? true : null, error: null };
     },
     from: (table: string) => {
       let op: Op["op"] = "select";
@@ -149,8 +149,8 @@ describe("one diner's share of a divided bill", () => {
     script["rpc:record_duplicate_share"] = [{ data: "repeat", error: null }];
     script["bill_split_claims:select"] = [{ count: 0, error: null }];
     await settleCheckout(share);
-    expect(rpcs.map(r => r.fn)).toEqual(["settle_split_share", "record_duplicate_share"]);
-    expect(writes("orders").length).toBeGreaterThan(0);
+    expect(rpcs.map(r => r.fn)).toEqual(["settle_split_share", "record_duplicate_share", "close_divided_bill"]);
+    expect(closeSessions).toHaveBeenCalled();
   });
 
   it("throws when the share cannot be claimed", async () => {
@@ -172,13 +172,24 @@ describe("one diner's share of a divided bill", () => {
     expect(rpcs.at(-1)?.args.p_orders).toEqual(["o2"]);
   });
 
+  it("refuses to close a thousand-peso bill covered by twenty pesos of shares", async () => {
+    script["bill_splits:select"] = [{ data: SPLIT, error: null }];
+    script["rpc:settle_split_share"] = [{ data: true, error: null }];
+    script["bill_split_claims:select"] = [{ count: 0, error: null }];
+    script["rpc:close_divided_bill"] = [{ data: false, error: null }];
+    await expect(settleCheckout(share)).rejects.toThrow("shares do not cover");
+    expect(writes("orders")).toEqual([]);
+    expect(writes("bill_splits")).toEqual([]);
+    expect(closeSessions).not.toHaveBeenCalled();
+  });
+
   it("closes the bill when the last share is paid", async () => {
     script["bill_splits:select"] = [{ data: SPLIT, error: null }];
     script["rpc:settle_split_share"] = [{ data: true, error: null }];
     script["bill_split_claims:select"] = [{ count: 0, error: null }];
     await settleCheckout(share);
-    expect(writes("orders").some(o => JSON.stringify(o.values).includes('"paid":true'))).toBe(true);
-    expect(writes("bill_splits").some(o => JSON.stringify(o.values).includes('"done"'))).toBe(true);
+    expect(rpcs).toContainEqual({ fn: "close_divided_bill", args: { p_split: "s1" } });
+    expect(writes("orders")).toEqual([]);
   });
 
   it("closes it on a repeated delivery too, when the first one's close failed", async () => {
@@ -186,16 +197,15 @@ describe("one diner's share of a divided bill", () => {
     script["rpc:settle_split_share"] = [{ data: false, error: null }]; // already claimed
     script["bill_split_claims:select"] = [{ count: 0, error: null }];
     await settleCheckout(share);
-    expect(writes("orders").some(o => JSON.stringify(o.values).includes('"paid":true'))).toBe(true);
+    expect(rpcs).toContainEqual({ fn: "close_divided_bill", args: { p_split: "s1" } });
   });
 
   it("retries closing the sitting even when its orders were already marked paid", async () => {
     script["bill_splits:select"] = [{ data: SPLIT, error: null }, { data: SPLIT, error: null }];
     script["rpc:settle_split_share"] = [{ data: true, error: null }, { data: false, error: null }];
     script["bill_split_claims:select"] = [{ count: 0, error: null }, { count: 0, error: null }];
-    script["orders:update"] = [{ data: [{ session_id: SPLIT.session_id }], error: null }, { data: [], error: null }];
-    script["bill_splits:update"] = [down, { error: null }];
-    await expect(settleCheckout(share)).rejects.toThrow("could not finish the split");
+    script["rpc:close_divided_bill"] = [down, { data: true, error: null }];
+    await expect(settleCheckout(share)).rejects.toThrow("could not close the divided bill");
     await settleCheckout(share);
     expect(closeSessions).toHaveBeenCalledWith([{ session_id: SPLIT.session_id }], "paid");
   });
@@ -204,7 +214,7 @@ describe("one diner's share of a divided bill", () => {
     script["bill_splits:select"] = [{ data: SPLIT, error: null }];
     script["rpc:settle_split_share"] = [{ data: true, error: null }];
     script["bill_split_claims:select"] = [{ count: 0, error: null }];
-    script["orders:update"] = [down];
+    script["rpc:close_divided_bill"] = [down];
     await expect(settleCheckout(share)).rejects.toThrow("could not close the divided bill");
   });
 
