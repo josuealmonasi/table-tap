@@ -25,6 +25,7 @@ import { TERMS_VERSION } from "./terms-version.mjs";
 import { seedLoyalty } from "./mock-loyalty.mjs";
 import { seedAccounts } from "./mock-accounts.mjs";
 import { seedCosts } from "./mock-costs.mjs";
+import { seedAllocations } from "./mock-allocations.mjs";
 import { seedTerminal } from "./mock-terminal.mjs";
 import { bulkInsert, randInt, sample } from "./menu-catalog.mjs";
 
@@ -177,6 +178,7 @@ function pickTip(subtotal) {
 }
 
 export async function seedMock(pg) {
+  await pg.query("select set_config('tabletap.allocation_origin', 'fixture_history', false)");
   if (!process.env.SUPABASE_SECRET_KEY) {
     throw new Error("SUPABASE_SECRET_KEY missing — needed to create demo logins.");
   }
@@ -976,6 +978,8 @@ export async function seedMock(pg) {
   await seedCosts(pg, rid);
   // Deposits from the restaurant's own card terminal, and voucher numbers.
   await seedTerminal(pg, rid);
+  await pg.query("select set_config('tabletap.allocation_origin', '', false)");
+  await seedAllocations(pg, rid);
   // Our fee on every order the demo was paid for online, in the ledger the
   // month's ceiling reads — what the schema's backfill does once for real
   // restaurants. Taken, in the month each was paid.

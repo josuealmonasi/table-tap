@@ -965,6 +965,40 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     refundDueCounter: "A card payment of {amount} arrived for an order that was already settled. Refund it from Open bills.",
     refundDueAccount: "A card payment of {amount} arrived for {name}'s account, which was already settled. Refund it from Open bills.",
   },
+  attribution: {
+    title: "Historical receipt attribution",
+    help: "Use the original receipt to assign its amount to the orders it paid. This preserves the receipt and records your attribution as a manager estimate. Do not guess.",
+    assign: "Assign receipt",
+    amount: "Assign {amount}, including {tip} in recorded tips.",
+    inclusive: "Amount including tip",
+    tip: "Tip inside that amount",
+  },
+
+  returns: {
+    myDrawer: "My drawer",
+    payoutDrawer: "Money returned from",
+
+    alreadyCollected: "Already collected: {amount}. The amounts below are what remains.",
+    remaining: "Still owed",
+
+    title: "Order returns",
+    intro: "Cancelled money stays here until the return is confirmed.",
+    confirm: "Confirm money returned",
+    drawer: "Confirm {amount} was actually returned from the original collection ({collector}). For a terminal payment, complete the refund on the terminal first.",
+    returned: "Confirm returned",
+    done: "Return recorded.",
+    pending: "Return outstanding",
+    processing: "Awaiting provider confirmation",
+    failed: "Provider reported failure",
+    succeeded: "Returned",
+    stripe: "Online card",
+    cash: "Cash",
+    terminal: "Restaurant terminal",
+    review: "Attribution review",
+    reviewHelp: "Original payment attribution needs review before a return can be recorded.",
+    check: "Check / retry",
+  },
+
   refunds: {
     title: "Refunds due",
     intro: "Card payments that arrived for a bill already collected. That money belongs to the diner.",
@@ -1209,6 +1243,10 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     noExtras: "This dish takes no extras.",
   },
   apiErr: {
+    attributionRequired: "A historical payment needs manager attribution in Bills before collecting more money.",
+    attributionChanged: "The attribution no longer fits the receipt or its orders. Refresh and check the amounts, including the tip.",
+    refundPending: "The provider has not confirmed the return. It remains outstanding; check again later.",
+    refundReviewRequired: "This historical payment needs manager attribution before a return can be recorded.",
     posUnsettled: "The sale is not confirmed yet. It stays on this device and is sent again by itself.",
     posOtherRestaurant: "You are signed in to a different restaurant now. The sale stays on this device until this restaurant signs in again.",
     posMismatch: "The menu's price changed while you were charging. The sale stays on this device and is recorded at what you charged.",
@@ -1708,6 +1746,8 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
     pageOf: "Page {page} of {pages}",
   },
   orders: {
+    refundPendingMessage: "Cancel this order and record what must be returned. Card refunds are confirmed by the provider. Confirm cash and terminal returns separately in Bills.",
+    refundPendingDone: "Order cancelled. Check Bills for the return status.",
     notPaid: "Unpaid",
     onAccount: "On account",
     moveRefused: "Couldn't move the order. It's back where it was.",

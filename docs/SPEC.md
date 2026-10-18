@@ -1618,3 +1618,40 @@ Platform deletion expires open subscription checkouts, cancels live contracts
 immediately, and confirms termination before deleting staff or the restaurant.
 It retains a durable intent and Stripe IDs for retries. Unknown billing state
 preserves local data. Owner cancellation still keeps the paid period.
+
+### Payment coverage and order returns (October 2026)
+
+A receipt is immutable money received. `payment_allocations` records exactly
+which orders it covers, in integer cents, with proportional principal and a
+stable largest-remainder tie break `(created_at, id)`. Existing order tip
+anchors are preserved: the receipt's tip follows its recorded order tip
+entitlement rather than being redistributed on cancellation. Frozen split
+order ids and account-checkout order ids prevent later rounds joining an old
+payment. Collection and the tip commit together through `collect_on_sitting_v2`.
+A settled order must have retained coverage; a concurrent partial collection
+invalidates a stale full collection. Stripe charges arriving after another
+collection record only remaining coverage and preserve the excess in refunds due.
+
+Cancellation commits an immutable `order_adjustments` record and reserves
+`refund_allocations` under a restaurant financial lock before contacting a
+provider. `refund_operations` distinguishes pending, processing, succeeded,
+failed and attribution-review obligations. Pending or uncertain returns cannot
+be spent on another order. Stripe retries reuse a durable `refund_attempts`
+request and account, and recover expired idempotency keys through metadata;
+a confirmed failed attempt permits a separately keyed retry. Only provider
+success completes an online return. A manager explicitly confirms money
+actually returned in cash or on the restaurant's terminal. The original
+collector and confirming manager are separately recorded. The corte and shifts
+subtract completed typed returns, terminal deposits use confirmed terminal
+returns, and account statements show return status. Activity text is not the
+source of these financial amounts. Platform-fee returns use Stripe's verified
+cumulative fee refund rather than a per-return estimate.
+
+Historical receipts are preserved. An explicit order link can be backfilled;
+pooled history remains unresolved and blocks another collection until a manager
+uses the original receipt to attribute it from Bills. A manager attribution is
+labelled estimated. Historical Stripe account provenance is never inferred from
+today's connected account. The money check reconciles allocation and return
+capacity and lists unresolved history or outstanding returns as exceptions,
+without calling them a clean reconciliation. No schema reapplication creates
+new receipts for old paid flags.

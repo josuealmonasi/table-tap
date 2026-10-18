@@ -54,6 +54,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       charges: d.charges.map(c => ({ at: c.at, tableLabel: c.tableLabel, lines: c.lines, total: c.total })),
     })),
     payments: statement.payments,
+    returns: statement.returns,
     // A yes or a no: the Stripe columns are not the customer's to read.
     cardsEnabled: Boolean(restaurant.stripe_account_id && restaurant.stripe_charges_enabled),
     payingOnline: Boolean(account.checkout_until && new Date(account.checkout_until) > new Date()),

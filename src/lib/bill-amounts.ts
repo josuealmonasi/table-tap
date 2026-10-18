@@ -3,6 +3,7 @@ import { round2 } from "@/lib/money";
 import { servicePercent, type TableBill } from "@/lib/table-bill";
 
 export interface BillAmounts {
+  collected?: number;
   /** What the chosen orders were priced at, service and any earlier tip included. */
   food: number;
   /** Promotions already taken off when the orders were placed or by the floor. */
@@ -50,6 +51,7 @@ export function billAmounts(
   const dishes = round2(food - service - priorTip);
   return {
     food,
+    ...((scope === "mine" ? bill.mine.collected : (bill.mine.collected ?? 0) + (bill.others.collected ?? 0)) ? { collected: scope === "mine" ? bill.mine.collected : (bill.mine.collected ?? 0) + (bill.others.collected ?? 0) } : {}),
     applied,
     couponOff,
     discount,

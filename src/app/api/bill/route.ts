@@ -1,3 +1,4 @@
+import { PaymentAttributionRequired } from "@/lib/payment-coverage";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { clientKey, forTheRoom, isRateLimited } from "@/lib/rate-limit";
@@ -48,7 +49,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       splitInProgress(restaurantId, tableId),
     ]);
     return NextResponse.json({ orders, staffBill, party, dividing });
-  } catch {
+  } catch (error) {
+    if (error instanceof PaymentAttributionRequired) return await apiError("apiErr.attributionRequired", 409);
     return await apiError("apiErr.ordersLoad", 500);
   }
 }

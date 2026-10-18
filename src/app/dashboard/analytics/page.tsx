@@ -10,6 +10,7 @@ import {
   type AnalyticsOrder,
 } from "@/lib/analytics";
 import AnalyticsView, { type RatedDish } from "@/components/dashboard/analytics/AnalyticsView";
+import { returnedAdjustments } from "@/lib/refunds/adjustments";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { unwrap } from "@/lib/ordering-data";
 import { getPlan } from "@/lib/plan-server";
@@ -79,7 +80,7 @@ export default async function AnalyticsPage({
   const admin = createAdminClient();
   const since = dayStart.toISOString();
 
-  const [paidRows, givenUp, owedRows] = await Promise.all([
+  const [paidRows, givenUp, owedRows, returns] = await Promise.all([
     everyRow<CortePayment>((a, b) => admin
       .from("payments")
       .select("actor_email, amount, method")
@@ -106,10 +107,11 @@ export default async function AnalyticsPage({
       .eq("paid", false).eq("written_off", false)
       .neq("status", "cancelled")
       .order("id").range(a, b), "what customer accounts owe"),
+    returnedAdjustments(membership.restaurant.id, since),
   ]);
   const corte = paidRows
     ? {
-        ...corteFrom(paidRows as CortePayment[], (givenUp ?? []) as CorteAdjustment[]),
+        ...corteFrom(paidRows as CortePayment[], [...givenUp, ...returns]),
         accountsOwed: Math.round((owedRows ?? []).reduce((s, o) => s + Number(o.total), 0) * 100) / 100,
       }
     : EMPTY_CORTE;

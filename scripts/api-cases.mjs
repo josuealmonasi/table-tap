@@ -12,6 +12,14 @@
 import { MARK, PART_AMOUNT, PART_TIP } from "./api-fixtures.mjs";
 import { loginByEmail } from "./logins.mjs";
 
+async function returnFor(f, orderId) {
+  const { data, error } = await f.admin.from("refund_operations")
+    .select("id, amount, source, status, confirmed_by, payout_actor, order_adjustments!inner(order_id)")
+    .eq("restaurant_id", f.restaurant.id).eq("order_adjustments.order_id", orderId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
 /** Creating a coupon answers `{ ok: true }`, so the id is looked up where it lives. */
 async function pendingWriteOff(fx) {
   const { data } = await fx.admin
@@ -84,6 +92,11 @@ export function cases(fx) {
   const r = restaurant.id;
 
   return [
+    { name: "order returns list", path: "/api/order-refunds", method: "GET", as: "owner", expect: [200] },
+    { name: "unknown order return cannot be confirmed", path: "/api/order-refunds", method: "POST", as: "owner", body: { id: "00000000-0000-0000-0000-000000000000" }, expect: [404] },
+    { name: "historical receipt attribution list", path: "/api/payment-attribution", method: "GET", as: "owner", expect: [200] },
+    { name: "empty receipt attribution refused", path: "/api/payment-attribution", method: "POST", as: "owner", body: {}, expect: [400] },
+
     // ── what the diner touches, with no session ──────────────────────────
     { name: "GET  /api/session", as: "diner", method: "GET",
       path: `/api/session?id=${fx.sessionId ?? ""}`, expect: fx.sessionId ? [200] : [400] },
@@ -1634,29 +1647,28 @@ export function cases(fx) {
         const { data: paid } = await f.admin
           .from("payments").select("amount").eq("order_id", f.cashPaidOrder);
         if (!paid?.length) return "the cancel took the cash payment off the ledger with it";
-        // …and so the handback has to be written down, against whoever took
-        // the cash. Without it the corte still expects the notes in that
-        // person's drawer, and an honest waiter reads as short by the sale.
-        const { data: lines } = await f.admin
-          .from("user_logs").select("detail")
-          .eq("entity", "order").eq("action", "refunded")
-          .like("detail", `%order=${f.cashPaidOrder.slice(0, 8)}%`);
-        const line = lines?.[0]?.detail ?? "";
-        if (!line) return "cancelled a cash sale and wrote no handback: the corte still expects the cash";
-        const want = `amount=${Number(paid[0].amount).toFixed(2)} method=cash collector=demo@tabletap.dev`;
-        return line.includes(want) || `the handback reads "${line}", not "${want}"`;
+        const back = await returnFor(f, f.cashPaidOrder);
+        return back?.source === "cash" && back.status === "pending" && Number(back.amount) === Number(paid[0].amount)
+          || "the cancellation did not reserve a pending cash return";
       } },
+    { name: "POST /api/order-refunds (manager confirms cash actually returned)", as: "owner", method: "POST",
+      path: "/api/order-refunds", body: async f => ({ id: (await returnFor(f, f.cashPaidOrder))?.id, confirmReturned: true, drawer: "original" }), expect: [200],
+      check: async (d, f) => {
+        const back = await returnFor(f, f.cashPaidOrder);
+        return d.completed && back?.status === "succeeded" && back.confirmed_by === "demo@tabletap.dev" && back.payout_actor === "demo@tabletap.dev"
+          || "the return was not confirmed with its manager and payout drawer";
+      } },
+
     // What the dialog asks before it words its offer. Each answer is the one
     // the POST below then acts on — the two read the same plan.
-    { name: "GET  /api/orders/cancel (paid with its table: no one drawer)", as: "owner", method: "GET",
-      path: f => `/api/orders/cancel?id=${f.sittingPaidOrder}`, expect: [200],
-      check: (d, f) => (d.withTable === f.linePrice && d.cash === 0) || `answered ${JSON.stringify(d)}` },
+    { name: "GET /api/orders/cancel (paid flag without receipt needs attribution)", as: "owner", method: "GET",
+      path: f => `/api/orders/cancel?id=${f.sittingPaidOrder}`, expect: [409], expectError: /atribuy|attribution/i },
     { name: "GET  /api/orders/cancel (POS card: the terminal, not Stripe)", as: "owner", method: "GET",
       path: f => `/api/orders/cancel?id=${f.posCardOrder}`, expect: [200],
       check: (d, f) => (d.terminal === f.linePrice && d.refund === 0) || `answered ${JSON.stringify(d)}` },
     { name: "GET  /api/orders/cancel (a table's online bill: Stripe)", as: "owner", method: "GET",
       path: f => `/api/orders/cancel?id=${f.tableBillOrder}`, expect: [200],
-      check: (d, f) => (d.refund === f.linePrice && d.terminal === 0) || `answered ${JSON.stringify(d)}` },
+      check: (d, f) => (d.withTable === f.linePrice && d.refund === 0) || `answered ${JSON.stringify(d)}` },
     { name: "GET  /api/orders/cancel (waiter refused)", as: "waiter", method: "GET",
       path: f => `/api/orders/cancel?id=${f.posCardOrder}`, expect: [403] },
     // Card on the restaurant's own terminal. This answered "payment still
@@ -1664,42 +1676,20 @@ export function cases(fx) {
     { name: "POST /api/orders/cancel (POS card sale)", as: "owner", method: "POST",
       path: "/api/orders/cancel", body: async f => ({ id: f.posCardOrder }), expect: [200],
       check: async (_d, f) => {
-        const { data: lines } = await f.admin
-          .from("user_logs").select("detail")
-          .eq("entity", "order").eq("action", "refunded")
-          .like("detail", `%order=${f.posCardOrder.slice(0, 8)}%`);
-        const line = lines?.[0]?.detail ?? "";
-        const want = `amount=${f.linePrice.toFixed(2)} method=card collector=demo-cashier@tabletap.dev`;
-        return line.includes(want) || `the handback reads "${line}", not "${want}"`;
+        const back = await returnFor(f, f.posCardOrder);
+        return back?.source === "terminal" && back.status === "pending" && Number(back.amount) === f.linePrice
+          || "the terminal return was not reserved pending confirmation";
       } },
-    // One order of a table's online bill: refunded through Stripe, for its own
-    // share, from the intent on its payment. The fake account makes Stripe
-    // refuse, and that is the assertion — the route reached Stripe instead of
-    // answering "still settling", and a refund that failed left the order up.
-    { name: "POST /api/orders/cancel (a table's online bill reaches Stripe)", as: "owner", method: "POST",
-      path: "/api/orders/cancel", arrange: f => f.withCardReader(),
-      body: async f => ({ id: f.tableBillOrder }),
-      expect: [502], expectError: /reembolso falló|refund failed/i,
+    // The receipt predates a verified connected-account snapshot. Cancelling
+    // preserves an explicit review obligation rather than guessing an account.
+    { name: "POST /api/orders/cancel (unverified Stripe provenance needs review)", as: "owner", method: "POST",
+      path: "/api/orders/cancel", body: async f => ({ id: f.tableBillOrder }), expect: [200],
       effect: async f => {
-        const { data: o } = await f.admin
-          .from("orders").select("status").eq("id", f.tableBillOrder).maybeSingle();
-        return o?.status === "received" || `a refund that failed still moved the order to "${o?.status}"`;
+        const back = await returnFor(f, f.tableBillOrder);
+        return back?.status === "review" && back.source === "review" || "the old charge's account was guessed";
       } },
-    { name: "POST /api/orders/cancel (paid with its table, in cash)", as: "owner", method: "POST",
-      path: "/api/orders/cancel", body: async f => ({ id: f.sittingPaidOrder }), expect: [200],
-      check: async (_d, f) => {
-        const { data: o } = await f.admin
-          .from("orders").select("total").eq("id", f.sittingPaidOrder).maybeSingle();
-        const { data: lines } = await f.admin
-          .from("user_logs").select("detail")
-          .eq("entity", "order").eq("action", "refunded")
-          .like("detail", `%order=${f.sittingPaidOrder.slice(0, 8)}%`);
-        const line = lines?.[0]?.detail ?? "";
-        if (!line) return "cancelled a paid order and wrote no handback";
-        const want = `amount=${Number(o?.total).toFixed(2)} method=cash`;
-        if (!line.endsWith(want)) return `the handback reads "${line}", not "…${want}"`;
-        return !line.includes("collector=") || `named a drawer for money no drawer took: "${line}"`;
-      } },
+    { name: "POST /api/orders/cancel (unattributed historical paid flag)", as: "owner", method: "POST",
+      path: "/api/orders/cancel", body: async f => ({ id: f.sittingPaidOrder }), expect: [409], expectError: /atribuy|attribution/i },
     // This case sent no orderIds, so it was refused at the body check and never
     // reached a line of the route — while `expect: [200, 400, 409]` accepted
     // that refusal, the no-card-reader one, and a success, all as a pass. It is

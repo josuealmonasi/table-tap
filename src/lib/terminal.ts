@@ -13,6 +13,8 @@ import { round2 } from "@/lib/money";
 
 export interface TerminalPayment {
   amount: number;
+  /** A confirmed partial terminal return, booked at its own time. */
+  returned_at?: string;
   /** The tip inside `amount`. */
   tip: number;
   created_at: string;
@@ -120,6 +122,10 @@ export function depositDays(
   const markedAt = new Map(deposits.map(d => [d.sales_day, d.created_at]));
   const voidedLater: { day: string; amount: number }[] = [];
   for (const p of payments) {
+    if (p.returned_at) {
+      voidedLater.push({ day: localDay(p.returned_at, timeZone), amount: Number(p.amount) });
+      continue;
+    }
     const day = localDay(p.created_at, timeZone);
     const voidDay = p.voided_at ? localDay(p.voided_at, timeZone) : null;
     if (voidDay === day) continue;

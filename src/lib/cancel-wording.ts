@@ -17,6 +17,9 @@ export interface CancelWording {
 }
 
 export function cancelWording(s: CancelSummary, money: (n: number) => string, t: Translate): CancelWording {
+  if (s.pending) {
+    return { message: t("orders.refundPendingMessage"), confirmKey: "orders.cancelOrder", done: t("orders.refundPendingDone") };
+  }
   if (!s.paid) {
     return { message: t("orders.unpaidCancelMsg"), confirmKey: "orders.cancelOrder", done: t("orders.cancelledToast") };
   }

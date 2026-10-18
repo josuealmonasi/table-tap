@@ -74,21 +74,29 @@ export async function readCancel(
     }
   }
 
-  // How the money arrived, payment by payment. A read that fails refuses the
-  // cancel: going ahead without it would refund nothing and name no drawer.
-  let payments: CancelPayment[] = [];
-  if (order.paid) {
-    const { data, error } = await admin
-      .from("payments")
-      .select("amount, method, actor_email, stripe_payment_intent")
-      .eq("restaurant_id", restaurantId)
-      .eq("order_id", id);
-    if (error) {
-      console.error("cancel: payments read failed:", error.message);
-      return { error: "apiErr.orderCancel", status: 500 };
-    }
-    payments = data ?? [];
-  }
+  const { data: attribution, error: attributionError } = await admin.rpc("order_coverage", {
+    p_restaurant: restaurantId, p_orders: [id],
+  });
+  if (attributionError) return { error: "apiErr.verifyOrders", status: 503 };
+  if (attribution?.some((r: { unresolved?: boolean }) => r.unresolved)) return { error: "apiErr.attributionRequired", status: 409 };
 
-  return { order, plan: cancelPlan(order, payments), hold, holdId };
+  // Coverage exists even while a divided bill is only partly paid. Never
+  // infer a pooled payment's provider or collector from an order flag.
+  const { data: coverage, error: coverageError } = await admin.rpc("order_refund_coverage", {
+    p_restaurant: restaurantId, p_order: id,
+  });
+  if (coverageError) return { error: "apiErr.verifyOrders", status: 503 };
+  const payments: CancelPayment[] = (coverage ?? []).map((p: {
+    amount: number; method: string; actor_email: string | null;
+    stripe_payment_intent: string | null; stripe_account_id: string | null; allocation_quality: string;
+  }) => ({
+    amount: Number(p.amount), method: p.method, actor_email: p.actor_email,
+    stripe_payment_intent: p.allocation_quality === "exact" && p.stripe_account_id ? p.stripe_payment_intent : null,
+  }));
+  const covered = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+  const plan = cancelPlan({ ...order, paid: payments.length > 0 }, payments);
+  if (order.paid && Number(order.total) - covered > 0.005) {
+    return { error: "apiErr.attributionRequired", status: 409 };
+  }
+  return { order, plan, hold, holdId };
 }

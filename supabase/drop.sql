@@ -1,3 +1,8 @@
+drop table if exists refund_attempts cascade;
+drop table if exists refund_allocations cascade;
+drop table if exists refund_operations cascade;
+drop table if exists order_adjustments cascade;
+drop table if exists payment_allocations cascade;
 -- ============================================================================
 -- TableTap — DROP everything (DESTRUCTIVE)
 -- Removes the tables, their data, policies, and indexes entirely.
@@ -157,3 +162,29 @@ drop function if exists public.keep_order_terminal();
 drop table if exists restaurant_subscription_prices cascade;
 drop function if exists public.effective_restaurant_plan(uuid);
 drop function if exists public.enforce_dashboard_write();
+
+drop function if exists public.lock_restaurant_money(uuid) cascade;
+drop function if exists public.snapshot_payment_scope() cascade;
+drop function if exists public.allocate_receipt(uuid) cascade;
+drop function if exists public.finish_payment_allocation() cascade;
+drop function if exists public.check_receipt_allocations() cascade;
+drop function if exists public.backfill_payment_allocations(uuid) cascade;
+drop function if exists public.collect_on_sitting_v2(uuid, uuid, numeric, numeric, text, text, text) cascade;
+drop function if exists public.order_refund_coverage(uuid, uuid) cascade;
+drop function if exists public.prepare_order_refund(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) cascade;
+drop function if exists public.start_refund_attempt(uuid, uuid) cascade;
+drop function if exists public.finish_refund_operation(uuid, uuid, text, text, text) cascade;
+drop function if exists public.retained_order_coverage(uuid, uuid) cascade;
+drop function if exists public.guard_allocated_order() cascade;
+drop function if exists public.check_refund_allocations() cascade;
+drop function if exists public.immutable_allocation() cascade;
+drop function if exists public.order_coverage(uuid, uuid[]) cascade;
+drop function if exists public.check_paid_coverage() cascade;
+drop function if exists public.sync_refunded_platform_fee(uuid, text, int) cascade;
+drop function if exists public.attribute_payment(uuid, uuid, text, jsonb) cascade;
+
+drop function if exists public.finish_refund_operation(uuid, uuid, text, text, text, text, uuid) cascade;
+drop function if exists public.attribute_payment(uuid, uuid, text, jsonb) cascade;
+drop function if exists public.guard_receipt_money() cascade;
+drop function if exists public.check_return_header() cascade;
+drop function if exists public.guard_return_money() cascade;

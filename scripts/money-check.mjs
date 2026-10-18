@@ -9,6 +9,7 @@
 //
 // Reads only. Add `--prod` to ask production the same question.
 // ============================================================================
+import { checkAllocations } from "./money-allocations.mjs";
 import { checkStockReturns } from "./money-stock.mjs";
 import { createClient } from "@supabase/supabase-js";
 import { join } from "node:path";
@@ -50,9 +51,10 @@ if (oErr) { console.log(`  cannot read orders: ${oErr.message}`); process.exit(1
 
 const { data: payments, error: pErr } = await all(() => db
   .from("payments")
-  .select("id, order_id, session_id, account_id, amount"));
+  .select("id, restaurant_id, order_id, session_id, account_id, amount, tip, allocation_version, allocation_quality, unallocated_amount, unallocated_tip"));
 if (pErr) { console.log(`  cannot read payments: ${pErr.message}`); process.exit(1); }
 
+const attribution = await checkAllocations(db, all, orders, payments, { ok, bad });
 const paidFor = new Map();
 /**
  * Money that belongs to a sitting rather than to any one order.
@@ -74,7 +76,7 @@ const paidForSitting = new Map();
  * owed, which marks all of those orders paid and carries none of them.
  */
 const paidForAccount = new Map();
-for (const p of payments) {
+for (const p of payments.filter(p => p.allocation_version === 0 || p.allocation_quality === "unresolved")) {
   if (p.order_id) {
     paidFor.set(p.order_id, (paidFor.get(p.order_id) ?? 0) + Number(p.amount));
   } else if (p.session_id) {
@@ -101,7 +103,7 @@ orphans.length === 0
     );
 
 // 1. Every settled order has money behind it — its own, or its sitting's.
-const settled = orders.filter(o => o.paid && !o.written_off && Number(o.total) > 0);
+const settled = orders.filter(o => !attribution.modern.has(o.id) && o.paid && !o.written_off && Number(o.total) > 0);
 const backed = o =>
   paidFor.has(o.id) ||
   (o.account_id && paidForAccount.has(o.account_id)) ||
@@ -121,7 +123,7 @@ unbacked.length === 0
 // exactly that order.
 const sittingOwed = new Map();
 for (const o of settled) {
-  if (!o.session_id || paidFor.has(o.id) || o.account_id) continue;
+  if (attribution.modern.has(o.id) || !o.session_id || paidFor.has(o.id) || o.account_id) continue;
   sittingOwed.set(o.session_id, (sittingOwed.get(o.session_id) ?? 0) + Number(o.total));
 }
 const shortSittings = [...sittingOwed.entries()].filter(
@@ -145,7 +147,7 @@ shortSittings.length === 0
 // that was written off after paying something still had food to pay for.
 const sittingHolds = new Map();
 for (const o of orders) {
-  if (!o.session_id || paidFor.has(o.id) || o.account_id) continue;
+  if (attribution.modern.has(o.id) || !o.session_id || paidFor.has(o.id) || o.account_id) continue;
   sittingHolds.set(o.session_id, (sittingHolds.get(o.session_id) ?? 0) + Number(o.total));
 }
 const overpaid = [...paidForSitting.entries()].filter(
@@ -163,7 +165,7 @@ overpaid.length === 0
 // order's total and on the payment alike), so the two sums are one number.
 const accountOrders = new Map();
 for (const o of orders) {
-  if (!o.account_id || !o.paid || o.status === "cancelled") continue;
+  if (attribution.modern.has(o.id) || !o.account_id || !o.paid || o.status === "cancelled") continue;
   accountOrders.set(o.account_id, (accountOrders.get(o.account_id) ?? 0) + Number(o.total));
 }
 const accountIds = new Set([...accountOrders.keys(), ...paidForAccount.keys()]);
@@ -305,7 +307,7 @@ const REFUND_ERA = "2026-09-22T00:00:00Z";
     const unwritten = [];
     const disagreeing = [];
     let checked = 0;
-    for (const o of orders.filter(o => o.status === "cancelled" && o.paid)) {
+    for (const o of orders.filter(o => o.status === "cancelled" && o.paid && !attribution.cancelled.has(o.id))) {
       const code = o.id.slice(0, 8);
       const mine = cancelLogs.filter(
         l => l.restaurant_id === o.restaurant_id && (l.detail ?? "").split(" ").includes(`order=${code}`),
@@ -402,7 +404,7 @@ await checkStockReturns(db, { ok, bad });
 
 console.log(
   failed === 0
-    ? `\nThe ledger, the orders and the drawer agree. ${payments.length} payment(s).\n`
+    ? `\nStructural checks passed. ${payments.length} payment(s); ${attribution.exceptions} exception(s) need review.\n`
     : `\n${failed} PROBLEM(S).\n`,
 );
 process.exit(failed === 0 ? 0 : 1);

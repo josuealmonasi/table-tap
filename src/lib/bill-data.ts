@@ -1,3 +1,4 @@
+import { paymentCoverageDetails } from "@/lib/payment-coverage";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { currentSessionId as openTableSession, sessionAtTable } from "@/lib/table-session";
 import { billWindowStart, paidOrders, unpaidOrders } from "@/lib/table-bill";
@@ -86,8 +87,10 @@ export async function fetchTableBill(
   // `pending_payment` is already excluded above — those are carts mid-Stripe,
   // not debts. unpaidOrders drops cancelled ones; paidOrders drops those and
   // the written-off, so an order falls on one side or the other and never both.
+  const outstanding = unpaidOrders((owedRes.data ?? []) as Order[]);
+  const coverage = await paymentCoverageDetails(restaurantId, outstanding, audience === "staff");
   return [
-    ...unpaidOrders((owedRes.data ?? []) as Order[]),
+    ...outstanding.map(o => ({ ...o, collected: coverage.get(o.id)?.amount ?? 0, collected_tip: coverage.get(o.id)?.tip ?? 0 })),
     ...paidOrders((settledRes.data ?? []) as Order[]),
   ];
 }

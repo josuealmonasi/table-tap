@@ -1,3 +1,7 @@
+import PaymentAttribution from "@/components/dashboard/PaymentAttribution.react-component";
+import OrderRefunds from "@/components/dashboard/OrderRefunds.react-component";
+import { orderRefunds } from "@/lib/refunds/operations";
+import { paymentCoverage } from "@/lib/payment-coverage";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { everyRow } from "@/lib/paged";
 import { unwrap } from "@/lib/ordering-data";
@@ -158,23 +162,17 @@ export default async function BillsPage() {
   // reading as unpaid until the bill closes. `order_id is null` is what makes
   // it the sitting's rather than one order's — an order-level payment left
   // with the order it settled.
-  const sittings = [...new Set(sessionOf.values())];
-  const parts = sittings.length
-    ? unwrap(
-        await db
-          .from("payments")
-          .select("session_id, amount")
-          .eq("restaurant_id", r.id)
-          .in("session_id", sittings)
-          .is("order_id", null),
-        "what the tables have already paid",
-      )
-    : null;
+  const coverage = await paymentCoverage(r.id, rows, true);
   const collected = new Map<string, number>();
-  for (const p of parts ?? []) {
-    const key = p.session_id as string;
-    collected.set(key, (collected.get(key) ?? 0) + Number(p.amount));
+  for (const o of rows) {
+    if (!o.session_id) continue;
+    collected.set(o.session_id, (collected.get(o.session_id) ?? 0) + (coverage.get(o.id) ?? 0));
   }
+
+  const unresolved = MANAGES(membership.role) ? await everyRow<{
+    id: string; amount: number; tip: number; currency: string; created_at: string;
+  }>((a, b) => db.from("payments").select("id, amount, tip, currency, created_at")
+    .eq("restaurant_id", r.id).eq("allocation_quality", "unresolved").order("id").range(a, b), "the historical receipts") : [];
 
   // `canCollectInParts` and `canDiscount` are what the ROUTES will actually
   // accept. Both refuse on a plan without the feature, and this screen offered
@@ -211,6 +209,8 @@ export default async function BillsPage() {
             hires, removals and role changes, and a manager does not reach
             /dashboard/staff. */}
         {/* Above the till: money that is somebody else's comes before counting ours. */}
+        <PaymentAttribution receipts={unresolved} timeZone={r.timezone ?? DEFAULT_TIME_ZONE} />
+        <OrderRefunds refunds={MANAGES(membership.role) ? await orderRefunds(r.id) : []} />
         <RefundsDue
           refunds={refunds}
           currency={r.currency}

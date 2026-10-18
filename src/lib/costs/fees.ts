@@ -53,10 +53,13 @@ export function feeRate(payments: FeePayment[], platformFees: number, terminalPc
   let cash = 0;
   let online = 0;
   let terminal = 0;
+  const charged = new Set<string>();
   for (const p of payments) {
     const amount = Number(p.amount);
     takings += amount;
     fees += paymentFee(p, terminalPct);
+    if (p.stripe_payment_intent && charged.has(p.stripe_payment_intent)) fees -= STRIPE_FIXED * (1 + FEE_IVA_PCT / 100);
+    if (p.stripe_payment_intent) charged.add(p.stripe_payment_intent);
     if (p.method === "cash") cash += amount;
     else if (p.stripe_payment_intent) online += amount;
     else terminal += amount;

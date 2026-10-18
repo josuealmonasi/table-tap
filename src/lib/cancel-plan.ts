@@ -84,6 +84,7 @@ export function cancelPlan(order: CancelOrder, payments: CancelPayment[]): Cance
 /** What the dialog needs to word the offer: sums, never whose line. */
 export interface CancelSummary {
   paid: boolean;
+  pending?: boolean;
   refund: number;
   cash: number;
   terminal: number;
@@ -94,7 +95,7 @@ export function summarise(order: CancelOrder, plan: CancelPlan): CancelSummary {
   const sum = (xs: { amount: number }[]) => round2(xs.reduce((s, x) => s + x.amount, 0));
   const byPerson = plan.handBack.filter(h => h.collector);
   return {
-    paid: order.paid,
+    paid: order.paid || plan.refunds.length > 0 || plan.handBack.length > 0,
     refund: sum(plan.refunds),
     cash: sum(byPerson.filter(h => h.method === "cash")),
     terminal: sum(byPerson.filter(h => h.method === "card")),

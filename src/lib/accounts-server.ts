@@ -93,6 +93,7 @@ export interface Statement {
   payments: StatementPayment[];
   /** Who charged each order — for the staff's view, never the customer's. */
   chargedBy: Record<string, string | null>;
+  returns: { id: string; amount: number; currency: string; status: string; created_at: string }[];
 }
 
 interface StatementOrder {
@@ -115,6 +116,10 @@ export async function statementOf(account: AccountRow, timeZone?: string | null)
     db.from("payments").select("amount, tip, method, created_at")
       .eq("account_id", account.id).order("created_at", { ascending: false }).limit(20),
   ]);
+  const returns = await everyRow<{ id: string; amount: number; currency: string; status: string; created_at: string }>((a, b) => db
+    .from("refund_operations").select("id, amount, currency, status, created_at, order_adjustments!inner(orders!inner(account_id))")
+    .eq("restaurant_id", account.restaurant_id).eq("order_adjustments.orders.account_id", account.id)
+    .order("id").range(a, b), "the account's returns");
   const charges: StatementCharge[] = orders.map(o => ({
     orderId: o.id,
     at: o.charged_at ?? o.created_at,
@@ -129,6 +134,7 @@ export async function statementOf(account: AccountRow, timeZone?: string | null)
     owed: round2(charges.reduce((sum, c) => sum + c.total, 0)),
     days: byDay(charges, timeZone ?? DEFAULT_TIME_ZONE),
     payments: payments.map(p => ({ at: p.created_at, amount: Number(p.amount), tip: Number(p.tip), method: p.method })),
+    returns: returns.map(r => ({ id: r.id, amount: Number(r.amount), currency: r.currency, status: r.status, created_at: r.created_at })),
     chargedBy: Object.fromEntries(orders.map(o => [o.id, o.charged_by])),
   };
 }

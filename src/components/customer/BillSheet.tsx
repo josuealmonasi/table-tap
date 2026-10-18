@@ -150,7 +150,7 @@ export default function BillSheet({
   // A coupon is offered only when none of the orders being settled already
   // carries one — that discount is inside their totals, and a second would take
   // the same money off twice.
-  const alreadyDiscounted = orders.some(o => o.coupon_code);
+  const alreadyDiscounted = orders.some(o => o.coupon_code || Number(o.collected) > 0);
 
   // What the chosen scope comes to, line by line.
   const amounts = billAmounts(bill, scope, coupon, tipPct, tipCustom);

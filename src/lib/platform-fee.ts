@@ -19,7 +19,7 @@ import { orderFeeCents, type PlanLimits } from "@/lib/plan";
  *     both fit under one ceiling;
  *   - the payment marks it TAKEN (`takeFee`, from the settling webhook);
  *   - only a session that was never created, or Stripe's expiry, RELEASES it;
- *   - a refund records the share of the fee that went back, rounded down.
+ *   - refund workflows reconcile Stripe's verified cumulative fee return.
  *
  * A reservation nobody confirms keeps counting — a little over, never under:
  * counting short is the one way to charge a restaurant past its ceiling.
@@ -202,20 +202,6 @@ export async function attachFeeSession(hold: FeeHold, sessionId: string): Promis
 /** Stripe's expiry for a session nobody paid. */
 export async function releaseSessionFee(session: Stripe.Checkout.Session): Promise<void> {
   await releaseFee(session.metadata?.fee_id);
-}
-
-/**
- * A refund on a charge that carried our fee. Stripe returns the fee in
- * proportion to what was refunded; this records that share, once per refund.
- */
-export async function refundFee(restaurantId: string, intent: string, refundCents: number, refundId: string): Promise<void> {
-  const { error } = await createAdminClient().rpc("refund_platform_fee", {
-    p_restaurant: restaurantId,
-    p_intent: intent,
-    p_refund_cents: refundCents,
-    p_refund_id: refundId,
-  });
-  if (error) throw new Error(`Could not record the fee refunded: ${error.message}`);
 }
 
 /** The fees we kept on payments settled since `since`, in pesos: the costs screen's figure. */

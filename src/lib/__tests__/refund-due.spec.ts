@@ -5,6 +5,7 @@ const logged: { action: string; detail?: string | null }[] = [];
 vi.mock("@/lib/activity-log", () => ({
   logEvent: async (e: { action: string; detail?: string | null }) => void logged.push(e),
 }));
+vi.mock("@/lib/refunds/fee", () => ({ syncReturnedFee: vi.fn(async () => {}) }));
 vi.mock("@/lib/stripe", () => ({ stripe: {} }));
 
 import { corteFrom } from "@/lib/corte";
@@ -64,8 +65,10 @@ const due = (over: Partial<Row> = {}): Row => ({
 
 function fakeStripe(over: { create?: () => Promise<unknown>; made?: Stripe.Refund[] } = {}) {
   const calls = {
-    create: vi.fn(over.create ?? (async () => ({ id: "re_1" }))),
-    list: vi.fn(async () => ({ data: over.made ?? [] })),
+    create: vi.fn(over.create ?? (async () => ({ id: "re_1", status: "succeeded" }))),
+    list: vi.fn(() => Object.assign(Promise.resolve({ data: over.made ?? [] }), {
+      async *[Symbol.asyncIterator]() { yield* over.made ?? []; },
+    })),
     feeRefund: vi.fn(async () => ({ id: "fr_1" })),
   };
   const client = {
@@ -102,6 +105,14 @@ describe("refunding a payment taken twice", () => {
     expect(logged).toHaveLength(1);
   });
 
+  it("keeps a pending provider refund owed instead of claiming it completed", async () => {
+    const rows = [due()];
+    const { client } = fakeStripe({ create: async () => ({ id: "re_pending", status: "pending" }) });
+    expect(await refundDue(fakeDb(rows), "r1", "d1", "manager", client)).toMatchObject({ ok: false, error: "apiErr.refundPending", status: 409 });
+    expect(rows[0].refunded_at).toBeNull();
+    expect(logged).toHaveLength(0);
+  });
+
   it("leaves the row owed when Stripe refuses, so it can be tried again", async () => {
     const rows = [due()];
     const { client } = fakeStripe({ create: async () => Promise.reject(stripeError("card_declined")) });
@@ -115,7 +126,7 @@ describe("refunding a payment taken twice", () => {
     // The server died after Stripe refunded and before the row was written.
     const rows = [due()];
     const { client, calls } = fakeStripe({
-      made: [{ id: "re_old", metadata: { refund_due: "d1" } } as unknown as Stripe.Refund],
+      made: [{ id: "re_old", status: "succeeded", metadata: { refund_due: "d1" } } as unknown as Stripe.Refund],
     });
     const answer = await refundDue(fakeDb(rows), "r1", "d1", "ana@x.dev", client);
     expect(answer.ok).toBe(true);
@@ -125,7 +136,8 @@ describe("refunding a payment taken twice", () => {
 
   it("returns our fee when the diner was already refunded by hand in Stripe", async () => {
     const rows = [due({ amount: 251 })];
-    const { client, calls } = fakeStripe({ create: async () => Promise.reject(stripeError("charge_already_refunded")) });
+    const { client, calls } = fakeStripe({ create: async () => Promise.reject(stripeError("charge_already_refunded")),
+      made: [{ id: "re_manual", amount: 25100, status: "succeeded", metadata: {} } as Stripe.Refund] });
     const answer = await refundDue(fakeDb(rows), "r1", "d1", "ana@x.dev", client);
     expect(answer).toEqual({ ok: true, amount: 251, alreadyInStripe: true });
     // The whole charge was taken twice, so the whole fee goes back.

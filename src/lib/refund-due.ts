@@ -3,7 +3,7 @@ import { stripe } from "@/lib/stripe";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
-import { refundFee } from "@/lib/platform-fee";
+import { syncReturnedFee } from "@/lib/refunds/fee";
 
 type Db = ReturnType<typeof createAdminClient>;
 
@@ -83,17 +83,12 @@ export async function refundDue(
   let refundId: string | null = null;
   let alreadyInStripe = false;
   try {
-    refundId = (await refundMadeFor(client, intent, stripeAccount, id)) ?? (
-      await client.refunds.create(
-        {
-          payment_intent: intent,
-          amount: cents,
-          refund_application_fee: true,
-          metadata: { refund_due: id },
-        },
-        { idempotencyKey: `refund-due-${id}`, stripeAccount },
-      )
-    ).id;
+    const refund = (await refundMadeFor(client, intent, stripeAccount, id)) ?? await client.refunds.create(
+      { payment_intent: intent, amount: cents, refund_application_fee: true, metadata: { refund_due: id } },
+      { idempotencyKey: `refund-due-${id}`, stripeAccount },
+    );
+    if (refund.status !== "succeeded") return { ok: false, error: "apiErr.refundPending", status: 409 };
+    refundId = refund.id;
   } catch (err) {
     const code = err && typeof err === "object" && "code" in err ? err.code : undefined;
     // The other click, still being answered: its refund is the one.
@@ -106,17 +101,21 @@ export async function refundDue(
     }
     // Somebody refunded it in Stripe by hand, as the bell used to ask. The
     // diner has their money; what is left to give back is our fee.
+    const confirmed = await returnOurFee(client, intent, stripeAccount, cents, id).catch(e => {
+      console.error("refund due: our fee could not be returned", e);
+      return false;
+    });
+    if (!confirmed) return { ok: false, error: "apiErr.refundPending", status: 409 };
     alreadyInStripe = true;
-    await returnOurFee(client, intent, stripeAccount, cents, id).catch(e =>
-      console.error("refund due: our fee could not be returned", e),
-    );
   }
 
   // The share of our fee that went back with it. A charge refunded by hand
   // in Stripe is left counted: the safe way round for the month's ceiling.
-  if (refundId) {
-    await refundFee(restaurantId, intent, cents, refundId)
-      .catch(err => console.error("refund due: the fee refund stays uncounted", err));
+  try {
+    await syncReturnedFee(client, restaurantId, intent, stripeAccount);
+  } catch (error) {
+    console.error("refund due: could not reconcile the returned fee", error);
+    return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
   }
 
   // Only the request that writes the row says so in the log, so a retry that
@@ -146,9 +145,11 @@ async function refundMadeFor(
   paymentIntent: string,
   stripeAccount: string,
   id: string,
-): Promise<string | null> {
-  const made = await client.refunds.list({ payment_intent: paymentIntent, limit: 100 }, { stripeAccount });
-  return made.data.find(r => r.metadata?.refund_due === id)?.id ?? null;
+): Promise<Stripe.Refund | null> {
+  for await (const made of client.refunds.list({ payment_intent: paymentIntent, limit: 100 }, { stripeAccount })) {
+    if (made.metadata?.refund_due === id) return made;
+  }
+  return null;
 }
 
 /**
@@ -164,7 +165,7 @@ async function returnOurFee(
   stripeAccount: string,
   refundedCents: number,
   id: string,
-): Promise<void> {
+): Promise<boolean> {
   const intent = await client.paymentIntents.retrieve(
     paymentIntent,
     { expand: ["latest_charge"] },
@@ -173,15 +174,22 @@ async function returnOurFee(
   const charge = intent.latest_charge as Stripe.Charge | null;
   const feeId =
     typeof charge?.application_fee === "string" ? charge.application_fee : charge?.application_fee?.id;
-  if (!charge?.amount || !feeId) return;
+  if (!charge?.amount) return false;
+  let confirmed = 0;
+  for await (const refund of client.refunds.list({ payment_intent: paymentIntent, limit: 100 }, { stripeAccount })) {
+    if (refund.status === "succeeded") confirmed += refund.amount;
+  }
+  if (confirmed < charge.amount) return false;
+  if (!feeId) return true;
   const fee = await client.applicationFees.retrieve(feeId);
   const share = Math.round((fee.amount * Math.min(refundedCents, charge.amount)) / charge.amount);
   const left = fee.amount - fee.amount_refunded;
   const back = Math.min(share, left);
-  if (back <= 0) return;
+  if (back <= 0) return true;
   await client.applicationFees.createRefund(
     feeId,
     { amount: back, metadata: { refund_due: id } },
     { idempotencyKey: `refund-due-fee-${id}` },
   );
+  return true;
 }

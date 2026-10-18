@@ -1158,7 +1158,7 @@ describe("a repeated webhook cannot record the same money twice", () => {
     expect(body("settle_split_share"), "settle_split_share lost its paid_at is null guard").toMatch(/and paid_at is null;/);
     const close = body("close_divided_bill");
     expect(close).toContain("v_count <> v_split.shares");
-    expect(close).toContain("v_collected - v_spent < v_owed");
+    expect(close).toContain("public.retained_order_coverage(v_split.restaurant_id, o.id) < o.total");
     expect(close).toContain("and paid = false and written_off = false");
 
     const unguarded = marks
@@ -1180,7 +1180,11 @@ describe("a repeated webhook cannot record the same money twice", () => {
   });
 
   it("treats a refused duplicate as already recorded, not as a failure", () => {
-    expect(read("src/lib/payments.ts")).toMatch(/error\.code !== "23505"/);
+    // Standalone receipt inserts are retired; each transactional writer owns
+    // its duplicate guard and the caller receives that explicit outcome.
+    expect(fs.existsSync("src/lib/payments.ts")).toBe(false);
+    expect(read("supabase/schema.sql")).toContain("exception when unique_violation then");
+    expect(read("src/lib/part-payment.ts")).toContain('outcome.outcome === "duplicate"');
   });
 
   it("adds a tip only on the delivery that settled the bill, and records it", () => {
@@ -1201,7 +1205,7 @@ describe("a repeated webhook cannot record the same money twice", () => {
     const fn = schema.slice(at, schema.indexOf("$$;", at));
     expect(fn, "the tip's order is not one this call settles").toMatch(/o\.id = p_tip_order and o\.id = any\(p_orders\) and o\.paid = false/);
     expect(fn, "the tip is added even when this delivery settled nothing").toMatch(/v_tip_on = any\(v_settled\)/);
-    expect(fn, "the payment for the tip's order does not carry the tip").toMatch(/round\(s\.total \+ case when s\.id = v_tip_on then coalesce\(p_tip, 0\) else 0 end, 2\)/);
+    expect(fn, "the payment for the tip's order does not carry the tip").toMatch(/round\(greatest\(s\.total - public\.retained_order_coverage\(s\.restaurant_id, s\.id\), 0\) \+ case when s\.id = v_tip_on then coalesce\(p_tip, 0\) else 0 end, 2\)/);
   });
 });
 
@@ -1803,15 +1807,14 @@ describe("a sale is handed back once", () => {
     // succeed, both log, and the sale leaves the drawer twice — while the
     // stock it held goes back on the shelf twice.
     const src = read("src/app/api/orders/cancel/route.ts");
-    expect(src).toContain('rpc("cancel_order"');
-    // The race to cancel is settled before anything is written down: of two
-    // cancels, the loser must be refused before the handback is logged, or the
-    // corte takes the same sale out of the drawer twice. (#464 moved the write
-    // into cancel_order; this keeps the order it was written in.)
-    const settled = src.search(/if \(!moved\) return/);
-    const handback = src.indexOf('action: "refunded"');
-    expect(settled, "nothing refuses the cancel that lost the race").toBeGreaterThan(src.indexOf('rpc("cancel_order"'));
-    expect(handback, "the handback is written before the race is settled").toBeGreaterThan(settled);
+    expect(src).toContain('rpc("prepare_order_refund"');
+    expect(src.indexOf('data?.outcome !== "cancelled"')).toBeGreaterThan(src.indexOf('rpc("prepare_order_refund"'));
+    expect(src.indexOf('await executeOrderRefund')).toBeGreaterThan(src.indexOf('rpc("prepare_order_refund"'));
+    expect(src).not.toContain('action: "refunded"');
+    const executor = read("src/lib/refunds/operations.ts");
+    expect(executor).toContain('rpc("start_refund_attempt"');
+    expect(executor).toContain('rpc("finish_refund_operation"');
+    expect(executor).toContain('refund_application_fee: true');
     const sql = read("supabase/schema.sql");
     expect(sql).toContain("status in ('received', 'preparing')");
     expect(sql).toContain("if not found then return false; end if;");

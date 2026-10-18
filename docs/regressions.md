@@ -2395,3 +2395,6 @@ History remains unrestricted, and the unused catalogue columns and TypeScript
 fields are removed instead of introducing a new restriction after a downgrade.
 `entitlement-schema.spec.ts` checks the removal on existing databases; analytics
 and log reads retain their existing behavior and tenant scope.
+
+| Partial payments and cancellations | Money collected for a cancelled dish was reused as credit for another dish, and a pooled receipt did not identify which collector or charge funded a return. | Transactional allocation probes in `pnpm api`, immutable per-order coverage, durable return reservations, and the allocation section of `pnpm money`. |
+| Frozen split versus later rounds | A split share must never fund or close orders placed after the split froze. | `scripts/allocations-check.mjs` pays both shares with tips, closes the frozen orders, and proves a later order remains unpaid and unallocated. |

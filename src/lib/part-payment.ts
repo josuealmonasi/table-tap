@@ -63,7 +63,7 @@ export async function record(
   let covered = false;
   let landedTotal = 0;
   for (const [n, share] of across.entries()) {
-    const { data } = await db.rpc("collect_on_sitting", {
+    const { data } = await db.rpc("collect_on_sitting_v2", {
       // The sitting, not an order: this money belongs to the table, and
       // pinning it to one of the orders would say that dish was paid for when
       // what was handed over covers a share of all of them.
@@ -153,27 +153,6 @@ export async function sittingFor(
     .is("account_id", null)
     .eq("written_off", false);
   return opened;
-}
-
-/**
- * The gratuity, onto the oldest order still owed.
- *
- * The same attribution settling a whole table already uses: `tip` and `total`
- * both rise, so the takings match what actually changed hands. The balance is
- * unmoved because it counts `total` minus `tip` — which is the one reason
- * both columns have to move together.
- */
-export async function addTip(restaurantId: string, before: Outstanding, tip: number): Promise<void> {
-  const first = before.orders[0];
-  if (!first) return;
-  await createAdminClient()
-    .from("orders")
-    .update({
-      tip: round2(Number(first.tip ?? 0) + tip),
-      total: round2(Number(first.total ?? 0) + tip),
-    })
-    .eq("id", first.id)
-    .eq("restaurant_id", restaurantId);
 }
 
 /**
