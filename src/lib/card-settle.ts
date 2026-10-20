@@ -34,7 +34,7 @@ export async function settleCardOrders(
   opts: { tip?: number; tipOrder?: string; status?: "received"; charged?: number } = {},
 ): Promise<CardSettlement & { sessions: { session_id: string | null }[] }> {
   const db = createAdminClient();
-  const { data, error } = await db.rpc("settle_card_orders", {
+  const { data, error } = await db.rpc("settle_card_orders_v2", {
     p_orders: ids,
     p_intent: typeof session.payment_intent === "string" ? session.payment_intent : null,
     p_tip: opts.tip ?? 0,

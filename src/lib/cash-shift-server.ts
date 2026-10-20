@@ -1,3 +1,5 @@
+import { returnedTrail } from "@/lib/refunds/trail";
+import { returnedAdjustments } from "@/lib/refunds/adjustments";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { everyRow } from "@/lib/paged";
 import type { CorteAdjustment, CortePayment } from "@/lib/corte";
@@ -70,7 +72,7 @@ export async function shiftSumOf(restaurantId: string, shift: CashShift, until: 
   const to = (shift.closed_at ? new Date(shift.closed_at) : until).toISOString();
   // Every row of the shift: a busy shift has more payments than one read
   // returns, and a drawer summed from part of them is a shortfall nobody made.
-  const [payments, handedBack, withdrawals] = await Promise.all([
+  const [payments, handedBack, withdrawals, returns] = await Promise.all([
     everyRow<CortePayment>((a, b) => db.from("payments").select("actor_email, amount, method")
       .eq("restaurant_id", restaurantId).gte("created_at", from).lte("created_at", to)
       .order("id").range(a, b), "the shift's payments"),
@@ -78,8 +80,9 @@ export async function shiftSumOf(restaurantId: string, shift: CashShift, until: 
       .eq("restaurant_id", restaurantId).eq("action", "refunded").gte("created_at", from).lte("created_at", to)
       .order("id").range(a, b), "the shift's handbacks"),
     shiftWithdrawals(restaurantId, shift.id),
+    returnedAdjustments(restaurantId, from, to),
   ]);
-  return shiftSum(shift.opening_amount, payments, handedBack, withdrawals);
+  return shiftSum(shift.opening_amount, payments, [...handedBack, ...returns], withdrawals);
 }
 
 /** What happened to the money during a shift: refunds, discounts, cancellations, withdrawals. */
@@ -92,7 +95,9 @@ export async function shiftTrail(restaurantId: string, shift: CashShift): Promis
     .in("entity", Object.keys(TRAIL))
     .gte("created_at", shift.opened_at).lte("created_at", to)
     .order("created_at", { ascending: true }).order("id").range(a, b), "the shift's trail");
-  return data.filter(l => TRAIL[l.entity]?.includes(l.action));
+  const returns = await returnedTrail(restaurantId, shift.opened_at, to);
+  return [...data.filter(l => TRAIL[l.entity]?.includes(l.action)), ...returns]
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
 /** Today's shifts as the register close shows them, each with its sum and trail. */

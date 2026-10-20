@@ -7,6 +7,7 @@ import { packOrderIds, stripeProductName } from "@/lib/stripe-limits";
 import { staffOpenedBill } from "@/lib/table-session";
 import { splitInProgress } from "@/lib/split-service";
 import { isRoomLimited, isTableLimited } from "@/lib/rate-limit";
+import { PaymentAttributionRequired, paymentCoverage } from "@/lib/payment-coverage";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPlan } from "@/lib/plan-server";
 import { NO_FEE, feeMetadata, releaseFee, reserveFee, stripeRefusedOutright } from "@/lib/platform-fee";
@@ -122,6 +123,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   })[];
   if (orders.length === 0) return await apiError("apiErr.billSettled", 409);
 
+  const coverage = await paymentCoverage(restaurantId, orders).catch(error => error instanceof PaymentAttributionRequired ? "review" : null);
+  if (coverage === "review") return await apiError("apiErr.attributionRequired", 409);
+  if (!coverage) return await apiError("apiErr.verifyOrders", 503);
+  if (couponCode && orders.some(o => (coverage.get(o.id) ?? 0) > 0)) return await apiError("apiErr.couponAlreadyUsed", 409);
+  for (const o of orders) o.total = round2(Math.max(0, Number(o.total) - (coverage.get(o.id) ?? 0)));
   const food = round2(orders.reduce((sum, o) => sum + Number(o.total), 0));
 
   // A coupon here discounts the share being settled, which is what lets two

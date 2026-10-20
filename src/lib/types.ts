@@ -240,6 +240,9 @@ export function lineUnitPrice(item: { price: number; extras?: OrderExtra[] }): n
 }
 
 export type Order = {
+  /** Retained payment coverage, supplied by the server for bill display. */
+  collected?: number;
+  collected_tip?: number;
   id: string;
   restaurant_id: string;
   table_id: string | null;

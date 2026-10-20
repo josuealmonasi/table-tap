@@ -35,7 +35,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const db = createAdminClient();
-  const { data: seat, error } = await db.rpc("join_bill_split", {
+  const { data: seat, error } = await db.rpc("join_bill_split_v2", {
     p_split: splitId,
     p_diner: diner,
     p_restaurant: restaurantId,

@@ -17,6 +17,7 @@
 // accounting. `smoke:prod` and `roles:prod` read the deployed site instead.
 // ============================================================================
 import { join } from "node:path";
+import { checkPaymentAllocations } from "./allocations-check.mjs";
 import { setup, teardown } from "./api-fixtures.mjs";
 import { cases } from "./api-cases.mjs";
 import { refuseProduction, requireServer, retryFetch } from "./preflight.mjs";
@@ -35,6 +36,7 @@ const bad = m => { failed++; console.log(`    BAD      ${m}`); };
 
 console.log("\nRequests — development\n");
 
+await checkPaymentAllocations();
 const fx = await setup(process.env, BASE);
 // What one case leaves for the next: the coupon that gets created is the one
 // later switched off and deleted.

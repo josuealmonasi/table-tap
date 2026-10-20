@@ -39,7 +39,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // The same ceiling on a gratuity as a table's: never more than the food.
   const { tip } = applyPayment(expected, expected, Number(body.tip ?? 0));
 
-  const { data, error } = await createAdminClient().rpc("account_settle", {
+  const { data, error } = await createAdminClient().rpc("account_settle_v2", {
     p_restaurant: actor.restaurantId,
     p_account: account.id,
     p_expected: expected,

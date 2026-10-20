@@ -2395,3 +2395,87 @@ History remains unrestricted, and the unused catalogue columns and TypeScript
 fields are removed instead of introducing a new restriction after a downgrade.
 `entitlement-schema.spec.ts` checks the removal on existing databases; analytics
 and log reads retain their existing behavior and tenant scope.
+
+| Partial payments and cancellations | Money collected for a cancelled dish was reused as credit for another dish, and a pooled receipt did not identify which collector or charge funded a return. | Transactional allocation probes in `pnpm api`, immutable per-order coverage, durable return reservations, and the allocation section of `pnpm money`. |
+| Frozen split versus later rounds | A split share must never fund or close orders placed after the split froze. | `scripts/allocations-check.mjs` pays both shares with tips, closes the frozen orders, and proves a later order remains unpaid and unallocated. |
+
+| PR1 overlap writers | Schema-first deployment changed the RPCs still used by main and let allocation triggers reject their writes. | `allocation-review.spec.ts` pins d7a0729 writer bodies; the app calls versioned writers under the shared money lock. |
+| PR1 refund before fee | A fee lookup failure hid a successful customer refund. | `operations.spec.tsx` records the provider outcome before fee work and recovers fee work without rebooking the return. |
+| PR1 duplicate refund retries | A confirmed failed duplicate refund reused Stripe's cached failure forever. | `refund-due.spec.ts` checks separately keyed durable failed/canceled retries. |
+| PR1 existing tips | Partial receipt metadata counted only new gratuity and omitted tips already owed. | `allocation-review.spec.ts` checks existing-tip construction in the versioned collector. |
+| PR1 cancelled history | Historical attribution excluded cancelled orders and could never assign the whole original receipt. | `allocation-review.spec.ts` and `attribution.spec.tsx` cover cancelled candidates and imported old handbacks. |
+| PR1 historical currency | Pooled history borrowed today's restaurant currency and could request a return in the wrong money. | `allocation-review.spec.ts` requires evidence; `attribution.spec.tsx` carries currency through manager attribution. |
+| PR1 food versus tip | Gross coverage concealed food/tip swaps. | `allocation-money.spec.ts` rejects swapped components and distinguishes explicitly unknown historical breakdowns. |
+| PR1 shift explanation | Completed typed returns changed drawer cash without appearing in the shift trail. | `shift-return-trail.spec.ts` verifies amount, order, payout actor and completion time, without old-log duplication. |
+| PR1 names and copy | Allocation files and payment explanations did not follow the house conventions. | `allocation-review.spec.ts` checks filenames, retired-initializer explanation and plainer copy. |
+
+## PR1 1 — Schema-first overlap
+
+The deployed writer and its new enforcement had to agree. Legacy RPC bodies
+retain d7a0729 behavior, adding only the restaurant money lock. New callers use
+`_v2` writers. Old receipts keep insertion-time scope for locked reconciliation;
+strict order checks run only inside versioned writers. The SQL contract tests
+do not execute PostgreSQL: Claude must rerun the main-against-delta window gate.
+
+## PR1 2 — Customer refund and our fee
+
+Provider success and the customer's financial record must agree even if our
+fee lookup fails. Record success first. `fee_reconciled_at` remains empty until
+a verified cumulative fee lookup succeeds; opening the manager's Bills list
+schedules that work after the response without changing the customer's completion time.
+
+## PR1 3 — Terminal failures and uncertain attempts
+
+A provider attempt and its Stripe key must agree across process restarts.
+`refund_due_attempts` freezes the request and account before the call. Pending
+or unknown outcomes reuse it; confirmed failed/canceled outcomes advance to a
+new numbered attempt. Late outcomes cannot overwrite the newest attempt.
+
+## PR1 4 — Existing and additional tips
+
+The debt's tip and the receipt's tip must agree. The collector attributes the
+existing unpaid tip proportionally to the amount paying existing debt, then
+adds only the new gratuity to the order. Rounding follows remaining capacity,
+so collecting MX$55 twice against MX$100 food plus MX$10 tip records MX$5 tip
+on each receipt and closes the whole debt.
+
+## PR1 5 — Cancelled historical orders
+
+Original pooled receipts and cancelled dishes still have to agree. A manager
+can attribute to historical cancelled orders. A uniquely matching old manual
+handback becomes a completed typed reservation linked to its old log. Corte
+and shift sums keep using that old log once; the shift trail also excludes its
+typed copy. A log arriving after the first review is reconciled on a later
+locked read. Unproven manual returns remain review items; confirm only money
+actually given back. Unknown Stripe provenance stays in review for provider
+verification, never an automatic refund using today's account.
+
+## PR1 6 — Currency evidence
+
+The old receipt and the return currency must agree. Pooled pre-snapshot history
+keeps a null currency; it never inherits today's restaurant setting. Attribution
+requires the original receipt's currency and an audit explanation, matches each
+order's currency, and records the manager's evidence. Unknown amounts display
+without a currency symbol until verified. Return preparation routes mismatched
+or absent currency to review.
+
+## PR1 7 — Principal and gratuity
+
+Food and tip capacity are separate invariants. Attribution and paid-order checks
+validate both, and the money probe checks both in cents. A historically missing
+breakdown is an explicit, audited exception, reported as REVIEW by the money
+probe rather than silently called a clean reconciliation. Gross capacity still
+applies to that exception.
+
+## PR1 8 — Drawer sum and explanation
+
+Typed returns and the shift's trail must agree. The trail merges completed new
+returns with activity logs, sorted by completion time, with the actual payout
+actor and order. Imported historical returns retain their original log line.
+
+## PR1 9 — Names and wording
+
+The allocation components use `OrderRefunds.tsx` and `PaymentAttribution.tsx`;
+specs use `.spec.ts` or `.spec.tsx`. Both languages describe matching old
+payments to orders and confirming money actually returned. The retired receipt
+initializer keeps its explanation about duplicate pooled/account receipts.

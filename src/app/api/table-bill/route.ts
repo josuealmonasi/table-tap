@@ -1,3 +1,4 @@
+import { PaymentAttributionRequired } from "@/lib/payment-coverage";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { actingFrontOfHouse } from "@/lib/api-guard";
@@ -64,7 +65,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       orders,
       outstanding: { ordered, collected: 0, tips: 0, owed: ordered },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof PaymentAttributionRequired) return await apiError("apiErr.attributionRequired", 409);
     return await apiError("apiErr.ordersLoad", 500);
   }
 }

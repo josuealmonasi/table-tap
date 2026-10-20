@@ -67,7 +67,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await apiError(key, status);
   };
 
-  const { data: opened, error: openError } = await db.rpc("account_checkout_open", {
+  const { data: opened, error: openError } = await db.rpc("account_checkout_open_v2", {
     p_restaurant: restaurant.id,
     p_account: account.id,
     p_expected: expected,

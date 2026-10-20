@@ -2348,29 +2348,8 @@ create policy "the floor reads payments"
 revoke all on payments from anon;
 grant select on payments to authenticated;
 
--- Backfill: one payment for every order already settled, so the ledger agrees
--- with the boolean from its first day. Idempotent, because this file re-runs —
--- an order that already has a payment is skipped rather than doubled.
-insert into payments (restaurant_id, order_id, session_id, amount, method, created_at)
-select o.restaurant_id, o.id, o.session_id, o.total,
-       case when coalesce(o.pay_method, '') = 'cash' then 'cash' else 'card' end,
-       o.created_at
-  from orders o
- where o.paid
-   and o.total > 0
-   and not exists (select 1 from payments p where p.order_id = o.id)
-   -- An order settled as part of a TABLE has no payment of its own on purpose:
-   -- a share of a divided bill, or a waiter collecting the bill a hundred pesos
-   -- at a time, is money against the sitting. Inventing one here counts the
-   -- same pesos a second time — and this file runs on every deploy, so it would
-   -- do it to every such table on the next migration. It cost MX$98.78 on the
-   -- first table ever settled in parts, in development, where it was cheap.
-   and not exists (
-     select 1 from payments p
-      where p.order_id is null
-        and p.session_id is not null
-        and p.session_id = o.session_id
-   );
+-- Historical receipt initialization retired; allocation backfills never create payments.
+-- The retired receipt initializer could manufacture duplicate receipts for pooled/account settlements.
 
 -- ── Dividing a bill ─────────────────────────────────────────────────────────
 -- A table agreeing to pay the same amount each.
@@ -2425,6 +2404,7 @@ create table if not exists bill_split_claims (
 create unique index if not exists bill_split_claims_one_each
   on bill_split_claims(split_id, diner);
 
+alter table bill_splits add column if not exists order_ids uuid[] not null default '{}';
 alter table bill_splits enable row level security;
 alter table bill_split_claims enable row level security;
 
@@ -2463,6 +2443,7 @@ declare
   v_amount numeric;
   v_freeze timestamptz;
 begin
+  perform public.lock_restaurant_money(p_restaurant);
   select * into v_split from bill_splits where id = p_split;
   if not found then return null; end if;
   perform pg_advisory_xact_lock(hashtextextended(v_split.session_id::text, 0));
@@ -2519,6 +2500,7 @@ declare
   v_collected numeric;
   v_spent numeric;
 begin
+  perform public.lock_restaurant_money((select restaurant_id from bill_splits where id = p_split));
   select * into v_split from bill_splits where id = p_split;
   if not found then return false; end if;
   perform pg_advisory_xact_lock(hashtextextended(v_split.session_id::text, 0));
@@ -2596,6 +2578,7 @@ declare
   v_room  numeric;
   v_take  numeric;
 begin
+  perform public.lock_restaurant_money(p_restaurant);
   -- One collection at a time per sitting. Everything below reads live.
   perform pg_advisory_xact_lock(hashtextextended(p_session::text, 0));
 
@@ -2702,6 +2685,7 @@ as $$
 declare
   v_count int;
 begin
+  perform public.lock_restaurant_money(p_restaurant);
   if p_method not in ('cash', 'card') then
     raise exception 'settle_orders: unknown method %', p_method;
   end if;
@@ -2838,6 +2822,7 @@ declare
   v_label    text;
   v_currency text;
 begin
+  perform public.lock_restaurant_money((select restaurant_id from orders where id = any(p_orders) limit 1));
   -- Held for the rest of the call, so the choice below and the update after it
   -- see the same orders: a waiter settling one in between waits for this.
   perform 1 from orders where id = any(p_orders) order by id for update;
@@ -2937,6 +2922,7 @@ declare
   v_session    uuid;
   v_claimed    int;
 begin
+  perform public.lock_restaurant_money((select restaurant_id from bill_splits where id = p_split));
   select restaurant_id, session_id into v_restaurant, v_session from bill_splits where id = p_split;
   if not found then return false; end if;
 
@@ -3030,6 +3016,7 @@ as $$
 declare
   v_total numeric;
 begin
+  perform public.lock_restaurant_money(p_restaurant);
   if p_method not in ('cash', 'card') then
     raise exception 'settle_sale: unknown method %', p_method;
   end if;
@@ -3695,6 +3682,7 @@ declare
   v_sessions uuid[];
   v_owed     numeric;
 begin
+  perform public.lock_restaurant_money(p_restaurant);
   select * into v_account from customer_accounts
    where id = p_account and restaurant_id = p_restaurant for update;
   if v_account.id is null or v_account.status <> 'open' then
@@ -3756,6 +3744,7 @@ declare
   v_account customer_accounts;
   v_owed numeric;
 begin
+  perform public.lock_restaurant_money(p_restaurant);
   select * into v_account from customer_accounts
    where id = p_account and restaurant_id = p_restaurant for update;
   if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
@@ -3795,6 +3784,7 @@ declare
   v_owed    numeric;
   v_tip     numeric := greatest(coalesce(p_tip, 0), 0);
 begin
+  perform public.lock_restaurant_money(p_restaurant);
   select * into v_account from customer_accounts
    where id = p_account and restaurant_id = p_restaurant for update;
   if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
@@ -3846,6 +3836,7 @@ declare
   v_tip     numeric := greatest(coalesce(p_tip, 0), 0);
   v_id      uuid;
 begin
+  perform public.lock_restaurant_money(p_restaurant);
   select * into v_account from customer_accounts
    where id = p_account and restaurant_id = p_restaurant for update;
   if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
@@ -3893,6 +3884,7 @@ declare
   v_tip      numeric;
   v_twice    numeric;
 begin
+  perform public.lock_restaurant_money((select restaurant_id from account_checkouts where id = p_checkout));
   select * into v_checkout from account_checkouts where id = p_checkout;
   if v_checkout.id is null then return jsonb_build_object('outcome', 'missing'); end if;
   -- Opening the next checkout holds the account first too.
@@ -4660,6 +4652,7 @@ create or replace function public.settle_offline_sale(
 declare
   v_total numeric;
 begin
+  perform public.lock_restaurant_money(p_restaurant);
   if p_method not in ('cash', 'card') then
     raise exception 'settle_offline_sale: unknown method %', p_method;
   end if;
@@ -4726,6 +4719,7 @@ declare
   v_order orders%rowtype;
   v_account customer_accounts;
 begin
+  perform public.lock_restaurant_money(p_restaurant);
   -- Collection holds the account first. Recheck the plan under that lock so
   -- an unpaid cancel cannot silently erase food that was just collected.
   if p_expected_account is not null then
@@ -5069,6 +5063,7 @@ declare
   v_stock jsonb := '{"ok":true,"low":[]}'::jsonb;
   v_reservation uuid;
 begin
+  perform public.lock_restaurant_money(p_restaurant);
   if p_method not in ('cash', 'card') or p_status not in ('received', 'completed') then
     raise exception 'Invalid till sale';
   end if;
@@ -5118,6 +5113,7 @@ declare
   v_reservation uuid;
   v_name text;
 begin
+  perform public.lock_restaurant_money(p_restaurant);
   if p_status not in ('received', 'completed') then raise exception 'Invalid till status'; end if;
   v_ticket := public.pos_ticket(p_restaurant, p_ref);
   if v_ticket is not null then return v_ticket; end if;
@@ -5158,6 +5154,7 @@ declare
   v_count int;
   v_total numeric;
 begin
+  perform public.lock_restaurant_money(p_restaurant);
   select * into v_request from write_off_requests
    where id = p_request and restaurant_id = p_restaurant for update;
   if not found or v_request.status <> 'pending' then return 'gone'; end if;
@@ -5194,6 +5191,7 @@ declare
   v_total numeric;
   v_amount numeric;
 begin
+  perform public.lock_restaurant_money(p_restaurant);
   select * into v_request from discount_requests
    where id = p_request and restaurant_id = p_restaurant for update;
   if not found or v_request.status <> 'pending' then return 'gone'; end if;
@@ -5271,5 +5269,1991 @@ grant select, insert on restaurant_subscription_prices to service_role;
 insert into restaurant_subscription_prices (price_id, plan)
   select stripe_price_id, plan from plan_limits where stripe_price_id is not null
   on conflict (price_id) do nothing;
+
+revoke truncate, references, trigger on all tables in schema public from authenticated;
+
+-- ── Payment provenance: receipts, coverage and return obligations ───────────
+-- Amounts remain inclusive of tips. Existing receipts are never recreated.
+alter table payments add column if not exists allocation_origin text not null default 'legacy';
+alter table payments add column if not exists allocation_version int not null default 0;
+alter table payments add column if not exists allocation_quality text not null default 'unresolved';
+alter table payments add column if not exists allocation_reason text;
+alter table payments add column if not exists allocation_scope uuid[] not null default '{}';
+alter table payments add column if not exists unallocated_amount numeric not null default 0;
+alter table payments add column if not exists unallocated_tip numeric not null default 0;
+alter table payments add column if not exists currency text;
+alter table payments add column if not exists stripe_account_id text;
+create unique index if not exists payments_tenant_identity on payments(restaurant_id, id);
+create unique index if not exists orders_tenant_identity on orders(restaurant_id, id);
+
+alter table payments add column if not exists breakdown_unknown boolean not null default false;
+create table if not exists payment_allocations (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  payment_id uuid not null,
+  order_id uuid not null,
+  amount numeric not null check (amount > 0 and amount = round(amount, 2)),
+  tip numeric not null check (tip >= 0 and tip <= amount and tip = round(tip, 2)),
+  provenance text not null check (provenance in ('exact', 'estimated')),
+  created_at timestamptz not null default now(),
+  unique (payment_id, order_id),
+  unique (restaurant_id, id),
+  foreign key (restaurant_id, payment_id) references payments(restaurant_id, id) on delete cascade,
+  foreign key (restaurant_id, order_id) references orders(restaurant_id, id) on delete cascade
+);
+create index if not exists allocations_order_idx on payment_allocations(restaurant_id, order_id);
+
+create table if not exists order_adjustments (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  order_id uuid not null,
+  foreign key (restaurant_id, order_id) references orders(restaurant_id, id) on delete cascade,
+  kind text not null check (kind = 'cancel'),
+  previous_total numeric not null,
+  previous_tip numeric not null,
+  actor text not null,
+  created_at timestamptz not null default now(),
+  unique(order_id, kind),
+  unique(restaurant_id, id)
+);
+create table if not exists refund_operations (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  adjustment_id uuid not null,
+  source text not null check (source in ('stripe', 'cash', 'terminal', 'review')),
+  amount numeric not null check (amount > 0 and amount = round(amount, 2)),
+  tip numeric not null check (tip >= 0 and tip <= amount and tip = round(tip, 2)),
+  currency text not null,
+  stripe_account_id text,
+  stripe_payment_intent text,
+  original_collector text,
+  payout_actor text,
+  confirmed_by text,
+  status text not null default 'pending' check (status in ('pending', 'processing', 'succeeded', 'failed', 'review')),
+  stripe_refund_id text,
+  provider_status text,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique(restaurant_id, id),
+  foreign key (restaurant_id, adjustment_id) references order_adjustments(restaurant_id, id) on delete cascade
+);
+alter table refund_operations add column if not exists historical_review boolean not null default false;
+create unique index if not exists user_logs_tenant_identity on user_logs(restaurant_id, id);
+alter table refund_operations add column if not exists historical_log_id uuid;
+alter table refund_operations drop constraint if exists refund_operations_historical_log_id_fkey;
+alter table refund_operations add constraint refund_operations_historical_log_id_fkey
+  foreign key (restaurant_id, historical_log_id) references user_logs(restaurant_id, id);
+alter table refund_operations add column if not exists fee_reconciled_at timestamptz;
+create unique index if not exists refund_historical_log on refund_operations(historical_log_id) where historical_log_id is not null;
+create index if not exists refunds_tenant_status on refund_operations(restaurant_id, status, created_at);
+create table if not exists refund_allocations (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  operation_id uuid not null,
+  allocation_id uuid not null,
+  foreign key (restaurant_id, operation_id) references refund_operations(restaurant_id, id) on delete cascade,
+  foreign key (restaurant_id, allocation_id) references payment_allocations(restaurant_id, id) on delete cascade,
+  amount numeric not null check (amount > 0 and amount = round(amount, 2)),
+  tip numeric not null check (tip >= 0 and tip <= amount and tip = round(tip, 2)),
+  unique(operation_id, allocation_id)
+);
+create index if not exists returns_allocation_idx on refund_allocations(allocation_id);
+create table if not exists refund_attempts (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  operation_id uuid not null,
+  attempt_no int not null default 1,
+  foreign key (restaurant_id, operation_id) references refund_operations(restaurant_id, id) on delete cascade,
+  idempotency_key text not null unique,
+  amount numeric not null,
+  stripe_account_id text not null,
+  stripe_payment_intent text not null,
+  stripe_refund_id text,
+  provider_status text,
+  last_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table refund_attempts add column if not exists attempt_no int not null default 1;
+alter table refund_attempts drop constraint if exists refund_attempts_operation_id_key;
+create unique index if not exists refund_attempts_number on refund_attempts(operation_id, attempt_no);
+
+alter table refund_operations drop constraint if exists refund_operations_tip_check;
+alter table refund_operations add constraint refund_operations_tip_check check (tip >= 0 and tip <= amount and tip = round(tip, 2));
+alter table refund_allocations drop constraint if exists refund_allocations_tip_check;
+alter table refund_allocations add constraint refund_allocations_tip_check check (tip >= 0 and tip <= amount and tip = round(tip, 2));
+alter table payments drop constraint if exists payments_allocation_metadata;
+alter table payments add constraint payments_allocation_metadata check (
+  allocation_version in (0, 1) and allocation_quality in ('exact', 'estimated', 'unresolved') and allocation_origin in ('legacy', 'live')
+  and unallocated_amount >= 0 and unallocated_amount <= amount and unallocated_tip >= 0 and unallocated_tip <= tip
+  and unallocated_tip <= unallocated_amount and unallocated_amount - unallocated_tip <= amount - tip);
+
+create or replace function public.lock_restaurant_money(p_restaurant uuid)
+returns void language sql security definer set search_path = public as $$
+  select pg_advisory_xact_lock(hashtextextended(p_restaurant::text, 707));
+$$;
+revoke all on function public.lock_restaurant_money(uuid) from public, anon, authenticated;
+grant execute on function public.lock_restaurant_money(uuid) to service_role;
+
+-- A snapshot, before the receipt is written: later dishes never join its scope.
+create or replace function public.snapshot_payment_scope()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if current_setting('tabletap.allocation_writer', true) is distinct from 'v1' then
+    select currency, stripe_account_id into new.currency, new.stripe_account_id from restaurants where id = new.restaurant_id;
+    if new.order_id is not null then
+      new.allocation_scope := array[new.order_id];
+      select currency into new.currency from orders where id = new.order_id and restaurant_id = new.restaurant_id;
+    else
+      select coalesce(array_agg(id order by created_at, id), '{}') into new.allocation_scope from orders
+        where restaurant_id = new.restaurant_id
+          and ((new.account_id is not null and account_id = new.account_id)
+            or (new.account_id is null and session_id = new.session_id and account_id is null))
+          and (not paid or xmin::text = (txid_current() % 4294967296)::text)
+          and not written_off and status not in ('cancelled', 'pending_payment');
+    end if;
+    new.allocation_origin := 'legacy';
+    new.allocation_version := 0;
+    return new;
+  end if;
+  if new.tip < 0 or new.tip > new.amount or new.tip <> round(new.tip, 2) or new.amount <> round(new.amount, 2) then
+    raise exception 'invalid receipt precision';
+  end if;
+  select r.currency, r.stripe_account_id into new.currency, new.stripe_account_id
+    from restaurants r where r.id = new.restaurant_id;
+  if new.order_id is not null then
+    if not exists (select 1 from orders where id = new.order_id and restaurant_id = new.restaurant_id) then
+      raise exception 'receipt belongs to another restaurant';
+    end if;
+    new.allocation_scope := array[new.order_id];
+    select currency into new.currency from orders where id = new.order_id;
+  elsif nullif(current_setting('tabletap.allocation_scope', true), '') is not null then
+    new.allocation_scope := array(select jsonb_array_elements_text(current_setting('tabletap.allocation_scope')::jsonb)::uuid);
+  else
+    select coalesce(array_agg(o.id order by o.created_at, o.id), '{}') into new.allocation_scope
+      from orders o where o.restaurant_id = new.restaurant_id
+       and ((new.account_id is not null and o.account_id = new.account_id)
+         or (new.account_id is null and new.session_id is not null and o.session_id = new.session_id and o.account_id is null))
+       and (not o.paid or o.xmin::text = (txid_current() % 4294967296)::text)
+       and not o.written_off and o.status not in ('cancelled', 'pending_payment');
+  end if;
+  if new.order_id is null and new.session_id is not null then
+    new.allocation_scope := array(select id from orders where id = any(new.allocation_scope) and session_id = new.session_id and account_id is null);
+  end if;
+  if exists (select 1 from unnest(new.allocation_scope) x where not exists
+    (select 1 from orders o where o.id = x and o.restaurant_id = new.restaurant_id)) then
+    raise exception 'allocation scope crosses restaurants';
+  end if;
+  if new.account_id is not null and exists(select 1 from orders where id = any(new.allocation_scope)
+    and account_id is distinct from new.account_id) then raise exception 'receipt scope has another account'; end if;
+  if exists(select 1 from orders where id = any(new.allocation_scope) and currency <> new.currency) then
+    raise exception 'receipt scope has another currency';
+  end if;
+  new.unallocated_amount := new.amount;
+  new.unallocated_tip := new.tip;
+  new.allocation_origin := case when current_setting('tabletap.allocation_origin', true) = 'fixture_history' then 'legacy' else 'live' end;
+  new.allocation_version := 1;
+  new.allocation_quality := case when new.order_id is not null
+    or current_setting('tabletap.allocation_writer', true) = 'v1' then 'exact' else 'unresolved' end;
+  return new;
+end;
+$$;
+revoke all on function public.snapshot_payment_scope() from public, anon, authenticated;
+drop trigger if exists snapshot_payment_scope on payments;
+create trigger snapshot_payment_scope before insert on payments for each row execute function public.snapshot_payment_scope();
+
+-- Principal uses largest-remainder cents; existing receipt tip attribution is
+-- preserved during the compatible rollout. A new receipt is not a new tip.
+create or replace function public.allocate_receipt(p_payment uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  p payments;
+  v_principal bigint;
+  v_tip bigint;
+  v_total bigint;
+begin
+  select * into p from payments where id = p_payment;
+  if p.id is null or p.allocation_quality <> 'exact' then return; end if;
+  perform 1 from orders where id = any(p.allocation_scope) order by id for update;
+  select * into p from payments where id = p_payment for update;
+  if exists (select 1 from payment_allocations where payment_id = p.id) then return; end if;
+  perform set_config('tabletap.allocating', p.id::text, true);
+  -- Older single-order writers omitted receipt tip metadata. For NEW receipts
+  -- only, the explicitly named order proves both the amount and its tip.
+  if p.order_id is not null and p.tip = 0 and exists
+    (select 1 from orders where id = p.order_id and abs(total - p.amount) < 0.005 and tip > 0) then
+    update payments set tip = (select least(tip, p.amount) from orders where id = p.order_id),
+      unallocated_tip = (select least(tip, p.amount) from orders where id = p.order_id) where id = p.id returning * into p;
+  end if;
+  v_principal := round((p.amount - p.tip) * 100);
+  v_tip := round(p.tip * 100);
+  with needs as (
+    select o.id, o.created_at,
+      greatest(round((o.total - o.tip - coalesce(a.principal, 0)) * 100), 0)::bigint as principal,
+      greatest(round((o.tip - coalesce(a.tip, 0)) * 100), 0)::bigint as tip
+    from orders o left join lateral
+      (select sum(amount - tip) as principal, sum(tip) as tip from payment_allocations where order_id = o.id) a on true
+    where o.id = any(p.allocation_scope) and o.restaurant_id = p.restaurant_id
+      and (p.allocation_origin = 'legacy' or (o.status <> 'cancelled' and not o.written_off))
+  ), weights as (
+    select *, sum(principal) over() as ps, sum(tip) over() as ts from needs
+  ), shares as (
+    select *, least(v_principal, ps) * principal / nullif(ps, 0) as raw_p,
+      least(v_tip, ts) * tip / nullif(ts, 0) as raw_t from weights
+  ), ranks as (
+    select *, row_number() over(order by raw_p - floor(raw_p) desc nulls last, created_at, id) as rp,
+      row_number() over(order by raw_t - floor(raw_t) desc nulls last, created_at, id) as rt,
+      sum(coalesce(floor(raw_p), 0)) over() as fp, sum(coalesce(floor(raw_t), 0)) over() as ft from shares
+  ), amounts as (
+    select id, coalesce(floor(raw_p), 0) + case when rp <= least(v_principal, ps) - fp then 1 else 0 end as pc,
+      coalesce(floor(raw_t), 0) + case when rt <= least(v_tip, ts) - ft then 1 else 0 end as tc from ranks
+  )
+  insert into payment_allocations(restaurant_id, payment_id, order_id, amount, tip, provenance)
+    select p.restaurant_id, p.id, id, (pc + tc) / 100, tc / 100, 'exact' from amounts where pc + tc > 0;
+  select coalesce(round(sum(amount) * 100), 0) into v_total from payment_allocations where payment_id = p.id;
+  if v_total <> round(p.amount * 100) then raise exception 'receipt exceeds verified order coverage'; end if;
+  update payments set unallocated_amount = p.amount - v_total / 100.0,
+    unallocated_tip = p.tip - coalesce((select sum(tip) from payment_allocations where payment_id = p.id), 0),
+    allocation_quality = case when v_total = round(p.amount * 100) then 'exact' else 'unresolved' end,
+    allocation_reason = case when v_total <> round(p.amount * 100) then 'Receipt exceeds verified order coverage' end
+    where id = p.id;
+  perform set_config('tabletap.allocating', '', true);
+  if exists(select 1 from payments r where r.id = p.id and
+    (r.unallocated_amount + coalesce((select sum(amount) from payment_allocations where payment_id = p.id), 0) <> r.amount
+    or r.unallocated_tip + coalesce((select sum(tip) from payment_allocations where payment_id = p.id), 0) <> r.tip)) then
+    raise exception 'receipt allocation does not reconcile';
+  end if;
+end;
+$$;
+revoke all on function public.allocate_receipt(uuid) from public, anon, authenticated;
+grant execute on function public.allocate_receipt(uuid) to service_role;
+create or replace function public.finish_payment_allocation()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  perform public.allocate_receipt(new.id);
+  return null;
+end;
+$$;
+revoke all on function public.finish_payment_allocation() from public, anon, authenticated;
+drop trigger if exists finish_payment_allocation on payments;
+create constraint trigger finish_payment_allocation after insert on payments
+  deferrable initially deferred for each row execute function public.finish_payment_allocation();
+
+create or replace function public.check_receipt_allocations()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare p payments; v_amount numeric; v_tip numeric;
+begin
+  if tg_table_name = 'payments' then
+    select * into p from payments where id = new.id;
+  else
+    select * into p from payments where id = new.payment_id;
+  end if;
+  if p.id is null or p.allocation_version <> 1 then return null; end if;
+  if current_setting('tabletap.allocating', true) = p.id::text then return null; end if;
+  select coalesce(sum(amount), 0), coalesce(sum(tip), 0) into v_amount, v_tip from payment_allocations where payment_id = p.id;
+  if v_amount + p.unallocated_amount <> p.amount or v_tip + p.unallocated_tip <> p.tip then
+    raise exception 'receipt allocation does not reconcile';
+  end if;
+  return null;
+end;
+$$;
+revoke all on function public.check_receipt_allocations() from public, anon, authenticated;
+drop trigger if exists check_receipt_allocations on payments;
+drop trigger if exists z_check_receipt_allocations on payments;
+create constraint trigger z_check_receipt_allocations after insert or update on payments
+  deferrable initially deferred for each row execute function public.check_receipt_allocations();
+drop trigger if exists check_receipt_allocations on payment_allocations;
+create constraint trigger check_receipt_allocations after insert or update on payment_allocations
+  deferrable initially deferred for each row execute function public.check_receipt_allocations();
+
+-- Old receipt tip metadata can be missing. That exception is named, not
+-- silently treated as proof that all historical money paid for food.
+create or replace function public.order_component_capacity(p_restaurant uuid, p_order uuid)
+returns jsonb language sql security definer set search_path = public as $$
+  select jsonb_build_object('principal', o.total - o.tip - coalesce(sum(a.amount - a.tip), 0),
+    'tip', o.tip - coalesce(sum(a.tip), 0),
+    'breakdown_unknown', coalesce(bool_or(p.breakdown_unknown), false))
+  from orders o left join payment_allocations a on a.order_id = o.id and a.restaurant_id = p_restaurant
+    left join payments p on p.id = a.payment_id
+  where o.id = p_order and o.restaurant_id = p_restaurant group by o.id;
+$$;
+revoke all on function public.order_component_capacity(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.order_component_capacity(uuid, uuid) to service_role;
+
+-- A historical return is imported only when one complete log line identifies
+-- one order and this exact group of receipts. Its old financial effect stays
+-- in the old log readers; the typed record reserves coverage without doubling it.
+create or replace function public.import_historical_return(p_restaurant uuid, p_order uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare o orders; d uuid; g record; v_log uuid; v_count int; v_operation uuid; l user_logs;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.importing_return', 'v1', true);
+  select * into o from orders where id = p_order and restaurant_id = p_restaurant for update;
+  if o.id is null or o.status <> 'cancelled' then return; end if;
+  insert into order_adjustments(restaurant_id, order_id, kind, previous_total, previous_tip, actor, created_at)
+    values(p_restaurant, o.id, 'cancel', o.total, o.tip, 'historical review', coalesce(o.cancelled_at, o.created_at))
+    on conflict(order_id, kind) do nothing;
+  select id into d from order_adjustments where order_id = o.id and kind = 'cancel';
+  for g in select p.method, p.actor_email, p.currency, p.stripe_payment_intent, p.stripe_account_id,
+      sum(a.amount) amount, sum(a.tip) tip, jsonb_agg(to_jsonb(a)) entries, f.id existing_operation
+    from payment_allocations a join payments p on p.id = a.payment_id
+    left join refund_allocations r on r.allocation_id = a.id
+    left join refund_operations f on f.id = r.operation_id
+    where a.restaurant_id = p_restaurant and a.order_id = o.id and p.allocation_origin = 'legacy'
+      and (r.id is null or (f.historical_review and f.status = 'review'))
+    group by p.method, p.actor_email, p.currency, p.stripe_payment_intent, p.stripe_account_id, f.id loop
+    v_log := null;
+    -- Truncated order codes and duplicated logs are ambiguous; neither proves a return.
+    if (select count(*) from orders where restaurant_id = p_restaurant and left(id::text, 8) = left(o.id::text, 8)) = 1 then
+      select count(*), (array_agg(id))[1] into v_count, v_log from user_logs
+        where restaurant_id = p_restaurant and entity = 'order' and action = 'refunded'
+          and substring(detail from '(?:^| )order=([^ ]+)') = left(o.id::text, 8)
+          and substring(detail from '(?:^| )amount=([0-9]+(?:[.][0-9]+)?)(?: |$)')::numeric = g.amount
+          and substring(detail from '(?:^| )method=([^ ]+)') = g.method
+          and replace(substring(detail from '(?:^| )collector=([^ ]+)'), '_', ' ') is not distinct from g.actor_email
+          and not exists(select 1 from refund_operations f where f.historical_log_id = user_logs.id);
+      if v_count <> 1 then v_log := null; end if;
+    end if;
+    -- An old log did not verify Stripe's provider status; keep that for review.
+    if g.stripe_payment_intent is not null or g.currency is distinct from o.currency then v_log := null; end if;
+    select * into l from user_logs where id = v_log;
+    if g.existing_operation is not null then
+      if v_log is not null then
+        update refund_operations set status = 'succeeded', historical_log_id = v_log,
+          completed_at = l.created_at, payout_actor = g.actor_email, confirmed_by = l.actor_email
+          where id = g.existing_operation and historical_review and status = 'review';
+      end if;
+      continue;
+    end if;
+    insert into refund_operations(restaurant_id, adjustment_id, source, amount, tip, currency,
+      stripe_payment_intent, stripe_account_id, original_collector, status, historical_log_id, completed_at, payout_actor, confirmed_by, historical_review)
+      values(p_restaurant, d, case when g.stripe_payment_intent is not null or g.currency is distinct from o.currency then 'review'
+        when g.method = 'cash' then 'cash' else 'terminal' end,
+        g.amount, g.tip, coalesce(g.currency, o.currency), g.stripe_payment_intent, g.stripe_account_id, g.actor_email,
+        case when v_log is null then 'review' else 'succeeded' end, v_log, l.created_at,
+        case when v_log is not null then g.actor_email end, l.actor_email, true) returning id into v_operation;
+    insert into refund_allocations(restaurant_id, operation_id, allocation_id, amount, tip)
+      select p_restaurant, v_operation, (x->>'id')::uuid, (x->>'amount')::numeric, (x->>'tip')::numeric
+        from jsonb_array_elements(g.entries) x;
+  end loop;
+end;
+$$;
+revoke all on function public.import_historical_return(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.import_historical_return(uuid, uuid) to service_role;
+
+-- Historical ambiguity is recorded, never turned into invented receipts.
+create or replace function public.backfill_payment_allocations(p_restaurant uuid default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare p payments; v_exact int := 0; v_unresolved int := 0; v_restaurant uuid; v_order uuid;
+begin
+  -- Old and new writers take this same lock before looking at money. Loop by
+  -- tenant so the deployment backfill never reverses their lock ordering.
+  for v_restaurant in select id from restaurants where p_restaurant is null or id = p_restaurant order by id loop
+    perform public.lock_restaurant_money(v_restaurant);
+    for p in select * from payments where restaurant_id = v_restaurant
+      and (allocation_version = 0 or (allocation_quality = 'unresolved' and allocation_origin = 'legacy'
+        and allocation_reason = 'Overlap receipt needs manager evidence'))
+      order by created_at, id for update loop
+      if p.order_id is not null and exists(select 1 from orders where id = p.order_id and restaurant_id = p.restaurant_id) then
+        insert into payment_allocations(restaurant_id, payment_id, order_id, amount, tip, provenance)
+          values(p.restaurant_id, p.id, p.order_id, p.amount, p.tip, 'exact');
+        update payments set allocation_version = 1, allocation_quality = 'exact', allocation_scope = array[p.order_id],
+          unallocated_amount = 0, unallocated_tip = 0, currency = (select currency from orders where id = p.order_id),
+          breakdown_unknown = exists(select 1 from orders where id = p.order_id and tip <> p.tip),
+          allocation_reason = 'Historical explicit order; tip metadata preserved' where id = p.id;
+        v_exact := v_exact + 1;
+      elsif cardinality(p.allocation_scope) > 0 and p.currency is not null then
+        -- These are overlap receipts snapshotted at insertion, before later
+        -- rounds could join. A failed proof leaves the receipt unresolved.
+        begin
+          update payments set allocation_version = 1, allocation_quality = 'exact',
+            unallocated_amount = amount, unallocated_tip = tip where id = p.id;
+          perform public.allocate_receipt(p.id);
+          v_exact := v_exact + 1;
+        exception when raise_exception then
+          update payments set allocation_version = 1, allocation_quality = 'unresolved',
+            unallocated_amount = amount, unallocated_tip = tip,
+            allocation_reason = 'Overlap receipt needs manager evidence' where id = p.id;
+          v_unresolved := v_unresolved + 1;
+        end;
+      else
+        update payments set allocation_version = 1, allocation_quality = 'unresolved',
+          unallocated_amount = amount, unallocated_tip = tip, currency = null,
+          allocation_reason = 'Historical pooled receipt; currency and attribution evidence required' where id = p.id;
+        v_unresolved := v_unresolved + 1;
+      end if;
+    end loop;
+    -- `p` is this function's loop variable: the receipt table needs its own alias.
+    for v_order in select distinct a.order_id from payment_allocations a join orders o on o.id = a.order_id
+      join payments rp on rp.id = a.payment_id where a.restaurant_id = v_restaurant
+        and rp.allocation_origin = 'legacy' and o.status = 'cancelled' order by a.order_id loop
+      perform public.import_historical_return(v_restaurant, v_order);
+    end loop;
+  end loop;
+  return jsonb_build_object('exact', v_exact, 'unresolved', v_unresolved);
+end;
+$$;
+revoke all on function public.backfill_payment_allocations(uuid) from public, anon, authenticated;
+grant execute on function public.backfill_payment_allocations(uuid) to service_role;
+
+-- Versioned to keep old application instances from adding this tip twice.
+-- Its full writer is defined below, after the reconciliation helpers.
+
+-- Private financial records. Parent-restaurant cascades remain available for
+-- the existing account-deletion flow and isolated fixture cleanup.
+alter table payment_allocations enable row level security;
+alter table order_adjustments enable row level security;
+alter table refund_operations enable row level security;
+alter table refund_allocations enable row level security;
+alter table refund_attempts enable row level security;
+revoke all on payment_allocations, order_adjustments, refund_operations, refund_allocations, refund_attempts from public, anon, authenticated;
+grant select, insert, update, delete on payment_allocations, order_adjustments, refund_operations, refund_allocations, refund_attempts to service_role;
+
+-- Only retained coverage can be returned. Reserved/failed attempts remain
+-- obligations and cannot be spent again while their provider outcome is unknown.
+create or replace function public.order_refund_coverage(p_restaurant uuid, p_order uuid)
+returns jsonb language sql security definer set search_path = public as $$
+  select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) from (
+    select a.id, a.payment_id,
+      a.amount - coalesce(r.amount, 0) as amount, a.tip - coalesce(r.tip, 0) as tip,
+      p.method, p.actor_email, p.currency, p.stripe_payment_intent, p.stripe_account_id,
+      p.allocation_quality
+    from payment_allocations a join payments p on p.id = a.payment_id
+    left join lateral (select sum(amount) as amount, sum(tip) as tip
+      from refund_allocations where allocation_id = a.id) r on true
+    where a.restaurant_id = p_restaurant and a.order_id = p_order
+      and a.amount > coalesce(r.amount, 0)
+  ) x;
+$$;
+revoke all on function public.order_refund_coverage(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.order_refund_coverage(uuid, uuid) to service_role;
+
+create or replace function public.prepare_order_refund(
+  p_restaurant uuid, p_order uuid, p_actor text, p_legacy_demand jsonb,
+  p_expected_paid boolean, p_expected_account uuid, p_expected_hold timestamptz, p_expected_checkout uuid
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  o orders;
+  v_adjustment uuid;
+  v_operation uuid;
+  c jsonb;
+  g record;
+  v_covered numeric := 0;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if p_expected_account is not null then
+    perform 1 from customer_accounts where id = p_expected_account and restaurant_id = p_restaurant for update;
+  end if;
+  select * into o from orders where restaurant_id = p_restaurant and id = p_order for update;
+  if o.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  select id into v_adjustment from order_adjustments where order_id = o.id and kind = 'cancel';
+  if v_adjustment is not null then
+    return jsonb_build_object('outcome', 'cancelled', 'adjustment', v_adjustment);
+  end if;
+  if (public.order_coverage(p_restaurant, array[o.id])->0->>'unresolved')::boolean
+    or (o.paid and public.retained_order_coverage(p_restaurant, o.id) < o.total) then
+    return jsonb_build_object('outcome', 'review');
+  end if;
+  perform set_config('tabletap.refund_writer', 'v1', true);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if not public.cancel_order_v2(p_restaurant, p_order, null, p_legacy_demand,
+    p_expected_paid, p_expected_account, p_expected_hold, p_expected_checkout) then
+    return jsonb_build_object('outcome', 'changed');
+  end if;
+  insert into order_adjustments(restaurant_id, order_id, kind, previous_total, previous_tip, actor)
+    values(p_restaurant, o.id, 'cancel', o.total, o.tip, p_actor) returning id into v_adjustment;
+  c := public.order_refund_coverage(p_restaurant, o.id);
+  for g in select
+      case when x->>'currency' is distinct from o.currency then 'review'
+        when x->>'allocation_quality' <> 'exact' and x->>'stripe_payment_intent' is not null then 'review'
+        when x->>'stripe_payment_intent' is not null and x->>'stripe_account_id' is not null then 'stripe'
+        when x->>'stripe_payment_intent' is not null then 'review'
+        when x->>'method' = 'cash' then 'cash' else 'terminal' end as source,
+      x->>'currency' as currency, x->>'stripe_account_id' as account,
+      x->>'stripe_payment_intent' as intent,
+      case when x->>'stripe_payment_intent' is null then x->>'actor_email' end as collector,
+      sum((x->>'amount')::numeric) as amount, sum((x->>'tip')::numeric) as tip,
+      jsonb_agg(x) as entries
+    from jsonb_array_elements(c) x group by 1, 2, 3, 4, 5 loop
+    insert into refund_operations(restaurant_id, adjustment_id, source, amount, tip, currency,
+      stripe_account_id, stripe_payment_intent, original_collector, status)
+      values(p_restaurant, v_adjustment, g.source, g.amount, g.tip, coalesce(g.currency, o.currency),
+        g.account, g.intent, g.collector, case when g.source = 'review' then 'review' else 'pending' end)
+      returning id into v_operation;
+    insert into refund_allocations(restaurant_id, operation_id, allocation_id, amount, tip)
+      select p_restaurant, v_operation, (x->>'id')::uuid, (x->>'amount')::numeric, (x->>'tip')::numeric
+        from jsonb_array_elements(g.entries) x;
+    v_covered := v_covered + g.amount;
+  end loop;
+  -- Historical pooled money stays visible, but no provider/drawer is guessed.
+  if o.paid and v_covered < o.total then
+    insert into refund_operations(restaurant_id, adjustment_id, source, amount, tip, currency, status)
+      values(p_restaurant, v_adjustment, 'review', o.total - v_covered, 0, o.currency, 'review');
+  end if;
+  -- Cancellation changes the frozen meal. Outstanding shares must be reviewed
+  -- before taking more money for that old meal; late charges become refunds due.
+  update bill_splits set status = 'cancelled' where session_id = o.session_id and status in ('proposed', 'locked');
+  insert into user_logs(restaurant_id, actor_email, entity, action, detail)
+    values(p_restaurant, p_actor, 'order', 'cancelled', 'order=' || left(o.id::text, 8));
+  return jsonb_build_object('outcome', 'cancelled', 'adjustment', v_adjustment);
+end;
+$$;
+revoke all on function public.prepare_order_refund(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) from public, anon, authenticated;
+grant execute on function public.prepare_order_refund(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) to service_role;
+
+-- An attempt is saved before a provider is called. The same immutable request
+-- and key survive a lost HTTP response, process crash, or repeated button tap.
+create or replace function public.start_refund_attempt(p_restaurant uuid, p_operation uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare o refund_operations; a refund_attempts; v_order uuid; v_no int;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into o from refund_operations where id = p_operation and restaurant_id = p_restaurant for update;
+  if o.id is null or o.source <> 'stripe' or o.status = 'review' then return null; end if;
+  select * into a from refund_attempts where operation_id = o.id order by attempt_no desc limit 1;
+  if a.id is null or (o.status = 'failed' and a.provider_status in ('failed', 'canceled')) then
+    v_no := coalesce(a.attempt_no, 0) + 1;
+    select order_id into v_order from order_adjustments where id = o.adjustment_id;
+    insert into refund_attempts(restaurant_id, operation_id, attempt_no, idempotency_key, amount, stripe_account_id, stripe_payment_intent)
+      values(p_restaurant, o.id, v_no,
+        case when v_no = 1 then 'cancel-' || v_order || '-' || o.stripe_payment_intent else 'return-' || o.id || '-' || v_no end,
+        o.amount, o.stripe_account_id, o.stripe_payment_intent) returning * into a;
+  end if;
+  if o.status <> 'succeeded' then update refund_operations set status = 'processing' where id = o.id; end if;
+  return to_jsonb(a) || jsonb_build_object('operation_status', o.status);
+end;
+$$;
+revoke all on function public.start_refund_attempt(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.start_refund_attempt(uuid, uuid) to service_role;
+
+drop function if exists public.finish_refund_operation(uuid, uuid, text, text, text);
+drop function if exists public.finish_refund_operation(uuid, uuid, text, text, text, text);
+create or replace function public.finish_refund_operation(
+  p_restaurant uuid, p_operation uuid, p_actor text, p_refund text, p_status text, p_payout text default null, p_attempt uuid default null
+) returns boolean language plpgsql security definer set search_path = public as $$
+declare o refund_operations;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into o from refund_operations where id = p_operation and restaurant_id = p_restaurant for update;
+  if o.id is null then return false; end if;
+  if o.status = 'succeeded' then return true; end if;
+  if o.source = 'stripe' and p_attempt is distinct from
+    (select id from refund_attempts where operation_id = o.id order by attempt_no desc limit 1) then return false; end if;
+  if o.source = 'stripe' and p_refund is null then raise exception 'provider refund required'; end if;
+  if o.source <> 'stripe' and (o.source = 'review' or p_refund is not null) then raise exception 'review required'; end if;
+  if p_status not in ('succeeded', 'pending', 'requires_action', 'failed', 'canceled') then raise exception 'invalid refund status'; end if;
+  update refund_attempts set stripe_refund_id = p_refund, provider_status = p_status, updated_at = now()
+    where operation_id = o.id and id = p_attempt;
+  update refund_operations set stripe_refund_id = p_refund, provider_status = p_status,
+    status = case when p_status = 'succeeded' then 'succeeded' when p_status in ('failed', 'canceled') then 'failed' else 'processing' end,
+    completed_at = case when p_status = 'succeeded' then now() end,
+    confirmed_by = p_actor,
+    payout_actor = case when source = 'stripe' then null else coalesce(p_payout, original_collector) end where id = o.id;
+  -- Financial readers consume typed returns. No mirrored refunded activity row
+  -- is written, which would make old log readers subtract the same money twice.
+  return true;
+end;
+$$;
+revoke all on function public.finish_refund_operation(uuid, uuid, text, text, text, text, uuid) from public, anon, authenticated;
+grant execute on function public.finish_refund_operation(uuid, uuid, text, text, text, text, uuid) to service_role;
+-- Coverage stays attached to the dish it paid, including while a return is
+-- pending. It is never a reusable balance on the rest of the table.
+create or replace function public.retained_order_coverage(p_restaurant uuid, p_order uuid)
+returns numeric language sql security definer set search_path = public as $$
+  select coalesce(sum(a.amount - coalesce(r.amount, 0)), 0)
+  from payment_allocations a left join lateral
+    (select sum(amount) amount from refund_allocations where allocation_id = a.id) r on true
+  where a.restaurant_id = p_restaurant and a.order_id = p_order;
+$$;
+revoke all on function public.retained_order_coverage(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.retained_order_coverage(uuid, uuid) to service_role;
+
+create or replace function public.guard_allocated_order()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_covered numeric;
+begin
+  if current_setting('tabletap.allocation_writer', true) is distinct from 'v1' then return new; end if;
+  if pg_trigger_depth() > 1 then return new; end if;
+  v_covered := public.retained_order_coverage(old.restaurant_id, old.id);
+  if v_covered > 0 and (new.written_off or new.account_id is distinct from old.account_id
+    or ((new.total <> old.total or new.tip <> old.tip)
+      and (new.tip < old.tip or new.total - old.total <> new.tip - old.tip))) then
+    raise exception 'allocated money requires an adjustment';
+  end if;
+  if new.status = 'cancelled' and old.status <> 'cancelled' and v_covered > 0
+    and current_setting('tabletap.refund_writer', true) is distinct from 'v1' then
+    raise exception 'allocated money requires a refund obligation';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.guard_allocated_order() from public, anon, authenticated;
+drop trigger if exists guard_allocated_order on orders;
+create trigger guard_allocated_order before update of total, tip, written_off, account_id, status on orders
+  for each row execute function public.guard_allocated_order();
+
+create or replace function public.check_refund_allocations()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare a payment_allocations; o refund_operations; v_amount numeric; v_tip numeric;
+begin
+  select * into a from payment_allocations where id = new.allocation_id for update;
+  select coalesce(sum(amount), 0), coalesce(sum(tip), 0) into v_amount, v_tip
+    from refund_allocations where allocation_id = a.id;
+  if v_amount > a.amount or v_tip > a.tip or v_amount - v_tip > a.amount - a.tip then
+    raise exception 'return exceeds original coverage';
+  end if;
+  select * into o from refund_operations where id = new.operation_id;
+  if not exists(select 1 from order_adjustments d where d.id = o.adjustment_id and d.order_id = a.order_id) then
+    raise exception 'return belongs to another order';
+  end if;
+  select coalesce(sum(amount), 0), coalesce(sum(tip), 0) into v_amount, v_tip
+    from refund_allocations where operation_id = o.id;
+  if v_amount <> o.amount or v_tip <> o.tip then raise exception 'return allocation does not reconcile'; end if;
+  return null;
+end;
+$$;
+revoke all on function public.check_refund_allocations() from public, anon, authenticated;
+drop trigger if exists check_refund_allocations on refund_allocations;
+create constraint trigger check_refund_allocations after insert or update on refund_allocations
+  deferrable initially deferred for each row execute function public.check_refund_allocations();
+
+create or replace function public.immutable_allocation()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'DELETE' and pg_trigger_depth() > 1 then return old; end if;
+  raise exception 'financial attribution is immutable';
+end;
+$$;
+revoke all on function public.immutable_allocation() from public, anon, authenticated;
+drop trigger if exists immutable_allocation on payment_allocations;
+create trigger immutable_allocation before update or delete on payment_allocations
+  for each row execute function public.immutable_allocation();
+drop trigger if exists immutable_allocation on refund_allocations;
+create trigger immutable_allocation before update or delete on refund_allocations
+  for each row execute function public.immutable_allocation();
+
+-- One authoritative live balance for every table reader. Unresolved historical
+-- pooled money is refused rather than charged a second time.
+create or replace function public.order_coverage(p_restaurant uuid, p_orders uuid[])
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  perform public.backfill_payment_allocations(p_restaurant);
+  return (select coalesce(jsonb_agg(jsonb_build_object('id', o.id,
+    'unresolved', exists(select 1 from payments p where p.restaurant_id = p_restaurant and p.allocation_quality = 'unresolved'
+      and (p.order_id = o.id or (p.order_id is null and ((p.account_id is not null and p.account_id = o.account_id)
+        or (p.account_id is null and p.session_id = o.session_id and o.account_id is null))))),
+    'amount', public.retained_order_coverage(p_restaurant, o.id),
+    'tip', (select coalesce(sum(a.tip - coalesce(r.tip, 0)), 0) from payment_allocations a
+      left join lateral(select sum(tip) tip from refund_allocations where allocation_id = a.id) r on true
+      where a.restaurant_id = p_restaurant and a.order_id = o.id))), '[]')
+  from orders o where o.restaurant_id = p_restaurant and o.id = any(p_orders));
+end;
+$$;
+revoke all on function public.order_coverage(uuid, uuid[]) from public, anon, authenticated;
+grant execute on function public.order_coverage(uuid, uuid[]) to service_role;
+
+create or replace function public.check_paid_coverage()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare o orders; v_capacity jsonb;
+begin
+  if current_setting('tabletap.allocation_writer', true) is distinct from 'v1' then return null; end if;
+  select * into o from orders where id = new.id;
+  if o.id is null or not o.paid or o.written_off or o.status = 'cancelled' then return null; end if;
+  perform public.allocate_receipt(p.id) from payments p where p.restaurant_id = o.restaurant_id
+    and o.id = any(p.allocation_scope) and p.allocation_version = 1 and p.allocation_quality = 'exact'
+    and not exists(select 1 from payment_allocations a where a.payment_id = p.id) order by p.created_at, p.id;
+  if current_setting('tabletap.allocation_writer', true) = 'v1'
+    and public.retained_order_coverage(o.restaurant_id, o.id) < o.total then
+    raise exception 'settled order lacks retained payment coverage';
+  end if;
+  v_capacity := public.order_component_capacity(o.restaurant_id, o.id);
+  if not (v_capacity->>'breakdown_unknown')::boolean
+    and ((v_capacity->>'principal')::numeric <> 0 or (v_capacity->>'tip')::numeric <> 0) then
+    raise exception 'settled order lacks principal or tip coverage';
+  end if;
+  return null;
+end;
+$$;
+revoke all on function public.check_paid_coverage() from public, anon, authenticated;
+drop trigger if exists zz_check_paid_coverage on orders;
+create constraint trigger zz_check_paid_coverage after update of paid, total, tip on orders
+  deferrable initially deferred for each row execute function public.check_paid_coverage();
+
+create or replace function public.sync_refunded_platform_fee(p_restaurant uuid, p_intent text, p_cents int)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if p_cents < 0 then raise exception 'invalid returned fee'; end if;
+  update platform_fees set refunded_cents = least(cents, greatest(refunded_cents, p_cents))
+    where restaurant_id = p_restaurant and stripe_payment_intent = p_intent and status = 'taken';
+  update refund_operations set fee_reconciled_at = now() where restaurant_id = p_restaurant
+    and stripe_payment_intent = p_intent and status = 'succeeded' and source = 'stripe';
+end;
+$$;
+revoke all on function public.sync_refunded_platform_fee(uuid, text, int) from public, anon, authenticated;
+grant execute on function public.sync_refunded_platform_fee(uuid, text, int) to service_role;
+
+-- A manager may attribute an ambiguous historical receipt, never change it.
+drop function if exists public.attribute_payment(uuid, uuid, text, jsonb);
+-- The submitted cents are evidence supplied by that manager, not a claim
+-- that today's orders prove how the old pooled payment was collected.
+create or replace function public.attribute_payment(
+  p_restaurant uuid, p_payment uuid, p_actor text, p_entries jsonb,
+  p_currency text default null, p_evidence text default null, p_breakdown_unknown boolean default false
+) returns boolean language plpgsql security definer set search_path = public as $$
+declare p payments; x jsonb; v_amount numeric; v_tip numeric; v_capacity jsonb;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform public.backfill_payment_allocations(p_restaurant);
+  select * into p from payments where id = p_payment and restaurant_id = p_restaurant for update;
+  if p.id is null or p.allocation_quality <> 'unresolved' then return false; end if;
+  p_currency := upper(coalesce(p_currency, p.currency));
+  if p_currency is null or p_currency !~ '^[A-Z]{3}$' or (p.currency is not null and p.currency <> p_currency)
+    or length(trim(coalesce(p_evidence, ''))) < 8 then raise exception 'original receipt evidence required'; end if;
+  if p_breakdown_unknown and p.allocation_origin <> 'legacy' then raise exception 'only historical breakdown may be unknown'; end if;
+  if jsonb_typeof(p_entries) <> 'array' or jsonb_array_length(p_entries) not between 1 and 100 then
+    raise exception 'invalid attribution';
+  end if;
+  perform 1 from orders where restaurant_id = p_restaurant and id in
+    (select (e->>'orderId')::uuid from jsonb_array_elements(p_entries) e) order by id for update;
+  for x in select * from jsonb_array_elements(p_entries) loop
+    v_amount := (x->>'amount')::numeric;
+    v_tip := (x->>'tip')::numeric;
+    if not exists(select 1 from orders o where o.id = (x->>'orderId')::uuid and o.restaurant_id = p_restaurant
+      and o.currency = p_currency and (p.allocation_origin = 'legacy' or (o.status <> 'cancelled' and not o.written_off))
+      and ((p.order_id is not null and p.order_id = o.id)
+        or (p.account_id is not null and p.account_id = o.account_id)
+        or (p.session_id is not null and p.session_id = o.session_id and o.account_id is null))
+      -- Returned coverage still consumes the original receipt's capacity.
+      and coalesce((select sum(amount) from payment_allocations where order_id = o.id), 0) + v_amount <= o.total) then
+      raise exception 'attribution exceeds eligible order';
+    end if;
+    v_capacity := public.order_component_capacity(p_restaurant, (x->>'orderId')::uuid);
+    if not p_breakdown_unknown and not (v_capacity->>'breakdown_unknown')::boolean
+      and (v_amount - v_tip > (v_capacity->>'principal')::numeric or v_tip > (v_capacity->>'tip')::numeric) then
+      raise exception 'attribution exceeds principal or tip capacity';
+    end if;
+    insert into payment_allocations(restaurant_id, payment_id, order_id, amount, tip, provenance)
+      values(p_restaurant, p.id, (x->>'orderId')::uuid, v_amount, v_tip, 'estimated');
+  end loop;
+  select coalesce(sum(amount), 0), coalesce(sum(tip), 0) into v_amount, v_tip
+    from payment_allocations where payment_id = p.id;
+  if v_amount <> p.amount or v_tip <> p.tip then raise exception 'attribute the entire remaining receipt'; end if;
+  update payments set allocation_version = 1, allocation_quality = 'estimated', currency = p_currency,
+    breakdown_unknown = p_breakdown_unknown, unallocated_amount = 0, unallocated_tip = 0,
+    allocation_reason = 'Manager attribution: ' || p_actor || '; evidence: ' || trim(p_evidence) where id = p.id;
+  insert into user_logs(restaurant_id, actor_email, entity, action, detail)
+    values(p_restaurant, p_actor, 'bill', 'attributed', 'payment=' || p.id || ' currency=' || p_currency
+      || ' breakdown_unknown=' || p_breakdown_unknown || ' evidence=' || replace(trim(p_evidence), ' ', '_'));
+  perform public.import_historical_return(p_restaurant, (e->>'orderId')::uuid) from jsonb_array_elements(p_entries) e;
+  return true;
+end;
+$$;
+revoke all on function public.attribute_payment(uuid, uuid, text, jsonb, text, text, boolean) from public, anon, authenticated;
+grant execute on function public.attribute_payment(uuid, uuid, text, jsonb, text, text, boolean) to service_role;
+
+revoke all on payment_allocations from anon, authenticated;
+revoke all on order_adjustments from anon, authenticated;
+revoke all on refund_operations from anon, authenticated;
+revoke all on refund_allocations from anon, authenticated;
+revoke all on refund_attempts from anon, authenticated;
+revoke truncate, references, trigger on all tables in schema public from anon, authenticated;
+
+revoke truncate, references, trigger on all tables in schema public from public, anon, authenticated;
+
+create or replace function public.guard_receipt_money()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if pg_trigger_depth() > 1 then return new; end if;
+  if new.amount is distinct from old.amount or new.restaurant_id is distinct from old.restaurant_id
+    or new.order_id is distinct from old.order_id or new.session_id is distinct from old.session_id
+    or new.account_id is distinct from old.account_id or new.method is distinct from old.method
+    or new.actor_email is distinct from old.actor_email or new.stripe_payment_intent is distinct from old.stripe_payment_intent then
+    raise exception 'receipt money is immutable';
+  end if;
+  if new.tip is distinct from old.tip and current_setting('tabletap.allocating', true) is distinct from old.id::text then
+    raise exception 'receipt tip is immutable';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.guard_receipt_money() from public, anon, authenticated;
+drop trigger if exists guard_receipt_money on payments;
+create trigger guard_receipt_money before update on payments for each row execute function public.guard_receipt_money();
+revoke truncate, references, trigger on all tables in schema public from public, anon, authenticated;
+
+revoke truncate, references, trigger on all tables in schema public from authenticated;
+
+create or replace function public.check_return_header()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare o refund_operations; v_amount numeric; v_tip numeric;
+begin
+  select * into o from refund_operations where id = new.id;
+  if o.id is null then return null; end if;
+  select coalesce(sum(amount), 0), coalesce(sum(tip), 0) into v_amount, v_tip
+    from refund_allocations where operation_id = o.id;
+  if o.source <> 'review' or v_amount > 0 then
+    if v_amount <> o.amount or v_tip <> o.tip then raise exception 'return header does not reconcile'; end if;
+  end if;
+  if exists(select 1 from refund_allocations r join payment_allocations a on a.id = r.allocation_id
+    join payments p on p.id = a.payment_id where r.operation_id = o.id and
+    ((o.source <> 'review' and p.currency is distinct from o.currency) or
+     (o.source = 'stripe' and (p.stripe_payment_intent is distinct from o.stripe_payment_intent
+       or p.stripe_account_id is distinct from o.stripe_account_id)) or
+     (o.source = 'cash' and (p.method <> 'cash' or p.stripe_payment_intent is not null)) or
+     (o.source = 'terminal' and (p.method <> 'card' or p.stripe_payment_intent is not null)))) then
+    raise exception 'return source differs from its receipt';
+  end if;
+  return null;
+end;
+$$;
+revoke all on function public.check_return_header() from public, anon, authenticated;
+drop trigger if exists check_return_header on refund_operations;
+create constraint trigger check_return_header after insert or update on refund_operations
+  deferrable initially deferred for each row execute function public.check_return_header();
+
+create or replace function public.guard_return_money()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.historical_log_id is distinct from old.historical_log_id and
+    (old.historical_log_id is not null or not old.historical_review or
+      current_setting('tabletap.importing_return', true) is distinct from 'v1') then
+    raise exception 'historical evidence is immutable';
+  end if;
+  if (to_jsonb(new) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','historical_log_id'])
+    is distinct from (to_jsonb(old) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','historical_log_id']) then
+    raise exception 'return money is immutable';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.guard_return_money() from public, anon, authenticated;
+drop trigger if exists guard_return_money on refund_operations;
+create trigger guard_return_money before update on refund_operations for each row execute function public.guard_return_money();
+revoke truncate, references, trigger on all tables in schema public from authenticated;
+
+-- Versioned writers keep the deployed application working during overlap.
+create or replace function public.join_bill_split_v2(
+  p_split uuid, p_diner text, p_restaurant uuid, p_table uuid, p_session uuid
+) returns int language plpgsql security definer set search_path = public as $$
+declare
+  v_split bill_splits%rowtype;
+  v_sitting table_sessions%rowtype;
+  v_taken int;
+  v_next int;
+  v_amount numeric;
+  v_freeze timestamptz;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  select * into v_split from bill_splits where id = p_split;
+  if not found then return null; end if;
+  perform pg_advisory_xact_lock(hashtextextended(v_split.session_id::text, 0));
+  select * into v_split from bill_splits where id = p_split for update;
+  select * into v_sitting from table_sessions where id = v_split.session_id for update;
+  -- A split id cannot borrow a cheaper table's sitting or restaurant.
+  if v_split.session_id is distinct from p_session
+     or v_split.restaurant_id is distinct from p_restaurant
+     or v_sitting.restaurant_id is distinct from v_split.restaurant_id
+     or v_sitting.table_id is distinct from p_table
+     or v_split.status <> 'proposed' or v_split.expires_at <= now() then return null; end if;
+
+  select share_no into v_next from bill_split_claims
+   where split_id = p_split and diner = p_diner;
+  if v_next is not null then return v_next; end if;
+  select count(*) into v_taken from bill_split_claims where split_id = p_split;
+  if v_taken >= v_split.shares then return null; end if;
+
+  perform 1 from orders where session_id = v_split.session_id
+    and restaurant_id = v_split.restaurant_id and table_id = v_sitting.table_id
+    order by id for update;
+  v_freeze := clock_timestamp();
+  select coalesce(sum(greatest(total - public.retained_order_coverage(p_restaurant, id), 0)), 0) into v_amount from orders
+   where session_id = v_split.session_id and restaurant_id = v_split.restaurant_id
+     and table_id = v_sitting.table_id and paid = false and written_off = false
+     and account_id is null and status not in ('cancelled', 'pending_payment')
+     and created_at < v_freeze;
+  if v_amount <= 0 then return null; end if;
+
+  v_next := v_taken;
+  insert into bill_split_claims (split_id, share_no, diner) values (p_split, v_next, p_diner);
+  if v_taken + 1 = v_split.shares then
+    update bill_splits set status = 'locked', locked_at = v_freeze, amount = round(v_amount, 2),
+      order_ids = array(select id from orders where session_id = v_split.session_id
+        and restaurant_id = v_split.restaurant_id and table_id = v_sitting.table_id
+        and not paid and not written_off and account_id is null
+        and status not in ('cancelled', 'pending_payment') and created_at < v_freeze order by created_at, id)
+     where id = p_split;
+    -- Shares are ready before the lock becomes visible to a paying phone.
+    update bill_split_claims
+       set amount = (floor(round(v_amount * 100) / v_split.shares)
+         + case when share_no = 0 then mod(round(v_amount * 100), v_split.shares) else 0 end) / 100
+     where split_id = p_split;
+  end if;
+  return v_next;
+end; $$;
+revoke all on function public.join_bill_split_v2(uuid, text, uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.join_bill_split_v2(uuid, text, uuid, uuid, uuid) to service_role;
+
+create or replace function public.close_divided_bill_v2(p_split uuid)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare
+  v_split bill_splits%rowtype;
+  v_count int;
+  v_shares numeric;
+  v_owed numeric;
+  v_collected numeric;
+  v_spent numeric;
+begin
+  select * into v_split from bill_splits where id = p_split;
+  if not found then return false; end if;
+  perform public.lock_restaurant_money(v_split.restaurant_id);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if v_split.restaurant_id is not null then perform public.backfill_payment_allocations(v_split.restaurant_id); end if;
+  perform pg_advisory_xact_lock(hashtextextended(v_split.session_id::text, 0));
+  select * into v_split from bill_splits where id = p_split for update;
+  if v_split.status = 'done' then return true; end if;
+  if v_split.status <> 'locked' then return false; end if;
+  perform 1 from bill_split_claims where split_id = p_split order by share_no for update;
+  select count(*), coalesce(sum(amount), 0) into v_count, v_shares
+    from bill_split_claims where split_id = p_split and paid_at is not null;
+  if v_count <> v_split.shares or v_shares < v_split.amount then return false; end if;
+
+  perform 1 from orders where session_id = v_split.session_id
+    and restaurant_id = v_split.restaurant_id order by id for update;
+  select coalesce(sum(total), 0) into v_owed from orders
+   where session_id = v_split.session_id and restaurant_id = v_split.restaurant_id
+     and id = any(v_split.order_ids) and paid = false and written_off = false
+     and account_id is null and status not in ('cancelled', 'pending_payment');
+  if exists(select 1 from orders o where o.id = any(v_split.order_ids)
+    and o.restaurant_id = v_split.restaurant_id and not o.paid and not o.written_off and o.status <> 'cancelled'
+    and public.retained_order_coverage(v_split.restaurant_id, o.id) < o.total) then return false; end if;
+  update orders set paid = true, pay_method = 'card'
+   where session_id = v_split.session_id and restaurant_id = v_split.restaurant_id
+     and id = any(v_split.order_ids) and paid = false and written_off = false
+     and account_id is null and status not in ('cancelled', 'pending_payment');
+  update bill_splits set status = 'done' where id = p_split;
+  return true;
+end; $$;
+revoke all on function public.close_divided_bill_v2(uuid) from public, anon, authenticated;
+grant execute on function public.close_divided_bill_v2(uuid) to service_role;
+
+create or replace function public.collect_on_sitting_v2(
+  p_restaurant uuid,
+  p_session    uuid,
+  p_amount     numeric,
+  p_tip        numeric,
+  p_method     text,
+  p_actor      text,
+  p_ref        text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_owed  numeric;
+  v_paid  numeric;
+  v_spent numeric;
+  v_room  numeric;
+  v_take  numeric;
+  v_existing_tip numeric;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  -- One collection at a time per sitting. Everything below reads live.
+  perform pg_advisory_xact_lock(hashtextextended(p_session::text, 0));
+
+  select coalesce(sum(total), 0) into v_owed
+    from orders
+   where session_id = p_session
+     and paid = false
+     and written_off = false
+     and account_id is null
+     and status <> 'cancelled'
+     and status <> 'pending_payment';
+
+  select coalesce(sum(public.retained_order_coverage(p_restaurant, id)), 0) into v_paid
+    from orders where restaurant_id = p_restaurant and session_id = p_session
+      and not paid and not written_off and account_id is null and status not in ('cancelled', 'pending_payment');
+  if exists(select 1 from payments where restaurant_id = p_restaurant and session_id = p_session
+    and order_id is null and allocation_quality = 'unresolved') then
+    raise exception 'historical pooled money requires attribution';
+  end if;
+  v_room := round(v_owed - v_paid, 2);
+  if v_room <= 0 then
+    return jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'covered');
+  end if;
+
+  -- The ceiling is what is owed PLUS the gratuity this payment carries.
+  --
+  -- `payments.amount` is inclusive of its tip, and the order does not carry
+  -- that tip yet — `addTip` puts it on the oldest order a moment after this
+  -- returns. Capping against the food alone therefore truncates the tip off
+  -- the share that carries it, which is the same food-versus-total confusion
+  -- that once read a table owing MX$94.07 as MX$93.17. The caller pads the
+  -- first sitting by the same amount before sharing out, for the same reason.
+  v_take := least(round(p_amount, 2), round(v_room + coalesce(p_tip, 0), 2));
+  if v_take <= 0 then
+    return jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'covered');
+  end if;
+
+  -- Existing tip is part of the debt; p_tip is only the new gratuity.
+  select coalesce(sum(greatest(o.tip - coalesce(a.tip, 0), 0)), 0) into v_existing_tip
+    from orders o left join lateral(select sum(tip) tip from payment_allocations where order_id = o.id) a on true
+    where o.restaurant_id = p_restaurant and o.session_id = p_session and not o.paid
+      and not o.written_off and o.account_id is null and o.status not in ('cancelled', 'pending_payment');
+  -- An explicitly unknown old breakdown cannot make the remaining tip
+  -- larger than the whole remaining debt. The exception stays visible.
+  v_existing_tip := least(v_room, v_existing_tip);
+  v_existing_tip := least(v_existing_tip, round(greatest(v_take - coalesce(p_tip, 0), 0) * v_existing_tip / nullif(v_room, 0), 2));
+  begin
+    insert into payments (restaurant_id, session_id, amount, tip, method, actor_email, client_ref)
+    values (p_restaurant, p_session, v_take, coalesce(p_tip, 0) + v_existing_tip, p_method, p_actor, p_ref);
+  exception when unique_violation then
+    -- The same collection arriving twice. The money is already in, once.
+    return jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'duplicate');
+  end;
+
+  update bill_splits set status = 'cancelled' where restaurant_id = p_restaurant
+    and session_id = p_session and status in ('proposed', 'locked');
+  if coalesce(p_tip, 0) > 0 then
+    update orders set total = total + p_tip, tip = tip + p_tip where id = (
+      select id from orders where restaurant_id = p_restaurant and session_id = p_session
+        and not paid and not written_off and account_id is null and status not in ('cancelled', 'pending_payment')
+        order by created_at, id limit 1);
+  end if;
+  return jsonb_build_object('taken', v_take, 'tip', coalesce(p_tip, 0), 'outcome', 'written');
+end;
+$$;
+revoke all on function public.collect_on_sitting_v2(uuid, uuid, numeric, numeric, text, text, text)
+  from public, anon, authenticated;
+grant execute on function public.collect_on_sitting_v2(uuid, uuid, numeric, numeric, text, text, text)
+  to service_role;
+
+create or replace function public.settle_orders_v2(
+  p_restaurant uuid,
+  p_orders     uuid[],
+  p_method     text,
+  p_actor      text,
+  p_sittings   jsonb
+)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_count int;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  perform set_config('tabletap.allocation_scope', to_json(p_orders)::text, true);
+  if p_method not in ('cash', 'card') then
+    raise exception 'settle_orders: unknown method %', p_method;
+  end if;
+  if coalesce(cardinality(p_orders), 0) = 0 then
+    raise exception 'not_owed';
+  end if;
+  -- A sitting is only ever this restaurant's own.
+  if p_sittings is not null and exists (
+    select 1 from jsonb_array_elements(p_sittings) p
+     where not exists (
+       select 1 from table_sessions s
+        where s.id = (p->>'session_id')::uuid and s.restaurant_id = p_restaurant)
+  ) then
+    raise exception 'settle_orders: a sitting that is not this restaurant''s';
+  end if;
+
+  if p_sittings is null and exists(select 1 from orders where id = any(p_orders)
+    and public.retained_order_coverage(p_restaurant, id) > 0) then raise exception 'not_owed'; end if;
+  with settled as (
+    update orders
+       set paid = true, pay_method = p_method
+     where restaurant_id = p_restaurant
+       and id = any(p_orders)
+       and paid = false
+       and account_id is null
+       and written_off = false
+       and status <> 'pending_payment'
+       and status <> 'cancelled'
+    returning id, session_id, total
+  ), written as (
+    insert into payments (restaurant_id, order_id, session_id, amount, method, actor_email)
+    select p_restaurant, s.id, s.session_id, round(s.total, 2), p_method, p_actor
+      from settled s
+     where p_sittings is null and s.total > 0
+    returning 1
+  )
+  select count(*) into v_count from settled;
+
+  -- All of them, or none: a bill that changed is looked at again.
+  if v_count <> cardinality(p_orders) then
+    raise exception 'not_owed';
+  end if;
+
+  if p_sittings is not null then
+    insert into payments (restaurant_id, session_id, amount, tip, method, actor_email)
+    select p_restaurant, (p->>'session_id')::uuid, round((p->>'amount')::numeric, 2),
+      least(round((p->>'amount')::numeric, 2), (select coalesce(sum(greatest(o.tip - coalesce(a.tip, 0), 0)), 0)
+        from orders o left join lateral (select sum(tip) tip from payment_allocations where order_id = o.id) a on true
+        where o.id = any(p_orders) and o.session_id = (p->>'session_id')::uuid)), p_method, p_actor
+      from jsonb_array_elements(p_sittings) p
+     where (p->>'amount')::numeric > 0;
+  end if;
+
+  return v_count;
+end;
+$$;
+revoke all on function public.settle_orders_v2(uuid, uuid[], text, text, jsonb)
+  from public, anon, authenticated;
+grant execute on function public.settle_orders_v2(uuid, uuid[], text, text, jsonb)
+  to service_role;
+
+create or replace function public.settle_card_orders_v2(
+  p_orders    uuid[],
+  p_intent    text,
+  p_tip       numeric,
+  p_tip_order uuid,
+  p_status    text,
+  -- Defaulted, so the call written before it existed still finds this function.
+  p_charged   numeric default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_settled  uuid[];
+  v_tip_on   uuid;
+  v_missed   uuid[];
+  v_recorded numeric;
+  v_owed     numeric;
+  v_rest     uuid;
+  v_label    text;
+  v_currency text;
+begin
+  perform public.lock_restaurant_money((select restaurant_id from orders where id = any(p_orders) limit 1));
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if (select restaurant_id from orders where id = any(p_orders) limit 1) is not null then perform public.backfill_payment_allocations((select restaurant_id from orders where id = any(p_orders) limit 1)); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  perform set_config('tabletap.allocation_scope', to_json(p_orders)::text, true);
+  -- Held for the rest of the call, so the choice below and the update after it
+  -- see the same orders: a waiter settling one in between waits for this.
+  perform 1 from orders where id = any(p_orders) order by id for update;
+
+  -- Which order carries the gratuity: the one asked for if this call settles
+  -- it, otherwise the first that it does settle.
+  select coalesce(
+           (select o.id from orders o where o.id = p_tip_order and o.id = any(p_orders) and o.paid = false),
+           (select o.id from orders o where o.id = any(p_orders) and o.paid = false order by o.created_at, o.id limit 1))
+    into v_tip_on;
+
+  with settled as (
+    update orders
+       set paid = true,
+           pay_method = 'card',
+           status = coalesce(p_status, status),
+           stripe_payment_intent = case when p_status is null then stripe_payment_intent else p_intent end
+     where id = any(p_orders)
+       and paid = false and not written_off and status <> 'cancelled'
+    returning id, session_id, total, restaurant_id
+  ), written as (
+    insert into payments (restaurant_id, order_id, session_id, amount, tip, method, stripe_payment_intent)
+    select s.restaurant_id, s.id, s.session_id,
+           round(greatest(s.total - public.retained_order_coverage(s.restaurant_id, s.id), 0) + case when s.id = v_tip_on then coalesce(p_tip, 0) else 0 end, 2),
+           greatest((select o.tip from orders o where o.id = s.id) - coalesce((select sum(a.tip) from payment_allocations a where a.order_id = s.id), 0), 0)
+             + case when s.id = v_tip_on then round(coalesce(p_tip, 0), 2) else 0 end,
+           'card', p_intent
+      from settled s
+     where greatest(s.total - public.retained_order_coverage(s.restaurant_id, s.id), 0) + case when s.id = v_tip_on then coalesce(p_tip, 0) else 0 end > 0
+    on conflict do nothing
+    returning 1
+  )
+  select coalesce(array_agg(id), '{}') into v_settled from settled;
+
+  if coalesce(p_tip, 0) > 0 and v_tip_on = any(v_settled) then
+    update orders
+       set tip = round(coalesce(tip, 0) + p_tip, 2), total = round(total + p_tip, 2)
+     where id = v_tip_on;
+  end if;
+
+  v_missed := coalesce((select array_agg(o) from unnest(p_orders) o where not (o = any(v_settled))), '{}');
+
+  -- Orders this payment was for that somebody else had settled. Whatever was
+  -- charged and is not in the ledger under this payment — a repeat of the
+  -- event finds it all there — is money taken twice.
+  if coalesce(p_charged, 0) > 0 and p_intent is not null then
+    select coalesce(sum(amount), 0) into v_recorded
+      from payments where stripe_payment_intent = p_intent and order_id = any(p_orders);
+    v_owed := round(p_charged - v_recorded, 2);
+    if v_owed > 0 then
+      select o.restaurant_id, o.table_label, o.currency into v_rest, v_label, v_currency
+        from orders o where o.id = coalesce(v_missed[1], p_orders[1]);
+      if v_rest is not null then
+        insert into refunds_due (restaurant_id, stripe_payment_intent, amount, order_ids, table_label)
+        values (v_rest, p_intent, v_owed, v_missed, v_label)
+        on conflict (stripe_payment_intent) do nothing;
+        if found then
+          insert into notifications (restaurant_id, kind, data)
+          values (v_rest, 'refund_due',
+                  jsonb_build_object('amount', v_owed, 'currency', v_currency, 'table', v_label));
+        end if;
+      end if;
+    end if;
+  end if;
+
+  return jsonb_build_object(
+    'settled', to_jsonb(v_settled),
+    'tip_on', v_tip_on,
+    'not_settled', to_jsonb(v_missed));
+end;
+$$;
+revoke all on function public.settle_card_orders_v2(uuid[], text, numeric, uuid, text, numeric)
+  from public, anon, authenticated;
+grant execute on function public.settle_card_orders_v2(uuid[], text, numeric, uuid, text, numeric)
+  to service_role;
+
+create or replace function public.settle_split_share_v2(
+  p_split  uuid,
+  p_share  int,
+  p_amount numeric,
+  p_tip    numeric,
+  p_intent text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_restaurant uuid;
+  v_session    uuid;
+  v_claimed    int;
+  v_payment uuid;
+  v_existing_tip numeric;
+  v_remaining numeric;
+begin
+  perform public.lock_restaurant_money((select restaurant_id from bill_splits where id = p_split));
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if (select restaurant_id from bill_splits where id = p_split) is not null then perform public.backfill_payment_allocations((select restaurant_id from bill_splits where id = p_split)); end if;
+  perform set_config('tabletap.allocation_scope', (select to_jsonb(order_ids)::text from bill_splits where id = p_split), true);
+  select restaurant_id, session_id into v_restaurant, v_session from bill_splits where id = p_split;
+  if not found then return false; end if;
+  if (select status from bill_splits where id = p_split) <> 'locked' then return false; end if;
+
+  perform 1 from orders where id = any((select order_ids from bill_splits where id = p_split)::uuid[]) order by id for update;
+  select coalesce(sum(greatest(o.total - public.retained_order_coverage(v_restaurant, o.id), 0)), 0) into v_remaining
+    from orders o where o.id = any((select order_ids from bill_splits where id = p_split)::uuid[])
+      and not o.paid and not o.written_off and o.account_id is null and o.status not in ('cancelled', 'pending_payment');
+  if p_amount > v_remaining or p_amount is distinct from
+    (select amount from bill_split_claims where split_id = p_split and share_no = p_share) then return false; end if;
+
+  update bill_split_claims set paid_at = now()
+   where split_id = p_split and share_no = p_share and paid_at is null;
+  get diagnostics v_claimed = row_count;
+  if v_claimed = 0 then return false; end if;
+
+  select coalesce(sum(greatest(o.total - coalesce(a.amount, 0), 0)), 0),
+    coalesce(sum(greatest(o.tip - coalesce(a.tip, 0), 0)), 0) into v_remaining, v_existing_tip
+    from orders o left join lateral(select sum(amount) amount, sum(tip) tip from payment_allocations where order_id = o.id) a on true
+    where o.id = any((select order_ids from bill_splits where id = p_split)::uuid[]);
+  v_existing_tip := least(v_remaining, v_existing_tip);
+  v_existing_tip := case when v_remaining <= 0 then 0
+    else least(v_existing_tip, round(p_amount * v_existing_tip / v_remaining, 2)) end;
+  insert into payments (restaurant_id, session_id, amount, tip, method, stripe_payment_intent)
+  values (v_restaurant, v_session, round(p_amount + coalesce(p_tip, 0), 2),
+          round(coalesce(p_tip, 0) + v_existing_tip, 2), 'card', p_intent) returning id into v_payment;
+  update bill_split_claims set payment_id = v_payment where split_id = p_split and share_no = p_share;
+
+  -- `total` and `tip` rise together, so a running balance still reads the
+  -- same food as owed — the way settling a whole table and collecting in
+  -- parts both attribute a gratuity.
+  if coalesce(p_tip, 0) > 0 then
+    update orders
+       set tip = round(coalesce(tip, 0) + p_tip, 2), total = round(total + p_tip, 2)
+     where id = (
+       select id from orders
+        where id = any((select order_ids from bill_splits where id = p_split)::uuid[])
+          and not paid and account_id is null and status <> 'cancelled' and status <> 'pending_payment' and written_off = false
+        order by created_at asc limit 1);
+  end if;
+  return true;
+end;
+$$;
+revoke all on function public.settle_split_share_v2(uuid, int, numeric, numeric, text)
+  from public, anon, authenticated;
+grant execute on function public.settle_split_share_v2(uuid, int, numeric, numeric, text)
+  to service_role;
+
+create or replace function public.settle_sale_v2(
+  p_restaurant uuid,
+  p_order      uuid,
+  p_method     text,
+  p_actor      text,
+  p_status     text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_total numeric;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  perform set_config('tabletap.allocation_scope', to_json(array[p_order])::text, true);
+  if p_method not in ('cash', 'card') then
+    raise exception 'settle_sale: unknown method %', p_method;
+  end if;
+  if p_status not in ('received', 'completed') then
+    raise exception 'settle_sale: a sale cannot be %', p_status;
+  end if;
+
+  update orders
+     set paid = true, pay_method = p_method, status = p_status
+   where id = p_order
+     and restaurant_id = p_restaurant
+     and paid = false
+     and status = 'pending_payment'
+  returning total into v_total;
+  if not found then
+    raise exception 'not_owed';
+  end if;
+
+  if v_total > 0 then
+    insert into payments (restaurant_id, order_id, amount, method, actor_email)
+    values (p_restaurant, p_order, round(v_total, 2), p_method, p_actor);
+  end if;
+  return true;
+end;
+$$;
+revoke all on function public.settle_sale_v2(uuid, uuid, text, text, text)
+  from public, anon, authenticated;
+grant execute on function public.settle_sale_v2(uuid, uuid, text, text, text)
+  to service_role;
+
+create or replace function public.account_charge_v2(
+  p_restaurant uuid,
+  p_account    uuid,
+  p_orders     uuid[],
+  p_expected   numeric,
+  p_actor      text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_account  customer_accounts;
+  v_count    int;
+  v_amount   numeric;
+  v_sessions uuid[];
+  v_owed     numeric;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  select * into v_account from customer_accounts
+   where id = p_account and restaurant_id = p_restaurant for update;
+  if v_account.id is null or v_account.status <> 'open' then
+    return jsonb_build_object('outcome', 'closed');
+  end if;
+  if p_orders is null or cardinality(p_orders) = 0 then
+    return jsonb_build_object('outcome', 'stale');
+  end if;
+
+  perform 1 from orders where id = any(p_orders) order by id for update;
+
+  -- A card checkout open on any of them: the diner is paying it right now.
+  if exists (select 1 from orders where id = any(p_orders)
+              and card_checkout_at is not null and card_checkout_at > now() - interval '35 minutes'
+              and paid = false) then
+    return jsonb_build_object('outcome', 'paying');
+  end if;
+
+  select count(*), coalesce(sum(total), 0),
+         array_agg(distinct session_id) filter (where session_id is not null)
+    into v_count, v_amount, v_sessions
+    from orders
+   where id = any(p_orders)
+     and restaurant_id = p_restaurant
+     and paid = false and written_off = false and account_id is null
+     and status not in ('cancelled', 'pending_payment');
+  if v_count <> cardinality(p_orders) or abs(v_amount - p_expected) > 0.005 then
+    return jsonb_build_object('outcome', 'stale');
+  end if;
+
+  -- Part of the table's bill already collected, or a division under way: the
+  -- orders cannot move whole, and the account would owe what was paid.
+  if exists (select 1 from payments where session_id = any(coalesce(v_sessions, '{}')) and order_id is null)
+     or exists (select 1 from bill_splits where session_id = any(coalesce(v_sessions, '{}'))
+                 and status in ('proposed', 'locked')) then
+    return jsonb_build_object('outcome', 'partly_paid');
+  end if;
+
+  v_owed := public.account_owed(p_account);
+  if v_owed + v_amount > v_account.credit_limit then
+    return jsonb_build_object('outcome', 'limit', 'owed', v_owed, 'limit', v_account.credit_limit);
+  end if;
+
+  update orders set account_id = p_account, charged_by = p_actor, charged_at = now()
+   where id = any(p_orders);
+  perform public.close_session_if_clear(s, 'account') from unnest(coalesce(v_sessions, '{}')) s;
+
+  return jsonb_build_object('outcome', 'charged', 'amount', v_amount, 'owed', v_owed + v_amount);
+end;
+$$;
+revoke all on function public.account_charge_v2(uuid, uuid, uuid[], numeric, text) from public, anon, authenticated;
+grant execute on function public.account_charge_v2(uuid, uuid, uuid[], numeric, text) to service_role;
+
+create or replace function public.account_change_v2(
+  p_restaurant uuid, p_account uuid, p_action text, p_limit numeric, p_actor text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_account customer_accounts;
+  v_owed numeric;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  select * into v_account from customer_accounts
+   where id = p_account and restaurant_id = p_restaurant for update;
+  if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  v_owed := public.account_owed(p_account);
+  if p_action = 'limit' then
+    if p_limit is null or p_limit <= 0 or p_limit > 1000000 then
+      return jsonb_build_object('outcome', 'invalid');
+    end if;
+    if p_limit < v_owed then return jsonb_build_object('outcome', 'limit', 'owed', v_owed); end if;
+    update customer_accounts set credit_limit = p_limit where id = p_account;
+  elsif p_action = 'close' then
+    if v_owed > 0 then return jsonb_build_object('outcome', 'owes', 'owed', v_owed); end if;
+    update customer_accounts set status = 'closed', closed_by = p_actor, closed_at = now() where id = p_account;
+  else
+    return jsonb_build_object('outcome', 'invalid');
+  end if;
+  return jsonb_build_object('outcome', 'changed', 'previous_limit', v_account.credit_limit);
+end;
+$$;
+revoke all on function public.account_change_v2(uuid, uuid, text, numeric, text) from public, anon, authenticated;
+grant execute on function public.account_change_v2(uuid, uuid, text, numeric, text) to service_role;
+
+create or replace function public.account_settle_v2(
+  p_restaurant uuid,
+  p_account    uuid,
+  p_expected   numeric,
+  p_tip        numeric,
+  p_method     text,
+  p_actor      text,
+  p_ref        text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_account customer_accounts;
+  v_ids     uuid[];
+  v_owed    numeric;
+  v_tip     numeric := greatest(coalesce(p_tip, 0), 0);
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  select * into v_account from customer_accounts
+   where id = p_account and restaurant_id = p_restaurant for update;
+  if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if p_ref is not null and exists (select 1 from payments
+                                    where restaurant_id = p_restaurant and client_ref = p_ref) then
+    return jsonb_build_object('outcome', 'duplicate');
+  end if;
+  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+    return jsonb_build_object('outcome', 'paying');
+  end if;
+
+  perform 1 from orders where account_id = p_account and paid = false and written_off = false and status <> 'cancelled' order by id for update;
+  select coalesce(sum(total), 0), array_agg(id order by created_at desc)
+    into v_owed, v_ids
+    from orders where account_id = p_account and paid = false and written_off = false and status <> 'cancelled';
+  if v_owed <= 0 then return jsonb_build_object('outcome', 'nothing'); end if;
+  if abs(v_owed - p_expected) > 0.005 then
+    return jsonb_build_object('outcome', 'changed', 'owed', v_owed);
+  end if;
+  -- A gratuity is never more than what it thanks somebody for.
+  v_tip := least(v_tip, v_owed);
+
+  insert into payments (restaurant_id, account_id, amount, tip, method, actor_email, client_ref)
+  values (p_restaurant, p_account, v_owed + v_tip,
+    v_tip + (select coalesce(sum(tip), 0) from orders where id = any(v_ids) and written_off = false), p_method, p_actor, p_ref);
+  update orders set paid = true, pay_method = p_method where id = any(v_ids);
+  -- The gratuity lands on the latest order, as a table's does on its first.
+  if v_tip > 0 then
+    update orders set tip = tip + v_tip, total = total + v_tip where id = v_ids[1];
+  end if;
+  return jsonb_build_object('outcome', 'paid', 'amount', v_owed + v_tip, 'tip', v_tip);
+end;
+$$;
+revoke all on function public.account_settle_v2(uuid, uuid, numeric, numeric, text, text, text) from public, anon, authenticated;
+grant execute on function public.account_settle_v2(uuid, uuid, numeric, numeric, text, text, text) to service_role;
+
+create or replace function public.account_checkout_open_v2(
+  p_restaurant uuid,
+  p_account    uuid,
+  p_expected   numeric,
+  p_tip        numeric,
+  p_fee        numeric
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_account customer_accounts;
+  v_ids     uuid[];
+  v_owed    numeric;
+  v_tip     numeric := greatest(coalesce(p_tip, 0), 0);
+  v_id      uuid;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  select * into v_account from customer_accounts
+   where id = p_account and restaurant_id = p_restaurant for update;
+  if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+    return jsonb_build_object('outcome', 'paying');
+  end if;
+  perform 1 from orders where account_id = p_account and paid = false
+    and written_off = false and status <> 'cancelled' order by id for update;
+  select coalesce(sum(total), 0), array_agg(id order by created_at desc)
+    into v_owed, v_ids
+    from orders where account_id = p_account and paid = false and written_off = false and status <> 'cancelled';
+  if v_owed <= 0 then return jsonb_build_object('outcome', 'nothing'); end if;
+  if abs(v_owed - p_expected) > 0.005 then
+    return jsonb_build_object('outcome', 'changed', 'owed', v_owed);
+  end if;
+  -- A checkout still open once its hold has lapsed is dead: its Stripe session
+  -- expired at thirty minutes, five before the hold. Closed here, so its
+  -- expiry arriving late (Stripe retries for days) finds nothing to release.
+  -- Releasing it lifted the hold of the checkout opened now, and the till
+  -- could collect the account while the customer was paying it by card.
+  update account_checkouts set status = 'expired' where account_id = p_account and status = 'open';
+  v_tip := least(v_tip, v_owed);
+  insert into account_checkouts (restaurant_id, account_id, order_ids, amount, tip, fee)
+  values (p_restaurant, p_account, v_ids, v_owed, v_tip, greatest(coalesce(p_fee, 0), 0)) returning id into v_id;
+  update customer_accounts set checkout_until = now() + interval '35 minutes', checkout_id = v_id where id = p_account;
+  return jsonb_build_object('outcome', 'open', 'checkout', v_id, 'amount', v_owed, 'tip', v_tip);
+end;
+$$;
+revoke all on function public.account_checkout_open_v2(uuid, uuid, numeric, numeric, numeric) from public, anon, authenticated;
+grant execute on function public.account_checkout_open_v2(uuid, uuid, numeric, numeric, numeric) to service_role;
+
+create or replace function public.account_checkout_settle_v2(
+  p_checkout uuid,
+  p_intent   text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_checkout account_checkouts;
+  v_account  customer_accounts;
+  v_ids      uuid[];
+  v_still    numeric;
+  v_food     numeric;
+  v_tip      numeric;
+  v_twice    numeric;
+begin
+  perform public.lock_restaurant_money((select restaurant_id from account_checkouts where id = p_checkout));
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if (select restaurant_id from account_checkouts where id = p_checkout) is not null then perform public.backfill_payment_allocations((select restaurant_id from account_checkouts where id = p_checkout)); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  select * into v_checkout from account_checkouts where id = p_checkout;
+  if v_checkout.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  -- Opening the next checkout holds the account first too.
+  select * into v_account from customer_accounts where id = v_checkout.account_id for update;
+  select * into v_checkout from account_checkouts where id = p_checkout for update;
+  if v_checkout.status = 'paid' then return jsonb_build_object('outcome', 'duplicate'); end if;
+
+  -- Freeze each order before summing it: a cancel or discount must not commit
+  -- between the amount read and the paid flag written below.
+  perform 1 from orders where id = any(v_checkout.order_ids)
+    and paid = false and written_off = false and status <> 'cancelled' order by id for update;
+
+  -- The ones still owed. The hold keeps the till off them while the customer
+  -- is on Stripe's page, but a payment whose webhook arrives after the hold
+  -- ran out can find the till collected some or all of them meanwhile.
+  select array_agg(id order by created_at desc), coalesce(sum(total), 0) into v_ids, v_still
+    from orders where id = any(v_checkout.order_ids) and paid = false and written_off = false and status <> 'cancelled';
+  v_food := least(v_checkout.amount, v_still);
+  v_tip := case when v_ids is null then 0 else v_checkout.tip end;
+  perform set_config('tabletap.allocation_scope', to_json(coalesce(v_ids, '{}'::uuid[]))::text, true);
+  if v_food + v_tip > 0 then
+    insert into payments (restaurant_id, account_id, amount, tip, method, stripe_payment_intent)
+    values (v_checkout.restaurant_id, v_checkout.account_id, v_food + v_tip,
+      v_tip + (select coalesce(sum(tip), 0) from orders where id = any(v_ids) and written_off = false), 'card', p_intent);
+  end if;
+  -- What the card paid for food already paid another way is the customer's
+  -- money taken twice: kept as a refund due, out of the ledger, and the bell
+  -- says so — the same as a card payment landing on a table already settled.
+  v_twice := round(v_checkout.amount + v_checkout.tip - v_food - v_tip, 2);
+  if v_twice > 0 and p_intent is not null then
+    insert into refunds_due (restaurant_id, stripe_payment_intent, amount, order_ids, account_name)
+    values (v_checkout.restaurant_id, p_intent, v_twice, v_checkout.order_ids, v_account.name)
+    on conflict (stripe_payment_intent) do nothing;
+    if found then
+      insert into notifications (restaurant_id, kind, data)
+      values (v_checkout.restaurant_id, 'refund_due',
+              jsonb_build_object('amount', v_twice, 'currency', (select currency from restaurants where id = v_checkout.restaurant_id),
+                                 'account', v_account.name));
+    end if;
+  end if;
+  update orders set paid = true, pay_method = 'card' where id = any(coalesce(v_ids, '{}'));
+  if v_checkout.tip > 0 and v_ids is not null then
+    update orders set tip = tip + v_checkout.tip, total = total + v_checkout.tip where id = v_ids[1];
+  end if;
+  -- Our fee is taken in `platform_fees` by the webhook; `orders.platform_fee`
+  -- is the frozen record of fees from before that ledger.
+  update account_checkouts set status = 'paid' where id = p_checkout;
+  update customer_accounts set checkout_until = null, checkout_id = null
+   where id = v_checkout.account_id and checkout_id = p_checkout;
+  return jsonb_build_object('outcome', 'paid', 'orders', coalesce(cardinality(v_ids), 0));
+end;
+$$;
+revoke all on function public.account_checkout_settle_v2(uuid, text) from public, anon, authenticated;
+grant execute on function public.account_checkout_settle_v2(uuid, text) to service_role;
+
+create or replace function public.settle_offline_sale_v2(
+  p_restaurant uuid, p_order uuid, p_method text, p_actor text, p_at timestamptz
+) returns boolean language plpgsql security definer set search_path = public as $$
+declare
+  v_total numeric;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  perform set_config('tabletap.allocation_scope', to_json(array[p_order])::text, true);
+  if p_method not in ('cash', 'card') then
+    raise exception 'settle_offline_sale: unknown method %', p_method;
+  end if;
+  update orders
+     set paid = true, pay_method = p_method, status = 'completed'
+   where id = p_order and restaurant_id = p_restaurant and paid = false and status = 'pending_payment'
+  returning total into v_total;
+  if not found then
+    raise exception 'not_owed';
+  end if;
+  if v_total > 0 then
+    insert into payments (restaurant_id, order_id, amount, method, actor_email, created_at)
+    values (p_restaurant, p_order, round(v_total, 2), p_method, p_actor, p_at);
+  end if;
+  return true;
+end;
+$$;
+revoke all on function public.settle_offline_sale_v2(uuid, uuid, text, text, timestamptz) from public, anon, authenticated;
+grant execute on function public.settle_offline_sale_v2(uuid, uuid, text, text, timestamptz) to service_role;
+
+create or replace function public.cancel_order_v2(
+  p_restaurant uuid, p_order uuid, p_refund text, p_legacy_demand jsonb,
+  p_expected_paid boolean, p_expected_account uuid, p_expected_hold timestamptz, p_expected_checkout uuid
+) returns boolean language plpgsql security definer set search_path = public as $$
+declare
+  v_order orders%rowtype;
+  v_account customer_accounts;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  -- Collection holds the account first. Recheck the plan under that lock so
+  -- an unpaid cancel cannot silently erase food that was just collected.
+  if p_expected_account is not null then
+    select * into v_account from customer_accounts
+     where id = p_expected_account and restaurant_id = p_restaurant for update;
+    if v_account.id is null or v_account.checkout_until is distinct from p_expected_hold
+       or v_account.checkout_id is distinct from p_expected_checkout then
+      return false;
+    end if;
+    if not p_expected_paid and v_account.checkout_until > now() then return false; end if;
+  end if;
+  select * into v_order from orders where id = p_order and restaurant_id = p_restaurant for update;
+  if v_order.id is null or v_order.paid is distinct from p_expected_paid
+     or v_order.account_id is distinct from p_expected_account then return false; end if;
+  update orders set status = 'cancelled', stripe_refund_id = p_refund, cancelled_at = now()
+    where id = p_order and restaurant_id = p_restaurant and status in ('received', 'preparing')
+    returning * into v_order;
+  if not found then return false; end if;
+  if not v_order.stock_managed and v_order.stock_reservation_id is null then
+    perform release_stock(p_restaurant, p_legacy_demand);
+  end if;
+  return true;
+end;
+$$;
+revoke all on function public.cancel_order_v2(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) from public, anon, authenticated;
+grant execute on function public.cancel_order_v2(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) to service_role;
+
+create or replace function public.ring_pos_sale_v2(
+  p_restaurant uuid, p_ref uuid, p_order jsonb, p_method text, p_actor text,
+  p_status text, p_at timestamptz, p_terminal text, p_demand jsonb,
+  p_inventory boolean, p_threshold int
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_ticket jsonb;
+  v_stock jsonb := '{"ok":true,"low":[]}'::jsonb;
+  v_reservation uuid;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  if p_method not in ('cash', 'card') or p_status not in ('received', 'completed') then
+    raise exception 'Invalid till sale';
+  end if;
+  v_ticket := public.pos_ticket(p_restaurant, p_ref);
+  if v_ticket is not null then return v_ticket; end if;
+  if p_at is not null then
+    -- It already happened, so the count floors at zero rather than refusing.
+    -- In the same transaction as the money: a sale recorded without its stock
+    -- was acknowledged, and nothing ever moved the count again. The floor
+    -- skips dishes that are gone and cannot run short, so what can fail here
+    -- is a lock that timed out, which the device's next send retries whole.
+    perform public.take_stock_floor(p_restaurant, p_demand);
+  elsif p_inventory then
+    v_reservation := p_ref;
+    v_stock := public.reserve_stock(p_restaurant, p_demand, p_threshold, v_reservation);
+    if not (v_stock->>'ok')::boolean then
+      return v_stock || jsonb_build_object('outcome', 'stock');
+    end if;
+  end if;
+  perform public.pos_insert_order(p_restaurant, p_ref, p_order, 'pending_payment', p_at, v_reservation);
+  if p_at is not null then
+    perform public.settle_offline_sale_v2(p_restaurant, p_ref, p_method, p_actor, p_at);
+  else
+    perform public.settle_sale_v2(p_restaurant, p_ref, p_method, p_actor, p_status);
+  end if;
+  if p_method = 'card' and p_terminal is not null then
+    update payments set terminal_ref = p_terminal
+     where restaurant_id = p_restaurant and order_id = p_ref and method = 'card';
+  end if;
+  return jsonb_build_object('outcome', 'settled', 'settled', true, 'orderId', p_ref,
+    'total', (p_order->>'total')::numeric, 'low', v_stock->'low',
+    'handedOver', p_at is not null or p_status = 'completed');
+end;
+$$;
+revoke all on function public.ring_pos_sale_v2(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int) from public, anon, authenticated;
+grant execute on function public.ring_pos_sale_v2(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int) to service_role;
+
+create or replace function public.ring_pos_account_v2(
+  p_restaurant uuid, p_ref uuid, p_order jsonb, p_account uuid, p_actor text,
+  p_status text, p_demand jsonb, p_inventory boolean, p_threshold int
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_ticket jsonb;
+  v_charge jsonb;
+  v_stock jsonb := '{"ok":true,"low":[]}'::jsonb;
+  v_reservation uuid;
+  v_name text;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  if p_status not in ('received', 'completed') then raise exception 'Invalid till status'; end if;
+  v_ticket := public.pos_ticket(p_restaurant, p_ref);
+  if v_ticket is not null then return v_ticket; end if;
+  -- Lock the account before stock, as every credit decision must see its latest debt.
+  select name into v_name from customer_accounts
+   where id = p_account and restaurant_id = p_restaurant for update;
+  if not found then return jsonb_build_object('outcome', 'closed'); end if;
+  begin
+    if p_inventory then
+      v_reservation := p_ref;
+      v_stock := public.reserve_stock(p_restaurant, p_demand, p_threshold, v_reservation);
+      if not (v_stock->>'ok')::boolean then
+        return v_stock || jsonb_build_object('outcome', 'stock');
+      end if;
+    end if;
+    perform public.pos_insert_order(p_restaurant, p_ref, p_order, p_status, null, v_reservation);
+    v_charge := public.account_charge_v2(p_restaurant, p_account, array[p_ref], (p_order->>'total')::numeric, p_actor);
+    if v_charge->>'outcome' <> 'charged' then
+      raise exception using errcode = 'PT001', message = 'Account refused the sale';
+    end if;
+  exception when sqlstate 'PT001' then
+    return v_charge;
+  end;
+  return jsonb_build_object('outcome', 'settled', 'settled', true, 'orderId', p_ref,
+    'total', (p_order->>'total')::numeric, 'low', v_stock->'low', 'handedOver', p_status = 'completed',
+    'onAccount', jsonb_build_object('name', v_name, 'owed', v_charge->'owed'));
+end;
+$$;
+revoke all on function public.ring_pos_account_v2(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int) from public, anon, authenticated;
+grant execute on function public.ring_pos_account_v2(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int) to service_role;
+
+create or replace function public.approve_write_off_request_v2(
+  p_request uuid, p_restaurant uuid, p_actor text, p_amount numeric, p_note text
+) returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_request write_off_requests%rowtype;
+  v_count int;
+  v_total numeric;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  select * into v_request from write_off_requests
+   where id = p_request and restaurant_id = p_restaurant for update;
+  if not found or v_request.status <> 'pending' then return 'gone'; end if;
+  if p_amount is null or p_amount <= 0 or v_request.amount <> p_amount then return 'changed'; end if;
+  perform 1 from orders where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+   order by id for update;
+  select count(*), coalesce(sum(total), 0) into v_count, v_total from orders
+   where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+     and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
+     -- An order moved onto a customer account is the account's debt now.
+     and account_id is null;
+  if v_count <> cardinality(v_request.order_ids) or round(v_total, 2) <> p_amount then return 'changed'; end if;
+
+  update orders set written_off = true, write_off_reason = v_request.reason,
+    write_off_note = v_request.note, written_off_by = p_actor, written_off_at = now(), status = 'completed'
+   where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+     and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
+     and account_id is null;
+  update write_off_requests set status = 'approved', decided_by = p_actor, decided_at = now(), decided_note = p_note
+   where id = p_request and restaurant_id = p_restaurant and status = 'pending';
+  return 'approved';
+end; $$;
+revoke all on function public.approve_write_off_request_v2(uuid, uuid, text, numeric, text) from public, anon, authenticated;
+grant execute on function public.approve_write_off_request_v2(uuid, uuid, text, numeric, text) to service_role;
+
+create or replace function public.approve_discount_request_v2(
+  p_request uuid, p_restaurant uuid, p_actor text, p_amount numeric
+) returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_request discount_requests%rowtype;
+  v_coupon coupons%rowtype;
+  v_count int;
+  v_total numeric;
+  v_amount numeric;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  select * into v_request from discount_requests
+   where id = p_request and restaurant_id = p_restaurant for update;
+  if not found or v_request.status <> 'pending' then return 'gone'; end if;
+  if p_amount is null or p_amount <= 0 or v_request.amount <> p_amount then return 'changed'; end if;
+  perform 1 from orders where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+   order by id for update;
+  select count(*), coalesce(sum(total), 0) into v_count, v_total from orders
+   where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+     and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
+     and coupon_code is null and account_id is null;
+  if v_count <> cardinality(v_request.order_ids) or v_total <= 0 then return 'changed'; end if;
+  select * into v_coupon from coupons
+   where restaurant_id = p_restaurant and upper(code) = upper(v_request.code) for update;
+  if not found or not v_coupon.active
+     or v_coupon.starts_at > now() or v_coupon.ends_at <= now()
+     or v_total < v_coupon.min_subtotal
+     or v_coupon.uses_count >= v_coupon.max_uses then return 'changed'; end if;
+  v_amount := greatest(0, least(v_total, round(case when v_coupon.kind = 'percent'
+    then v_total * v_coupon.value / 100 else v_coupon.value end, 2)));
+  if v_amount <> p_amount then return 'changed'; end if;
+  if redeem_coupon(v_coupon.id) is null then return 'changed'; end if;
+
+  -- Keep the rounding remainder on the largest order, as spreadDiscount does.
+  with shares as (
+    select id, total, round(p_amount * total / v_total, 2) amount,
+      row_number() over (order by total desc, id) position
+    from orders where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+     and account_id is null
+  ), amounts as (
+    select id, greatest(0, least(total, amount + case when position = 1
+      then p_amount - sum(amount) over () else 0 end)) amount from shares
+  )
+  update orders o set coupon_code = v_coupon.code,
+    discount = round(coalesce(o.discount, 0) + a.amount, 2), total = round(o.total - a.amount, 2)
+    from amounts a where o.id = a.id and o.restaurant_id = p_restaurant;
+  insert into coupon_redemptions (restaurant_id, coupon_id, order_id, code, amount, confirmed_at)
+  values (p_restaurant, v_coupon.id, v_request.order_ids[1], v_coupon.code, p_amount, now());
+  update discount_requests set status = 'approved', decided_by = p_actor, decided_at = now()
+   where id = p_request and restaurant_id = p_restaurant and status = 'pending';
+  return 'approved';
+end; $$;
+revoke all on function public.approve_discount_request_v2(uuid, uuid, text, numeric) from public, anon, authenticated;
+grant execute on function public.approve_discount_request_v2(uuid, uuid, text, numeric) to service_role;
+
+-- Duplicate charges need the same durable retry rule as order cancellations.
+-- Unknown/pending outcomes reuse their immutable request; only a confirmed
+-- terminal failure can advance to a new Stripe idempotency key.
+create unique index if not exists refunds_due_tenant_identity on refunds_due(restaurant_id, id);
+create table if not exists refund_due_attempts (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  due_id uuid not null,
+  foreign key (restaurant_id, due_id) references refunds_due(restaurant_id, id) on delete cascade,
+  attempt_no int not null check (attempt_no > 0),
+  idempotency_key text not null unique,
+  amount numeric not null check (amount > 0 and amount = round(amount, 2)),
+  stripe_account_id text not null,
+  stripe_payment_intent text not null,
+  stripe_refund_id text,
+  provider_status text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(due_id, attempt_no)
+);
+alter table refund_due_attempts enable row level security;
+revoke all on refund_due_attempts from anon, authenticated;
+revoke all on refund_due_attempts from public;
+grant select, insert, update, delete on refund_due_attempts to service_role;
+
+create or replace function public.start_refund_due_attempt(p_restaurant uuid, p_due uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare d refunds_due; a refund_due_attempts; v_account text; v_no int;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into d from refunds_due where id = p_due and restaurant_id = p_restaurant for update;
+  if d.id is null or d.refunded_at is not null then return null; end if;
+  select * into a from refund_due_attempts where due_id = d.id order by attempt_no desc limit 1;
+  if a.id is null or a.provider_status in ('failed', 'canceled') then
+    v_no := coalesce(a.attempt_no, 0) + 1;
+    v_account := a.stripe_account_id;
+    if v_account is null then select stripe_account_id into v_account from restaurants where id = p_restaurant; end if;
+    if v_account is null then return null; end if;
+    insert into refund_due_attempts(restaurant_id, due_id, attempt_no, idempotency_key, amount, stripe_account_id, stripe_payment_intent)
+      values(p_restaurant, d.id, v_no, 'refund-due-' || d.id || case when v_no = 1 then '' else '-' || v_no end,
+        coalesce(a.amount, d.amount), v_account, coalesce(a.stripe_payment_intent, d.stripe_payment_intent)) returning * into a;
+  end if;
+  return to_jsonb(a);
+end;
+$$;
+revoke all on function public.start_refund_due_attempt(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.start_refund_due_attempt(uuid, uuid) to service_role;
+
+create or replace function public.finish_refund_due_attempt(
+  p_restaurant uuid, p_due uuid, p_attempt uuid, p_actor text, p_refund text, p_status text
+) returns boolean language plpgsql security definer set search_path = public as $$
+declare d refunds_due;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into d from refunds_due where id = p_due and restaurant_id = p_restaurant for update;
+  if d.id is null or d.refunded_at is not null then return false; end if;
+  if p_attempt is distinct from (select id from refund_due_attempts where due_id = d.id order by attempt_no desc limit 1) then return false; end if;
+  if p_status not in ('succeeded', 'pending', 'requires_action', 'failed', 'canceled') then raise exception 'invalid provider outcome'; end if;
+  if p_refund is null then raise exception 'provider evidence required'; end if;
+  update refund_due_attempts set stripe_refund_id = p_refund, provider_status = p_status, updated_at = now()
+    where id = p_attempt and restaurant_id = p_restaurant;
+  if p_status <> 'succeeded' then return false; end if;
+  update refunds_due set refunded_at = now(), refunded_by = p_actor, stripe_refund_id = p_refund where id = d.id;
+  return true;
+end;
+$$;
+revoke all on function public.finish_refund_due_attempt(uuid, uuid, uuid, text, text, text) from public, anon, authenticated;
+grant execute on function public.finish_refund_due_attempt(uuid, uuid, uuid, text, text, text) to service_role;
+
+revoke truncate, references, trigger on all tables in schema public from public, anon, authenticated;
 
 revoke truncate, references, trigger on all tables in schema public from authenticated;

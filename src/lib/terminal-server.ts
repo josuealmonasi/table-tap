@@ -41,6 +41,7 @@ interface PaymentRead {
   terminal_ref: string | null;
   created_at: string;
   recorded_at: string | null;
+  allocation_origin: string;
   /** Embedded through the foreign key, so no list of ids rides in the URL. */
   orders: OrderRead | null;
 }
@@ -65,7 +66,7 @@ export async function readTerminal(restaurantId: string, timeZone: string, now =
   const [restaurant, payments, deposits] = await Promise.all([
     db.from("restaurants").select("terminal_fee_pct, terminal_settle_days").eq("id", restaurantId).single(),
     everyRow<PaymentRead>((a, b) => db.from("payments")
-      .select("id, amount, tip, order_id, terminal_ref, created_at, recorded_at, orders(tip, total, status, cancelled_at)")
+      .select("id, amount, tip, order_id, terminal_ref, created_at, recorded_at, allocation_origin, orders(tip, total, status, cancelled_at)")
       .eq("restaurant_id", restaurantId).eq("method", "card").is("stripe_payment_intent", null)
       .eq("orders.restaurant_id", restaurantId)
       .gte("created_at", since.toISOString()).order("id").range(a, b)
@@ -77,9 +78,12 @@ export async function readTerminal(restaurantId: string, timeZone: string, now =
   ]);
   if (restaurant.error || !restaurant.data) throw new Error(`Could not read the restaurant: ${restaurant.error?.message}`);
 
-  const earlierVoids = await voidedSince(restaurantId, since);
+  const cancellations = await everyRow<{ order_id: string }>((a, b) => db.from("order_adjustments")
+    .select("order_id").eq("restaurant_id", restaurantId).order("id").range(a, b), "the cancellation adjustments");
+  const adjusted = new Set(cancellations.map(a => a.order_id));
+  const earlierVoids = await voidedSince(restaurantId, since, adjusted);
   const voidedAt = (p: PaymentRead): string | null =>
-    p.orders?.status === "cancelled" ? p.orders.cancelled_at ?? p.created_at : null;
+    p.allocation_origin === "legacy" && !adjusted.has(p.order_id ?? "") && p.orders?.status === "cancelled" ? p.orders.cancelled_at ?? p.created_at : null;
   const tipOf = (p: PaymentRead): number => {
     if (Number(p.tip) > 0) return Number(p.tip);
     const order = p.orders;
@@ -88,6 +92,12 @@ export async function readTerminal(restaurantId: string, timeZone: string, now =
 
   const feePct = Number(restaurant.data.terminal_fee_pct);
   const settleDays = Number(restaurant.data.terminal_settle_days);
+  const returns = await everyRow<{ amount: number; tip: number; completed_at: string }>((a, b) => db.from("refund_operations")
+    .select("amount, tip, completed_at").eq("restaurant_id", restaurantId).eq("source", "terminal")
+    .eq("status", "succeeded").gte("completed_at", since.toISOString()).order("id").range(a, b), "the terminal returns");
+  const returned: TerminalPayment[] = returns.map(r => ({
+    amount: Number(r.amount), tip: Number(r.tip), created_at: r.completed_at, returned_at: r.completed_at,
+  }));
   const rows = payments.map(p => ({ ...p, tip: tipOf(p), voided_at: voidedAt(p) }));
   const byDay: Record<string, TerminalPaymentRow[]> = {};
   for (const p of rows.sort((a, b) => a.created_at.localeCompare(b.created_at))) {
@@ -98,7 +108,7 @@ export async function readTerminal(restaurantId: string, timeZone: string, now =
     });
   }
   return {
-    days: depositDays([...rows, ...earlierVoids], deposits, feePct, settleDays, timeZone, localDay(now, timeZone), localDay(since, timeZone)),
+    days: depositDays([...rows, ...earlierVoids, ...returned], deposits, feePct, settleDays, timeZone, localDay(now, timeZone), localDay(since, timeZone)),
     payments: byDay,
     feePct,
     settleDays,
@@ -107,20 +117,21 @@ export async function readTerminal(restaurantId: string, timeZone: string, now =
 
 interface VoidRead {
   amount: number;
+  order_id: string;
   created_at: string;
   orders: { cancelled_at: string };
 }
 
 /** Terminal charges taken before `since` whose sale was cancelled after it. */
-async function voidedSince(restaurantId: string, since: Date): Promise<TerminalPayment[]> {
+async function voidedSince(restaurantId: string, since: Date, adjusted: Set<string>): Promise<TerminalPayment[]> {
   const db = createAdminClient();
   const voided = await everyRow<VoidRead>((a, b) => db.from("payments")
-    .select("amount, created_at, orders!inner(cancelled_at)")
+    .select("amount, order_id, created_at, orders!inner(cancelled_at)")
     .eq("restaurant_id", restaurantId).eq("method", "card").is("stripe_payment_intent", null)
-    .lt("created_at", since.toISOString())
+    .eq("allocation_origin", "legacy").lt("created_at", since.toISOString())
     .eq("orders.restaurant_id", restaurantId).eq("orders.status", "cancelled")
     .gte("orders.cancelled_at", since.toISOString())
     .order("id").range(a, b)
     .overrideTypes<VoidRead[], { merge: false }>(), "the charges voided");
-  return voided.map(p => ({ amount: Number(p.amount), tip: 0, created_at: p.created_at, voided_at: p.orders.cancelled_at }));
+  return voided.filter(p => !adjusted.has(p.order_id)).map(p => ({ amount: Number(p.amount), tip: 0, created_at: p.created_at, voided_at: p.orders.cancelled_at }));
 }

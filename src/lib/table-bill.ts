@@ -46,6 +46,7 @@ export function billWindowStart(now: Date = new Date()): Date {
 }
 
 export interface BillSide {
+  collected?: number;
   orders: Order[];
   /** Every line across those orders, for listing what is being paid for. */
   items: OrderLineItem[];
@@ -134,10 +135,11 @@ function side(orders: Order[]): BillSide {
     items: orders.flatMap(o => o.items ?? []),
     // Rounded once at the end: summing pre-rounded totals is what makes a bill
     // disagree with the sum of its parts by a cent.
-    total: round2(orders.reduce((sum, o) => sum + Number(o.total), 0)),
+    total: round2(orders.reduce((sum, o) => sum + Number(o.total) - Number(o.collected ?? 0), 0)),
+    ...(orders.some(o => Number(o.collected) > 0) ? { collected: round2(orders.reduce((sum, o) => sum + Number(o.collected ?? 0), 0)) } : {}),
     discount: round2(orders.reduce((sum, o) => sum + Number(o.discount ?? 0), 0)),
     service: round2(orders.reduce((sum, o) => sum + Number(o.service_fee ?? 0), 0)),
-    tip: round2(orders.reduce((sum, o) => sum + Number(o.tip ?? 0), 0)),
+    tip: round2(orders.reduce((sum, o) => sum + Number(o.tip ?? 0) - Number(o.collected_tip ?? 0), 0)),
   };
 }
 

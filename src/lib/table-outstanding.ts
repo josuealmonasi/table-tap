@@ -1,3 +1,5 @@
+import { paymentCoverageDetails } from "@/lib/payment-coverage";
+import { everyRow } from "@/lib/paged";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { unpaidOrders } from "@/lib/table-bill";
 import { billTotal, type Owes } from "@/lib/table-balance";
@@ -102,104 +104,23 @@ export async function tableOutstanding(
   tableId: string,
 ): Promise<Outstanding> {
   const db = createAdminClient();
-  const { data } = await db
-    .from("orders")
-    .select(FIELDS)
-    .eq("restaurant_id", restaurantId)
-    .eq("table_id", tableId)
-    .eq("paid", false)
-    .is("account_id", null)
-    .eq("written_off", false)
-    .neq("status", "pending_payment")
-    .order("created_at", { ascending: true });
-
-  // The same set the waiter's dialog shows: everything owed on the table, with
-  // no window on it. An older debt is theirs to collect or write off, and a
-  // bill that hid one is how the floor ended up looking at MX$105 the app said
-  // was nothing.
-  const owed = unpaidOrders((data ?? []) as OwedRow[]);
-  const sessions = [...new Set(owed.map(o => o.session_id).filter(Boolean))] as string[];
-  const ordered = billTotal(owed);
-
-  if (sessions.length === 0) {
-    return { orders: owed, ordered, collected: 0, tips: 0, owed: ordered, sittings: [] };
-  }
-
-  // Orders on those sittings that are already settled, and every payment the
-  // sittings carry. Both are needed to say how much of the money is still free
-  // to pay for what is left.
-  const [settledRes, paidRes] = await Promise.all([
-    db
-      .from("orders")
-      .select("id, total, session_id")
-      .eq("restaurant_id", restaurantId)
-      .in("session_id", sessions)
-      .eq("paid", true)
-      .eq("written_off", false)
-      .neq("status", "cancelled")
-      .neq("status", "pending_payment"),
-    db
-      .from("payments")
-      .select("order_id, session_id, amount, tip")
-      .eq("restaurant_id", restaurantId)
-      .in("session_id", sessions),
-  ]);
-
-  const settled = (settledRes.data ?? []).map(o => ({
-    id: o.id as string,
-    session: o.session_id as string,
-    total: Number(o.total),
-  }));
-  const payments: Paid[] = (paidRes.data ?? []).map(p => ({
-    order_id: (p.order_id as string | null) ?? null,
-    session: p.session_id as string,
-    amount: Number(p.amount),
-    tip: Number(p.tip ?? 0),
-  }));
-
-  const ownPaid = new Map<string, number>();
-  for (const p of payments) {
-    if (!p.order_id) continue;
-    ownPaid.set(p.order_id, (ownPaid.get(p.order_id) ?? 0) + p.amount);
-  }
-
-  // Everything per sitting, because that is what a payment belongs to. The
-  // table's own numbers are then the sum of its sittings' rather than a second
-  // calculation that can disagree with them — and one that did: a sitting's
-  // whole history of payments was set against what it still owed, so a sitting
-  // that had already closed one bill looked as though it owed nothing on the
-  // next, and a collection for it was recorded nowhere at all.
-  const unpaidOn = new Map<string, number>();
-  for (const o of owed) {
-    if (!o.session_id) continue;
-    unpaidOn.set(o.session_id, round2((unpaidOn.get(o.session_id) ?? 0) + Number(o.total)));
-  }
-
-  const sittings: Owes[] = [];
+  const rows = await everyRow<OwedRow>((a, b) => db.from("orders").select(FIELDS)
+    .eq("restaurant_id", restaurantId).eq("table_id", tableId)
+    .eq("paid", false).is("account_id", null).eq("written_off", false)
+    .neq("status", "pending_payment").order("created_at").order("id").range(a, b), "the open table orders");
+  const orders = unpaidOrders(rows);
+  const coverage = await paymentCoverageDetails(restaurantId, orders);
+  const ordered = billTotal(orders);
+  const balances = new Map<string, number>();
   let collected = 0;
-  for (const id of sessions) {
-    const credit = creditFor(
-      payments.filter(p => !p.order_id && p.session === id),
-      settled.filter(o => o.session === id),
-      ownPaid,
-    );
-    collected = round2(collected + credit);
-    const unpaid = unpaidOn.get(id) ?? 0;
-    // Kept even at zero: it is a sitting this table owes on, and `shareOut`
-    // needs the ones with nothing left as much as the ones with something.
-    if (unpaid > 0) sittings.push({ id, owed: Math.max(0, round2(unpaid - credit)) });
+  for (const o of orders) {
+    const paid = coverage.get(o.id)?.amount ?? 0;
+    collected = round2(collected + paid);
+    if (o.session_id) balances.set(o.session_id, round2((balances.get(o.session_id) ?? 0) + Number(o.total) - paid));
   }
-
-  const tips = round2(
-    payments.filter(p => !p.order_id).reduce((sum, p) => sum + p.tip, 0),
-  );
-
   return {
-    orders: owed,
-    ordered,
-    collected,
-    tips,
-    owed: round2(sittings.reduce((sum, x) => sum + x.owed, 0)),
-    sittings,
+    orders, ordered, collected, tips: round2([...coverage.values()].reduce((s, a) => s + a.tip, 0)),
+    owed: round2(ordered - collected),
+    sittings: [...balances].map(([id, owed]) => ({ id, owed: Math.max(0, owed) })),
   };
 }

@@ -1,3 +1,4 @@
+import { PaymentAttributionRequired } from "@/lib/payment-coverage";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -7,7 +8,7 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { tableOutstanding } from "@/lib/table-outstanding";
 import { applyPayment } from "@/lib/table-balance";
-import { addTip, closeBill, record, sittingFor, summary } from "@/lib/part-payment";
+import { closeBill, record, sittingFor, summary } from "@/lib/part-payment";
 
 export const runtime = "nodejs";
 
@@ -29,6 +30,14 @@ export const runtime = "nodejs";
  * screen sitting open on the pass.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  try { return await collect(req); }
+  catch (error) {
+    if (error instanceof PaymentAttributionRequired) return await apiError("apiErr.attributionRequired", 409);
+    throw error;
+  }
+}
+
+async function collect(req: NextRequest): Promise<NextResponse> {
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
@@ -95,8 +104,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // The gratuity follows the food it thanks somebody for, so it is clamped to
   // what actually landed rather than to what was typed: a colleague collecting
   // the same table first leaves less room than this request read.
-  const tipLanded = Math.min(taken.tip, landed);
-  if (wrote && tipLanded > 0) await addTip(actor.restaurantId, before, tipLanded);
+  // The collection and its tip commit together in collect_on_sitting_v2.
 
   const after = await tableOutstanding(actor.restaurantId, body.tableId);
   const settled = after.owed <= 0 && (await closeBill(actor, body.tableId, method!));

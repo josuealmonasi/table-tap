@@ -183,8 +183,8 @@ export async function POST(req: NextRequest) {
   // Nothing of this reaches Stripe, so there is no application fee to take:
   // the subscription is what pays for the till (`platform_fee` is 0 in SQL).
   const { data: ticket, error } = onAccount
-    ? await db.rpc("ring_pos_account", { ...common, p_account: body.accountId })
-    : await db.rpc("ring_pos_sale", {
+    ? await db.rpc("ring_pos_account_v2", { ...common, p_account: body.accountId })
+    : await db.rpc("ring_pos_sale_v2", {
         ...common, p_method: method, p_at: null,
         p_terminal: method === "card" ? terminalRef(body.terminalRef) : null,
       });

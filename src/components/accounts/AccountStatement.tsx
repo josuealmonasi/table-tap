@@ -18,6 +18,7 @@ interface Statement {
   owed: number;
   days: StatementDay[];
   payments: { at: string; amount: number; tip: number; method: "cash" | "card" }[];
+  returns?: { id: string; amount: number; currency: string; status: string; created_at: string }[];
   cardsEnabled: boolean;
   payingOnline: boolean;
   canEmail: boolean;
@@ -164,6 +165,11 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
             </ul>
           </details>
         )}
+
+        {Boolean(data.returns?.length) && <section className="tt-section">
+          <h3>{t("returns.title")}</h3>
+          {data.returns?.map(r => <p key={r.id}>{formatMoney(Number(r.amount), r.currency)} · {t(`returns.${r.status}`)}</p>)}
+        </section>}
 
         {notice && <p className="tt-field-error" role="status">{notice}</p>}
 

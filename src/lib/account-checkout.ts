@@ -15,7 +15,7 @@ export async function settleAccountCheckout(session: Stripe.Checkout.Session): P
   const checkout = session.metadata?.account_checkout;
   if (!checkout) return;
   const intent = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id ?? null;
-  const { error } = await createAdminClient().rpc("account_checkout_settle", {
+  const { error } = await createAdminClient().rpc("account_checkout_settle_v2", {
     p_checkout: checkout,
     p_intent: intent,
   });

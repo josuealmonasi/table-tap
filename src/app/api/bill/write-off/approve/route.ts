@@ -102,7 +102,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (amount !== reviewedAmount || orders.length !== request.order_ids.length) {
     return await apiError("apiErr.approvalChanged", 409);
   }
-  const { data: outcome, error } = await db.rpc("approve_write_off_request", {
+  const { data: outcome, error } = await db.rpc("approve_write_off_request_v2", {
     p_request: request.id, p_restaurant: actor.restaurantId,
     p_actor: actor.email, p_amount: reviewedAmount, p_note: decidedNote || null,
   });

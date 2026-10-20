@@ -92,7 +92,7 @@ async function settleSplitShare(session: Stripe.Checkout.Session): Promise<void>
     // recording only the share said a smaller number arrived than did.
     const tip = Math.max(0, Number(session.metadata?.settle_tip ?? 0));
     const intent = typeof session.payment_intent === "string" ? session.payment_intent : null;
-    const { data: claimed, error: claimError } = await db.rpc("settle_split_share", {
+    const { data: claimed, error: claimError } = await db.rpc("settle_split_share_v2", {
       p_split: splitId,
       p_share: shareNo,
       p_amount: shareAmount,
@@ -159,7 +159,7 @@ async function closeDividedBill(splitId: string, sessionId: string): Promise<voi
 
   // Counting seats alone let a split frozen too low erase the rest of a bill.
   // The transaction locks the orders and checks real ledger credit before closing.
-  const { data: covered, error } = await db.rpc("close_divided_bill", { p_split: splitId });
+  const { data: covered, error } = await db.rpc("close_divided_bill_v2", { p_split: splitId });
   if (error) throw new Error(`settling a share: could not close the divided bill: ${error.message}`);
   if (covered !== true) throw new Error("settling a share: shares do not cover the divided bill");
   // On a retry the orders may already be paid, so the UPDATE returns none.

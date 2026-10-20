@@ -22,22 +22,22 @@ it("hands all sitting capabilities to the join transaction instead of another ta
     splitId: "expensive-split", diner: "phone", restaurantId: "cheap-restaurant", tableId: "cheap-table", sessionId: "cheap-sitting",
   }) }));
   expect(response.status).toBe(409);
-  expect(rpc).toHaveBeenCalledWith("join_bill_split", {
+  expect(rpc).toHaveBeenCalledWith("join_bill_split_v2", {
     p_split: "expensive-split", p_diner: "phone", p_restaurant: "cheap-restaurant", p_table: "cheap-table", p_session: "cheap-sitting",
   });
   expect(bill).not.toHaveBeenCalled();
 });
 it("derives the freeze from locked orders of the split's own sitting", () => {
-  const join = schema.split("create or replace function public.join_bill_split(")[1]?.split("end; $$;")[0];
+  const join = schema.split("create or replace function public.join_bill_split_v2(")[1]?.split("end; $$;")[0];
   expect(join).toContain("v_split.session_id is distinct from p_session");
   expect(join).toContain("v_sitting.table_id is distinct from p_table");
-  expect(join).toContain("sum(total)");
+  expect(join).toContain("sum(greatest(total - public.retained_order_coverage(p_restaurant, id), 0))");
   expect(join).toContain("session_id = v_split.session_id");
   expect(join).not.toContain("p_amount");
 });
 it("checks collected credit and share completeness inside the close transaction", () => {
-  const close = schema.split("create or replace function public.close_divided_bill(")[1]?.split("end; $$;")[0];
+  const close = schema.split("create or replace function public.close_divided_bill_v2(")[1]?.split("end; $$;")[0];
   expect(close).toContain("v_count <> v_split.shares");
-  expect(close).toContain("v_collected - v_spent < v_owed");
+  expect(close).toContain("public.retained_order_coverage(v_split.restaurant_id, o.id) < o.total");
   expect(close).toContain("for update");
 });

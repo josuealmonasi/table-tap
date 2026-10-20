@@ -142,7 +142,7 @@ export async function attackAccounts({ admin, post, who, home, neighbour, ok, ba
     {
       const held = await account(home.id, 1000);
       await order(home.id, 30, { account_id: held });
-      const open = async () => (await admin.rpc("account_checkout_open", {
+      const open = async () => (await admin.rpc("account_checkout_open_v2", {
         p_restaurant: home.id, p_account: held, p_expected: 30, p_tip: 0, p_fee: 0,
       })).data;
       const first = await open();
@@ -167,15 +167,15 @@ export async function attackAccounts({ admin, post, who, home, neighbour, ok, ba
     {
       const tab = await account(home.id, 1000);
       await order(home.id, 40, { account_id: tab });
-      const checkout = (await admin.rpc("account_checkout_open", {
+      const checkout = (await admin.rpc("account_checkout_open_v2", {
         p_restaurant: home.id, p_account: tab, p_expected: 40, p_tip: 0, p_fee: 0,
       })).data;
       await admin.from("customer_accounts")
         .update({ checkout_until: new Date(Date.now() - 60_000).toISOString() }).eq("id", tab);
       const cash = await post("/api/accounts/settle", { accountId: tab, expected: 40, tip: 0, method: "cash", ref: `${MARK}-twice-${Date.now()}` }, who.cashier);
       const intent = `pi_${MARK}_twice_${tab.slice(0, 8)}`;
-      await admin.rpc("account_checkout_settle", { p_checkout: checkout?.checkout, p_intent: intent });
-      await admin.rpc("account_checkout_settle", { p_checkout: checkout?.checkout, p_intent: intent }); // Stripe sends it again
+      await admin.rpc("account_checkout_settle_v2", { p_checkout: checkout?.checkout, p_intent: intent });
+      await admin.rpc("account_checkout_settle_v2", { p_checkout: checkout?.checkout, p_intent: intent }); // Stripe sends it again
       const [{ data: byCard }, { data: due }, { count: told }] = await Promise.all([
         admin.from("payments").select("amount").eq("stripe_payment_intent", intent),
         admin.from("refunds_due").select("amount, account_name").eq("stripe_payment_intent", intent),

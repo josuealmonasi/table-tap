@@ -25,7 +25,7 @@ describe("account money SQL guards", () => {
     expect(gate).toContain("cancel_order(uuid,uuid,text,jsonb,boolean,uuid,timestamptz,uuid)");
   });
   it("never collects written-off debt, including already-open checkouts", () => {
-    for (const name of ["account_owed", "account_settle", "account_checkout_open", "account_checkout_settle"]) {
+    for (const name of ["account_owed", "account_settle_v2", "account_checkout_open_v2", "account_checkout_settle_v2"]) {
       const body = fn(name);
       const reads = body.match(/from orders[^;]+/g) ?? [];
       expect(reads.length).toBeGreaterThan(0);
@@ -34,20 +34,20 @@ describe("account money SQL guards", () => {
   });
   it("clears only the checkout that owns the account hold", () => {
     expect(schema).toContain("add column if not exists checkout_id uuid");
-    expect(fn("account_checkout_open")).toContain("checkout_id = v_id");
-    for (const name of ["account_checkout_settle", "account_checkout_release"]) {
+    expect(fn("account_checkout_open_v2")).toContain("checkout_id = v_id");
+    for (const name of ["account_checkout_settle_v2", "account_checkout_release"]) {
       expect(fn(name)).toMatch(/update customer_accounts set checkout_until = null, checkout_id = null[^;]+and checkout_id = p_checkout/);
     }
   });
   it("locks checkout orders before calculating the money still owed", () => {
-    const settle = fn("account_checkout_settle");
+    const settle = fn("account_checkout_settle_v2");
     const lock = settle.indexOf("for update;", settle.indexOf("perform 1 from orders"));
     expect(settle).toMatch(/perform 1 from orders[^;]+order by id for update;/);
     expect(lock).toBeGreaterThan(0);
     expect(lock).toBeLessThan(settle.indexOf("select array_agg"));
   });
   it("locks the account before its checkouts on open, settle and release", () => {
-    for (const name of ["account_checkout_open", "account_checkout_settle", "account_checkout_release"]) {
+    for (const name of ["account_checkout_open_v2", "account_checkout_settle_v2", "account_checkout_release"]) {
       const body = fn(name);
       const accountLock = body.indexOf("from customer_accounts");
       expect(accountLock).toBeGreaterThan(0);
@@ -56,13 +56,13 @@ describe("account money SQL guards", () => {
     }
   });
   it("rechecks debt under the charge lock before lowering a ceiling or closing", () => {
-    const change = fn("account_change");
+    const change = fn("account_change_v2");
     expect(change).toMatch(/from customer_accounts[^;]+restaurant_id = p_restaurant for update;/);
     expect(change.indexOf("for update;")).toBeLessThan(change.indexOf("public.account_owed"));
     expect(change).toContain("p_limit < v_owed");
     expect(change).toContain("v_owed > 0");
     expect(change).toContain("'limit'");
     expect(change).toContain("'owes'");
-    expect(schema).toContain("revoke all on function public.account_change(uuid, uuid, text, numeric, text) from public, anon, authenticated;");
+    expect(schema).toContain("revoke all on function public.account_change_v2(uuid, uuid, text, numeric, text) from public, anon, authenticated;");
   });
 });

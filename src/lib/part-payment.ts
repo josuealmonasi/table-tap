@@ -63,7 +63,7 @@ export async function record(
   let covered = false;
   let landedTotal = 0;
   for (const [n, share] of across.entries()) {
-    const { data } = await db.rpc("collect_on_sitting", {
+    const { data } = await db.rpc("collect_on_sitting_v2", {
       // The sitting, not an order: this money belongs to the table, and
       // pinning it to one of the orders would say that dish was paid for when
       // what was handed over covers a share of all of them.
@@ -156,27 +156,6 @@ export async function sittingFor(
 }
 
 /**
- * The gratuity, onto the oldest order still owed.
- *
- * The same attribution settling a whole table already uses: `tip` and `total`
- * both rise, so the takings match what actually changed hands. The balance is
- * unmoved because it counts `total` minus `tip` — which is the one reason
- * both columns have to move together.
- */
-export async function addTip(restaurantId: string, before: Outstanding, tip: number): Promise<void> {
-  const first = before.orders[0];
-  if (!first) return;
-  await createAdminClient()
-    .from("orders")
-    .update({
-      tip: round2(Number(first.tip ?? 0) + tip),
-      total: round2(Number(first.total ?? 0) + tip),
-    })
-    .eq("id", first.id)
-    .eq("restaurant_id", restaurantId);
-}
-
-/**
  * Nothing left to collect: the orders stop being owed and the table clears.
  *
  * No payment is recorded here — every centavo of this bill is already in the
@@ -211,7 +190,7 @@ export async function closeBill(
   // Nothing left unpaid: somebody closed it a moment ago, and it is settled.
   if (!owed?.length) return true;
 
-  const { error } = await db.rpc("settle_orders", {
+  const { error } = await db.rpc("settle_orders_v2", {
     p_restaurant: actor.restaurantId,
     p_orders: owed.map(o => o.id),
     p_method: method,

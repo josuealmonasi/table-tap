@@ -1,3 +1,4 @@
+import { PaymentAttributionRequired } from "@/lib/payment-coverage";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -29,6 +30,14 @@ type Settlement = "cash" | "card";
 // through us, so it must not be reachable from a customer's phone, nor from a
 // kitchen screen that everyone in the back has their hands on.
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  try { return await collect(req); }
+  catch (error) {
+    if (error instanceof PaymentAttributionRequired) return await apiError("apiErr.attributionRequired", 409);
+    throw error;
+  }
+}
+
+async function collect(req: NextRequest): Promise<NextResponse> {
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
@@ -96,7 +105,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // The orders and the ledger in one write (`settle_orders`): both, or
   // neither. They were two, and a failed second write left a bill marked paid
   // with no money behind it that no retry could repair.
-  const { error: settleError } = await db.rpc("settle_orders", {
+  const { error: settleError } = await db.rpc("settle_orders_v2", {
     p_restaurant: actor.restaurantId,
     p_orders: updated.map(o => o.id),
     p_method: settlement,

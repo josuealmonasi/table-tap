@@ -962,6 +962,47 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     refundDueCounter: "Llegó un pago con tarjeta de {amount} por un pedido que ya estaba cobrado. Reembólsalo desde Cuentas abiertas.",
     refundDueAccount: "Llegó un pago con tarjeta de {amount} por la cuenta de {name}, que ya estaba cobrada. Reembólsalo desde Cuentas abiertas.",
   },
+  attribution: {
+    currencyUnknown: "Moneda por confirmar",
+    currency: "Moneda del recibo original",
+    chooseCurrency: "Elige la moneda del recibo",
+    evidence: "Número de recibo u otra prueba (al menos 8 caracteres)",
+    unknownTip: "El recibo anterior no muestra cómo se repartió la propina.",
+    cancelled: "Pedido cancelado: revisa si su dinero ya fue devuelto.",
+
+    title: "Asignar cobros anteriores a pedidos",
+    help: "Usa el comprobante original para asignar el importe a los pedidos que pagó. Se conserva el cobro y se registra tu atribución como estimación del gerente. No adivines.",
+    assign: "Asignar cobro",
+    amount: "Asigna {amount}, incluidos {tip} de propina registrada.",
+    inclusive: "Importe con propina",
+    tip: "Propina dentro del importe",
+  },
+
+  returns: {
+    myDrawer: "Mi caja",
+    payoutDrawer: "El dinero salió de",
+
+    alreadyCollected: "Ya se cobraron {amount}. Los importes siguientes son lo que falta.",
+    remaining: "Falta por cobrar",
+
+    title: "Devoluciones de pedidos",
+    intro: "Confirma cada devolución después de entregar el dinero al cliente.",
+    confirm: "Confirmar dinero devuelto",
+    drawer: "Confirma que se devolvieron {amount} del cobro original ({collector}). Si fue con terminal, primero realiza la devolución en la terminal.",
+    returned: "Confirmar devolución",
+    done: "Devolución registrada.",
+    pending: "Devolución pendiente",
+    processing: "Esperando confirmación del proveedor",
+    failed: "El proveedor reportó un fallo",
+    succeeded: "Devuelto",
+    stripe: "Tarjeta en línea",
+    cash: "Efectivo",
+    terminal: "Terminal del restaurante",
+    review: "Revisión de atribución",
+    reviewHelp: "Es necesario revisar el cobro original antes de registrar una devolución.",
+    check: "Verificar / reintentar",
+  },
+
   refunds: {
     title: "Reembolsos pendientes",
     intro: "Pagos con tarjeta que llegaron por una cuenta que ya estaba cobrada. Ese dinero es del comensal.",
@@ -1203,6 +1244,10 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     noExtras: "Este platillo no lleva extras.",
   },
   apiErr: {
+    attributionRequired: "Un cobro histórico necesita que un gerente lo atribuya en Cuentas antes de cobrar más.",
+    attributionChanged: "La atribución ya no coincide con el cobro o sus pedidos. Actualiza y revisa los importes, incluida la propina.",
+    refundPending: "El proveedor aún no confirma la devolución. Sigue pendiente; verifica de nuevo más tarde.",
+    refundReviewRequired: "Este pago histórico necesita revisión del gerente antes de registrar una devolución.",
     posUnsettled: "La venta aún no está confirmada. Sigue en este dispositivo y se enviará de nuevo sola.",
     posOtherRestaurant: "Ahora tienes sesión en otro restaurante. La venta sigue en este dispositivo hasta que este restaurante vuelva a iniciar sesión.",
     posMismatch: "El precio del menú cambió mientras cobrabas. La venta sigue en este dispositivo y se registra por lo que cobraste.",
@@ -1696,6 +1741,8 @@ badgesHint: "Muestra cuántas cosas esperan acción en cada sección. Aplica a t
     pageOf: "Página {page} de {pages}",
   },
   orders: {
+    refundPendingMessage: "Cancela el pedido y registra lo que se debe devolver. El proveedor confirma los reembolsos a tarjeta. Confirma por separado las devoluciones en efectivo o terminal en Cuentas.",
+    refundPendingDone: "Pedido cancelado. Consulta el estado de la devolución en Cuentas.",
     notPaid: "No pagado",
     onAccount: "En cuenta",
     moveRefused: "No se pudo mover el pedido. Volvió a donde estaba.",

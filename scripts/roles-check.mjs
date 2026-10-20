@@ -103,6 +103,10 @@ const PAGES = {
 // invite an address at a stranger's domain. `passes` is the one answer an allowed role may get; any
 // other, a 2xx above all, fails the run.
 const ROUTES = [
+  { m: "GET", p: "/api/order-refunds", allow: MANAGES },
+  { m: "POST", p: "/api/order-refunds", body: {}, allow: MANAGES, passes: 400 },
+  { m: "GET", p: "/api/payment-attribution", allow: MANAGES },
+  { m: "POST", p: "/api/payment-attribution", body: {}, allow: MANAGES, passes: 400 },
   { m: "GET", p: "/api/badges", allow: ALL },
   // The bell. Only the people who can order more stock are told a dish is
   // running out — the same line the table's RLS policy draws.

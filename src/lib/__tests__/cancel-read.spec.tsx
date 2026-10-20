@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { readCancel } from "@/lib/cancel-read";
 import type { SupabaseClient } from "@supabase/supabase-js";
 function database(paid: boolean, hold: string | null, holdId: string | null) {
-  return { from: (table: string) => {
+  return { rpc: async () => ({ data: [], error: null }), from: (table: string) => {
     const q = {
       select: () => q, eq: () => q,
       maybeSingle: async () => ({ data: table === "orders" ? {
-        id: "o1", status: "received", paid, account_id: "a1", total: 100, pay_method: "cash",
+        id: "o1", status: "received", paid, account_id: "a1", total: 0, pay_method: "cash",
       } : { checkout_until: hold, checkout_id: holdId }, error: null }),
       then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(resolve),
     };

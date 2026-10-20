@@ -11,11 +11,11 @@ const schema = fs.readFileSync("supabase/schema.sql", "utf8");
 const drop = fs.readFileSync("supabase/drop.sql", "utf8");
 
 function schemaTables(): string[] {
-  return [...schema.matchAll(/create table if not exists ([a-z_]+)/g)].map(m => m[1]);
+  return [...schema.matchAll(/create table if not exists ([a-z_0-9]+)/g)].map(m => m[1]);
 }
 
 function schemaFunctions(): string[] {
-  return [...schema.matchAll(/create or replace function public\.([a-z_]+)/g)].map(m => m[1]);
+  return [...schema.matchAll(/create or replace function public\.([a-z_0-9]+)/g)].map(m => m[1]);
 }
 
 describe("drop.sql keeps up with schema.sql", () => {
