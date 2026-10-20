@@ -394,7 +394,7 @@ export const STATES = [
     offers: /abrir cuenta|open account/i,
   },
   {
-    // "Ponlo en mi cuenta" at the till.
+    // Putting a counter sale on a customer account.
     name: "the till · on account",
     as: "owner",
     path: "/dashboard/pos",

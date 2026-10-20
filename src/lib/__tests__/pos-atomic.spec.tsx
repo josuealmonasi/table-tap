@@ -1,3 +1,4 @@
+import { issueOfflineContext } from "@/lib/offline-authority";
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
@@ -25,7 +26,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   rpc: async (name: string, args: Record<string, unknown>) => {
     state.calls.push({ name, args });
     if (state.reply) return { data: state.reply, error: null };
-    state.ticket = { id: args.p_ref, total: 100, paid: name !== "ring_pos_account_v2", status: "completed",
+    state.ticket = { id: args.p_ref, total: 100, currency: "MXN", pay_method: args.p_method, paid: name !== "ring_pos_account_v2", status: "completed",
       ...(name === "ring_pos_account_v2" ? { account_id: "a", charged_at: "now", customer_accounts: { name: "Guest" } } : {}) };
     if (state.lost) return { data: null, error: { message: "response lost after commit" } };
     return { data: { outcome: "settled", orderId: args.p_ref, total: 100, settled: true, ...(name === "ring_pos_account_v2" ? { onAccount: { name: "Guest", owed: 100 } } : {}) }, error: null };
@@ -39,6 +40,12 @@ vi.mock("@/lib/api-guard", () => ({ actingStaff: async () => ({ restaurantId: "r
 vi.mock("@/lib/plan-guard", () => ({ frozenBlocks: async () => null, planBlocks: async () => null }));
 vi.mock("@/lib/plan-server", () => ({ getPlan: async () => ({ limits: {} }) }));
 vi.mock("@/lib/plan", () => ({ can: () => true }));
+vi.mock("@/lib/offline-pricing", async importOriginal => {
+  const original = await importOriginal<typeof import("@/lib/offline-pricing")>();
+  return { ...original, currentOfflinePrice: async (_db: unknown, _r: string, b: { items: unknown[] }) => ({
+    price: { subtotal: 100, serviceFee: 0, tip: 0, discount: 0, total: 100 }, lines: b.items,
+  }) };
+});
 vi.mock("@/lib/promotions-on-sale", () => ({ promotionsOnSale: async () => [] }));
 vi.mock("@/lib/activity-log", () => ({ logEvent: async () => {} }));
 vi.mock("@/lib/checkout/orderable-now", () => ({ orderableNow: async () => ({ closedNow: false, onOpenMenu: () => true }) }));
@@ -51,14 +58,14 @@ vi.mock("@/lib/account-charge", () => ({ chargeAccount: async () => ({ outcome: 
 const { ringOffline } = await import("@/lib/pos-offline");
 const { POST } = await import("@/app/api/pos/order/route");
 const actor = { restaurantId: "r1", email: "cashier", role: "owner" } as Parameters<typeof ringOffline>[0];
-const body = () => ({ posRef: id, method: "cash" as const, items: [{ itemId: "x", name: "Dish", price: 100, qty: 1, mods: {}, emoji: "" }], offline: { at: new Date().toISOString(), subtotal: 100, serviceFee: 0, tip: 0, discount: 0, total: 100 } });
-beforeEach(() => { state.ops = []; state.calls = []; state.ticket = null; state.lost = false; state.reply = null; });
+const body = () => ({ collectorContext: issueOfflineContext("r1", "cashier", "MXN", Date.now() - 60_000), posRef: id, method: "cash" as const, items: [{ itemId: "x", name: "Dish", price: 100, qty: 1, mods: {}, emoji: "" }], offline: { at: new Date().toISOString(), subtotal: 100, serviceFee: 0, tip: 0, discount: 0, total: 100 } });
+beforeEach(() => { process.env.SUPABASE_SECRET_KEY = "test-offline-secret"; state.ops = []; state.calls = []; state.ticket = null; state.lost = false; state.reply = null; });
 
 it("W1.1 keeps a committed offline sale when its response is lost", async () => {
   state.lost = true;
   await ringOffline(actor, body());
   expect(state.ops.filter(o => o.op === "delete")).toEqual([]);
-  expect(state.calls.map(c => c.name)).toEqual(["ring_pos_sale_v2"]);
+  expect(state.calls.map(c => c.name)).toEqual(["record_offline_sale"]);
   state.lost = false;
   const replay = await ringOffline(actor, body());
   expect(await replay.json()).toMatchObject({ orderId: id, total: 100, settled: true, repeat: true });
@@ -67,7 +74,7 @@ it("W1.1 keeps a committed offline sale when its response is lost", async () => 
 it("W1.6 commits offline stock and money in the same RPC", async () => {
   const res = await ringOffline(actor, body());
   expect(res.status).toBe(200);
-  expect(state.calls.map(c => c.name)).toEqual(["ring_pos_sale_v2"]);
+  expect(state.calls.map(c => c.name)).toEqual(["record_offline_sale"]);
   expect(state.calls[0].args.p_demand).toEqual([{ item_id: "x", qty: 1 }]);
   expect(state.ops.filter(o => o.op === "insert")).toEqual([]);
 });
@@ -112,9 +119,9 @@ it("a till that names its own restaurant, or none (opened before this check), ri
   }
 });
 it("a replay charged in another currency is refused and kept, never relabelled", async () => {
-  const res = await ringOffline(actor, { ...body(), currency: "USD" });
+  const res = await ringOffline(actor, { ...body(), currency: "USD", collectorContext: issueOfflineContext("r1", "cashier", "USD", Date.now() - 60_000) });
   expect(res.status).toBe(409);
-  expect(await res.json()).toEqual({ error: "apiErr.offlineCurrency", held: true });
+  expect(await res.json()).toEqual({ error: "apiErr.offlineCurrency", held: true, reviewReason: "recovery.currencyChanged" });
   expect(state.calls).toEqual([]);
 });
 it("a replay in the restaurant's currency, or from a till that sent none, rings as before", async () => {
@@ -126,8 +133,8 @@ it("a replay in the restaurant's currency, or from a till that sent none, rings 
 it("a replay records the lines as sold and takes a combo's parts from stock", async () => {
   const items = [{ itemId: "promo-1", name: "Combo", price: 90, qty: 2, mods: {}, emoji: "", comboId: "promo-1",
     components: [{ itemId: "burger", name: "Burger", emoji: "", qty: 1 }, { itemId: "fries", name: "Fries", emoji: "", qty: 1 }] }];
-  await ringOffline(actor, { ...body(), posRef: crypto.randomUUID(), items });
-  const args = state.calls.find(c => c.name === "ring_pos_sale_v2")?.args as { p_order: { items: { price: number }[] }; p_demand: unknown };
+  await ringOffline(actor, { ...body(), posRef: crypto.randomUUID(), items }, { reason: "Original combo receipt verified" });
+  const args = state.calls.find(c => c.name === "record_offline_sale")?.args as { p_order: { items: { price: number }[] }; p_demand: unknown };
   expect(args.p_order.items[0].price).toBe(90);
   expect(args.p_demand).toEqual(expect.arrayContaining([
     expect.objectContaining({ item_id: "burger", qty: 2 }), expect.objectContaining({ item_id: "fries", qty: 2 }),
@@ -137,7 +144,7 @@ it("a foreign reference conflict reveals no ticket or total", async () => {
   state.reply = { outcome: "conflict" };
   const res = await ringOffline(actor, body());
   expect(res.status).toBe(409);
-  expect(await res.json()).toEqual({ error: "apiErr.posUnsettled" });
+  expect(await res.json()).toEqual({ error: "apiErr.posUnsettled", held: true });
   expect(state.ops).toEqual([]);
 });
 it("an atomic account refusal never causes a second cleanup request", async () => {

@@ -63,7 +63,7 @@ for (const table of [
   "waste_entries", "ingredient_purchases", "ingredient_counts",
   // The ledger and everything around it, the bell, the kitchen's paper, a
   // table's division, and what the routes keep for themselves.
-  "payment_allocations", "order_adjustments", "refund_operations", "refund_allocations", "refund_attempts", "refund_due_attempts",
+  "offline_sale_queue", "payment_allocations", "order_adjustments", "refund_operations", "refund_allocations", "refund_attempts", "refund_due_attempts",
   "payments", "refunds_due", "notifications", "print_jobs", "bill_splits", "bill_split_claims",
   "service_requests", "dish_ratings", "plan_limits", "stock_reservations",
   "terminal_deposits", "platform_fees", "restaurant_billing_operations", "restaurant_subscription_prices",

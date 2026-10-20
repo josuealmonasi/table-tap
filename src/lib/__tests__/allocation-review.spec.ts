@@ -18,6 +18,20 @@ describe("PR1 schema review regressions", () => {
       expect(createHash("sha256").update(normalize(definition(schema, name))).digest("hex"), name).toBe(legacyWriters[name]);
     }
   });
+  it("recovers queued receipts through allocation writers and guards every POS insert", () => {
+    const recovery = definition(schema, "record_offline_sale");
+    expect(recovery).toContain("v_ticket := public.ring_pos_sale_v2(p_restaurant");
+    expect(recovery).not.toContain("public.ring_pos_sale(");
+    expect(recovery).toContain("set_config('tabletap.offline_queue_writer', p_ref::text, true)");
+    const insert = definition(schema, "pos_insert_order");
+    expect(insert).toContain("from offline_sale_queue where pos_ref = p_ref");
+    expect(insert).toContain("current_setting('tabletap.offline_queue_writer',true) is distinct from p_ref::text");
+    expect(insert.indexOf("manager approval required")).toBeLessThan(insert.indexOf("insert into orders"));
+    for (const name of ["ring_pos_sale", "ring_pos_sale_v2", "ring_pos_account", "ring_pos_account_v2"]) {
+      expect(definition(schema, name), name).toContain("public.pos_insert_order(");
+      expect(definition(schema, name), name).toContain("public.lock_restaurant_money(p_restaurant)");
+    }
+  });
   it("gates strict order enforcement on versioned writers, never existing coverage", () => {
     for (const name of ["guard_allocated_order", "check_paid_coverage"]) {
       expect(definition(schema, name), name).toContain("current_setting('tabletap.allocation_writer', true) is distinct from 'v1' then");

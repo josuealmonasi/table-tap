@@ -27,7 +27,7 @@ import { CloseIcon } from "@/components/ui/icons";
  */
 export default function OrderDetailDialog({
   order,
-  currency,
+  currency: menuCurrency,
   open,
   onClose,
 }: {
@@ -36,6 +36,7 @@ export default function OrderDetailDialog({
   open: boolean;
   onClose: () => void;
 }) {
+  const currency = order.currency ?? menuCurrency;
   const t = useT();
   const { locale } = useLocale();
   const toast = useToast();

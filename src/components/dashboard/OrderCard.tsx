@@ -108,7 +108,7 @@ export default function OrderCard({
       <div onClick={e => e.stopPropagation()} role="presentation">
         <OrderDetailDialog
           order={order}
-          currency={currency}
+          currency={order.currency ?? currency}
           open={detail}
           onClose={() => setDetail(false)}
         />
@@ -201,7 +201,7 @@ export default function OrderCard({
           both — see .tt-order-actions. Squeezed in place they wrapped their own
           labels and the last one hung off the edge of the card. */}
       <div className="tt-order-foot">
-        <strong className="tt-accent">{formatMoney(order.total, currency)}</strong>
+        <strong className="tt-accent">{formatMoney(order.total, order.currency ?? currency)}</strong>
         <div className="tt-order-actions">
           {/* Sending a ticket back a stage — a plate returned, a mis-tap. Only
               earlier stages appear: forward is what the main button does, and

@@ -13,7 +13,7 @@ import type { ComboComponent, OrderExtra, OrderLineItem } from "@/lib/types";
  * Pure.
  */
 
-/** A sale older than this is not sent: something is wrong with the device. */
+/** A sale older than this needs manager review; its collected money is kept. */
 export const OFFLINE_MAX_AGE_DAYS = 30;
 /** A device clock a little ahead of ours is a clock, not a sale from the future. */
 const CLOCK_SKEW_MS = 5 * 60_000;
@@ -28,11 +28,11 @@ export interface OfflineCharge {
   total: number;
 }
 
-export function offlineCharge(raw: unknown, now = Date.now()): OfflineCharge | null {
+export function offlineCharge(raw: unknown, now = Date.now(), recovery = false): OfflineCharge | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   const at = typeof r.at === "string" ? Date.parse(r.at) : NaN;
-  if (!Number.isFinite(at) || at > now + CLOCK_SKEW_MS || now - at > OFFLINE_MAX_AGE_DAYS * 86_400_000) return null;
+  if (!Number.isFinite(at) || at > now + CLOCK_SKEW_MS || (!recovery && now - at > OFFLINE_MAX_AGE_DAYS * 86_400_000) || at < Date.UTC(2000, 0, 1)) return null;
   const money = (v: unknown) => cashAmount(typeof v === "number" ? round2(v) : v, false);
   const subtotal = money(r.subtotal);
   const serviceFee = money(r.serviceFee);
@@ -98,6 +98,7 @@ export function offlineLines(items: unknown): OrderLineItem[] {
     return [{
       itemId: text(l.itemId, 64), name: text(l.name, 80) || "—", emoji: text(l.emoji, 8),
       price: price(l.price), qty, mods, extras,
+      ...(typeof l.note === "string" ? { note: text(l.note, 150) } : {}),
       ...(comboId && components.length > 0 ? { comboId, components } : {}),
       ...(Number.isFinite(discountPct) && discountPct > 0 && discountPct <= 100 ? { discountPct } : {}),
     }];

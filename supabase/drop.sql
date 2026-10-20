@@ -214,3 +214,9 @@ drop function if exists public.attribute_payment(uuid, uuid, text, jsonb, text, 
 
 drop function if exists public.start_refund_due_attempt(uuid, uuid);
 drop function if exists public.finish_refund_due_attempt(uuid, uuid, uuid, text, text, text);
+
+drop function if exists public.record_offline_sale(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text) cascade;
+drop function if exists public.guard_offline_audit() cascade;
+
+drop function if exists public.queue_offline_sale(uuid,uuid,jsonb,text,text,text,text) cascade;
+drop table if exists offline_sale_queue cascade;

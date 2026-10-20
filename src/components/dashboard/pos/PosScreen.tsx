@@ -62,6 +62,9 @@ export default function PosScreen({
   canEmailReceipt,
   loyalty = false,
   canChargeAccount = false,
+  collectorContext = "",
+  collector = "",
+  canRecover = false,
   shiftOpen = false,
   counterOrders = [],
   bestSellers = [],
@@ -83,6 +86,9 @@ export default function PosScreen({
   loyalty?: boolean;
   /** The plan carries customer accounts: a sale can go on one. */
   canChargeAccount?: boolean;
+  collectorContext?: string;
+  collector?: string;
+  canRecover?: boolean;
   /** A shift is open at the cash drawer. */
   shiftOpen?: boolean;
   /** The counter's orders still with the kitchen, for the pickup strip. */
@@ -130,6 +136,8 @@ export default function PosScreen({
   );
   const { charge, busy, pending, setPending, ticket, setTicket } = usePosCharge({
     restaurant,
+    collectorContext,
+    collector,
     cart,
     details,
     canEmailReceipt,
@@ -232,7 +240,7 @@ export default function PosScreen({
             </div>
           </header>
 
-          <OfflineTillBanner online={offline.online} held={offline.held} onRetry={() => void offline.flush()} />
+          <OfflineTillBanner canRecover={canRecover} online={offline.online} held={offline.held} onRetry={() => void offline.flush()} />
 
           {closedNow && <p className="tt-offline-banner">{t("pos.closedNow")}</p>}
 

@@ -11,8 +11,8 @@ import type { Corte } from "@/lib/corte";
 import type { ShiftView } from "@/lib/cash-shift";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import OrderHistory from "@/components/dashboard/OrderHistory";
-import type { TerminalView } from "@/lib/terminal-server";
-import TerminalDeposits from "./TerminalDeposits";
+import type { TerminalReport } from "@/lib/terminal-report";
+import TerminalReportView from "./TerminalReport";
 import OfflineSalesCard, { type OfflineSaleRow } from "./OfflineSalesCard";
 
 /** A dish with its star average and how many people rated it. */
@@ -41,7 +41,7 @@ interface AnalyticsViewProps {
   /** The visit card over the same period, where the restaurant runs one. */
   loyalty?: LoyaltyStats | null;
   /** The restaurant's own card terminal and its deposits, on a tier with the till. */
-  terminal?: TerminalView | null;
+  terminal?: TerminalReport | null;
   /** How many sales the till rang without a connection over `offlineDays`. */
   offlineCount?: number;
   offlineDays?: number;
@@ -127,7 +127,7 @@ export default function AnalyticsView({
         {/* What the terminal should deposit sits under the corte: both are
             the money the counter took, one in the drawer and one on its way
             to the bank. */}
-        {terminal && <TerminalDeposits terminal={terminal} currency={currency} timeZone={timeZone} />}
+        {terminal && <TerminalReportView report={terminal} timeZone={timeZone} />}
 
         {offlineCount > 0 && (
           <OfflineSalesCard count={offlineCount} days={offlineDays} sales={offlineSales} currency={currency} timeZone={timeZone} />

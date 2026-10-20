@@ -4609,7 +4609,7 @@ alter table restaurants add constraint restaurants_terminal_settle_days_check
   check (terminal_settle_days between 0 and 10);
 
 -- A day's terminal sales, marked as deposited: what the bank actually paid,
--- against what was expected at the moment it was marked. One per day; taken
+-- against what was expected at the moment it was marked. One per currency/day; taken
 -- back and marked again if it was marked wrong. Server-only.
 create table if not exists terminal_deposits (
   id            uuid primary key default gen_random_uuid(),
@@ -4622,6 +4622,17 @@ create table if not exists terminal_deposits (
   created_at    timestamptz not null default now(),
   unique (restaurant_id, sales_day)
 );
+-- Currency is part of a deposit's identity. Never relabel an old deposit
+-- from today's restaurant setting: a bank receipt must establish its currency.
+-- Null preserves older records for that verification, outside currency totals.
+alter table terminal_deposits add column if not exists currency text check (currency in ('MXN', 'USD'));
+alter table terminal_deposits drop constraint if exists terminal_deposits_restaurant_id_sales_day_key;
+create unique index if not exists terminal_deposits_currency_day
+  on terminal_deposits (restaurant_id, sales_day, currency) where currency is not null;
+-- Older deployed writers can still insert a legacy record during deployment,
+-- but cannot mark the same unverified day twice.
+create unique index if not exists terminal_deposits_unverified_day
+  on terminal_deposits (restaurant_id, sales_day) where currency is null;
 alter table terminal_deposits enable row level security;
 revoke all on terminal_deposits from anon;
 revoke all on terminal_deposits from authenticated;
@@ -5025,7 +5036,7 @@ begin
      where id = v_order.account_id and restaurant_id = p_restaurant;
   end if;
   return jsonb_build_object('outcome', 'settled', 'settled', true, 'repeat', true,
-    'orderId', v_order.id, 'total', v_order.total, 'handedOver', v_order.status = 'completed')
+    'orderId', v_order.id, 'total', v_order.total, 'currency', v_order.currency, 'method', v_order.pay_method, 'handedOver', v_order.status = 'completed')
     || case when v_order.account_id is null then '{}'::jsonb
        else jsonb_build_object('onAccount', jsonb_build_object('name', v_name)) end;
 end;
@@ -5038,6 +5049,11 @@ create or replace function public.pos_insert_order(
   p_restaurant uuid, p_ref uuid, p_order jsonb, p_status text, p_at timestamptz, p_reservation uuid
 ) returns void language plpgsql security definer set search_path = public as $$
 begin
+  -- A queued receipt can enter the ledger only through its approved recovery.
+  if exists(select 1 from offline_sale_queue where pos_ref = p_ref)
+    and current_setting('tabletap.offline_queue_writer',true) is distinct from p_ref::text then
+    raise exception 'manager approval required';
+  end if;
   insert into orders (id, restaurant_id, pos_ref, status, paid, stock_managed, stock_reservation_id,
     subtotal, service_fee, tip, discount, total, tax_pct, platform_fee, promo_detail,
     currency, items, note, customer_name, created_at, offline_at, offline_drift)
@@ -7256,4 +7272,162 @@ grant execute on function public.finish_refund_due_attempt(uuid, uuid, uuid, tex
 
 revoke truncate, references, trigger on all tables in schema public from public, anon, authenticated;
 
+
+-- A received held receipt is immutable and private. It remains available to
+-- managers on another device, including after its collector signs out.
+create table if not exists offline_sale_queue (
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  pos_ref uuid not null unique,
+  body jsonb not null,
+  collector text,
+  currency text check (currency in ('MXN','USD')),
+  submitted_by text not null,
+  reason text not null,
+  received_at timestamptz not null default now(),
+  approved_by text,
+  approved_at timestamptz,
+  primary key (restaurant_id, pos_ref)
+);
+alter table offline_sale_queue enable row level security;
+revoke all on offline_sale_queue from public, authenticated;
+revoke all on offline_sale_queue from anon;
+grant all on offline_sale_queue to service_role;
+
+create or replace function public.queue_offline_sale(
+  p_restaurant uuid, p_ref uuid, p_body jsonb, p_collector text,
+  p_currency text, p_actor text, p_reason text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare q offline_sale_queue%rowtype; v_ticket jsonb;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if p_ref is null or lower(p_body->>'posRef') is distinct from p_ref::text
+    or (p_body ? 'restaurantId' and p_body->>'restaurantId' is distinct from p_restaurant::text)
+    or p_body->>'method' not in ('cash','card') or p_body->'offline' is null
+    or nullif(btrim(p_actor),'') is null then raise exception 'invalid held receipt'; end if;
+  select * into q from offline_sale_queue where pos_ref = p_ref for update;
+  if found then
+    if q.restaurant_id <> p_restaurant or q.body <> p_body then return jsonb_build_object('outcome','conflict'); end if;
+    -- Even after approval, this exact receipt is safely retained on the server.
+    return jsonb_build_object('queued',true,'orderId',p_ref,'receipt',q.body);
+  end if;
+  v_ticket := public.pos_ticket(p_restaurant,p_ref);
+  if v_ticket is not null then
+    if v_ticket->>'outcome' = 'settled'
+      and (v_ticket->>'total')::numeric = (p_body->'offline'->>'total')::numeric
+      and (not (p_body ? 'currency') or v_ticket->>'currency' = p_body->>'currency')
+      and v_ticket->>'method' = p_body->>'method' then return v_ticket; end if;
+    return jsonb_build_object('outcome','conflict');
+  end if;
+  insert into offline_sale_queue(restaurant_id,pos_ref,body,collector,currency,submitted_by,reason)
+    values(p_restaurant,p_ref,p_body,p_collector,p_currency,p_actor,p_reason);
+  return jsonb_build_object('queued',true,'orderId',p_ref,'receipt',p_body);
+end;
+$$;
+revoke all on function public.queue_offline_sale(uuid,uuid,jsonb,text,text,text,text) from public,anon,authenticated;
+grant execute on function public.queue_offline_sale(uuid,uuid,jsonb,text,text,text,text) to service_role;
+
+-- Manager recovery preserves the held receipt and records who approved its
+-- exceptions. No browser may rewrite that financial audit afterwards.
+alter table orders add column if not exists offline_collector text;
+alter table orders add column if not exists offline_approved_by text;
+alter table orders add column if not exists offline_approved_at timestamptz;
+alter table orders add column if not exists offline_recovery_reason text;
+alter table orders add column if not exists offline_original_at text;
+alter table orders add column if not exists offline_authority text;
+
+create or replace function public.record_offline_sale(
+  p_restaurant uuid, p_ref uuid, p_order jsonb, p_method text, p_actor text,
+  p_at timestamptz, p_terminal text, p_demand jsonb,
+  p_manager text, p_reason text, p_original_at text, p_authority text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_ticket jsonb; q offline_sale_queue%rowtype;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into q from offline_sale_queue where pos_ref = p_ref for update;
+  if q.pos_ref is not null and (q.restaurant_id <> p_restaurant or p_manager is null) then
+    raise exception 'manager approval required';
+  end if;
+  if p_at is null or p_at > now() + interval '5 minutes' or p_at < '2000-01-01'::timestamptz
+    or p_method is null or p_method not in ('cash','card') or nullif(btrim(p_actor),'') is null
+    or p_authority is null or p_authority not in ('signed','manager_attested') then raise exception 'invalid offline receipt'; end if;
+  if p_manager is null then
+    if p_authority <> 'signed' or p_reason is not null or p_at < now() - interval '30 days' then
+      raise exception 'manager approval required';
+    end if;
+  else
+    if not exists(select 1 from restaurants r join auth.users u on u.id = r.owner_id
+      where r.id = p_restaurant and u.email = p_manager)
+      and not exists(select 1 from staff where restaurant_id = p_restaurant and email = p_manager and role in ('owner','manager')) then
+      raise exception 'manager approval required';
+    end if;
+    if length(btrim(coalesce(p_reason,''))) not between 8 and 500 then raise exception 'recovery reason required'; end if;
+  end if;
+  if p_manager is null and (p_order->>'currency') is distinct from (select currency from restaurants where id = p_restaurant) then
+    raise exception 'manager approval required';
+  end if;
+  if p_manager is not null then
+    if q.pos_ref is null or p_method is distinct from q.body->>'method'
+      or (q.collector is not null and q.collector <> p_actor)
+      or (q.currency is not null and q.currency is distinct from p_order->>'currency')
+      or (p_order->>'subtotal')::numeric <> round((q.body->'offline'->>'subtotal')::numeric,2)
+      or (p_order->>'service_fee')::numeric <> round((q.body->'offline'->>'serviceFee')::numeric,2)
+      or (p_order->>'discount')::numeric <> round((q.body->'offline'->>'discount')::numeric,2)
+      or (p_order->>'tip')::numeric <> round((q.body->'offline'->>'tip')::numeric,2)
+      or (p_order->>'total')::numeric <> round((q.body->'offline'->>'total')::numeric,2) then
+      raise exception 'held receipt changed';
+    end if;
+  end if;
+  v_ticket := public.pos_ticket(p_restaurant, p_ref);
+  if v_ticket is not null then
+    if v_ticket->>'outcome' = 'settled' and exists(select 1 from orders where id = p_ref and restaurant_id = p_restaurant
+      and (total <> (p_order->>'total')::numeric or currency <> p_order->>'currency' or pay_method <> p_method or account_id is not null)) then
+      raise exception 'contradictory held receipt';
+    end if;
+    return v_ticket;
+  end if;
+  perform set_config('tabletap.offline_queue_writer', p_ref::text, true);
+  v_ticket := public.ring_pos_sale_v2(p_restaurant, p_ref, p_order, p_method, p_actor,
+    'completed', p_at, p_terminal, p_demand, false, 0);
+  if v_ticket->>'outcome' <> 'settled' then return v_ticket; end if;
+  perform set_config('tabletap.offline_audit_writer', p_ref::text, true);
+  update orders set offline_collector = p_actor, offline_authority = p_authority,
+    offline_approved_by = p_manager, offline_approved_at = case when p_manager is not null then now() end,
+    offline_recovery_reason = p_reason, offline_original_at = left(p_original_at,80)
+    where id = p_ref and restaurant_id = p_restaurant;
+  insert into user_logs(restaurant_id,actor_email,entity,action,detail)
+    values(p_restaurant,p_actor,'bill','paid','code=ORD-' || upper(left(p_ref::text,4)) || ' amount=' || to_char((p_order->>'total')::numeric,'FM999999990.00') || ' currency=' || (p_order->>'currency') || ' method=' || p_method);
+  if p_manager is not null then
+    insert into user_logs(restaurant_id,actor_email,entity,action,detail)
+      values(p_restaurant,p_manager,'order','offline_recovered','code=ORD-' || upper(left(p_ref::text,4)) || ' note=' || replace(p_reason,' ','_'));
+  end if;
+  update offline_sale_queue set approved_by = p_manager, approved_at = now()
+    where restaurant_id = p_restaurant and pos_ref = p_ref;
+  return v_ticket || jsonb_build_object('currency',p_order->>'currency','method',p_method);
+end;
+$$;
+revoke all on function public.record_offline_sale(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text) from public,anon,authenticated;
+grant execute on function public.record_offline_sale(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text) to service_role;
+
+create or replace function public.guard_offline_audit()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.offline_collector is not null or new.offline_approved_by is not null or new.offline_approved_at is not null
+      or new.offline_recovery_reason is not null or new.offline_original_at is not null or new.offline_authority is not null then
+      raise exception 'offline approval is private';
+    end if;
+    return new;
+  end if;
+  if (new.offline_collector,new.offline_approved_by,new.offline_approved_at,new.offline_recovery_reason,new.offline_original_at,new.offline_authority)
+    is distinct from (old.offline_collector,old.offline_approved_by,old.offline_approved_at,old.offline_recovery_reason,old.offline_original_at,old.offline_authority)
+    and current_setting('tabletap.offline_audit_writer',true) is distinct from new.id::text then
+    raise exception 'offline approval is immutable';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.guard_offline_audit() from public,anon,authenticated;
+drop trigger if exists guard_offline_audit on orders;
+create trigger guard_offline_audit before insert or update on orders for each row execute function public.guard_offline_audit();
 revoke truncate, references, trigger on all tables in schema public from authenticated;
+revoke truncate, references, trigger on all tables in schema public from public, anon, authenticated;

@@ -50,6 +50,8 @@ export type LogAction =
   | "rejected"
   | "cancelled"
   | "refunded"
+  /** A manager approved a receipt already collected while offline. */
+  | "offline_recovered"
   | "paused"
   | "resumed"
   | "stamped"

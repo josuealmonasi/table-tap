@@ -16,6 +16,7 @@ export const CREW = [
       "/dashboard/orders",
       "/dashboard/table-order",
       "/dashboard/bills",
+      "/dashboard/held-sales",
       "/dashboard/tables",
       "/dashboard/analytics",
       // The longer periods have the longer figures: a month's takings pushed
@@ -45,6 +46,7 @@ export const CREW = [
       "/dashboard/main-menu",
       "/dashboard/orders",
       "/dashboard/bills",
+      "/dashboard/held-sales",
       "/dashboard/tables",
       "/dashboard/analytics",
       "/dashboard/costs",

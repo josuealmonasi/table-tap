@@ -1,10 +1,13 @@
+import { issueOfflineContext } from "@/lib/offline-authority";
+import { currentUser } from "@/lib/current-user";
 import { redirect } from "next/navigation";
-import { getMembership, TAKES_COUNTER_ORDERS } from "@/lib/membership";
+import { getMembership, MANAGES, TAKES_COUNTER_ORDERS } from "@/lib/membership";
 import { getPlan } from "@/lib/plan-server";
 import { loyaltyOn } from "@/lib/loyalty/server";
-import { can } from "@/lib/plan";
+import { can, dashboardFrozen } from "@/lib/plan";
 import { loadOrderingData } from "@/lib/ordering-data";
 import PosScreen from "@/components/dashboard/pos/PosScreen";
+import UploadHeldSales from "@/components/dashboard/pos/UploadHeldSales";
 import PlanLock from "@/components/dashboard/plan/PlanLock";
 import { allPlans } from "@/lib/plan-server";
 import { cheapestWith } from "@/lib/plan";
@@ -34,12 +37,16 @@ export default async function PosPage() {
   if (!TAKES_COUNTER_ORDERS(membership.role)) redirect("/dashboard/orders");
 
   const plan = await getPlan(membership.restaurant.id);
+  if (plan && dashboardFrozen(plan.status)) {
+    return <div className="tt-dash"><div className="container"><UploadHeldSales restaurantId={membership.restaurant.id} /></div></div>;
+  }
   if (!plan || !can(plan.limits, "pos")) {
     // Named, not merely locked: the screen says which tier carries the till.
     const unlocks = cheapestWith(await allPlans(), "pos", plan?.limits);
     return (
       <div className="tt-dash">
         <div className="container">
+          <UploadHeldSales restaurantId={membership.restaurant.id} />
           <PlanLock feature="pos" unlocksWith={unlocks?.plan ?? "servicio"} isOwner={membership.role === "owner"} />
         </div>
       </div>
@@ -67,9 +74,13 @@ export default async function PosPage() {
   if (counterRes.error) console.error("till: counter orders", counterRes.error.message);
   if (soldRes.error) console.error("till: best sellers", soldRes.error.message);
 
+  const collector = (await currentUser())?.email ?? "staff";
   return (
     <PosScreen
       restaurant={data.restaurant}
+      collectorContext={dashboardFrozen(plan.status) ? "" : issueOfflineContext(membership.restaurant.id, collector, data.restaurant.currency)}
+      collector={collector}
+      canRecover={MANAGES(membership.role)}
       categories={data.categories}
       items={data.items}
       extras={data.extras}

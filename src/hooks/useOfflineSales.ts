@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { useRouter } from "next/navigation";
+import { queueAcknowledgement } from "@/lib/offline-review";
 import { dropHeld, keepAcknowledgement, saleAcknowledgement, holdSale, markHeldError, readHeld, replayBody, type HeldSale } from "@/lib/offline-sales";
 
 /** How often held sales are tried again while the till is online. */
@@ -13,11 +14,12 @@ const RETRY_MS = 30_000;
  *
  * Held sales are sent the moment the connection returns, one at a time in the
  * order they happened, and then every half minute while any are left. A sale
- * the server accepts is dropped from the device; one it refuses is kept with
- * the reason, for a manager to see — it is never thrown away, because it is
+ * the server accepts is dropped from the device; one safely queued for manager
+ * review can also leave the device. A refusal is kept with the reason, for a
+ * manager to see — it is never thrown away, because it is
  * the only record of money already taken.
  */
-export function useOfflineSales(restaurantId: string) {
+export function useOfflineSales(restaurantId: string, uploadOnly = false) {
   const router = useRouter();
   const t = useT();
   const [online, setOnline] = useState(true);
@@ -34,7 +36,7 @@ export function useOfflineSales(restaurantId: string) {
       for (const sale of readHeld().filter(s => s.restaurantId === restaurantId).sort((a, b) => a.at.localeCompare(b.at))) {
         let res: Response;
         try {
-          res = await fetch("/api/pos/order", {
+          res = await fetch(uploadOnly ? "/api/pos/upload" : "/api/pos/order", {
             method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(replayBody(sale)),
           });
         } catch {
@@ -42,7 +44,7 @@ export function useOfflineSales(restaurantId: string) {
         }
         const data = await res.json().catch(() => null);
         const acknowledgement = saleAcknowledgement(sale, data);
-        if (res.ok && acknowledgement === "settled") {
+        if (res.ok && (acknowledgement === "settled" || queueAcknowledgement(replayBody(sale), data))) {
           if (dropHeld(sale.posRef, restaurantId)) sent++;
         } else {
           if (res.ok && acknowledgement === "mismatch") keepAcknowledgement(sale, data);
@@ -57,7 +59,7 @@ export function useOfflineSales(restaurantId: string) {
       refresh();
       if (sent > 0) router.refresh();
     }
-  }, [restaurantId, refresh, router, t]);
+  }, [restaurantId, refresh, router, t, uploadOnly]);
 
   useEffect(() => {
     refresh();

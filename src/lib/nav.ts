@@ -123,6 +123,13 @@ export const NAV_ITEMS: NavItem[] = [
     feature: "loyalty",
   },
   {
+    href: "/dashboard/held-sales",
+    icon: "Bills",
+    titleKey: "recovery.title",
+    shortKey: "recovery.short",
+    descKey: "recovery.deviceOnly",
+  },
+  {
     href: "/dashboard/bills",
     icon: "Bills",
     titleKey: "nav.bills",
@@ -230,8 +237,8 @@ export function navItemsFor(
   if (role === "cashier") {
     return allowed(
       NAV_ITEMS.filter(i =>
-        ["/dashboard/orders", "/dashboard/bills", "/dashboard/pos", "/dashboard/accounts", "/dashboard/waste"].includes(i.href),
-      ),
+        ["/dashboard/orders", "/dashboard/bills", "/dashboard/pos", "/dashboard/accounts", "/dashboard/waste", "/dashboard/held-sales"].includes(i.href),
+      ).map(i => i.href === "/dashboard/held-sales" ? { ...i, descKey: "recovery.uploadOnly" } : i),
     );
   }
   if (role === "waiter") {

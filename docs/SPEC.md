@@ -1185,7 +1185,8 @@ server applies it only if nothing has happened since.
   (`src/lib/offline-sales.ts`, `localStorage`, one key per sale so two till
   tabs on one tablet can never overwrite each other) before its first request
   leaves, and let go only when the server answers that this sale, at this
-  amount, is settled. If the browser will not save it, it is not sent. With no
+  amount, is settled, or that the exact full receipt was safely received into
+  the manager queue. If the browser will not save it, it is not sent. With no
   connection, a request that never came back, a 5xx, or a refusal that says
   the money is already in the drawer (`held`: the menu's price changed, the
   ticket is not settled yet), the till keeps the sale under the reference it
@@ -1203,26 +1204,38 @@ server applies it only if nothing has happened since.
   while any are left (`useOfflineSales`). The reference becomes the sale's id,
   so the code on the offline receipt is the sale's code, and a sale sent twice
   is rung once.
-- The server records it as it happened (`ringOffline`, through the same
-  `ring_pos_sale()` and its `settle_offline_sale()`):
-  at its own time — so it lands in that day's corte and that shift's drawer —
-  for what was collected, finished (the kitchen worked from the ticket; it
-  never appears on the board as new), with its stock taken down to nought at
-  most (`take_stock_floor`, in the same transaction as the money). It is never
-  refused for what the menu says today — only for the currency: a sale charged
-  in pesos is kept on the device, not recorded, while the restaurant uses
-  another currency, because recording it would relabel MX$100 as US$100.
-  Its lines are stored as the till sold them — their prices, and a combo's
-  parts, which are what stock gives up even after the promotion has ended.
-  Today's menu prices it only to store the difference (`orders.offline_drift`;
-  null when a dish is gone). Analytics' "Ventas sin conexión" counts the
-  offline sales of the last 44 days — the 30 a held sale can arrive late, plus
-  two weeks to see it — and lists every one with a difference, for a manager.
+- A till opened online saves signed original collector and currency context.
+  Cashiers cannot choose another collector or finalize different line prices,
+  even if the total matches. Legacy receipts need manager attestation.
+- The server records it as it happened (`ringOffline`, through
+  `record_offline_sale`, `ring_pos_sale()` and `settle_offline_sale()`): at its
+  own time — so it lands in that day's corte and that shift's drawer — for
+  what was collected, finished (the kitchen worked from the ticket; it never
+  appears on the board as new), with stock taken down to nought at most
+  (`take_stock_floor`, in the same transaction as the money).
+- A price difference or missing dish, currency change, expired/downgraded/frozen
+  plan, receipt older than 30 days, unverifiable collector or wrong device
+  clock enters the private `offline_sale_queue`. A retry never replaces the
+  original receipt. `/dashboard/held-sales` lets a manager review it on any
+  device, confirm the original collector/currency/time and enter an approval
+  reason. Approval never restores permission to create new sales on that plan.
+- Approved lines keep the till's original prices and combo parts, which are
+  what stock gives up even after the promotion has ended. The order, money,
+  stock and approval audit commit together, retaining both the collector and
+  approving manager. A corrected time also retains the original device time.
+  Today's menu stores the difference (`orders.offline_drift`; null when a dish
+  is gone). Original MXN/USD remains unchanged, with no conversion or settings
+  change. Reports in the current menu currency exclude foreign receipts;
+  history, printed receipt, activity log and manager queue show the original.
+- Analytics' "Ventas sin conexión" counts current-currency offline sales of the
+  last 44 days and lists every one with a difference. The manager queue keeps
+  every received exception regardless of age, including approved history.
 - While the device holds unsent sales, it cannot close the shift or sign out:
   they are the only record of money in the drawer. One the server refuses is
   kept with the reason, never thrown away.
 
-Available on every plan with the till.
+New sales are available on every plan with the till. Receiving and approving
+held money remain available after that entitlement ends.
 
 ## What the browser is allowed to do
 

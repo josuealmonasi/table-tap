@@ -41,7 +41,7 @@ function DepositForm({ day, currency, onClose }: { day: DepositDay; currency: st
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const failed = await send("/api/terminal/deposits", "POST", { day: day.day, received, note: note.trim() || undefined });
+    const failed = await send("/api/terminal/deposits", "POST", { day: day.day, currency, received, note: note.trim() || undefined });
     setBusy(false);
     if (failed) return setError(failed);
     toast(t("terminal.marked"));

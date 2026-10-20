@@ -95,12 +95,12 @@ export default function OrderHistory({
               <span className="tt-log-detail">{summarise(order)}</span>
             </span>
             <span className="tt-hist-right">
-              <strong>{formatMoney(order.total, currency)}</strong>
+              <strong>{formatMoney(order.total, order.currency ?? currency)}</strong>
               {/* A promotion that was applied stays visible in the list, so a
                   discounted night can be found without opening every ticket. */}
               {Number(order.discount ?? 0) > 0 && (
                 <span className="tt-save" style={{ fontSize: 12 }}>
-                  −{formatMoney(Number(order.discount), currency)}
+                  −{formatMoney(Number(order.discount), order.currency ?? currency)}
                 </span>
               )}
               <span className="tt-log-when">
@@ -140,7 +140,7 @@ export default function OrderHistory({
       {open && (
         <OrderDetailDialog
           order={open}
-          currency={currency}
+          currency={open.currency ?? currency}
           open={Boolean(open)}
           onClose={() => setOpen(null)}
         />

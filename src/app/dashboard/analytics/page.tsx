@@ -21,7 +21,7 @@ import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { startOfLocalDay } from "@/lib/day-window";
 import { corteFrom, EMPTY_CORTE, type CorteAdjustment, type CortePayment } from "@/lib/corte";
 import { todaysShiftViews } from "@/lib/cash-shift-server";
-import { readTerminal } from "@/lib/terminal-server";
+import { readTerminalReport } from "@/lib/terminal-report";
 import { everyRow } from "@/lib/paged";
 import { OFFLINE_MAX_AGE_DAYS } from "@/lib/offline-sale";
 import type { OfflineSaleRow } from "@/components/dashboard/analytics/OfflineSalesCard";
@@ -55,7 +55,7 @@ export default async function AnalyticsPage({
   const rows = await everyRow<AnalyticsOrder>((a, b) => supabase
     .from("orders")
     .select("total, tip, created_at, items")
-    .eq("restaurant_id", membership.restaurant.id)
+    .eq("restaurant_id", membership.restaurant.id).eq("currency", membership.restaurant.currency)
     .eq("paid", true)
     .neq("status", "cancelled")
     .gte("created_at", start.toISOString())
@@ -84,7 +84,7 @@ export default async function AnalyticsPage({
     everyRow<CortePayment>((a, b) => admin
       .from("payments")
       .select("actor_email, amount, method")
-      .eq("restaurant_id", membership.restaurant.id)
+      .eq("restaurant_id", membership.restaurant.id).eq("currency", membership.restaurant.currency)
       .gte("created_at", since)
       .order("id").range(a, b), "today's takings"),
     everyRow<CorteAdjustment>((a, b) => admin
@@ -107,7 +107,7 @@ export default async function AnalyticsPage({
       .eq("paid", false).eq("written_off", false)
       .neq("status", "cancelled")
       .order("id").range(a, b), "what customer accounts owe"),
-    returnedAdjustments(membership.restaurant.id, since),
+    returnedAdjustments(membership.restaurant.id, since, undefined, membership.restaurant.currency),
   ]);
   const corte = paidRows
     ? {
@@ -175,7 +175,7 @@ export default async function AnalyticsPage({
   // The restaurant's own card terminal, on a tier with the till: what it took
   // and what the bank should deposit. A failed read throws to the error
   // screen, like the corte — a deposit shown as missing is a wrong number.
-  const terminal = plan && can(plan.limits, "pos") ? await readTerminal(membership.restaurant.id, timeZone) : null;
+  const terminal = plan && can(plan.limits, "pos") ? await readTerminalReport(membership.restaurant.id, timeZone, membership.restaurant.currency) : null;
   // The till's sales rung without a connection, so a manager sees every one
   // whose amount the menu would not have charged. Over the whole window a
   // held sale can still arrive in, plus two weeks to see it: a sale sent 20
@@ -184,9 +184,9 @@ export default async function AnalyticsPage({
   const offlineSince = new Date(Date.now() - (OFFLINE_MAX_AGE_DAYS + OFFLINE_REVIEW_DAYS) * 86_400_000).toISOString();
   const [offlineCountRes, offlineFlagged] = await Promise.all([
     admin.from("orders").select("id", { count: "exact", head: true })
-      .eq("restaurant_id", membership.restaurant.id).not("offline_at", "is", null).gte("offline_at", offlineSince),
+      .eq("restaurant_id", membership.restaurant.id).eq("currency", membership.restaurant.currency).not("offline_at", "is", null).gte("offline_at", offlineSince),
     everyRow<OfflineSaleRow>((a, b) => admin.from("orders").select("id, offline_at, total, offline_drift")
-      .eq("restaurant_id", membership.restaurant.id).not("offline_at", "is", null).gte("offline_at", offlineSince)
+      .eq("restaurant_id", membership.restaurant.id).eq("currency", membership.restaurant.currency).not("offline_at", "is", null).gte("offline_at", offlineSince)
       .or("offline_drift.is.null,offline_drift.gte.0.01,offline_drift.lte.-0.01")
       .order("id").range(a, b), "the sales rung without a connection"),
   ]);

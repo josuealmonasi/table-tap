@@ -105,7 +105,7 @@ export default async function OrdersPage() {
       ? supabase
           .from("orders")
           .select("total")
-          .eq("restaurant_id", r.id)
+          .eq("restaurant_id", r.id).eq("currency", r.currency)
           .eq("paid", true)
           .neq("status", "cancelled")
           .gte("created_at", todayStart.toISOString())
@@ -129,6 +129,7 @@ export default async function OrdersPage() {
       .filter(
         o =>
           o.paid &&
+          o.currency === r.currency &&
           o.status !== "cancelled" &&
           new Date(o.created_at).getTime() >= todayStart.getTime(),
       )

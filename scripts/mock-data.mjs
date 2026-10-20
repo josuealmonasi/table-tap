@@ -25,6 +25,7 @@ import { TERMS_VERSION } from "./terms-version.mjs";
 import { seedLoyalty } from "./mock-loyalty.mjs";
 import { seedAccounts } from "./mock-accounts.mjs";
 import { seedCosts } from "./mock-costs.mjs";
+import { seedOffline } from "./mock-offline.mjs";
 import { seedAllocations } from "./mock-allocations.mjs";
 import { seedTerminal } from "./mock-terminal.mjs";
 import { bulkInsert, randInt, sample } from "./menu-catalog.mjs";
@@ -619,9 +620,9 @@ export async function seedMock(pg) {
     const expected = 500;
     const lateNet = round2(lateCard.amount * (1 - 3.5 / 100));
     await pg.query(
-      `insert into terminal_deposits (restaurant_id, sales_day, expected, received, recorded_by, created_at)
-       values ($1, $2, $3, $4, 'demo-manager@tabletap.dev', $5)
-       on conflict (restaurant_id, sales_day) do nothing`,
+      `insert into terminal_deposits (restaurant_id, sales_day, currency, expected, received, recorded_by, created_at)
+       values ($1, $2, 'MXN', $3, $4, 'demo-manager@tabletap.dev', $5)
+       on conflict (restaurant_id, sales_day, currency) where currency is not null do nothing`,
       [rid, day, expected, round2(expected + lateNet), new Date(Date.parse(lateCard.at) + 30 * 3600000).toISOString()],
     );
   }
@@ -980,6 +981,7 @@ export async function seedMock(pg) {
   await seedTerminal(pg, rid);
   await pg.query("select set_config('tabletap.allocation_origin', '', false)");
   await seedAllocations(pg, rid);
+  await seedOffline(pg, rid);
   // Our fee on every order the demo was paid for online, in the ledger the
   // month's ceiling reads — what the schema's backfill does once for real
   // restaurants. Taken, in the month each was paid.
