@@ -5685,9 +5685,10 @@ begin
         v_unresolved := v_unresolved + 1;
       end if;
     end loop;
+    -- `p` is this function's loop variable: the receipt table needs its own alias.
     for v_order in select distinct a.order_id from payment_allocations a join orders o on o.id = a.order_id
-      join payments p on p.id = a.payment_id where a.restaurant_id = v_restaurant
-        and p.allocation_origin = 'legacy' and o.status = 'cancelled' order by a.order_id loop
+      join payments rp on rp.id = a.payment_id where a.restaurant_id = v_restaurant
+        and rp.allocation_origin = 'legacy' and o.status = 'cancelled' order by a.order_id loop
       perform public.import_historical_return(v_restaurant, v_order);
     end loop;
   end loop;
