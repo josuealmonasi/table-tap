@@ -46,12 +46,12 @@ async function all(build) {
 
 const { data: orders, error: oErr } = await all(() => db
   .from("orders")
-  .select("id, restaurant_id, total, paid, written_off, status, session_id, account_id"));
+  .select("id, restaurant_id, total, tip, paid, written_off, status, session_id, account_id"));
 if (oErr) { console.log(`  cannot read orders: ${oErr.message}`); process.exit(1); }
 
 const { data: payments, error: pErr } = await all(() => db
   .from("payments")
-  .select("id, restaurant_id, order_id, session_id, account_id, amount, tip, allocation_version, allocation_quality, unallocated_amount, unallocated_tip"));
+  .select("id, restaurant_id, order_id, session_id, account_id, amount, tip, allocation_version, allocation_quality, allocation_origin, breakdown_unknown, unallocated_amount, unallocated_tip"));
 if (pErr) { console.log(`  cannot read payments: ${pErr.message}`); process.exit(1); }
 
 const attribution = await checkAllocations(db, all, orders, payments, { ok, bad });

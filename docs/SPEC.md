@@ -1655,3 +1655,56 @@ today's connected account. The money check reconciles allocation and return
 capacity and lists unresolved history or outstanding returns as exceptions,
 without calling them a clean reconciliation. No schema reapplication creates
 new receipts for old paid flags.
+
+#### Schema-first deployment and enforcement switch
+
+Deploying this schema does not switch existing instances to the allocation
+rules. Every deployed d7a0729 financial RPC retains its original body and
+behavior, with the restaurant financial lock added before its other locks.
+The legacy insert trigger captures a receipt's contemporaneous scope, currency
+and account but leaves `allocation_version = 0`; allocation, paid coverage and
+order-adjustment enforcement must not reject those callers. The retired receipt
+initializer remains retired: reapplying the schema never invents receipts.
+
+The new app explicitly calls the `_v2` financial RPCs, including till/offline,
+account, split, collection, approval and settlement paths. These set the
+transaction-local `tabletap.allocation_writer = v1`, reconcile overlap receipts
+under the same restaurant lock, and enable strict receipt precision/scope,
+retained coverage, separate principal/tip capacity, and protected order changes.
+Cancellation uses `prepare_order_refund` and `cancel_order_v2`, reserving its
+return obligations before a provider call. Strict checks are gated by the
+writer marker, not by the mere existence of old allocations. Keep legacy RPCs
+available while old instances drain; retiring them needs a separate cutover.
+
+Receipt snapshots prevent later dishes joining an overlap payment. Receipts
+that cannot yet reconcile (including an old app's tip update still in flight)
+remain unresolved and retry against their frozen scope on the next locked
+read. Pooled history without snapshots needs the original receipt, an explicit
+currency and manager evidence. Historical cancelled orders remain eligible.
+Uniquely evidenced old manual returns are imported with `historical_log_id`;
+log-based sums and trails exclude their typed duplicate. Unknown return
+provenance remains an explicit review item: use original payment evidence to
+attribute it, then confirm an actual manual return; verify historical Stripe
+returns in the original provider account rather than guessing its identity.
+`breakdown_unknown` is allowed only for history and preserves the receipt's
+original amounts; money checks report that exception separately.
+
+Customer refund completion commits before fee reconciliation. The customer's
+completion time is unchanged by later fee recovery. `fee_reconciled_at` is set
+only by a verified cumulative provider fee read; until then the month's ceiling
+conservatively counts the fee as retained. Bills reads schedule completed-order fee recovery after the response,
+so provider delays cannot block collection. Duplicate-charge refunds use immutable numbered
+`refund_due_attempts`, preserving unknown outcomes and separately keying only
+confirmed terminal failures. Managers can keep returning money while fee work
+is unavailable.
+
+The attribution RPC signature changes from four arguments to seven (the extra
+currency, evidence and historical-breakdown arguments have defaults); schema.sql
+drops the four-argument definition before creating it. Main never calls that
+new-manager-workflow RPC. Existing deployed financial signatures stay available.
+The production delta is generated from the canonical provenance block plus
+every changed existing function, without applying it. Before release Claude
+must repeat main's api/money/attack/smoke window run against the delta, verify
+refund and fee recovery, and run the full new-code gate, including allocation
+and split probes. Local Vitest SQL source contracts complement those checks;
+they do not establish PostgreSQL execution or concurrency correctness.

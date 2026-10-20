@@ -103,7 +103,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.approvalChanged", 409);
   }
   // Rechecked under the order and request locks: pricing may have changed since this read.
-  const { data: outcome, error } = await db.rpc("approve_discount_request", {
+  const { data: outcome, error } = await db.rpc("approve_discount_request_v2", {
     p_request: request.id, p_restaurant: actor.restaurantId,
     p_actor: actor.email, p_amount: reviewedAmount,
   });

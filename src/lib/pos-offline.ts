@@ -84,7 +84,7 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
   }
   if (lines.length === 0) return await apiError("apiErr.invalidRequest", 400);
 
-  const { data: ticket, error } = await db.rpc("ring_pos_sale", {
+  const { data: ticket, error } = await db.rpc("ring_pos_sale_v2", {
     p_restaurant: actor.restaurantId, p_ref: posRef, p_method: body.method, p_actor: actor.email,
     p_status: "completed", p_at: charge.at, p_threshold: 0, p_inventory: false,
     p_terminal: body.method === "card" ? terminalRef(body.terminalRef) : null,

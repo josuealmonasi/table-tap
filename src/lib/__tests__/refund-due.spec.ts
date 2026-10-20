@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type Stripe from "stripe";
+import { syncReturnedFee } from "@/lib/refunds/fee";
 
 const logged: { action: string; detail?: string | null }[] = [];
 vi.mock("@/lib/activity-log", () => ({
@@ -11,83 +12,11 @@ vi.mock("@/lib/stripe", () => ({ stripe: {} }));
 import { corteFrom } from "@/lib/corte";
 import { refundDue, refundDueLogDetail } from "@/lib/refund-due";
 
-interface Row {
-  id: string;
-  restaurant_id: string;
-  stripe_payment_intent: string;
-  amount: number;
-  table_label: string | null;
-  refunded_at: string | null;
-  refunded_by?: string | null;
-  stripe_refund_id?: string | null;
-}
-
-/** Just enough of the admin client for the two tables this touches. */
-function fakeDb(rows: Row[], stripeAccount: string | null = "acct_1") {
-  return {
-    from(table: string) {
-      const where: Record<string, unknown> = {};
-      let nullCol: string | null = null;
-      let patch: Partial<Row> | null = null;
-      const matches = () =>
-        rows.filter(
-          r =>
-            Object.entries(where).every(([k, v]) => (r as unknown as Record<string, unknown>)[k] === v) &&
-            (!nullCol || (r as unknown as Record<string, unknown>)[nullCol] == null),
-        );
-      const q = {
-        select: () => q,
-        update: (p: Partial<Row>) => ((patch = p), q),
-        eq: (k: string, v: unknown) => ((where[k] = v), q),
-        is: (k: string) => ((nullCol = k), q),
-        single: async () => ({ data: table === "restaurants" ? { stripe_account_id: stripeAccount } : null, error: null }),
-        maybeSingle: async () => ({ data: matches()[0] ?? null, error: null }),
-        then: (resolve: (v: unknown) => void) => {
-          const hit = matches();
-          if (patch) for (const r of hit) Object.assign(r, patch);
-          resolve({ data: hit.map(r => ({ id: r.id })), error: null });
-        },
-      };
-      return q;
-    },
-  } as never;
-}
-
-const due = (over: Partial<Row> = {}): Row => ({
-  id: "d1",
-  restaurant_id: "r1",
-  stripe_payment_intent: "pi_1",
-  amount: 125.5,
-  table_label: "4",
-  refunded_at: null,
-  ...over,
-});
-
-function fakeStripe(over: { create?: () => Promise<unknown>; made?: Stripe.Refund[] } = {}) {
-  const calls = {
-    create: vi.fn(over.create ?? (async () => ({ id: "re_1", status: "succeeded" }))),
-    list: vi.fn(() => Object.assign(Promise.resolve({ data: over.made ?? [] }), {
-      async *[Symbol.asyncIterator]() { yield* over.made ?? []; },
-    })),
-    feeRefund: vi.fn(async () => ({ id: "fr_1" })),
-  };
-  const client = {
-    refunds: { create: calls.create, list: calls.list },
-    paymentIntents: {
-      retrieve: async () => ({ latest_charge: { amount: 25100, application_fee: "fee_1" } }),
-    },
-    applicationFees: {
-      retrieve: async () => ({ amount: 500, amount_refunded: 0 }),
-      createRefund: calls.feeRefund,
-    },
-  } as unknown as Stripe;
-  return { client, calls };
-}
-
-const stripeError = (code: string) => Object.assign(new Error(code), { code });
+import { due, fakeDb, fakeStripe, stripeError } from "./refund-due-fixtures";
 
 beforeEach(() => {
   logged.length = 0;
+  vi.mocked(syncReturnedFee).mockReset().mockResolvedValue(undefined);
 });
 
 describe("refunding a payment taken twice", () => {
@@ -97,7 +26,7 @@ describe("refunding a payment taken twice", () => {
     const answer = await refundDue(fakeDb(rows), "r1", "d1", "ana@x.dev", client);
     expect(answer).toEqual({ ok: true, amount: 125.5, alreadyInStripe: false });
     expect(calls.create).toHaveBeenCalledWith(
-      { payment_intent: "pi_1", amount: 12550, refund_application_fee: true, metadata: { refund_due: "d1" } },
+      { payment_intent: "pi_1", amount: 12550, refund_application_fee: true, metadata: { refund_due: "d1", refund_due_attempt: "due-attempt-1" } },
       { idempotencyKey: "refund-due-d1", stripeAccount: "acct_1" },
     );
     expect(rows[0]).toMatchObject({ refunded_by: "ana@x.dev", stripe_refund_id: "re_1" });
@@ -111,6 +40,35 @@ describe("refunding a payment taken twice", () => {
     expect(await refundDue(fakeDb(rows), "r1", "d1", "manager", client)).toMatchObject({ ok: false, error: "apiErr.refundPending", status: 409 });
     expect(rows[0].refunded_at).toBeNull();
     expect(logged).toHaveLength(0);
+  });
+
+  it.each(["failed", "canceled"])("retries a confirmed %s duplicate refund with a fresh durable key", async status => {
+    const rows = [due()]; const db = fakeDb(rows);
+    const { client, calls } = fakeStripe();
+    calls.create.mockResolvedValueOnce({ id: "re_failed", status } as never);
+    expect(await refundDue(db, "r1", "d1", "manager", client)).toMatchObject({ ok: false });
+    expect(await refundDue(db, "r1", "d1", "manager", client)).toMatchObject({ ok: true });
+    expect(calls.create).toHaveBeenCalledTimes(2);
+    expect(calls.create.mock.calls[0]).not.toEqual(calls.create.mock.calls[1]);
+    expect(calls.create.mock.calls[1]).toEqual([expect.objectContaining({ metadata: {
+      refund_due: "d1", refund_due_attempt: "due-attempt-2" } }), expect.objectContaining({ idempotencyKey: "refund-due-d1-2" })]);
+  });
+
+  it("records customer success before a failed fee lookup", async () => {
+    vi.mocked(syncReturnedFee).mockRejectedValueOnce(new Error("fee unavailable"));
+    const rows = [due()]; const { client } = fakeStripe();
+    expect(await refundDue(fakeDb(rows), "r1", "d1", "manager", client)).toMatchObject({ ok: true });
+    expect(rows[0]).toMatchObject({ stripe_refund_id: "re_1", refunded_at: expect.any(String) });
+  });
+
+  it("preserves a pending attempt and retrieves it without creating another refund", async () => {
+    const rows = [due()]; const db = fakeDb(rows);
+    const { client, calls } = fakeStripe({ create: async () => ({ id: "re_wait", status: "pending" }),
+      retrieve: async () => ({ id: "re_wait", status: "succeeded" }) });
+    expect(await refundDue(db, "r1", "d1", "manager", client)).toMatchObject({ error: "apiErr.refundPending" });
+    expect(await refundDue(db, "r1", "d1", "manager", client)).toMatchObject({ ok: true });
+    expect(calls.create).toHaveBeenCalledTimes(1);
+    expect(calls.retrieve).toHaveBeenCalledWith("re_wait", { stripeAccount: "acct_1" });
   });
 
   it("leaves the row owed when Stripe refuses, so it can be tried again", async () => {

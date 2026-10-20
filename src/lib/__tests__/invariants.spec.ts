@@ -1149,14 +1149,14 @@ describe("a repeated webhook cannot record the same money twice", () => {
     // Each `.update({...paid: true...})` must carry the guard that makes the
     // second delivery match nothing.
     const marks = [...settle.matchAll(/\.update\(\{[^}]*paid:\s*true[\s\S]{0,400}?(?=\n\n|;)/g)];
-    expect(settle, "the split close must use the coverage transaction").toContain('rpc("close_divided_bill"');
+    expect(settle, "the split close must use the coverage transaction").toContain('rpc("close_divided_bill_v2"');
     // The rest moved into the database, and carry the same guard there: only
     // an order still unpaid is touched, only a share still unclaimed is.
     const schema = read("supabase/schema.sql");
     const body = (fn: string) => schema.slice(schema.indexOf(`function public.${fn}(`), schema.indexOf("$$;", schema.indexOf(`function public.${fn}(`)));
-    expect(body("settle_card_orders"), "settle_card_orders lost its paid = false guard").toMatch(/where id = any\(p_orders\)\s+and paid = false/);
-    expect(body("settle_split_share"), "settle_split_share lost its paid_at is null guard").toMatch(/and paid_at is null;/);
-    const close = body("close_divided_bill");
+    expect(body("settle_card_orders_v2"), "settle_card_orders lost its paid = false guard").toMatch(/where id = any\(p_orders\)\s+and paid = false/);
+    expect(body("settle_split_share_v2"), "settle_split_share lost its paid_at is null guard").toMatch(/and paid_at is null;/);
+    const close = body("close_divided_bill_v2");
     expect(close).toContain("v_count <> v_split.shares");
     expect(close).toContain("public.retained_order_coverage(v_split.restaurant_id, o.id) < o.total");
     expect(close).toContain("and paid = false and written_off = false");
@@ -1201,7 +1201,7 @@ describe("a repeated webhook cannot record the same money twice", () => {
     expect(bill, "the bill's tip is not handed to the call that records the money").toMatch(/settleCardOrders\([\s\S]*?\btip,/);
     expect(bill, "the tip is added to an order outside the database function").not.toMatch(/tip:\s*Number\(/);
     const schema = read("supabase/schema.sql");
-    const at = schema.indexOf("function public.settle_card_orders(");
+    const at = schema.indexOf("function public.settle_card_orders_v2(");
     const fn = schema.slice(at, schema.indexOf("$$;", at));
     expect(fn, "the tip's order is not one this call settles").toMatch(/o\.id = p_tip_order and o\.id = any\(p_orders\) and o\.paid = false/);
     expect(fn, "the tip is added even when this delivery settled nothing").toMatch(/v_tip_on = any\(v_settled\)/);
@@ -1380,7 +1380,7 @@ describe("every route that settles an order records the payment", () => {
   it("calls recordPayment wherever it sets paid", () => {
     for (const [file, complaint] of SETTLES) {
       const lines = read(file).split("\n").filter(l => !l.trimStart().startsWith("import"));
-      const marksPaid = lines.filter(l => /paid:\s*true|"ring_pos_sale"|"settle_(orders|card_orders|sale)"|"close_divided_bill"/.test(l)).length;
+      const marksPaid = lines.filter(l => /paid:\s*true|"ring_pos_sale_v2"|"settle_(orders|card_orders|sale)_v2"|"close_divided_bill_v2"/.test(l)).length;
       // `recordPayment`, or the SQL that does the same job under a lock. The
       // calculator moved to `collect_on_sitting` so that reading the balance,
       // capping against it and inserting happen atomically — two waiters on
@@ -1388,7 +1388,7 @@ describe("every route that settles an order records the payment", () => {
       // route that settles orders and still has to record the money; this
       // invariant just had to learn the second spelling.
       const records = lines.filter(
-        l => /\brecordPayments?\s*\(/.test(l) || /collect_on_sitting|"ring_pos_sale"|"settle_(orders|card_orders|split_share|sale)"/.test(l),
+        l => /\brecordPayments?\s*\(/.test(l) || /collect_on_sitting|"ring_pos_sale_v2"|"settle_(orders|card_orders|split_share|sale)_v2"/.test(l),
       ).length;
       expect(marksPaid, `${file}: nothing marks an order paid any more`).toBeGreaterThan(0);
       expect(records, `${file}: ${complaint}`).toBeGreaterThan(0);
@@ -1401,16 +1401,16 @@ describe("every route that settles an order records the payment", () => {
     // retry could repair it: every path guards on `paid = false`.
     for (const file of ["src/app/api/table-payment/route.ts", "src/lib/part-payment.ts"]) {
       const src = read(file);
-      expect(src, `${file} no longer settles through settle_orders`).toMatch(/rpc\("settle_orders"/);
+      expect(src, `${file} no longer settles through settle_orders`).toMatch(/rpc\("settle_orders_v2"/);
       expect(src, `${file} marks orders paid outside settle_orders`).not.toMatch(/paid:\s*true/);
     }
     // ...and the function does both under one transaction, refusing a bill that changed.
     const schema = read("supabase/schema.sql");
-    const fn = schema.slice(schema.indexOf("function public.settle_orders("), schema.indexOf("$$;", schema.indexOf("function public.settle_orders(")));
+    const fn = schema.slice(schema.indexOf("function public.settle_orders_v2("), schema.indexOf("$$;", schema.indexOf("function public.settle_orders_v2(")));
     expect(fn).toMatch(/update orders\s+set paid = true/);
     expect(fn).toMatch(/insert into payments/);
     expect(fn).toMatch(/if v_count <> cardinality\(p_orders\) then\s+raise exception 'not_owed'/);
-    expect(schema).toMatch(/grant execute on function public\.settle_orders\([^)]*\)\s+to service_role;/);
+    expect(schema).toMatch(/grant execute on function public\.settle_orders_v2\([^)]*\)\s+to service_role;/);
   });
 
   it("records a card payment with the orders it paid, never after them", () => {
@@ -1419,11 +1419,11 @@ describe("every route that settles an order records the payment", () => {
     // recorded nowhere, and Stripe's repeat found nothing left to do.
     // The webhook's settling, wherever it was split to.
     const src = ["checkout-settle.ts", "card-settle.ts", "checkout-abandon.ts"].map(f => read(`src/lib/${f}`)).join("\n");
-    expect(src).toMatch(/rpc\("settle_card_orders"/);
-    expect(src).toMatch(/rpc\("settle_split_share"/);
+    expect(src).toMatch(/rpc\("settle_card_orders_v2"/);
+    expect(src).toMatch(/rpc\("settle_split_share_v2"/);
     expect(src, "the webhook writes the ledger outside the functions").not.toMatch(/recordPayments?\(|from\("payments"\)/);
     const schema = read("supabase/schema.sql");
-    for (const fn of ["settle_card_orders", "settle_split_share"]) {
+    for (const fn of ["settle_card_orders_v2", "settle_split_share_v2"]) {
       const at = schema.indexOf(`function public.${fn}(`);
       const body = schema.slice(at, schema.indexOf("$$;", at));
       expect(body, `${fn} no longer records the money`).toMatch(/insert into payments/);
@@ -1435,26 +1435,26 @@ describe("every route that settles an order records the payment", () => {
     // The till inserted the order paid and then wrote the ledger: a failed
     // second write was a sale with no money in the corte.
     const src = read("src/app/api/pos/order/route.ts");
-    expect(src).toMatch(/rpc\("ring_pos_sale"/);
+    expect(src).toMatch(/rpc\("ring_pos_sale_v2"/);
     expect(src, "the till marks a sale paid outside settle_sale").not.toMatch(/paid:\s*true/);
     expect(src, "the till writes the ledger outside settle_sale").not.toMatch(/recordPayments?\(/);
     expect(src, "the till inserts outside its transaction").not.toMatch(/\.insert\(/);
     const offline = read("src/lib/pos-offline.ts");
-    expect(offline).toMatch(/rpc\("ring_pos_sale"/);
+    expect(offline).toMatch(/rpc\("ring_pos_sale_v2"/);
     expect(offline, "offline stock is still a second request").not.toMatch(/rpc\("take_stock_floor"/);
     const schema = read("supabase/schema.sql");
-    const at = schema.indexOf("function public.settle_sale(");
+    const at = schema.indexOf("function public.settle_sale_v2(");
     const fn = schema.slice(at, schema.indexOf("$$;", at));
     expect(fn).toMatch(/and status = 'pending_payment'/);
     expect(fn).toMatch(/insert into payments/);
-    const ringAt = schema.indexOf("function public.ring_pos_sale(");
+    const ringAt = schema.indexOf("function public.ring_pos_sale_v2(");
     const ring = schema.slice(ringAt, schema.indexOf("$$;", ringAt));
-    for (const operation of ["pos_ticket", "pos_insert_order", "settle_sale", "settle_offline_sale", "take_stock_floor", "reserve_stock"]) {
+    for (const operation of ["pos_ticket", "pos_insert_order", "settle_sale_v2", "settle_offline_sale_v2", "take_stock_floor", "reserve_stock"]) {
       expect(ring, `the till transaction lost ${operation}`).toContain(`public.${operation}(`);
     }
-    const accountAt = schema.indexOf("function public.ring_pos_account(");
+    const accountAt = schema.indexOf("function public.ring_pos_account_v2(");
     const account = schema.slice(accountAt, schema.indexOf("$$;", accountAt));
-    expect(account).toContain("public.account_charge(");
+    expect(account).toContain("public.account_charge_v2(");
     expect(account).toContain("exception when sqlstate 'PT001'");
   });
 
@@ -1463,7 +1463,7 @@ describe("every route that settles an order records the payment", () => {
     // arrived after the hold ran out and the till had collected the tab. It was
     // recorded as a payment against food already paid, and nobody was told.
     const schema = read("supabase/schema.sql");
-    const at = schema.indexOf("function public.account_checkout_settle(");
+    const at = schema.indexOf("function public.account_checkout_settle_v2(");
     const fn = schema.slice(at, schema.indexOf("$$;", at));
     expect(fn, "the payment is still the whole checkout, whatever was paid meanwhile").not.toMatch(/v_checkout\.amount \+ v_checkout\.tip,\s*v_checkout\.tip, 'card'/);
     expect(fn, "a double charge is not kept").toMatch(/insert into refunds_due/);
@@ -1475,7 +1475,7 @@ describe("every route that settles an order records the payment", () => {
     // A waiter took cash while the diner was on Stripe's page; the webhook
     // matched nothing and the card money was recorded nowhere.
     const schema = read("supabase/schema.sql");
-    const at = schema.indexOf("function public.settle_card_orders(");
+    const at = schema.indexOf("function public.settle_card_orders_v2(");
     const fn = schema.slice(at, schema.indexOf("$$;", at));
     expect(fn, "a double charge is no longer kept").toMatch(/insert into refunds_due/);
     expect(fn, "nobody is told about a double charge").toMatch(/insert into notifications[\s\S]*'refund_due'/);
@@ -2610,7 +2610,7 @@ describe("a customer account's orders are never a table's", () => {
 
     // The same, in the two functions that decide what a sitting owes.
     const schema = read("supabase/schema.sql");
-    for (const fn of ["close_session_if_clear", "collect_on_sitting"]) {
+    for (const fn of ["close_session_if_clear", "collect_on_sitting_v2"]) {
       const start = schema.indexOf(`create or replace function public.${fn}(`);
       expect(start, `${fn} is not in the schema`).toBeGreaterThan(-1);
       const body = schema.slice(start, schema.indexOf("$$;", start));

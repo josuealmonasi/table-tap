@@ -1,5 +1,5 @@
-import PaymentAttribution from "@/components/dashboard/PaymentAttribution.react-component";
-import OrderRefunds from "@/components/dashboard/OrderRefunds.react-component";
+import PaymentAttribution from "@/components/dashboard/PaymentAttribution";
+import OrderRefunds from "@/components/dashboard/OrderRefunds";
 import { orderRefunds } from "@/lib/refunds/operations";
 import { paymentCoverage } from "@/lib/payment-coverage";
 import { createAdminClient } from "@/lib/supabase/admin";

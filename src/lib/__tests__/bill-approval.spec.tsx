@@ -62,7 +62,7 @@ for (const [kind, route] of [["write-off", writeOff], ["discount", discount]] as
     it("applies a matching request in one guarded transaction", async () => {
       state.amount = state.total = 1000;
       expect((await route(request(1000))).status).toBe(200);
-      expect(rpc).toHaveBeenCalledWith(kind === "discount" ? "approve_discount_request" : "approve_write_off_request", expect.objectContaining({
+      expect(rpc).toHaveBeenCalledWith(kind === "discount" ? "approve_discount_request_v2" : "approve_write_off_request_v2", expect.objectContaining({
         p_request: "ask", p_restaurant: "r1", p_actor: "manager", p_amount: 1000,
       }));
       expect(mutate).not.toHaveBeenCalled();
@@ -97,7 +97,7 @@ it("approval request tables grant only scoped reads to authenticated clients", (
 
 it("rechecks the approval amount under order and request locks", () => {
   const sql = readFileSync("supabase/schema.sql", "utf8");
-  for (const name of ["approve_write_off_request", "approve_discount_request"]) {
+  for (const name of ["approve_write_off_request_v2", "approve_discount_request_v2"]) {
     const fn = sql.split(`create or replace function public.${name}(`)[1]?.split("end; $$;")[0];
     expect(fn).toContain("v_request.amount <> p_amount");
     expect(fn).toContain("order by id for update");

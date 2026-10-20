@@ -32,7 +32,7 @@ export async function checkPaymentAllocations() {
     assert.deepEqual(shares.map(a => Number(a.amount)), [33.34, 33.33, 33.33]);
     await reject("update payments set amount=101 where id=$1", [p.id], /immutable/);
     await reject("update payment_allocations set amount=1 where payment_id=$1", [p.id], /immutable/);
-    await reject("select settle_orders($1,$2,'cash','cashier',null)", [r.id, ids], /not_owed/);
+    await reject("select settle_orders_v2($1,$2,'cash','cashier',null)", [r.id, ids], /not_owed/);
     await reject("update orders set total=99,tip=-1 where id=$1", [ids[1]], /adjustment/);
     await defer();
     const args = [r.id, shares[0].order_id];
@@ -62,7 +62,7 @@ export async function checkPaymentAllocations() {
 
     await defer();
     const counter = await order(110, { tip: 10, status: "pending_payment" });
-    await db.query("select settle_sale($1,$2,'cash','probe','completed')", [r.id, counter]);
+    await db.query("select settle_sale_v2($1,$2,'cash','probe','completed')", [r.id, counter]);
     await check();
     const { rows: [counterReceipt] } = await db.query("select amount,tip,unallocated_amount,unallocated_tip from payments where order_id=$1", [counter]);
     assert.deepEqual(Object.values(counterReceipt).map(Number), [110, 10, 0, 0]);
@@ -72,7 +72,7 @@ export async function checkPaymentAllocations() {
     const { rows: [account] } = await db.query(`insert into customer_accounts(restaurant_id,name,code,credit_limit,opened_by)
       values($1,'Allocation probe',$2,10000,'probe') returning id`, [r.id, randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()]);
     const a = await order(110, { tip: 10, account: account.id });
-    await db.query("select account_settle($1,$2,110,5,'cash','probe',$3)", [r.id, account.id, randomUUID()]);
+    await db.query("select account_settle_v2($1,$2,110,5,'cash','probe',$3)", [r.id, account.id, randomUUID()]);
     await check();
     const { rows: [funded] } = await db.query("select total,tip,paid,retained_order_coverage(restaurant_id,id) covered from orders where id=$1", [a]);
     assert.equal(Number(funded.total), 115);
@@ -88,10 +88,10 @@ export async function checkPaymentAllocations() {
     await db.query("insert into bill_split_claims(split_id,share_no,diner,amount) values($1,0,'one',100),($1,1,'two',100)", [split.id]);
     const later = await order(50, { session: session.id });
     for (const no of [0, 1]) {
-      await db.query("select settle_split_share($1,$2,100,8,$3)", [split.id, no, `pi_probe_${randomUUID()}`]);
+      await db.query("select settle_split_share_v2($1,$2,100,8,$3)", [split.id, no, `pi_probe_${randomUUID()}`]);
       await check(); await defer();
     }
-    assert.equal((await db.query("select close_divided_bill($1) closed", [split.id])).rows[0].closed, true);
+    assert.equal((await db.query("select close_divided_bill_v2($1) closed", [split.id])).rows[0].closed, true);
     await check();
     assert.equal((await db.query("select paid from orders where id=$1", [later])).rows[0].paid, false);
     const { rows: [leaked] } = await db.query("select count(*) n from payment_allocations where order_id=$1", [later]);
@@ -100,7 +100,7 @@ export async function checkPaymentAllocations() {
     await defer();
     await db.query("update restaurants set stripe_account_id='acct_probe' where id=$1", [r.id]);
     const card = await order(50, { status: "pending_payment" });
-    await db.query("select settle_card_orders($1,$2,0,null,'received',50)", [[card], `pi_probe_${randomUUID()}`]);
+    await db.query("select settle_card_orders_v2($1,$2,0,null,'received',50)", [[card], `pi_probe_${randomUUID()}`]);
     await check(); await defer();
     await db.query("select prepare_order_refund($1,$2,'manager','[]',true,null,null,null)", [r.id, card]);
     await check();

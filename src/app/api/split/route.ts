@@ -108,7 +108,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (error || !made) return await apiError("apiErr.splitAlready", 409);
 
   // Whoever asked is in it, and takes seat zero — which carries the odd cent.
-  await db.rpc("join_bill_split", { p_split: made.id, p_diner: diner, p_amount: 0 });
+  await db.rpc("join_bill_split_v2", { p_split: made.id, p_diner: diner, p_amount: 0 });
 
   return NextResponse.json({
     split: await currentSplit(sessionId, diner, restaurantId, tableId),

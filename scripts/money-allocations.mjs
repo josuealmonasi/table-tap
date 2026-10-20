@@ -46,6 +46,15 @@ export async function checkAllocations(db, all, orders, payments, { ok, bad }) {
     const mine = allocations.filter(a => a.order_id === id);
     const reserved = returns.filter(r => mine.some(a => a.id === r.allocation_id));
     const retained = sum(mine, "amount") - sum(reserved, "amount");
+    const tip = sum(mine, "tip") - sum(reserved, "tip");
+    const unknown = mine.some(a => payments.some(p => p.id === a.payment_id && p.allocation_origin === "legacy" && p.breakdown_unknown));
+    if (unknown) {
+      exceptions++;
+      console.log(`    REVIEW   order ${id}: historical principal/tip breakdown unknown`);
+    } else if (o.paid && !o.written_off && o.status !== "cancelled"
+      && (tip !== Math.round(Number(o.tip) * 100) || retained - tip !== Math.round((Number(o.total) - Number(o.tip)) * 100))) {
+      bad(`settled order ${id} lacks principal or tip coverage`);
+    }
     if (o.paid && !o.written_off && o.status !== "cancelled" && retained !== Math.round(Number(o.total) * 100)) bad(`settled order ${id} lacks exact retained coverage`);
     if (o.status === "cancelled" && cancelled.has(id) && retained !== 0) bad(`cancelled order ${id} lacks a return obligation`);
   }

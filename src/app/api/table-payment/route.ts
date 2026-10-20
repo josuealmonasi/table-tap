@@ -105,7 +105,7 @@ async function collect(req: NextRequest): Promise<NextResponse> {
   // The orders and the ledger in one write (`settle_orders`): both, or
   // neither. They were two, and a failed second write left a bill marked paid
   // with no money behind it that no retry could repair.
-  const { error: settleError } = await db.rpc("settle_orders", {
+  const { error: settleError } = await db.rpc("settle_orders_v2", {
     p_restaurant: actor.restaurantId,
     p_orders: updated.map(o => o.id),
     p_method: settlement,

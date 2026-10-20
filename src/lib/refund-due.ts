@@ -3,6 +3,7 @@ import { stripe } from "@/lib/stripe";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
+import { refundMadeFor, returnOurFee, fullyReturnedCharge } from "@/lib/refunds/due-provider";
 import { syncReturnedFee } from "@/lib/refunds/fee";
 
 type Db = ReturnType<typeof createAdminClient>;
@@ -69,24 +70,30 @@ export async function refundDue(
   if (!due) return { ok: false, error: "apiErr.refundNotFound", status: 404 };
   if (due.refunded_at) return { ok: false, error: "apiErr.alreadyRefunded", status: 409 };
 
-  const { data: acct } = await db
-    .from("restaurants")
-    .select("stripe_account_id")
-    .eq("id", restaurantId)
-    .single();
-  const stripeAccount = acct?.stripe_account_id as string | null | undefined;
-  if (!stripeAccount) return { ok: false, error: "apiErr.refundNeedsStripe", status: 409 };
+  const { data: attempt, error: prepareError } = await db.rpc("start_refund_due_attempt", {
+    p_restaurant: restaurantId, p_due: id,
+  });
+  if (prepareError) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
+  if (!attempt) return { ok: false, error: "apiErr.refundNeedsStripe", status: 409 };
+  const stripeAccount = attempt.stripe_account_id as string;
 
-  const intent = due.stripe_payment_intent as string;
-  const amount = Number(due.amount);
+  const intent = attempt.stripe_payment_intent as string;
+  const amount = Number(attempt.amount);
   const cents = Math.round(amount * 100);
   let refundId: string | null = null;
   let alreadyInStripe = false;
   try {
-    const refund = (await refundMadeFor(client, intent, stripeAccount, id)) ?? await client.refunds.create(
-      { payment_intent: intent, amount: cents, refund_application_fee: true, metadata: { refund_due: id } },
-      { idempotencyKey: `refund-due-${id}`, stripeAccount },
+    const refund = (attempt.stripe_refund_id
+      ? await client.refunds.retrieve(attempt.stripe_refund_id, { stripeAccount })
+      : await refundMadeFor(client, intent, stripeAccount, id, attempt.id, attempt.attempt_no)) ?? await client.refunds.create(
+      { payment_intent: intent, amount: cents, refund_application_fee: true, metadata: { refund_due: id, refund_due_attempt: attempt.id } },
+      { idempotencyKey: attempt.idempotency_key, stripeAccount },
     );
+    if (refund.status !== "succeeded") {
+      const { error } = await db.rpc("finish_refund_due_attempt", { p_restaurant: restaurantId, p_due: id,
+        p_attempt: attempt.id, p_actor: actor, p_refund: refund.id, p_status: refund.status ?? "pending" });
+      if (error) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
+    }
     if (refund.status !== "succeeded") return { ok: false, error: "apiErr.refundPending", status: 409 };
     refundId = refund.id;
   } catch (err) {
@@ -101,33 +108,28 @@ export async function refundDue(
     }
     // Somebody refunded it in Stripe by hand, as the bell used to ask. The
     // diner has their money; what is left to give back is our fee.
-    const confirmed = await returnOurFee(client, intent, stripeAccount, cents, id).catch(e => {
-      console.error("refund due: our fee could not be returned", e);
-      return false;
-    });
-    if (!confirmed) return { ok: false, error: "apiErr.refundPending", status: 409 };
+    refundId = await fullyReturnedCharge(client, intent, stripeAccount).catch(() => null);
+    if (!refundId) return { ok: false, error: "apiErr.refundPending", status: 409 };
     alreadyInStripe = true;
-  }
-
-  // The share of our fee that went back with it. A charge refunded by hand
-  // in Stripe is left counted: the safe way round for the month's ceiling.
-  try {
-    await syncReturnedFee(client, restaurantId, intent, stripeAccount);
-  } catch (error) {
-    console.error("refund due: could not reconcile the returned fee", error);
-    return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
   }
 
   // Only the request that writes the row says so in the log, so a retry that
   // found the refund already made does not log it twice.
-  const { data: marked } = await db
-    .from("refunds_due")
-    .update({ refunded_at: new Date().toISOString(), refunded_by: actor, stripe_refund_id: refundId })
-    .eq("id", id)
-    .eq("restaurant_id", restaurantId)
-    .is("refunded_at", null)
-    .select("id");
-  if (marked?.length) {
+  const { data: marked, error: writeError } = await db.rpc("finish_refund_due_attempt", {
+    p_restaurant: restaurantId, p_due: id, p_attempt: attempt.id, p_actor: actor,
+    p_refund: refundId, p_status: "succeeded",
+  });
+  if (writeError) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
+
+  // The share of our fee that went back with it. A charge refunded by hand
+  // in Stripe is left counted: the safe way round for the month's ceiling.
+  try {
+    if (alreadyInStripe) await returnOurFee(client, intent, stripeAccount, cents, id);
+    await syncReturnedFee(client, restaurantId, intent, stripeAccount);
+  } catch (error) {
+    console.error("refund due: could not reconcile the returned fee", error);
+  }
+  if (marked) {
     await logEvent({
       restaurantId,
       actor,
@@ -137,59 +139,4 @@ export async function refundDue(
     });
   }
   return { ok: true, amount, alreadyInStripe };
-}
-
-/** A refund Stripe already made for this row, found by the tag it carries. */
-async function refundMadeFor(
-  client: Stripe,
-  paymentIntent: string,
-  stripeAccount: string,
-  id: string,
-): Promise<Stripe.Refund | null> {
-  for await (const made of client.refunds.list({ payment_intent: paymentIntent, limit: 100 }, { stripeAccount })) {
-    if (made.metadata?.refund_due === id) return made;
-  }
-  return null;
-}
-
-/**
- * Our share of the fee on a charge the restaurant refunded by hand.
- *
- * A refund made in the restaurant's own Stripe dashboard leaves our fee where
- * it is. This returns the part of it that belongs to the money given back —
- * all of it when the whole charge was paid twice.
- */
-async function returnOurFee(
-  client: Stripe,
-  paymentIntent: string,
-  stripeAccount: string,
-  refundedCents: number,
-  id: string,
-): Promise<boolean> {
-  const intent = await client.paymentIntents.retrieve(
-    paymentIntent,
-    { expand: ["latest_charge"] },
-    { stripeAccount },
-  );
-  const charge = intent.latest_charge as Stripe.Charge | null;
-  const feeId =
-    typeof charge?.application_fee === "string" ? charge.application_fee : charge?.application_fee?.id;
-  if (!charge?.amount) return false;
-  let confirmed = 0;
-  for await (const refund of client.refunds.list({ payment_intent: paymentIntent, limit: 100 }, { stripeAccount })) {
-    if (refund.status === "succeeded") confirmed += refund.amount;
-  }
-  if (confirmed < charge.amount) return false;
-  if (!feeId) return true;
-  const fee = await client.applicationFees.retrieve(feeId);
-  const share = Math.round((fee.amount * Math.min(refundedCents, charge.amount)) / charge.amount);
-  const left = fee.amount - fee.amount_refunded;
-  const back = Math.min(share, left);
-  if (back <= 0) return true;
-  await client.applicationFees.createRefund(
-    feeId,
-    { amount: back, metadata: { refund_due: id } },
-    { idempotencyKey: `refund-due-fee-${id}` },
-  );
-  return true;
 }

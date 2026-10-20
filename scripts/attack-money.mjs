@@ -739,7 +739,7 @@ try {
     }).select("id").maybeSingle();
     const { data: byCard } = await order(80, MARK);
     const intentFor = what => `pi_${MARK}_${what}_${sat.id.slice(0, 8)}`;
-    const card = (orders, charged, intent) => admin.rpc("settle_card_orders", {
+    const card = (orders, charged, intent) => admin.rpc("settle_card_orders_v2", {
       p_orders: orders, p_intent: intent, p_tip: 0, p_tip_order: null, p_status: null, p_charged: charged,
     });
 

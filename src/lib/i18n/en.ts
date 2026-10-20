@@ -966,7 +966,14 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     refundDueAccount: "A card payment of {amount} arrived for {name}'s account, which was already settled. Refund it from Open bills.",
   },
   attribution: {
-    title: "Historical receipt attribution",
+    currencyUnknown: "Currency needs checking",
+    currency: "Currency on the original receipt",
+    chooseCurrency: "Choose the receipt’s currency",
+    evidence: "Receipt number or other evidence (at least 8 characters)",
+    unknownTip: "The old receipt does not show how the tip was split.",
+    cancelled: "Cancelled order — check whether its money was already returned.",
+
+    title: "Match old payments to orders",
     help: "Use the original receipt to assign its amount to the orders it paid. This preserves the receipt and records your attribution as a manager estimate. Do not guess.",
     assign: "Assign receipt",
     amount: "Assign {amount}, including {tip} in recorded tips.",
@@ -982,7 +989,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     remaining: "Still owed",
 
     title: "Order returns",
-    intro: "Cancelled money stays here until the return is confirmed.",
+    intro: "Confirm each return after the customer has their money back.",
     confirm: "Confirm money returned",
     drawer: "Confirm {amount} was actually returned from the original collection ({collector}). For a terminal payment, complete the refund on the terminal first.",
     returned: "Confirm returned",

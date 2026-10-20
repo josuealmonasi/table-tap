@@ -1,3 +1,4 @@
+drop table if exists refund_due_attempts cascade;
 drop table if exists refund_attempts cascade;
 drop table if exists refund_allocations cascade;
 drop table if exists refund_operations cascade;
@@ -188,3 +189,28 @@ drop function if exists public.attribute_payment(uuid, uuid, text, jsonb) cascad
 drop function if exists public.guard_receipt_money() cascade;
 drop function if exists public.check_return_header() cascade;
 drop function if exists public.guard_return_money() cascade;
+
+drop function if exists public.order_component_capacity(uuid, uuid);
+drop function if exists public.import_historical_return(uuid, uuid);
+drop function if exists public.join_bill_split_v2(uuid, text, uuid, uuid, uuid);
+drop function if exists public.close_divided_bill_v2(uuid);
+drop function if exists public.collect_on_sitting_v2(uuid, uuid, numeric, numeric, text, text, text);
+drop function if exists public.settle_orders_v2(uuid, uuid[], text, text, jsonb);
+drop function if exists public.settle_card_orders_v2(uuid[], text, numeric, uuid, text, numeric);
+drop function if exists public.settle_split_share_v2(uuid, int, numeric, numeric, text);
+drop function if exists public.settle_sale_v2(uuid, uuid, text, text, text);
+drop function if exists public.account_charge_v2(uuid, uuid, uuid[], numeric, text);
+drop function if exists public.account_change_v2(uuid, uuid, text, numeric, text);
+drop function if exists public.account_settle_v2(uuid, uuid, numeric, numeric, text, text, text);
+drop function if exists public.account_checkout_open_v2(uuid, uuid, numeric, numeric, numeric);
+drop function if exists public.account_checkout_settle_v2(uuid, text);
+drop function if exists public.settle_offline_sale_v2(uuid, uuid, text, text, timestamptz);
+drop function if exists public.cancel_order_v2(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid);
+drop function if exists public.ring_pos_sale_v2(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int);
+drop function if exists public.ring_pos_account_v2(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int);
+drop function if exists public.approve_write_off_request_v2(uuid, uuid, text, numeric, text);
+drop function if exists public.approve_discount_request_v2(uuid, uuid, text, numeric);
+drop function if exists public.attribute_payment(uuid, uuid, text, jsonb, text, text, boolean);
+
+drop function if exists public.start_refund_due_attempt(uuid, uuid);
+drop function if exists public.finish_refund_due_attempt(uuid, uuid, uuid, text, text, text);

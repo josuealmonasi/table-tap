@@ -21,7 +21,7 @@ export async function chargeAccount(
   expected: number,
   actor: string,
 ): Promise<ChargeResult> {
-  const { data, error } = await createAdminClient().rpc("account_charge", {
+  const { data, error } = await createAdminClient().rpc("account_charge_v2", {
     p_restaurant: restaurantId,
     p_account: accountId,
     p_orders: orderIds,

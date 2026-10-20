@@ -190,7 +190,7 @@ export async function closeBill(
   // Nothing left unpaid: somebody closed it a moment ago, and it is settled.
   if (!owed?.length) return true;
 
-  const { error } = await db.rpc("settle_orders", {
+  const { error } = await db.rpc("settle_orders_v2", {
     p_restaurant: actor.restaurantId,
     p_orders: owed.map(o => o.id),
     p_method: method,

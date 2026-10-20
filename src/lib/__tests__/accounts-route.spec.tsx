@@ -23,7 +23,7 @@ describe("account changes racing a new charge", () => {
   it("refuses a ceiling below debt that arrived after the account was read", async () => {
     rpc.mockResolvedValue({ data: { outcome: "limit", owed: 150 }, error: null });
     expect((await patch({ action: "limit", limit: 100 })).status).toBe(409);
-    expect(rpc).toHaveBeenCalledWith("account_change", {
+    expect(rpc).toHaveBeenCalledWith("account_change_v2", {
       p_restaurant: "r1", p_account: "a1", p_action: "limit", p_limit: 100, p_actor: "ana",
     });
     expect(update).not.toHaveBeenCalled();

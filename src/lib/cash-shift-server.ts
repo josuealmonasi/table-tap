@@ -1,3 +1,4 @@
+import { returnedTrail } from "@/lib/refunds/trail";
 import { returnedAdjustments } from "@/lib/refunds/adjustments";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { everyRow } from "@/lib/paged";
@@ -94,7 +95,9 @@ export async function shiftTrail(restaurantId: string, shift: CashShift): Promis
     .in("entity", Object.keys(TRAIL))
     .gte("created_at", shift.opened_at).lte("created_at", to)
     .order("created_at", { ascending: true }).order("id").range(a, b), "the shift's trail");
-  return data.filter(l => TRAIL[l.entity]?.includes(l.action));
+  const returns = await returnedTrail(restaurantId, shift.opened_at, to);
+  return [...data.filter(l => TRAIL[l.entity]?.includes(l.action)), ...returns]
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
 /** Today's shifts as the register close shows them, each with its sum and trail. */
