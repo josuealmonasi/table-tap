@@ -107,11 +107,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const own = orders.filter(
     o => wanted.has(o.id) && !o.paid && Date.parse(o.created_at) > froze,
   );
-  // The split's frozen food determines its money, even when the menu changed.
-  const frozenOrders = await dinerCheckoutOrders(split.order_ids).catch(() => null);
-  if (!frozenOrders?.length || frozenOrders.length !== split.order_ids.length) return await apiError("apiErr.verifyOrders", 503);
-  const currency = dinerCurrency([...frozenOrders, ...own]);
-  if (!currency) return await apiError("apiErr.mixedCurrencies", 409);
   const ownTotal = round2(own.reduce((sum, o) => sum + Number(o.total), 0));
 
   const payable = round2(Number(claim.amount) + ownTotal);
@@ -174,6 +169,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const giveBackFee = () => releaseFee(fee.id).catch(err => console.error("split pay: the fee reservation stays counted", err));
 
   const origin = siteOrigin(req);
+
+  // The split's frozen food decides the currency it is charged in, even after
+  // a menu change. Asked last, once every refusal about the share's own state
+  // has had its say: asked first, a settled bill or a share already being
+  // opened was answered "could not verify the orders" instead.
+  const frozenOrders = await dinerCheckoutOrders(split.order_ids).catch(() => null);
+  if (!frozenOrders?.length || frozenOrders.length !== split.order_ids.length) {
+    await giveBackFee();
+    return await apiError("apiErr.verifyOrders", 503);
+  }
+  const currency = dinerCurrency([...frozenOrders, ...own]);
+  if (!currency) {
+    await giveBackFee();
+    return await apiError("apiErr.mixedCurrencies", 409);
+  }
 
   try {
     const session = await stripe.checkout.sessions.create(
