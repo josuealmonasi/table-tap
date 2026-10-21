@@ -55,9 +55,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Don't stack duplicates: one open request per table+kind is enough.
+  // Scoped to this restaurant too: matched on the table alone, a row another
+  // restaurant's staff had pointed at this table answered "already asked", and
+  // this table's call for the bill reached nobody.
   const { data: existing } = await admin
     .from("service_requests")
     .select("id")
+    .eq("restaurant_id", restaurantId)
     .eq("table_id", tableId)
     .eq("kind", kind)
     .eq("status", "open")

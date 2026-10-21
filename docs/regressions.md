@@ -14,6 +14,8 @@ us, and what now catches each one.
 
 | Rule | The bug it came from |
 |---|---|
+| Pages never receive the restaurant's credentials (security review H1) | The printer token reached every role's browser and survived their removal |
+| Staff write only a service request's status; duplicates match within the restaurant (H2) | A member pointed a request at another restaurant's table and silenced its calls |
 | Cashier recovery access and upload authority agree (PR2 review) | Losing POS hid the only upload surface while sign-out still protected held money |
 | Deposit identity and display use the same original currency (PR2 review) | A peso deposit was reconciled against a later dollar sale |
 | Saved and verified carts compare line multisets (PR2 review) | Verification moved combos first and falsely flagged unchanged mixed carts |
@@ -2593,3 +2595,28 @@ items, failed reads, unknown currency and changed currencies explicitly say
 that comparison is unavailable; the manager can still recover the saved money.
 `offline-comparison.spec.ts` checks real server pricing; the UI assertions in
 `offline-recovery-ui.spec.tsx` cover the breakdown and unavailable state.
+
+## Security review H1: the printer's credential reached every role's browser
+
+The row `getMembership` reads with the service key and the props a page hands a
+client component had to agree on what leaves the server. The `Restaurant` type
+leaves `print_token` out, but a type removes nothing at runtime: the orders page
+passed the whole row to `OrdersBoard`, so the kitchen login, like every other
+role, received the printer's credential in the page's payload, and it kept
+working after that person was removed. `getMembership` now drops credentials
+from the row before any page sees it. `membership-credentials.spec.ts` checks
+both the owner and the staff path; `pnpm rls` fetches the kitchen's orders page
+and fails if the seeded token is anywhere in it. **Production tokens issued
+before this fix should be rotated** (Settings → printer).
+
+## Security review H2: a member could silence another restaurant's table
+
+The service-request policy and the duplicate lookup had to agree on which
+restaurant a request belongs to. The policy checked the request's own
+`restaurant_id` but left the whole row writable, so a member could point their
+own open request at another restaurant's table; the diner route then matched
+duplicates by table alone and answered that table's real calls for the bill
+"already asked". Staff now write `status` only (open or done), and the lookup
+is scoped to the restaurant. `invariants.spec.ts` holds both; `pnpm rls` tries
+the rewrite as the kitchen login and judges it by effect, with "mark answered"
+as the control.

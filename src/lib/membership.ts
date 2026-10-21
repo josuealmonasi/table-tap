@@ -103,6 +103,22 @@ export interface Membership {
   role: Role;
 }
 
+/**
+ * The restaurant row as pages may see it: everything but its credentials.
+ *
+ * Pages hand `membership.restaurant` to client components, and a client
+ * component's props travel to the browser whole. The `Restaurant` type leaves
+ * `print_token` out, but a type removes nothing at runtime: every role, the
+ * kitchen login included, received the printer's credential in the orders
+ * page's payload, and it kept working after that person was removed. The
+ * printer routes read the token themselves, by restaurant.
+ */
+function withoutCredentials(row: Restaurant): Restaurant {
+  const restaurant: Restaurant & { print_token?: unknown } = { ...row };
+  delete restaurant.print_token;
+  return restaurant;
+}
+
 /** A staff row with its restaurant pulled in by the same query. */
 interface StaffRow {
   role: string;
@@ -157,7 +173,7 @@ export const getMembership = cache(async (): Promise<Membership | null> => {
   const failed = ownedRes.error ?? staffRes.error;
   if (failed) throw new Error(`membership lookup failed: ${failed.message}`);
 
-  if (ownedRes.data) return { restaurant: ownedRes.data as Restaurant, role: "owner" };
+  if (ownedRes.data) return { restaurant: withoutCredentials(ownedRes.data as Restaurant), role: "owner" };
 
   const staff = staffRes.data;
   if (!staff?.restaurant) return null;
@@ -165,5 +181,5 @@ export const getMembership = cache(async (): Promise<Membership | null> => {
   // map through directly. An unrecognised role falls back to the least
   // privileged one rather than being trusted.
   const role: Role = ROLES.includes(staff.role as Role) ? (staff.role as Role) : "kitchen";
-  return { restaurant: staff.restaurant, role };
+  return { restaurant: withoutCredentials(staff.restaurant), role };
 });
