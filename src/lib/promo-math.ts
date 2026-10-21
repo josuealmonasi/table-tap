@@ -21,6 +21,9 @@ export interface QuantityPromo {
  * otherwise pay. Returns `qty * unit` when the promo doesn't apply, so callers
  * can always subtract this from the undiscounted cost to get the saving.
  */
+/** The furthest ahead the cart's "add N more" hint looks. */
+const MAX_HINT_UNITS = 12;
+
 export function promoCost(promo: QuantityPromo, qty: number, unit: number): number {
   if (qty <= 0 || unit < 0) return 0;
 
@@ -37,18 +40,22 @@ export function promoCost(promo: QuantityPromo, qty: number, unit: number): numb
   // Tiered: repeatedly take the largest bracket that still fits, then charge
   // the leftovers at the normal unit price. Largest-first keeps it predictable
   // and means a bigger basket is never worse than a smaller one.
+  // Whole units only, as the guard reads them. A tier of 1e-20 passed the
+  // "positive" check, and subtracting it from 1 never changed the number: the
+  // loop below spun for ever and froze the server for every restaurant.
   const tiers = (promo.tiers ?? [])
-    .filter(t => t.qty > 0 && t.price >= 0)
+    .map(t => ({ qty: Math.floor(Number(t.qty)), price: Number(t.price) }))
+    .filter(t => Number.isFinite(t.qty) && t.qty >= 1 && Number.isFinite(t.price) && t.price >= 0)
     .sort((a, b) => b.qty - a.qty);
   if (tiers.length === 0) return round2(qty * unit);
 
   let left = qty;
   let cost = 0;
   for (const tier of tiers) {
-    while (left >= tier.qty) {
-      cost += tier.price;
-      left -= tier.qty;
-    }
+    // As many whole brackets as fit, counted rather than taken one at a time.
+    const times = Math.floor(left / tier.qty);
+    cost += times * tier.price;
+    left -= times * tier.qty;
   }
   return round2(cost + left * unit);
 }
@@ -64,11 +71,13 @@ export function nextPromoStep(
   unit: number,
 ): { addQty: number; save: number } | null {
   // Only look a small distance ahead — a hint to add six more drinks is noise.
-  const horizon = Math.max(
-    promo.kind === "bogo" ? (promo.buyQty ?? 0) : 0,
-    ...(promo.tiers ?? []).map(t => t.qty),
+  // Capped too: the horizon came from the deal's own numbers, and a tier of
+  // 1e20 units would have priced the cart that many times.
+  const horizon = Math.min(MAX_HINT_UNITS, Math.max(
+    promo.kind === "bogo" ? Math.floor(Number(promo.buyQty) || 0) : 0,
+    ...(promo.tiers ?? []).map(t => Math.floor(Number(t.qty) || 0)),
     1,
-  );
+  ));
   const current = promoCost(promo, qty, unit);
   for (let add = 1; add <= horizon; add++) {
     const save = round2(current + add * unit - promoCost(promo, qty + add, unit));

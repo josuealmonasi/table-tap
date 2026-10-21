@@ -197,9 +197,18 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ token: s
   // that is not a uuid is a database error, not a 200 with nothing done.
   const echoed = req.nextUrl.searchParams.get("token");
   const jobId = echoed && UUID.test(echoed) ? echoed : null;
+
+  // The printer says how it went in `code`: OK (or a 2xx) when the ticket came
+  // out, anything else when it could not print it. Every confirmation used to
+  // close the job, so a printer out of paper reported 520 and the order left
+  // the queue unprinted. A failure leaves it queued for the printer to try
+  // again; a printer that sends no code at all is read as it always was.
+  const code = req.nextUrl.searchParams.get("code");
+  if (code !== null && !/^\s*(ok|2\d\d)\b/i.test(code)) return new NextResponse(null, { status: 200 });
+
   const job = jobId ? { id: jobId } : await pendingJob(printer.restaurantId);
   if (job) {
-    await createAdminClient()
+    const { error } = await createAdminClient()
       .from("print_jobs")
       .update({ printed_at: new Date().toISOString() })
       .eq("id", job.id as string)
@@ -207,6 +216,8 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ token: s
       // somewhere else closes nothing.
       .eq("restaurant_id", printer.restaurantId)
       .is("printed_at", null);
+    // Not closed is not printed: answered 500, the printer confirms again.
+    if (error) return new NextResponse(null, { status: 500 });
   }
   return new NextResponse(null, { status: 200 });
 }

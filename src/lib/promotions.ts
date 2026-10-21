@@ -54,6 +54,9 @@ export function buildCombos(
 
   for (const promo of promos) {
     if (promo.kind !== "combo" || !promo.active || promo.combo_price == null) continue;
+    // A price the database should never hold, skipped rather than honoured: a
+    // combo at -90 made the rest of a MX$100 cart cost MX$10.
+    if (!Number.isFinite(Number(promo.combo_price)) || Number(promo.combo_price) < 0) continue;
     if (promo.items.length === 0) continue;
 
     const components: ComboComponent[] = [];

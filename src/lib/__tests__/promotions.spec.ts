@@ -68,6 +68,12 @@ describe("buildCombos", () => {
     expect(combo.components[0].qty).toBe(3);
   });
 
+  it("skips a combo whose stored price is negative", () => {
+    // Managers write promotions directly; a combo at -90 made the rest of a
+    // MX$100 cart cost MX$10. The database now refuses it, and this skips one.
+    expect(buildCombos([promo({ combo_price: -90 })], MENU)).toEqual([]);
+  });
+
   it("drops the combo when a component sold out", () => {
     const menu = new Map(MENU);
     menu.set("drink", item("drink", "Drink", 5, false));

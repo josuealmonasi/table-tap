@@ -8037,3 +8037,29 @@ revoke all on function public.decide_table_member(uuid, uuid, uuid, boolean, tex
 grant execute on function public.decide_table_member(uuid, uuid, uuid, boolean, text, text) to service_role;
 
 revoke truncate, references, trigger on all tables in schema public from authenticated;
+
+-- ── Prices the database will hold (security review J3, J4) ──────────────────
+-- Managers write promotions and dishes directly under their policies, and the
+-- order verifier trusts the stored price: a combo at -90 made the rest of a
+-- MX$100 cart cost MX$10, and a tier of 1e-20 units froze pricing for every
+-- restaurant. No row broke these when they were added (dev and production).
+create or replace function public.tiers_sound(p_tiers jsonb)
+returns boolean language sql immutable set search_path = public as $$
+  select p_tiers is null or (jsonb_typeof(p_tiers) = 'array' and jsonb_array_length(p_tiers) <= 20
+    and not exists (select 1 from jsonb_array_elements(p_tiers) t
+      where jsonb_typeof(t->'qty') <> 'number' or jsonb_typeof(t->'price') <> 'number'
+         or (t->>'qty')::numeric < 1 or (t->>'qty')::numeric > 1000
+         or (t->>'qty')::numeric <> floor((t->>'qty')::numeric) or (t->>'price')::numeric < 0));
+$$;
+revoke all on function public.tiers_sound(jsonb) from public, anon, authenticated;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'menu_items_price_not_negative') then
+    alter table menu_items add constraint menu_items_price_not_negative check (price >= 0);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'promotions_combo_price_not_negative') then
+    alter table promotions add constraint promotions_combo_price_not_negative check (combo_price is null or combo_price >= 0);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'promotions_tiers_sound') then
+    alter table promotions add constraint promotions_tiers_sound check (public.tiers_sound(tiers));
+  end if;
+end $$;

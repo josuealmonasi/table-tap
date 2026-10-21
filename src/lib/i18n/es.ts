@@ -1395,6 +1395,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     promoBogoQty: "Ingresa cuántos se lleva y cuántos paga.",
     promoBogoLess: "Debe pagar por menos de los que se lleva.",
     promoTierNeeded: "Agrega al menos un precio por cantidad.",
+    promoTierInvalid: "Cada precio por cantidad necesita una cantidad entera, de 1 a 1000, y un precio.",
     promoKind: "Elige un tipo de promoción.",
     promoUnknownProduct: "Producto desconocido.",
     promoCreate: "No se pudo crear la promoción.",

@@ -1401,6 +1401,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     promoBogoQty: "Enter how many they take and how many they pay for.",
     promoBogoLess: "They must pay for fewer than they take.",
     promoTierNeeded: "Add at least one price break.",
+    promoTierInvalid: "Each price break needs a whole quantity, from 1 to 1,000, and a price.",
     promoKind: "Pick a promotion type.",
     promoUnknownProduct: "Unknown product.",
     promoCreate: "Could not create the promotion.",
