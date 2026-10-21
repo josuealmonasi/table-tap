@@ -1338,6 +1338,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     badCover: "That image must be uploaded here, not linked from elsewhere.",
     payLaterNotAllowed: "This restaurant takes payment when you order.",
     billSettled: "That bill has already been paid.",
+    collectionFailed: "Could not record this collection. Try again with the same amount; do not take the money again.",
     nothingToSettle: "That table has nothing outstanding.",
     billChanged: "The bill changed while you were collecting it. Check it and collect again.",
     waiterSettles: "Your waiter is settling this table. Ask them for the bill.",

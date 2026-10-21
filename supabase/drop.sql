@@ -170,6 +170,7 @@ drop function if exists public.allocate_receipt(uuid) cascade;
 drop function if exists public.finish_payment_allocation() cascade;
 drop function if exists public.check_receipt_allocations() cascade;
 drop function if exists public.backfill_payment_allocations(uuid) cascade;
+drop function if exists public.collect_on_sittings_v1(uuid, jsonb, text, text, text, numeric) cascade;
 drop function if exists public.collect_on_sitting_v2(uuid, uuid, numeric, numeric, text, text, text) cascade;
 drop function if exists public.order_refund_coverage(uuid, uuid) cascade;
 drop function if exists public.prepare_order_refund(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) cascade;

@@ -1332,6 +1332,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     badCover: "Esa imagen debe subirse aquí, no enlazarse desde otro sitio.",
     payLaterNotAllowed: "Este restaurante cobra al momento de ordenar.",
     billSettled: "Esa cuenta ya fue pagada.",
+    collectionFailed: "No pudimos registrar este cobro. Inténtalo de nuevo con el mismo importe; no vuelvas a pedir el dinero.",
     nothingToSettle: "Esa mesa no tiene nada pendiente.",
     billChanged: "La cuenta cambió mientras la cobrabas. Revísala y vuelve a cobrar.",
     waiterSettles: "Tu mesero está cobrando esta mesa. Pídele la cuenta.",

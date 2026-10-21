@@ -1,7 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Actor } from "@/lib/api-guard";
 import { closeSessionsFor, openSession } from "@/lib/table-session";
-import { endSplitsFor } from "@/lib/split-service";
 import { type Outstanding } from "@/lib/table-outstanding";
 import { shareOut } from "@/lib/table-balance";
 import { round2 } from "@/lib/money";
@@ -21,7 +20,7 @@ import { round2 } from "@/lib/money";
  *
  * @returns `wrote` — something new reached the ledger — `refused`, which says a
  * row was turned down as a copy of one already there, and `landed`, the amount
- * that ACTUALLY went down. Both flags false means the insert failed outright
+ * that ACTUALLY went down. All three flags false means the insert failed outright
  * and the money is nowhere, which is a different answer from "already
  * recorded" and must not be reported as one.
  *
@@ -37,9 +36,10 @@ export async function record(
   taken: { amount: number; tip: number },
   method: "cash" | "card",
   ref: string,
+  requested = taken.amount,
 ): Promise<{ wrote: boolean; refused: boolean; covered: boolean; landed: number }> {
   // The first sitting is credited with the gratuity it is ABOUT to receive:
-  // `addTip` puts it on the oldest order a moment from now, and splitting the
+  // the transaction puts it on the oldest order, and splitting the
   // money against totals that do not include it yet spills the tip into the
   // next sitting's share — which then reads as money it never owed.
   const owedNow = before.sittings.map((sitting, n) =>
@@ -53,8 +53,9 @@ export async function record(
   const split = owedNow.length > 0 ? shareOut(taken.amount, owedNow) : [];
   const across = split.length > 0 ? split : [{ id: fallback, amount: taken.amount }];
 
-  // Each share goes down under a lock on its own sitting, where what is owed
-  // is read live. The balance this request started from is already stale by
+  // Every share goes down in one transaction, under the restaurant money lock
+  // and then the sitting locks, where what is owed is read live. The balance
+  // this request started from is already stale by
   // now if anybody else is collecting on the same table — which is how two
   // waiters took MX$400 for a MX$200 dinner.
   const db = createAdminClient();
@@ -62,22 +63,30 @@ export async function record(
   let refused = false;
   let covered = false;
   let landedTotal = 0;
-  for (const [n, share] of across.entries()) {
-    const { data } = await db.rpc("collect_on_sitting_v2", {
+  const { data, error } = await db.rpc("collect_on_sittings_v1", {
+    p_restaurant: actor.restaurantId,
+    p_method: method,
+    p_actor: actor.email,
+    p_ref: ref,
+    // The original handful, before today's remaining bill capped it. A retry
+    // subtracts receipts already recorded, rather than taking the rest twice.
+    p_total: requested,
+    p_shares: across.map((share, n) => ({
       // The sitting, not an order: this money belongs to the table, and
       // pinning it to one of the orders would say that dish was paid for when
       // what was handed over covers a share of all of them.
-      p_restaurant: actor.restaurantId,
-      p_session: share.id,
-      p_amount: share.amount,
+      session_id: share.id,
+      amount: share.amount,
       // The gratuity rides with the first share, which is the oldest sitting —
-      // the same one whose order `addTip` puts it on.
-      p_tip: n === 0 ? taken.tip : 0,
-      p_method: method,
-      p_actor: actor.email,
-      p_ref: n === 0 ? ref : `${ref}#${n}`,
-    });
-    const outcome = (data as { taken?: number; outcome?: string } | null) ?? {};
+      // the same one whose order receives it inside the transaction.
+      tip: n === 0 ? taken.tip : 0,
+    })),
+  });
+  if (error) {
+    console.error("could not record the table collection:", error.message);
+    return { wrote: false, refused: false, covered: false, landed: 0 };
+  }
+  for (const outcome of (data ?? []) as { taken: number; outcome: string }[]) {
     if (outcome.outcome === "written") {
       wrote = true;
       landedTotal = round2(landedTotal + Number(outcome.taken ?? 0));
@@ -110,9 +119,8 @@ export async function record(
   // duplicate left the table's split ended and no money recorded. A retry is
   // the exception and still ends it, because on a retry the first attempt
   // already collected.
-  if (wrote || refused) {
-    for (const share of across) await endSplitsFor(share.id);
-  }
+  // This happens inside the batch now, so a failed split write rolls the
+  // receipts and the tip back too; there is no separate unchecked write.
 
   return { wrote, refused, covered, landed: landedTotal };
 }
