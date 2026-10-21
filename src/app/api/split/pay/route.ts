@@ -1,6 +1,7 @@
 import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
 import { dinerCurrency } from "@/lib/diner-currency";
-import { recordDinerCheckout } from "@/lib/diner-checkout";
+import { openDinerAttempt, resumeDinerAttempt } from "@/lib/diner-attempt";
+import { billEntitlements, remainingPrincipal } from "@/lib/bill-principal";
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { packOrderIds, stripeProductName } from "@/lib/stripe-limits";
@@ -13,8 +14,7 @@ import { fetchTableBill } from "@/lib/bill-data";
 import { tableBill } from "@/lib/table-bill";
 import { getPlan } from "@/lib/plan-server";
 import {
-  NO_FEE, attachFeeSession, feeMetadata, feeRefOpen, releaseFee, reserveFeeCents, retirePriorShareSession,
-  stripeRefusedOutright,
+  NO_FEE, feeMetadata, releaseFee, reserveFeeCents,
 } from "@/lib/platform-fee";
 import { orderFeeCents } from "@/lib/plan";
 import { round2 } from "@/lib/money";
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const { data: split } = await db
     .from("bill_splits")
-    .select("id, status, locked_at, session_id, shares, amount, restaurant_id, order_ids")
+    .select("id, status, locked_at, session_id, shares, amount, food_principal, restaurant_id, order_ids")
     .eq("id", splitId)
     .eq("session_id", sessionId)
     .maybeSingle();
@@ -97,6 +97,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!claim) return await apiError("apiErr.splitNotYours", 403);
   if (claim.paid_at) return await apiError("apiErr.splitAlreadyPaid", 409);
 
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+  const scopeKey = `split:${splitId}:${claim.share_no}`;
+  try {
+    const prior = await resumeDinerAttempt(stripe, restaurantId, scopeKey);
+    if (prior) return NextResponse.json({ url: prior.url });
+  } catch { return await apiError("apiErr.checkoutFailed", 502); }
+
   // Their own orders since the freeze — verified, never taken on trust: unpaid,
   // at this table's sitting, and placed after it locked.
   const orders = await fetchTableBill(restaurantId, tableId, "diner", sessionId);
@@ -107,7 +114,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const own = orders.filter(
     o => wanted.has(o.id) && !o.paid && Date.parse(o.created_at) > froze,
   );
-  const ownTotal = round2(own.reduce((sum, o) => sum + Number(o.total), 0));
+  const ownTotal = round2(own.reduce((sum, o) => sum + Number(o.total) - Number(o.collected ?? 0), 0));
 
   const payable = round2(Number(claim.amount) + ownTotal);
   if (payable <= 0) return await apiError("apiErr.billSettled", 409);
@@ -127,46 +134,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // still one bill, and charging the restaurant four times for the courtesy of
   // splitting it would be a fee for using the feature. So each share carries
   // its slice of that one fee (the odd cents on share 1), reserved under its
-  // own `ref`. It used to ride whole on whichever share opened first, and a
+  // own attempt. It used to ride whole on whichever share opened first, and a
   // share abandoned and reopened after another paid left the bill fee-free;
   // two shares opened at once each carried the whole fee.
   const feePlan = await getPlan(restaurantId);
-  const billFee = feePlan ? orderFeeCents(feePlan.limits, Math.round(Number(split.amount) * 100)) : 0;
+  // A frozen principal never grows with this or another share's gratuity.
+  // A pre-deploy split has no frozen principal: use what its food still owes.
+  // That may take a smaller fee, but never asks diners to restart their split.
+  const foodPrincipal = split.food_principal ?? remainingPrincipal(orders.filter(o => split.order_ids.includes(o.id)));
+  const billFee = feePlan ? orderFeeCents(feePlan.limits, Math.round(Number(foodPrincipal) * 100)) : 0;
   const shares = Math.max(1, Number(split.shares) || 1);
-  const slice = Math.floor(billFee / shares) + (claim.share_no === 1 ? billFee % shares : 0);
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-  const onTheirAccount = { stripeAccount: restaurant.stripe_account_id };
-  const ref = `split:${splitId}:${claim.share_no}`;
+  const slice = Math.floor(billFee / shares) + (claim.share_no === 0 ? billFee % shares : 0);
   let fee = NO_FEE;
   try {
     if (feePlan && slice > 0) {
-      // The share reopened: its earlier session is expired first, so the new
-      // one carries the slice and the old can no longer be paid fee-free.
-      const prior = await retirePriorShareSession(
-        restaurantId, ref,
-        id => stripe.checkout.sessions.expire(id, {}, onTheirAccount),
-        id => stripe.checkout.sessions.retrieve(id, {}, onTheirAccount),
-      );
-      if (prior === "paid") return await apiError("apiErr.splitAlreadyPaid", 409);
-      fee = await reserveFeeCents(restaurantId, feePlan.limits, slice, "split", ref);
-      // Nothing reserved while the share's fee is still held: another request
-      // is opening its checkout right now, or opened one whose session was
-      // never noted. A second, fee-free session would be payable beside it —
-      // and a diner who paid both paid for their share twice.
-      if (!fee.id) {
-        if (await feeRefOpen(restaurantId, ref)) return await apiError("apiErr.sharePayingOnline", 409);
-        // Nothing held either: the ceiling is reached — or the other request
-        // gave its reservation back between the two reads. Asked once more,
-        // so a slice released a moment ago is still charged.
-        fee = await reserveFeeCents(restaurantId, feePlan.limits, slice, "split", ref);
-        if (!fee.id && await feeRefOpen(restaurantId, ref)) return await apiError("apiErr.sharePayingOnline", 409);
-      }
+      // The attempt excludes a second session even when the fee is zero.
+      // Each paid share still carries its slice of the table's single fee.
+      fee = await reserveFeeCents(restaurantId, feePlan.limits, slice, "split");
     }
   } catch {
     return await apiError("apiErr.generic", 502);
   }
   const appFee = fee.cents;
-  const giveBackFee = () => releaseFee(fee.id).catch(err => console.error("split pay: the fee reservation stays counted", err));
 
   const origin = siteOrigin(req);
 
@@ -174,6 +163,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // a menu change. Asked last, once every refusal about the share's own state
   // has had its say: asked first, a settled bill or a share already being
   // opened was answered "could not verify the orders" instead.
+  // No attempt is open yet, so the share's fee slice is all there is to give back.
+  const giveBackFee = () => releaseFee(fee.id).catch(err => console.error("split pay: the fee reservation stays counted", err));
   const frozenOrders = await dinerCheckoutOrders(split.order_ids).catch(() => null);
   if (!frozenOrders?.length || frozenOrders.length !== split.order_ids.length) {
     await giveBackFee();
@@ -186,7 +177,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const session = await stripe.checkout.sessions.create(
+    const session = await openDinerAttempt(stripe,
       {
         mode: "payment",
         // Cards only, as every checkout (see `card-session.ts`).
@@ -221,21 +212,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         success_url: `${origin}/r/${restaurantId}/t/${tableId}?settled=1`,
         cancel_url: `${origin}/r/${restaurantId}/t/${tableId}?cancelled=1`,
       },
-      { stripeAccount: restaurant.stripe_account_id },
+      {
+        restaurantId, stripeAccount: restaurant.stripe_account_id, currency, amountCents: cents,
+        orderIds: [...split.order_ids, ...own.map(o => o.id)], payableIds: own.map(o => o.id), scopeKey,
+        entitlements: billEntitlements(own, 0).entitlements, foodPrincipal: Number(foodPrincipal),
+      },
     );
 
-    await recordDinerCheckout(session, {
-      restaurantId, stripeAccount: restaurant.stripe_account_id, currency, amountCents: cents,
-      orderIds: [...split.order_ids, ...own.map(o => o.id)],
-    }, () => stripe.checkout.sessions.expire(session.id, {}, onTheirAccount));
-    await attachFeeSession(fee, session.id);
     // A session with no page is still a session: its fee waits for expiry.
     if (!session.url) return await apiError("apiErr.generic", 502);
     return NextResponse.json({ url: session.url });
-  } catch (err) {
+  } catch {
     // Released only when Stripe refused outright: an answer that never
     // arrived may still be a session, which Stripe's expiry releases.
-    if (stripeRefusedOutright(err)) await giveBackFee();
+    // `openDinerAttempt` releases only the reservation it knows was refused.
     return await apiError("apiErr.generic", 502);
   }
 }

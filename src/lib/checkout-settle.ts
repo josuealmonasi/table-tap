@@ -1,3 +1,4 @@
+import { finishDinerCheckout } from "@/lib/diner-attempt";
 import { closeSessionsFor } from "@/lib/table-session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { unpackOrderIds } from "@/lib/stripe-limits";
@@ -49,10 +50,11 @@ export async function settleCheckout(session: Stripe.Checkout.Session, context: 
   const meta = session.metadata ?? {};
   await takeFee(session, { feeId: meta.fee_id, feeCents: meta.fee_cents, restaurantId: meta.restaurant_id });
 
-  if (session.metadata?.account_checkout) return await settleAccountCheckout(session);
-  if (session.metadata?.split_id) return await settleSplitShare(session);
-  if ((session.metadata?.settle_order_ids ?? "").trim()) return await settleBill(session);
-  if (session.metadata?.order_id) return await settleOrder(session);
+  if (session.metadata?.account_checkout) await settleAccountCheckout(session);
+  else if (session.metadata?.split_id) await settleSplitShare(session);
+  else if ((session.metadata?.settle_order_ids ?? "").trim()) await settleBill(session);
+  else if (session.metadata?.order_id) await settleOrder(session);
+  await finishDinerCheckout(session, true);
 }
 
 /**
@@ -177,8 +179,6 @@ async function settleBill(session: Stripe.Checkout.Session): Promise<void> {
   // created before the split shipped carries them all in the first one, and
   // reads back the same way.
   const settleIds = unpackOrderIds(session.metadata);
-  const db = createAdminClient();
-
   // The tip was collected against the table, not a dish, so it rides on one
   // order: the first of the ones asked for if this delivery settles it,
   // otherwise the first it does settle — and only ever one THIS delivery
@@ -194,24 +194,10 @@ async function settleBill(session: Stripe.Checkout.Session): Promise<void> {
   // Paid in full is the ordinary way a table empties.
   await closeSessionsFor(settled.sessions, "paid");
 
-  // The coupon use was reserved when the bill was sent to Stripe; the
-  // payment makes it real, and the code is stamped on the order it paid
-  // for so the same orders can never take a second one.
-  const settleCoupon = session.metadata?.settle_coupon ?? "";
-  if (settleCoupon) {
-    await db
-      .from("orders")
-      .update({
-        coupon_code: settleCoupon,
-        discount: Number(session.metadata?.settle_discount ?? 0),
-      })
-      .eq("id", settleIds[0]);
-    await db
-      .from("coupon_redemptions")
-      .update({ confirmed_at: new Date().toISOString() })
-      .eq("order_id", settleIds[0])
-      .is("confirmed_at", null);
-  }
+  // The coupon use was reserved by this attempt before Stripe was asked.
+  // `settle_card_orders_v2` applies its frozen per-order discounts with the
+  // receipts. `finishDinerCheckout` confirms only this attempt's reservation.
+  // The code stays on every discounted order, so it cannot take a second one.
 }
 
 /**
@@ -220,7 +206,6 @@ async function settleBill(session: Stripe.Checkout.Session): Promise<void> {
 async function settleOrder(session: Stripe.Checkout.Session): Promise<void> {
   const orderId = session.metadata!.order_id!;
 
-  const supabase = createAdminClient();
   // Only an order still unpaid is touched, and only the delivery that settles
   // it records it: a webhook Stripe repeats settles nothing the second time.
   const settled = await settleCardOrders([orderId], session, "settling an order", { status: "received" });
@@ -228,10 +213,6 @@ async function settleOrder(session: Stripe.Checkout.Session): Promise<void> {
   // A pay-now order can be the only thing the table owed.
   await closeSessionsFor(settled.sessions, "paid");
 
-  // The coupon use was reserved at checkout; the payment makes it real.
-  await supabase
-    .from("coupon_redemptions")
-    .update({ confirmed_at: new Date().toISOString() })
-    .eq("order_id", orderId)
-    .is("confirmed_at", null);
+  // The coupon use was reserved at checkout; this attempt's verified payment
+  // confirms only its own reservation in `finishDinerCheckout`.
 }

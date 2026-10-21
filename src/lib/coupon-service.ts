@@ -150,7 +150,7 @@ export async function logRedemption(params: {
   amount: number;
   settled?: boolean;
 }): Promise<void> {
-  await createAdminClient().from("coupon_redemptions").insert({
+  const { error } = await createAdminClient().from("coupon_redemptions").insert({
     restaurant_id: params.restaurantId,
     coupon_id: params.couponId,
     order_id: params.orderId,
@@ -158,4 +158,5 @@ export async function logRedemption(params: {
     amount: params.amount,
     confirmed_at: params.settled ? new Date().toISOString() : null,
   });
+  if (error) throw new Error(`Could not record the coupon reservation: ${error.message}`);
 }

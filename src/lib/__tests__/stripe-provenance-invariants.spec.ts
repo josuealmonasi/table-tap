@@ -6,15 +6,15 @@ const schema = read("supabase/schema.sql");
 // checked at release time, not a file in the repo.
 
 it("every diner session producer saves provenance before exposing its URL", () => {
-  for (const file of ["src/lib/checkout/card-session.ts", "src/app/api/bill/pay/route.ts",
-    "src/app/api/split/pay/route.ts", "src/app/api/account/pay/route.ts"]) {
+  for (const file of ["src/lib/checkout/card-session.ts", "src/lib/diner-attempt.ts"]) {
     const source = read(file);
     const created = source.indexOf("await stripe.checkout.sessions.create(");
     const saved = source.indexOf("await recordDinerCheckout(");
-    const returned = source.indexOf(file.includes("card-session") ? "return session" : "return NextResponse.json({ url:");
+    const returned = source.indexOf("return session");
     expect(created, file).toBeGreaterThan(-1);
     expect(saved, file).toBeGreaterThan(created);
     expect(returned, file).toBeGreaterThan(saved);
+    if (file.includes("diner-attempt")) expect(source).toContain("idempotencyKey: attempt.idempotency_key");
   }
 });
 it("both webhook mutations pass the signed account/mode into provenance before dispatch", () => {

@@ -84,6 +84,7 @@ export function useBillPayment(
         body: JSON.stringify({
           restaurantId,
           tableId,
+          sessionId,
           // Which orders, and how much to add on top. The food's price is
           // summed from the stored rows either way.
           orderIds: pay.orderIds,

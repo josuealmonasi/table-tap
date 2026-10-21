@@ -1401,7 +1401,12 @@ describe("every fact sent to Stripe is read back", () => {
     const everyShape = bodyOf(settle, "settleCheckout");
     const orphans: string[] = [];
     for (const [route, fn] of PAIRS) {
-      const body = bodyOf(settle, fn) + everyShape;
+      // Frozen coupon metadata is consumed under the receipt transaction's lock.
+      const couponSql = fn === "settleBill"
+        ? read("supabase/schema.sql").split("create or replace function public.settle_card_orders_v2(")[1]?.split("$$;")[0] ?? "" : "";
+      const quoteSql = fn === "settleBill"
+        ? read("supabase/schema.sql").split("create or replace function public.diner_checkout_open(")[1]?.split("$$;")[0] ?? "" : "";
+      const body = bodyOf(settle, fn) + everyShape + couponSql + quoteSql;
       // A file that writes no metadata would pass this by saying nothing.
       expect(keysWritten(route).length, `${route} writes no Stripe metadata — has the session moved?`).toBeGreaterThan(0);
       for (const key of keysWritten(route)) {
@@ -2753,7 +2758,7 @@ describe("a diner pays by card, and only by card", () => {
     // paid days later completes the session unpaid, `settleCheckout` ignores
     // it, and no handler records the money when it lands. A diner's meal is
     // paid at the table, by card.
-    const sessions = walk("src").filter(f => /checkout\.sessions\.create\(/.test(read(f)) && !f.includes("/billing/") && !/mode:\s*"subscription"/.test(read(f)));
+    const sessions = walk("src").filter(f => /checkout\.sessions\.create\(|await openDinerAttempt\(/.test(read(f)) && !f.endsWith("/diner-attempt.ts") && !f.includes("/billing/") && !/mode:\s*"subscription"/.test(read(f)));
     expect(sessions.length, "the scan found no diner checkout").toBeGreaterThanOrEqual(4);
     expect(sessions.filter(f => !/payment_method_types: \["card"\]/.test(read(f))), "a diner checkout that lets Stripe choose the payment method").toEqual([]);
   });

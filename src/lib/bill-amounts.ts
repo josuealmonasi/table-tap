@@ -40,14 +40,14 @@ export function billAmounts(
 ): BillAmounts {
   const food = scope === "mine" ? bill.mine.total : bill.total;
   const applied = scope === "mine" ? bill.mine.discount : bill.discount;
-  const couponOff = coupon ? applyCoupon(coupon, food) : 0;
+  const priorTip = scope === "mine" ? bill.mine.tip : bill.tip;
+  const couponOff = coupon ? applyCoupon(coupon, Math.max(0, round2(food - priorTip))) : 0;
   const discount = round2(applied + couponOff);
   const base = round2(food - couponOff);
   const tip =
     tipCustom !== null ? Math.min(tipCustom, base) : round2(base * (tipPct / 100));
   const total = round2(base + tip);
   const service = scope === "mine" ? bill.mine.service : bill.service;
-  const priorTip = scope === "mine" ? bill.mine.tip : bill.tip;
   const dishes = round2(food - service - priorTip);
   return {
     food,
