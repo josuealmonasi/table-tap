@@ -8,7 +8,7 @@ import { needsExplanation, shiftDifference, shiftNote, shiftSum, type CashShift 
  */
 
 const shift = (over: Partial<CashShift> = {}): CashShift => ({
-  id: "s1", opened_by: "caja@x.dev", opened_at: "2026-10-14T13:00:00Z", opening_amount: 250,
+  id: "s1", currency: "MXN", opened_by: "caja@x.dev", opened_at: "2026-10-14T13:00:00Z", opening_amount: 250,
   closed_by: null, closed_at: null, counted_cash: null, expected_cash: null, difference: null,
   difference_note: null, explained_by: null, ...over,
 });

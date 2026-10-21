@@ -5,8 +5,8 @@ import { actingStaff } from "@/lib/api-guard";
 import { HOLDS_THE_DRAWER, MANAGES } from "@/lib/membership";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cashAmount } from "@/lib/cash-drawer";
-import { shiftDifference, shiftNote } from "@/lib/cash-shift";
-import { openShift, shiftSumOf } from "@/lib/cash-shift-server";
+import { shiftNote } from "@/lib/cash-shift";
+import { openShift } from "@/lib/cash-shift-server";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 
@@ -51,24 +51,20 @@ export async function POST(req: NextRequest) {
     if (counted === null) return await apiError("apiErr.cashAmount", 400);
     const shift = await openShift(actor.restaurantId);
     if (!shift) return await apiError("apiErr.noOpenShift", 409);
-    const closedAt = new Date();
-    const sum = await shiftSumOf(actor.restaurantId, shift, closedAt);
-    const difference = shiftDifference(counted, sum.expected);
     // Only the shift still open: two people closing at once close it once.
-    const { data, error } = await db.from("cash_shifts")
-      .update({
-        closed_by: actor.email, closed_at: closedAt.toISOString(),
-        counted_cash: counted, expected_cash: sum.expected, difference,
-      })
-      .eq("id", shift.id).eq("restaurant_id", actor.restaurantId).is("closed_at", null)
-      .select("id");
+    // The sum and the signature belong to one transaction, after every earlier
+    // money writer and before another withdrawal can change the drawer.
+    const { data, error } = await db.rpc("close_cash_shift", {
+      p_restaurant: actor.restaurantId, p_shift: shift.id, p_counted: counted, p_actor: actor.email,
+    });
     if (error) return await apiError("apiErr.generic", 500);
-    if (!data?.length) return await apiError("apiErr.noOpenShift", 409);
+    if (!data) return await apiError("apiErr.noOpenShift", 409);
     await logEvent({
       restaurantId: actor.restaurantId, actor: actor.email, entity: "cash", action: "closed",
-      detail: logDetail({ counted: counted.toFixed(2), expected: sum.expected.toFixed(2), difference: difference.toFixed(2) }),
+      detail: logDetail({ counted: counted.toFixed(2), expected: Number(data.expected).toFixed(2),
+        difference: Number(data.difference).toFixed(2), currency: data.currency }),
     });
-    return NextResponse.json({ ok: true, id: shift.id, ...sum, counted, difference });
+    return NextResponse.json({ ok: true, ...data });
   }
 
   if (body?.action === "explain") {

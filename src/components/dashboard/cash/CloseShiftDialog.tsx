@@ -15,6 +15,7 @@ interface CloseShiftDialogProps {
 }
 
 interface Closed {
+  currency: string;
   id: string;
   expected: number;
   counted: number;
@@ -31,7 +32,6 @@ interface Closed {
 export default function CloseShiftDialog({ open, currency, onClose, onClosed }: CloseShiftDialogProps) {
   const t = useT();
   const toast = useToast();
-  const money = (n: number) => formatMoney(n, currency);
   const [counted, setCounted] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [closed, setClosed] = useState<Closed | null>(null);
@@ -39,6 +39,7 @@ export default function CloseShiftDialog({ open, currency, onClose, onClosed }: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [wasOpen, setWasOpen] = useState(false);
+  const money = (n: number) => formatMoney(n, closed?.currency ?? currency);
 
   // Each time it opens it starts at the count.
   if (open !== wasOpen) {
@@ -81,6 +82,7 @@ export default function CloseShiftDialog({ open, currency, onClose, onClosed }: 
     if (!data) return;
     setClosed({
       id: String(data.id),
+      currency: String(data.currency),
       expected: Number(data.expected),
       counted: Number(data.counted),
       difference: Number(data.difference),
@@ -112,7 +114,7 @@ export default function CloseShiftDialog({ open, currency, onClose, onClosed }: 
         <form className="tt-prodform" onSubmit={e => void count(e)}>
           <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>{t("shift.countHint")}</p>
           <label className="tt-field">
-            <span className="tt-mod-label">{t("shift.counted")}</span>
+            <span className="tt-mod-label">{t("shift.counted")} · {currency}</span>
             <input
               className="tt-input"
               inputMode="decimal"

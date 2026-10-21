@@ -1,5 +1,6 @@
 import { memberFixture } from "./table-member-fixture.mjs";
 import { attackTableJoin } from "./attack-table-join.mjs";
+import { attackCashShift } from "./attack-cash-shift.mjs";
 // ============================================================================
 // TableTap — attacking the routes that move money.
 //
@@ -822,6 +823,7 @@ try {
   await attackTableJoin({ admin, base, who, home, ok, bad });
 
   await attackStock({ admin, ok, bad });
+  await attackCashShift({ ok, bad });
 
   // ── The visit card ─────────────────────────────────────────────────────
   // Not money in the till, but a free meal is: another restaurant's card, the

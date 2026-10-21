@@ -8037,3 +8037,169 @@ revoke all on function public.decide_table_member(uuid, uuid, uuid, boolean, tex
 grant execute on function public.decide_table_member(uuid, uuid, uuid, boolean, text, text) to service_role;
 
 revoke truncate, references, trigger on all tables in schema public from authenticated;
+
+-- S9: the drawer keeps the currency it opened in. Old rows have no evidence
+-- of the float's original currency; receipts alone cannot prove it. Use the
+-- restaurant's currency today for those rows, rather than invent a history.
+alter table cash_shifts add column if not exists currency text;
+update cash_shifts s set currency = r.currency from restaurants r
+  where r.id = s.restaurant_id and s.currency is null;
+alter table cash_shifts alter column currency set not null;
+alter table cash_movements add column if not exists currency text;
+update cash_movements m set currency = s.currency from cash_shifts s
+  where s.id = m.shift_id and s.restaurant_id = m.restaurant_id and m.currency is null;
+update cash_movements m set currency = r.currency from restaurants r
+  where r.id = m.restaurant_id and m.currency is null;
+alter table cash_movements alter column currency set not null;
+
+-- Fill omitted currencies so the deployed routes still work before the new
+-- routes ship. A menu currency change never relabels an existing drawer.
+create or replace function public.freeze_cash_currency()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'UPDATE' then
+    if new.currency is distinct from old.currency or new.restaurant_id is distinct from old.restaurant_id then
+      raise exception 'drawer currency is immutable';
+    end if;
+    if tg_table_name = 'cash_movements' then
+      if new.shift_id is distinct from old.shift_id then raise exception 'withdrawal shift is immutable'; end if;
+    end if;
+    return new;
+  end if;
+  if tg_table_name = 'cash_movements' then
+    if new.shift_id is not null then
+      select currency into new.currency from cash_shifts
+        where id = new.shift_id and restaurant_id = new.restaurant_id;
+      if not found then raise exception 'withdrawal shift not found'; end if;
+      return new;
+    end if;
+  end if;
+  select currency into new.currency from restaurants where id = new.restaurant_id;
+  return new;
+end;
+$$;
+revoke all on function public.freeze_cash_currency() from public, anon, authenticated;
+grant execute on function public.freeze_cash_currency() to service_role;
+drop trigger if exists freeze_cash_currency on cash_shifts;
+create trigger freeze_cash_currency before insert or update on cash_shifts
+  for each row execute function public.freeze_cash_currency();
+drop trigger if exists freeze_cash_currency on cash_movements;
+create trigger freeze_cash_currency before insert or update on cash_movements
+  for each row execute function public.freeze_cash_currency();
+
+-- One calculation for both the signed close and the later review. Aggregate
+-- inside Postgres: PostgREST's row cap must never cut a busy shift short.
+create or replace function public.cash_shift_totals(p_restaurant uuid, p_shift uuid, p_until timestamptz)
+returns jsonb language sql stable security definer set search_path = public as $$
+  with s as (
+    select *, least(coalesce(closed_at, p_until), p_until) until_at
+      from cash_shifts where id = p_shift and restaurant_id = p_restaurant
+  ), receipts as (
+    select coalesce(sum(p.amount), 0) amount from payments p, s
+      where p.restaurant_id = p_restaurant and p.currency = s.currency
+        and p.method = 'cash' and nullif(p.actor_email, '') is not null
+        and p.created_at between s.opened_at and s.until_at
+  ), returns as (
+    select coalesce(sum(f.amount), 0) amount from refund_operations f, s
+      where f.restaurant_id = p_restaurant and f.currency = s.currency
+        and f.status = 'succeeded' and f.source = 'cash' and nullif(f.payout_actor, '') is not null
+        and f.completed_at between s.opened_at and s.until_at
+  ), old_returns as (
+    -- Imported returns are counted above once. Older logs without a currency
+    -- use their uniquely named order's currency, or the drawer's fallback.
+    select coalesce(sum(substring(l.detail from '(?:^| )amount=([0-9]+(?:[.][0-9]+)?)(?: |$)')::numeric), 0) amount
+      from user_logs l cross join s
+      where l.restaurant_id = p_restaurant and l.action = 'refunded'
+        and l.created_at between s.opened_at and s.until_at
+        and substring(l.detail from '(?:^| )method=([^ ]+)') = 'cash'
+        and nullif(substring(l.detail from '(?:^| )collector=([^ ]+)'), '') is not null
+        and not exists(select 1 from refund_operations f where f.restaurant_id = p_restaurant and f.historical_log_id = l.id)
+        and coalesce(substring(l.detail from '(?:^| )currency=([^ ]+)'),
+          (select case when count(*) = 1 then min(o.currency) end from orders o
+            where o.restaurant_id = p_restaurant
+              and left(o.id::text, 8) = substring(l.detail from '(?:^| )order=([^ ]+)')), s.currency) = s.currency
+  ), withdrawals as (
+    select coalesce(sum(m.amount), 0) amount from cash_movements m, s
+      where m.restaurant_id = p_restaurant and m.shift_id = s.id
+        and m.kind = 'withdrawal' and m.currency = s.currency
+  )
+  select jsonb_build_object('opening', round(s.opening_amount, 2),
+    'cashSales', round(r.amount - f.amount - h.amount, 2), 'withdrawn', round(w.amount, 2),
+    'expected', round(s.opening_amount + r.amount - f.amount - h.amount - w.amount, 2))
+    from s cross join receipts r cross join returns f cross join old_returns h cross join withdrawals w;
+$$;
+revoke all on function public.cash_shift_totals(uuid, uuid, timestamptz) from public, anon, authenticated;
+grant execute on function public.cash_shift_totals(uuid, uuid, timestamptz) to service_role;
+
+create or replace function public.close_cash_shift(p_restaurant uuid, p_shift uuid, p_counted numeric, p_actor text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare s cash_shifts; v_at timestamptz; v_sum jsonb; v_difference numeric;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into s from cash_shifts where restaurant_id = p_restaurant and id = p_shift and closed_at is null for update;
+  if not found then return null; end if;
+  if p_counted is null or p_counted < 0 or p_counted > 1000000 or p_counted <> round(p_counted, 2)
+    or nullif(btrim(p_actor), '') is null then raise exception 'invalid cash count'; end if;
+  -- now() is the transaction's start, possibly before waiting for the lock.
+  -- The count includes every earlier writer, so date it after that wait.
+  v_at := clock_timestamp();
+  v_sum := public.cash_shift_totals(p_restaurant, p_shift, v_at);
+  v_difference := round(p_counted - (v_sum->>'expected')::numeric, 2);
+  update cash_shifts set closed_at = v_at, closed_by = p_actor, counted_cash = p_counted,
+    expected_cash = (v_sum->>'expected')::numeric, difference = v_difference where id = s.id;
+  return v_sum || jsonb_build_object('id', s.id, 'currency', s.currency, 'counted', p_counted, 'difference', v_difference);
+end;
+$$;
+revoke all on function public.close_cash_shift(uuid, uuid, numeric, text) from public, anon, authenticated;
+grant execute on function public.close_cash_shift(uuid, uuid, numeric, text) to service_role;
+
+create or replace function public.create_cash_withdrawal(p_restaurant uuid, p_shift uuid, p_amount numeric, p_note text, p_actor text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare s cash_shifts; v_id uuid;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into s from cash_shifts where restaurant_id = p_restaurant and id = p_shift and closed_at is null for update;
+  if not found then return null; end if;
+  if p_amount is null or p_amount <= 0 or p_amount > 1000000 or p_amount <> round(p_amount, 2)
+    or nullif(btrim(p_actor), '') is null then raise exception 'invalid cash withdrawal'; end if;
+  insert into cash_movements(restaurant_id, shift_id, currency, kind, amount, note, actor_email, created_at)
+    values(p_restaurant, s.id, s.currency, 'withdrawal', p_amount, p_note, p_actor, clock_timestamp()) returning id into v_id;
+  return jsonb_build_object('id', v_id, 'currency', s.currency);
+end;
+$$;
+revoke all on function public.create_cash_withdrawal(uuid, uuid, numeric, text, text) from public, anon, authenticated;
+grant execute on function public.create_cash_withdrawal(uuid, uuid, numeric, text, text) to service_role;
+
+create or replace function public.delete_cash_withdrawal(p_restaurant uuid, p_shift uuid, p_movement uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare s cash_shifts; m cash_movements;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into s from cash_shifts where restaurant_id = p_restaurant and id = p_shift and closed_at is null for update;
+  if not found then return null; end if;
+  delete from cash_movements where restaurant_id = p_restaurant and shift_id = s.id and id = p_movement and kind = 'withdrawal'
+    returning * into m;
+  if not found then return null; end if;
+  return jsonb_build_object('amount', m.amount, 'note', m.note, 'currency', m.currency);
+end;
+$$;
+revoke all on function public.delete_cash_withdrawal(uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.delete_cash_withdrawal(uuid, uuid, uuid) to service_role;
+
+-- A shift can belong to today's handover even if it opened yesterday, or its
+-- count was corrected by a receipt that arrived today with an earlier date.
+create or replace function public.cash_shifts_for_day(p_restaurant uuid, p_day_start timestamptz)
+returns setof public.cash_shifts language sql stable security definer set search_path = public as $$
+  select s.* from cash_shifts s where s.restaurant_id = p_restaurant and (
+    s.opened_at >= p_day_start or s.closed_at >= p_day_start or s.closed_at is null
+    or exists(select 1 from payments p where p.restaurant_id = p_restaurant and p.currency = s.currency
+      and p.method = 'cash' and nullif(p.actor_email, '') is not null
+      and p.recorded_at >= p_day_start and p.recorded_at > s.closed_at
+      and p.created_at between s.opened_at and s.closed_at)
+  ) order by s.opened_at, s.id;
+$$;
+revoke all on function public.cash_shifts_for_day(uuid, timestamptz) from public, anon, authenticated;
+grant execute on function public.cash_shifts_for_day(uuid, timestamptz) to service_role;
+create index if not exists cash_shifts_closed_idx on cash_shifts(restaurant_id, closed_at) where closed_at is not null;
+create index if not exists payments_cash_recorded_idx on payments(restaurant_id, recorded_at, created_at)
+  where method = 'cash' and actor_email is not null;

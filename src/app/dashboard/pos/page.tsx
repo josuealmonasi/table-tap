@@ -74,6 +74,7 @@ export default async function PosPage() {
   if (counterRes.error) console.error("till: counter orders", counterRes.error.message);
   if (soldRes.error) console.error("till: best sellers", soldRes.error.message);
 
+  const shift = await openShift(membership.restaurant.id);
   const collector = (await currentUser())?.email ?? "staff";
   return (
     <PosScreen
@@ -92,7 +93,8 @@ export default async function PosPage() {
       canEmailReceipt={data.receipts}
       loyalty={await loyaltyOn(membership.restaurant.id, plan.limits)}
       canChargeAccount={can(plan.limits, "openAccounts")}
-      shiftOpen={(await openShift(membership.restaurant.id)) !== null}
+      shiftOpen={shift !== null}
+      shiftCurrency={shift?.currency}
       counterOrders={(counterRes.data as Order[] | null) ?? []}
       bestSellers={topSellers((soldRes.data as { items: OrderLineItem[] | null }[] | null) ?? [], data.items)}
     />

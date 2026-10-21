@@ -20,6 +20,7 @@ import type { CashMovement } from "@/lib/cash-drawer";
 /** A row of `cash_shifts`. */
 export interface CashShift {
   id: string;
+  currency: string;
   opened_by: string;
   opened_at: string;
   opening_amount: number;
