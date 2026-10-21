@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 
 vi.mock("@/lib/platform-fee", () => ({ feesKeptSince: async () => 0 }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => { const from = (table: string) => {
   let currency: unknown;
   let method: unknown;
   let offset = 0;
@@ -34,7 +34,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (tabl
   q.single = async () => result();
   q.then = (resolve: (value: unknown) => unknown) => Promise.resolve(result()).then(resolve);
   return q;
-} }) }));
+}; return { from, rpc: (_name: string, args: { p_currency: string }) => { const q = from("payments"); const eq = q.eq as (key: string, value: string) => unknown; eq("currency", args.p_currency); eq("method", "card"); return q; } }; } }));
 
 const { readCosts } = await import("@/lib/costs/server");
 const { readTerminal } = await import("@/lib/terminal-server");

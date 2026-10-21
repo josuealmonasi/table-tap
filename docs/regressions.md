@@ -16,6 +16,11 @@ us, and what now catches each one.
 |---|---|
 | Price breaks are whole quantities, priced by division, and the database refuses others (J4) | A tier of 1e-20 units froze the server |
 | A print job closes only on the printer's success code (J9) | A printer out of paper dropped tickets unprinted |
+
+| A terminal deposit names its receipt cutoff (S10 I3) | MX$50 arriving between the MX$100 read and insert was missing from both expected and late money |
+| A terminal return belongs to one signed manifest or the next unsigned deposit (S10 I4) | A MX$100 return after Tuesday's sign-off reduced neither Tuesday nor Wednesday |
+| A terminal day is read whole, including older recovery (S10 I6) | A 15:00 cutoff counted only MX$100 of the oldest day's MX$200 and hid a twenty-day recovery |
+| A terminal return retains its original payment day (S10 I7) | A same-day MX$100 typed void left an expected −MX$3.50 at a 3.5% fee |
 | A statement email is capped per account and per restaurant, never on the recipient (G5) | One account code could mail the same stranger ~400 times a day |
 | Coupon entitlements and card receipts agree before money moves (S5 E4) | A MX$90 discounted charge recorded MX$100 and could later reserve a MX$100 return |
 | A coupon use belongs to one checkout attempt (S5 E7) | An old expiry released the newer payment page's reservation on the same order |
@@ -3083,3 +3088,55 @@ the handover sheet distinguish an older shift from today's shifts.
 receipt, and excludes unrelated windows and currencies. SQL contract tests
 keep both predicates scoped to the restaurant and original currency. The list
 heading says closed or updated today in both languages.
+
+
+## S10 I3 — the receipt and the signed cutoff had to agree
+
+`record_terminal_deposit_v1` calculates and inserts under the settlement money
+lock. The saved `payment_ids`, `return_ids`, `snapshot_at` and `fee_pct` name the
+exact contents and rate. A receipt outside that list is late even when its
+transaction timestamp predates the lock. `terminal-snapshot.spec.ts` first
+reproduced the missing MX$50 beside a MX$100 mark, then verifies MX$150 received.
+`terminal-snapshot-schema.spec.ts` guards the lock, manifest and service-only
+grants. Taking back a deposit takes the same lock, since it releases returns.
+
+`scripts/api-terminal-deposit.mjs` holds a MX$50 receipt uncommitted, sends the
+HTTP mark, observes it waiting for the money lock, commits, then checks the
+stored amount and both receipt IDs by effect. It removes its orders, receipts,
+allocations, deposit, print jobs and activity. Written here; not run here.
+
+## S10 I4 — the return and the deposit that used it had to agree
+
+A return allocation (or an older void's payment ID) is saved in the manifest
+that reconciled it. Later returns go to the first unsigned day with sales;
+with none yet, they remain visible as coming out of the next deposit. Tuesday's
+MX$300 sign-off stays MX$300; its later MX$100 return reduces Wednesday's MX$200
+to MX$100, exactly once. `terminal-snapshot.spec.ts` first failed on that case
+and also checks the return waiting when all sales days are signed. Existing
+marks with null manifests retain their old timestamp interpretation; historical
+membership is not invented or backfilled.
+
+## S10 I6 — the day offered and the day read had to agree
+
+The recent window starts at restaurant-local midnight fourteen calendar days
+back. The paged ledger includes complete older unsigned days and signed days
+with late receipts. Filtering happens after arithmetic, so a recovered sale
+brings all the other receipts of its day with it. The transactional writer
+reads the complete ledger independently of the displayed window.
+`terminal-window.spec.ts` first reproduced MX$100 instead of MX$200 at 15:00
+and a missing twenty-day recovery. It also checks an older marked day and
+refusal of an incomplete later page. Reports currently page the restaurant's
+terminal history; no server row cap is accepted as a complete day.
+
+## S10 I7 — the return date and the original payment date had to agree
+
+The ledger joins each succeeded terminal return through `refund_allocations`
+and `payment_allocations` to its original receipt, preserving tenant and
+currency scope. Same-day returns reduce takings and their fee; later refunds
+subtract the gross return while retaining the original fee. A same-day return
+after sign-off carries its net amount to the next unsigned deposit using the
+signed rate. `terminal-snapshot.spec.ts` first reproduced −MX$3.50 for a fully
+voided MX$100 sale and checks zero, partial returns, later gross refunds and
+returns already in a manifest. English and Spanish explain returns waiting on
+the next deposit. Claude must apply the additive SQL, run all live gates,
+and inspect these rows at phone, tablet and desktop widths; none ran here.
