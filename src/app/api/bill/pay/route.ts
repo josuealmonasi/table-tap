@@ -1,28 +1,26 @@
 import { dinerCurrency } from "@/lib/diner-currency";
-import { recordDinerCheckout } from "@/lib/diner-checkout";
+import { openDinerAttempt, resumeDinerAttempt } from "@/lib/diner-attempt";
+import { remainingPrincipal, billEntitlements } from "@/lib/bill-principal";
+import { fetchTableBill } from "@/lib/bill-data";
 import { NextResponse, type NextRequest } from "next/server";
 import Stripe from "stripe";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
-import { billWindowStart, MAX_BILL_ORDERS } from "@/lib/table-bill";
+import { MAX_BILL_ORDERS } from "@/lib/table-bill";
 import { packOrderIds, stripeProductName } from "@/lib/stripe-limits";
 import { staffOpenedBill } from "@/lib/table-session";
 import { splitInProgress } from "@/lib/split-service";
 import { isRoomLimited, isTableLimited } from "@/lib/rate-limit";
-import { PaymentAttributionRequired, paymentCoverage } from "@/lib/payment-coverage";
+import { PaymentAttributionRequired } from "@/lib/payment-coverage";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPlan } from "@/lib/plan-server";
-import { NO_FEE, feeMetadata, releaseFee, reserveFee, stripeRefusedOutright } from "@/lib/platform-fee";
+import { NO_FEE, feeMetadata, reserveFee } from "@/lib/platform-fee";
 import { applyCoupon } from "@/lib/pricing";
 import {
-  claimCoupon,
   couponProblem,
   findCoupon,
-  logRedemption,
-  releaseCoupon,
   toAppliedCoupon,
 } from "@/lib/coupon-service";
-import type { Order } from "@/lib/types";
 import { round2 } from "@/lib/money";
 import { siteOrigin } from "@/lib/site-origin";
 
@@ -46,13 +44,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const body = await jsonBody<{
     restaurantId?: string;
     tableId?: string;
+    sessionId?: string;
     orderIds?: string[];
     tipPct?: number;
     tipAmount?: number;
     couponCode?: string;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
-  const { restaurantId, tableId, orderIds, tipPct, tipAmount, couponCode } = body;
+  const { restaurantId, tableId, orderIds, tipPct, tipAmount, couponCode, sessionId } = body;
   if (await isTableLimited(req, "billpay", tableId, 10)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
@@ -103,38 +102,30 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // nothing. Already-paid and cancelled rows are excluded here rather than
   // filtered afterwards: paying twice for the same food is the failure that
   // matters most.
-  const { data: rows, error: rowsError } = await db
-    .from("orders")
-    .select("id, total, currency, items, paid, status, coupon_code")
-    .eq("restaurant_id", restaurantId)
-    .eq("table_id", tableId)
-    // Same window the diner's bill uses, so what is charged is what was shown.
-    .gte("created_at", billWindowStart().toISOString())
-    .eq("paid", false)
-    .is("account_id", null)
-    .eq("written_off", false)
-    .neq("status", "pending_payment")
-    .neq("status", "cancelled")
-    .in("id", orderIds);
-
   // A read that failed is not a bill that is paid. Told apart, because the
   // wrong one of the two sends somebody away from the table owing money.
-  if (rowsError) return await apiError("apiErr.verifyOrders", 503);
-
-  const orders = (rows ?? []) as (Pick<Order, "id" | "total" | "items" | "currency"> & {
-    coupon_code: string | null;
-  })[];
-  if (orders.length === 0) return await apiError("apiErr.billSettled", 409);
+  const visible = await fetchTableBill(restaurantId, tableId, "diner", sessionId)
+    .catch(error => error instanceof PaymentAttributionRequired ? "review" as const : null);
+  if (visible === "review") return await apiError("apiErr.attributionRequired", 409);
+  if (!visible) return await apiError("apiErr.verifyOrders", 503);
+  const wanted = new Set(orderIds);
+  const orders = visible.filter(o => wanted.has(o.id) && !o.paid);
+  // A stale or foreign selection needs another look; it is never called paid.
+  if (orders.length !== wanted.size) return await apiError("apiErr.billChanged", 409);
+  if (!orders.length) return await apiError("apiErr.billSettled", 409);
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+  const scopeKey = `bill:${[...wanted].sort().join(",")}`;
+  try {
+    const prior = await resumeDinerAttempt(stripe, restaurantId, scopeKey);
+    if (prior) return NextResponse.json({ url: prior.url });
+  } catch { return await apiError("apiErr.checkoutFailed", 502); }
 
   const currency = dinerCurrency(orders);
   if (!currency) return await apiError("apiErr.mixedCurrencies", 409);
 
-  const coverage = await paymentCoverage(restaurantId, orders).catch(error => error instanceof PaymentAttributionRequired ? "review" : null);
-  if (coverage === "review") return await apiError("apiErr.attributionRequired", 409);
-  if (!coverage) return await apiError("apiErr.verifyOrders", 503);
-  if (couponCode && orders.some(o => (coverage.get(o.id) ?? 0) > 0)) return await apiError("apiErr.couponAlreadyUsed", 409);
-  for (const o of orders) o.total = round2(Math.max(0, Number(o.total) - (coverage.get(o.id) ?? 0)));
-  const food = round2(orders.reduce((sum, o) => sum + Number(o.total), 0));
+  if (couponCode && orders.some(o => Number(o.collected ?? 0) > 0)) return await apiError("apiErr.couponAlreadyUsed", 409);
+  const food = round2(orders.reduce((sum, o) => sum + Number(o.total) - Number(o.collected ?? 0), 0));
+  const principal = remainingPrincipal(orders);
 
   // A coupon here discounts the share being settled, which is what lets two
   // people at one table each use their own on their own food. Two rules keep
@@ -155,14 +146,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (found === undefined) return await apiError("apiErr.couponLookupFailed", 503);
     coupon = found;
     if (!coupon || coupon.staff_only) return await apiError("apiErr.couponNotFound", 400);
-    if (couponProblem(coupon, food)) return await apiError("apiErr.couponNotValid", 400);
+    if (couponProblem(coupon, principal)) return await apiError("apiErr.couponNotValid", 400);
 
-    // Reserve before charging. If the last use has gone, the diner is told now
-    // rather than after their card has been taken.
-    if (!(await claimCoupon(coupon.id))) {
-      return await apiError("apiErr.couponNotValid", 409);
-    }
-    discount = applyCoupon(toAppliedCoupon(coupon), food);
+    // The attempt transaction reserves the last use together with its scope,
+    // before a payable page exists; a losing request never owns another use.
+    discount = applyCoupon(toAppliedCoupon(coupon), principal);
   }
 
   const payable = round2(food - discount);
@@ -185,7 +173,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // raises what we take.
   const feePlan = await getPlan(restaurantId);
   if (cents <= 0) {
-    if (coupon) await releaseCoupon(coupon.id);
     return await apiError("apiErr.billSettled", 409);
   }
 
@@ -193,33 +180,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // open on these orders and switching the service charge off could lower
   // them: the webhook records these same totals when the money lands, and a
   // total lowered in between records less than Stripe took (service-reprice).
-  const { error: markError } = await db
-    .from("orders")
-    .update({ card_checkout_at: new Date().toISOString() })
-    .in("id", orders.map(o => o.id))
-    .eq("restaurant_id", restaurantId);
-  if (markError) {
-    if (coupon) await releaseCoupon(coupon.id);
-    return await apiError("apiErr.generic", 500);
-  }
+  // `diner_checkout_open` marks the frozen orders in the transaction that
+  // excludes every competing checkout, so this cannot be an unconditional hold.
 
   const origin = siteOrigin(req);
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-
   // Reserved under the month's ceiling before Stripe is asked; given back
   // below when the session is never created, and by Stripe's expiry when it
   // is never paid (`releaseSessionFee`).
   let fee = NO_FEE;
   try {
-    fee = feePlan ? await reserveFee(restaurantId, feePlan.limits, Math.round(payable * 100), "bill") : NO_FEE;
+    fee = feePlan ? await reserveFee(restaurantId, feePlan.limits, Math.round(Math.max(0, principal - discount) * 100), "bill") : NO_FEE;
   } catch {
-    if (coupon) await releaseCoupon(coupon.id);
     return await apiError("apiErr.checkoutFailed", 502);
   }
   const appFee = fee.cents;
 
   try {
-    const session = await stripe.checkout.sessions.create(
+    const session = await openDinerAttempt(stripe,
       {
         mode: "payment",
         // Cards only, as every checkout (see `card-session.ts`).
@@ -270,36 +247,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // open, and repricing holds off for as long (service-reprice).
         expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
       },
-      { stripeAccount: restaurant.stripe_account_id },
+      {
+        restaurantId, stripeAccount: restaurant.stripe_account_id, currency, amountCents: cents,
+        orderIds: orders.map(o => o.id), payableIds: orders.map(o => o.id), scopeKey,
+        ...billEntitlements(orders, discount), couponId: coupon?.id, foodPrincipal: round2(principal - discount),
+      },
     );
 
-    await recordDinerCheckout(session, {
-      restaurantId, stripeAccount: restaurant.stripe_account_id, currency, amountCents: cents,
-      orderIds: orders.map(o => o.id),
-    }, () => stripe.checkout.sessions.expire(session.id, {}, { stripeAccount: restaurant.stripe_account_id }));
-
-    // Reserved, not yet real: the webhook confirms it when the money lands,
-    // and the expiry handler gives it back if the diner walks away from Stripe.
-    // Attached to the first settled order, the same row that carries the tip.
-    if (coupon) {
-      await logRedemption({
-        restaurantId,
-        couponId: coupon.id,
-        orderId: orders[0].id,
-        code: coupon.code,
-        amount: discount,
-      });
-    }
+    // Reserved, not yet real: only this attempt's verified payment confirms
+    // its coupon, and only this attempt's expiry gives that reservation back.
 
     return NextResponse.json({ url: session.url });
-  } catch (err) {
-    // The charge never happened, so the reserved use goes back — and the fee,
-    // when Stripe refused outright. An answer that never arrived may still be
-    // a session: its fee stays reserved until Stripe's expiry releases it.
-    if (coupon) await releaseCoupon(coupon.id);
-    if (stripeRefusedOutright(err)) {
-      await releaseFee(fee.id).catch(e => console.error("bill pay: the fee reservation stays counted", e));
-    }
+  } catch {
+    // The attempt owns its coupon and fee. Only its initial outright refusal
+    // or verified expiry releases them; an unknown answer can still be payable.
     return await apiError("apiErr.checkoutFailed", 502);
   }
 }

@@ -3678,6 +3678,22 @@ revoke all on diner_checkouts from anon;
 revoke all on diner_checkouts from authenticated;
 grant select, insert, update on diner_checkouts to service_role;
 
+-- A quote exists before Stripe answers, so its session id starts empty.
+alter table diner_checkouts alter column stripe_session_id drop not null;
+alter table diner_checkouts add column if not exists status text not null default 'open' check (status in ('open', 'paid', 'expired'));
+alter table diner_checkouts add column if not exists scope_key text;
+alter table diner_checkouts add column if not exists payable_order_ids uuid[] not null default '{}';
+alter table diner_checkouts add column if not exists idempotency_key text unique;
+alter table diner_checkouts add column if not exists stripe_params jsonb;
+alter table diner_checkouts add column if not exists entitlements jsonb not null default '{}';
+alter table diner_checkouts add column if not exists order_discounts jsonb not null default '{}';
+alter table diner_checkouts add column if not exists discount_applied boolean not null default false;
+alter table diner_checkouts add column if not exists food_principal numeric not null default 0 check (food_principal >= 0);
+create unique index if not exists diner_checkout_open_scope on diner_checkouts(restaurant_id, scope_key) where status = 'open';
+alter table coupon_redemptions add column if not exists checkout_attempt_id uuid references diner_checkouts(id);
+create index if not exists coupon_checkout_attempt on coupon_redemptions(checkout_attempt_id);
+alter table bill_splits add column if not exists food_principal numeric;
+
 -- No currency conversion happens anywhere in diner checkout. Refuse an old
 -- unsupported value rather than silently relabelling somebody's money.
 do $$ begin
@@ -4273,7 +4289,7 @@ begin
   if not found then return; end if;
   if p_delete_order and (v_order.paid or v_order.status <> 'pending_payment') then return; end if;
   for v_coupon in
-    delete from coupon_redemptions where order_id = p_order and confirmed_at is null
+    delete from coupon_redemptions where order_id = p_order and confirmed_at is null and checkout_attempt_id is null
     returning coupon_id
   loop
     if v_coupon.coupon_id is not null then perform release_coupon(v_coupon.coupon_id); end if;
@@ -5951,6 +5967,14 @@ begin
   if v_covered > 0 and (new.written_off or new.account_id is distinct from old.account_id
     or ((new.total <> old.total or new.tip <> old.tip)
       and (new.tip < old.tip or new.total - old.total <> new.tip - old.tip))) then
+    -- A quoted coupon can land after a partial collection. Only that frozen
+    -- reduction is allowed, and it cannot consume anybody's existing receipt.
+    if new.total >= v_covered and new.total < old.total and new.tip = old.tip
+      and new.status = old.status and new.written_off = old.written_off
+      and new.account_id is not distinct from old.account_id
+      and old.total - new.total <= coalesce((select (c.order_discounts->>old.id::text)::numeric
+        from diner_checkouts c where c.id::text = current_setting('tabletap.diner_discount', true)
+          and c.stripe_payment_intent is not null and not c.discount_applied), 0) then return new; end if;
     raise exception 'allocated money requires an adjustment';
   end if;
   if new.status = 'cancelled' and old.status <> 'cancelled' and v_covered > 0
@@ -6252,6 +6276,11 @@ begin
   insert into bill_split_claims (split_id, share_no, diner) values (p_split, v_next, p_diner);
   if v_taken + 1 = v_split.shares then
     update bill_splits set status = 'locked', locked_at = v_freeze, amount = round(v_amount, 2),
+      food_principal = (select coalesce(sum(greatest(o.total - public.retained_order_coverage(p_restaurant, o.id)
+        - greatest(o.tip - coalesce((select sum(a.tip) from payment_allocations a where a.order_id = o.id), 0), 0), 0)), 0)
+        from orders o where o.session_id = v_split.session_id and o.restaurant_id = v_split.restaurant_id
+          and o.table_id = v_sitting.table_id and not o.paid and not o.written_off and o.account_id is null
+          and o.status not in ('cancelled', 'pending_payment') and o.created_at < v_freeze),
       order_ids = array(select id from orders where session_id = v_split.session_id
         and restaurant_id = v_split.restaurant_id and table_id = v_sitting.table_id
         and not paid and not written_off and account_id is null
@@ -6611,6 +6640,10 @@ declare
   v_rest     uuid;
   v_label    text;
   v_currency text;
+  v_checkout diner_checkouts;
+  v_discount record;
+  v_off numeric;
+  v_applied numeric := 0;
 begin
   perform public.lock_restaurant_money((select restaurant_id from orders where id = any(p_orders) limit 1));
   perform set_config('tabletap.allocation_writer', 'v1', true);
@@ -6620,6 +6653,27 @@ begin
   -- Held for the rest of the call, so the choice below and the update after it
   -- see the same orders: a waiter settling one in between waits for this.
   perform 1 from orders where id = any(p_orders) order by id for update;
+
+  select * into v_checkout from diner_checkouts where stripe_payment_intent = p_intent for update;
+  if found and not v_checkout.discount_applied and v_checkout.order_discounts <> '{}'::jsonb then
+    perform set_config('tabletap.diner_discount', v_checkout.id::text, true);
+    for v_discount in select key::uuid id, value::numeric amount from jsonb_each_text(v_checkout.order_discounts) where value::numeric > 0 loop
+      -- Food collected in between is no longer this card's debt. Discount
+      -- only what is still owed; the unused charge becomes an explicit return.
+      select least(v_discount.amount, greatest(o.total - public.retained_order_coverage(o.restaurant_id, o.id)
+        - greatest(o.tip - coalesce((select sum(a.tip) from payment_allocations a where a.order_id = o.id), 0), 0), 0))
+        into v_off from orders o where o.id = v_discount.id and o.id = any(p_orders)
+          and not o.paid and not o.written_off and o.status <> 'cancelled';
+      if v_off is null then continue; end if;
+      update orders set total = total - v_off, discount = discount + v_off,
+        coupon_code = v_checkout.metadata->>'settle_coupon'
+       where id = v_discount.id and id = any(p_orders) and not paid and not written_off and status <> 'cancelled';
+      v_applied := v_applied + v_off;
+    end loop;
+    update coupon_redemptions set amount = v_applied where checkout_attempt_id = v_checkout.id;
+    perform set_config('tabletap.diner_discount', '', true);
+    update diner_checkouts set discount_applied = true where id = v_checkout.id;
+  end if;
 
   -- Which order carries the gratuity: the one asked for if this call settles
   -- it, otherwise the first that it does settle.
@@ -6665,6 +6719,7 @@ begin
   if coalesce(p_charged, 0) > 0 and p_intent is not null then
     select coalesce(sum(amount), 0) into v_recorded
       from payments where stripe_payment_intent = p_intent and order_id = any(p_orders);
+    if v_recorded > round(p_charged, 2) then raise exception 'card receipts exceed verified charge'; end if;
     v_owed := round(p_charged - v_recorded, 2);
     if v_owed > 0 then
       select o.restaurant_id, o.table_label, o.currency into v_rest, v_label, v_currency
@@ -7725,3 +7780,172 @@ exception when duplicate_object then null;
 end $$;
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 revoke truncate, references, trigger on all tables in schema public from public, anon, authenticated;
+
+-- Every payable attempt has one owner, including fee-free plans. Its Stripe
+-- request is kept intact so a lost response is retried with the same key.
+create or replace function public.diner_checkout_open(p_record jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_new diner_checkouts;
+  v_prior diner_checkouts;
+  v_order orders;
+  v_coupon uuid := (p_record->>'coupon_id')::uuid;
+  v_discount numeric;
+  v_expected numeric;
+  v_entitled numeric;
+  v_tip numeric;
+begin
+  v_new := jsonb_populate_record(null::diner_checkouts, p_record);
+  perform public.lock_restaurant_money(v_new.restaurant_id);
+  perform public.backfill_payment_allocations(v_new.restaurant_id);
+  select * into v_prior from diner_checkouts c
+   where c.restaurant_id = v_new.restaurant_id and c.status = 'open'
+     and (c.scope_key = v_new.scope_key or c.payable_order_ids && v_new.payable_order_ids
+       or (c.order_ids && v_new.order_ids and not (
+         coalesce(c.metadata->>'split_id', '') <> '' and c.metadata->>'split_id' = coalesce(v_new.metadata->>'split_id', ''))))
+   order by c.created_at limit 1 for update;
+  if found then
+    if v_prior.scope_key = v_new.scope_key then return to_jsonb(v_prior); end if;
+    raise exception 'checkout_scope_busy';
+  end if;
+  if cardinality(v_new.order_ids) = 0 or exists (
+    select 1 from unnest(v_new.order_ids) x left join orders o on o.id = x
+     where o.id is null or o.restaurant_id <> v_new.restaurant_id or o.currency <> v_new.currency
+  ) then raise exception 'checkout_scope_changed'; end if;
+  perform 1 from orders where id = any(v_new.order_ids) order by id for update;
+  if not v_new.payable_order_ids <@ v_new.order_ids then raise exception 'checkout_scope_changed'; end if;
+  for v_order in select * from orders where id = any(v_new.payable_order_ids) loop
+    if v_order.paid or v_order.written_off or v_order.status in ('cancelled', 'pending_payment') then
+      raise exception 'checkout_scope_changed';
+    end if;
+    v_expected := (v_new.entitlements->>v_order.id::text)::numeric
+      + coalesce((v_new.order_discounts->>v_order.id::text)::numeric, 0);
+    if v_expected is null or abs(v_expected - greatest(v_order.total - public.retained_order_coverage(v_new.restaurant_id, v_order.id), 0)) > 0.005 then
+      raise exception 'checkout_amount_changed';
+    end if;
+  end loop;
+  -- The discount is frozen per order before a payable page exists. Settlement
+  -- lowers those entitlements in the same transaction that writes receipts.
+  select coalesce(sum(value::numeric), 0) into v_discount from jsonb_each_text(v_new.order_discounts);
+  if v_discount < 0 or v_discount <> coalesce((v_new.metadata->>'settle_discount')::numeric, 0) then
+    raise exception 'checkout_discount_changed';
+  end if;
+  select coalesce(sum(value::numeric), 0) into v_entitled from jsonb_each_text(v_new.entitlements);
+  v_tip := coalesce((v_new.metadata->>'settle_tip')::numeric,
+    (select tip from account_checkouts where id = (v_new.metadata->>'account_checkout')::uuid), 0);
+  if v_new.amount_cents <> round((v_entitled + v_tip + coalesce((v_new.metadata->>'split_amount')::numeric, 0)) * 100)
+    or v_new.food_principal is null or v_new.food_principal < 0
+    or exists (select 1 from jsonb_each_text(v_new.entitlements) where value::numeric < 0)
+    or exists (select 1 from jsonb_each_text(v_new.order_discounts) where value::numeric < 0) then
+    raise exception 'checkout_amount_changed';
+  end if;
+  if v_coupon is not null then
+    if exists (select 1 from orders where id = any(v_new.payable_order_ids)
+      and (coupon_code is not null or public.retained_order_coverage(v_new.restaurant_id, id) > 0))
+      or not exists (select 1 from coupons where id = v_coupon and restaurant_id = v_new.restaurant_id and not staff_only)
+      or public.redeem_coupon(v_coupon) is null then raise exception 'checkout_coupon_unavailable'; end if;
+  end if;
+  insert into diner_checkouts (id, restaurant_id, stripe_account_id, livemode, currency, amount_cents,
+    metadata, order_ids, payable_order_ids, scope_key, idempotency_key, stripe_params, entitlements, order_discounts, food_principal)
+  values (v_new.id, v_new.restaurant_id, v_new.stripe_account_id, v_new.livemode, v_new.currency, v_new.amount_cents,
+    v_new.metadata, v_new.order_ids, v_new.payable_order_ids, v_new.scope_key, v_new.idempotency_key,
+    v_new.stripe_params, v_new.entitlements, v_new.order_discounts, v_new.food_principal);
+  if v_coupon is not null then
+    insert into coupon_redemptions (restaurant_id, coupon_id, order_id, code, amount, checkout_attempt_id)
+    values (v_new.restaurant_id, v_coupon, v_new.payable_order_ids[1], v_new.metadata->>'settle_coupon', v_discount, v_new.id);
+  end if;
+  -- Marked before Stripe hears of it: service repricing cannot change the
+  -- quote between the diner opening the page and its webhook landing.
+  update orders set card_checkout_at = now() where id = any(v_new.order_ids);
+  select * into v_new from diner_checkouts where id = v_new.id;
+  return to_jsonb(v_new);
+end; $$;
+revoke all on function public.diner_checkout_open(jsonb) from public, anon, authenticated;
+grant execute on function public.diner_checkout_open(jsonb) to service_role;
+
+create or replace function public.diner_checkout_bind(p_attempt uuid, p_record jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+declare c diner_checkouts;
+begin
+  select * into c from diner_checkouts where id = p_attempt for update;
+  if not found or (c.stripe_session_id is not null and c.stripe_session_id <> p_record->>'stripe_session_id')
+    or c.restaurant_id::text <> p_record->>'restaurant_id'
+    or c.stripe_account_id <> p_record->>'stripe_account_id'
+    or c.currency <> p_record->>'currency' or c.amount_cents <> (p_record->>'amount_cents')::int
+    or c.livemode <> (p_record->>'livemode')::boolean or c.metadata <> p_record->'metadata' then
+    raise exception 'checkout_provenance_changed';
+  end if;
+  update diner_checkouts set stripe_session_id = p_record->>'stripe_session_id' where id = p_attempt;
+end; $$;
+revoke all on function public.diner_checkout_bind(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.diner_checkout_bind(uuid, jsonb) to service_role;
+
+create or replace function public.finish_diner_checkout(p_attempt uuid, p_paid boolean)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_checkout diner_checkouts; r record;
+begin
+  perform public.lock_restaurant_money((select restaurant_id from diner_checkouts where id = p_attempt));
+  select * into v_checkout from diner_checkouts where id = p_attempt for update;
+  if not found then raise exception 'checkout_missing'; end if;
+  if v_checkout.status = 'paid' then return; end if;
+  if p_paid then
+    update coupon_redemptions set confirmed_at = coalesce(confirmed_at, now())
+     where checkout_attempt_id = v_checkout.id;
+    update diner_checkouts set status = 'paid' where id = p_attempt;
+  elsif v_checkout.status = 'open' then
+    for r in delete from coupon_redemptions where checkout_attempt_id = v_checkout.id
+      and confirmed_at is null returning coupon_id loop
+      if r.coupon_id is not null then perform public.release_coupon(r.coupon_id); end if;
+    end loop;
+    update diner_checkouts set status = 'expired' where id = p_attempt;
+    if v_checkout.metadata->>'fee_id' is not null then
+      perform public.release_platform_fee((v_checkout.metadata->>'fee_id')::uuid);
+    end if;
+    if v_checkout.metadata->>'account_checkout' is not null then
+      perform public.account_checkout_release((v_checkout.metadata->>'account_checkout')::uuid);
+    end if;
+  end if;
+end; $$;
+revoke all on function public.finish_diner_checkout(uuid, boolean) from public, anon, authenticated;
+grant execute on function public.finish_diner_checkout(uuid, boolean) to service_role;
+
+-- A pay-now order reserved its coupon before its Stripe session existed.
+-- Bind that reservation once; an old expiry can never pick up a newer one.
+create or replace function public.bind_diner_coupon()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.metadata->>'order_id' is not null and new.stripe_session_id is not null then
+    update coupon_redemptions set checkout_attempt_id = new.id
+     where order_id = (new.metadata->>'order_id')::uuid and confirmed_at is null and checkout_attempt_id is null;
+  end if;
+  return new;
+end; $$;
+revoke all on function public.bind_diner_coupon() from public, anon, authenticated;
+grant execute on function public.bind_diner_coupon() to service_role;
+drop trigger if exists bind_diner_coupon on diner_checkouts;
+create trigger bind_diner_coupon after insert or update of stripe_session_id on diner_checkouts
+for each row execute function public.bind_diner_coupon();
+
+-- Older deployed carts log their redemption after Stripe answers. Locking the
+-- attempt also covers a webhook before that insert during the deployment overlap.
+create or replace function public.bind_redemption_checkout()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare c diner_checkouts;
+begin
+  if new.confirmed_at is not null or new.checkout_attempt_id is not null then return new; end if;
+  select * into c from diner_checkouts where metadata->>'order_id' = new.order_id::text
+    and stripe_session_id is not null order by created_at desc limit 1 for update;
+  if found then
+    if c.status = 'expired' then raise exception 'checkout_expired'; end if;
+    new.checkout_attempt_id := c.id;
+    if c.status = 'paid' then new.confirmed_at := now(); end if;
+  end if;
+  return new;
+end; $$;
+revoke all on function public.bind_redemption_checkout() from public, anon, authenticated;
+grant execute on function public.bind_redemption_checkout() to service_role;
+drop trigger if exists bind_redemption_checkout on coupon_redemptions;
+create trigger bind_redemption_checkout before insert on coupon_redemptions
+for each row execute function public.bind_redemption_checkout();
+create unique index if not exists coupon_one_checkout_reservation on coupon_redemptions(checkout_attempt_id)
+where checkout_attempt_id is not null;

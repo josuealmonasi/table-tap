@@ -263,6 +263,9 @@ export async function POST(req: NextRequest) {
     const origin = siteOrigin(req);
     const cur = restaurant.currency.toLowerCase();
 
+    // The reservation must exist before a payment or expiry can arrive. The
+    // durable checkout binds it before exposing Stripe's page.
+    await logCheckoutCoupon(restaurantId, coupon, order.id, pricing.couponDiscount);
     let session;
     try {
       session = await openCardSession({
@@ -301,7 +304,6 @@ export async function POST(req: NextRequest) {
 
     // The use is committed now that there's a real session to pay for, and
     // from here Stripe's expiry gives back whatever an unpaid session holds.
-    await logCheckoutCoupon(restaurantId, coupon, order.id, pricing.couponDiscount);
     held.handOver();
 
     await supabase

@@ -1803,3 +1803,33 @@ Stripe account, when it was applied).
 
 This boundary follows Stripe's [Connect webhook account/mode guidance](https://support.stripe.com/questions/connect-account-webhook-configurations?locale=en-GB)
 and [currency amount rules](https://docs.stripe.com/currencies).
+
+
+## Diner bill checkout ownership and accounting (S5)
+
+Bill, split-share and customer-account payments open a durable attempt in
+`diner_checkouts` before contacting Stripe. A restaurant money lock excludes
+competing payable financial scopes regardless of platform fees. An exact retry
+resumes the saved page; overlapping orders refuse a second page. Separate
+shares of the same frozen split can pay at once, but their later own orders
+cannot overlap. The Stripe request and its idempotency key are persisted, so a
+lost response retries the original amount, tip, fee and expiry. A verified
+expiry permits a fresh quote. Unknown outcomes retain their scope, coupon and
+fee reservations until reconciled; a retry never extends the original quote.
+
+Coupons belong to the attempt through `coupon_redemptions.checkout_attempt_id`.
+A bill quote freezes per-order discounted entitlements before the charge;
+settlement reduces totals and writes receipts atomically, once. Concurrently
+collected food cannot be discounted again. The redemption records the discount
+actually used, and any charge not used by the surviving debt is a separate
+refund liability. Receipts cannot exceed the verified charge. Confirmation and
+expiry affect only that attempt's reservation. A pay-now reservation is logged
+before its Stripe page exists and bound to the durable checkout.
+
+Fee caps use remaining food principal, including service but excluding existing
+and newly added tips. Splits freeze `food_principal` with their order IDs and
+amount; their shares carry slices of the one capped fee. Existing splits with
+no snapshot use current remaining principal conservatively. Every pooled
+attempt also saves its explicit principal. Bill display and payment read the
+same validated sitting, including a phone's valid sitting older than eight
+hours. A stale selection requests review and never reports the debt as paid.

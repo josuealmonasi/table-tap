@@ -60,6 +60,8 @@ vi.mock("@/lib/diner-checkout", () => ({
   verifyDinerCheckout: async () => {}, requireVerifiedCheckout: () => {},
 }));
 
+vi.mock("@/lib/diner-attempt", () => ({ finishDinerCheckout: async () => {} }));
+
 const { settleCheckout: settleVerifiedCheckout } = await import("@/lib/checkout-settle");
 const settleCheckout = (session: Stripe.Checkout.Session) =>
   settleVerifiedCheckout(session, { account: "acct_fixture", livemode: false });
@@ -232,4 +234,31 @@ describe("one diner's share of a divided bill", () => {
     expect(writes("orders").filter(o => JSON.stringify(o.values).includes('"paid":true'))).toEqual([]);
     expect(writes("bill_splits")).toEqual([]);
   });
+});
+
+it("E4 a ninety-peso coupon bill records its charge without a later full-total coupon write", async () => {
+  script["rpc:settle_card_orders_v2"] = [settledAs(["o1", "o2"])];
+  await settleCheckout({ ...session({ settle_order_ids: "o1,o2", settle_coupon: "TEN", settle_discount: "10" }), amount_total: 9000 });
+  expect(rpcs[0]).toMatchObject({ fn: "settle_card_orders_v2", args: { p_orders: ["o1", "o2"], p_charged: 90 } });
+  expect(writes("orders")).toEqual([]);
+  expect(writes("coupon_redemptions")).toEqual([]);
+});
+
+it("E4 a coupon-free bill retains its whole charge, including the new tip", async () => {
+  script["rpc:settle_card_orders_v2"] = [settledAs(["o1"])];
+  await settleCheckout({ ...session({ settle_order_ids: "o1", settle_tip: "7.5" }), amount_total: 10750 });
+  expect(rpcs[0].args).toMatchObject({ p_charged: 107.5, p_tip: 7.5 });
+});
+it("E4 a split records its share, tip and later orders without counting or losing money twice", async () => {
+  script["bill_splits:select"] = [{ data: { id: "s1", session_id: "t1" }, error: null }];
+  script["rpc:settle_split_share_v2"] = [{ data: true, error: null }];
+  script["rpc:settle_card_orders_v2"] = [settledAs(["later"])];
+  script["bill_split_claims:select"] = [{ count: 1, error: null }];
+  await settleCheckout({ ...session({ split_id: "s1", split_share: "0", split_amount: "30", settle_tip: "2", settle_order_ids: "later" }), amount_total: 5000 });
+  expect(rpcs[0].args).toMatchObject({ p_amount: 30, p_tip: 2 });
+  expect(rpcs[1].args).toMatchObject({ p_charged: 18, p_tip: 0 });
+});
+it("E4 account settlement keeps its original frozen checkout and payment", async () => {
+  await settleCheckout({ ...session({ account_checkout: "account1" }), amount_total: 10750 });
+  expect(rpcs).toEqual([{ fn: "account_checkout_settle_v2", args: { p_checkout: "account1", p_intent: "pi_test" } }]);
 });

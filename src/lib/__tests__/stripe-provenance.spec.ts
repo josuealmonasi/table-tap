@@ -148,5 +148,5 @@ it("authenticates repeated expiry even after its pending order was deleted", asy
   state.writes = [];
   state.missing = true;
   await deliver({ payment_status: "unpaid" }, { type: "checkout.session.expired" });
-  expect(state.writes).toEqual(["fee released"]);
+  expect(state.writes).toEqual(["fee released", "finish_diner_checkout"]);
 });

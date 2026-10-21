@@ -1,6 +1,7 @@
 import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
 import { dinerCurrency } from "@/lib/diner-currency";
-import { recordDinerCheckout } from "@/lib/diner-checkout";
+import { DinerAttemptRejected, openDinerAttempt, resumeDinerAttempt } from "@/lib/diner-attempt";
+import { billEntitlements, remainingPrincipal } from "@/lib/bill-principal";
 import { NextResponse, type NextRequest } from "next/server";
 import Stripe from "stripe";
 import { apiError } from "@/lib/api-error";
@@ -12,7 +13,7 @@ import { accountByCode } from "@/lib/accounts-server";
 import { releaseAccountCheckout } from "@/lib/account-checkout";
 import { stripeProductName } from "@/lib/stripe-limits";
 import { getPlan } from "@/lib/plan-server";
-import { NO_FEE, feeMetadata, releaseFee, reserveFee, stripeRefusedOutright } from "@/lib/platform-fee";
+import { NO_FEE, feeMetadata, reserveFee } from "@/lib/platform-fee";
 import { round2 } from "@/lib/money";
 import { siteOrigin } from "@/lib/site-origin";
 
@@ -48,35 +49,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.noCardPayments", 409);
   }
 
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+  const scopeKey = `account:${account.id}`;
+  try {
+    const prior = await resumeDinerAttempt(stripe, restaurant.id, scopeKey);
+    if (prior) return NextResponse.json({ url: prior.url });
+  } catch { return await apiError("apiErr.checkoutFailed", 502); }
+
   // The same gratuity rule as a table's bill: a percentage or an amount, and
   // never more than the food it thanks somebody for.
   const pct = Math.min(100, Math.max(0, Number(body?.tipPct) || 0));
   const asked = body?.tipAmount != null ? Number(body.tipAmount) : (expected * pct) / 100;
   const tip = Math.min(Math.max(0, round2(Number.isFinite(asked) ? asked : 0)), expected);
 
-  // One card payment for one account: the single fee an order carries,
-  // capped against the food and not the tip.
-  // Reserved under the month's ceiling before the checkout opens, and given
-  // back on every way it does not reach Stripe.
-  const plan = await getPlan(restaurant.id);
-  let fee = NO_FEE;
-  try {
-    fee = plan ? await reserveFee(restaurant.id, plan.limits, Math.round(expected * 100), "account") : NO_FEE;
-  } catch {
-    return await apiError("apiErr.generic", 500);
-  }
-  const feeCents = fee.cents;
-  const refused = async (key: string, status: number) => {
-    await releaseFee(fee.id).catch(err => console.error("account pay: the fee reservation stays counted", err));
-    return await apiError(key, status);
-  };
-
+  const refused = async (key: string, status: number) => await apiError(key, status);
   const { data: opened, error: openError } = await db.rpc("account_checkout_open_v2", {
     p_restaurant: restaurant.id,
     p_account: account.id,
     p_expected: expected,
     p_tip: tip,
-    p_fee: feeCents / 100,
+    p_fee: 0,
   });
   if (openError) return await refused("apiErr.generic", 500);
   const r = opened as { outcome: string; checkout?: string; amount?: number; tip?: number };
@@ -94,11 +86,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await refused(!orders ? "apiErr.verifyOrders" : "apiErr.mixedCurrencies", !orders ? 503 : 409);
   }
 
+  const plan = await getPlan(restaurant.id);
+  const foodPrincipal = remainingPrincipal(orders);
+  let fee = NO_FEE;
+  try {
+    fee = plan ? await reserveFee(restaurant.id, plan.limits, Math.round(foodPrincipal * 100), "account") : NO_FEE;
+  } catch {
+    await releaseAccountCheckout(r.checkout);
+    return await apiError("apiErr.checkoutFailed", 502);
+  }
+  const feeCents = fee.cents;
+  // One card payment for one account: the single fee an order carries,
+  // capped against the food and not the tip, reserved under the month's ceiling.
+  // Every failure before Stripe gives it back; an unknown Stripe answer keeps it.
   const origin = siteOrigin(req);
   const cents = Math.round(round2(Number(r.amount) + Number(r.tip)) * 100);
   try {
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-    const session = await stripe.checkout.sessions.create(
+    const session = await openDinerAttempt(stripe,
       {
         mode: "payment",
         // Cards only, as every checkout (see `card-session.ts`).
@@ -124,21 +128,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         cancel_url: `${origin}/cuenta/${code}?cancelled=1`,
         expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
       },
-      { stripeAccount: restaurant.stripe_account_id },
+      {
+        restaurantId: restaurant.id, stripeAccount: restaurant.stripe_account_id, currency, amountCents: cents,
+        orderIds: checkout.order_ids, payableIds: checkout.order_ids, scopeKey,
+        entitlements: billEntitlements(orders, 0).entitlements, foodPrincipal,
+      },
     );
-    await recordDinerCheckout(session, {
-      restaurantId: restaurant.id, stripeAccount: restaurant.stripe_account_id, currency, amountCents: cents,
-      orderIds: checkout.order_ids,
-    }, () => stripe.checkout.sessions.expire(session.id, {}, { stripeAccount: restaurant.stripe_account_id }));
     await db.from("account_checkouts").update({ stripe_session_id: session.id }).eq("id", r.checkout);
     return NextResponse.json({ url: session.url });
   } catch (err) {
-    // The charge never happened: the till may collect this account again. If
-    // even that fails, the hold simply runs out — the safe way round. The fee
-    // goes back only on an outright refusal: an answer that never arrived may
-    // still be a session, and Stripe's expiry will release it.
-    await releaseAccountCheckout(r.checkout).catch(e => console.error("account checkout release failed:", e));
-    if (stripeRefusedOutright(err)) return await refused("apiErr.checkoutFailed", 502);
+    // A rejected quote never reached Stripe: the till may collect again. If
+    // releasing fails the hold runs out. An unknown response can still be a
+    // payable session, so its attempt, fee and hold survive for the same retry.
+    // The attempt releases an initial Stripe refusal and its own account hold.
+    if (err instanceof DinerAttemptRejected) {
+      await releaseAccountCheckout(r.checkout);
+    }
     return await apiError("apiErr.checkoutFailed", 502);
   }
 }

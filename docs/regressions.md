@@ -15,6 +15,11 @@ us, and what now catches each one.
 | Rule | The bug it came from |
 |---|---|
 | A statement email is capped per account and per restaurant, never on the recipient (G5) | One account code could mail the same stranger ~400 times a day |
+| Coupon entitlements and card receipts agree before money moves (S5 E4) | A MX$90 discounted charge recorded MX$100 and could later reserve a MX$100 return |
+| A coupon use belongs to one checkout attempt (S5 E7) | An old expiry released the newer payment page's reservation on the same order |
+| Financial scope and Stripe retries agree independently of fees (S5 E8) | Bills and fee-free split shares could open two payable pages |
+| Fee caps and remaining food principal agree (S5 E9) | Existing gratuities raised the ten-percent cap on bill and split fees |
+| Displayed and payable sitting scopes agree (S5 E11) | A valid sitting older than eight hours showed debt that payment called paid |
 | A signed card event matches our own frozen checkout before any money or expiry write (S4 E1) | A connected owner could stamp another restaurant's orders onto a cheap test session |
 | Settings and the database accept the same cent-based currencies (S4 E2) | JPY entered arithmetic that multiplied every charge by 100 |
 | Bill, split and account charges and receipts keep the orders' original currency (S4 E3) | Changing the menu from MXN to USD relabelled an unpaid peso bill as dollars |
@@ -2870,3 +2875,80 @@ answered call reaching the safe feed. Run those live gates only after applying
 the schema. On screen, verify kitchen cards and detail show no money, calls still
 arrive, both stations update live, and another device's completion/cancellation
 clears the board; repeat as the floor to check totals, unpaid badges and receipts.
+
+## A bill coupon and its receipts disagreed (S5 E4)
+
+The quoted discount and the orders' entitlements had to agree before Stripe
+charged. `diner_checkout_open` now freezes every net entitlement and discount,
+checks their sum against the charge, and reserves the coupon in that same
+transaction. Settlement applies those discounts once before inserting receipts.
+A concurrent collection leaves its receipts intact; only the remaining food can
+be discounted, and unused card money is an explicit `refunds_due` liability.
+The redemption records the discount actually applied. An over-record rolls back
+and retries rather than silently accepting a receipt larger than the charge.
+
+`bill-principal.spec.ts` checks cent allocation, existing tips, full discounts
+and coupon-free entitlements. `checkout-settle.spec.ts` checks bill, split,
+account and pay-now dispatch, including the charge left for a split's later
+orders. `bill-checkout-invariants.spec.ts` joins the quote, receipt, attribution
+and refund rules. Claude must verify the SQL against the shared development
+database with money, allocation and attack checks; these unit tests do not run SQL.
+
+## An old expiry released a newer coupon use (S5 E7)
+
+A reservation and the payment page that owns it had to agree. Redemptions now
+carry `checkout_attempt_id`; confirmation and expiry target that attempt only,
+once. Legacy order cleanup excludes attempt-owned reservations. Pay-now coupon
+logging happens before creating the session, and triggers bind the reservation
+to its durable checkout, including the former logging order during deployment.
+
+`diner-attempt.spec.ts` checks verified attempt identity for both outcomes and
+rejects unverified release. `bill-abandon.spec.ts` replays expiry and proves that
+served orders never reach order-wide coupon cleanup. The invariant links the expiry,
+cart producer and SQL ownership rules. The live check must expire A, open B
+using the same coupon and order, then replay A's expiry and payment events.
+
+## A fee-free payment page had no exclusion (S5 E8)
+
+The payable financial scope and the saved Stripe request had to agree. Bill,
+split and account routes share `diner_checkouts` ownership under the restaurant
+money lock, even when the fee is zero. Exact scopes resume their existing page;
+overlapping bill or own-order scopes refuse another page. Different shares of
+the same split may still pay concurrently. Each attempt persists its Stripe
+idempotency key and complete request, including tip, fee and expiry.
+
+`diner-attempt.spec.ts` covers simultaneous opens, lost responses, expiry and
+initial refusal. A refusal while resuming an uncertain older attempt cannot
+release its reservation. `diner-currency.spec.ts` checks that all three routes
+return an existing URL without reserving another fee. A lost response keeps its
+scope and reservations until Stripe proves its outcome; retries never extend
+its quote. An unrecoverable provider outcome needs investigation, not a fresh
+key that might create a second charge.
+
+## Existing gratuities raised the fee cap (S5 E9)
+
+The plan's food-only cap and checkout's fee base had to agree. Remaining food
+principal subtracts both collected money and outstanding existing gratuities.
+Bill coupons discount that principal. Splits freeze it separately from their
+amount and divide the one capped bill fee across shares; new tips never raise
+it. Account checkout uses the same principal helper. The attempt saves the
+principal explicitly. Older splits with no principal snapshot use their current
+remaining principal, which can lower the fee and lets their diners keep paying.
+
+`bill-principal.spec.ts` reproduces MX$4 food plus MX$4 tip: the MX$0.75 fee is
+capped at MX$0.40. `diner-currency.spec.ts` checks the actual bill, split and
+account route arguments; `bill-checkout-invariants.spec.ts` joins split freezing
+and all three payment producers.
+
+## An older sitting could see its debt but could not pay it (S5 E11)
+
+Bill display and payment selection had to agree on the validated sitting.
+`bill/pay` now calls the same `fetchTableBill` as display, with the phone's
+sitting ID. A valid older sitting remains payable; a stale or foreign selection
+asks the diner to review the bill instead of saying it was paid.
+
+`diner-currency.spec.ts` reproduces payment from a sitting older than eight
+hours and rejects a selection outside the displayed scope. The invariant also
+checks that the phone sends its sitting and payment has no second age cutoff.
+Claude must check the older sitting, a new party scanning the same table, and
+the changed-bill copy on screen.

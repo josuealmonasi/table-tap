@@ -228,3 +228,9 @@ drop table if exists offline_sale_queue cascade;
 drop function if exists public.sync_kitchen_ticket();
 drop function if exists public.kitchen_items(jsonb);
 drop function if exists public.sync_kitchen_request();
+
+drop function if exists public.diner_checkout_open(jsonb);
+drop function if exists public.diner_checkout_bind(uuid, jsonb);
+drop function if exists public.finish_diner_checkout(uuid, boolean);
+drop function if exists public.bind_diner_coupon() cascade;
+drop function if exists public.bind_redemption_checkout() cascade;

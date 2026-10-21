@@ -49,7 +49,7 @@ async function checkScope(record: DinerCheckoutRecord, allowMissing = false): Pr
  */
 export async function recordDinerCheckout(
   session: Stripe.Checkout.Session,
-  expected: { restaurantId: string; stripeAccount: string; currency: string; amountCents: number; orderIds: string[] },
+  expected: { restaurantId: string; stripeAccount: string; currency: string; amountCents: number; orderIds: string[]; attemptId?: string },
   expire: () => Promise<unknown>,
 ): Promise<void> {
   try {
@@ -62,7 +62,10 @@ export async function recordDinerCheckout(
       || session.currency !== record.currency.toLowerCase() || session.amount_total !== record.amount_cents
       || record.metadata.restaurant_id !== record.restaurant_id) throw new Error("Stripe created a different checkout than requested");
     await checkScope(record);
-    const { error } = await createAdminClient().from("diner_checkouts").insert(record);
+    const db = createAdminClient();
+    const { error } = expected.attemptId
+      ? await db.rpc("diner_checkout_bind", { p_attempt: expected.attemptId, p_record: record })
+      : await db.from("diner_checkouts").insert(record);
     if (error) throw new Error(`Could not save checkout provenance: ${error.message}`);
   } catch (error) {
     // Never expose a payable page whose money we cannot authenticate later.
