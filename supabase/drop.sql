@@ -65,6 +65,8 @@ drop table if exists platform_admins     cascade;
 drop table if exists profiles            cascade;
 drop table if exists staff               cascade;
 drop table if exists service_requests    cascade;
+drop table if exists kitchen_requests    cascade;
+drop table if exists kitchen_tickets     cascade;
 drop table if exists orders              cascade;
 drop table if exists item_addons         cascade;
 drop table if exists menu_items          cascade;
@@ -222,3 +224,7 @@ drop function if exists public.guard_offline_audit() cascade;
 
 drop function if exists public.queue_offline_sale(uuid,uuid,jsonb,text,text,text,text) cascade;
 drop table if exists offline_sale_queue cascade;
+
+drop function if exists public.sync_kitchen_ticket();
+drop function if exists public.kitchen_items(jsonb);
+drop function if exists public.sync_kitchen_request();

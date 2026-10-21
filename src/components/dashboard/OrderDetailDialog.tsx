@@ -7,7 +7,7 @@ import { useToast } from "@/components/ui/Toast";
 import { printableReceipt } from "@/lib/print-document";
 import { printWhenReady } from "@/lib/print-window";
 import { formatMoney, dateLocale } from "@/lib/format";
-import { orderCode, type Order } from "@/lib/types";
+import { boardOrderCode, hasOrderMoney, type BoardOrder } from "@/lib/kitchen-ticket";
 import { statusMeta } from "@/lib/order-status";
 import { itemSalePrice } from "@/lib/pricing";
 import { modifierEntries } from "@/lib/modifiers";
@@ -18,8 +18,8 @@ import { CloseIcon } from "@/components/ui/icons";
  *
  * The board's card is a summary — it has to fit a column and stay scannable
  * across a busy service. When the pass needs the detail (which options, whose
- * allergy note, what the table actually owes) they open the card, and it is
- * all here without anyone hunting for a screen.
+ * allergy note, and what the floor may collect) they open the card, and it is
+ * all here without anyone hunting for a screen. Money stays with the floor.
  *
  * Read-only on purpose, with one exception: it prints. The buttons that MOVE an
  * order live on the card, where the kitchen's hands already are — but paper is
@@ -32,12 +32,13 @@ export default function OrderDetailDialog({
   open,
   onClose,
 }: {
-  order: Order;
+  order: BoardOrder;
   currency: string;
   open: boolean;
   onClose: () => void;
 }) {
-  const currency = order.currency ?? menuCurrency;
+  const money = hasOrderMoney(order) ? order : null;
+  const currency = money?.currency ?? menuCurrency;
   const t = useT();
   const { locale } = useLocale();
   const toast = useToast();
@@ -52,7 +53,7 @@ export default function OrderDetailDialog({
    * is standing next to the printer that should produce it.
    */
   async function print(to: "kitchen" | "receipt"): Promise<void> {
-    if (busy) return;
+    if (busy || (to === "receipt" && !money)) return;
     setBusy(to);
     try {
       const res = await fetch("/api/orders/print", {
@@ -79,7 +80,7 @@ export default function OrderDetailDialog({
         toast(t("pos.printBlocked"), "error");
         return;
       }
-      w.document.write(printableReceipt(data.html ?? "", orderCode(order.id)));
+      w.document.write(printableReceipt(data.html ?? "", boardOrderCode(order)));
       w.document.close();
       w.focus();
       printWhenReady(w);
@@ -91,7 +92,7 @@ export default function OrderDetailDialog({
   }
 
   return (
-    <Modal open={open} onClose={onClose} maxWidth={460} label={orderCode(order.id)}>
+    <Modal open={open} onClose={onClose} maxWidth={460} label={boardOrderCode(order)}>
       <div className="tt-row" style={{ alignItems: "baseline", gap: 10 }}>
         <h3 className="tt-serif" style={{ margin: 0 }}>
           {order.table_label
@@ -99,7 +100,7 @@ export default function OrderDetailDialog({
             : t("dash.billsToGo")}
         </h3>
         <span className="tt-order-code" style={{ marginLeft: "auto" }}>
-          {orderCode(order.id)}
+          {boardOrderCode(order)}
         </span>
         <button
           type="button"
@@ -141,15 +142,15 @@ export default function OrderDetailDialog({
           </div>
           {/* What this line put on the bill: the price it was ordered at,
               extras included. The list price would make the lines add up to
-              more than the total the kitchen can see at the bottom. */}
-          <span className="tt-muted" style={{ flex: "none" }}>
+              more than the total the floor can see at the bottom. */}
+          {money && "price" in item && <span className="tt-muted" style={{ flex: "none" }}>
             {formatMoney(
               (itemSalePrice(item.price, item.discountPct) +
                 (item.extras?.reduce((sum, e) => sum + e.price, 0) ?? 0)) *
                 item.qty,
               currency,
             )}
-          </span>
+          </span>}
         </div>
       ))}
 
@@ -163,31 +164,31 @@ export default function OrderDetailDialog({
           record of what was charged and why, and a total that is smaller than
           the dishes above it with nothing to explain the gap is the question
           somebody asks weeks later with no way to answer it. */}
-      {Number(order.discount ?? 0) > 0 && (
+      {money && Number(money.discount ?? 0) > 0 && (
         <>
           <div className="tt-row" style={{ marginTop: 14, fontSize: 14 }}>
             <span className="tt-muted">{t("totals.subtotal")}</span>
             <span className="tt-muted">
-              {formatMoney(Number(order.total) + Number(order.discount), currency)}
+              {formatMoney(Number(money.total) + Number(money.discount), currency)}
             </span>
           </div>
           <div className="tt-row" style={{ marginTop: 4, fontSize: 14 }}>
             <span className="tt-save">
-              {order.coupon_code
-                ? t("totals.discountCode", { code: order.coupon_code })
+              {money.coupon_code
+                ? t("totals.discountCode", { code: money.coupon_code })
                 : t("totals.discount")}
             </span>
             <span className="tt-save">
-              −{formatMoney(Number(order.discount), currency)}
+              −{formatMoney(Number(money.discount), currency)}
             </span>
           </div>
         </>
       )}
 
-      <div className="tt-row tt-total" style={{ marginTop: 14 }}>
+      {money && <div className="tt-row tt-total" style={{ marginTop: 14 }}>
         <span>{t("totals.total")}</span>
-        <span>{formatMoney(order.total, currency)}</span>
-      </div>
+        <span>{formatMoney(money.total, currency)}</span>
+      </div>}
 
       {/* Whatever column it is in, and however long ago it was served. */}
       <div className="tt-order-print">
@@ -199,14 +200,14 @@ export default function OrderDetailDialog({
         >
           {busy === "kitchen" ? t("common.saving") : t("orders.printKitchen")}
         </button>
-        <button
+        {money && <button
           type="button"
           className="tt-btn"
           disabled={busy !== null}
           onClick={() => void print("receipt")}
         >
           {busy === "receipt" ? t("common.saving") : t("orders.printReceipt")}
-        </button>
+        </button>}
       </div>
     </Modal>
   );

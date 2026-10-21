@@ -7,7 +7,8 @@ import { useOnline } from "@/hooks/useOnline";
 import { enqueue, readQueue, writeQueue, type QueuedMove } from "@/lib/offline-queue";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
-import type { Order, OrderStatus } from "@/lib/types";
+import type { OrderStatus } from "@/lib/types";
+import type { BoardOrder } from "@/lib/kitchen-ticket";
 import type { CancelSummary } from "@/lib/cancel-plan";
 
 /** Short, gentle ping so kitchen staff notice a new order without looking. */
@@ -32,10 +33,10 @@ function playPing() {
  * them in sync via realtime (pinging on new ones), and exposes a status updater
  * with optimistic UI.
  */
-export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]) {
+export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOrder[], kitchen = false) {
   const t = useT();
   const toast = useToast();
-  const [orders, setOrders] = useState<Order[]>(initialOrders);
+  const [orders, setOrders] = useState<BoardOrder[]>(initialOrders);
   const { online, markOffline } = useOnline();
   const [pending, setPending] = useState<QueuedMove[]>([]);
 
@@ -47,7 +48,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
     let channel: ReturnType<typeof supabase.channel> | null = null;
     let cancelled = false;
 
-    function handleChange(row: Order | undefined, eventType: string) {
+    function handleChange(row: BoardOrder | undefined, eventType: string) {
       if (!row || row.status === "pending_payment") return;
       setOrders(prev => {
         const exists = prev.find(o => o.id === row.id);
@@ -58,8 +59,8 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
     }
 
     (async () => {
-      // Orders are owner-only under RLS, so the realtime socket must carry the
-      // owner's token — otherwise every change is filtered out.
+      // RLS checks the socket too: the kitchen reads tickets and the floor
+      // reads orders, both with their own current session.
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -73,10 +74,10 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
           {
             event: "*",
             schema: "public",
-            table: "orders",
+            table: kitchen ? "kitchen_tickets" : "orders",
             filter: `restaurant_id=eq.${restaurantId}`,
           },
-          payload => handleChange(payload.new as Order, payload.eventType),
+          payload => handleChange(payload.new as BoardOrder, payload.eventType),
         )
         .subscribe();
     })();
@@ -85,7 +86,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: Order[]
       cancelled = true;
       if (channel) supabase.removeChannel(channel);
     };
-  }, [restaurantId]);
+  }, [restaurantId, kitchen]);
 
   /**
    * Sends what has been waiting, oldest first.

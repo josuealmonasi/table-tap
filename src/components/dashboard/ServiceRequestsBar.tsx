@@ -1,7 +1,7 @@
 "use client";
 
 import { useServiceRequests } from "@/hooks/useServiceRequests";
-import type { ServiceRequest } from "@/lib/types";
+import type { BoardRequest } from "@/lib/kitchen-ticket";
 import { useT } from "@/lib/i18n/context";
 import { BillIcon, CallWaiterIcon, StatusReadyIcon } from "@/components/ui/icons";
 import type { ReadyTable } from "@/lib/ready-tables";
@@ -10,7 +10,8 @@ import SettleTableDialog from "./SettleTableDialog";
 
 interface ServiceRequestsBarProps {
   restaurantId: string;
-  initialRequests: ServiceRequest[];
+  initialRequests: BoardRequest[];
+  kitchen?: boolean;
   currency: string;
   /** Only the floor settles bills — the kitchen sees the chip, not the money. */
   canSettle: boolean;
@@ -39,11 +40,12 @@ export default function ServiceRequestsBar({
   canApprove,
   ready = [],
   onDelivered,
+  kitchen = false,
 }: ServiceRequestsBarProps) {
   const t = useT();
-  const { requests, markDone } = useServiceRequests(restaurantId, initialRequests);
+  const { requests, markDone } = useServiceRequests(restaurantId, initialRequests, kitchen);
   // The table whose bill the waiter is collecting, if any.
-  const [settling, setSettling] = useState<ServiceRequest | null>(null);
+  const [settling, setSettling] = useState<BoardRequest | null>(null);
 
   // Measured after mount, not during render: the server says "5m ago" and the
   // browser hydrating a moment later says "6m", which React reports as a

@@ -21,7 +21,7 @@ market is Mexico — prices in MXN, interface in Spanish with English alongside.
 | Actor | Reaches | Needs |
 | --- | --- | --- |
 | **Diner** | the QR, no login | browse, order, pay, track, rate, ask for the bill |
-| **Kitchen** | `/dashboard/orders` | the board, and nothing that costs money |
+| **Kitchen** | `/dashboard/orders` | live preparation tickets and waiter calls, with no amounts, payment state or customer receipts |
 | **Waiter** | orders + open bills + the pad | take the order, carry it out, collect in parts, ask for a discount or a write-off |
 | **Cashier** | orders + open bills | take money at the till, see their own takings |
 | **Manager** | most of the dashboard | the menu, promotions, approvals, the daily count |
@@ -440,7 +440,7 @@ dishes on a bill the restaurant has just cancelled.
 ## Data model
 
 `supabase/schema.sql` is one idempotent script; git history is the changelog.
-Forty-six tables, RLS on every one of them, in groups:
+Fifty-nine tables, RLS on every one of them, in groups:
 
 - **The restaurant** — `restaurants`, `staff`, `profiles`, `platform_admins`,
   `plan_limits`, `user_logs`
@@ -448,6 +448,7 @@ Forty-six tables, RLS on every one of them, in groups:
   `dietary_tags`, `icon_groups`, `icon_group_items`
 - **Selling** — `orders`, `payments`, `table_sessions`, `restaurant_tables`,
   `service_requests`, `dish_ratings`, `bill_splits`, `bill_split_claims`
+- **The pass** — `kitchen_tickets`, `kitchen_requests` (safe live projections)
 - **Paper** — `print_jobs`
 - **Offers** — `promotions`, `promotion_items`, `coupons`, `coupon_redemptions`
 - **Money asked for** — `discount_requests`, `write_off_requests`
@@ -485,6 +486,21 @@ Assume the browser is hostile; it holds the publishable key and nothing else.
   `has_role(restaurant_id, ['manager','waiter','cashier'])` rather than
   `works_at`, so the kitchen cannot read the night's takings or see what each
   person took.
+- **Kitchen access stops at preparation.** The kitchen cannot select `orders`,
+  `table_sessions`, `bill_splits`, `bill_split_claims` or `service_requests` with
+  its session and the publishable key. Its board reads `kitchen_tickets` and
+  `kitchen_requests` initially and through `postgres_changes`. Triggers update
+  both in the source write's transaction. Ticket lines allowlist preparation
+  fields recursively, including extras and combo components. No totals, prices,
+  payment state, order UUIDs, sitting UUIDs or table UUIDs reach either feed:
+  those UUIDs can open public diner bills. A separate `orders.kitchen_ticket_id`
+  identifies kitchen actions, while the short displayed order code stays the
+  same as the floor's and printer's. Terminal statuses remain readable so live
+  completion and cancellation remove tickets from the board.
+  Status moves, station readiness and kitchen reprints resolve that ticket ID
+  server-side within the actor's restaurant. Calls are answered by request ID
+  through `PATCH /api/service-requests`, which changes only `status` to `done`.
+  The floor keeps its full order and call feeds and permissions.
 - **Column grants, not just row policies.** `restaurants` is publicly readable
   by row — the menu hangs off a QR — so what is granted is an allowlist of the
   PUBLIC columns, identical for `anon` and for `authenticated`. The private
@@ -1104,6 +1120,11 @@ the printer was off when it was placed. **The ticket** is the customer's
 receipt, printed through the browser — the same document the till prints and the
 same one an email carries, so a reprint cannot say something different from the
 original.
+
+The kitchen may reprint preparation paper only. `to: "receipt"` requires
+`actingFrontOfHouse()` before reading the order; owner, manager, waiter and
+cashier retain customer receipts. The kitchen dialog omits amounts, paid badges
+and the receipt button, and the route enforces the same boundary.
 
 Asking again is not the same as asking twice by accident. `print_jobs_once` is
 unique on `(order_id, kind)` precisely so a repeated trigger cannot put one

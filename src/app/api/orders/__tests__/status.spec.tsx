@@ -19,7 +19,7 @@ function database() {
         if (state.race === "write-off") state.written_off = true;
         else state.status = state.race;
       }
-      const row: Record<string, unknown> = { id: "o1", status: state.status, written_off: state.written_off, restaurant_id: state.restaurant_id };
+      const row: Record<string, unknown> = { id: "o1", status: state.status, written_off: state.written_off, kitchen_ticket_id: "t1", restaurant_id: state.restaurant_id };
       const matches = filters.every(([key, value]) => row[key] === value);
       if (updating) {
         state.filters = filters;
@@ -43,7 +43,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => database() }
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => database() }));
 const { PATCH } = await import("../route");
 const send = (status: string, from?: string) => PATCH(new NextRequest("http://localhost/api/orders", {
-  method: "PATCH", body: JSON.stringify({ id: "o1", status, from }),
+  method: "PATCH", body: JSON.stringify({ id: state.role === "kitchen" ? "t1" : "o1", status, from }),
 }));
 beforeEach(() => Object.assign(state, { role: "kitchen", status: "cancelled", written_off: false, restaurant_id: "r1", race: "", writes: 0, filters: [] }));
 describe("ordinary order status moves", () => {
@@ -79,7 +79,7 @@ describe("ordinary order status moves", () => {
     state.status = from;
     expect((await send(to, from)).status).toBe(200);
     expect(state.status).toBe(to);
-    expect(state.filters).toEqual(expect.arrayContaining([["restaurant_id", "r1"], ["status", from], ["written_off", false]]));
+    expect(state.filters).toEqual(expect.arrayContaining([["id", "o1"], ["restaurant_id", "r1"], ["status", from], ["written_off", false]]));
   });
   it.each(["waiter", "cashier"])("%s may hand over ready food but cannot skip cooking", async role => {
     state.role = role; state.status = "received";

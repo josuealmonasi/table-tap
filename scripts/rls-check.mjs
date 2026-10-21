@@ -17,6 +17,7 @@
 // ============================================================================
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
+import { checkKitchenMoney } from "./rls-kitchen.mjs";
 import { plantNeighbour } from "./rls-fixture.mjs";
 import { refuseProduction, watchDevWorker } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
@@ -51,7 +52,7 @@ console.log("\nRLS check — development\n");
 // ── 1. The publishable key, which ships to every phone ─────────────────────
 console.log("The key on every diner's phone");
 for (const table of [
-  "orders", "table_sessions", "write_off_requests", "discount_requests",
+  "kitchen_tickets", "kitchen_requests", "orders", "table_sessions", "write_off_requests", "discount_requests",
   "coupons", "coupon_redemptions", "staff", "user_logs", "profiles",
   "platform_admins", "rate_limits", "restaurant_tables",
   "icon_groups", "icon_group_items",
@@ -496,6 +497,10 @@ if (!signIn.error && theirs) {
   if (inErr) {
     bad("cannot sign in as the kitchen — the takings check did not run");
   } else {
+    const { data: restaurants } = await admin.from("restaurants").select("id,name");
+    const home = restaurants?.find(r => r.name === "Demo Bistro");
+    if (!home) bad("no Demo Bistro for the kitchen privacy check");
+    else await checkKitchenMoney({ admin, kitchen, home, ok, bad, base: BASE });
     const seen = await kitchen.from("payments").select("id").limit(1);
     (seen.error || (seen.data ?? []).length === 0)
       ? ok("the kitchen cannot read the takings")
@@ -542,7 +547,7 @@ if (!signIn.error && theirs) {
   const PUBLIC_MENU = ["categories", "dietary_tags", "menu_items", "menus", "promotions"];
   const TENANT = ["bill_splits", "categories", "coupon_redemptions", "coupons", "dietary_tags",
     "discount_requests", "dish_ratings", "icon_groups", "menu_items", "menus", "notifications",
-    "orders", "payments", "print_jobs", "promotions", "restaurant_tables", "service_requests",
+    "kitchen_tickets", "kitchen_requests", "orders", "payments", "print_jobs", "promotions", "restaurant_tables", "service_requests",
     "staff", "table_sessions", "user_logs", "write_off_requests",
     "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions",
     "customer_accounts", "account_checkouts", "diner_checkouts",

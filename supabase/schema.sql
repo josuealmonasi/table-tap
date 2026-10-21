@@ -803,7 +803,7 @@ drop policy if exists "owner reads orders" on orders; -- superseded by team read
 drop policy if exists "team reads orders" on orders;
 create policy "team reads orders"
   on orders for select
-  using (works_at(restaurant_id));
+  using (has_role(restaurant_id, array['manager', 'waiter', 'cashier']));
 
 -- INSERT/UPDATE on orders is done ONLY server-side via the secret key, which
 -- bypasses RLS. So we intentionally add NO insert/update policies here:
@@ -817,13 +817,13 @@ drop policy if exists "owner reads service requests" on service_requests;
 drop policy if exists "team reads service requests" on service_requests;
 create policy "team reads service requests"
   on service_requests for select
-  using (works_at(restaurant_id));
+  using (has_role(restaurant_id, array['manager', 'waiter', 'cashier']));
 drop policy if exists "owner updates service requests" on service_requests;
 drop policy if exists "team updates service requests" on service_requests;
 create policy "team updates service requests"
   on service_requests for update
-  using (works_at(restaurant_id))
-  with check (works_at(restaurant_id) and status in ('open', 'done'));
+  using (has_role(restaurant_id, array['manager', 'waiter', 'cashier']))
+  with check (has_role(restaurant_id, array['manager', 'waiter', 'cashier']) and status in ('open', 'done'));
 -- Staff only ever mark a request answered, so that is the one column they may
 -- write. With the whole row writable, a member of one restaurant could point
 -- their own request at another restaurant's table (the policy checks the
@@ -1833,7 +1833,8 @@ alter table table_sessions enable row level security;
 drop policy if exists "team reads table sessions" on table_sessions;
 create policy "team reads table sessions"
   on table_sessions for select
-  using (works_at(restaurant_id));
+  using (has_role(restaurant_id, array['manager', 'waiter', 'cashier']));
+-- Only the floor reads sitting ids: /api/session uses them to reveal balances.
 -- Customers never read this table; the server answers for them through
 -- /api/session, which tells a phone only about its own sitting.
 revoke all on table_sessions from anon;
@@ -2415,17 +2416,17 @@ alter table bill_splits add column if not exists order_ids uuid[] not null defau
 alter table bill_splits enable row level security;
 alter table bill_split_claims enable row level security;
 
--- The team can look at what a table is doing, so a waiter can see why the
+-- The floor can look at what a table is doing, so a waiter can see why the
 -- screen says a bill is being divided and can call it off.
 drop policy if exists "team reads splits" on bill_splits;
 create policy "team reads splits"
-  on bill_splits for select using (works_at(restaurant_id));
+  on bill_splits for select using (has_role(restaurant_id, array['manager', 'waiter', 'cashier']));
 
 drop policy if exists "team reads split claims" on bill_split_claims;
 create policy "team reads split claims"
   on bill_split_claims for select using (
     exists (select 1 from bill_splits s
-             where s.id = split_id and works_at(s.restaurant_id))
+             where s.id = split_id and has_role(s.restaurant_id, array['manager', 'waiter', 'cashier']))
   );
 
 revoke all on bill_splits from anon;
@@ -7583,5 +7584,144 @@ $$;
 revoke all on function public.guard_offline_audit() from public,anon,authenticated;
 drop trigger if exists guard_offline_audit on orders;
 create trigger guard_offline_audit before insert or update on orders for each row execute function public.guard_offline_audit();
+revoke truncate, references, trigger on all tables in schema public from authenticated;
+revoke truncate, references, trigger on all tables in schema public from public, anon, authenticated;
+
+-- The pass reads preparation facts, not sales. A separate id matters too:
+-- orders.id is the credential a diner uses to open a bill without a login.
+alter table orders add column if not exists kitchen_ticket_id uuid not null default gen_random_uuid();
+create unique index if not exists orders_kitchen_ticket_id on orders(kitchen_ticket_id);
+
+create table if not exists kitchen_tickets (
+  id uuid primary key references orders(kitchen_ticket_id) on delete cascade,
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  code text not null,
+  table_label text,
+  customer_name text,
+  status text not null,
+  stations_ready text[] not null default '{}',
+  items jsonb not null,
+  note text,
+  created_at timestamptz not null
+);
+create index if not exists kitchen_tickets_board on kitchen_tickets(restaurant_id, status, created_at);
+alter table kitchen_tickets enable row level security;
+revoke all on kitchen_tickets from anon;
+revoke all on kitchen_tickets from public, authenticated;
+grant select on kitchen_tickets to authenticated;
+grant all on kitchen_tickets to service_role;
+drop policy if exists "team reads kitchen tickets" on kitchen_tickets;
+create policy "team reads kitchen tickets" on kitchen_tickets for select to authenticated
+  using (works_at(restaurant_id));
+
+-- Build from an allowlist at every depth: removing just price missed extras,
+-- combo components and any new money field added to order snapshots later.
+create or replace function public.kitchen_items(p_items jsonb)
+returns jsonb language sql immutable set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+    'name', line->'name', 'emoji', line->'emoji', 'qty', line->'qty',
+    'mods', line->'mods', 'notes', line->'notes',
+    'station', line->'station', 'skipsKitchen', line->'skipsKitchen',
+    'extras', kitchen_items(line->'extras'),
+    'components', kitchen_items(line->'components')
+  )) order by n), '[]'::jsonb)
+  from jsonb_array_elements(case when jsonb_typeof(p_items) = 'array' then p_items else '[]'::jsonb end)
+    with ordinality as lines(line, n);
+$$;
+revoke all on function public.kitchen_items(jsonb) from public, anon, authenticated;
+grant execute on function public.kitchen_items(jsonb) to service_role;
+
+-- Atomic with the order: status, station readiness, edits and cancellation all
+-- reach the same feed. Terminal updates remain readable so the board removes
+-- finished tickets; pending checkouts never reach the pass.
+create or replace function public.sync_kitchen_ticket()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.status <> 'pending_payment' then
+    insert into kitchen_tickets (id, restaurant_id, code, table_label, customer_name,
+      status, stations_ready, items, note, created_at)
+    values (new.kitchen_ticket_id, new.restaurant_id, left(replace(new.id::text, '-', ''), 4),
+      new.table_label, new.customer_name, new.status, new.stations_ready,
+      kitchen_items(new.items), new.note, new.created_at)
+    on conflict (id) do update set restaurant_id = excluded.restaurant_id,
+      code = excluded.code, table_label = excluded.table_label, customer_name = excluded.customer_name,
+      status = excluded.status, stations_ready = excluded.stations_ready,
+      items = excluded.items, note = excluded.note, created_at = excluded.created_at;
+  end if;
+  return new;
+end; $$;
+revoke all on function public.sync_kitchen_ticket() from public, anon, authenticated;
+grant execute on function public.sync_kitchen_ticket() to service_role;
+drop trigger if exists orders_sync_kitchen_ticket on orders;
+create trigger orders_sync_kitchen_ticket after insert or update on orders
+  for each row execute function public.sync_kitchen_ticket();
+
+-- Lock the initial copy against concurrent moves, or an older snapshot could
+-- overwrite a newer trigger result on a busy pass during rollout.
+do $$ begin
+  lock table orders in share row exclusive mode;
+  insert into kitchen_tickets (id, restaurant_id, code, table_label, customer_name,
+    status, stations_ready, items, note, created_at)
+  select kitchen_ticket_id, restaurant_id, left(replace(id::text, '-', ''), 4),
+    table_label, customer_name, status, stations_ready, kitchen_items(items), note, created_at
+  from orders where status in ('received', 'preparing', 'ready')
+  on conflict (id) do update set restaurant_id = excluded.restaurant_id,
+    code = excluded.code, table_label = excluded.table_label, customer_name = excluded.customer_name,
+    status = excluded.status, stations_ready = excluded.stations_ready,
+    items = excluded.items, note = excluded.note, created_at = excluded.created_at;
+end $$;
+do $$ begin
+  alter publication supabase_realtime add table kitchen_tickets;
+exception when duplicate_object then null;
+end $$;
+
+-- A table UUID is a public bill credential too. Keep the kitchen's live calls
+-- and its done button without letting those calls reveal a diner's bill.
+create table if not exists kitchen_requests (
+  id uuid primary key references service_requests(id) on delete cascade,
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  table_label text not null,
+  kind text not null,
+  status text not null,
+  created_at timestamptz not null
+);
+create index if not exists kitchen_requests_open on kitchen_requests(restaurant_id, status, created_at);
+alter table kitchen_requests enable row level security;
+revoke all on kitchen_requests from anon;
+revoke all on kitchen_requests from public, authenticated;
+grant select on kitchen_requests to authenticated;
+grant all on kitchen_requests to service_role;
+drop policy if exists "team reads kitchen calls" on kitchen_requests;
+create policy "team reads kitchen calls" on kitchen_requests for select to authenticated
+  using (works_at(restaurant_id));
+
+create or replace function public.sync_kitchen_request()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into kitchen_requests (id, restaurant_id, table_label, kind, status, created_at)
+  values (new.id, new.restaurant_id, new.table_label, new.kind, new.status, new.created_at)
+  on conflict (id) do update set restaurant_id = excluded.restaurant_id,
+    table_label = excluded.table_label, kind = excluded.kind, status = excluded.status,
+    created_at = excluded.created_at;
+  return new;
+end; $$;
+revoke all on function public.sync_kitchen_request() from public, anon, authenticated;
+grant execute on function public.sync_kitchen_request() to service_role;
+drop trigger if exists service_requests_sync_kitchen on service_requests;
+create trigger service_requests_sync_kitchen after insert or update on service_requests
+  for each row execute function public.sync_kitchen_request();
+
+do $$ begin
+  lock table service_requests in share row exclusive mode;
+  insert into kitchen_requests (id, restaurant_id, table_label, kind, status, created_at)
+  select id, restaurant_id, table_label, kind, status, created_at from service_requests where status = 'open'
+  on conflict (id) do update set restaurant_id = excluded.restaurant_id,
+    table_label = excluded.table_label, kind = excluded.kind, status = excluded.status,
+    created_at = excluded.created_at;
+end $$;
+do $$ begin
+  alter publication supabase_realtime add table kitchen_requests;
+exception when duplicate_object then null;
+end $$;
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 revoke truncate, references, trigger on all tables in schema public from public, anon, authenticated;

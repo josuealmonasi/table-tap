@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
-import { actingStaff } from "@/lib/api-guard";
+import { actingStaff, actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildReceipt } from "@/lib/receipt";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
@@ -24,8 +24,8 @@ export const runtime = "nodejs";
  *   The same document the till prints and the same one an email carries, so a
  *   reprint cannot say something different from the original.
  *
- * Any of the team may ask. Reprinting costs paper and reveals nothing that the
- * screen they asked from was not already showing them.
+ * Any of the team may ask for kitchen paper. Only the floor may ask for a
+ * receipt: the kitchen has preparation facts, never what the customer paid.
  */
 export async function POST(req: NextRequest) {
   const actor = await actingStaff();
@@ -41,6 +41,10 @@ export async function POST(req: NextRequest) {
     return await apiError("apiErr.invalidRequest", 400);
   }
 
+  if (to === "receipt" && !(await actingFrontOfHouse())) {
+    return await apiError("apiErr.forbidden", 403);
+  }
+
   const db = createAdminClient();
   // Scoped to the caller's own restaurant, so an id from anywhere else is
   // simply not found.
@@ -49,7 +53,7 @@ export async function POST(req: NextRequest) {
     .select(
       "id, restaurant_id, items, subtotal, discount, service_fee, tip, total, currency, table_label, created_at, pay_method",
     )
-    .eq("id", orderId)
+    .eq(actor.role === "kitchen" ? "kitchen_ticket_id" : "id", orderId)
     .eq("restaurant_id", actor.restaurantId)
     .maybeSingle();
   if (!order) return await apiError("apiErr.orderNotFound", 404);
