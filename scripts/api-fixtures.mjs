@@ -245,6 +245,11 @@ export async function setup(env, base) {
     .from("menu_items").select("id, name, price, emoji")
     .eq("restaurant_id", restaurant.id).eq("available", true).eq("is_addon", false)
     .eq("menu_id", menu.id)
+    // Uncounted. The seed gives three dishes it picks at random a stock count,
+    // one of them only 3; when that was this dish, the first cases sold it out,
+    // it switched itself off, and seven later cases were refused "no longer
+    // available": the suite failed on what the seed happened to pick.
+    .is("stock", null)
     // Ordered, so every run uses the same dish. Unordered with limit(1),
     // Postgres returns whichever row it likes and the suite quietly changes
     // what it is testing between runs.
