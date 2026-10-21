@@ -3,7 +3,7 @@
 import { useT } from "@/lib/i18n/context";
 import type { PhoneMembership } from "@/hooks/useTableMembership";
 import type { PendingPhone } from "@/lib/table-member-requests";
-import PhoneRequest from "@/components/table-membership/phone-request.react-component";
+import PhoneRequest from "@/components/table-membership/phone-request";
 
 interface TableJoinNoticeProps {
   restaurantId: string;

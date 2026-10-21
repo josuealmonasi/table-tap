@@ -7,7 +7,7 @@ import { translate } from "@/lib/i18n";
 vi.stubGlobal("React", React);
 const state = vi.hoisted(() => ({ spanish: true }));
 vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string, vars?: Record<string, string | number>) => translate(state.spanish ? es : en, key, vars) }));
-import TableJoinNotice from "../table-join-notice.react-component";
+import TableJoinNotice from "../table-join-notice";
 
 it.each([true, false])("shows waiting, rejection and the phone decision in both languages (Spanish: %s)", spanish => {
   state.spanish = spanish;

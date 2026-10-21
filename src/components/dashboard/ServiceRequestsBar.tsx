@@ -1,7 +1,7 @@
 "use client";
 
 import { usePendingPhones } from "@/hooks/usePendingPhones";
-import PhoneRequest from "@/components/table-membership/phone-request.react-component";
+import PhoneRequest from "@/components/table-membership/phone-request";
 import { useServiceRequests } from "@/hooks/useServiceRequests";
 import type { BoardRequest } from "@/lib/kitchen-ticket";
 import { useT } from "@/lib/i18n/context";

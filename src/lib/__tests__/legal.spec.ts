@@ -42,6 +42,9 @@ describe("the text and the version cannot drift apart", () => {
       .digest("hex")
       .slice(0, 16);
 
+  // 2026-10-21, bumped from 2026-10-15: the privacy notice gained the table
+  // credential (a hash per phone per visit, with who let it in), a new
+  // category of data, so every restaurant is asked again.
   // 2026-10-15, bumped from 2026-10-03: the till now keeps selling without a
   // connection, holding cash and own-terminal sales on the device until they
   // are sent. The terms' "nothing is recorded during an outage" stopped being
@@ -51,15 +54,15 @@ describe("the text and the version cannot drift apart", () => {
   // kept the version as a clarification.)
   it("has terms that match the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("terms-es") }).toEqual({
-      version: "2026-10-15",
+      version: "2026-10-21",
       text: "10b05f445a4af689",
     });
   });
 
   it("has a privacy notice that matches the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("privacy-es") }).toEqual({
-      version: "2026-10-15",
-      text: "38e771f940bae131",
+      version: "2026-10-21",
+      text: "bd8c87568b1e745f",
     });
   });
 });

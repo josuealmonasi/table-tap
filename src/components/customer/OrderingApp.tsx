@@ -1,7 +1,7 @@
 "use client";
 
 import { useTableMembership } from "@/hooks/useTableMembership";
-import TableJoinNotice from "./table-join-notice.react-component";
+import TableJoinNotice from "./table-join-notice";
 import { useT } from "@/lib/i18n/context";
 import { useEffect, useMemo, useState } from "react";
 import {
