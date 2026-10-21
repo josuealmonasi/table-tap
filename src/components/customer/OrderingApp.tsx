@@ -88,8 +88,13 @@ export default function OrderingApp({
   const t = useT();
   const membership = useTableMembership(restaurant.id, table?.id ?? null);
   const canOrder = !table || membership.state?.status === "empty" || membership.state?.status === "approved";
-  const tableLoyalty = table ? (membership.state?.status === "approved" && loyalty
-    ? { ...loyalty, pass: membership.state.pass } : null) : loyalty;
+  // The visit card at a table: a phone let in carries its sitting's pass; at
+  // an empty table the page's own pass, so a party sitting down finds the card
+  // before ordering. A phone waiting to be let in, or declined, is not offered it.
+  const tableLoyalty = !table || !loyalty ? loyalty
+    : membership.state?.status === "approved" ? { ...loyalty, pass: membership.state.pass }
+    : membership.state?.status === "empty" && loyalty.pass ? loyalty
+    : null;
   const [orderNote, setOrderNote] = useState("");
   // Only ever filled from the general QR; the cart hides the field at a table.
   // Seeded from what they gave last time, so a second order does not mean
