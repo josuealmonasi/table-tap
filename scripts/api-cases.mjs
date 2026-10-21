@@ -1408,6 +1408,16 @@ export function cases(fx) {
     { name: "GET  /api/print/cloudprnt (no money on the paper)", as: "diner", method: "GET",
       path: async f => `/api/print/cloudprnt/${await f.printToken()}`, expect: [200],
       checkText: t => !/MX\$|tarjeta|\bcard\b|total:/i.test(t) || "the kitchen ticket carries money" },
+    // The printer reports how it went; a failure must leave the ticket queued.
+    // Every confirmation used to close the job, so a printer out of paper
+    // (code 520) dropped the order from the queue unprinted.
+    { name: "DELETE /api/print/cloudprnt (a failed print keeps the job)", as: "diner", method: "DELETE",
+      path: async f => `/api/print/cloudprnt/${await f.printToken()}?token=${f.printJobId}&code=520%20Paper%20Empty`,
+      expect: [200],
+      check: async (_d, f) => {
+        const { data } = await f.admin.from("print_jobs").select("printed_at").eq("id", f.printJobId).maybeSingle();
+        return !data?.printed_at || "a print the printer said failed was closed as printed";
+      } },
     { name: "DELETE /api/print/cloudprnt (closes the job it was handed)", as: "diner",
       method: "DELETE",
       path: async f => `/api/print/cloudprnt/${await f.printToken()}?token=${f.printJobId}`,
@@ -1527,6 +1537,12 @@ export function cases(fx) {
     { name: "POST /api/promotions (create)", as: "manager", method: "POST", path: "/api/promotions",
       body: { kind: "bogo", name: `${MARK} 2x1`, emoji: "🎁", buyQty: 2, payQty: 1,
               items: [{ itemId: dish.id, qty: 1 }] }, expect: [200] },
+    // A tier the pricing loop cannot finish: 1e-20 units passed "positive",
+    // and pricing one unit then spun for ever and froze the server.
+    { name: "POST /api/promotions (a tier of a fraction of a unit)", as: "manager", method: "POST", path: "/api/promotions",
+      body: { kind: "tiered", name: `${MARK} tier`, emoji: "🎁", tiers: [{ qty: 1e-20, price: 0 }],
+              items: [{ itemId: dish.id, qty: 1 }] },
+      expect: [400], expectError: /cantidad entera|whole quantity/i },
     { name: "POST /api/legal/accept", as: "owner", method: "POST", path: "/api/legal/accept",
       body: {}, expect: [200] },
     { name: "GET  /api/connect/status", as: "owner", method: "GET", path: "/api/connect/status",

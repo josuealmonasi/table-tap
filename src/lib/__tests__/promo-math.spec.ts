@@ -159,3 +159,24 @@ describe("addedLineCost", () => {
     expect(addedLineCost(tiered, 2, 2, 2.5)).toBe(4.25);
   });
 });
+
+describe("a tier that cannot be counted", () => {
+  const tiered = (tiers: { qty: number; price: number }[]): QuantityPromo => ({
+    id: "t1", name: "tiers", kind: "tiered", tiers,
+  } as QuantityPromo);
+
+  it("ignores a fraction of a unit instead of looping for ever", () => {
+    // Subtracting 1e-20 from 1 never changes it; the old loop never ended.
+    expect(promoCost(tiered([{ qty: 1e-20, price: 0 }]), 1, 100)).toBe(100);
+  });
+
+  it("counts whole brackets in one step, however many fit", () => {
+    expect(promoCost(tiered([{ qty: 2, price: 150 }]), 2_000_001, 100)).toBe(150 * 1_000_000 + 100);
+  });
+
+  it("looks only a few units ahead for the cart's hint", () => {
+    const started = Date.now();
+    expect(nextPromoStep(tiered([{ qty: 1e20, price: 1 }]), 1, 100)).toBeNull();
+    expect(Date.now() - started).toBeLessThan(200);
+  });
+});

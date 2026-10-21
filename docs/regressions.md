@@ -14,6 +14,8 @@ us, and what now catches each one.
 
 | Rule | The bug it came from |
 |---|---|
+| Price breaks are whole quantities, priced by division, and the database refuses others (J4) | A tier of 1e-20 units froze the server |
+| A print job closes only on the printer's success code (J9) | A printer out of paper dropped tickets unprinted |
 | A statement email is capped per account and per restaurant, never on the recipient (G5) | One account code could mail the same stranger ~400 times a day |
 | Coupon entitlements and card receipts agree before money moves (S5 E4) | A MX$90 discounted charge recorded MX$100 and could later reserve a MX$100 return |
 | A coupon use belongs to one checkout attempt (S5 E7) | An old expiry released the newer payment page's reservation on the same order |
@@ -2990,3 +2992,31 @@ confirm the new phone can then order and open the bill. Close the sitting,
 seat a new party, and confirm the old phone can still see/pay its own food
 without seeing the new bill. Also check a staff-opened bill and a legacy
 phone's own-order payment during rollout.
+
+## Security review J4: a price break that froze the server
+
+The stored tier and the pricing loop had to agree on what a quantity is. The
+route accepted any positive `qty`, the guard floored it, and pricing used it as
+stored: a tier of `1e-20` units made `left -= qty` change nothing, the loop never
+ended, and the server stopped answering every restaurant. The hint search had
+the same hole with a huge `qty`. Pricing now counts whole brackets by division,
+the hint looks at most 12 units ahead, the route takes whole quantities from 1
+to 1,000 (20 tiers at most), and the database refuses anything else
+(`promotions_tiers_sound`). `promo-math.spec.ts`; `pnpm api` sends `1e-20`.
+
+## Security review J3: a negative price the checkout honoured
+
+Managers write promotions and dishes directly under their policies, and the
+order verifier trusts the stored price. A combo at `-90` made a MX$100 cart
+cost MX$10. Prices now have floors in the database (`menu_items_price_not_negative`,
+`promotions_combo_price_not_negative`), and `buildCombos` skips a negative
+combo anyway. `promotions.spec.ts`.
+
+## Security review J9: a print the printer said failed, closed as printed
+
+The printer's confirmation and the queue had to agree on what happened. Star
+reports it in `code` (OK when the ticket came out, 520 and the like when it did
+not), and every confirmation closed the job, so a printer out of paper dropped
+the order unprinted. Only a success closes it now, and a failed write answers
+500 so the printer confirms again. `pnpm api` confirms with `code=520` and
+expects the job still open.

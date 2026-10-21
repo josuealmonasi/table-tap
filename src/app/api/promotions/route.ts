@@ -11,6 +11,10 @@ import {
 } from "@/lib/promo-guard";
 import type { PromotionKind } from "@/lib/promotions";
 
+/** Beyond any real price break; a stored tier is what checkout prices. */
+const MAX_TIER_QTY = 1000;
+const MAX_TIERS = 20;
+
 export const runtime = "nodejs";
 
 // Promotion management for owners and managers: combo bundles and quantity
@@ -50,10 +54,14 @@ function validate(body: Body): { key: string } | null {
     }
     if (pay >= buy) return { key: "apiErr.promoBogoLess" };
   } else if (body.kind === "tiered") {
-    const tiers = (body.tiers ?? []).filter(
-      t => Number(t.qty) > 0 && Number(t.price) >= 0,
-    );
+    // Whole units within reason, a real price, and a handful of brackets: what
+    // is stored is what pricing reads, so anything else must not be saved.
+    const tiers = body.tiers ?? [];
+    const sound = (t: { qty?: unknown; price?: unknown }) =>
+      Number.isInteger(Number(t.qty)) && Number(t.qty) >= 1 && Number(t.qty) <= MAX_TIER_QTY &&
+      Number.isFinite(Number(t.price)) && Number(t.price) >= 0;
     if (tiers.length === 0) return { key: "apiErr.promoTierNeeded" };
+    if (tiers.length > MAX_TIERS || !tiers.every(sound)) return { key: "apiErr.promoTierInvalid" };
   } else {
     return { key: "apiErr.promoKind" };
   }
