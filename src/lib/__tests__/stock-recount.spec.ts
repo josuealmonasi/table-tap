@@ -9,10 +9,16 @@ it("J6: a numeric recount advances the generation under the dish lock", () => {
   expect(body("recount_stock")).toContain("for update");
   expect(body("recount_stock")).toContain("stock_epoch = stock_epoch + 1");
   expect(body("stock_tracking_epoch")).toContain("new.stock is distinct from old.stock");
-  for (const signature of ["reserve_stock(uuid, jsonb, int)", "release_stock(uuid, jsonb)",
-    "release_stock_reservation(uuid, uuid)", "take_stock_floor(uuid, jsonb)", "record_waste(uuid, uuid, uuid, numeric, text, text, numeric, text)"]) {
-    expect(sql).toContain(`alter function public.${signature} set tabletap.stock_movement = 'on'`);
+  // Each trusted movement marks itself inside its own body: Supabase refuses a
+  // custom setting attached with ALTER FUNCTION ... SET, and the schema did not
+  // apply until it moved.
+  for (const fn of ["release_stock", "release_stock_reservation", "take_stock_floor", "record_waste"]) {
+    expect(body(fn), fn).toContain("set_config('tabletap.stock_movement', 'on', true)");
   }
+  const threeArg = sql.slice(sql.indexOf("create or replace function public.reserve_stock("));
+  expect(threeArg.slice(0, threeArg.indexOf("$$;", threeArg.indexOf("$$") + 2))).toContain("set_config('tabletap.stock_movement', 'on', true)");
+  expect(body("recount_stock")).toContain("set_config('tabletap.stock_recount', 'on', true)");
+  expect(sql).not.toMatch(/alter function [^;]* set tabletap\./);
 });
 it("J7: cancellation and expiry cannot credit reconstructed legacy demand", () => {
   for (const fn of ["abandon_checkout", "cancel_order", "cancel_order_v2"]) {

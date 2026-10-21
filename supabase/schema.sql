@@ -2165,6 +2165,8 @@ declare
   v_low   jsonb := '[]'::jsonb;
   v_row   record;
 begin
+  -- A trusted stock movement: it keeps the dish's count generation.
+  perform set_config('tabletap.stock_movement', 'on', true);
   -- Lock every tracked row this cart touches, in a deterministic order.
   for v_row in
     select m.id, m.name, m.stock, m.available, (d.qty)::int as want
@@ -2228,6 +2230,8 @@ security definer
 set search_path = public
 as $$
 begin
+  -- A trusted stock movement: it keeps the dish's count generation.
+  perform set_config('tabletap.stock_movement', 'on', true);
   update menu_items m
      set stock          = m.stock + d.qty,
          available      = case when m.stock = 0 and m.stock_auto_off then true  else m.available end,
@@ -4298,6 +4302,8 @@ declare
   v_res stock_reservations%rowtype;
   v_item record;
 begin
+  -- A trusted stock movement: it keeps the dish's count generation.
+  perform set_config('tabletap.stock_movement', 'on', true);
   select * into v_res from stock_reservations
    where id = p_reservation and restaurant_id = p_restaurant for update;
   if not found or v_res.released_at is not null then return; end if;
@@ -4673,6 +4679,8 @@ declare
   v_stock int;
   v_id uuid;
 begin
+  -- A trusted stock movement: it keeps the dish's count generation.
+  perform set_config('tabletap.stock_movement', 'on', true);
   if (p_ingredient is null) = (p_item is null) then return null; end if;
   if p_ingredient is not null then
     select name into v_name from ingredients
@@ -4838,6 +4846,8 @@ returns void language plpgsql security definer set search_path = public as $$
 declare
   v_row record;
 begin
+  -- A trusted stock movement: it keeps the dish's count generation.
+  perform set_config('tabletap.stock_movement', 'on', true);
   for v_row in
     select m.id, m.stock, m.available, (d.qty)::int as want
       from jsonb_to_recordset(p_demand) as d(item_id uuid, qty int)
@@ -8428,7 +8438,7 @@ begin
   ), marks as materialized (
     select * from terminal_deposits where restaurant_id = p_restaurant and currency = p_currency
   ), returns as (
-    select id, payment_id, amount, sale_day, returned_at at_time, (returned_at at time zone v_zone)::date day
+    select id, payment_id, amount, sale_day, returned_at at_time, (returned_at at time zone v_zone)::date as day
       from ledger where returned_at is not null
     union all
     select 'void:' || id, payment_id, amount, sale_day, voided_at, (voided_at at time zone v_zone)::date
@@ -8439,7 +8449,7 @@ begin
         and not exists(select 1 from marks d where d.sales_day = l.sale_day)), 0) net
     from ledger l where l.returned_at is null
   ), sales as (
-    select distinct sale_day day from receipts where net > 0
+    select distinct sale_day as day from receipts where net > 0
   ), assigned as (
     select r.*,
       r.sale_day = r.day and not exists(select 1 from marks d where d.sales_day = r.sale_day) same_day,
@@ -8484,22 +8494,21 @@ revoke all on function public.delete_terminal_deposit_v1(uuid, date, text) from 
 grant execute on function public.delete_terminal_deposit_v1(uuid, date, text) to service_role;
 
 -- Stock movements keep their generation; a new physical count supersedes it.
--- Function settings restore on return, including early returns and exceptions.
-alter function public.reserve_stock(uuid, jsonb, int) set tabletap.stock_movement = 'on';
-alter function public.release_stock(uuid, jsonb) set tabletap.stock_movement = 'on';
-alter function public.release_stock_reservation(uuid, uuid) set tabletap.stock_movement = 'on';
-alter function public.take_stock_floor(uuid, jsonb) set tabletap.stock_movement = 'on';
-alter function public.record_waste(uuid, uuid, uuid, numeric, text, text, numeric, text) set tabletap.stock_movement = 'on';
+-- Each trusted function sets tabletap.stock_movement itself (set_config, for
+-- its transaction): Supabase refuses a custom setting attached with ALTER
+-- FUNCTION ... SET.
 
 -- The count is authoritative. Holds from before it remain recorded, but their
 -- dish generation no longer matches: neither expiry nor cancellation can add
 -- them to this new count. Other dishes in the same reservation still return.
 create or replace function public.recount_stock(
   p_restaurant uuid, p_item uuid, p_stock int, p_expected_stock int, p_expected_epoch int
-) returns text language plpgsql security definer set search_path = public
-set tabletap.stock_recount = 'on' as $$
+) returns text language plpgsql security definer set search_path = public as $$
 declare v_item menu_items%rowtype;
 begin
+  -- A recount starts a new generation (set for its transaction: Supabase
+  -- refuses a custom setting attached with ALTER FUNCTION ... SET).
+  perform set_config('tabletap.stock_recount', 'on', true);
   if p_stock < 0 or p_expected_epoch is null or p_expected_epoch < 0 then
     raise exception 'Invalid stock count';
   end if;
