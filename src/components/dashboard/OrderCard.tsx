@@ -9,6 +9,7 @@ import OrderDetailDialog from "./OrderDetailDialog";
 import { STATUS_META, statusMeta } from "@/lib/order-status";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { linesAt, stationDone, stationsOf, type Station } from "@/lib/stations";
+import { modsOf } from "@/lib/ticket";
 
 
 /** Map an order's current status to the button that advances it. */
@@ -160,13 +161,11 @@ export default function OrderCard({
           <div key={i} style={{ fontSize: 13, marginBottom: 4 }}>
             <span className="tt-muted">{item.qty}× </span>
             {item.emoji} {item.name}
-            {Object.keys(item.mods ?? {}).length > 0 && (
+            {modsOf(item) && (
               <span className="tt-muted" style={{ fontSize: 11 }}>
                 {" "}
                 (
-                {Object.values(item.mods ?? {})
-                  .map(v => (Array.isArray(v) ? v.join(", ") : v))
-                  .join(" · ")}
+                {modsOf(item)}
                 )
               </span>
             )}

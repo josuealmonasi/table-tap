@@ -10,6 +10,7 @@ import { formatMoney, dateLocale } from "@/lib/format";
 import { orderCode, type Order } from "@/lib/types";
 import { statusMeta } from "@/lib/order-status";
 import { itemSalePrice } from "@/lib/pricing";
+import { modifierEntries } from "@/lib/modifiers";
 import { CloseIcon } from "@/components/ui/icons";
 
 /**
@@ -121,9 +122,9 @@ export default function OrderDetailDialog({
             <strong>
               {item.qty}× {item.emoji} {item.name}
             </strong>
-            {Object.entries(item.mods ?? {}).map(([group, choice]) => (
+            {modifierEntries(item.mods).map(([group, choice]) => (
               <div key={group} className="tt-muted tt-subline" style={{ fontSize: 12 }}>
-                {group}: {Array.isArray(choice) ? choice.join(", ") : choice}
+                {group}: {choice}
               </div>
             ))}
             {item.extras && item.extras.length > 0 && (

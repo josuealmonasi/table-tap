@@ -1,4 +1,5 @@
 import { orderCode, type OrderLineItem } from "@/lib/types";
+import { modifierEntries } from "@/lib/modifiers";
 
 /**
  * The ticket the kitchen printer prints.
@@ -73,10 +74,7 @@ export function wrap(text: string, indent = 0): string[] {
 
 /** The chosen options on a line, as the kitchen board writes them. */
 export function modsOf(item: { mods?: Record<string, string | string[]> }): string {
-  return Object.values(item.mods ?? {})
-    .map(v => (Array.isArray(v) ? v.join(", ") : v))
-    .filter(Boolean)
-    .join(" · ");
+  return modifierEntries(item.mods).map(([, value]) => value).join(" · ");
 }
 
 export function kitchenTicket(
