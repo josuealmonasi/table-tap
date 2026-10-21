@@ -2706,3 +2706,25 @@ describe("approval requests are written only by guarded routes", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("staff write only the columns their screens write", () => {
+  it("lets the browser change a service request's status and nothing else", () => {
+    // The board marks a call answered, and that is all. With the whole row
+    // writable, a member could point their own request at another restaurant's
+    // table, and that table's calls were answered "already asked".
+    const writes = walkAll("src/components").concat(walkAll("src/hooks"))
+      .flatMap(f => read(f).match(/\.from\("service_requests"\)\.update\(\{[^}]*\}/g) ?? []);
+    expect(writes.length, "the scan found no browser update of service_requests").toBeGreaterThanOrEqual(1);
+    expect(writes.filter(w => !/^\.from\("service_requests"\)\.update\(\{ status: "done" \}$/.test(w))).toEqual([]);
+    const revoke = schema.lastIndexOf("revoke update on service_requests from authenticated;");
+    const grant = schema.lastIndexOf("grant update (status) on service_requests to authenticated;");
+    expect(revoke, "service_requests is still writable whole by staff").toBeGreaterThan(-1);
+    expect(grant).toBeGreaterThan(revoke);
+  });
+
+  it("matches a duplicate call within its own restaurant", () => {
+    const route = read("src/app/api/service-requests/route.ts");
+    const lookup = route.slice(route.indexOf('.from("service_requests")'), route.indexOf(".limit(1)"));
+    expect(lookup).toContain('.eq("restaurant_id", restaurantId)');
+  });
+});

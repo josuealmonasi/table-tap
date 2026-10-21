@@ -385,6 +385,63 @@ if (!signIn.error && theirs) {
   await admin.from("icon_groups").delete().eq("id", victim.id);
 }
 
+// ── A member's own rows, pointed somewhere else ─────────────────────────────
+// Everything above reaches for a NEIGHBOUR's row. This is the other shape: a
+// row of your own, rewritten to point at the neighbour. The service-request
+// policy checked the request's restaurant and not its table's, and the whole
+// row was writable, so a kitchen login could aim its own open call at another
+// restaurant's table; that table's real calls were then answered "already
+// asked" and reached nobody. And the orders page handed every role the
+// printer's credential, which kept working after the person was removed.
+{
+  console.log("\n  A member's own rows\n");
+  const { data: rs3 } = await admin.from("restaurants").select("id, name, print_token");
+  const home = rs3.find(r => r.name === "Demo Bistro") ?? rs3[0];
+  const away = rs3.find(r => r.id !== home.id);
+  const kitchen = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+  const kSignIn = await kitchen.auth.signInWithPassword({ email: "demo-kitchen@tabletap.dev", password: "demo123" });
+  const signInError = kSignIn.error?.message;
+  const [{ data: myTable }, { data: theirTable }] = await Promise.all([
+    admin.from("restaurant_tables").select("id, label").eq("restaurant_id", home.id).limit(1).maybeSingle(),
+    away ? admin.from("restaurant_tables").select("id").eq("restaurant_id", away.id).limit(1).maybeSingle() : { data: null },
+  ]);
+  if (signInError || !myTable || !theirTable) {
+    bad(`the own-row checks did not run — ${signInError ?? "no table in each restaurant"}`);
+  } else {
+    const { data: probe } = await admin.from("service_requests")
+      .insert({ restaurant_id: home.id, table_id: myTable.id, table_label: myTable.label, kind: "waiter" })
+      .select("id").single();
+    try {
+      await kitchen.from("service_requests").update({ table_id: theirTable.id, kind: "bill" }).eq("id", probe.id);
+      const { data: moved } = await admin.from("service_requests").select("table_id, kind").eq("id", probe.id).single();
+      if (moved.table_id === myTable.id && moved.kind === "waiter") ok("kitchen cannot point its request at another restaurant's table");
+      else bad(`kitchen rewrote its request to ${JSON.stringify(moved)}`);
+      await kitchen.from("service_requests").update({ status: "paid" }).eq("id", probe.id);
+      const { data: odd } = await admin.from("service_requests").select("status").eq("id", probe.id).single();
+      if (odd.status === "open") ok("kitchen cannot give a request a status the app does not have");
+      else bad(`kitchen set a request's status to ${odd.status}`);
+      // The control: the one write staff need still lands, so the two refusals
+      // above are the policy speaking and not a dead session.
+      await kitchen.from("service_requests").update({ status: "done" }).eq("id", probe.id);
+      const { data: done } = await admin.from("service_requests").select("status").eq("id", probe.id).single();
+      if (done.status === "done") ok("kitchen can still mark a request answered");
+      else bad(`kitchen could not mark its own request answered (${done.status})`);
+    } finally {
+      await admin.from("service_requests").delete().eq("id", probe.id);
+    }
+
+    if (!home.print_token) bad(`${home.name} has no printer token — the credential check did not run`);
+    else {
+      const kCookie = `sb-${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0]}-auth-token=base64-${Buffer.from(JSON.stringify(kSignIn.data.session)).toString("base64")}`;
+      const res = await fetch(BASE + "/dashboard/orders", { headers: { cookie: kCookie } });
+      const page = await res.text();
+      if (!page.includes("tt-dash")) bad(`the kitchen's orders page did not render (${res.status}) — the credential check did not run`);
+      else if (page.includes(home.print_token)) bad("the orders page hands the kitchen the printer's credential");
+      else ok("the orders page does not carry the printer's credential");
+    }
+  }
+}
+
 // ── One tenant does not read the one next door ──────────────────────────────
 // The row policy on `restaurants` shows every row — the menu hangs off a QR —
 // so the only thing separating one restaurant from another is the column list.

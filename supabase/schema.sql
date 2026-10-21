@@ -823,7 +823,14 @@ drop policy if exists "team updates service requests" on service_requests;
 create policy "team updates service requests"
   on service_requests for update
   using (works_at(restaurant_id))
-  with check (works_at(restaurant_id));
+  with check (works_at(restaurant_id) and status in ('open', 'done'));
+-- Staff only ever mark a request answered, so that is the one column they may
+-- write. With the whole row writable, a member of one restaurant could point
+-- their own request at another restaurant's table (the policy checks the
+-- request's restaurant, not its table's), and that table's diners' calls were
+-- then answered "already asked" and reached nobody.
+revoke update on service_requests from authenticated;
+grant update (status) on service_requests to authenticated;
 
 -- OWNER WRITE: the logged-in restaurant owner manages their own menu/tables.
 -- owns_restaurant() covers co-owners (staff role 'owner') too.
