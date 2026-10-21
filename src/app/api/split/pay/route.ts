@@ -15,6 +15,7 @@ import {
 } from "@/lib/platform-fee";
 import { orderFeeCents } from "@/lib/plan";
 import { round2 } from "@/lib/money";
+import { siteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -164,7 +165,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const appFee = fee.cents;
   const giveBackFee = () => releaseFee(fee.id).catch(err => console.error("split pay: the fee reservation stays counted", err));
 
-  const origin = req.headers.get("origin") ?? new URL(req.url).origin;
+  const origin = siteOrigin(req);
 
   try {
     const session = await stripe.checkout.sessions.create(

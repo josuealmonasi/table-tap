@@ -37,7 +37,11 @@ export async function POST(req: NextRequest) {
     return await apiError("apiErr.badRequest", 400);
   }
 
-  const orderIds = [...new Set(ratings.map(r => r.orderId).filter(Boolean))];
+  // Every entry must be an object: a `null` in the list once answered 500.
+  if (!ratings.every(r => typeof r === "object" && r !== null)) {
+    return await apiError("apiErr.badRequest", 400);
+  }
+  const orderIds = [...new Set(ratings.map(r => r.orderId).filter(id => typeof id === "string" && id.length > 0))];
   if (orderIds.length === 0 || orderIds.length > 20) {
     return await apiError("apiErr.badRequest", 400);
   }

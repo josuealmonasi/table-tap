@@ -8,6 +8,7 @@ import { parsePlanLimit, planLimitText } from "@/lib/plan-error";
 import { logUserChange } from "@/lib/user-log";
 import { getPlan, allPlans } from "@/lib/plan-server";
 import { assignableRoles, cheapestWith, planLabel, type TeamRole } from "@/lib/plan";
+import { siteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
 
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest) {
   }
 
   const admin = createAdminClient();
-  const origin = req.headers.get("origin") ?? new URL(req.url).origin;
+  const origin = siteOrigin(req);
 
   // Creates the (password-less) user and emails them an invite. They set their
   // own password via the link → /auth/callback → /reset-password.

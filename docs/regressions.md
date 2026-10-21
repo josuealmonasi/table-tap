@@ -16,6 +16,8 @@ us, and what now catches each one.
 |---|---|
 | Pages never receive the restaurant's credentials (security review H1) | The printer token reached every role's browser and survived their removal |
 | Staff write only a service request's status; duplicates match within the restaurant (H2) | A member pointed a request at another restaurant's table and silenced its calls |
+| Every `.rpc()` call names the arguments of a function in schema.sql (E10) | Proposing a split called the old signature and left the proposer without a seat |
+| Links the app sends are built on its own address, never on `Origin` (G3) | A statement email carried a pay link to the caller's site |
 | Cashier recovery access and upload authority agree (PR2 review) | Losing POS hid the only upload surface while sign-out still protected held money |
 | Deposit identity and display use the same original currency (PR2 review) | A peso deposit was reconciled against a later dollar sale |
 | Saved and verified carts compare line multisets (PR2 review) | Verification moved combos first and falsely flagged unchanged mixed carts |
@@ -2620,3 +2622,32 @@ duplicates by table alone and answered that table's real calls for the bill
 is scoped to the restaurant. `invariants.spec.ts` holds both; `pnpm rls` tries
 the rewrite as the kitchen login and judges it by effect, with "mark answered"
 as the control.
+## Security review E10: a database call with the old function's arguments
+
+The split proposal and `join_bill_split_v2` had to agree on argument names.
+PostgREST finds a function by them, so a call naming the old function's
+arguments found nothing; the route never read that error, and the person who
+proposed dividing the bill was left without a share. It shipped in #514, when
+the function gained its restaurant, table and sitting. The call now passes the
+full signature and reads its error, and `invariants.spec.ts` fits every
+`.rpc()` call with a literal argument object to an overload in `schema.sql`.
+`pnpm api` proposes a real split and checks the proposer's seat.
+
+## Security review G3: a "pay" link built on the caller's Origin header
+
+The address in a link the app sends and the address the app runs at had to
+agree. Nine routes built links on the request's `Origin` header, which is
+whatever the caller says; for the account statement that meant an email sent
+from the app's own verified sender, to any address, with a "pay" link to
+another site. Links are now built on the request's own URL (`siteOrigin`), the
+host the deployment answered on. `invariants.spec.ts` forbids reading `Origin`.
+
+## Security review G8 and G9: a public route a script could hammer or crash
+
+Cancelling a split had no rate limit, unlike proposing one, and reached the
+database with the secret key on every call; it is now limited per room and per
+table, and bound to its restaurant. Four public routes answered 500 to valid
+JSON of the wrong type (a string for a list, a `null` rating, a number for a
+name, a signature of the right length in letters but not in bytes); each now
+checks the type it uses. `pnpm api` sends each of those bodies, and
+`loyalty-pass.spec.ts` the signature.

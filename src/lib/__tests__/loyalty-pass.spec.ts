@@ -29,6 +29,16 @@ describe("a visit pass", () => {
     expect(a?.nonce).not.toBe(b?.nonce);
   });
 
+  it("is refused, not thrown, when its signature is the right length in letters but not in bytes", () => {
+    const pass = issueVisitPass(R, { table: TABLE });
+    const [key, issued, nonce, sig] = pass.split(".");
+    // As many accented letters as the signature has characters: equal as text,
+    // twice as long as bytes. timingSafeEqual threw on it, and the route said 500.
+    const forged = `${key}.${issued}.${nonce}.${"é".repeat(sig.length)}`;
+    expect(() => readVisitPass(R, forged)).not.toThrow();
+    expect(readVisitPass(R, forged)).toBeNull();
+  });
+
   it("is refused for another restaurant", () => {
     expect(readVisitPass(OTHER, issueVisitPass(R, { table: TABLE }))).toBeNull();
   });

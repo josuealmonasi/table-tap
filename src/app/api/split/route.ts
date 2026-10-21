@@ -108,7 +108,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (error || !made) return await apiError("apiErr.splitAlready", 409);
 
   // Whoever asked is in it, and takes seat zero — which carries the odd cent.
-  await db.rpc("join_bill_split_v2", { p_split: made.id, p_diner: diner, p_amount: 0 });
+  // With the arguments of the old function this call failed unread, and the
+  // proposer was left without a seat until they joined their own split.
+  const { error: seatError } = await db.rpc("join_bill_split_v2", {
+    p_split: made.id,
+    p_diner: diner,
+    p_restaurant: restaurantId,
+    p_table: tableId,
+    p_session: sessionId,
+  });
+  if (seatError) {
+    await db.from("bill_splits").update({ status: "cancelled" }).eq("id", made.id).eq("status", "proposed");
+    return await apiError("apiErr.generic", 500);
+  }
 
   return NextResponse.json({
     split: await currentSplit(sessionId, diner, restaurantId, tableId),
@@ -125,6 +137,11 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   if (!splitId || !sessionId || !diner || !restaurantId || !tableId) {
     return await apiError("apiErr.invalidRequest", 400);
   }
+  // Limited like proposing one: every call reaches the database with the
+  // secret key, and nothing else here slowed a script down.
+  if (await isRoomLimited(req, "splitend", 10) || await isTableLimited(req, "splitend", tableId, 10)) {
+    return await apiError("apiErr.tooManyAttempts", 429);
+  }
 
   const db = createAdminClient();
   // Only while it is still a proposal: once it has frozen, people are paying
@@ -133,6 +150,7 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
     .from("bill_splits")
     .update({ status: "cancelled" })
     .eq("id", splitId)
+    .eq("restaurant_id", restaurantId)
     .eq("session_id", sessionId)
     .eq("status", "proposed")
     .select("id");

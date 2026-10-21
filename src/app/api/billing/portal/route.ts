@@ -3,6 +3,7 @@ import { apiError } from "@/lib/api-error";
 import { actingOwner } from "@/lib/api-guard";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { siteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
 
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const customerId = data?.stripe_customer_id as string | null;
   if (!customerId) return await apiError("apiErr.noBilling", 400);
 
-  const origin = req.headers.get("origin") ?? new URL(req.url).origin;
+  const origin = siteOrigin(req);
   const session = await stripe.billingPortal.sessions.create({
     customer: customerId,
     return_url: `${origin}/dashboard`,

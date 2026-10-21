@@ -10,6 +10,7 @@ import { mailConfigured, sendMail } from "@/lib/mail";
 import { getLocale } from "@/lib/i18n/server";
 import { messagesFor, translate } from "@/lib/i18n";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
+import { siteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
 
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const locale = await getLocale();
   const messages = messagesFor(locale);
-  const origin = req.headers.get("origin") ?? new URL(req.url).origin;
+  const origin = siteOrigin(req);
   const mail = statementMail(
     statement,
     {

@@ -2728,3 +2728,70 @@ describe("staff write only the columns their screens write", () => {
     expect(lookup).toContain('.eq("restaurant_id", restaurantId)');
   });
 });
+
+describe("a database call names the arguments its function takes", () => {
+  // PostgREST finds a function by its argument NAMES. A call with a stale set
+  // finds nothing, and a route that does not read that error carries on as if
+  // it had worked: proposing a split after the function gained its restaurant,
+  // table and sitting arguments left the proposer without a seat, silently.
+  // So every `.rpc()` with a literal argument object must fit one overload in
+  // schema.sql: no unknown names, and every argument without a default given.
+  const signatures = new Map<string, { name: string; optional: boolean }[][]>();
+  for (const m of schema.matchAll(/create or replace function public\.(\w+)\s*\(([\s\S]*?)\)\s*returns/gi)) {
+    const args = m[2].replace(/--[^\n]*/g, "").split(",").map(a => a.trim()).filter(Boolean)
+      .map(a => ({ name: a.split(/\s+/)[0], optional: /\bdefault\b|=/.test(a) }));
+    signatures.set(m[1], [...(signatures.get(m[1]) ?? []), args]);
+  }
+
+  /** The names in a call's argument object, or null when it spreads another. */
+  function argumentNames(src: string, from: number): string[] | null {
+    let depth = 1;
+    let body = "";
+    for (let i = from; i < src.length && depth > 0; i++) {
+      if (src[i] === "{") depth++;
+      if (src[i] === "}") depth--;
+      if (depth > 0) body += src[i];
+    }
+    body = body.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+    let nested = 0;
+    let top = "";
+    for (const c of body) {
+      if ("{[(".includes(c)) nested++;
+      if ("}])".includes(c)) nested--;
+      top += nested === 0 ? c : " ";
+    }
+    const names = top.split(",").map(s => s.trim()).filter(Boolean)
+      .map(s => (s.includes(":") ? s.slice(0, s.indexOf(":")).trim() : s));
+    return names.some(n => n.startsWith("...")) ? null : names;
+  }
+
+  it("fits every rpc call to a function in schema.sql", () => {
+    const misfits: string[] = [];
+    let checked = 0;
+    for (const file of sources) {
+      const src = read(file);
+      for (const m of src.matchAll(/\.rpc\(\s*"(\w+)"\s*(,\s*\{)?/g)) {
+        const overloads = signatures.get(m[1]);
+        if (!overloads) { misfits.push(`${file}: ${m[1]} is not in schema.sql`); continue; }
+        const names = m[2] ? argumentNames(src, m.index! + m[0].length) : [];
+        if (names === null) continue;
+        checked++;
+        const fits = overloads.some(args =>
+          names.every(n => args.some(a => a.name === n)) && args.every(a => a.optional || names.includes(a.name)));
+        if (!fits) misfits.push(`${file}: ${m[1]}(${names.join(", ")})`);
+      }
+    }
+    expect(checked, "the scan found too few database calls").toBeGreaterThanOrEqual(50);
+    expect(misfits).toEqual([]);
+  });
+});
+
+describe("a link the app sends is built on its own address", () => {
+  it("never reads the caller's Origin header", () => {
+    // A script set Origin to another site, and the statement email the app
+    // sent from its own verified sender carried a "pay" link there.
+    const offenders = sources.filter(f => /headers\.get\(\s*["']origin["']\s*\)/i.test(read(f)));
+    expect(offenders).toEqual([]);
+    expect(sources.filter(f => /siteOrigin\(req\)/.test(read(f))).length).toBeGreaterThanOrEqual(9);
+  });
+});

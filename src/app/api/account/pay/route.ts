@@ -11,6 +11,7 @@ import { stripeProductName } from "@/lib/stripe-limits";
 import { getPlan } from "@/lib/plan-server";
 import { NO_FEE, feeMetadata, releaseFee, reserveFee, stripeRefusedOutright } from "@/lib/platform-fee";
 import { round2 } from "@/lib/money";
+import { siteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
 
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (r.outcome === "changed") return await refused("apiErr.accountStatementChanged", 409);
   if (r.outcome !== "open" || !r.checkout) return await refused("apiErr.generic", 500);
 
-  const origin = req.headers.get("origin") ?? new URL(req.url).origin;
+  const origin = siteOrigin(req);
   const cents = Math.round(round2(Number(r.amount) + Number(r.tip)) * 100);
   try {
     const session = await new Stripe(process.env.STRIPE_SECRET_KEY!).checkout.sessions.create(
