@@ -1,5 +1,4 @@
 import { expect, it, vi } from "vitest";
-import type { CashShift } from "@/lib/cash-shift";
 
 vi.mock("@/lib/platform-fee", () => ({ feesKeptSince: async () => 0 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
@@ -37,14 +36,11 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (tabl
   return q;
 } }) }));
 
-const { shiftSumOf } = await import("@/lib/cash-shift-server");
 const { readCosts } = await import("@/lib/costs/server");
 const { readTerminal } = await import("@/lib/terminal-server");
 
-it("keeps original-currency receipts and returns out of a current-currency drawer count", async () => {
-  const sum = await shiftSumOf("r", { id: "shift", opening_amount: 20, opened_at: "2026-10-20T00:00:00Z", closed_at: null } as CashShift);
-  expect(sum).toMatchObject({ cashSales: 90, expected: 110 });
-});
+// Drawer currency coverage now lives in cash-shift-review.spec.ts and
+// cash-shift-schema.spec.ts: the signed close and review share one SQL sum.
 it("does not add foreign-currency receipts to current menu margins or fee totals", async () => {
   const costs = await readCosts("r", new Date("2026-10-20T18:00:00Z"));
   expect(costs.period.uncosted).toBe(100);

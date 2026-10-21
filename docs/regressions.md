@@ -20,6 +20,9 @@ us, and what now catches each one.
 | Coupon entitlements and card receipts agree before money moves (S5 E4) | A MX$90 discounted charge recorded MX$100 and could later reserve a MX$100 return |
 | A coupon use belongs to one checkout attempt (S5 E7) | An old expiry released the newer payment page's reservation on the same order |
 | Financial scope and Stripe retries agree independently of fees (S5 E8) | Bills and fee-free split shares could open two payable pages |
+| Closing and changing a withdrawal share the money lock (S9 I1) | A withdrawal inserted or deleted after its shift closed rewrote the reviewed drawer |
+| A drawer's amounts and labels keep its opening currency (S9 I2) | Changing the menu currency recalculated and relabelled an earlier shift |
+| Shift review follows closes and late receipts, as well as openings (S9 I13) | Overnight closes and next-day corrections disappeared from the handover |
 | Fee caps and remaining food principal agree (S5 E9) | Existing gratuities raised the ten-percent cap on bill and split fees |
 | Displayed and payable sitting scopes agree (S5 E11) | A valid sitting older than eight hours showed debt that payment called paid |
 
@@ -3020,3 +3023,63 @@ not), and every confirmation closed the job, so a printer out of paper dropped
 the order unprinted. Only a success closes it now, and a failed write answers
 500 so the printer confirms again. `pnpm api` confirms with `code=520` and
 expects the job still open.
+
+## S9 I1 — a withdrawal and its shift's count share one transaction
+
+The route checked the open shift and then wrote separately. A close between
+those requests left a new withdrawal on a closed shift, or erased one that
+its signed count still included. Creation, deletion and close now take
+`lock_restaurant_money` before checking that exact shift. Close computes and
+stores its snapshot inside that transaction. Both the signed and reviewed
+figures stay unchanged when close wins; a withdrawal that wins first is
+included in the count. Existing function signatures remain intact.
+
+`cash-shift-race.spec.ts` reproduces both losing interleavings and checks both
+winning withdrawals and a repeated close. `cash-shift-schema.spec.ts` checks
+lock order, scoping and server-only grants. `scripts/attack-cash-shift.mjs`,
+registered in `pnpm attack`, uses two real database connections to queue each
+withdrawal behind close and judges its effect on rows and both totals. That
+case is written for the release runner; it was not run in this worktree.
+
+## S9 I2 — the drawer keeps the currency it opened in
+
+The opening float and withdrawals had no currency, while the sum and screen
+used the restaurant's current setting. A peso drawer became a dollar drawer
+without anybody exchanging its cash. Shifts now freeze the restaurant currency
+at insert; movements inherit their shift's stored currency. Insert triggers
+accept the old deployed routes before the new code ships. Neither currency nor
+restaurant can be changed afterwards. Existing shifts have no proven currency
+for their opening float, so their backfill uses today's setting; linked
+movements use the shift, and unlinked movements use today's setting too.
+
+The close and review share `cash_shift_totals`, including only matching cash
+receipts and completed cash returns, with imported historical returns counted
+once. Legacy handbacks use an explicit currency or their uniquely named order's
+currency where known, otherwise the shift's historical fallback. Screens,
+withdrawal and count inputs, and printed handovers use the stored currency.
+After a menu currency change, the cashier is told to keep the new currency's
+cash separate and count only the shift currency. Selling and closing remain
+available; the next shift uses the new menu currency.
+
+`cash-shift-review.spec.ts`, `cash-shift-schema.spec.ts` and
+`cash-shift-ui.spec.tsx` cover the currency switch, calculation contract and
+rendered labels in the till and manager view. Check Spanish and English on
+screen at 360px, 390px, 820px and 1280px, including the close dialog and print
+sheet; browser and database gates are left to the release runner.
+
+## S9 I13 — the handover includes overnight closes and late corrections
+
+The review selected shifts by their opening date alone. A shift opened last
+night and closed this morning disappeared, and an older shift corrected by
+cash received today never returned. `cash_shifts_for_day` selects shifts
+opened or closed since the reporting day began, still-open shifts, and closed
+shifts with matching cash dated inside them but recorded today after close.
+The server pages the complete result with a unique order; an `exists` check
+keeps multiple late receipts from duplicating a shift. The saved sign-off is
+preserved while the review shows its updated meaning. Dates on screen and on
+the handover sheet distinguish an older shift from today's shifts.
+
+`cash-shift-review.spec.ts` reproduces the overnight close and next-day late
+receipt, and excludes unrelated windows and currencies. SQL contract tests
+keep both predicates scoped to the restaurant and original currency. The list
+heading says closed or updated today in both languages.

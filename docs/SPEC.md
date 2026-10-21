@@ -458,18 +458,33 @@ dishes on a bill the restaurant has just cancelled.
   **blind count**: the person closing enters what they counted and confirms
   it is theirs, the shift closes on that number, and only then are they told
   what it should have held — so the count cannot drift toward the answer, and
-  it is final. What it should hold is worked out on the server at the close
+  it is final. What it should hold is worked out in the database at the close
   and stored: the opening, plus the cash taken while it was open (net of cash
   handed back, as the corte counts it), minus its withdrawals
-  (`src/lib/cash-shift.ts`). A difference ("Sobrante" / "Faltante") is
+  (`cash_shift_totals`, also used by the later review). Closing, withdrawal
+  creation and withdrawal deletion share the restaurant money lock and check
+  the exact open shift inside the transaction that writes the change. A
+  difference ("Sobrante" / "Faltante") is
   explained once, by the closer or a manager. Withdrawals (`cash_movements`)
   go only into the open shift, and a manager can strike one off only while it
-  is still open. Each closed shift shows its count, difference and why, a
+  is still open. Every shift freezes its currency at opening, and each
+  movement keeps that shift's currency. Receipts and completed cash returns
+  are summed only in that currency; labels and printed handovers use it too.
+  Old shifts whose opening currency cannot be proven use the restaurant's
+  currency at backfill, linked movements use their shift, and unlinked
+  movements use the restaurant's currency at backfill. A menu currency change
+  leaves the open shift in its old currency: the cashier is told to separate
+  the new currency's cash and count this shift only in its stored currency.
+  Selling and closing remain available; the next opening uses the new
+  currency. Each closed shift shows its count, difference and why, a
   trail of what happened to the money in it (withdrawals, refunds, discounts,
   cancellations, write-offs — the activity log's own wording), and prints as
   a handover sheet with two signatures. Cash dated inside a closed shift that
   arrived after its count (a sale the till held offline) is shown under the
-  sign-off, with the verdict as it stands now; the sign-off itself is kept. Owners and managers run it from the
+  sign-off, with the verdict as it stands now; the sign-off itself is kept.
+  Today's review includes shifts opened or closed today, still-open shifts,
+  and older shifts with late matching cash receipts recorded today. Dates
+  identify overnight shifts and older corrections. Owners and managers run it from the
   corte; the cashier opens, withdraws and closes from the till's header,
   never seeing the expected amount before counting. `/api/cash-shift` and
   `/api/cash-drawer`, for owner, manager and cashier. Card and online money
