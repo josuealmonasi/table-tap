@@ -39,6 +39,28 @@ cleared, nothing is charged, the move is written in the restaurant's activity
 log, and one still billed by a live Stripe subscription is refused, since the
 next billing event would write Stripe's plan back over it.
 
+Permanent deletion is limited to restaurants with no orders, receipts or other
+accounting history. `admin_delete_restaurant` takes `lock_restaurant_money` and
+the restaurant row lock, refuses unfinished refunds, duplicate-payment refunds
+and unconfirmed provider work with a specific admin message, and retains even
+completed refund records by refusing deletion. The route checks before touching
+billing or logins and checks atomically again at deletion. Staff logins are
+removed only after that guarded deletion; their IDs survive in the billing
+recovery record until cleanup completes. Existing restaurants stay available
+for their team to finish refunds. There is no archive state in this change.
+
+Platform actions have a separate append-only `platform_admin_audit` stream:
+actor and target identities, action, outcome and allowlisted before/after facts.
+It covers login creation, updates (including founding-owner password resets),
+platform admin creation/deletion, restaurant deletion and plan moves. Passwords
+are never copied; only set/reset flags are recorded. A durable start precedes
+writes and a result shares its attempt ID. Missing results mean unresolved work,
+not a promise to retry safely. No actor or target FK can cascade this history.
+RLS denies clients and only the service can insert/read; mutation and truncation
+are refused. `GET /api/admin/audit` checks platform membership and returns
+uncached keyset pages of 100. The API checks intentionally retain their genuine
+admin audit events after removing disposable business fixtures.
+
 ## The two ways in
 
 - **A table QR** → `/r/<restaurantId>/t/<tableId>`. The order knows its table,

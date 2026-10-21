@@ -42,6 +42,9 @@ describe("the text and the version cannot drift apart", () => {
       .digest("hex")
       .slice(0, 16);
 
+  // S17 keeps 2026-10-21: termination now explicitly preserves refunds and
+  // accounting records already covered by the privacy notice. No new data
+  // category, purpose or retention period; this clarifies the existing duty.
   // 2026-10-21, bumped from 2026-10-15: the privacy notice gained the table
   // credential (a hash per phone per visit, with who let it in), a new
   // category of data, so every restaurant is asked again.
@@ -55,7 +58,7 @@ describe("the text and the version cannot drift apart", () => {
   it("has terms that match the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("terms-es") }).toEqual({
       version: "2026-10-21",
-      text: "10b05f445a4af689",
+      text: "c58f22b50304f8ac",
     });
   });
 

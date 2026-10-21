@@ -12,6 +12,7 @@ import { checkTableJoin } from "./check-table-join.mjs";
 // (409, 400) — that is working. What is never right is a 500.
 // ============================================================================
 import { MARK, PART_AMOUNT, PART_TIP } from "./api-fixtures.mjs";
+import { adminCases } from "./api-admin-cases.mjs";
 import { offlineCases } from "./api-offline-cases.mjs";
 import { twoSittingCollection } from "./api-part-collection.mjs";
 import { loginByEmail } from "./logins.mjs";
@@ -104,6 +105,7 @@ export function cases(fx) {
   const r = restaurant.id;
 
   return [
+    ...adminCases(),
     { name: "POST /api/table-membership (approval, rejection, a new party and paying old food)",
       as: "diner", method: "POST", path: "/api/table-membership",
       headers: f => ({ cookie: f.joinScenario.second.cookie }),

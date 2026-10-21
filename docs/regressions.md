@@ -14,6 +14,8 @@ us, and what now catches each one.
 
 | Rule | The bug it came from |
 |---|---|
+| Restaurant deletion and refund obligations share the money lock (S17 J1) | Deleting a restaurant cascaded away money still owed and completed accounting records |
+| Sensitive admin actions and platform history survive the same deletion (S17 J15) | Password resets, admin logins, deletions and plan moves left no durable platform trail |
 | A statement email is capped per account and per restaurant, never on the recipient (G5) | One account code could mail the same stranger ~400 times a day |
 | Coupon entitlements and card receipts agree before money moves (S5 E4) | A MX$90 discounted charge recorded MX$100 and could later reserve a MX$100 return |
 | A coupon use belongs to one checkout attempt (S5 E7) | An old expiry released the newer payment page's reservation on the same order |
@@ -2990,3 +2992,50 @@ confirm the new phone can then order and open the bill. Close the sitting,
 seat a new party, and confirm the old phone can still see/pay its own food
 without seeing the new bill. Also check a staff-opened bill and a legacy
 phone's own-order payment during rollout.
+
+
+## S17 J1 — deletion and money owed
+
+Deleting a restaurant cascaded through its refunds and receipts. The admin
+route and the money ledger had to agree, and nothing checked that they did.
+`admin_delete_restaurant` takes the restaurant money lock and locks its parent
+row before checking pending refunds, duplicate-payment returns, unconfirmed
+provider work and accounting history. A check runs before billing or login
+changes, and the final deletion checks again in its own transaction. Refunds
+that already succeeded still prevent deletion because their records are books.
+The restaurant stays usable so its team can finish returning money. Only an
+unused restaurant can be permanently deleted; this does not add an archive.
+
+`admin-safety.spec.ts` reproduces each refusal and the intervening-refund race;
+`admin-safety-schema.spec.ts` checks locks, retained record classes and grants.
+`billing-delete.spec.ts` preserves Stripe cancellation/retry coverage, including
+retained staff IDs for cleanup after a failed Auth deletion. The API case in
+`api-admin-cases.mjs` plants a disposable restaurant with a pending cash refund,
+asserts refusal, the surviving refund and the audit row, then removes its
+fixture. Its real audit attempt stays in platform history by design.
+
+The terms now explain that closing does not cancel refunds or erase books.
+Version 2026-10-21 stays: this clarifies accounting retention already stated in
+the privacy notice, without adding a data category, purpose or retention term.
+Both legal PDFs are regenerated from their JSON sources.
+
+## S17 J15 — platform history and sensitive changes
+
+Restaurant activity logs disappear with their restaurant, and founding-owner
+password resets and platform admin changes were not written there at all.
+Every admin login create/update/delete, restaurant delete and plan move now
+appends a durable start before mutation and a result afterward, sharing one
+attempt ID. Facts are explicitly allowlisted: identity, role, plan, profile name
+and password-set/reset flags, never passwords, request bodies or provider errors.
+If the start cannot be written, no action runs. A missing result remains an
+unresolved start and the caller is told to inspect before retrying.
+
+`platform_admin_audit` has no actor/target foreign keys, RLS with no client
+policies, revoked anon/authenticated grants and service-only SELECT/INSERT.
+A trigger rejects UPDATE, DELETE and TRUNCATE. Only a platform admin can read
+`GET /api/admin/audit`; it sends uncached pages ordered by timestamp and ID.
+`admin-safety.spec.ts` covers real handlers, successful and refused plan moves,
+founding-owner resets, platform admin creation/deletion and both audit failure
+windows. `admin-audit-read.spec.ts` covers authorization, keyset pagination,
+invalid cursors and read failures. `admin-safety-schema.spec.ts` covers the
+append-only stream's lack of cascading identities and mutation privileges.
