@@ -4,6 +4,7 @@ import { unpackOrderIds } from "@/lib/stripe-limits";
 import type Stripe from "stripe";
 import { settleAccountCheckout } from "@/lib/account-checkout";
 import { charged, settleCardOrders } from "@/lib/card-settle";
+import { verifyDinerCheckout, type ConnectContext } from "@/lib/diner-checkout";
 import { takeFee } from "@/lib/platform-fee";
 
 // Abandoning a checkout lives beside it; the webhooks import both from here.
@@ -18,7 +19,7 @@ export { abandonCheckout } from "@/lib/checkout-abandon";
  * Nothing here touches a subscription, which is the other account entirely.
  *
  * SERVER-ONLY. Every write is made with the secret key, because the only thing
- * vouching for the caller is a signature Stripe put on the request.
+ * vouching for the caller is Stripe's signature matched to our frozen checkout.
  */
 
 /**
@@ -36,9 +37,10 @@ export { abandonCheckout } from "@/lib/checkout-abandon";
  * sure landed, so each is written to be safe to run twice — the guards are
  * `.eq("paid", false)` and `.is("paid_at", null)`, never a flag we set.
  */
-export async function settleCheckout(session: Stripe.Checkout.Session): Promise<void> {
-  // Only here is a payment believed. A browser coming back from Stripe proves
-  // nothing: it is the signature on this request that does.
+export async function settleCheckout(session: Stripe.Checkout.Session, context: ConnectContext): Promise<void> {
+  // A browser proves nothing. Stripe's signature and our frozen checkout
+  // must agree before any fee or food is marked paid.
+  await verifyDinerCheckout(session, context);
   if (session.payment_status !== "paid") return;
 
   // Our fee on this charge is real now, whichever shape it settles. First,

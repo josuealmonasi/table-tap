@@ -1,3 +1,6 @@
+import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
+import { dinerCurrency } from "@/lib/diner-currency";
+import { recordDinerCheckout } from "@/lib/diner-checkout";
 import { NextResponse, type NextRequest } from "next/server";
 import Stripe from "stripe";
 import { apiError } from "@/lib/api-error";
@@ -82,10 +85,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (r.outcome === "changed") return await refused("apiErr.accountStatementChanged", 409);
   if (r.outcome !== "open" || !r.checkout) return await refused("apiErr.generic", 500);
 
+  const { data: checkout, error: checkoutError } = await db.from("account_checkouts").select("order_ids")
+    .eq("id", r.checkout).eq("restaurant_id", restaurant.id).single();
+  const orders = checkoutError || !checkout ? null : await dinerCheckoutOrders(checkout.order_ids).catch(() => null);
+  const currency = orders ? dinerCurrency(orders) : null;
+  if (!checkout || !currency || !orders || orders.length !== checkout.order_ids.length) {
+    await releaseAccountCheckout(r.checkout);
+    return await refused(!orders ? "apiErr.verifyOrders" : "apiErr.mixedCurrencies", !orders ? 503 : 409);
+  }
+
   const origin = siteOrigin(req);
   const cents = Math.round(round2(Number(r.amount) + Number(r.tip)) * 100);
   try {
-    const session = await new Stripe(process.env.STRIPE_SECRET_KEY!).checkout.sessions.create(
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+    const session = await stripe.checkout.sessions.create(
       {
         mode: "payment",
         // Cards only, as every checkout (see `card-session.ts`).
@@ -94,7 +107,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           {
             quantity: 1,
             price_data: {
-              currency: restaurant.currency.toLowerCase(),
+              currency: currency.toLowerCase(),
               unit_amount: cents,
               product_data: { name: stripeProductName(`${restaurant.name} — ${account.name}`) },
             },
@@ -102,7 +115,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         ],
         // The webhook settles exactly this checkout. A returning browser
         // proves nothing about whether money moved.
-        metadata: { account_checkout: r.checkout, ...feeMetadata(fee, restaurant.id) },
+        metadata: { restaurant_id: restaurant.id, account_checkout: r.checkout, ...feeMetadata(fee, restaurant.id) },
         payment_intent_data: {
           metadata: feeMetadata(fee, restaurant.id),
           ...(feeCents > 0 ? { application_fee_amount: feeCents } : {}),
@@ -113,6 +126,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       },
       { stripeAccount: restaurant.stripe_account_id },
     );
+    await recordDinerCheckout(session, {
+      restaurantId: restaurant.id, stripeAccount: restaurant.stripe_account_id, currency, amountCents: cents,
+      orderIds: checkout.order_ids,
+    }, () => stripe.checkout.sessions.expire(session.id, {}, { stripeAccount: restaurant.stripe_account_id }));
     await db.from("account_checkouts").update({ stripe_session_id: session.id }).eq("id", r.checkout);
     return NextResponse.json({ url: session.url });
   } catch (err) {

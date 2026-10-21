@@ -24,6 +24,7 @@ drop function if exists public.claim_restaurant_billing(uuid, uuid);
 drop function if exists public.record_restaurant_billing(uuid, uuid, jsonb);
 drop function if exists public.takeover_restaurant_billing(uuid, uuid, uuid, timestamptz, jsonb);
 drop function if exists public.release_restaurant_billing(uuid, uuid);
+drop table if exists diner_checkouts cascade;
 drop table if exists platform_fees       cascade;
 drop table if exists terminal_deposits   cascade;
 drop table if exists waste_entries       cascade;

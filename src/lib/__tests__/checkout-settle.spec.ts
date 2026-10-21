@@ -56,7 +56,13 @@ vi.mock("@/lib/platform-fee", () => ({
   releaseSessionFee: async () => {},
 }));
 
-const { settleCheckout } = await import("@/lib/checkout-settle");
+vi.mock("@/lib/diner-checkout", () => ({
+  verifyDinerCheckout: async () => {}, requireVerifiedCheckout: () => {},
+}));
+
+const { settleCheckout: settleVerifiedCheckout } = await import("@/lib/checkout-settle");
+const settleCheckout = (session: Stripe.Checkout.Session) =>
+  settleVerifiedCheckout(session, { account: "acct_fixture", livemode: false });
 
 const down = { data: null, count: null, error: { message: "canceling statement due to statement timeout" } };
 const session = (metadata: Record<string, string>) =>

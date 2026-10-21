@@ -14,6 +14,9 @@ us, and what now catches each one.
 
 | Rule | The bug it came from |
 |---|---|
+| A signed card event matches our own frozen checkout before any money or expiry write (S4 E1) | A connected owner could stamp another restaurant's orders onto a cheap test session |
+| Settings and the database accept the same cent-based currencies (S4 E2) | JPY entered arithmetic that multiplied every charge by 100 |
+| Bill, split and account charges and receipts keep the orders' original currency (S4 E3) | Changing the menu from MXN to USD relabelled an unpaid peso bill as dollars |
 | Pages never receive the restaurant's credentials (security review H1) | The printer token reached every role's browser and survived their removal |
 | Staff write only a service request's status; duplicates match within the restaurant (H2) | A member pointed a request at another restaurant's table and silenced its calls |
 | Every `.rpc()` call names the arguments of a function in schema.sql (E10) | Proposing a split called the old signature and left the proposer without a seat |
@@ -2730,3 +2733,71 @@ The API case in `scripts/api-cases.mjs` creates an expired and an open sitting,
 collects MX$200 plus MX$10 tip, and checks both receipts, allocations and paid
 orders by effect, then removes its receipts, orders, sessions, table, print
 jobs and log. Run that case only after applying the new function.
+
+## A Stripe signature alone did not prove whose food was paid for (S4 E1)
+
+The Connect event and the checkout we created had to agree. A Standard Connect
+owner can create their own signed events with arbitrary session metadata.
+`diner_checkouts` now stores the exact Stripe session ID, connected account,
+key mode, restaurant, cents, currency, complete metadata and order scope before
+any payment URL leaves the server. All four diner checkout producers save it,
+including fee-free checkouts. A failed save attempts to expire the new session
+and returns an error instead of exposing its page.
+
+Settlement and expiry verify that record and the restaurant's connected account
+before fees, coupon uses, stock or payments change. Split scope includes the
+frozen food plus the diner's later orders; account scope comes from the existing
+`account_checkouts` snapshot. Order scope reads are paged and chunked. Exported
+card/account settlement helpers require a verified session; card helpers also
+refuse IDs outside its frozen metadata. Deleted pending orders do not prevent
+an authenticated expiry retry from finishing its remaining cleanup.
+
+`stripe-provenance.spec.ts` delivers genuinely signed test payloads through the
+Connect route. Wrong account, event/session mode, amount, currency, foreign
+order, altered scope and an owner-created session ID leave every settlement
+write untouched. It also covers failed reads, live/test key matching and direct
+helper bypasses. `diner-checkout.spec.ts` checks persistence and expiry on a
+failed save. `stripe-provenance-invariants.spec.ts` ties every producer and
+settlement entry point to the boundary and compares the receipt SQL delta with
+the canonical schema.
+
+Pre-deploy sessions with no record are refused for both settlement and expiry;
+there is no metadata fallback or automatic backfill. The release brief reports
+zero connected production accounts, so this is the chosen cutover. A webhook
+that races the record insert fails and can retry after persistence. If Stripe
+creation has an unknown outcome or the record cannot be saved, no payment URL
+is returned; unrecorded events remain refused and need investigation rather
+than guessed settlement. Existing fee/stock holds remain conservatively handled
+by their current failure paths. No idempotency or coupon redesign is included.
+
+## Currency accepted by settings disagreed with cent arithmetic (S4 E2)
+
+Settings and PostgreSQL now both allow exactly uppercase MXN and USD. The seed
+uses MXN, while `plan_limits` subscription prices are independently denominated
+in MXN; neither needs changing. `stripe-currency.spec.ts` first reproduced JPY,
+BHD, EUR and malformed settings being accepted, then verifies refusal before a
+write and continued MXN/USD support. The production constraint rejects any
+unsupported existing row rather than relabelling it. Its SQL contract is in
+`stripe-provenance-invariants.spec.ts`.
+
+## A bill changed money when the menu changed currency (S4 E3)
+
+The stored orders and the provider charge had to agree. Bill and split checkout
+now use the original order currency; a split reads its frozen `order_ids`, not
+only later orders on the phone. Account checkout follows its frozen order set
+as well. Mixed currencies are refused before charging, with a message in both
+languages asking the diner to get help paying each currency separately.
+
+Pooled split/account receipts also used today's restaurant currency. After
+provenance succeeds, the intent is bound to the durable checkout; the receipt
+trigger reads its original currency/account and requires its allocation scope
+to stay inside the checkout. Legacy callers with no record retain their old
+behavior during deployment overlap; no existing financial signature is removed.
+`diner-currency.spec.ts` first reproduced MXN food being charged as USD on both
+bill and split routes, then checks original-currency charging and refusal of
+mixed frozen/later orders. SQL source contracts do not execute PostgreSQL.
+
+Still needs a person once a restaurant connects Stripe: a real Connect
+completion and expiry, a repeated delivery, a wrong-account and a test-mode
+event, and an old MXN bill, split and account paid after a switch to USD.
+Nothing on production could exercise them when this shipped.
