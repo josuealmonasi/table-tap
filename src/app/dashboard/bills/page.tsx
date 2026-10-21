@@ -97,7 +97,7 @@ export default async function BillsPage() {
     ? await everyRow<{ amount: number; method: "cash" | "card" }>((a, b) => db
         .from("payments")
         .select("amount, method")
-        .eq("restaurant_id", r.id)
+        .eq("restaurant_id", r.id).eq("currency", r.currency)
         .eq("actor_email", me.email)
         .gte("created_at", dayStart.toISOString())
         .order("id").range(a, b), "your takings today")

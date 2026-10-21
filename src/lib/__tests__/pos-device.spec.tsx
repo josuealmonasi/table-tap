@@ -12,11 +12,11 @@ vi.mock("@/components/ui/Toast", () => ({ useToast: () => state.toast }));
 vi.mock("@/lib/pos-last-sale", () => ({ rememberLastSale: () => {} }));
 const { usePosCharge } = await import("@/hooks/usePosCharge");
 const { useOfflineSales } = await import("@/hooks/useOfflineSales");
-const { holdSale, readHeld } = await import("@/lib/offline-sales");
+const { holdSale, readHeld, replayBody } = await import("@/lib/offline-sales");
 const sale: HeldSale = { posRef: "6b1f0c2e-0000-4000-8000-000000000001", restaurantId: "r", at: new Date().toISOString(), method: "cash", items: [], charge: { subtotal: 100, total: 100, discount: 0, tip: 0, serviceFee: 0 } };
 function useTill() {
   const offline = useOfflineSales("r");
-  return usePosCharge({ restaurant: { id: "r", currency: "MXN" }, cart: { lines: [{ itemId: "x", price: 100, qty: 1 }], clear: state.clear }, details: { tipPct: 0, tipCustom: null, noTicket: true, customerName: "", note: "", terminalRef: "", reset: vi.fn() }, canEmailReceipt: false, pricing: sale.charge, offline } as unknown as Parameters<typeof usePosCharge>[0]);
+  return usePosCharge({ collectorContext: "signed-context", collector: "cashier@x.dev", restaurant: { id: "r", currency: "MXN" }, cart: { lines: [{ itemId: "x", price: 100, qty: 1 }], clear: state.clear }, details: { tipPct: 0, tipCustom: null, noTicket: true, customerName: "", note: "", terminalRef: "", reset: vi.fn() }, canEmailReceipt: false, pricing: sale.charge, offline } as unknown as Parameters<typeof usePosCharge>[0]);
 }
 beforeEach(() => {
   state.storage.clear(); state.fetch.mockReset(); state.toast.mockReset(); state.clear.mockReset();
@@ -49,7 +49,7 @@ it("W1.5 keeps a differing acknowledgement for reconciliation", async () => {
 
 it("drops a held sale only after a matching settled ticket", async () => {
   holdSale(sale);
-  state.fetch.mockResolvedValue(Response.json({ settled: true, orderId: sale.posRef, total: 100 }));
+  state.fetch.mockResolvedValue(Response.json({ settled: true, orderId: sale.posRef, total: 100, currency: "MXN", method: "cash" }));
   await useOfflineSales("r").flush();
   expect(readHeld()).toEqual([]);
 });
@@ -76,7 +76,7 @@ it("removes the online sale after its matching settled acknowledgement", async (
     const request = JSON.parse(options.body);
     expect(readHeld()[0].posRef).toBe(request.posRef);
     expect(request.collected).toEqual({ at: readHeld()[0].at, ...sale.charge });
-    return Response.json({ orderId: request.posRef, code: "ORD-TEST", total: 100, settled: true });
+    return Response.json({ orderId: request.posRef, code: "ORD-TEST", total: 100, settled: true, currency: "MXN", method: "cash" });
   });
   await useTill().charge("cash");
   expect(readHeld()).toEqual([]);
@@ -113,5 +113,22 @@ it("a refusal that says the money is in the drawer keeps the sale held", async (
 it("a server error keeps the sale held", async () => {
   state.fetch.mockResolvedValue(Response.json({ error: "boom" }, { status: 500 }));
   await useTill().charge("cash");
+  expect(readHeld()).toHaveLength(1);
+});
+
+it("lets the device go only after the server received every field of the queued receipt", async () => {
+  holdSale(sale);
+  state.fetch.mockResolvedValueOnce(Response.json({ queued: true, orderId: sale.posRef, receipt: { ...replayBody(sale), method: "card" } }))
+    .mockResolvedValueOnce(Response.json({ queued: true, orderId: sale.posRef, receipt: replayBody(sale) }));
+  const offline = useOfflineSales("r");
+  await offline.flush();
+  expect(readHeld()).toHaveLength(1);
+  await offline.flush();
+  expect(readHeld()).toEqual([]);
+});
+it("keeps queued money on the device when the queue write response is lost", async () => {
+  holdSale(sale);
+  state.fetch.mockRejectedValueOnce(new Error("response lost"));
+  await useOfflineSales("r").flush();
   expect(readHeld()).toHaveLength(1);
 });

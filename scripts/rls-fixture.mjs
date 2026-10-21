@@ -267,7 +267,7 @@ export async function plantNeighbour(admin, restaurantId) {
 
   // A day of their terminal marked as deposited: what their bank paid them.
   await keep("deposit", "terminal_deposits", {
-    restaurant_id: restaurantId, sales_day: "2001-01-01", expected: 1, received: 1, note: MARK, recorded_by: ACTOR,
+    restaurant_id: restaurantId, sales_day: "2001-01-01", currency: "MXN", expected: 1, received: 1, note: MARK, recorded_by: ACTOR,
   });
 
   // One of our fees on their ledger: what decides how much more we may charge

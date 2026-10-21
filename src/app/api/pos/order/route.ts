@@ -1,3 +1,4 @@
+import { readOfflineContext, contextCoveredSale } from "@/lib/offline-authority";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { rejectionMessage } from "@/lib/cart-rejection";
@@ -21,7 +22,7 @@ import { offlineCharge } from "@/lib/offline-sale";
 import { stockDemand, toDemandPayload, parseReserveResult } from "@/lib/stock";
 import { saleReceipt } from "@/lib/pos-receipt";
 import { existingTicket, otherRestaurant, terminalRef, type PosSaleBody } from "@/lib/pos-sale";
-import { ringOffline } from "@/lib/pos-offline";
+import { receiveOffline } from "@/lib/offline-intake";
 import { orderableNow } from "@/lib/checkout/orderable-now";
 import { verifiedLines } from "@/lib/checkout/verified-lines";
 
@@ -58,19 +59,18 @@ export async function POST(req: NextRequest) {
   if (!actor) return await apiError("apiErr.forbidden", 403);
   if (!TAKES_COUNTER_ORDERS(actor.role)) return await apiError("apiErr.forbidden", 403);
 
-  const frozen = await frozenBlocks(actor.restaurantId);
-  if (frozen) return frozen;
-  const blocked = await planBlocks(actor.restaurantId, "pos");
-  if (blocked) return blocked;
-
   const body = await jsonBody<PosSaleBody & { offline?: unknown }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const elsewhere = await otherRestaurant(body, actor.restaurantId);
   if (elsewhere) return elsewhere;
-  // Rung while the connection was gone and sent now: it already happened, so
-  // it is recorded as it was taken rather than checked against the menu as a
-  // new sale would be. Same role, freeze and plan checks as above.
-  if (body.offline !== undefined) return await ringOffline(actor, body);
+  // Rung while the connection was gone and sent now: it already happened.
+  // Receiving its money may queue a manager review after a freeze or downgrade;
+  // the checks below still refuse new sales on that same plan.
+  if (body.offline !== undefined) return await receiveOffline(actor, body);
+  const frozen = await frozenBlocks(actor.restaurantId);
+  if (frozen) return frozen;
+  const blocked = await planBlocks(actor.restaurantId, "pos");
+  if (blocked) return blocked;
   const { posRef, items, method } = body;
 
   // The till's own random UUID, never a guessable string: the reference is
@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
 
   // The same sale, sent twice. Answer with the ticket that already exists
   // rather than ringing it again — and only this restaurant's ticket.
-  const already = await existingTicket(db, posRef, actor.restaurantId);
+  const already = await existingTicket(db, posRef, actor.restaurantId, body);
   if (already) return already;
 
   // Read with the secret key, not the staff session. `restaurants` grants a
@@ -166,6 +166,12 @@ export async function POST(req: NextRequest) {
     // The drawer holds what the till charged, not today's price: refused here,
     // and kept on the device to be recorded as collected (`held`).
     return await apiError("apiErr.posMismatch", 409, undefined, { held: true });
+  }
+  if (collected) {
+    const context = readOfflineContext(body.collectorContext, actor.restaurantId);
+    if (!context || context.collector !== actor.email || context.currency !== restaurant.currency || !contextCoveredSale(context, collected.at)) {
+      return await apiError("apiErr.offlineCollector", 409, undefined, { held: true });
+    }
   }
   const common = {
     p_restaurant: actor.restaurantId, p_ref: posRef, p_actor: actor.email, p_status: finalStatus,
@@ -248,6 +254,7 @@ export async function POST(req: NextRequest) {
     orderId: order.id,
     code: orderCode(order.id as string),
     total: pricing.total,
+    currency: restaurant.currency, method,
     // What the device waits for before it lets go of its held copy.
     settled: true,
     receipt,

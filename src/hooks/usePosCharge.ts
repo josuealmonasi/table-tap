@@ -21,6 +21,8 @@ import { useLocale } from "@/lib/i18n/context";
 import { dateLocale } from "@/lib/format";
 
 interface PosChargeInput {
+  collectorContext: string;
+  collector: string;
   restaurant: Restaurant;
   cart: ReturnType<typeof usePosCart>;
   details: ReturnType<typeof usePosSaleDetails>;
@@ -46,7 +48,7 @@ interface PosChargeInput {
  * when the server says it is settled — a hung request or a restarted tablet
  * must not erase money already taken.
  */
-export function usePosCharge({ restaurant, cart, details, canEmailReceipt, pricing, offline }: PosChargeInput) {
+export function usePosCharge({ collector, collectorContext, restaurant, cart, details, canEmailReceipt, pricing, offline }: PosChargeInput) {
   const t = useT();
   const { locale } = useLocale();
   const toast = useToast();
@@ -116,7 +118,7 @@ export function usePosCharge({ restaurant, cart, details, canEmailReceipt, prici
     // dies on the way and is held and sent again is the same sale, rung once.
     const posRef = crypto.randomUUID();
     const sale: HeldSale | null = method === "account" ? null : {
-      posRef, restaurantId: restaurant.id, at: new Date().toISOString(), method, items: lines,
+      posRef, collector, collectorContext, restaurantId: restaurant.id, at: new Date().toISOString(), method, items: lines,
       charge: { ...pricing }, currency: restaurant.currency, tipPct: tipCustom === null ? tipPct : undefined, tipAmount: tipCustom ?? undefined,
       customerName: details.customerName.trim() || undefined, note: details.note.trim() || undefined,
       terminalRef: method === "card" ? details.terminalRef.trim() || undefined : undefined,
@@ -141,6 +143,8 @@ export function usePosCharge({ restaurant, cart, details, canEmailReceipt, prici
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             posRef,
+            collectorContext,
+            currency: restaurant.currency,
             restaurantId: restaurant.id,
             collected: sale ? { at: sale.at, ...sale.charge } : undefined,
             items: lines,

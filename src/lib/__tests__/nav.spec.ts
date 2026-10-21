@@ -67,7 +67,8 @@ describe("an area the tier does not include", () => {
   it("leaves the cashier their other screens", () => {
     // Customer accounts stay on every tier: one opened on a paid plan still
     // owes after a move down, and its page collects it (opening is locked).
-    expect(withoutPos("cashier")).toEqual(["/dashboard/orders", "/dashboard/waste", "/dashboard/bills", "/dashboard/accounts"]);
+    // Held money also needs an upload surface after the till is locked.
+    expect(withoutPos("cashier")).toEqual(["/dashboard/orders", "/dashboard/waste", "/dashboard/held-sales", "/dashboard/bills", "/dashboard/accounts"]);
   });
 
   it("never offers the till to a waiter or the kitchen", () => {

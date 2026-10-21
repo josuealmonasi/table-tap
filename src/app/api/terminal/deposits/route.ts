@@ -16,8 +16,8 @@ export const runtime = "nodejs";
 // /api/terminal/deposits — the restaurant's own card terminal: what the bank
 // deposited for a day's card sales. Owner and managers, on a tier with the till.
 //
-// POST   { day, received, note? }   a day's deposit arrived: this much
-// DELETE { day }                    it was marked wrong: take it back
+// POST   { day, currency, received, note? }   a day's deposit arrived: this much
+// DELETE { day, currency }                    it was marked wrong: take it back
 // PATCH  { settleDays }             how many business days the bank takes
 //
 // What a day SHOULD deposit is worked out here, from its payments, at the
@@ -38,25 +38,27 @@ async function guard(): Promise<{ restaurantId: string; email: string; timeZone:
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await guard();
   if (actor instanceof NextResponse) return actor;
-  const body = await jsonBody<{ day?: unknown; received?: unknown; note?: unknown }>(req);
+  const body = await jsonBody<{ day?: unknown; currency?: unknown; received?: unknown; note?: unknown }>(req);
   const day = typeof body?.day === "string" && DAY.test(body.day) ? body.day : null;
   if (!day) return await apiError("apiErr.depositDay", 400);
+  const currency = body?.currency;
+  if (currency !== "MXN" && currency !== "USD") return await apiError("apiErr.invalidRequest", 400);
   const received = cashAmount(body?.received, false);
   if (received === null) return await apiError("apiErr.depositAmount", 400);
 
-  const view = await readTerminal(actor.restaurantId, actor.timeZone);
+  const view = await readTerminal(actor.restaurantId, actor.timeZone, new Date(), currency);
   const row = view.days.find(d => d.day === day);
   if (!row || row.count === 0) return await apiError("apiErr.depositNoSales", 404);
 
   const { error } = await createAdminClient().from("terminal_deposits").insert({
-    restaurant_id: actor.restaurantId, sales_day: day, expected: row.expected, received,
+    restaurant_id: actor.restaurantId, sales_day: day, currency, expected: row.expected, received,
     note: cashNote(body?.note), recorded_by: actor.email,
   });
   if (error?.code === "23505") return await apiError("apiErr.depositMarked", 409);
   if (error) return await apiError("apiErr.generic", 500);
   await logEvent({
     restaurantId: actor.restaurantId, actor: actor.email, entity: "terminal", action: "collected",
-    detail: logDetail({ note: day, amount: received.toFixed(2) }),
+    detail: logDetail({ note: day, currency, amount: received.toFixed(2) }),
   });
   return NextResponse.json({ ok: true, expected: row.expected, received });
 }
@@ -64,16 +66,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
   const actor = await guard();
   if (actor instanceof NextResponse) return actor;
-  const body = await jsonBody<{ day?: unknown }>(req);
+  const body = await jsonBody<{ day?: unknown; currency?: unknown }>(req);
   const day = typeof body?.day === "string" && DAY.test(body.day) ? body.day : null;
   if (!day) return await apiError("apiErr.depositDay", 400);
+  const currency = body?.currency;
+  if (currency !== "MXN" && currency !== "USD") return await apiError("apiErr.invalidRequest", 400);
   const { data, error } = await createAdminClient().from("terminal_deposits")
-    .delete().eq("restaurant_id", actor.restaurantId).eq("sales_day", day).select("id");
+    .delete().eq("restaurant_id", actor.restaurantId).eq("sales_day", day).eq("currency", currency).select("id");
   if (error) return await apiError("apiErr.generic", 500);
   if (!data?.length) return await apiError("apiErr.notFound", 404);
   await logEvent({
     restaurantId: actor.restaurantId, actor: actor.email, entity: "terminal", action: "deleted",
-    detail: logDetail({ note: day }),
+    detail: logDetail({ note: day, currency }),
   });
   return NextResponse.json({ ok: true });
 }

@@ -49,14 +49,14 @@ export default function TerminalDeposits({ terminal, currency, timeZone }: Termi
   async function takeBack(day: string): Promise<void> {
     const ok = await confirm({ title: t("terminal.undoConfirm", { day: dayLabel(day) }), confirmLabel: t("terminal.undo"), danger: true });
     if (!ok) return;
-    const failed = await send("/api/terminal/deposits", "DELETE", { day });
+    const failed = await send("/api/terminal/deposits", "DELETE", { day, currency });
     toast(failed ?? t("terminal.undone"), failed ? "error" : undefined);
     if (!failed) router.refresh();
   }
 
   return (
     <section className="tt-section tt-terminal">
-      <h3 className="tt-serif" style={{ margin: 0 }}>{t("terminal.title")}</h3>
+      <h3 className="tt-serif" style={{ margin: 0 }}>{t("terminal.title")} · {currency}</h3>
       <p className="tt-muted tt-costs-hint">
         {t("terminal.hint", { pct: terminal.feePct, days: terminal.settleDays })}
       </p>

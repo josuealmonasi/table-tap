@@ -68,19 +68,21 @@ export async function shiftWithdrawals(restaurantId: string, shiftId: string): P
  */
 export async function shiftSumOf(restaurantId: string, shift: CashShift, until: Date = new Date()): Promise<ShiftSum> {
   const db = createAdminClient();
+  const { data: restaurant, error } = await db.from("restaurants").select("currency").eq("id", restaurantId).single();
+  if (error || !restaurant) throw new Error("Could not read the drawer currency");
   const from = shift.opened_at;
   const to = (shift.closed_at ? new Date(shift.closed_at) : until).toISOString();
   // Every row of the shift: a busy shift has more payments than one read
   // returns, and a drawer summed from part of them is a shortfall nobody made.
   const [payments, handedBack, withdrawals, returns] = await Promise.all([
     everyRow<CortePayment>((a, b) => db.from("payments").select("actor_email, amount, method")
-      .eq("restaurant_id", restaurantId).gte("created_at", from).lte("created_at", to)
+      .eq("restaurant_id", restaurantId).eq("currency", restaurant.currency).gte("created_at", from).lte("created_at", to)
       .order("id").range(a, b), "the shift's payments"),
     everyRow<CorteAdjustment>((a, b) => db.from("user_logs").select("action, detail")
       .eq("restaurant_id", restaurantId).eq("action", "refunded").gte("created_at", from).lte("created_at", to)
       .order("id").range(a, b), "the shift's handbacks"),
     shiftWithdrawals(restaurantId, shift.id),
-    returnedAdjustments(restaurantId, from, to),
+    returnedAdjustments(restaurantId, from, to, restaurant.currency),
   ]);
   return shiftSum(shift.opening_amount, payments, [...handedBack, ...returns], withdrawals);
 }

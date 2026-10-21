@@ -6,6 +6,7 @@ import { orderCode, type OrderLineItem } from "@/lib/types";
 /** What the till sends when a cashier rings a sale. */
 export interface PosSaleBody {
   posRef?: string;
+  collectorContext?: unknown;
   /** The restaurant the till screen was opened for — the drawer the money is in. */
   restaurantId?: unknown;
   /** A replayed sale: the currency it was charged in. */
@@ -67,19 +68,24 @@ export async function existingTicket(
   db: ReturnType<typeof createAdminClient>,
   posRef: string,
   restaurantId: string,
+  expected?: Pick<PosSaleBody, "currency" | "method">,
 ): Promise<NextResponse | null> {
   const { data, error } = await db.from("orders")
-    .select("id, total, paid, status, account_id, charged_at, customer_accounts(name)")
+    .select("id, total, paid, status, account_id, charged_at, currency, pay_method, customer_accounts(name)")
     .eq("pos_ref", posRef).eq("restaurant_id", restaurantId).maybeSingle();
   if (error) return await apiError("apiErr.orderCreate", 503);
   if (!data) return null;
+  if ((typeof expected?.currency === "string" && data.currency !== expected.currency)
+    || (expected?.method && expected.method !== "account" && (data.account_id || data.pay_method !== expected.method))) {
+    return await apiError("apiErr.posMismatch", 409, undefined, { held: true });
+  }
   const approved = data.account_id && data.charged_at && data.status !== "pending_payment";
   if (data.status === "pending_payment" || (!data.paid && !approved)) {
     return await apiError("apiErr.posUnsettled", 409, undefined, { held: true });
   }
   return NextResponse.json({
     orderId: data.id, code: orderCode(data.id as string), total: Number(data.total),
-    settled: true, repeat: true,
+    settled: true, repeat: true, currency: data.currency, method: data.pay_method,
     handedOver: data.status === "completed",
     ...(approved ? { onAccount: { name: (data.customer_accounts as unknown as { name: string } | null)?.name } } : {}),
   });

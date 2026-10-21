@@ -27,6 +27,9 @@ const LEGACY_KEY = "tt-offline-sales";
 export interface HeldSale {
   /** The till's reference, which becomes the sale's id: sent twice, rung once. */
   posRef: string;
+  /** Server-signed original collector and currency, saved with this sale. */
+  collectorContext?: string;
+  collector?: string;
   restaurantId: string;
   /** When it happened. */
   at: string;
@@ -137,7 +140,7 @@ export function replayBody(sale: HeldSale): Record<string, unknown> {
   return {
     posRef: sale.posRef, restaurantId: sale.restaurantId, items: sale.items, method: sale.method,
     tipPct: sale.tipPct, tipAmount: sale.tipAmount, customerName: sale.customerName, note: sale.note,
-    terminalRef: sale.terminalRef, currency: sale.currency, noReceipt: true,
+    terminalRef: sale.terminalRef, currency: sale.currency, collectorContext: sale.collectorContext, noReceipt: true,
     offline: { at: sale.at, ...sale.charge },
   };
 }
@@ -145,10 +148,11 @@ export function replayBody(sale: HeldSale): Record<string, unknown> {
 /** HTTP success alone does not prove the money was recorded for this sale. */
 export function saleAcknowledgement(sale: HeldSale, raw: unknown): "settled" | "unsettled" | "mismatch" {
   if (!raw || typeof raw !== "object") return "unsettled";
-  const ack = raw as { settled?: unknown; orderId?: unknown; total?: unknown; onAccount?: unknown };
+  const ack = raw as { settled?: unknown; orderId?: unknown; total?: unknown; onAccount?: unknown; currency?: unknown; method?: unknown };
   if (ack.settled !== true) return "unsettled";
   if (ack.orderId !== sale.posRef || typeof ack.total !== "number" || !Number.isFinite(ack.total)
-      || Math.abs(ack.total - sale.charge.total) > 0.005 || ack.onAccount) return "mismatch";
+      || Math.abs(ack.total - sale.charge.total) > 0.005 || ack.onAccount
+      || (sale.currency !== undefined && ack.currency !== sale.currency) || ack.method !== sale.method) return "mismatch";
   return "settled";
 }
 

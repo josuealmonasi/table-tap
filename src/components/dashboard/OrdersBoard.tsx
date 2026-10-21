@@ -116,6 +116,7 @@ export default function OrdersBoard({
     (sum, o) =>
       sum +
       (o.paid &&
+      o.currency === restaurant.currency &&
       o.status !== "cancelled" &&
       new Date(o.created_at).getTime() >= todayStartMs
         ? o.total
@@ -135,7 +136,7 @@ export default function OrdersBoard({
         toast(plan, "error");
         return;
       }
-      const words = cancelWording(plan, n => formatMoney(n, restaurant.currency), t);
+      const words = cancelWording(plan, n => formatMoney(n, order.currency ?? restaurant.currency), t);
       const ok = await confirm({
         title: t("orders.cancelConfirm", { code: orderCode(order.id) }),
         message: words.message,

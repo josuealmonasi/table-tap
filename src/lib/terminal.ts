@@ -25,6 +25,8 @@ export interface TerminalPayment {
 }
 
 export interface DepositRecord {
+  /** Null on older deposits until their bank receipt verifies the currency. */
+  currency?: string | null;
   sales_day: string;
   expected: number;
   received: number;

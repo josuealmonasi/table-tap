@@ -36,8 +36,11 @@ export async function readCosts(restaurantId: string, now = new Date()): Promise
   const db = createAdminClient();
   const since = new Date(now.getTime() - COST_WINDOW_DAYS * 86_400_000).toISOString();
 
-  const [restaurant, ingredients, recipes, items, menus, changes, orders, payments] = await Promise.all([
-    db.from("restaurants").select("tax_pct, terminal_fee_pct").eq("id", restaurantId).single(),
+  // Recovered foreign-currency receipts remain in their own books. Adding
+  // them to current menu margins would treat pesos and dollars as equal.
+  const restaurant = await db.from("restaurants").select("currency, tax_pct, terminal_fee_pct").eq("id", restaurantId).single();
+  if (restaurant.error || !restaurant.data) throw new Error(`Could not read the restaurant: ${restaurant.error?.message}`);
+  const [ingredients, recipes, items, menus, changes, orders, payments] = await Promise.all([
     everyRow<Ingredient>((a, b) => db.from("ingredients")
       .select("id, name, unit, pack_size, pack_price, unit_cost, supplier, lead_days")
       .eq("restaurant_id", restaurantId).is("archived_at", null).order("id").range(a, b), "the ingredients"),
@@ -54,13 +57,12 @@ export async function readCosts(restaurantId: string, now = new Date()): Promise
       .eq("restaurant_id", restaurantId).gte("created_at", since).order("id").range(a, b), "the price changes"),
     everyRow<{ items: OrderLineItem[]; subtotal: number; tax_pct: number }>((a, b) => db.from("orders")
       .select("items, subtotal, tax_pct")
-      .eq("restaurant_id", restaurantId).eq("paid", true).neq("status", "cancelled")
+      .eq("restaurant_id", restaurantId).eq("currency", restaurant.data.currency).eq("paid", true).neq("status", "cancelled")
       .gte("created_at", since).order("id").range(a, b), "the period's sales"),
     everyRow<FeePayment>((a, b) => db.from("payments")
       .select("amount, method, stripe_payment_intent")
-      .eq("restaurant_id", restaurantId).gte("created_at", since).order("id").range(a, b), "the period's payments"),
+      .eq("restaurant_id", restaurantId).eq("currency", restaurant.data.currency).gte("created_at", since).order("id").range(a, b), "the period's payments"),
   ]);
-  if (restaurant.error || !restaurant.data) throw new Error(`Could not read the restaurant: ${restaurant.error?.message}`);
 
   const taxPct = Number(restaurant.data.tax_pct) || 0;
   const terminalFeePct = Number(restaurant.data.terminal_fee_pct);

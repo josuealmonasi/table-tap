@@ -674,6 +674,7 @@ export async function setup(env, base) {
 /** Everything marked goes, whatever happened to the tests. */
 export async function teardown(fx) {
   const { admin, restaurant } = fx;
+  await admin.from("offline_sale_queue").delete().eq("restaurant_id", restaurant.id).like("body->>note", `${MARK} offline%`);
   // The fees its checkouts reserved and gave back when Stripe refused the
   // fake card reader: released rows count for nothing, but they are litter.
   await admin.from("platform_fees").delete()

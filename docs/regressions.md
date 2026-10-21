@@ -14,6 +14,16 @@ us, and what now catches each one.
 
 | Rule | The bug it came from |
 |---|---|
+| Cashier recovery access and upload authority agree (PR2 review) | Losing POS hid the only upload surface while sign-out still protected held money |
+| Deposit identity and display use the same original currency (PR2 review) | A peso deposit was reconciled against a later dollar sale |
+| Saved and verified carts compare line multisets (PR2 review) | Verification moved combos first and falsely flagged unchanged mixed carts |
+| The manager sees the same saved and current prices approval checks (PR2 review) | Approval showed collected totals without the menu comparison or breakdown |
+| Held receipt prices and manager approval agree (PR2) | A cashier could finalize arbitrary offline prices; equal totals concealed changed lines |
+| Receiving held money and permission to sell are separate (PR2) | Downgrades, freezes, old receipts and clock errors stranded money on a device |
+| A receipt keeps its proven collector, with manager attestation for legacy receipts (PR2) | A manager's login or browser-supplied name could take another drawer's collection |
+| The device releases only the exact receipt safely received (PR2) | HTTP success or an amount alone could discard different lines, methods or currencies |
+| Original currencies and current-currency reports agree (PR2) | Recovering MXN after a switch to USD relabelled money or mixed incompatible totals |
+| Retry decisions use codes and copy uses translations (PR2) | Matching an English error key against translated API copy prevented queueing |
 | The actual Stripe Price and the entitlement tier agree (W6 D5) | A portal Price change kept the former metadata tier |
 | Ceiling counts and inserts share a restaurant lock (W6 D6) | Concurrent creates each took the last table, menu, dish or staff seat |
 | Dish updates and inserts count the same membership (W6 D7) | Add-ons became dishes, or dishes moved restaurants, past the ceiling |
@@ -2270,6 +2280,10 @@ with a probe that made the order, ran the gate as it was (BAD) and as it is
 
 | Rule | The bug it came from |
 |---|---|
+| Cashier recovery access and upload authority agree (PR2 review) | Losing POS hid the only upload surface while sign-out still protected held money |
+| Deposit identity and display use the same original currency (PR2 review) | A peso deposit was reconciled against a later dollar sale |
+| Saved and verified carts compare line multisets (PR2 review) | Verification moved combos first and falsely flagged unchanged mixed carts |
+| The manager sees the same saved and current prices approval checks (PR2 review) | Approval showed collected totals without the menu comparison or breakdown |
 | One restaurant has one billing contract | Tier changes and concurrent first checkouts created duplicate subscriptions and customers |
 | Expired billing claims reconcile before takeover | A crashed checkout worker permanently blocked paying and deletion |
 | Deletion ends Stripe billing first | Deleted restaurants kept paying after their local billing IDs vanished |
@@ -2396,9 +2410,10 @@ fields are removed instead of introducing a new restriction after a downgrade.
 `entitlement-schema.spec.ts` checks the removal on existing databases; analytics
 and log reads retain their existing behavior and tenant scope.
 
+| Regression | The bug it came from | Verification |
+|---|---|---|
 | Partial payments and cancellations | Money collected for a cancelled dish was reused as credit for another dish, and a pooled receipt did not identify which collector or charge funded a return. | Transactional allocation probes in `pnpm api`, immutable per-order coverage, durable return reservations, and the allocation section of `pnpm money`. |
 | Frozen split versus later rounds | A split share must never fund or close orders placed after the split froze. | `scripts/allocations-check.mjs` pays both shares with tips, closes the frozen orders, and proves a later order remains unpaid and unallocated. |
-
 | PR1 overlap writers | Schema-first deployment changed the RPCs still used by main and let allocation triggers reject their writes. | `allocation-review.spec.ts` pins d7a0729 writer bodies; the app calls versioned writers under the shared money lock. |
 | PR1 refund before fee | A fee lookup failure hid a successful customer refund. | `operations.spec.tsx` records the provider outcome before fee work and recovers fee work without rebooking the return. |
 | PR1 duplicate refund retries | A confirmed failed duplicate refund reused Stripe's cached failure forever. | `refund-due.spec.ts` checks separately keyed durable failed/canceled retries. |
@@ -2479,3 +2494,102 @@ The allocation components use `OrderRefunds.tsx` and `PaymentAttribution.tsx`;
 specs use `.spec.ts` or `.spec.tsx`. Both languages describe matching old
 payments to orders and confirming money actually returned. The retired receipt
 initializer keeps its explanation about duplicate pooled/account receipts.
+
+## PR2: offline prices need approval before entering the ledger
+
+The held receipt and today's menu describe different facts. Compare every money
+field and priced line, including extras and combo parts. Equal final totals are
+insufficient. A changed or missing dish enters a private manager queue; approval
+records the saved amount and original combo stock demand in the same transaction.
+`offline-authority.spec.ts` covers equal-total line forgery and
+`offline-exceptions.spec.ts` covers queueing a price difference.
+
+## PR2: receiving old money does not reopen the till
+
+Entitlements govern new sales. The money from an already collected sale must
+still be received after a freeze, downgrade or 30 days. Clock errors also keep
+the original receipt and need a manager to correct the time. The queue is durable
+before the device removes its copy. Approval needs a reason and confirmation;
+original and corrected times are audited, preserving seconds and milliseconds.
+`offline-exceptions.spec.ts` exercises those exceptions and verifies new sales
+remain blocked on the same frozen plan.
+
+## PR2: original collector and approving manager are separate people
+
+An online till receives signed restaurant, collector and currency context. A
+cashier cannot submit a different collector; legacy or unverifiable receipts
+require manager attestation. Recovery reads the immutable queued body rather than
+accepting replacement amounts from the caller. The order, payment and audit keep
+the collector separately from the approving manager. `offline-authority.spec.ts`
+covers forged and cross-tenant proofs; `offline-exceptions.spec.ts` covers legacy
+attestation, manager-only approval and attempted collector/currency replacement.
+
+## PR2: releasing a local copy requires the exact queued receipt
+
+The queue returns the saved body after its transaction commits. Compare every
+field before removing the device copy; a matching amount alone says nothing about
+lines or payment method. Retries compare immutable JSON and never overwrite a
+previously received receipt. Settlement still requires matching reference,
+amount, method and currency. `pos-device.spec.tsx` covers lost replies and altered
+queue replies; the SQL shares the restaurant money lock with ordinary POS writers
+so queueing and approval cannot create a second sale.
+
+## PR2: original currencies remain original
+
+Manager recovery permits the original MXN/USD currency even after menu settings
+change. Payment provenance snapshots the order currency. Current-currency sales,
+corte, shifts, terminal totals, returns and margins exclude foreign receipts;
+the manager queue, activity log and order history retain their original currency. Price drift is null across different currencies, because those totals cannot
+be subtracted. There is no conversion and no need to change restaurant settings. `offline-currency.spec.ts`
+checks real reader results against mixed-currency mock rows.
+`offline-recovery-ui.spec.tsx` checks original-currency review and log output. Phone and desktop
+checks must also inspect the queue, history and printed receipt.
+
+## PR2: translated errors do not control retries
+
+The API's `error` is user-facing translated copy. A separate `reviewReason` code
+controls the decision to queue a receipt and is translated when managers read it.
+`offline-exceptions.spec.ts` deliberately returns translated errors so matching
+English keys against copy cannot quietly return.
+
+
+## PR2 review: a cashier can send held money after losing POS
+
+The locked till and the sign-out guard had to agree about where held money
+could go. POS now mounts upload-only recovery after a downgrade or freeze;
+Held Sales remains in cashier navigation and shows only that device's receipts.
+The upload API only queues money. Queue reads, comparisons and approvals stay
+manager-only. Exact receipt acknowledgement releases the device copy; a lost
+response keeps it. `offline-upload-page.spec.tsx`,
+`offline-upload-sign-out.spec.ts` and `offline-exceptions.spec.ts` cover access,
+tenant boundaries, queue-only writes and signing out after successful upload.
+
+## PR2 review: terminal deposits carry their currency
+
+The payment reader and the deposit identity had to agree on currency. Deposits
+are unique by restaurant, day and currency; insert, delete, read and display all
+carry that currency. Analytics lists currencies separately. Older records have
+no trustworthy currency column, so the schema preserves them as unverified,
+outside currency arithmetic, until a manager checks the bank receipt and
+records its currency with a reason. Today's setting never backfills old money.
+`terminal-deposit-currency.spec.ts` reproduces the MXN 1,000 deposit / USD 100
+late sale, and `terminal-deposit-api.spec.ts` checks writes and verification.
+
+## PR2 review: mixed carts compare as multisets
+
+The cart's submission order and verification's combo-first order had to agree.
+Normalized line signatures are sorted before comparison, retaining duplicates;
+equal totals still cannot conceal different quantities, products or prices.
+`offline-mixed-cart.spec.ts` uses the real verifier for both dish/combo orders
+and rejects a duplicate substitution at equal totals.
+
+## PR2 review: show the difference before approval
+
+The approval calculation and the manager's screen had to agree. Review shows
+saved unit prices, extras, discounts, subtotal, service, tip and total alongside
+a server-calculated breakdown and collected-minus-current difference. The
+comparison loads only for the selected, tenant-scoped queued receipt. Missing
+items, failed reads, unknown currency and changed currencies explicitly say
+that comparison is unavailable; the manager can still recover the saved money.
+`offline-comparison.spec.ts` checks real server pricing; the UI assertions in
+`offline-recovery-ui.spec.tsx` cover the breakdown and unavailable state.
