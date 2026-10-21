@@ -14,6 +14,11 @@ import { siteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
 
+/** Sent, mistyped, sent again and one spare, the same allowance as a receipt. */
+const STATEMENTS_PER_ACCOUNT = 4;
+/** A busy restaurant's honest day, and a ceiling on what its codes can send. */
+const STATEMENTS_PER_RESTAURANT = 100;
+
 // POST /api/account/email — the statement to an address the customer types.
 // The address is used for this one message and never written down, the same
 // promise the receipts make: holding the code is what lets a statement be
@@ -35,6 +40,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const account = await accountByCode(code).catch(() => undefined);
   if (account === undefined) return await apiError("apiErr.generic", 500);
   if (!account) return await apiError("account.notFound", 404);
+  // And few per account, and per restaurant. The address limit alone let one
+  // person holding one code mail the statement about 400 times a day, to the
+  // same stranger, from our sender; more addresses meant more allowances. Kept
+  // on the account and the restaurant, never on the recipient: a limit on the
+  // address typed would have to store something about a stranger's inbox.
+  if (await isRateLimited(`account-mail-account:${account.id}`, STATEMENTS_PER_ACCOUNT, 86_400)
+    || await isRateLimited(`account-mail-restaurant:${account.restaurant_id}`, STATEMENTS_PER_RESTAURANT, 86_400)) {
+    return await apiError("apiErr.tooManyWait", 429);
+  }
 
   const { data: restaurant } = await createAdminClient()
     .from("restaurants").select("name, currency, timezone").eq("id", account.restaurant_id).maybeSingle();
