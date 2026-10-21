@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/lib/i18n/context";
-import type { ServiceRequest } from "@/lib/types";
+import type { BoardRequest } from "@/lib/kitchen-ticket";
 
 /** Short double-beep so staff notice a table calling without watching. */
 function playChime() {
@@ -28,13 +28,14 @@ function playChime() {
 /**
  * Live open service requests (call waiter / request bill) for one restaurant.
  * Seeds from server data, follows realtime inserts (chiming), and marks
- * requests done via the owner's RLS-scoped client.
+ * requests done via the floor's RLS-scoped client or the kitchen's scoped route.
  */
 export function useServiceRequests(
   restaurantId: string,
-  initialRequests: ServiceRequest[],
+  initialRequests: BoardRequest[],
+  kitchen = false,
 ) {
-  const [requests, setRequests] = useState<ServiceRequest[]>(initialRequests);
+  const [requests, setRequests] = useState<BoardRequest[]>(initialRequests);
   const toast = useToast();
   const t = useT();
 
@@ -51,7 +52,8 @@ export function useServiceRequests(
     let cancelled = false;
 
     (async () => {
-      // Reads are owner-only under RLS, so the socket needs the owner's token.
+      // The kitchen follows labels without table credentials; both feeds use
+      // the member's token so RLS checks the socket as well as the first read.
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -65,11 +67,11 @@ export function useServiceRequests(
           {
             event: "INSERT",
             schema: "public",
-            table: "service_requests",
+            table: kitchen ? "kitchen_requests" : "service_requests",
             filter: `restaurant_id=eq.${restaurantId}`,
           },
           payload => {
-            const row = payload.new as ServiceRequest;
+            const row = payload.new as BoardRequest;
             setRequests(prev =>
               prev.some(r => r.id === row.id) ? prev : [row, ...prev],
             );
@@ -81,7 +83,7 @@ export function useServiceRequests(
           {
             event: "UPDATE",
             schema: "public",
-            table: "service_requests",
+            table: kitchen ? "kitchen_requests" : "service_requests",
             filter: `restaurant_id=eq.${restaurantId}`,
           },
           payload => {
@@ -90,7 +92,7 @@ export function useServiceRequests(
             // leave this board too. Without this only the device that pressed
             // the button stopped showing it, so everyone else kept being asked
             // to handle something already handled.
-            const row = payload.new as ServiceRequest;
+            const row = payload.new as BoardRequest;
             if (row.status !== "open") {
               setRequests(prev => prev.filter(r => r.id !== row.id));
             }
@@ -103,12 +105,25 @@ export function useServiceRequests(
       cancelled = true;
       if (channel) supabase.removeChannel(channel);
     };
-  }, [restaurantId]);
+  }, [restaurantId, kitchen]);
 
   async function markDone(id: string): Promise<void> {
     const handled = requests.find(r => r.id === id);
     setRequests(prev => prev.filter(r => r.id !== id)); // optimistic
-    const { error } = await createClient().from("service_requests").update({ status: "done" }).eq("id", id);
+    let error: unknown;
+    try {
+      if (kitchen) {
+        const res = await fetch("/api/service-requests", {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        error = !res.ok;
+      } else {
+        ({ error } = await createClient().from("service_requests").update({ status: "done" }).eq("id", id));
+      }
+    } catch {
+      error = true;
+    }
     // Put back when it did not land. It was left hidden here and pending on
     // every other screen: a table two waiters each think the other answered.
     if (error) {

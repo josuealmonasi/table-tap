@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isRoomLimited, isTableLimited } from "@/lib/rate-limit";
 import { getPlan } from "@/lib/plan-server";
 import { can } from "@/lib/plan";
+import { actingStaff } from "@/lib/api-guard";
 
 export const runtime = "nodejs";
 
@@ -76,5 +77,21 @@ export async function POST(req: NextRequest) {
   });
   if (error) return await apiError("apiErr.requestSend", 500);
 
+  return NextResponse.json({ ok: true });
+}
+
+// The kitchen sees calls without their table's public bill credential. It
+// answers by request id, through a restaurant-scoped write that returns no row.
+export async function PATCH(req: NextRequest) {
+  const actor = await actingStaff();
+  if (!actor) return await apiError("apiErr.forbidden", 403);
+  const body = await jsonBody<{ id?: unknown }>(req);
+  if (typeof body?.id !== "string" || !/^[0-9a-f-]{36}$/i.test(body.id)) {
+    return await apiError("apiErr.invalidRequest", 400);
+  }
+  const { data, error } = await createAdminClient().from("service_requests")
+    .update({ status: "done" }).eq("id", body.id).eq("restaurant_id", actor.restaurantId).select("id");
+  if (error) return await apiError("apiErr.requestSend", 500);
+  if (!data?.length) return await apiError("apiErr.notFound", 404);
   return NextResponse.json({ ok: true });
 }

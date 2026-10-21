@@ -1,4 +1,5 @@
-import type { Order, OrderLineItem, OrderStatus } from "@/lib/types";
+import type { Order, OrderStatus } from "@/lib/types";
+import type { KitchenLine } from "@/lib/kitchen-ticket";
 
 /**
  * Where an order's lines are made, and how each station sees the order.
@@ -15,21 +16,21 @@ import type { Order, OrderLineItem, OrderStatus } from "@/lib/types";
 export type Station = "kitchen" | "bar";
 export const STATIONS: Station[] = ["kitchen", "bar"];
 
-export const stationOf = (line: Pick<OrderLineItem, "station">): Station => (line.station === "bar" ? "bar" : "kitchen");
+export const stationOf = (line: Pick<KitchenLine, "station">): Station => (line.station === "bar" ? "bar" : "kitchen");
 
 /** The stations an order needs: those of its lines that are made at all. */
-export function stationsOf(order: Pick<Order, "items">): Station[] {
+export function stationsOf(order: { items: KitchenLine[] }): Station[] {
   const needed = new Set<Station>();
   for (const line of order.items ?? []) if (!line.skipsKitchen) needed.add(stationOf(line));
   return STATIONS.filter(s => needed.has(s));
 }
 
 /** Whether a station has anything to make in this order. All of them, with no station chosen. */
-export const inStation = (order: Pick<Order, "items">, station: Station | null): boolean =>
+export const inStation = (order: { items: KitchenLine[] }, station: Station | null): boolean =>
   station === null || stationsOf(order).includes(station);
 
 /** The lines a station makes; every line when no station is chosen. */
-export const linesAt = (order: Pick<Order, "items">, station: Station | null): OrderLineItem[] =>
+export const linesAt = (order: { items: KitchenLine[] }, station: Station | null): KitchenLine[] =>
   station === null ? order.items : order.items.filter(l => !l.skipsKitchen && stationOf(l) === station);
 
 /** Whether this station has finished its part of the order. */

@@ -1913,7 +1913,8 @@ describe("the board loads what the badge counts", () => {
     // still counted it. The board and the badge have to agree on what "live"
     // means, and only a status can say it.
     const page = read("src/app/dashboard/orders/page.tsx");
-    const at = page.indexOf('.from("orders")');
+    const at = page.indexOf('.from(kitchen ? "kitchen_tickets" : "orders")');
+    expect(at, "neither role has a live feed").toBeGreaterThan(-1);
     const query = page.slice(at, page.indexOf("),", at));
     expect(query, "the board is no longer seeded by status").toMatch(/\.in\("status", LIVE_FLOW\)/);
     expect(query, "a row limit decides which live orders the kitchen sees").not.toMatch(/\.limit\(/);

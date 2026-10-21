@@ -18,6 +18,7 @@ us, and what now catches each one.
 | A signed card event matches our own frozen checkout before any money or expiry write (S4 E1) | A connected owner could stamp another restaurant's orders onto a cheap test session |
 | Settings and the database accept the same cent-based currencies (S4 E2) | JPY entered arithmetic that multiplied every charge by 100 |
 | Bill, split and account charges and receipts keep the orders' original currency (S4 E3) | Changing the menu from MXN to USD relabelled an unpaid peso bill as dollars |
+| Kitchen tickets, live calls and receipt permissions agree (S6, H3) | The kitchen could query sales and print receipts; order, sitting and call-table IDs also opened public bill readers |
 | Pages never receive the restaurant's credentials (security review H1) | The printer token reached every role's browser and survived their removal |
 | Staff write only a service request's status; duplicates match within the restaurant (H2) | A member pointed a request at another restaurant's table and silenced its calls |
 | Every `.rpc()` call names the arguments of a function in schema.sql (E10) | Proposing a split called the old signature and left the proposer without a seat |
@@ -2822,3 +2823,50 @@ visit. The ceiling itself stays: it keeps cards nobody carries out of the
 owner's numbers. Who may be handed a table's pass is decided with the table's
 sitting (staff confirm new phones), which is where a stranger holding an old
 QR is stopped.
+
+## S6 / H3 — the kitchen sees tickets, not money
+
+The board hid the daily takings, but its initial read and realtime feed still
+sent whole `orders` rows. A kitchen session could select the entire sales
+history with the publishable key, and the shared print route returned receipt
+HTML. Hiding a total in React did not protect what crossed the network.
+
+The kitchen now reads `kitchen_tickets`, maintained atomically by the order
+trigger and published for realtime. Lines allowlist preparation fields at every
+depth, including extras and combo components. A separate ticket UUID prevents a
+cook from using the public order tracker to recover the bill. Sitting and split
+rows are floor-only too. Calls have their own `kitchen_requests` projection:
+`service_requests.table_id` also opens the public diner bill, so sending that
+credential through a call chip would undo the order fix. Answering a call uses a
+scoped route that returns only success. The floor keeps its existing feeds.
+
+`actingFrontOfHouse` guards receipt reprints before reading order money. The
+kitchen can still move tickets, finish each station, reprint preparation paper,
+read live calls and mark them done. Completed and cancelled tickets stay readable
+under RLS so their final update clears the live board. Badges remain server-side
+role-scoped counts; notifications remain manager-only in both API and RLS.
+
+Policy audit: `payments` already requires the floor; `coupons`,
+`coupon_redemptions`, `refunds_due` and `notifications` already require management;
+`discount_requests` and `write_off_requests` already exclude the kitchen.
+`payment_allocations`, `order_adjustments`, `refund_operations`,
+`refund_allocations`, `refund_attempts`, `refund_due_attempts`, `cash_shifts`,
+`cash_movements`, `terminal_deposits`, `platform_fees`, `offline_sale_queue`,
+`customer_accounts`, `account_checkouts`, the six ingredient/cost tables,
+`restaurant_billing_operations`, `restaurant_subscription_prices`, `print_jobs`
+and all four loyalty tables already revoke authenticated reads. Those guards
+stay as they were. Menu prices, public offers and the platform's plan catalogue
+remain readable as before; they are not restaurant sales or takings.
+
+Checks: `kitchen-access-invariants.spec.ts`, `kitchen-orders-page.spec.tsx`,
+`kitchen-print.spec.ts`, `kitchen-requests.spec.ts`, `kitchen-station.spec.ts`,
+`kitchen-live.spec.ts` and the order status tests cover policy/source agreement, server props, receipt refusal,
+scoped actions and live updates. `pnpm rls` now calls `scripts/rls-kitchen.mjs`,
+which plants actual home rows, requires a readable ticket and call as positive
+controls, checks all money tables by effect, rejects unrelated query errors,
+checks that a ticket cannot open the public tracker, and removes its fixtures.
+The API cases check the 403 receipt refusal, a working kitchen reprint, and an
+answered call reaching the safe feed. Run those live gates only after applying
+the schema. On screen, verify kitchen cards and detail show no money, calls still
+arrive, both stations update live, and another device's completion/cancellation
+clears the board; repeat as the floor to check totals, unpaid badges and receipts.

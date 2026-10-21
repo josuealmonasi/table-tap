@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { formatMoney, dateLocale } from "@/lib/format";
 import { backwardOptions } from "@/lib/order-flow";
 import { MoveToIcon } from "@/components/ui/icons";
-import { orderCode, type Order, type OrderStatus } from "@/lib/types";
+import { type Order, type OrderStatus } from "@/lib/types";
+import { boardOrderCode, hasOrderMoney, type BoardOrder } from "@/lib/kitchen-ticket";
 import OrderDetailDialog from "./OrderDetailDialog";
 import { STATUS_META, statusMeta } from "@/lib/order-status";
 import { useLocale, useT } from "@/lib/i18n/context";
@@ -30,7 +31,7 @@ function nextAction(
 }
 
 interface OrderCardProps {
-  order: Order;
+  order: BoardOrder;
   currency: string;
   onAdvance: (id: string, status: OrderStatus) => void;
   /** Cancel + refund; offered on new/preparing orders only. */
@@ -43,7 +44,7 @@ interface OrderCardProps {
   onStationReady?: (id: string, station: Station) => void;
 }
 
-/** One order on the kitchen board: table, items, total, and its advance button. */
+/** One board ticket: preparation facts, an advance button, and money for the floor. */
 export default function OrderCard({
   order,
   currency,
@@ -54,6 +55,7 @@ export default function OrderCard({
   onStationReady,
 }: OrderCardProps) {
   const t = useT();
+  const money = hasOrderMoney(order) ? order : null;
   const { locale } = useLocale();
   const meta = statusMeta(order.status);
   const action = nextAction(order.status);
@@ -92,7 +94,7 @@ export default function OrderCard({
       style={{ borderLeft: `4px solid ${meta.color}` }}
       role="button"
       tabIndex={0}
-      aria-label={t("orders.openDetail", { code: orderCode(order.id) })}
+      aria-label={t("orders.openDetail", { code: boardOrderCode(order) })}
       // The card opens the detail; the buttons on it keep doing their own job,
       // which is why every control below stops the click from reaching here.
       onClick={() => setDetail(true)}
@@ -109,7 +111,7 @@ export default function OrderCard({
       <div onClick={e => e.stopPropagation()} role="presentation">
         <OrderDetailDialog
           order={order}
-          currency={order.currency ?? currency}
+          currency={money?.currency ?? currency}
           open={detail}
           onClose={() => setDetail(false)}
         />
@@ -128,7 +130,7 @@ export default function OrderCard({
               ? t("dash.tableN", { label: order.table_label })
               : (order.customer_name ?? t("dash.billsToGo"))}
           </strong>
-          <span className="tt-order-code">{orderCode(order.id)}</span>
+          <span className="tt-order-code">{boardOrderCode(order)}</span>
         </div>
         <div className="tt-row">
           <span className="tt-muted" style={{ fontSize: 12 }}>
@@ -141,9 +143,9 @@ export default function OrderCard({
                 leaves with nobody having collected. */}
             {/* On an account it is owed, but not here: nobody collects it
                 at the pass, so it does not say "unpaid". */}
-            {!order.paid && (
-              <span className={`tt-status-badge ${order.account_id ? "tt-account-badge" : "tt-unpaid-badge"}`}>
-                {t(order.account_id ? "orders.onAccount" : "orders.notPaid")}
+            {money && !money.paid && (
+              <span className={`tt-status-badge ${money.account_id ? "tt-account-badge" : "tt-unpaid-badge"}`}>
+                {t(money.account_id ? "orders.onAccount" : "orders.notPaid")}
               </span>
             )}
             <span
@@ -200,7 +202,7 @@ export default function OrderCard({
           both — see .tt-order-actions. Squeezed in place they wrapped their own
           labels and the last one hung off the edge of the card. */}
       <div className="tt-order-foot">
-        <strong className="tt-accent">{formatMoney(order.total, order.currency ?? currency)}</strong>
+        {money && <strong className="tt-accent">{formatMoney(money.total, money.currency ?? currency)}</strong>}
         <div className="tt-order-actions">
           {/* Sending a ticket back a stage — a plate returned, a mis-tap. Only
               earlier stages appear: forward is what the main button does, and
@@ -239,12 +241,12 @@ export default function OrderCard({
               )}
             </div>
           )}
-          {cancellable && onCancel && (
+          {cancellable && onCancel && money && (
             <button
               className="tt-btn tt-btn-ghost tt-btn-sm"
               onClick={e => {
                 e.stopPropagation();
-                onCancel(order);
+                onCancel(money);
               }}
             >
               {t("common.cancel")}
@@ -279,7 +281,7 @@ export default function OrderCard({
           ) : order.status === "cancelled" ? (
             <span className="tt-muted" style={{ fontSize: 13, fontWeight: 700 }}>
               {t("orders.cancelledLabel")}
-              {order.stripe_refund_id ? t("orders.refunded") : ""}
+              {money?.stripe_refund_id ? t("orders.refunded") : ""}
             </span>
           ) : (
             <span style={{ color: "var(--tt-success)", fontSize: 13, fontWeight: 700 }}>

@@ -14,6 +14,14 @@ import { offlineCases } from "./api-offline-cases.mjs";
 import { twoSittingCollection } from "./api-part-collection.mjs";
 import { loginByEmail } from "./logins.mjs";
 
+// The pass holds a ticket id, never the diner's order lookup credential.
+async function kitchenTicketId(f, orderId) {
+  const { data, error } = await f.admin.from("orders").select("kitchen_ticket_id")
+    .eq("id", orderId).eq("restaurant_id", f.restaurant.id).single();
+  if (error || !data?.kitchen_ticket_id) throw new Error(`no kitchen ticket: ${error?.message ?? orderId}`);
+  return data.kitchen_ticket_id;
+}
+
 async function returnFor(f, orderId) {
   const { data, error } = await f.admin.from("refund_operations")
     .select("id, amount, source, status, confirmed_by, payout_actor, order_adjustments!inner(order_id)")
@@ -132,6 +140,23 @@ export function cases(fx) {
       expect: [200] },
     { name: "POST /api/service-requests", as: "diner", method: "POST", path: "/api/service-requests",
       body: { restaurantId: r, tableId: table.id, kind: "waiter" }, expect: [200] },
+    { name: "PATCH /api/service-requests (kitchen answers a call without a table id)", as: "kitchen",
+      method: "PATCH", path: "/api/service-requests",
+      arrange: async f => {
+        const { data, error } = await f.admin.from("service_requests").insert({
+          restaurant_id: r, table_id: table.id, table_label: table.label, kind: "bill",
+        }).select("id").single();
+        if (error) throw new Error(error.message);
+        f.kitchenCall = data.id;
+        return () => f.admin.from("service_requests").delete().eq("id", data.id);
+      },
+      body: f => ({ id: f.kitchenCall }), expect: [200],
+      check: d => d.ok === true && Object.keys(d).length === 1 || "answering a call returned more than its result",
+      effect: async f => {
+        const { data, error } = await f.admin.from("kitchen_requests").select("status")
+          .eq("id", f.kitchenCall).single();
+        return !error && data?.status === "done" || "the kitchen's live call stayed open";
+      } },
     { name: "POST /api/ratings/pending", as: "diner", method: "POST", path: "/api/ratings/pending",
       body: { restaurantId: r, orderIds: [paidOrder] }, expect: [200],
       check: d => Array.isArray(d.dishes) && d.dishes.length > 0 || "did not offer the dish that was bought" },
@@ -995,7 +1020,7 @@ export function cases(fx) {
     // and a station with nothing in the order cannot either.
     { name: "POST /api/orders/station (the bar finishes its part)", as: "kitchen", method: "POST",
       path: "/api/orders/station",
-      body: f => ({ id: f.stationOrder, station: "bar" }), expect: [200],
+      body: async f => ({ id: await kitchenTicketId(f, f.stationOrder), station: "bar" }), expect: [200],
       check: async (d, f) => {
         const { data } = await f.admin.from("orders").select("status, stations_ready").eq("id", f.stationOrder).single();
         if (d.status !== "preparing") return `answered ${d.status}, not preparing`;
@@ -1004,25 +1029,25 @@ export function cases(fx) {
     { name: "POST /api/orders/station (a waiter cannot press it)", as: "waiter", method: "POST",
       path: "/api/orders/station", body: f => ({ id: f.stationOrder, station: "kitchen" }), expect: [403] },
     { name: "POST /api/orders/station (a station with nothing here)", as: "kitchen", method: "POST",
-      path: "/api/orders/station", body: f => ({ id: f.kitchenOnlyOrder, station: "bar" }), expect: [409],
+      path: "/api/orders/station", body: async f => ({ id: await kitchenTicketId(f, f.kitchenOnlyOrder), station: "bar" }), expect: [409],
       expectError: /nada que preparar|nothing to make/i },
     { name: "POST /api/orders/station (the kitchen finishes: the order is ready)", as: "kitchen", method: "POST",
-      path: "/api/orders/station", body: f => ({ id: f.stationOrder, station: "kitchen" }), expect: [200],
+      path: "/api/orders/station", body: async f => ({ id: await kitchenTicketId(f, f.stationOrder), station: "kitchen" }), expect: [200],
       check: async (d, f) => {
         const { data } = await f.admin.from("orders").select("status").eq("id", f.stationOrder).single();
         return d.status === "ready" && data?.status === "ready" || `answered ${d.status}, stored ${data?.status}`;
       } },
     { name: "POST /api/orders/station (an order already ready)", as: "kitchen", method: "POST",
-      path: "/api/orders/station", body: f => ({ id: f.stationOrder, station: "bar" }), expect: [409],
+      path: "/api/orders/station", body: async f => ({ id: await kitchenTicketId(f, f.stationOrder), station: "bar" }), expect: [409],
       expectError: /ya avanzó|already moved on/i },
     { name: "PATCH /api/orders (move)", as: "kitchen", method: "PATCH", path: "/api/orders",
-      body: { id: unpaidOrder, status: "preparing" }, expect: [200] },
+      body: async f => ({ id: await kitchenTicketId(f, unpaidOrder), status: "preparing" }), expect: [200] },
     // A move that waited out a dropped connection carries the status it began
     // at. The order is "preparing" by now, so a queued "from: received" is
     // older than the board and must be refused rather than drag it backwards —
     // and the order must still be where the live board put it.
     { name: "PATCH /api/orders (a stale queued move loses)", as: "kitchen", method: "PATCH",
-      path: "/api/orders", body: { id: unpaidOrder, status: "received", from: "received" },
+      path: "/api/orders", body: async f => ({ id: await kitchenTicketId(f, unpaidOrder), status: "received", from: "received" }),
       expect: [409], expectError: /ya cambió de etapa|has moved on/i,
       effect: async f => {
         const { data } = await f.admin.from("orders").select("status").eq("id", unpaidOrder).single();
@@ -1400,6 +1425,24 @@ export function cases(fx) {
       // A restaurant with no printer address must be told, not queued for a
       // machine that will never ask. 200 once one is configured.
       expect: [200, 409] },
+    { name: "POST /api/orders/print (kitchen cannot print receipts)", as: "kitchen", method: "POST",
+      path: "/api/orders/print",
+      body: async f => ({ orderId: await kitchenTicketId(f, f.printableOrder), to: "receipt" }),
+      expect: [403],
+      effect: async f => {
+        const { data, error } = await f.admin.from("print_jobs").select("printed_at")
+          .eq("id", f.printJobId).single();
+        return !error && data?.printed_at !== null || "the receipt refusal re-armed the kitchen job";
+      } },
+    { name: "POST /api/orders/print (kitchen reprint still works)", as: "kitchen", method: "POST",
+      path: "/api/orders/print",
+      body: async f => ({ orderId: await kitchenTicketId(f, f.printableOrder), to: "kitchen" }),
+      expect: [200], check: d => d.queued === true && !d.html || "no kitchen ticket was queued",
+      effect: async f => {
+        const { data } = await f.admin.from("print_jobs").select("claimed_at, printed_at")
+          .eq("order_id", f.printableOrder).eq("kind", "kitchen").single();
+        return data && data.claimed_at === null && data.printed_at === null || "the print job was not re-armed";
+      } },
     { name: "POST /api/orders/print (receipt)", as: "waiter", method: "POST",
       path: "/api/orders/print",
       body: async f => ({ orderId: await anyOrderId(f), to: "receipt" }),

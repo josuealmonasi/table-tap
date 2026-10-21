@@ -23,9 +23,19 @@ export async function POST(req: NextRequest) {
   const station = body?.station === "kitchen" || body?.station === "bar" ? body.station : null;
   if (!id || !station) return await apiError("apiErr.invalidRequest", 400);
 
-  const { data, error } = await createAdminClient().rpc("mark_station_ready", {
+  const db = createAdminClient();
+  let orderId = id;
+  if (actor.role === "kitchen") {
+    // A ticket id must never double as a credential for the public diner bill.
+    const { data: order, error } = await db.from("orders").select("id")
+      .eq("kitchen_ticket_id", id).eq("restaurant_id", actor.restaurantId).maybeSingle();
+    if (error) return await apiError("apiErr.orderData", 500);
+    if (!order) return await apiError("apiErr.orderNotFound", 404);
+    orderId = order.id;
+  }
+  const { data, error } = await db.rpc("mark_station_ready", {
     p_restaurant: actor.restaurantId,
-    p_order: id,
+    p_order: orderId,
     p_station: station,
   });
   if (error) return await apiError("apiErr.orderData", 500);

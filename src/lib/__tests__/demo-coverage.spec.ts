@@ -35,12 +35,24 @@ const NOT_DEMO_DATA = new Set([
   "item_addons", // filled by populateMenu()
   "stock_reservations", // internal checkout recovery records, not a demo feature
   "diner_checkouts", // genuine Stripe session provenance; demo rows must never authorize money
+  "kitchen_tickets", // filled by the trigger on the seeder's orders
+  "kitchen_requests", // filled by the trigger on the seeder's service requests
   "account_checkouts", // an online payment in progress; only the pay route opens one
   "restaurant_billing_operations", // an in-flight billing claim; seeding one would block checkout
   "refunds_due", // money taken twice; only the webhook finds one, and a demo with one teaches that it happens
 ]);
 
 describe("the demo shows the whole app", () => {
+  it("fills the kitchen projections through the seeded source tables", () => {
+    for (const [target, source, fn] of [["kitchen_tickets", "orders", "sync_kitchen_ticket"],
+      ["kitchen_requests", "service_requests", "sync_kitchen_request"]]) {
+      expect(seeder).toMatch(new RegExp(`\\b${source}\\b`));
+      expect(schema).toContain(`after insert or update on ${source}`);
+      expect(schema).toContain(`execute function public.${fn}()`);
+      const body = schema.split(`create or replace function public.${fn}()`)[1]?.split("end; $$;")[0];
+      expect(body).toContain(`insert into ${target}`);
+    }
+  });
   it("only seeds coupon codes the app will accept", () => {
     // The seeder writes coupons with direct SQL, skipping /api/coupons'
     // validation. It seeded VIP-15, BIEN-10 and HOLA-50: the list offered them

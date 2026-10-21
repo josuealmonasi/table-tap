@@ -9,17 +9,18 @@ import { messagesFor, translate } from "@/lib/i18n";
 import { SecureIcon } from "@/components/ui/icons";
 import OrdersBoard from "@/components/dashboard/OrdersBoard";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
-import type { Order, ServiceRequest } from "@/lib/types";
+import type { Order } from "@/lib/types";
 import { currentUser } from "@/lib/current-user";
 import { startOfLocalDay } from "@/lib/day-window";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
+import type { BoardOrder, BoardRequest } from "@/lib/kitchen-ticket";
 import { LIVE_FLOW } from "@/lib/order-flow";
 
 export const dynamic = "force-dynamic";
 
 // /dashboard/orders — live kitchen board for the owner AND their staff.
-// Orders are read via the member-scoped server client (works_at RLS); the
-// board keeps them live via realtime. Cancelling (refunds) stays owner-only.
+// The member-scoped client reads tickets for the kitchen and full orders for
+// the floor. Each feed stays live via realtime; refunds stay owner-only.
 export default async function OrdersPage() {
   const supabase = await createClient();
   const user = await currentUser();
@@ -28,6 +29,7 @@ export default async function OrdersPage() {
   const membership = await getMembership();
   if (!membership) redirect("/dashboard");
   const r = membership.restaurant;
+  const kitchen = membership.role === "kitchen";
 
   // No board on Caja: a sale is served where it is paid. Everything that sends
   // staff "home" sends them here, so it goes on to the register rather than
@@ -87,13 +89,13 @@ export default async function OrdersPage() {
     // loaded, while the Pedidos badge, which counts by status, went on
     // counting it. History pages through the rest on its own.
     supabase
-      .from("orders")
+      .from(kitchen ? "kitchen_tickets" : "orders")
       .select("*")
       .eq("restaurant_id", r.id)
       .in("status", LIVE_FLOW)
       .order("created_at", { ascending: false }),
     supabase
-      .from("service_requests")
+      .from(kitchen ? "kitchen_requests" : "service_requests")
       .select("*")
       .eq("restaurant_id", r.id)
       .eq("status", "open")
@@ -140,9 +142,10 @@ export default async function OrdersPage() {
   return (
     <ConfirmProvider>
       <OrdersBoard
-        restaurant={r}
-        initialOrders={(orders as Order[]) ?? []}
-        initialRequests={(requests as ServiceRequest[]) ?? []}
+        restaurant={{ id: r.id, currency: r.currency }}
+        initialOrders={(orders as BoardOrder[]) ?? []}
+        kitchen={kitchen}
+        initialRequests={(requests as BoardRequest[]) ?? []}
         canCancel={MANAGES(membership.role)}
         canMove={MOVES_ORDERS(membership.role)}
         canSettle={SETTLES(membership.role)}

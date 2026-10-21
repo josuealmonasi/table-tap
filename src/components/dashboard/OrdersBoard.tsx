@@ -5,7 +5,7 @@ import { useRestaurantOrders } from "@/hooks/useRestaurantOrders";
 import OfflineBanner from "@/components/dashboard/OfflineBanner";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
-import { orderCode, type Order, type Restaurant, type ServiceRequest } from "@/lib/types";
+import { type Order, type Restaurant } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import OrderCard from "./OrderCard";
@@ -17,12 +17,14 @@ import { EmptyIcon } from "@/components/ui/icons";
 import { cancelWording } from "@/lib/cancel-wording";
 import { inStation, viewStatus, type Station } from "@/lib/stations";
 import { useBoardStation } from "@/hooks/useBoardStation";
+import { boardOrderCode, hasOrderMoney, type BoardOrder, type BoardRequest } from "@/lib/kitchen-ticket";
 import StationFilter from "./StationFilter";
 
 interface OrdersBoardProps {
-  restaurant: Restaurant;
-  initialOrders: Order[];
-  initialRequests: ServiceRequest[];
+  restaurant: Pick<Restaurant, "id" | "currency">;
+  initialOrders: BoardOrder[];
+  kitchen?: boolean;
+  initialRequests: BoardRequest[];
   /** Cancelling triggers refunds, so only the owner gets the button. */
   canCancel: boolean;
   /** False for waiters: complete only, no stage moves. */
@@ -75,12 +77,14 @@ export default function OrdersBoard({
   revenueBase,
   todayStartMs,
   hasStations = false,
+  kitchen = false,
 }: OrdersBoardProps) {
   const router = useRouter();
   const t = useT();
   const { orders, updateStatus, cancelOrder, cancelPlanFor, online, pending } = useRestaurantOrders(
     restaurant.id,
     initialOrders,
+    kitchen,
   );
   const confirm = useConfirm();
   const toast = useToast();
@@ -115,7 +119,7 @@ export default function OrdersBoard({
   const liveToday = orders.reduce(
     (sum, o) =>
       sum +
-      (o.paid &&
+      (hasOrderMoney(o) && o.paid &&
       o.currency === restaurant.currency &&
       o.status !== "cancelled" &&
       new Date(o.created_at).getTime() >= todayStartMs
@@ -138,7 +142,7 @@ export default function OrdersBoard({
       }
       const words = cancelWording(plan, n => formatMoney(n, order.currency ?? restaurant.currency), t);
       const ok = await confirm({
-        title: t("orders.cancelConfirm", { code: orderCode(order.id) }),
+        title: t("orders.cancelConfirm", { code: boardOrderCode(order) }),
         message: words.message,
         confirmLabel: t(words.confirmKey),
         danger: true,
@@ -187,6 +191,7 @@ export default function OrdersBoard({
         {hasStations && <StationFilter station={station} onChange={setStation} />}
 
         <ServiceRequestsBar
+          kitchen={kitchen}
           restaurantId={restaurant.id}
           canSettle={canSettle}
           canApprove={canApprove}
@@ -197,7 +202,7 @@ export default function OrdersBoard({
           // chip telling the kitchen their own food is ready is one they learn
           // to ignore — and then they read past the table asking for a waiter
           // two chips down. The same is true of anyone else not on the floor.
-          ready={isWaiter ? readyToDeliver(live) : []}
+          ready={isWaiter ? readyToDeliver(live.filter(hasOrderMoney)) : []}
           onDelivered={
             isWaiter ? ids => ids.forEach(id => updateStatus(id, "completed")) : undefined
           }
