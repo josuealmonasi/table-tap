@@ -24,7 +24,10 @@ export interface ProductInput {
    * How many are left, or null when the restaurant is not counting this dish.
    * Null is the default: `available` stays the manual switch it always was.
    */
-  stock: number | null;
+  stock?: number | null;
+  /** The count and generation shown when the form opened, only for a recount. */
+  expectedStock?: number | null;
+  expectedEpoch?: number;
 }
 
 /** Editable fields for an add-on item. */
@@ -36,6 +39,7 @@ export interface AddonInput {
 
 /** What every group of editor actions works from: the client, the state and the writer. */
 export interface EditorContext {
+  ready: () => boolean;
   supabase: ReturnType<typeof createClient>;
   restaurantId: string;
   toast: ReturnType<typeof useToast>;

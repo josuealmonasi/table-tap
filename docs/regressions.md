@@ -14,6 +14,11 @@ us, and what now catches each one.
 
 | Rule | The bug it came from |
 |---|---|
+| Product edits and the opening stock count are separate (S13 J5) | Saving a description restored portions sold while the editor was open |
+| A physical recount and older reservation releases use different generations (S13 J6) | Cancelling two held portions after a count of five raised it to seven |
+| Legacy stock returns require a deduction record (S13 J7) | An old untracked sale returned portions only counted later |
+| Editing and duplication wait for every menu page (S13 J17) | A thousand-row cap or read failure silently removed dishes and extras from the editor |
+| Waiter orders and checkout use the same alert preference (S13 J18) | Turning off stock alerts still left waiter orders filling the bell |
 | A statement email is capped per account and per restaurant, never on the recipient (G5) | One account code could mail the same stranger ~400 times a day |
 | Coupon entitlements and card receipts agree before money moves (S5 E4) | A MX$90 discounted charge recorded MX$100 and could later reserve a MX$100 return |
 | A coupon use belongs to one checkout attempt (S5 E7) | An old expiry released the newer payment page's reservation on the same order |
@@ -2990,3 +2995,51 @@ confirm the new phone can then order and open the bill. Close the sitting,
 seat a new party, and confirm the old phone can still see/pay its own food
 without seeing the new bill. Also check a staff-opened bill and a legacy
 phone's own-order payment during rollout.
+
+
+## S13 J5 — a description never resets the count
+
+The form and the product writer used to agree on a stale opening count while
+checkout had already deducted portions. Unchanged stock is omitted; ordinary
+`PATCH /api/products` edits strip stock even from stale callers. A deliberate
+recount uses `POST /api/products`, checking the count and generation the manager
+saw under the dish lock. A refusal explains in both languages to reopen and
+check the count. `products.spec.ts` and the products route's `stock.spec.ts`
+cover stale edits and recount refusals; the API gate has an effect-based J5 case.
+
+## S13 J6 — a new physical count replaces earlier holds
+
+A recount of five means five available portions. Earlier holds stay recorded
+for recovery, but their dish generation is superseded, so cancellation or expiry
+cannot add them to that count. Other dishes in a mixed reservation still return.
+Sales, waste and returns retain their generation through function-scoped settings
+that restore on exit. The SQL contracts in `stock-recount.spec.ts` guard these
+rules; the route tests also reject a matching count from an older generation.
+Claude must verify the recount/release race against the database before shipping.
+
+## S13 J7 — do not put guessed portions back
+
+An older order's lines and today's inventory plan cannot prove that stock was
+taken. With no historical deduction record, cancellation and abandoned-checkout
+deletion return nothing for those legacy lines. Their order trigger writes
+`stock=unproven` to activity, rendered in the reader's language with a request to
+check the count. It leaves money handling alone and a failed activity write
+cannot block cancellation. `stock-service.spec.ts` covers the legacy guess;
+`stock-recount.spec.ts` checks every legacy cancellation/expiry SQL entry point.
+
+## S13 J17 — the full menu before edits and copies
+
+Menus, sections and items page to an empty page, ordered by position and unique
+id. All read failures throw; links still page and batch their product ids.
+Reload marks the editor unready before reading, and product edits and product
+or menu copies refuse incomplete state. `menu-data.spec.ts` covers more than a
+thousand tied-position items and each failed table read; `products.spec.ts`
+checks the write and copy guard while loading.
+`menu-load.spec.ts` also keeps an older read from unlocking a failed reload,
+and refuses the extras replacement after that failure.
+
+## S13 J18 — the manager decides when the bell warns
+
+A waiter's order now reads and checks the same `low_stock_alerts_enabled`
+preference as checkout and the till. Stock still gets deducted with alerts off.
+`stock-alerts.spec.ts` exercises both preference values through the waiter route.

@@ -9,10 +9,11 @@ interface WriterDeps {
   toast: ReturnType<typeof useToast>;
   t: (key: string, vars?: Record<string, string | number>) => string;
   reload: () => Promise<void>;
+  ready?: () => boolean;
 }
 
 /** How every write in the menu editor reports itself and refreshes. */
-export function makeWriter({ supabase, toast, t, reload }: WriterDeps) {
+export function makeWriter({ supabase, toast, t, reload, ready = () => true }: WriterDeps) {
   /**
    * `key` names the action in the user's language. The raw Supabase message is
    * logged rather than shown: it is English, it leaks schema details, and it
@@ -49,6 +50,7 @@ export function makeWriter({ supabase, toast, t, reload }: WriterDeps) {
     write: PromiseLike<{ error: { message: string } | null }>,
     done?: string,
   ): Promise<void> {
+    if (!ready()) return;
     const { error } = await write;
     if (reportError(key, error) && done) toast(t(done));
     await reload();
@@ -61,6 +63,7 @@ export function makeWriter({ supabase, toast, t, reload }: WriterDeps) {
     row: Record<string, unknown>,
     done?: string,
   ): Promise<string | undefined> {
+    if (!ready()) return undefined;
     const { data, error } = await supabase.from(table).insert(row).select("id").single();
     if (!reportError(key, error)) return undefined;
     if (done) toast(t(done));
@@ -76,6 +79,7 @@ export function makeWriter({ supabase, toast, t, reload }: WriterDeps) {
     id: string,
     direction: "up" | "down",
   ): Promise<void> {
+    if (!ready()) return;
     reportError(key, await reorderRows(supabase, table, siblings, id, direction));
     await reload();
   }

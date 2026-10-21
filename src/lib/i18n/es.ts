@@ -213,6 +213,8 @@ export const es: Messages = {
     stockHint: "Vacío: lo maneja el interruptor. Con número: se descuenta y sale de la carta al llegar a cero.",
     stockLocked: "Contar existencias viene con los planes de paga.",
     stockPlaceholder: "Sin contar",
+    legacyStockUnknown: "No se devolvieron porciones al conteo: este pedido anterior no tiene registro de haberlas descontado. Revisa cuántas quedan.",
+    stockChanged: "La cantidad cambió mientras editabas. Abre el platillo de nuevo, revisa cuántos quedan y vuelve a escribir tu conteo.",
     stockLeft: "Quedan {count}",
     stockOut: "Agotado",
     trackThisOrder: "Sigue tu pedido {code}",

@@ -1,6 +1,6 @@
 import type { createClient } from "@/lib/supabase/client";
 import type { Category, Menu, MenuItem } from "@/lib/types";
-import { everyRowIn } from "@/lib/paged";
+import { everyRow, everyRowIn } from "@/lib/paged";
 
 type Supabase = ReturnType<typeof createClient>;
 
@@ -19,25 +19,15 @@ export async function fetchMenuData(
   supabase: Supabase,
   restaurantId: string,
 ): Promise<MenuData> {
-  const [{ data: menuRows }, { data: cats }, { data: items }] = await Promise.all([
-    supabase
-      .from("menus")
-      .select("*")
-      .eq("restaurant_id", restaurantId)
-      .order("sort_order"),
-    supabase
-      .from("categories")
-      .select("*")
-      .eq("restaurant_id", restaurantId)
-      .order("sort_order"),
-    supabase
-      .from("menu_items")
-      .select("*")
-      .eq("restaurant_id", restaurantId)
-      .order("sort_order"),
+  const read = <T>(table: string) => everyRow<T>(
+    (from, to) => supabase.from(table).select("*").eq("restaurant_id", restaurantId)
+      .order("sort_order").order("id").range(from, to),
+    `the menu's ${table}`,
+  );
+  const [menuRows, cats, allItems] = await Promise.all([
+    read<Menu>("menus"), read<Category>("categories"), read<MenuItem>("menu_items"),
   ]);
 
-  const allItems = (items as MenuItem[]) ?? [];
   const products = allItems.filter(i => !i.is_addon);
 
   // Every link, or none: saving a dish's extras replaces the whole set with
@@ -57,8 +47,8 @@ export async function fetchMenuData(
   for (const row of linkRows) (links[row.product_id] ??= []).push(row.addon_id);
 
   return {
-    menus: (menuRows as Menu[]) ?? [],
-    sections: (cats as Category[]) ?? [],
+    menus: menuRows,
+    sections: cats,
     products,
     addons: allItems.filter(i => i.is_addon),
     links,

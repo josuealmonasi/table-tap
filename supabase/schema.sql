@@ -4154,11 +4154,19 @@ create unique index if not exists orders_stock_reservation_idx
 
 -- Starting tracking again is a new count. An older reservation must not add
 -- portions to a new physical count after tracking was switched off and on.
+-- Numeric recounts do the same; only trusted sale, waste and return functions
+-- keep the generation. Browser callers cannot give themselves that exemption.
 alter table menu_items add column if not exists stock_epoch int not null default 0;
 create or replace function public.stock_tracking_epoch()
 returns trigger language plpgsql set search_path = public as $$
 begin
-  if (old.stock is null) <> (new.stock is null) then
+  if current_setting('tabletap.stock_movement', true) = 'on'
+     and current_user not in ('anon', 'authenticated') then
+    new.stock_epoch := old.stock_epoch;
+  elsif new.stock is distinct from old.stock
+     or (new.stock_epoch = old.stock_epoch + 1
+       and current_setting('tabletap.stock_recount', true) = 'on'
+       and current_user not in ('anon', 'authenticated')) then
     new.stock_epoch := old.stock_epoch + 1;
   else
     new.stock_epoch := old.stock_epoch;
@@ -4255,6 +4263,18 @@ begin
     end if;
     return new;
   end if;
+  if not old.stock_managed and old.stock_reservation_id is null
+     and old.status <> 'cancelled'
+     and (tg_op = 'DELETE' or new.status = 'cancelled') then
+    begin
+      insert into user_logs(restaurant_id, actor_email, entity, action, detail)
+        values(old.restaurant_id, coalesce(auth.jwt()->>'email', 'staff'), 'order', 'updated',
+          'order=' || left(old.id::text, 8) || ' stock=unproven');
+    exception when others then
+      -- A missing activity row must not block a cancellation or change its money.
+      raise warning 'Could not log unproven stock for order %', old.id;
+    end;
+  end if;
   if tg_op = 'DELETE' then
     perform release_stock_reservation(old.restaurant_id, old.stock_reservation_id);
     delete from stock_reservations where id = old.stock_reservation_id;
@@ -4295,9 +4315,7 @@ begin
     if v_coupon.coupon_id is not null then perform release_coupon(v_coupon.coupon_id); end if;
   end loop;
   if p_delete_order then
-    if not v_order.stock_managed and v_order.stock_reservation_id is null then
-      perform release_stock(v_order.restaurant_id, p_legacy_demand);
-    end if;
+    -- No deduction record exists for legacy lines; deletion must not invent stock.
     delete from orders where id = p_order;
   end if;
 end;
@@ -4774,8 +4792,9 @@ revoke truncate, references, trigger on all tables in schema public from authent
 -- for orders cancelled before it was kept.
 alter table orders add column if not exists cancelled_at timestamptz;
 
--- The status guard and legacy handback share one transaction. New orders are
--- returned by the trigger using their exact reservation, regardless of plan.
+-- The status guard and proven stock handback share one transaction. New orders
+-- are returned by the trigger using their exact reservation, regardless of plan.
+-- Legacy lines alone cannot prove what was deducted, so they return nothing.
 drop function if exists public.cancel_order(uuid, uuid, text, jsonb);
 create or replace function public.cancel_order(
   p_restaurant uuid, p_order uuid, p_refund text, p_legacy_demand jsonb,
@@ -4804,9 +4823,7 @@ begin
     where id = p_order and restaurant_id = p_restaurant and status in ('received', 'preparing')
     returning * into v_order;
   if not found then return false; end if;
-  if not v_order.stock_managed and v_order.stock_reservation_id is null then
-    perform release_stock(p_restaurant, p_legacy_demand);
-  end if;
+  -- The order trigger returns proven reservations and logs unknown legacy stock.
   return true;
 end;
 $$;
@@ -7210,9 +7227,7 @@ begin
     where id = p_order and restaurant_id = p_restaurant and status in ('received', 'preparing')
     returning * into v_order;
   if not found then return false; end if;
-  if not v_order.stock_managed and v_order.stock_reservation_id is null then
-    perform release_stock(p_restaurant, p_legacy_demand);
-  end if;
+  -- The order trigger returns proven reservations and logs unknown legacy stock.
   return true;
 end;
 $$;
@@ -8037,3 +8052,41 @@ revoke all on function public.decide_table_member(uuid, uuid, uuid, boolean, tex
 grant execute on function public.decide_table_member(uuid, uuid, uuid, boolean, text, text) to service_role;
 
 revoke truncate, references, trigger on all tables in schema public from authenticated;
+
+-- Stock movements keep their generation; a new physical count supersedes it.
+-- Function settings restore on return, including early returns and exceptions.
+alter function public.reserve_stock(uuid, jsonb, int) set tabletap.stock_movement = 'on';
+alter function public.release_stock(uuid, jsonb) set tabletap.stock_movement = 'on';
+alter function public.release_stock_reservation(uuid, uuid) set tabletap.stock_movement = 'on';
+alter function public.take_stock_floor(uuid, jsonb) set tabletap.stock_movement = 'on';
+alter function public.record_waste(uuid, uuid, uuid, numeric, text, text, numeric, text) set tabletap.stock_movement = 'on';
+
+-- The count is authoritative. Holds from before it remain recorded, but their
+-- dish generation no longer matches: neither expiry nor cancellation can add
+-- them to this new count. Other dishes in the same reservation still return.
+create or replace function public.recount_stock(
+  p_restaurant uuid, p_item uuid, p_stock int, p_expected_stock int, p_expected_epoch int
+) returns text language plpgsql security definer set search_path = public
+set tabletap.stock_recount = 'on' as $$
+declare v_item menu_items%rowtype;
+begin
+  if p_stock < 0 or p_expected_epoch is null or p_expected_epoch < 0 then
+    raise exception 'Invalid stock count';
+  end if;
+  select * into v_item from menu_items
+    where id = p_item and restaurant_id = p_restaurant and not is_addon for update;
+  if not found then return 'missing'; end if;
+  if v_item.stock is distinct from p_expected_stock
+     or v_item.stock_epoch is distinct from p_expected_epoch then
+    return 'changed';
+  end if;
+  update menu_items set stock = p_stock, stock_epoch = stock_epoch + 1,
+    available = case when p_stock = 0 then false
+      when stock_auto_off then true else available end,
+    stock_auto_off = case when p_stock = 0 then available or stock_auto_off else false end
+    where id = p_item and restaurant_id = p_restaurant;
+  return 'counted';
+end;
+$$;
+revoke all on function public.recount_stock(uuid, uuid, int, int, int) from public, anon, authenticated;
+grant execute on function public.recount_stock(uuid, uuid, int, int, int) to service_role;
