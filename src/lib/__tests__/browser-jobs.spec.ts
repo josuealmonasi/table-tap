@@ -134,8 +134,11 @@ it("closes the positive control and refuses an audit that no longer catches over
   expect(close).toHaveBeenCalledOnce();
 });
 
-it("defaults to three workers and rejects concurrency outside 1–4", () => {
+it("defaults to two workers and rejects concurrency outside 1–4", () => {
   expect(browserConcurrency("3")).toBe(3);
+  vi.stubEnv("GATE_BROWSER_CONCURRENCY", undefined);
+  expect(browserConcurrency()).toBe(2);
+  vi.unstubAllEnvs();
   for (const n of ["0", "5", "1.5", "garbage", ""]) expect(() => browserConcurrency(n)).toThrow();
 });
 

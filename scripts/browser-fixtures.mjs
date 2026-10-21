@@ -1,3 +1,4 @@
+import { deadline } from "./browser-deadline.mjs";
 import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { forgetBrowserMember } from "./table-member-fixture.mjs";
@@ -40,8 +41,8 @@ export async function isolateMember(ctx, admin, base, diner, prod) {
     // Stop clicks and pending requests before deleting the visit's membership.
     // Cookies remain available until the context itself closes.
     try {
-      await Promise.all(ctx.pages().map(page => page.close()));
-      if (!prod) await forgetBrowserMember(ctx, admin);
-    } finally { await close(); }
+      await deadline(5000, () => Promise.all(ctx.pages().map(page => page.close())), undefined, 5000, "diner pages close");
+      if (!prod) await deadline(5000, () => forgetBrowserMember(ctx, admin), undefined, 5000, "diner membership cleanup");
+    } finally { await deadline(5000, close, undefined, 5000, "diner context close"); }
   })();
 }

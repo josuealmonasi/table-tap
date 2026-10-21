@@ -1,30 +1,15 @@
+import { deadline, RUN_TIMEOUT } from "./browser-deadline.mjs";
+import { browserVisit } from "./browser-visit.mjs";
+export { deadline } from "./browser-deadline.mjs";
+
 /** One browser, bounded isolated visits, and an explicit verdict for every job. */
 export function browserConcurrency(value = process.env.GATE_BROWSER_CONCURRENCY) {
-  if (value === undefined) return 3;
+  if (value === undefined) return 2;
   const n = Number(value);
   if (!Number.isInteger(n) || n < 1 || n > 4) {
     throw new Error("GATE_BROWSER_CONCURRENCY must be an integer from 1 to 4");
   }
   return n;
-}
-
-/** A timeout is a failure. Close its context before another visit can start. */
-export async function deadline(ms, work, stop) {
-  let timer;
-  const task = Promise.resolve().then(work);
-  try {
-    return await Promise.race([task, new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
-    })]);
-  } catch (error) {
-    // Promise.race observes late rejection too. Closing stops all browser work;
-    // an uncooperative promise cannot keep a context alive or click another job.
-    try { await stop(); }
-    catch (closeError) { throw new AggregateError([error, closeError], "work and context cleanup failed"); }
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 export function phaseTimings() {
@@ -33,7 +18,7 @@ export function phaseTimings() {
     totals,
     async phase(name, work) {
       const start = performance.now();
-      try { return await work(); }
+      try { return await deadline(name === "navigation" ? 65000 : 60000, work, undefined, 5000, name); }
       finally { totals[name] += performance.now() - start; }
     },
     report(log = console.log) {
@@ -49,69 +34,84 @@ export function manifestFailures(records) {
 
 export async function runBrowserJobs(browser, jobs, {
   concurrency = browserConcurrency(), timeout = 180000, prepare = async () => {},
-  log = console.log, timings = phaseTimings(),
+  log = console.log, timings = phaseTimings(), stepTimeout = 65000, cleanupTimeout = 5000,
+  overallTimeout = RUN_TIMEOUT,
+  server = /** @type {ReturnType<typeof import("./browser-server.mjs").monitorBrowserServer> | null} */ (null),
 } = {}) {
   concurrency = browserConcurrency(concurrency);
   if (new Set(jobs.map(job => job.id)).size !== jobs.length) throw new Error("duplicate browser job id");
-  const records = jobs.map(job => ({ id: job.id, verdict: "pending", complete: false, lines: [], result: null }));
+  const records = jobs.map(job => ({ id: job.id, verdict: "pending", complete: false, lines: [], result: null, retries: 0 }));
   let next = 0;
   let printed = 0;
+  let aborted = false;
+  const controller = new AbortController();
   const flush = () => {
-    while (printed < records.length && records[printed].complete) {
-      const r = records[printed++];
-      log(r.lines.join("\n"));
-    }
+    while (printed < records.length && records[printed].complete) log(records[printed++].lines.join("\n"));
   };
   async function worker() {
-    while (next < jobs.length) {
+    while (!aborted && next < jobs.length) {
       const index = next++;
       const job = jobs[index];
       const record = records[index];
-      let ctx;
-      let closing;
-      let stopped = false;
-      const close = () => {
-        stopped = true;
-        return closing ??= Promise.resolve().then(() => ctx?.close());
-      };
-      const line = text => { if (record.verdict === "pending") record.lines.push(text); };
+      const line = text => { if (!record.complete) record.lines.push(text); };
       try {
         if (job.skip) {
           line(`    –        ${job.id}: ${job.skip}`);
           record.verdict = "skipped";
         } else {
-          record.result = await deadline(job.timeout ?? timeout, async () => {
-            ctx = await browser.newContext(job.options);
-            if (stopped) { await ctx.close(); throw new Error("context arrived after visit timeout"); }
-            await prepare(ctx, job);
-            if (stopped) throw new Error("visit stopped during setup");
-            const tab = await ctx.newPage();
-            if (stopped) throw new Error("visit stopped while creating its page");
-            return await job.run({ ctx, tab, log: line, phase: timings.phase, stop: close });
-          }, close);
-          if (!Number.isInteger(record.result?.failures) || record.result.failures < 0) {
-            throw new Error("visit returned without a verdict");
+          for (let attempt = 0; attempt < 2; attempt++) {
+            // All workers share the recovery wait. None starts a new context while down.
+            await server?.beforeJob();
+            if (aborted) return;
+            const epoch = server?.epoch;
+            let auditFailed = false;
+            const visit = await browserVisit(browser, job, {
+              timeout, stepTimeout, cleanupTimeout, prepare, phase: timings.phase, signal: controller.signal,
+              log: text => { if (/^\s*BAD\s/.test(text)) auditFailed = true; line(text); },
+            });
+            if (aborted) return;
+            if (visit.cleanupFailed) { aborted = true; controller.abort(); } // An unclosed context must not leak into another visit.
+            if (!visit.error) {
+              record.result = visit.result;
+              record.verdict = visit.result.failures ? "failed" : "passed";
+              break;
+            }
+            line(`    BAD      ${job.id}: ${visit.error.message.split("\n")[0]}`);
+            if (attempt || auditFailed || visit.cleanupFailed || !await server?.canRetry(visit.error, epoch)) throw visit.error;
+            record.retries++;
+            // Print immediately too: ordered buffering must not conceal a recovery wait.
+            log(`    RETRY    ${job.id}: connection/restart failure; retry 1/1 in a fresh context`);
+            line(`    RETRY    ${job.id}: retry 1/1`);
           }
-          await close();
-          record.verdict = record.result.failures ? "failed" : "passed";
         }
       } catch (error) {
         line(`    BAD      ${job.id}: ${error.message.split("\n")[0]}`);
         record.verdict = "failed";
       } finally {
-        try { await close(); }
-        catch (error) {
-          record.lines.push(`    BAD      ${job.id}: cleanup failed: ${error.message}`);
-          record.verdict = "failed";
+        if (!record.complete && record.verdict !== "pending") {
+          record.lines.push(`    ${record.verdict.toUpperCase()} visit ${job.id}`);
+          record.complete = true;
+          flush();
         }
-        record.lines.push(`    ${record.verdict.toUpperCase()} visit ${job.id}`);
-        record.complete = true;
-        flush();
       }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, worker));
+  try {
+    await deadline(overallTimeout, () => Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, worker)),
+      undefined, cleanupTimeout, "browser pool watchdog");
+  } catch (error) {
+    aborted = true;
+    controller.abort();
+    log(`    BAD      ${error.message}; unfinished visits FAILED`);
+  }
+  const missing = records.filter(record => record.verdict === "pending").length;
+  for (const record of records) if (record.verdict === "pending") {
+    record.verdict = "failed";
+    record.complete = true;
+    record.lines.push(`    BAD      ${record.id}: job never reported before pool stopped`);
+  }
+  flush();
   const failures = manifestFailures(records);
-  log(`  Visits: planned=${records.length}, passed=${records.filter(r => r.verdict === "passed").length}, failed=${records.filter(r => r.verdict === "failed").length}, skipped=${records.filter(r => r.verdict === "skipped").length}, missing=${records.filter(r => r.verdict === "pending").length}`);
+  log(`  Visits: planned=${records.length}, passed=${records.filter(r => r.verdict === "passed").length}, failed=${records.filter(r => r.verdict === "failed").length}, skipped=${records.filter(r => r.verdict === "skipped").length}, missing=${missing}, retries=${records.reduce((n, r) => n + r.retries, 0)}`);
   return { records, failures };
 }

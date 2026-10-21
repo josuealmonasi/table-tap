@@ -744,7 +744,7 @@ The gate, all of which must pass before anything ships:
 | `pnpm money` | the ledger and the orders tell the same story |
 
 The layout and dialog sweeps use one browser with isolated contexts per complete
-role/path/viewport or diner-flow visit. `GATE_BROWSER_CONCURRENCY` defaults to 3
+role/path/viewport or diner-flow visit. `GATE_BROWSER_CONCURRENCY` defaults to 2
 and accepts integers 1–4; 1 runs the same visits serially. Actions inside each
 visit stay sequential, each diner has its own member cookie and development
 cleanup, and job logs print together in manifest order. Navigation, typing,
@@ -753,6 +753,18 @@ fail the run. Both sweeps retain the planted-overlap control, report visit and
 audit counts, and print navigation/readiness/audit/auth worker seconds plus wall
 time. Readiness observes route/content, completed data, absent skeletons, fonts,
 images and stable geometry; dialog no-ops retain bounded observation windows.
+Each visit bounds context/page creation, preparation, auth, navigation, readiness,
+audit and close, including individual readiness samples. Failed cleanup stops the
+pool; unreported visits fail explicitly. A 90-minute watchdog covers the whole
+script, including setup, the overlap control, final fingerprints and shutdown.
+Development pools pause admission while the target port is unreachable, share a
+recovery wait of at most 90 seconds, then retry connection failures once in fresh
+contexts. Readiness failures qualify only with a sampled outage or listener PID
+change during that visit; audit faults, redirects and cleanup failures never
+qualify. Every retry is printed; repeat failures fail the run. Summaries include
+peak listener RSS sampled once per second on DEV_URL's port and restart counts;
+unavailable process measurements are stated explicitly. Production has no server
+recovery retries or local RSS sampling.
 Run different gates serially: contexts isolate browser state, not the database.
 
 The table left `attack` out for a while and the prose below listed it, which is

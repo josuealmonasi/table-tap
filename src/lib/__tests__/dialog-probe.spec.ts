@@ -7,7 +7,7 @@ it("propagates failed dialog-visit navigation instead of continuing to another p
   await expect(probeDialogs({ tab, log: vi.fn(), phase: phaseTimings().phase, stop: vi.fn() },
     { url: "http://localhost/dashboard/orders", role: "owner", path: "/dashboard/orders" }))
     .rejects.toThrow("cannot navigate");
-  expect(tab.goto).toHaveBeenCalledTimes(2);
+  expect(tab.goto).toHaveBeenCalledTimes(1);
 });
 
 it("propagates a broken page typing check instead of returning no faults", async () => {

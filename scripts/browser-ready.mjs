@@ -1,9 +1,11 @@
+import { deadline } from "./browser-deadline.mjs";
+
 /** Node-side polling: production's CSP forbids Playwright's waitForFunction. */
 export async function observe(tab, sample, { timeout = 30000, interval = 100, required = true } = {}) {
   const until = Date.now() + timeout;
   do {
     if (tab.isClosed()) throw new Error("page closed before readiness");
-    if (await sample()) return true;
+    if (await deadline(Math.max(1, until - Date.now()), sample, undefined, 5000, "readiness sample")) return true;
     await new Promise(resolve => setTimeout(resolve, interval));
   } while (Date.now() < until);
   if (required) throw new Error(`page state did not become ready in ${timeout}ms`);
@@ -109,16 +111,14 @@ export async function overlay(tab, selector = "[role=dialog]", open = true, time
     { timeout, required });
 }
 
-/** A navigation that retries once.
+/** A navigation whose connection failures can be retried once by the pool.
  *
  * The dev server drops mid-run and the network failure showed up as though the
  * screen were broken. A false red teaches people to ignore reds.
  */
 export async function navigate(tab, url, phase, pending) {
   await phase("navigation", async () => {
-    let response;
-    try { response = await tab.goto(url, { waitUntil: "load", timeout: 60000 }); }
-    catch { response = await tab.goto(url, { waitUntil: "load", timeout: 60000 }); }
+    const response = await tab.goto(url, { waitUntil: "load", timeout: 60000 });
     if (response && response.status() >= 400) throw new Error(`navigation returned HTTP ${response.status()}`);
   });
   await phase("readiness", () => ready(tab, { url, pending }));

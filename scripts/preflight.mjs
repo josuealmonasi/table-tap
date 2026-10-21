@@ -104,7 +104,7 @@ export async function retryFetch(url, init, base) {
 }
 
 /** The pids listening on this dev server's port, never another checkout's. */
-export function devWorkers(base, run = (file, args, options) => String(execFileSync(file, args, options))) {
+export function devWorkers(base, run = (file, args, options) => String(execFileSync(file, args, { ...options, timeout: 1000, killSignal: "SIGKILL" }))) {
   const url = new URL(base);
   if (!["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return null;
   try {

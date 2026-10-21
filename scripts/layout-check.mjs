@@ -24,9 +24,15 @@ import { assertAuditControl, look } from "./browser-audit.mjs";
 import { navigate, trackData } from "./browser-ready.mjs";
 import { dinerVisit, teamVisit } from "./layout-visits.mjs";
 
+import { deadline, runWatchdog } from "./browser-deadline.mjs";
+import { monitorBrowserServer } from "./browser-server.mjs";
+
+runWatchdog("layout");
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
 const BASE = prod ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app") : DEV_URL;
+const server = prod ? null : monitorBrowserServer(BASE);
+process.on("exit", () => { server?.stop(); server?.report(); });
 const concurrency = browserConcurrency();
 const timings = phaseTimings();
 const started = performance.now();
@@ -95,7 +101,7 @@ for (const size of SIZES) {
     },
   });
 }
-const browser = await chromium.launch();
+const browser = await deadline(30000, () => chromium.launch(), undefined, 5000, "browser launch");
 // Against production nothing this gate does may reach the server. It clicks
 // dialogs open and walks a diner to the cart, and one click on the wrong
 // button is an order in a real restaurant's books — so every write a page
@@ -106,11 +112,11 @@ console.log(`\nLayout — ${prod ? "production" : "development"}; ${concurrency}
 let result;
 try {
   await assertAuditControl(browser);
-  result = await runBrowserJobs(browser, jobs, { concurrency, timings, prepare: async (ctx, job) => {
+  result = await runBrowserJobs(browser, jobs, { concurrency, timings, server, prepare: async (ctx, job) => {
     await isolateMember(ctx, admin, BASE, job.diner, prod);
     if (prod) await holdWrites(ctx, held);
   } });
-} finally { await browser.close(); }
+} finally { await deadline(10000, () => browser.close(), undefined, 5000, "browser close"); }
 let failed = result.failures;
 /** Dialogs that needed a fresh load to open — said at the end, not hidden. */
 const reloads = result.records.reduce((n, r) => n + (r.result?.reloads ?? 0), 0);

@@ -1,3 +1,4 @@
+import { deadline } from "./browser-deadline.mjs";
 import { AUDIT } from "./layout-audit.mjs";
 
 /**
@@ -10,19 +11,26 @@ import { AUDIT } from "./layout-audit.mjs";
  * worthless and says so rather than printing a column of ok.
  */
 export async function assertAuditControl(browser) {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  let ctx;
+  let stopped = false;
+  let closing;
+  const close = () => { stopped = true; return closing ??= Promise.resolve().then(() => ctx?.close()); };
   try {
-    const tab = await ctx.newPage();
-    await tab.setContent(`<!doctype html><body style="margin:0">
-      <div style="font:20px/1.2 sans-serif;color:#000;height:40px">PLANTED ALPHA TEXT</div>
-      <div style="font:20px/1.2 sans-serif;color:#000;height:40px;margin-top:-34px;margin-left:30px">PLANTED BETA TEXT</div>
-    </body>`);
-    const faults = await tab.evaluate(AUDIT);
-    if (!faults.some(f => f.kind === "overlapping" && f.text.includes("PLANTED"))) {
-      throw new Error("The audit no longer sees text painted over text. Every ok would be meaningless. Fix layout-audit.mjs first.");
-    }
-    console.log("  ok       the audit still catches a planted overlap\n");
-  } finally { await ctx.close(); }
+    await deadline(30000, async () => {
+      ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      if (stopped) { await deadline(5000, () => ctx.close()); throw new Error("control context arrived late"); }
+      const tab = await ctx.newPage();
+      await tab.setContent(`<!doctype html><body style="margin:0">
+        <div style="font:20px/1.2 sans-serif;color:#000;height:40px">PLANTED ALPHA TEXT</div>
+        <div style="font:20px/1.2 sans-serif;color:#000;height:40px;margin-top:-34px;margin-left:30px">PLANTED BETA TEXT</div>
+      </body>`);
+      const faults = await tab.evaluate(AUDIT);
+      if (!faults.some(f => f.kind === "overlapping" && f.text.includes("PLANTED"))) {
+        throw new Error("The audit no longer sees text painted over text. Every ok would be meaningless. Fix layout-audit.mjs first.");
+      }
+      console.log("  ok       the audit still catches a planted overlap\n");
+    }, close, 5000, "planted overlap control");
+  } finally { await deadline(5000, close, undefined, 5000, "control close"); }
 }
 
 export async function look(tab, where, phase, log) {

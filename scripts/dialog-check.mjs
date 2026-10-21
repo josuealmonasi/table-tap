@@ -22,10 +22,16 @@ import { crewCookies } from "./browser-fixtures.mjs";
 import { probeDialogs } from "./dialog-probe.mjs";
 import { assertAuditControl } from "./browser-audit.mjs";
 
+import { deadline, runWatchdog } from "./browser-deadline.mjs";
+import { monitorBrowserServer } from "./browser-server.mjs";
+
+runWatchdog("dialogs");
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
 const BASE = prod ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app") : DEV_URL;
 watchDevWorker(BASE);
+const server = prod ? null : monitorBrowserServer(BASE);
+process.on("exit", () => { server?.stop(); server?.report(); });
 const concurrency = browserConcurrency();
 const timings = phaseTimings();
 const started = performance.now();
@@ -55,16 +61,16 @@ const jobs = WIDTHS.flatMap(width => CREW.flatMap(who => who.pages.filter(pageIn
     return probeDialogs(job, { url: BASE + path, role: who.role, path });
   },
 }))));
-const browser = await chromium.launch();
+const browser = await deadline(30000, () => chromium.launch(), undefined, 5000, "browser launch");
 console.log(`\nDialogs — ${prod ? "production" : "development"}; ${concurrency} worker(s)\n`);
 let result;
 try {
   await assertAuditControl(browser);
-  result = await runBrowserJobs(browser, jobs, { concurrency, timings,
+  result = await runBrowserJobs(browser, jobs, { concurrency, timings, server,
     prepare: async ctx => { ctx.setDefaultTimeout(30000); await holdWrites(ctx, held); },
   });
 } finally {
-  await browser.close();
+  await deadline(10000, () => browser.close(), undefined, 5000, "browser close");
 }
 let failed = result.failures;
 const opened = result.records.reduce((n, r) => n + (r.result?.opened ?? 0), 0);

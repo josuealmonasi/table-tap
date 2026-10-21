@@ -14,6 +14,9 @@ us, and what now catches each one.
 
 | Rule | The bug it came from |
 |---|---|
+| Browser deadlines include context teardown and the whole run (S8b) | A dead worker left layout waiting on an unbounded browser call for over three hours |
+| Restart retries and their evidence agree (S8b) | Concurrency three overloaded next dev; dropped visits needed bounded recovery without hiding audit failures |
+| Browser admission and measured server memory agree (S8b) | Three workers repeatedly crossed the development server's memory threshold with no peak RSS in the summary |
 | Browser navigation and the visit verdict agree (S8) | Dialog visits whose navigation failed silently vanished from coverage |
 | Typing errors and failed checks agree (S8) | A failed page-field check became an empty fault list and printed ok |
 | Probe deadlines and context lifetimes agree (S8) | A timeout printed a skip while its old probe kept clicking into the next one |
@@ -3043,3 +3046,45 @@ all Next workers, so another worktree could explain away a real failure.
 `watchDevWorker()` now compares only listener PIDs on the checked localhost
 port, including a lost listener. `browser-jobs.spec.ts` checks the exact port
 query and excludes remote sites.
+
+
+## S8b: a timeout cannot wait forever for cleanup
+
+The deadline and the context lifetime had to agree. A visit deadline called
+`close()` with no deadline of its own; normal close, the planted-overlap control,
+readiness samples and final browser shutdown could also wait forever. Each now
+has a bounded wait. A 90-minute whole-script watchdog fails loudly even during
+setup or final fingerprints. The pool also fails every unreported visit and
+cancels active contexts when its watchdog expires. Failed context cleanup stops
+admission rather than leaking an old page into later jobs.
+`browser-deadlines.spec.ts` reproduces the old hanging close at concurrency one
+and three, and covers never-settling context/page creation, audit, late contexts,
+missing jobs and both watchdogs. `browser-ready.spec.ts` holds a page evaluation
+forever and requires readiness to fail within its deadline.
+
+## S8b: a restart is evidence for one retry, never for an audit pass
+
+A connection failure and the target server's availability had to agree.
+Development pools now check DEV_URL's port before admitting work, pause all
+workers behind a shared recovery wait of at most 90 seconds, and retry a
+connection-level failure once in a new context. A not-ready outcome qualifies
+only when the monitor saw an outage or listener PID change during that visit.
+The old unconditional navigation retry is removed so a visit cannot secretly
+retry more than once. Audit faults already printed, redirects, cleanup failures
+and a failed second attempt stay red. Every retry is printed immediately and
+retained in the visit log. Production does not use this recovery policy.
+`browser-restarts.spec.ts` checks connection retry delivery at concurrency one,
+two and three, unavailable servers, readiness evidence, and preserving faults
+found before a later connection failure. Claude must still run the real sweeps;
+these tests use fake pages and server samples without opening a browser.
+
+## S8b: concurrency needs a memory measurement
+
+The worker count and the server's capacity had to agree. The default is now two,
+with one through four still accepted. Both development sweeps sample only the
+listener PIDs on DEV_URL's port once per second and report the peak per-process
+RSS and its PID, including across worker restarts. Process lookup itself has a
+deadline, so measurement cannot hang the run. Missing or remote listener data
+prints unavailable. `browser-restarts.spec.ts` checks the exact port, rejects
+unrelated process rows and preserves the peak after a lower later reading.
+Actual time and memory at one, two and three workers remain Claude's live proof.

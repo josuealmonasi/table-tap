@@ -84,10 +84,10 @@ it("fails unresolved data instead of auditing the page shell", async () => {
   await result;
 });
 
-it("treats two failed navigations as a failed visit", async () => {
+it("leaves a failed navigation to the pool retry policy", async () => {
   const goto = vi.fn().mockRejectedValue(new Error("navigation refused"));
   await expect(navigate({ goto }, "http://localhost/login", phaseTimings().phase, new Set())).rejects.toThrow("navigation refused");
-  expect(goto).toHaveBeenCalledTimes(2);
+  expect(goto).toHaveBeenCalledTimes(1);
 });
 
 it("waits for overlays to open and close, and observes a legitimate no-op for its full window", async () => {
@@ -108,4 +108,12 @@ it("waits for overlays to open and close, and observes a legitimate no-op for it
   await vi.advanceTimersByTimeAsync(700);
   expect(await nothing).toBe(false);
   expect(Date.now() - start).toBe(700);
+});
+
+it("bounds a readiness sample whose page evaluation never settles", async () => {
+  const page = new FakePage();
+  vi.spyOn(page, "evaluate").mockImplementation(() => new Promise(() => {}));
+  const result = expect(ready(page, { timeout: 20 })).rejects.toThrow("readiness sample timed out");
+  await vi.advanceTimersByTimeAsync(21);
+  await result;
 });
