@@ -108,6 +108,7 @@ for (const [fn, args] of [
   // they are. Called from a phone, either would be a free visit or a free meal.
   ["loyalty_stamp", { p_restaurant: crypto.randomUUID(), p_code: "0000000000AA", p_actor: "anon" }],
   ["loyalty_redeem", { p_restaurant: crypto.randomUUID(), p_code: "0000000000AA", p_actor: "anon" }],
+  ["loyalty_redeem_once", { p_restaurant: crypto.randomUUID(), p_code: "0000000000AA", p_actor: "anon", p_step: 2, p_round: 0, p_request_key: crypto.randomUUID() }],
   ["loyalty_progress", { p_card: crypto.randomUUID() }],
 ]) {
   const { error } = await anon.rpc(fn, args);

@@ -3581,6 +3581,79 @@ $$;
 revoke all on function public.loyalty_redeem(uuid, text, text, int) from public, anon, authenticated;
 grant execute on function public.loyalty_redeem(uuid, text, text, int) to service_role;
 
+-- A handover belongs to the displayed round and step. Save its answer on the
+-- redemption itself so a lost response can be retried even after later rounds.
+alter table loyalty_redemptions add column if not exists request_key uuid;
+alter table loyalty_redemptions add column if not exists request_result jsonb;
+create unique index if not exists loyalty_redemptions_request_idx
+  on loyalty_redemptions(card_id, request_key) where request_key is not null;
+
+-- Keep loyalty_redeem's old signature for the deployed route during rollout.
+-- A separate name also avoids ambiguous RPC overloads for the old caller.
+create or replace function public.loyalty_redeem_once(
+  p_restaurant uuid, p_code text, p_actor text, p_step int, p_round int, p_request_key uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_card loyalty_cards%rowtype;
+  v_prior loyalty_redemptions%rowtype;
+  v_spent record;
+  v_result jsonb;
+  v_steps jsonb;
+  v_reward text;
+begin
+  if p_step is null or p_step not between 2 and 50
+     or p_round is null or p_round < 0 or p_request_key is null then
+    return jsonb_build_object('error', 'invalidRequest');
+  end if;
+  select * into v_card from loyalty_cards c
+   where c.code = p_code and c.restaurant_id = p_restaurant for update;
+  if not found then return jsonb_build_object('error', 'notHere'); end if;
+
+  -- Check replay before the current round: the original tap may have closed it.
+  select * into v_prior from loyalty_redemptions r
+   where r.card_id = v_card.id and r.request_key = p_request_key;
+  if found then
+    if v_prior.round_no <> p_round or v_prior.step <> p_step then
+      return jsonb_build_object('error', 'invalidRequest');
+    end if;
+    return v_prior.request_result;
+  end if;
+  if v_card.round_no <> p_round then
+    return jsonb_build_object('error', 'roundChanged');
+  end if;
+
+  -- Stamp, undo and both redemption callers all take this same card lock.
+  select * into v_spent from public.loyalty_redeem(p_restaurant, p_code, p_actor, p_step);
+  if not found then
+    if exists (select 1 from loyalty_redemptions r
+                where r.card_id = v_card.id and r.round_no = p_round and r.step = p_step) then
+      return jsonb_build_object('error', 'alreadyRedeemed');
+    end if;
+    return jsonb_build_object('error', 'notReady');
+  end if;
+
+  select * into v_card from loyalty_cards c where c.id = v_card.id;
+  select p.reward into v_reward from loyalty_programs p where p.restaurant_id = p_restaurant;
+  v_steps := coalesce(v_card.steps, jsonb_build_array(jsonb_build_object(
+    'visits', v_card.goal, 'reward', coalesce(v_reward, ''))));
+  v_result := jsonb_build_object(
+    'progress', v_spent.progress, 'goal', v_spent.goal, 'reward', v_spent.reward,
+    'round_no', v_card.round_no, 'steps', v_steps,
+    'done', coalesce((select jsonb_agg(r.step) from loyalty_redemptions r
+                      where r.card_id = v_card.id and r.round_no = v_card.round_no), '[]'::jsonb));
+  update loyalty_redemptions r set request_key = p_request_key, request_result = v_result
+   where r.card_id = v_card.id and r.round_no = p_round and r.step = p_step;
+  return v_result;
+end;
+$$;
+revoke all on function public.loyalty_redeem_once(uuid, text, text, int, int, uuid) from public, anon, authenticated;
+grant execute on function public.loyalty_redeem_once(uuid, text, text, int, int, uuid) to service_role;
+
 -- ── Customer accounts ("cuenta abierta") ───────────────────────────────────
 -- A customer the restaurant trusts to pay later: food goes out now and is paid
 -- for in one go, any day, online or at the till. It is credit the restaurant

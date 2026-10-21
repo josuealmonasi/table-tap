@@ -1371,12 +1371,16 @@ email or phone.
   `saved_at`) asks for the picture to be saved again. The page links back to
   the menu the diner came from (`back`, accepted only as `/r/…`) or to the
   card's restaurant, and shows the card's shape while it looks it up.
-- **A reward is spent once**, under the same lock, by `loyalty_redeem()`. The
-  button names the reward it spends (`step`, its visits), and the function
-  refuses unless that is still the next one — on a ladder with every reward
-  ready, a second tap would otherwise spend the reward after it; it answers
-  "already redeemed" instead. A reward already earned is honoured after the
-  program is switched off or the plan changes — the diner did their part.
+- **A reward is spent once**, under the same card lock, by
+  `loyalty_redeem_once()`. Both staff screens send the displayed `round` and
+  `step` with a retry key saved on the device before sending. A repeat returns
+  the original answer saved on the redemption; another key for an old round
+  asks staff to look up the card again. This also protects the final step when
+  banked visits have already earned the next round's reward. A step already
+  redeemed in the current round answers "already redeemed". The original
+  `loyalty_redeem()` stays available during rollout. Stamp undo still uses the
+  same lock and redemption history. A reward already earned is honoured after
+  the program is switched off or the plan changes — the diner did their part.
 - **Server only.** The four tables and the functions are revoked from every
   browser key; staff and diners reach them through routes that check who is
   asking.

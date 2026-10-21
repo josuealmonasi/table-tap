@@ -14,6 +14,7 @@ us, and what now catches each one.
 
 | Rule | The bug it came from |
 |---|---|
+| A reward handover names the displayed round, step and saved retry key (S15 J8) | Two identical requests closed one round and spent the same step in the next |
 | A statement email is capped per account and per restaurant, never on the recipient (G5) | One account code could mail the same stranger ~400 times a day |
 | Coupon entitlements and card receipts agree before money moves (S5 E4) | A MX$90 discounted charge recorded MX$100 and could later reserve a MX$100 return |
 | A coupon use belongs to one checkout attempt (S5 E7) | An old expiry released the newer payment page's reservation on the same order |
@@ -2301,6 +2302,7 @@ with a probe that made the order, ran the gate as it was (BAD) and as it is
 
 | Rule | The bug it came from |
 |---|---|
+| A reward handover names the displayed round, step and saved retry key (S15 J8) | Two identical requests closed one round and spent the same step in the next |
 | Cashier recovery access and upload authority agree (PR2 review) | Losing POS hid the only upload surface while sign-out still protected held money |
 | Deposit identity and display use the same original currency (PR2 review) | A peso deposit was reconciled against a later dollar sale |
 | Saved and verified carts compare line multisets (PR2 review) | Verification moved combos first and falsely flagged unchanged mixed carts |
@@ -2990,3 +2992,27 @@ confirm the new phone can then order and open the bill. Close the sitting,
 seat a new party, and confirm the old phone can still see/pay its own food
 without seeing the new bill. Also check a staff-opened bill and a legacy
 phone's own-order payment during rollout.
+
+## One handover consumed two rewards (S15 J8)
+
+The round on the staff screen and the round under the card lock had to agree.
+A step alone repeated in the next round, so banked visits let two identical
+requests consume two MX$50 rewards. Both staff screens now save a retry key
+before sending the displayed round and step. `loyalty_redeem_once` checks that
+identity under the same lock as stamping and undo, saves the answer on the
+redemption, and returns it on retry even after later rounds. A fresh key from
+an old round asks staff to look up the card again, in either language.
+
+`loyalty-redeem.spec.ts` reproduced two rewards consumed before the fix and
+checks concurrent retries, the saved answer, stale rounds and validation.
+`loyalty-redeem-request.spec.ts` checks saved keys and failed saves.
+`loyalty-redeem-invariants.spec.ts` joins both screens, the private RPC,
+the saved answer and the unchanged undo lock. The attack case banks enough
+visits for two rounds and checks redemption rows, visits spent and round number;
+it is written for the release runner and was not run here. The old RPC stays
+available while the deployed route still uses it; apply the additive SQL first.
+
+Check both staff screens in English and Spanish: repeat a handover after a
+lost response, then use an old screen after another device closed its round.
+Check today's unused stamp can still be undone and a stamp used for a reward
+cannot. Run the API, RLS, attack and complete release gates in isolation.

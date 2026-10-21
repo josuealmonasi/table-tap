@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { tableJoinScenario } from "./table-join-scenario.mjs";
 import { checkTableJoin } from "./check-table-join.mjs";
 // ============================================================================
@@ -244,20 +245,20 @@ export function cases(fx) {
       path: "/api/loyalty/stamp", arrange: f => f.withLoyaltyOff(), body: { code: fx.stampableCode ?? "" },
       expect: [409], expectError: /apagada|switched off/i },
     { name: "POST /api/loyalty/redeem (not ready yet)", as: "waiter", method: "POST",
-      path: "/api/loyalty/redeem", body: { code: fx.stampableCode ?? "" },
+      path: "/api/loyalty/redeem", body: { code: fx.stampableCode ?? "", step: fx.stampableStep, round: fx.stampableRound, requestKey: randomUUID() },
       expect: [409], expectError: /faltan visitas|hasn't reached/i },
     // The reward the waiter pressed is named, so the same tap twice spends it
     // once — on a ladder, a second tap would otherwise spend the NEXT reward.
     { name: "POST /api/loyalty/redeem (a ready card)", as: "cashier", method: "POST",
-      path: "/api/loyalty/redeem", body: { code: fx.readyCode ?? "no-ready-card-in-the-seed", step: fx.readyStep }, expect: [200],
+      path: "/api/loyalty/redeem", body: { code: fx.readyCode ?? "no-ready-card-in-the-seed", step: fx.readyStep, round: fx.readyRound, requestKey: randomUUID() }, expect: [200],
       check: d => {
         if (typeof d.spent !== "string" || d.standing?.ready !== false) return `answered ${JSON.stringify(d)}`;
         const step = (d.standing.steps ?? []).find(s => s.visits === fx.readyStep);
         return !step || step.done || d.standing.goal === fx.readyStep || "the reward spent is not marked redeemed";
       } },
     { name: "POST /api/loyalty/redeem (the same reward twice)", as: "waiter", method: "POST",
-      path: "/api/loyalty/redeem", body: { code: fx.readyCode ?? "", step: fx.readyStep },
-      expect: [409], expectError: /ya se canjeó|already redeemed/i },
+      path: "/api/loyalty/redeem", body: { code: fx.readyCode ?? "", step: fx.readyStep, round: fx.readyRound, requestKey: randomUUID() },
+      expect: [409], expectError: /ya se canjeó|already redeemed|otra ronda|another round/i },
     { name: "POST /api/loyalty/redeem (a step that is not a number)", as: "waiter", method: "POST",
       path: "/api/loyalty/redeem", body: { code: fx.readyCode ?? "", step: "8" }, expect: [400] },
     // A reward already earned is honoured after the program is paused: the
@@ -279,7 +280,7 @@ export function cases(fx) {
           await f.admin.from("loyalty_cards").delete().eq("id", card.id);
         };
       },
-      body: { code: "PAVSEDXTEST0" }, expect: [200],
+      body: { code: "PAVSEDXTEST0", step: 2, round: 0, requestKey: randomUUID() }, expect: [200],
       check: async (_d, f) => {
         const { count } = await f.admin.from("loyalty_redemptions").select("id", { count: "exact", head: true }).eq("card_id", f.pausedCard);
         return count === 1 || `the earned reward was spent ${count} times`;
