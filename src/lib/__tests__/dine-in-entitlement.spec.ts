@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 const insert = vi.fn();
+vi.mock("@/lib/table-membership", () => ({ tableMember: async () => ({ id: "member", sessionId: "s" }) }));
 vi.mock("@/lib/stripe", () => ({ stripe: {} }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => NextResponse.json({ error }, { status }) }));
 vi.mock("@/lib/rate-limit", () => ({ isRoomLimited: async () => false, isTableLimited: async () => false }));

@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync } from "node:fs";
 
+vi.mock("@/lib/table-membership", () => ({ tableMember: async () => ({ id: "phone", sessionId: "cheap-sitting", closed: false }) }));
 const { rpc, bill } = vi.hoisted(() => ({ rpc: vi.fn(), bill: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ isRoomLimited: async () => false, isTableLimited: async () => false }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => NextResponse.json({ error }, { status }) }));

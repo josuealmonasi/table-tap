@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { dinerToken } from "@/lib/diner-token";
 import { SPLIT_POLL_MS } from "@/lib/poll";
 
 /** What the table is doing about its bill, from this phone's point of view. */
@@ -45,12 +44,8 @@ export function useSplit(
   const [busy, setBusy] = useState(false);
   const [diner, setDiner] = useState("");
 
-  useEffect(() => {
-    setDiner(dinerToken(restaurantId));
-  }, [restaurantId]);
-
   const read = useCallback(async () => {
-    if (!tableId || !sessionId || !diner) return;
+    if (!tableId || !sessionId) return;
     try {
       const res = await fetch(
         `/api/split?sessionId=${sessionId}&diner=${encodeURIComponent(diner)}` +
@@ -58,8 +53,9 @@ export function useSplit(
           `&own=${encodeURIComponent(ownOrderIds.join(","))}`,
       );
       if (!res.ok) return;
-      const data = (await res.json()) as { split: SplitState | null };
+      const data = (await res.json()) as { split: SplitState | null; diner: string };
       setSplit(data.split);
+      setDiner(data.diner);
     } catch {
       // Offline for a moment: keep showing what we last knew.
     }
@@ -75,7 +71,7 @@ export function useSplit(
 
   const send = useCallback(
     async (path: string, method: string, body: Record<string, unknown>) => {
-      if (!tableId || !sessionId || !diner) return;
+      if (!tableId || !sessionId) return;
       setBusy(true);
       try {
         const res = await fetch(path, {

@@ -1,5 +1,7 @@
 "use client";
 
+import { usePendingPhones } from "@/hooks/usePendingPhones";
+import PhoneRequest from "@/components/table-membership/phone-request";
 import { useServiceRequests } from "@/hooks/useServiceRequests";
 import type { BoardRequest } from "@/lib/kitchen-ticket";
 import { useT } from "@/lib/i18n/context";
@@ -43,6 +45,7 @@ export default function ServiceRequestsBar({
   kitchen = false,
 }: ServiceRequestsBarProps) {
   const t = useT();
+  const phones = usePendingPhones(restaurantId, canSettle);
   const { requests, markDone } = useServiceRequests(restaurantId, initialRequests, kitchen);
   // The table whose bill the waiter is collecting, if any.
   const [settling, setSettling] = useState<BoardRequest | null>(null);
@@ -71,7 +74,7 @@ export default function ServiceRequestsBar({
   };
 
   const carrying = onDelivered ? ready : [];
-  if (requests.length === 0 && carrying.length === 0) return null;
+  if (requests.length === 0 && carrying.length === 0 && phones.pending.length === 0) return null;
 
   return (
     <div className="tt-requests-bar" role="status">
@@ -97,6 +100,8 @@ export default function ServiceRequestsBar({
           </button>
         </div>
       ))}
+
+      {phones.pending.map(phone => <PhoneRequest key={phone.id} restaurantId={restaurantId} phone={phone} onDecided={phones.refresh} />)}
 
       {requests.map(r => (
         <div key={r.id} className="tt-request-chip">

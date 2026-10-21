@@ -1,3 +1,4 @@
+import { memberFixture, forgetBrowserMember } from "./table-member-fixture.mjs";
 // ============================================================================
 // TableTap — does the screen promise something the system cannot deliver?
 //
@@ -60,8 +61,17 @@ const cookieFor = async (email, password = "demo123") => {
 
 const { data: restaurant } = await admin
   .from("restaurants").select("id").eq("name", "Demo Bistro").maybeSingle();
-const { data: table } = await admin
-  .from("restaurant_tables").select("id").eq("restaurant_id", restaurant.id).limit(1).maybeSingle();
+// The table a diner arrives at: one nobody is eating at, so the menu is judged
+// as a party sitting down sees it. Strangers at somebody else's meal are shown
+// less on purpose (they wait to be let in), and an unordered pick landed on an
+// occupied table, so the visit card on the menu read as taken away. Ordered,
+// so every run judges the same table.
+const { data: tables } = await admin
+  .from("restaurant_tables").select("id, label").eq("restaurant_id", restaurant.id).order("label");
+const { data: seated } = await admin
+  .from("table_sessions").select("table_id").eq("restaurant_id", restaurant.id).is("closed_at", null);
+const busy = new Set((seated ?? []).map(s => s.table_id));
+const table = (tables ?? []).find(t => !busy.has(t.id)) ?? (tables ?? [])[0] ?? null;
 
 // Compile every route this sweep opens, before it opens any of them. In
 // development Next builds a route the first time anything asks for it, and a
@@ -85,6 +95,11 @@ const held = [];
 async function newContext(options) {
   const ctx = await browser.newContext(options);
   if (prod) await holdWrites(ctx, held);
+  const close = ctx.close.bind(ctx);
+  ctx.close = async options => {
+    try { if (!prod) await forgetBrowserMember(ctx, admin); }
+    finally { await close(options); }
+  };
   return ctx;
 }
 console.log(`\nPromises — ${prod ? "production" : "development"}\n`);
@@ -289,7 +304,7 @@ async function withCounterOrder(run) {
  * is sitting at, and says so loudly if there is none rather than measuring the
  * wrong screen.
  */
-async function withTableBill(run, frozen = false) {
+async function withTableBill(run, frozen = false, context) {
   const MARK = "promise-audit-bill";
   const { data: dish } = await admin.from("menu_items")
     .select("id, name, emoji, price").eq("restaurant_id", restaurant.id)
@@ -334,9 +349,15 @@ async function withTableBill(run, frozen = false) {
     ]);
   }
 
+  const phones = memberFixture(admin, restaurant.id);
   try {
+    const cookie = await phones.cookieFor("/api/bill", {
+      restaurantId: restaurant.id, tableId: free.id, sessionId: sitting.id,
+    });
+    await context.addCookies([{ name: "tt-table-member", value: cookie.split("=")[1], url: BASE, httpOnly: true, sameSite: "Lax" }]);
     return await run(free);
   } finally {
+    await phones.cleanup();
     if (split) {
       await admin.from("bill_split_claims").delete().eq("split_id", split);
       await admin.from("bill_splits").delete().eq("id", split);
@@ -497,7 +518,7 @@ for (const state of STATES) {
   try {
     if (state.as === "tracker") await withCounterOrder(id => visit(`/order/${id}`));
     else if (state.as === "bill") {
-      await withTableBill(free => visit(`/r/${restaurant.id}/t/${free.id}`), state.frozen);
+      await withTableBill(free => visit(`/r/${restaurant.id}/t/${free.id}`), state.frozen, context);
     } else {
       // A path can depend on the data — a visit card's page needs a card's code.
       const path = typeof state.path === "function" ? await state.path(admin, ctx) : state.path;

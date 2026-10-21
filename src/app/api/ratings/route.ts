@@ -1,3 +1,4 @@
+import { memberRatingOrders } from "@/lib/rating-membership";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
   // restaurant or an abandoned checkout entitles nobody to anything.
   const { data: orders, error } = await supabase
     .from("orders")
-    .select("id, items")
+    .select("id, items, table_id, session_id, diner")
     .in("id", orderIds)
     .eq("restaurant_id", restaurantId)
     .eq("paid", true);
@@ -61,8 +62,11 @@ export async function POST(req: NextRequest) {
     return await apiError("apiErr.verifyOrders", 503);
   }
 
+  const owned = await memberRatingOrders(req, restaurantId, orders ?? []).catch(() => null);
+  if (!owned) return await apiError("apiErr.verifyOrders", 503);
+
   const entitled = rateableDishes(
-    (orders ?? []).map(o => ({ id: o.id, items: (o.items ?? []) as OrderLineItem[] })),
+    owned.map(o => ({ id: o.id, items: (o.items ?? []) as OrderLineItem[] })),
   );
   // And that the ids fit their columns. A line with an id that is not a uuid
   // passed the purchase check and blew up on the insert, and the 503 took the

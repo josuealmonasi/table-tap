@@ -48,8 +48,9 @@ export function useTableBill(
     // become `{ orders: [] }`, and an empty bill is a settled one: one refused
     // poll hid the bill under a diner who owed it and asked them if they
     // wanted a receipt for paying it.
-    fetch(`/api/bill?restaurantId=${restaurantId}&tableId=${tableId}${mine}`)
+    fetch(`/api/bill?restaurantId=${restaurantId}&tableId=${tableId}${mine}&own=${encodeURIComponent(myOrderIds(restaurantId).join(","))}`)
       .then(async r => {
+        if (r.status === 403) { setOrders(null); return; }
         if (!r.ok) return;
         const d = await r.json();
         setOrders(d.orders ?? []);

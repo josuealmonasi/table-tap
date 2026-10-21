@@ -2490,8 +2490,22 @@ describe("no gate writes to production", () => {
         .filter(m => scripts.includes(m[2]) && writesItself(m[2]))
         .flatMap(m => m[1].split(",").map(n => n.trim().split(/\s+as\s+/).pop() ?? ""))
         .filter(Boolean);
-      const calls = imported.length ? new RegExp(`\\b(${imported.join("|")})\\(`) : null;
-      const firsts = [code.search(WRITE), calls ? code.search(calls) : -1].filter(i => i >= 0);
+      // Browser contexts remove their own pending phones only in development.
+      // A literal `if (!prod)` around that imported call is a guard too; its
+      // else branch is deliberately outside the range and stays checked.
+      const developmentOnly: [number, number][] = [];
+      const source = ts.createSourceFile(file, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+      const visit = (node: ts.Node): void => {
+        if (ts.isIfStatement(node) && node.expression.getText(source).replace(/\s/g, "") === "!prod") {
+          developmentOnly.push([node.thenStatement.getStart(source), node.thenStatement.end]);
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(source);
+      const calls = imported.length ? new RegExp(`\\b(${imported.join("|")})\\(`, "g") : null;
+      const writesCalled = calls ? [...code.matchAll(calls)].map(match => match.index!)
+        .filter(at => !developmentOnly.some(([start, end]) => at >= start && at < end)) : [];
+      const firsts = [code.search(WRITE), ...writesCalled].filter(i => i >= 0);
       if (!firsts.length) continue;
       writers++;
       if (!/--prod|\.env\.production\.local|PROD_SITE_URL/.test(code)) continue;
@@ -2717,7 +2731,9 @@ describe("a visit card is made only from inside the restaurant", () => {
 
   it("every page that offers the card hands it a pass for its own place, and the phone sends it", () => {
     expect(read("src/lib/ordering-data.ts")).toMatch(/pass: issueVisitPass\(restaurantId, "counter"\)/);
-    expect(read("src/app/r/[restaurantId]/t/[tableId]/page.tsx")).toMatch(/offerAt\(data\.loyalty, \{ table: /);
+    expect(read("src/app/r/[restaurantId]/t/[tableId]/page.tsx")).toContain('pass: ""');
+    expect(read("src/app/api/table-membership/route.ts")).toContain('state.status === "approved"');
+    expect(read("src/app/api/table-membership/route.ts")).toContain('issueVisitPass(restaurantId, { table: tableId, session: state.sessionId })');
     expect(read("src/app/order/[orderId]/page.tsx")).toMatch(/offerAt\(data\.loyalty, \{ order: /);
     expect(read("src/components/customer/LoyaltyOffer.tsx")).toMatch(/pass: offer\.pass/);
   });
@@ -2859,5 +2875,24 @@ describe("a link the app sends is built on its own address", () => {
     const offenders = sources.filter(f => /headers\.get\(\s*["']origin["']\s*\)/i.test(read(f)));
     expect(offenders).toEqual([]);
     expect(sources.filter(f => /siteOrigin\(req\)/.test(read(f))).length).toBeGreaterThanOrEqual(9);
+  });
+});
+
+describe("a sitting lasts as long in SQL as in the app", () => {
+  it("writes the table-member functions' window as OPEN_BILL_HOURS", () => {
+    // Two places that must agree: the routes treat a sitting older than
+    // OPEN_BILL_HOURS as over, and the member functions close and refuse it by
+    // their own interval. Changed in one place only, a phone would be let into
+    // a sitting the bill no longer shows, or kept out of one it still owes on.
+    const hours = Number(/export const OPEN_BILL_HOURS = (\d+);/.exec(read("src/lib/table-bill.ts"))?.[1]);
+    expect(hours, "OPEN_BILL_HOURS moved").toBeGreaterThan(0);
+    for (const name of ["request_table_member", "decide_table_member"]) {
+      const start = schema.indexOf(`create or replace function public.${name}(`);
+      expect(start, name).toBeGreaterThan(-1);
+      const body = schema.slice(start, schema.indexOf("$$;", schema.indexOf("$$", start) + 2));
+      const intervals = [...body.matchAll(/interval '(\d+) hours'/g)].map(m => Number(m[1]));
+      expect(intervals.length, `${name} has no sitting window`).toBeGreaterThan(0);
+      expect(intervals.every(h => h === hours), `${name}: ${intervals}`).toBe(true);
+    }
   });
 });

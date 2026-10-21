@@ -7,7 +7,7 @@ interface CheckoutOrderInput {
   /** The row returned by the restaurant-scoped table lookup, never its client label. */
   table: { id: string; label: string } | null;
   sessionId: string | null;
-  /** The throwaway id the phone gave itself, exactly as the client sent it. */
+  /** The server-verified table member, or a counter phone's throwaway id. */
   diner: unknown;
   deferred: boolean;
   pricing: PricedCart;

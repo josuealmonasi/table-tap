@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { tableOf } from "@/lib/table-guard";
-import { openSession } from "@/lib/table-session";
+import { requestTableMember } from "@/lib/table-membership";
+import { memberHash } from "@/lib/table-member-cookie";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
@@ -103,6 +104,17 @@ export async function POST(req: NextRequest) {
       return await apiError("apiErr.tableNotFound", 404);
     }
 
+    // Check an occupied table before reserving anything. Empty-table races
+    // are decided under the table lock below, with any claims returned if
+    // another phone opened the sitting while this cart was being checked.
+    const hash = memberHash(req);
+    if (tableId && !hash) return await apiError("apiErr.tableJoin", 403);
+
+    const waiting = tableId && hash ? await requestTableMember(restaurantId, tableId, hash) : null;
+    if (waiting && (waiting.status === "pending" || waiting.status === "rejected")) {
+      return await apiError("apiErr.tableJoin", 403);
+    }
+
     // Pay later is decided from the database and the plan (`payLaterAllowed`).
     const allowDeferred = payLaterAllowed(restaurant.allow_pay_later, plan?.limits);
     const deferred = Boolean(payLater) && allowDeferred;
@@ -182,9 +194,18 @@ export async function POST(req: NextRequest) {
 
     fee = await checkoutFee(restaurantId, plan, deferred, pricing.subtotal);
 
-    // Which sitting this order belongs to. A dine-in order joins whoever is
-    // already at the table; a counter order has no table and no sitting.
-    const sessionId = tableId ? await openSession(restaurantId, tableId) : null;
+    // Which sitting this order belongs to. A dine-in order needs admission;
+    // a counter order has no table and no sitting.
+    const admission = tableId && hash ? await requestTableMember(restaurantId, tableId, hash, true) : null;
+    if (admission && admission.status !== "approved") {
+      await held.giveBack();
+      return await apiError("apiErr.tableJoin", 403);
+    }
+    const sessionId = admission?.sessionId ?? null;
+    if (tableId && !sessionId) {
+      await held.giveBack();
+      return await apiError("apiErr.sessionGone", 409);
+    }
 
     // Take the stock this order needs before asking anyone for money.
     //
@@ -213,7 +234,7 @@ export async function POST(req: NextRequest) {
           restaurantId,
           table,
           sessionId,
-          diner: body.diner,
+          diner: admission?.diner ?? body.diner,
           deferred,
           pricing,
           taxPct: Number(restaurant.tax_pct) || 0,

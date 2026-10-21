@@ -7949,3 +7949,91 @@ create trigger bind_redemption_checkout before insert on coupon_redemptions
 for each row execute function public.bind_redemption_checkout();
 create unique index if not exists coupon_one_checkout_reservation on coupon_redemptions(checkout_attempt_id)
 where checkout_attempt_id is not null;
+
+-- A printed QR names a table, never the people eating there now. Only the
+-- server sees credentials; the floor polls a route that returns pending ids.
+create table if not exists table_session_members (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null references table_sessions(id) on delete cascade,
+  token_hash text not null check (token_hash ~ '^[0-9a-f]{64}$'),
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  created_at timestamptz not null default now(),
+  decided_at timestamptz,
+  decided_by text,
+  unique (session_id, token_hash)
+);
+alter table table_session_members enable row level security;
+revoke all on table_session_members from anon;
+revoke all on table_session_members from public, authenticated;
+grant all on table_session_members to service_role;
+create index if not exists table_session_members_pending
+  on table_session_members(session_id, created_at) where status = 'pending';
+
+-- Lock the physical table before deciding who arrived first. A loser to a
+-- simultaneous diner or staff opener must request admission, never inherit it.
+create or replace function public.request_table_member(
+  p_restaurant uuid, p_table uuid, p_hash text, p_open boolean default false
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_session uuid;
+  v_created boolean := false;
+  v_member table_session_members%rowtype;
+begin
+  if p_hash is null or p_hash !~ '^[0-9a-f]{64}$' then raise exception 'Invalid member credential'; end if;
+  perform 1 from restaurant_tables where id = p_table and restaurant_id = p_restaurant for update;
+  if not found then raise exception 'Table not found'; end if;
+  if p_open then
+    update table_sessions set closed_at = now(), close_reason = 'expired'
+      where table_id = p_table and restaurant_id = p_restaurant and closed_at is null
+        and opened_at < now() - interval '8 hours';
+  end if;
+  select id into v_session from table_sessions
+    where table_id = p_table and restaurant_id = p_restaurant and closed_at is null
+      and opened_at >= now() - interval '8 hours';
+  if v_session is null and not p_open then
+    return jsonb_build_object('status', 'empty', 'sessionId', null, 'diner', null);
+  end if;
+  if v_session is null then
+    insert into table_sessions(restaurant_id, table_id) values (p_restaurant, p_table)
+      on conflict do nothing returning id into v_session;
+    v_created := v_session is not null;
+    if v_session is null then
+      select id into v_session from table_sessions
+        where table_id = p_table and restaurant_id = p_restaurant and closed_at is null;
+    end if;
+  end if;
+  if v_session is null then raise exception 'Could not open sitting'; end if;
+  insert into table_session_members(session_id, token_hash, status, decided_at)
+    values (v_session, p_hash, case when v_created then 'approved' else 'pending' end,
+      case when v_created then now() else null end)
+    on conflict (session_id, token_hash) do nothing;
+  select * into strict v_member from table_session_members where session_id = v_session and token_hash = p_hash;
+  return jsonb_build_object('status', v_member.status, 'sessionId', v_session, 'diner', v_member.id);
+end; $$;
+revoke all on function public.request_table_member(uuid, uuid, text, boolean) from public, anon, authenticated;
+grant execute on function public.request_table_member(uuid, uuid, text, boolean) to service_role;
+
+-- A decision can only change a pending phone in this sitting. Serializing on
+-- the sitting also prevents an approval from reviving a closed party.
+create or replace function public.decide_table_member(
+  p_member uuid, p_restaurant uuid, p_table uuid, p_approve boolean,
+  p_staff text default null, p_hash text default null
+) returns boolean language plpgsql security definer set search_path = public as $$
+declare v_session uuid;
+begin
+  select s.id into v_session from table_sessions s join table_session_members m on m.session_id = s.id
+    where m.id = p_member and s.restaurant_id = p_restaurant and s.table_id = p_table
+      and s.closed_at is null and s.opened_at >= now() - interval '8 hours' for update of s;
+  if v_session is null then return false; end if;
+  if p_staff is null and not exists (
+    select 1 from table_session_members where session_id = v_session and token_hash = p_hash and status = 'approved'
+  ) then return false; end if;
+  update table_session_members set status = case when p_approve then 'approved' else 'rejected' end,
+    decided_at = now(), decided_by = coalesce(p_staff, 'member')
+    where id = p_member and session_id = v_session and status = 'pending';
+  return found;
+end; $$;
+revoke all on function public.decide_table_member(uuid, uuid, uuid, boolean, text, text) from public, anon, authenticated;
+grant execute on function public.decide_table_member(uuid, uuid, uuid, boolean, text, text) to service_role;
+
+revoke truncate, references, trigger on all tables in schema public from authenticated;

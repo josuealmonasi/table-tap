@@ -1,6 +1,6 @@
 import { paymentCoverageDetails } from "@/lib/payment-coverage";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { currentSessionId as openTableSession, sessionAtTable } from "@/lib/table-session";
+import type { TableMember } from "@/lib/table-membership";
 import { billWindowStart, paidOrders, unpaidOrders } from "@/lib/table-bill";
 import type { Order } from "@/lib/types";
 
@@ -16,15 +16,13 @@ import type { Order } from "@/lib/types";
  * now is never shown — or asked to pay — what the last party left behind.
  * Staff see the lot.
  *
- * Anyone holding the table's URL can see what that table owes. The URL is
- * printed on the table, so this is the same trust boundary as the menu itself:
- * it tells you what the people sitting there ordered, which they can see
- * anyway.
+ * The printed URL only opens the menu. A diner needs the approved membership
+ * the route verified from its server-issued cookie before any bill is read.
  */
 
 /** Only the columns the bill screen and the waiter's modal actually show. */
 const FIELDS =
-  "id, table_label, status, items, subtotal, discount, service_fee, tip, total, currency, paid, written_off, coupon_code, customer_name, created_at";
+  "id, table_label, status, items, subtotal, discount, service_fee, tip, total, currency, paid, written_off, coupon_code, customer_name, created_at, diner";
 
 export async function fetchTableBill(
   restaurantId: string,
@@ -43,6 +41,7 @@ export async function fetchTableBill(
    * one person who should never be told the table owes nothing.
    */
   sessionId?: string | null,
+  member?: TableMember | null,
 ): Promise<Order[]> {
   const base = () =>
     createAdminClient()
@@ -68,16 +67,22 @@ export async function fetchTableBill(
   let settled = base().eq("paid", true).gte("created_at", billWindowStart().toISOString());
 
   if (audience === "diner") {
-    // Their own sitting first: a phone that ordered here is owed a way to pay,
-    // however long the table has been sitting. Otherwise the table's current
-    // sitting, which is empty for a diner who has just scanned a table the
-    // last party left a debt on — that debt is the manager's to resolve, and
-    // showing it here would ask a stranger to pay it.
-    const mine = sessionId ? await sessionAtTable(sessionId, tableId) : null;
-    const session = mine ?? (await openTableSession(restaurantId, tableId));
-    if (!session) return [];
-    owed = owed.eq("session_id", session);
-    settled = settled.eq("session_id", session);
+    // Their own sitting only: falling back to the current one handed a saved
+    // QR the next party's food. Even a caller naming a real sitting must have
+    // the cookie that the route verified, for this restaurant and table.
+    if (!member || !sessionId || member.sessionId !== sessionId ||
+        member.restaurantId !== restaurantId || member.tableId !== tableId) return [];
+    owed = owed.eq("session_id", sessionId);
+    settled = settled.eq("session_id", sessionId);
+    // Membership ends when the party leaves. The remaining exception is
+    // paying one's own food, never reading somebody else's closed bill.
+    if (member.legacyOrderIds) {
+      owed = owed.in("id", member.legacyOrderIds);
+      settled = settled.in("id", member.legacyOrderIds);
+    } else if (member.closed) {
+      owed = owed.eq("diner", member.id);
+      settled = settled.eq("diner", member.id);
+    }
   }
 
   const [owedRes, settledRes] = await Promise.all([owed, settled]);

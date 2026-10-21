@@ -58,7 +58,7 @@ for (const table of [
   "icon_groups", "icon_group_items",
   "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions",
   // A customer's name and what they owe: read only through the routes.
-  "customer_accounts", "account_checkouts", "diner_checkouts",
+  "customer_accounts", "account_checkouts", "diner_checkouts", "table_session_members",
   // The drawer's shifts and what was taken out of it; the restaurant's costs.
   "cash_shifts", "cash_movements", "ingredients", "ingredient_prices", "recipe_lines",
   "waste_entries", "ingredient_purchases", "ingredient_counts",
@@ -560,7 +560,7 @@ if (!signIn.error && theirs) {
     "kitchen_tickets", "kitchen_requests", "orders", "payments", "print_jobs", "promotions", "restaurant_tables", "service_requests",
     "staff", "table_sessions", "user_logs", "write_off_requests",
     "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions",
-    "customer_accounts", "account_checkouts", "diner_checkouts",
+    "customer_accounts", "account_checkouts", "diner_checkouts", "table_session_members",
     "cash_shifts", "cash_movements", "ingredients", "ingredient_prices", "recipe_lines",
     "waste_entries", "ingredient_purchases", "ingredient_counts", "terminal_deposits", "platform_fees"];
   const TEAM = [["anon", null], ["owner", "demo@tabletap.dev"], ["manager", "demo-manager@tabletap.dev"],

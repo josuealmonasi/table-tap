@@ -1,3 +1,4 @@
+import { forgetBrowserMember } from "./table-member-fixture.mjs";
 // ============================================================================
 // TableTap — can the screen actually be read?
 //
@@ -178,6 +179,11 @@ const held = [];
 async function newContext(options) {
   const ctx = await browser.newContext(options);
   if (prod) await holdWrites(ctx, held);
+  const close = ctx.close.bind(ctx);
+  ctx.close = async options => {
+    try { if (!prod) await forgetBrowserMember(ctx, admin); }
+    finally { await close(options); }
+  };
   return ctx;
 }
 console.log(`\nLayout — ${prod ? "production" : "development"}\n`);

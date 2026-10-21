@@ -1,3 +1,5 @@
+import { tableMember } from "@/lib/table-membership";
+import { memberHash } from "@/lib/table-member-cookie";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { clientKey, isRateLimited } from "@/lib/rate-limit";
@@ -15,7 +17,7 @@ export const dynamic = "force-dynamic";
  * still open and still owed for, the diner is at one table with an unpaid bill
  * and is about to open a second one.
  *
- * The id is unguessable and tells the caller only about its own sitting —
+ * The server-issued cookie proves membership and tells the caller only about its own sitting —
  * which table it is at, and how much is left on it. Rate limited because it is
  * open to the world.
  */
@@ -26,6 +28,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.tooManyRequests", 429);
   }
 
+  if (!memberHash(req)) return await apiError("apiErr.tableJoin", 403);
   const db = createAdminClient();
   const { data: session, error: sessionError } = await db
     .from("table_sessions")
@@ -35,6 +38,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // A read that failed is not a sitting that closed. It answered
   // `{ open: false }`, and closed is what makes the phone forget its table.
   if (sessionError) return await apiError("apiErr.ordersLoad", 500);
+
+  if (session && !await tableMember(req, session.restaurant_id, session.table_id, id, true).catch(() => null)) {
+    return await apiError("apiErr.tableJoin", 403);
+  }
 
   // A sitting that closed leaves nothing behind: the diner is free.
   if (!session || session.closed_at) return NextResponse.json({ open: false });

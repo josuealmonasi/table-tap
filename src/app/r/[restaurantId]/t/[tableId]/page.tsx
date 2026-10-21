@@ -6,8 +6,9 @@ import MenuSkeleton from "@/components/customer/MenuSkeleton";
 import { menuShowsLoyalty, loadCoverState, loadOrderingData, unwrap } from "@/lib/ordering-data";
 import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
-import { offerAt } from "@/lib/loyalty/pass";
 import type { RestaurantTable } from "@/lib/types";
+import { offerAt } from "@/lib/loyalty/pass";
+import { openSittingAt } from "@/lib/table-membership";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ async function Menu({
   // Read with the secret key, scoped to both ids in the URL. Tables are not
   // readable with the publishable key on purpose — listable table ids would let
   // anyone see any table's bill, or charge an order to it — so the QR code the
-  // diner scanned is what proves which table this is.
+  // diner scanned names the table; only approved membership opens its bill.
   const [data, tableRes, plan] = await Promise.all([
     loadOrderingData(restaurantId),
     createAdminClient()
@@ -55,6 +56,10 @@ async function Menu({
   // points at nothing.
   if (!data.restaurant) notFound();
   const seatedAt = dineIn ? table : null;
+  // Whether a party is eating here decides the visit card's pass: an empty
+  // table offers it before ordering, somebody else's meal only after the phone
+  // is let in. A failed read is treated as somebody's meal: no pass, menu intact.
+  const sitting = seatedAt ? await openSittingAt(restaurantId, seatedAt.id).catch(() => "unknown") : null;
 
   return (
     <OrderingApp
@@ -70,7 +75,7 @@ async function Menu({
       closedNow={data.closedNow}
       orderAtRegister={data.orderAtRegister}
       receipts={data.receipts}
-      loyalty={seatedAt ? offerAt(data.loyalty, { table: seatedAt.id }) : data.loyalty}
+      loyalty={seatedAt && data.loyalty ? (sitting ? { ...data.loyalty, pass: "" } : offerAt(data.loyalty, { table: seatedAt.id })) : data.loyalty}
       dietaryTags={data.dietaryTags}
     />
   );

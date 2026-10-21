@@ -1,3 +1,5 @@
+import { tableJoinScenario } from "./table-join-scenario.mjs";
+import { checkTableJoin } from "./check-table-join.mjs";
 // ============================================================================
 // One case per endpoint: the request that SHOULD work.
 //
@@ -102,6 +104,19 @@ export function cases(fx) {
   const r = restaurant.id;
 
   return [
+    { name: "POST /api/table-membership (approval, rejection, a new party and paying old food)",
+      as: "diner", method: "POST", path: "/api/table-membership",
+      headers: f => ({ cookie: f.joinScenario.second.cookie }),
+      arrange: async f => {
+        f.joinScenario = await tableJoinScenario({ admin: f.admin, base: f.base, restaurantId: r, dish: f.dish });
+        return f.joinScenario.cleanup;
+      },
+      body: f => f.joinScenario.body, expect: [200],
+      check: async (data, f) => {
+        if (data.status !== "pending") return "a new phone was not pending";
+        try { return await checkTableJoin(f.joinScenario, f.who); }
+        catch (error) { return error.message; }
+      } },
     { name: "POST /api/pos/upload (new money is refused)", as: "cashier", method: "POST", path: "/api/pos/upload", body: {}, expect: [400] },
     { name: "POST /api/terminal/deposits/verify (missing bank confirmation)", as: "manager", method: "POST", path: "/api/terminal/deposits/verify", body: {}, expect: [400] },
     { name: "POST /api/pos/recover (missing attestation)", as: "owner", method: "POST", path: "/api/pos/recover", body: {}, expect: [400] },
@@ -446,7 +461,7 @@ export function cases(fx) {
           .eq("session_id", f.propose.session).eq("status", "proposed").maybeSingle();
         if (!split) return "no proposal was recorded";
         const { data: seats } = await f.admin.from("bill_split_claims").select("diner").eq("split_id", split.id);
-        return (seats ?? []).some(x => x.diner === `${MARK}-a`) || `the proposer has no seat (${JSON.stringify(seats)})`;
+        return (seats ?? []).some(x => x.diner === f.phoneMembers.idFor(f.propose.session, `${MARK}-a`)) || `the proposer has no seat (${JSON.stringify(seats)})`;
       } },
     // Valid JSON with the wrong types: each of these once answered 500.
     { name: "POST /api/receipt (order ids that are not a list)", as: "diner", method: "POST", path: "/api/receipt",
@@ -507,7 +522,7 @@ export function cases(fx) {
       },
       body: async f => ({ splitId: f.lockedSplitId, sessionId: f.splitSessionId,
         diner: `${MARK}-unpaid`, restaurantId: f.otherRestaurant, tableId: f.otherTable }),
-      expect: [403], expectError: /no tienes una parte|do not have a share/i,
+      expect: [403], expectError: /teléfono|phone/i,
       effect: async f => {
         const since = new Date(Date.now() - 120_000).toISOString();
         const { count } = await f.admin.from("platform_fees").select("id", { count: "exact", head: true })
@@ -1757,10 +1772,9 @@ export function cases(fx) {
         restaurantId: r, tableId: "00000000-0000-0000-0000-000000000000",
         orderIds: [f.billOrder],
       }),
-      // Scoped by restaurant AND table, so an id from elsewhere matches
-      // nothing, and the diner is asked to look again: never told it is paid,
-      // which would send them away from a table they still owe.
-      expect: [409], expectError: /cambió|changed/i },
+      // Scoped by restaurant, table AND admission: a foreign table is refused
+      // before either its food or its payment readiness can be read.
+      expect: [403], expectError: /teléfono|phone/i },
 
     // ── promotions: the rest of their life ───────────────────────────────
     { name: "PATCH /api/promotions (switch off)", as: "manager", method: "PATCH", path: "/api/promotions",

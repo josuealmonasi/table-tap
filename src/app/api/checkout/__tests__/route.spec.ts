@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
  * dies, and nothing goes back once somebody else owns it.
  */
 
+let admissionStatus = "approved";
 const step = {
   openSession: vi.fn(async (): Promise<string | null> => "sitting-1"),
   reserveStock: vi.fn(async () => ({ ok: true, short: [], low: [], reservationId: "reservation-1" })),
@@ -63,7 +64,10 @@ vi.mock("@/lib/coupon-service", () => ({
   toAppliedCoupon: (c: typeof coupon) => ({ code: c.code, kind: c.kind, value: c.value, minSubtotal: 0 }),
 }));
 vi.mock("@/lib/table-guard", () => ({ tableOf: async () => ({ id: "t-1" }) }));
-vi.mock("@/lib/table-session", () => ({ openSession: () => step.openSession() }));
+vi.mock("@/lib/table-member-cookie", () => ({ memberHash: () => "hash" }));
+vi.mock("@/lib/table-membership", () => ({ requestTableMember: async () => ({
+  status: admissionStatus, sessionId: await step.openSession(), diner: "member-1",
+}) }));
 vi.mock("@/lib/stock-service", () => ({
   reserveStock: () => step.reserveStock(),
   releaseStock: (r: string, lines: unknown) => releaseStock(r, lines),
@@ -118,6 +122,7 @@ const boom = () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  admissionStatus = "approved";
   step.openSession.mockImplementation(async () => "sitting-1");
   step.reserveStock.mockImplementation(async () => ({ ok: true, short: [], low: [], reservationId: "reservation-1" }));
   step.insertOrder.mockImplementation(async () => ({ data: { id: "order-1" }, error: null }));
@@ -128,11 +133,11 @@ beforeEach(() => {
 });
 
 describe("a checkout that dies halfway gives back what it had claimed", () => {
-  it("hands back the coupon when the sitting cannot be opened", async () => {
+  it("claims no coupon when the sitting cannot be opened", async () => {
     step.openSession.mockImplementation(async () => boom());
     const res = await checkout();
     expect(res.status).toBe(500);
-    expect(releaseCoupon).toHaveBeenCalledTimes(1);
+    expect(releaseCoupon).not.toHaveBeenCalled();
     expect(releaseStock).not.toHaveBeenCalled();
   });
 
@@ -191,5 +196,21 @@ describe("what is somebody else's is left alone", () => {
     expect(await res.json()).toMatchObject({ url: "https://stripe.test/cs_1", orderId: "order-1" });
     expect(releaseCoupon).not.toHaveBeenCalled();
     expect(releaseStock).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("admission before a new table order", () => {
+  it.each(["pending", "rejected"])("does not reserve or insert food for a %s phone", async status => {
+    admissionStatus = status;
+    expect((await checkout({ payLater: true })).status).toBe(403);
+    expect(step.reserveStock).not.toHaveBeenCalled();
+    expect(step.insertOrder).not.toHaveBeenCalled();
+    expect(step.openCard).not.toHaveBeenCalled();
+    expect(releaseCoupon).not.toHaveBeenCalled();
+  });
+  it("keeps the first phone at an empty table ordering normally", async () => {
+    expect((await checkout({ payLater: true })).status).toBe(200);
+    expect(step.insertOrder).toHaveBeenCalledOnce();
   });
 });

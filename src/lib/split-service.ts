@@ -2,15 +2,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchTableBill } from "@/lib/bill-data";
 import { tableBill } from "@/lib/table-bill";
 import { sharesFor } from "@/lib/split";
+import type { TableMember } from "@/lib/table-membership";
 import { round2 } from "@/lib/money";
 
 /**
  * The server's side of dividing a bill.
  *
  * SERVER-ONLY: every read here uses the secret key, because the only thing
- * identifying a diner is a sitting id and a token their own phone made up.
- * Neither is a login, so nothing a browser sends is believed: what the table
- * owes is always summed from the stored orders.
+ * identifying a diner is its approved membership, verified by the route from
+ * the server-issued cookie. Nothing else a browser sends is believed: what
+ * the table owes is always summed from the stored orders.
  */
 
 export interface SplitState {
@@ -48,9 +49,10 @@ export interface SplitState {
 export async function splitInProgress(
   restaurantId: string,
   tableId: string,
+  sessionId?: string,
 ): Promise<boolean> {
   const db = createAdminClient();
-  const { data: owed, error: owedError } = await db
+  let owedQuery = db
     .from("orders")
     .select("session_id")
     .eq("restaurant_id", restaurantId)
@@ -60,6 +62,8 @@ export async function splitInProgress(
     .eq("written_off", false)
     .neq("status", "pending_payment")
     .neq("status", "cancelled");
+  if (sessionId) owedQuery = owedQuery.eq("session_id", sessionId);
+  const { data: owed, error: owedError } = await owedQuery;
   // Thrown, never "no": paying the whole bill is refused while shares of it
   // are being collected, and a failed read answered "no split".
   if (owedError) throw new Error(`Could not read the table's orders: ${owedError.message}`);
@@ -102,13 +106,15 @@ export async function currentSplit(
   /**
    * The orders this phone says are its own.
    *
-   * Which order belongs to which diner is knowledge only the phone has — there
-   * are no accounts at a table. Passed in and then checked against the sitting,
+   * Which order belongs to which diner is checked against membership on the
+   * stored order. Passed in and then checked against the sitting,
    * because without it every diner was shown everybody else's later round: one
    * person ordering a beer raised the bill of everyone who had already agreed.
    */
   ownOrderIds: string[] = [],
+  member?: TableMember,
 ): Promise<SplitState | null> {
+  if (!member || member.id !== diner || member.sessionId !== sessionId) return null;
   const db = createAdminClient();
   const { data: split } = await db
     .from("bill_splits")
@@ -130,7 +136,7 @@ export async function currentSplit(
     .eq("split_id", split.id);
 
   const mine = (claims ?? []).find(c => c.diner === diner);
-  const orders = await fetchTableBill(restaurantId, tableId, "diner", sessionId);
+  const orders = await fetchTableBill(restaurantId, tableId, "diner", sessionId, member);
   const bill = tableBill(orders, []);
 
   return {
@@ -145,7 +151,7 @@ export async function currentSplit(
       : null,
     outstanding: bill.total,
     ownSince: split.locked_at
-      ? ownOrdersSince(orders, split.locked_at as string, ownOrderIds)
+      ? ownOrdersSince(orders.filter(o => o.diner === member.id), split.locked_at as string, ownOrderIds)
       : 0,
   };
 }

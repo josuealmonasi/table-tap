@@ -92,6 +92,7 @@ export default function BillSheet({
     restaurant.id,
     tableId,
     sessionId,
+    bill.mine.orders.map(order => order.id),
   );
 
   // What this bill can actually be settled with. Every route that charges a

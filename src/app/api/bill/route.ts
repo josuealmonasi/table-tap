@@ -1,3 +1,4 @@
+import { ownBillAccess } from "@/lib/legacy-bill-access";
 import { PaymentAttributionRequired } from "@/lib/payment-coverage";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -14,7 +15,7 @@ export const dynamic = "force-dynamic";
 //
 // What the table still owes. The bill screen polls this while the diners are
 // sitting there, so it is throttled: it reads with the secret key, and a table
-// id is the only thing standing between a caller and somebody's order history.
+// membership is what stands between a caller and somebody's order history.
 //
 // `party` comes back with it: how many devices have ordered on this table,
 // which is the most ways its bill can be divided. The device tokens themselves
@@ -38,15 +39,17 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
+    const member = await ownBillAccess(req, restaurantId, tableId, sessionId, (req.nextUrl.searchParams.get("own") ?? "").split(","));
+    if (!member) return await apiError("apiErr.tableJoin", 403);
     // `staffBill` is what the sheet needs to stop offering a card: a waiter
     // opened this bill and is settling it in person. The routes that charge
     // refuse it as well — this only keeps the screen from promising something
     // the system will turn down.
     const [orders, staffBill, party, dividing] = await Promise.all([
-      fetchTableBill(restaurantId, tableId, "diner", sessionId),
-      staffOpenedBill(restaurantId, tableId),
-      tableParty(restaurantId, tableId),
-      splitInProgress(restaurantId, tableId),
+      fetchTableBill(restaurantId, tableId, "diner", member.sessionId, member),
+      staffOpenedBill(restaurantId, tableId, member.sessionId),
+      member.legacyOrderIds ? Promise.resolve(0) : tableParty(restaurantId, tableId, member.sessionId),
+      splitInProgress(restaurantId, tableId, member.sessionId),
     ]);
     return NextResponse.json({ orders, staffBill, party, dividing });
   } catch (error) {

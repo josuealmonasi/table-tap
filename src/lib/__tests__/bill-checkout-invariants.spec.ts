@@ -47,8 +47,11 @@ it("E4 pay-now coupon audit amounts are not overwritten by an empty bill discoun
   expect(fn("settle_card_orders_v2")).toContain("v_checkout.order_discounts <> '{}'::jsonb");
 });
 it("E11 display and payment use one validated sitting, including old debt", () => {
+  // Payment reads the sitting the table cookie proved, never one the client
+  // names (#525), and with the member, so a closed sitting shows only the
+  // phone's own food.
   const bill = read("src/app/api/bill/pay/route.ts");
-  expect(bill).toContain('fetchTableBill(restaurantId, tableId, "diner", sessionId)');
+  expect(bill).toContain('fetchTableBill(restaurantId, tableId, "diner", member.sessionId, member)');
   expect(bill).not.toContain('.gte("created_at", billWindowStart()');
   expect(read("src/hooks/useBillPayment.ts").split('fetch("/api/bill/pay"')[1]).toMatch(/sessionId/);
 });

@@ -1,3 +1,4 @@
+import { tableMember } from "@/lib/table-membership";
 import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
 import { dinerCurrency } from "@/lib/diner-currency";
 import { openDinerAttempt, resumeDinerAttempt } from "@/lib/diner-attempt";
@@ -44,17 +45,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     tableId?: string; ownOrderIds?: string[]; tipPct?: number; tipAmount?: number;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
-  const { splitId, sessionId, diner, restaurantId, tableId, ownOrderIds, tipPct, tipAmount } = body;
+  const { splitId, sessionId, restaurantId, tableId, ownOrderIds, tipPct, tipAmount } = body;
   if (await isTableLimited(req, "splitpay", tableId, 10)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
-  if (!splitId || !sessionId || !diner || !restaurantId || !tableId) {
+  if (!splitId || !sessionId || !restaurantId || !tableId) {
     return await apiError("apiErr.invalidRequest", 400);
   }
+
+  const member = await tableMember(req, restaurantId, tableId, sessionId, true).catch(() => null);
+  if (!member) return await apiError("apiErr.tableJoin", 403);
+  const diner = member.id;
   // The same refusal the bill screen makes, made where it counts: a share
   // charged here is money the waiter's running balance never sees.
   // A guard that cannot read refuses: a failed read is not leave to charge.
-  const waiterSettles = await staffOpenedBill(restaurantId, tableId).catch(() => null);
+  const waiterSettles = await staffOpenedBill(restaurantId, tableId, sessionId).catch(() => null);
   if (waiterSettles === null) return await apiError("apiErr.verifyOrders", 503);
   if (waiterSettles) return await apiError("apiErr.waiterSettles", 409);
 
@@ -106,13 +111,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // Their own orders since the freeze — verified, never taken on trust: unpaid,
   // at this table's sitting, and placed after it locked.
-  const orders = await fetchTableBill(restaurantId, tableId, "diner", sessionId);
+  const orders = await fetchTableBill(restaurantId, tableId, "diner", sessionId, member);
   const wanted = new Set(Array.isArray(ownOrderIds) ? ownOrderIds : []);
   // Parsed, never compared as text: Postgres returns "+00:00" where JavaScript
   // writes "Z", and as strings that can sort the wrong way round.
   const froze = Date.parse(split.locked_at as string);
   const own = orders.filter(
-    o => wanted.has(o.id) && !o.paid && Date.parse(o.created_at) > froze,
+    o => wanted.has(o.id) && o.diner === member.id && !o.paid && Date.parse(o.created_at) > froze,
   );
   const ownTotal = round2(own.reduce((sum, o) => sum + Number(o.total) - Number(o.collected ?? 0), 0));
 

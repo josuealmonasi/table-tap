@@ -1,5 +1,8 @@
 "use client";
 
+import { useTableMembership } from "@/hooks/useTableMembership";
+import TableJoinNotice from "./table-join-notice";
+import { useT } from "@/lib/i18n/context";
 import { useEffect, useMemo, useState } from "react";
 import {
   type Category,
@@ -82,6 +85,16 @@ export default function OrderingApp({
    */
   trackOrder?: TrackedOrder | null;
 }) {
+  const t = useT();
+  const membership = useTableMembership(restaurant.id, table?.id ?? null);
+  const canOrder = !table || membership.state?.status === "empty" || membership.state?.status === "approved";
+  // The visit card at a table: a phone let in carries its sitting's pass; at
+  // an empty table the page's own pass, so a party sitting down finds the card
+  // before ordering. A phone waiting to be let in, or declined, is not offered it.
+  const tableLoyalty = !table || !loyalty ? loyalty
+    : membership.state?.status === "approved" ? { ...loyalty, pass: membership.state.pass }
+    : membership.state?.status === "empty" && loyalty.pass ? loyalty
+    : null;
   const [orderNote, setOrderNote] = useState("");
   // Only ever filled from the general QR; the cart hides the field at a table.
   // Seeded from what they gave last time, so a second order does not mean
@@ -102,6 +115,8 @@ export default function OrderingApp({
     party,
     dividing,
   } = useTableBill(restaurant.id, table?.id ?? null, billOpen);
+
+  useEffect(() => { reloadBill(); }, [reloadBill, membership.state?.status, membership.state?.sessionId]);
 
   // Re-asks the server what is being served, so a dish pulled while this page
   // sat open stops being orderable here too.
@@ -174,6 +189,7 @@ export default function OrderingApp({
       // the moment they order interrupts a meal that has not started.
       setScreen("menu");
       reloadBill();
+      membership.refresh();
     },
   });
 
@@ -186,7 +202,7 @@ export default function OrderingApp({
         <MenuScreen
           restaurant={restaurant}
           table={table}
-          loyalty={loyalty}
+          loyalty={tableLoyalty}
           trackIds={trackIds}
           categories={categories}
           items={items}
@@ -211,11 +227,10 @@ export default function OrderingApp({
           // The visit card, offered once the money is settled — after the
           // receipt question, never on top of it, and not behind the tracker,
           // which offers it itself.
-          notice={
-            loyalty && paidNow && !offering && !tracking ? (
-              <LoyaltyOffer offer={loyalty} />
-            ) : null
-          }
+          notice={<>
+            {table && <TableJoinNotice restaurantId={restaurant.id} {...membership} />}
+            {tableLoyalty && paidNow && !offering && !tracking ? <LoyaltyOffer offer={tableLoyalty} /> : null}
+          </>}
           onOpenBill={() => {
             reloadBill();
             setBillOpen(true);
@@ -237,7 +252,9 @@ export default function OrderingApp({
             loading={loading}
             orderAtRegister={orderAtRegister}
             onEditItem={editLine}
-            onCheckout={checkout}
+            admissionBlocked={!canOrder}
+            admissionNotice={!canOrder && table ? <TableJoinNotice restaurantId={restaurant.id} {...membership} /> : null}
+            onCheckout={canOrder ? checkout : async () => { membership.refresh(); setNotice(t("apiErr.tableJoin")); }}
             onClose={() => setScreen("menu")}
           />
         )}
@@ -249,7 +266,7 @@ export default function OrderingApp({
             orderId={tracking}
             initialOrder={trackOrder?.id === tracking ? trackOrder : null}
             onClose={closeTracker}
-            loyalty={loyalty}
+            loyalty={tableLoyalty}
           />
         )}
         {table && bill && !bill.settled && (
@@ -261,7 +278,7 @@ export default function OrderingApp({
             restaurant={restaurant}
             tableId={table.id}
             tableLabel={table.label}
-            sessionId={sittingSessionId}
+            sessionId={membership.state?.status === "approved" ? membership.state.sessionId : sittingSessionId}
             staffBill={staffBill}
             party={party}
             dividing={dividing}

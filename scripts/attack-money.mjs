@@ -1,3 +1,5 @@
+import { memberFixture } from "./table-member-fixture.mjs";
+import { attackTableJoin } from "./attack-table-join.mjs";
 // ============================================================================
 // TableTap — attacking the routes that move money.
 //
@@ -70,7 +72,13 @@ async function patch(path, body, cookie) {
   return { status: res.status, body: await res.json().catch(() => ({})) };
 }
 
+let phoneMembers = null;
 async function post(path, body, cookie) {
+  // These older cases test money guards with an admitted diner. Admission
+  // attacks below use raw HTTP and never receive fixture approval.
+  if (!cookie && phoneMembers && /^\/api\/(bill|split)(\/|$)/.test(path)) {
+    cookie = await phoneMembers.cookieFor(path, body);
+  }
   const res = await fetch(`${base}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(cookie ? { cookie } : {}) },
@@ -98,6 +106,7 @@ console.log("\nAttacking the money routes — development\n");
 const { data: restaurants } = await admin.from("restaurants").select("id, name");
 const home = restaurants.find(r => r.name === "Demo Bistro") ?? restaurants[0];
 const neighbour = restaurants.find(r => r.id !== home.id);
+phoneMembers = memberFixture(admin, home.id);
 if (!neighbour) {
   console.log("    BAD      only one restaurant exists — cross-tenant cases cannot run\n");
   process.exit(1);
@@ -782,8 +791,11 @@ try {
 
   // ── A bill the waiter opened is not payable online ──────────────────────
   {
+    // Open, as the case says: the blocks above settle this table, which closes
+    // its sitting, and a closed sitting is refused at the door (the phone is a
+    // stranger to it) before the waiter's bill is ever asked about.
     await admin.from("table_sessions")
-      .update({ opened_by: "demo-waiter@tabletap.dev" }).eq("id", sitting.id);
+      .update({ opened_by: "demo-waiter@tabletap.dev", closed_at: null, close_reason: null }).eq("id", sitting.id);
     const { data: owed } = await admin
       .from("orders").select("id").eq("session_id", sitting.id).eq("paid", false);
     const before = await takings(home.id);
@@ -807,6 +819,8 @@ try {
       : bad(`the split route answered ${split.status} and left ${count} split(s)`);
   }
 
+  await attackTableJoin({ admin, base, who, home, ok, bad });
+
   await attackStock({ admin, ok, bad });
 
   // ── The visit card ─────────────────────────────────────────────────────
@@ -829,6 +843,7 @@ try {
   console.log("\n  The month's fee ceiling\n");
   await attackFeeCeiling({ admin, home, ok, bad });
 } finally {
+  await phoneMembers.cleanup();
   await sweep();
   if (raced) {
     await admin.from("menu_items").update({

@@ -1,3 +1,4 @@
+import { openSittingAt, tableMember } from "@/lib/table-membership";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -42,6 +43,24 @@ export async function POST(req: NextRequest) {
   if (!restaurantId) return await apiError("apiErr.invalidRequest", 400);
   const pass = readVisitPass(restaurantId, body?.pass);
   if (!pass) return await apiError("apiErr.loyaltyNeedsVisit", 403);
+
+  if (pass.place !== "counter" && "table" in pass.place) {
+    if (pass.place.session) {
+      const member = await tableMember(req, restaurantId, pass.place.table, pass.place.session).catch(() => null);
+      if (!member) return await apiError("apiErr.tableJoin", 403);
+    } else {
+      // A pass handed out at an empty table, so a party sitting down can find
+      // the card on the menu before ordering (the owner's "any time"). It stays
+      // good while the table is empty, and for a phone let into the party that
+      // has sat down since: a stranger who kept one is refused once somebody
+      // is eating there.
+      const sitting = await openSittingAt(restaurantId, pass.place.table).catch(() => undefined);
+      if (sitting === undefined) return await apiError("apiErr.generic", 500);
+      if (sitting && !(await tableMember(req, restaurantId, pass.place.table, sitting).catch(() => null))) {
+        return await apiError("apiErr.tableJoin", 403);
+      }
+    }
+  }
 
   const plan = await getPlan(restaurantId);
   if (!(await loyaltyOn(restaurantId, plan?.limits ?? null))) return await apiError("apiErr.loyaltyOff", 409);

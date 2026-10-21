@@ -20,6 +20,7 @@ export function useBillPayment(
   restaurantId: string,
   tableId: string,
   sessionId: string | null,
+  ownOrderIds: string[] = [],
 ) {
   const t = useT();
   const toast = useToast();
@@ -117,7 +118,7 @@ export function useBillPayment(
       const res = await fetch("/api/service-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ restaurantId, tableId, kind: "pay" }),
+        body: JSON.stringify({ restaurantId, tableId, sessionId, ownOrderIds, kind: "pay" }),
       });
       if (res.ok) {
         setCalled(true);

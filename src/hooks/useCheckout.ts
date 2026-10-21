@@ -82,10 +82,9 @@ export function useCheckout(input: CheckoutInput): {
           tipAmount: input.tipCustom ?? undefined,
           couponCode: input.coupon?.code,
           payLater,
-          // Which phone ordered. It is how many devices have ordered on the
-          // sitting that decides how many ways the bill can be divided — a
-          // share belongs to a device, and a share nobody can claim stops the
-          // whole table paying.
+          // A counter hint only. Table orders use the server-issued cookie
+          // and the approved member id, because a self-chosen id cannot
+          // prove who owns a split seat or permission to join this party.
           diner: dinerToken(restaurantId) || undefined,
         }),
       });

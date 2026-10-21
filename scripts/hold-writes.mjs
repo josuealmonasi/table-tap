@@ -35,6 +35,12 @@ export async function holdWrites(ctx, held) {
       if (READS.has(req.method())) return route.continue();
       const { pathname } = new URL(req.url());
       held.push(`${req.method()} ${pathname}`);
+      // Admission bootstrap is a POST because it issues a credential. A
+      // read-only sweep receives an honest unadmitted state, never a fake yes.
+      if (pathname === "/api/table-membership" && req.method() === "POST") {
+        return route.fulfill({ status: 200, contentType: "application/json",
+          body: JSON.stringify({ status: "pending", sessionId: null, diner: null, pass: "" }) });
+      }
       return route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -60,8 +66,13 @@ export async function fingerprint(admin, restaurantName) {
     if (e) throw new Error(`cannot fingerprint ${table}: ${e.message}`);
     return data;
   };
+  const { data: members, error: memberError } = await admin.from("table_session_members")
+    .select("id, status, session_id, table_sessions!inner(restaurant_id)")
+    .eq("table_sessions.restaurant_id", r.id).order("id");
+  if (memberError) throw new Error(`cannot fingerprint table membership: ${memberError.message}`);
   return JSON.stringify({
     settings,
+    members,
     orders: await rows("orders", "id, status, paid, written_off, total, discount"),
     menus: await rows("menus", "id, sort_order, active"),
     categories: await rows("categories", "id, sort_order"),

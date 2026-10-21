@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 const state = vi.hoisted(() => ({
-  orders: [{ id: "o1", tip: 0, total: 100, currency: "MXN", paid: false, created_at: "2026-10-20T10:00:00Z", items: [] }],
+  orders: [{ id: "o1", tip: 0, total: 100, currency: "MXN", diner: "d1", paid: false, created_at: "2026-10-20T10:00:00Z", items: [] }],
   principal: 100,
   orderFee: 0.75,
   shareNo: 1,
@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   record: vi.fn<(...args: unknown[]) => Promise<void>>(async () => {}),
   create: vi.fn(async () => ({ id: "cs_test", url: "https://stripe.test" })),
 }));
+vi.mock("@/lib/table-membership", () => ({ tableMember: async () => ({ id: "d1", sessionId: "t1", restaurantId: "r1", tableId: "t1", closed: false }) }));
 vi.mock("stripe", () => ({ default: class { checkout = { sessions: { create: state.create } }; } }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status = 400) => Response.json({ error }, { status }) }));
 vi.mock("@/lib/rate-limit", () => ({ isRoomLimited: async () => false, isTableLimited: async () => false, isRateLimited: async () => false, clientKey: () => "test" }));
@@ -54,7 +55,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: async 
 const bill = await import("@/app/api/bill/pay/route");
 const split = await import("@/app/api/split/pay/route");
 const account = await import("@/app/api/account/pay/route");
-beforeEach(() => { state.prior = null; state.orderFee = 0.75; state.shareNo = 1; state.principal = 100; state.reserve.mockClear(); state.create.mockClear(); state.record.mockReset().mockResolvedValue(undefined); state.orders = [{ id: "o1", tip: 0, total: 100, currency: "MXN", paid: false, created_at: "2026-10-20T10:00:00Z", items: [] }]; });
+beforeEach(() => { state.prior = null; state.orderFee = 0.75; state.shareNo = 1; state.principal = 100; state.reserve.mockClear(); state.create.mockClear(); state.record.mockReset().mockResolvedValue(undefined); state.orders = [{ id: "o1", tip: 0, total: 100, currency: "MXN", diner: "d1", paid: false, created_at: "2026-10-20T10:00:00Z", items: [] }]; });
 const request = () => new NextRequest("http://localhost/pay", { method: "POST", body: JSON.stringify({
   c: "account-code", expected: 100, restaurantId: "r1", tableId: "t1", orderIds: state.orders.map(o => o.id), splitId: "s1", sessionId: "t1", diner: "d1", ownOrderIds: ["o1", "o2"],
 }) });
