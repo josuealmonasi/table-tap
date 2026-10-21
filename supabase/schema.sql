@@ -6359,6 +6359,106 @@ revoke all on function public.collect_on_sitting_v2(uuid, uuid, numeric, numeric
 grant execute on function public.collect_on_sitting_v2(uuid, uuid, numeric, numeric, text, text, text)
   to service_role;
 
+-- Apply before deploying the batch caller. Keep collect_on_sitting_v2 for the
+-- deployed caller: this wrapper reuses its coverage, tip and allocation rules.
+create or replace function public.collect_on_sittings_v1(
+  p_restaurant uuid,
+  p_shares jsonb,
+  p_method text,
+  p_actor text,
+  p_ref text,
+  p_total numeric
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_session uuid;
+  v_share jsonb;
+  v_ref text;
+  v_seen numeric;
+  v_left numeric;
+  v_tip numeric;
+  v_amount numeric;
+  v_outcome jsonb;
+  v_outcomes jsonb := '[]'::jsonb;
+begin
+  if p_restaurant is null or p_method is null or p_method not in ('cash', 'card')
+    or nullif(btrim(p_ref), '') is null or p_total is null or p_total <= 0
+    or p_total::text in ('NaN', 'Infinity', '-Infinity') or p_total <> round(p_total, 2)
+    or jsonb_typeof(p_shares) is distinct from 'array' then
+    raise exception 'invalid collection';
+  end if;
+  if jsonb_array_length(p_shares) = 0 or exists (
+    select 1 from jsonb_to_recordset(p_shares) as s(session_id uuid, amount numeric, tip numeric)
+    where session_id is null or amount is null or amount <= 0 or amount <> round(amount, 2)
+      or amount::text in ('NaN', 'Infinity', '-Infinity') or tip is null or tip < 0 or tip > amount
+      or tip <> round(tip, 2) or tip::text in ('NaN', 'Infinity', '-Infinity')
+      or not exists(select 1 from table_sessions t where t.id = s.session_id and t.restaurant_id = p_restaurant)
+  ) or (select count(distinct (s->>'session_id')::uuid) from jsonb_array_elements(p_shares) s)
+    <> jsonb_array_length(p_shares) or exists (
+      select 1 from jsonb_array_elements(p_shares) with ordinality s(share, n)
+        where n > 1 and (share->>'tip')::numeric <> 0
+    ) then
+    raise exception 'invalid collection shares';
+  end if;
+
+  -- Same order as the deployed sitting writer: restaurant, allocation
+  -- backfill, then sitting. Bill, split and account writers share this lock.
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  perform public.backfill_payment_allocations(p_restaurant);
+  perform set_config('tabletap.allocation_scope', '', true);
+  for v_session in select (s->>'session_id')::uuid from jsonb_array_elements(p_shares) s order by 1 loop
+    perform pg_advisory_xact_lock(hashtextextended(v_session::text, 0));
+  end loop;
+
+  -- Include old positional receipts too. A retry after an older caller's
+  -- partial commit must finish that handful, never collect its first share
+  -- or gratuity again. Subtract from the original request, not today's debt.
+  select coalesce(sum(amount), 0) into v_seen from payments
+    where restaurant_id = p_restaurant
+      and (client_ref = p_ref or left(client_ref, length(p_ref) + 1) = p_ref || '#');
+  v_left := greatest(0, p_total - v_seen);
+
+  for v_share in select value from jsonb_array_elements(p_shares) loop
+    v_session := (v_share->>'session_id')::uuid;
+    select client_ref into v_ref from payments where restaurant_id = p_restaurant and session_id = v_session
+      and (client_ref = p_ref or left(client_ref, length(p_ref) + 1) = p_ref || '#')
+      order by created_at, id limit 1;
+    if found or v_left <= 0 then
+      v_outcome := jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'duplicate');
+    else
+      -- A single sitting keeps today's bare reference. Every multi-sitting
+      -- receipt uses its sitting id, including when only one remains on retry.
+      v_ref := case when jsonb_array_length(p_shares) = 1 and v_seen = 0 then p_ref
+        else p_ref || '#' || v_session::text end;
+      v_tip := case when v_seen > 0 then 0 else (v_share->>'tip')::numeric end;
+      v_amount := least(v_left, (v_share->>'amount')::numeric - (v_share->>'tip')::numeric + v_tip);
+      -- Do not catch errors here: a failure in any share, tip, allocation or
+      -- split write must roll every earlier share back with it.
+      v_outcome := public.collect_on_sitting_v2(p_restaurant, v_session, v_amount,
+        least(v_tip, v_amount), p_method, p_actor, v_ref);
+      v_left := v_left - (v_outcome->>'taken')::numeric;
+    end if;
+    if v_outcome->>'outcome' in ('written', 'duplicate') then
+      -- Retrying also repairs a split left open after an old partial attempt.
+      -- 'cancelled', as collect_on_sitting_v2 itself marks it when it writes.
+      update bill_splits set status = 'cancelled' where restaurant_id = p_restaurant
+        and session_id = v_session and status in ('proposed', 'locked');
+    end if;
+    v_outcomes := v_outcomes || jsonb_build_array(v_outcome);
+  end loop;
+  return v_outcomes;
+end;
+$$;
+revoke all on function public.collect_on_sittings_v1(uuid, jsonb, text, text, text, numeric)
+  from public, anon, authenticated;
+grant execute on function public.collect_on_sittings_v1(uuid, jsonb, text, text, text, numeric)
+  to service_role;
+
 create or replace function public.settle_orders_v2(
   p_restaurant uuid,
   p_orders     uuid[],

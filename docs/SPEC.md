@@ -1640,7 +1640,10 @@ stable largest-remainder tie break `(created_at, id)`. Existing order tip
 anchors are preserved: the receipt's tip follows its recorded order tip
 entitlement rather than being redistributed on cancellation. Frozen split
 order ids and account-checkout order ids prevent later rounds joining an old
-payment. Collection and the tip commit together through `collect_on_sitting_v2`.
+payment. Every sitting in one collection and its tip commit together through
+`collect_on_sittings_v1`, which keeps `collect_on_sitting_v2` as the compatible
+sitting writer. References follow sitting ids; retries subtract receipts already
+recorded from the original collection amount and do not add its tip again.
 A settled order must have retained coverage; a concurrent partial collection
 invalidates a stale full collection. Stripe charges arriving after another
 collection record only remaining coverage and preserve the excess in refunds due.

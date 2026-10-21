@@ -11,6 +11,7 @@
 // ============================================================================
 import { MARK, PART_AMOUNT, PART_TIP } from "./api-fixtures.mjs";
 import { offlineCases } from "./api-offline-cases.mjs";
+import { twoSittingCollection } from "./api-part-collection.mjs";
 import { loginByEmail } from "./logins.mjs";
 
 async function returnFor(f, orderId) {
@@ -1486,6 +1487,7 @@ export function cases(fx) {
           ? true
           : `approved, and the order still shows a discount of ${data?.discount}`;
       } },
+    twoSittingCollection(),
     // The calculator: a waiter collects part of a table's bill. A little of
     // it, so the bill stays open for the cases below.
     { name: "POST /api/table-payment/part", as: "waiter", method: "POST",

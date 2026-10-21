@@ -134,6 +134,7 @@ us, and what now catches each one.
 | The docs do not count what the code decides | `CLAUDE.md` said the API gate called 34 routes and the spec said 48; there were 61, and the dialog count was as far behind. A number in prose is right the day it is written. An invariant fails on a doc that counts routes, dialogs, overlays, tables, screens or pages, in digits or in words |
 | A visit card is made only from inside the restaurant | `POST /api/loyalty/card` took the restaurant's id alone, which is printed on every QR, so anybody could fill an owner's program with cards nobody carries. The page now hands out a signed visit pass for its table, order or the counter; one pass makes one card, each place has a ceiling. `pnpm api` makes a card from each page and sends one pass twice, none, and another restaurant's; an invariant keeps the checks before the insert |
 | A full room behind one Wi-Fi is not one phone | Every diner write was limited per address and sized for one phone, so a busy room shared ten payments a minute between all its tables. Each table now has that allowance behind each address, and the address a ceiling ten tables high, counted first. A unit test fills a room and invents tables; an invariant fails on a public write that takes a table and does not count it |
+| A handful collected across sittings commits whole (S3) | The second sitting failed after the first receipt committed, but the waiter was told it all landed. Positional references then collided on retry. `part-payment.spec.ts` injects the failure and checks stable retries, the original amount and tip; `part-payment-route.spec.ts` checks the retry error; the two-sitting API case checks receipts and coverage by effect |
 | A table is settled in one write | "Pagó en efectivo" marked the orders paid and then wrote the ledger; a failed second write left a bill paid with no money behind it, the corte short by that bill, and nothing could repair it because every path guards on `paid = false`. Closing a bill paid in parts ignored its write's error and answered "settled". Both go through `settle_orders()`: orders and payments together or not at all. `pnpm attack` settles one table five times at once; the API case checks the order and its one payment; an invariant keeps both routes on the function |
 | A card payment is recorded with the orders it paid | The webhook marked orders paid and then wrote the ledger, and claimed a divided bill's share and then recorded it; a failed second write left the diner's money recorded nowhere, and Stripe's repeat found nothing left to do. A failed close of a divided bill was never retried. `settle_card_orders()` and `settle_split_share()` do each as one write; unit tests cover a failure, a repeat and the tip; invariants keep the webhook off the ledger outside them |
 | A till sale and its money are one write | The till inserted the order already paid and then wrote the ledger; a failed second write was a sale in the day's orders with nothing in the corte. The sale now goes in as `pending_payment` and `settle_sale()` makes it paid, gives it its status and records the money at once; on failure the sale is deleted and its stock returned. The API case checks the sale has exactly its payment; an invariant keeps the till on the function |
@@ -2696,3 +2697,36 @@ already take their labels from the table row, and POS accepts no table label.
 `checkout-table-label.spec.ts` calls the actual route with mocked database
 answers for a forged destination, a counter label and a foreign/missing table.
 `invariants.spec.ts` guards those writers and the shared checkout row builder.
+## A handful collected across sittings commits whole (S3)
+
+A waiter holding MX$200 for two MX$100 sittings was told the collection worked
+when the second RPC failed: the first receipt was committed and its success hid
+the second error. On retry, the remaining sitting moved to position zero and
+reused the first sitting's reference, so its money could never be recorded.
+
+`record` now sends every share to `collect_on_sittings_v1`. The function takes
+the restaurant money lock, backfills allocations, then locks sittings in id
+order before calling the existing `collect_on_sitting_v2` inside the same
+transaction. Receipts, the first sitting's gratuity, allocations and ending
+splits commit together; any database error answers the waiter with a retry.
+The deployed single-sitting writer stays available during the release.
+
+Multi-sitting references include the sitting id. A single sitting keeps the
+bare reference, and receipts from an old partial attempt are recognized by
+both that reference and its old suffixes. The original handful is passed
+separately from today's capped debt: already recorded money is subtracted from
+that amount and an already recorded gratuity is never added again. Retrying a
+MX$150 collection after MX$100 landed must take only MX$50, even if the table
+still owes MX$100.
+
+Both directions share the existing allocation writer and live coverage cap.
+Whole-bill and own card settlement still use retained order coverage, a split
+cannot collect its frozen share after the cash ends it, and account charging
+still refuses sittings with pooled collections. `part-collection-schema.spec.ts`
+checks the lock order, service-only grants and these shared guards. The mocked
+second-sitting failure, retry and tip cases are in `part-payment.spec.ts`; the
+route test requires a retry sentence before any success log or bill close.
+The API case in `scripts/api-cases.mjs` creates an expired and an open sitting,
+collects MX$200 plus MX$10 tip, and checks both receipts, allocations and paid
+orders by effect, then removes its receipts, orders, sessions, table, print
+jobs and log. Run that case only after applying the new function.

@@ -85,7 +85,11 @@ async function collect(req: NextRequest): Promise<NextResponse> {
   const sessionId = await sittingFor(actor, body.tableId, before);
   if (!sessionId) return await apiError("apiErr.nothingToSettle", 409);
 
-  const { wrote, refused, covered, landed } = await record(actor, before, sessionId, taken, method!, ref);
+  const requested = applyPayment(Number.MAX_SAFE_INTEGER, Number(body.amount), Number(body.tip)).amount;
+  const { wrote, refused, covered, landed } = await record(actor, before, sessionId, taken, method!, ref, requested);
+  // A failed batch recorded nothing. Do not close the bill or hide this error
+  // behind a later read: the waiter holding the cash needs to retry this tap.
+  if (!wrote && !refused && !covered) return await apiError("apiErr.collectionFailed", 500);
 
   // `wrote` is false when nothing new reached the ledger. That has two causes
   // and they are not the same thing:
@@ -99,12 +103,12 @@ async function collect(req: NextRequest): Promise<NextResponse> {
   //   that it was already recorded, which is the one thing it must never say.
   //
   // Either way the tip and the log line are skipped, because both belong to
-  // the collection that did land, and everything after still runs: the first
-  // attempt may have been cut off before it closed the bill.
+  // the collection that did land. A duplicate still retries closing the bill:
+  // the first attempt may have been cut off before it closed it.
   // The gratuity follows the food it thanks somebody for, so it is clamped to
   // what actually landed rather than to what was typed: a colleague collecting
   // the same table first leaves less room than this request read.
-  // The collection and its tip commit together in collect_on_sitting_v2.
+  // Every sitting and its tip commit together in collect_on_sittings_v1.
 
   const after = await tableOutstanding(actor.restaurantId, body.tableId);
   const settled = after.owed <= 0 && (await closeBill(actor, body.tableId, method!));
@@ -137,7 +141,7 @@ async function collect(req: NextRequest): Promise<NextResponse> {
 
   // Nothing landed and it was neither a duplicate nor a covered bill: say so
   // rather than dressing a failure up as a collection that already happened.
-  if (!wrote && !refused) return await apiError("apiErr.generic", 500);
+  if (!wrote && !refused) return await apiError("apiErr.collectionFailed", 500);
 
   return NextResponse.json({
     ok: true,
