@@ -99,6 +99,8 @@ for (const [fn, args] of [
   ["open_table_session", { p_restaurant: crypto.randomUUID(), p_table: crypto.randomUUID(), p_max_hours: 8 }],
   ["close_session_if_clear", { p_session: crypto.randomUUID(), p_reason: "paid" }],
   ["claim_founding_price", { p_restaurant: crypto.randomUUID(), p_limit: 50 }],
+  ["save_promotion_v1", { p_restaurant: crypto.randomUUID(), p_id: null, p_fields: {}, p_items: [] }],
+  ["duplicate_menu_v1", { p_restaurant: crypto.randomUUID(), p_source: crypto.randomUUID() }],
   ["redeem_coupon", { p_coupon_id: crypto.randomUUID() }],
   ["rate_limit_hit", { p_bucket: "probe", p_window_seconds: 60 }],
   // Seeding dietary tags belongs to the trigger and nobody else. RLS would stop
@@ -194,6 +196,7 @@ for (const [method, path, body] of [
   ["POST", "/api/bill/write-off/approve", { requestId: crypto.randomUUID(), approve: true }],
   ["POST", "/api/table-payment", { tableId: crypto.randomUUID(), settlement: "cash" }],
   ["POST", "/api/settings", { name: "hacked" }],
+  ["POST", "/api/menu/duplicate", {}],
   ["POST", "/api/coupons", { code: "AAA-BBB", kind: "percent", value: 10 }],
   ["POST", "/api/staff", { email: "x@y.z", role: "owner" }],
   ["PATCH", "/api/orders", { id: crypto.randomUUID(), status: "ready" }],

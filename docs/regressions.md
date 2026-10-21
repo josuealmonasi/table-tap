@@ -14,6 +14,9 @@ us, and what now catches each one.
 
 | Rule | The bug it came from |
 |---|---|
+| A promotion's terms and components commit and read together (S14 J2) | Separate writes and reads exposed a new price with old or missing dishes |
+| Frozen offers only switch off, through routes and direct writes (S14 J16) | A manager could edit or resume promotions and coupons on a frozen restaurant |
+| A menu copy keeps settings and publishes only after every row succeeds (S14 J14) | A partial, active copy lost discounts, schedules, dietary tags and preparation settings |
 | A statement email is capped per account and per restaurant, never on the recipient (G5) | One account code could mail the same stranger ~400 times a day |
 | Coupon entitlements and card receipts agree before money moves (S5 E4) | A MX$90 discounted charge recorded MX$100 and could later reserve a MX$100 return |
 | A coupon use belongs to one checkout attempt (S5 E7) | An old expiry released the newer payment page's reservation on the same order |
@@ -2990,3 +2993,45 @@ confirm the new phone can then order and open the bill. Close the sitting,
 seat a new party, and confirm the old phone can still see/pay its own food
 without seeing the new bill. Also check a staff-opened bill and a legacy
 phone's own-order payment during rollout.
+
+
+## A promotion edited and read in pieces (S14 J2)
+
+The promotion's terms and components had to agree. PATCH saved the new price,
+then separately deleted and inserted the links. Restoring links after a failure
+kept the changed price. POST also exposed its parent before attaching products.
+`save_promotion_v1` now locks the owned parent and commits every write together;
+a failure rolls back the whole change. `fetchPromotions` uses one nested SELECT,
+so a concurrent edit cannot split a read across two versions.
+`offers-atomic.spec.ts` reproduces split writes and failed replacement;
+`promotions-data.spec.ts` checks one request. `offers-schema.spec.ts` checks SQL
+contracts; it does not execute PostgreSQL. The new SQL leaves price and tier
+constraints in place, including the upcoming `promotions_tiers_sound` check.
+
+## Frozen offers that kept changing (S14 J16)
+
+The routes and database had to agree on a freeze. Creation checked it, but
+edits, resuming and deletion did not. Both routes now refuse those writes;
+only `{ id, active: false }` may bypass the freeze. A database trigger applies
+the same rule to authenticated writes to promotions, their components and
+coupons. Changing any other field with the off flag is refused. Server coupon
+claims still work, so a billing freeze cannot interrupt payment.
+`offers-atomic.spec.ts` reproduces each route bypass. `api-frozen-offers.mjs`
+adds cases for both kinds, with before/after effect checks and cleanup; these
+cases must be run by the release owner after applying SQL.
+
+## A menu copy that lost settings and stopped halfway (S14 J14)
+
+The editor's loaded rows and the saved menu had to agree. It copied rows one at
+a time, published immediately, omitted schedule, discount, dietary and kitchen
+settings, and left earlier writes behind on failure. Prices were already
+copied; that part of the audit claim did not reproduce. `duplicate_menu_v1`
+reads the complete source in one snapshot, explicitly copies settings for both
+products and extras, remaps sections and links, then publishes as its last
+write. A failure rolls everything back. The copy preserves the original active
+switch and schedule; a newly copied schedule still requires its plan feature.
+Stock is always null with a fresh tracking state: physical stock stays with
+the original dish. Availability stays as saved, including unavailable dishes.
+`menu-duplicate.spec.ts` checks the request and failure handling;
+`offers-schema.spec.ts` checks the SQL copy contract. Run the added menu-copy
+API case and inspect the confirmation text in both languages before release.

@@ -76,8 +76,8 @@ export async function POST(req: NextRequest) {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
-  // Creating is gated, editing is not: a restaurant that drops a tier keeps
-  // the codes it already handed out and must still be able to switch them off.
+  // Creating needs the feature; a downgrade keeps the codes already handed
+  // out. A freeze allows only switching them off, never changing their terms.
   const frozen = await frozenBlocks(actor.restaurantId);
   if (frozen) return frozen;
 
@@ -135,6 +135,12 @@ export async function PATCH(req: NextRequest) {
   const id = String(body.id ?? "");
   if (!id) return await apiError("apiErr.invalidRequest", 400);
 
+  const offOnly = body.active === false && Object.keys(body).length === 2;
+  if (!offOnly) {
+    const frozen = await frozenBlocks(actor.restaurantId);
+    if (frozen) return frozen;
+  }
+
   // Pausing is a single-field update and skips the rest of the validation.
   if (typeof body.active === "boolean" && Object.keys(body).length === 2) {
     const { error } = await createAdminClient()
@@ -187,6 +193,9 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
+
+  const frozen = await frozenBlocks(actor.restaurantId);
+  if (frozen) return frozen;
 
   const body = await jsonBody<Record<string, unknown>>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);

@@ -177,6 +177,7 @@ export const en = {
     cafeCsv: "category,name,price,description,emoji\nCoffee,Americano,35,,☕\nCoffee,Espresso,30,,☕\nCoffee,Cappuccino,45,,☕\nCoffee,Latte,48,,☕\nCoffee,Mocha,52,,☕\nCoffee,Café de olla,38,With cinnamon and piloncillo,☕\nCold drinks,Coffee frappé,58,,🧋\nCold drinks,Iced tea,38,,🧊\nOther drinks,Hot chocolate,45,,🍫\nOther drinks,Tea,32,,🍵\nBakery,Croissant,38,,🥐\nBakery,Concha,22,,🍞\nBakery,Muffin,35,,🧁\nTo eat,Ham and cheese sandwich,75,,🥪\nTo eat,Chilaquiles,95,Green or red,🍳",
   },
   write: {
+    duplicateMenu: "Couldn't duplicate the menu. Refresh the menu list before trying again.",
     sectionStation: "Couldn't save where the section is made",
     createTable: "Couldn't add the table",
     renameTable: "Couldn't rename the table",
@@ -308,7 +309,7 @@ myBill: "View my bill",
       "All of its sections, products and extras will be permanently deleted. This can't be undone.",
     duplicateConfirm: "Duplicate “{name}”?",
     duplicateMsg:
-      "This makes a copy with all of its sections, products and extras. You can rename it afterward.",
+      "This copies the sections, products, extras, prices, discounts and opening hours. Stock counts stay with the original dishes. You can rename the copy afterward.",
     selected: "selected",
     deleteSelectedConfirm: "Delete the selected items?",
     deleteSelectedMsg:

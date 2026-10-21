@@ -237,3 +237,6 @@ drop function if exists public.diner_checkout_bind(uuid, jsonb);
 drop function if exists public.finish_diner_checkout(uuid, boolean);
 drop function if exists public.bind_diner_coupon() cascade;
 drop function if exists public.bind_redemption_checkout() cascade;
+drop function if exists public.save_promotion_v1(uuid, uuid, jsonb, jsonb);
+drop function if exists public.duplicate_menu_v1(uuid, uuid);
+drop function if exists public.enforce_offer_write();

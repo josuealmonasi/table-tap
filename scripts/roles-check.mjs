@@ -104,6 +104,7 @@ const PAGES = {
 // invite an address at a stranger's domain. `passes` is the one answer an allowed role may get; any
 // other, a 2xx above all, fails the run.
 const ROUTES = [
+  { m: "POST", p: "/api/menu/duplicate", body: {}, allow: MANAGES, passes: 400 },
   { m: "GET", p: "/api/pos/recover", allow: MANAGES },
   { m: "POST", p: "/api/pos/recover", body: {}, allow: MANAGES, passes: 400 },
   { m: "GET", p: "/api/order-refunds", allow: MANAGES },
