@@ -517,7 +517,13 @@ export function cases(fx) {
     // A share whose checkout another tab is opening right now: its slice of
     // the fee is reserved and its session not yet noted. A second checkout
     // used to open beside it fee-free, and a diner who paid both paid twice.
-    { name: "POST /api/split/pay (a share whose checkout is already being opened)", as: "diner", method: "POST",
+    // A share whose checkout is already open is resumed, never opened twice:
+    // two payable pages for one share is a diner charged twice. The open
+    // attempt is planted as the route records one (before Stripe answers), and
+    // the case is judged by effect: still exactly one open attempt for the
+    // share. Resuming asks Stripe for that session, which the borrowed reader's
+    // account cannot answer here, so the route's own answer is a 502.
+    { name: "POST /api/split/pay (a share whose checkout is already open)", as: "diner", method: "POST",
       path: "/api/split/pay",
       arrange: async f => {
         const lend = await f.withCardReader();
@@ -525,19 +531,29 @@ export function cases(fx) {
           restaurant_id: r, table_id: f.splitTableId, session_id: f.splitSessionId, items: [], subtotal: 50,
           service_fee: 0, tip: 0, tax_pct: 0, discount: 0, total: 50, note: MARK, status: "received",
         }).select("id").single();
-        const month = new Date().toISOString().slice(0, 7) + "-01";
-        const { data: held } = await f.admin.from("platform_fees").insert({
-          restaurant_id: r, period: month, cents: 1, status: "open", source: "split", ref: `split:${f.lockedSplitId}:1`,
+        f.openShareScope = `split:${f.lockedSplitId}:1`;
+        const { data: attempt, error } = await f.admin.from("diner_checkouts").insert({
+          restaurant_id: r, stripe_account_id: "acct_api_check", livemode: false, currency: "MXN",
+          amount_cents: 5000, metadata: { restaurant_id: r }, order_ids: [food.id], status: "open",
+          scope_key: f.openShareScope, idempotency_key: `${MARK}-${f.openShareScope}`,
+          stripe_params: { mode: "payment" },
         }).select("id").single();
+        if (error) throw new Error(`could not plant the open attempt: ${error.message}`);
         return async () => {
-          if (held?.id) await f.admin.from("platform_fees").delete().eq("id", held.id);
+          await f.admin.from("diner_checkouts").delete().eq("restaurant_id", r).eq("scope_key", f.openShareScope);
+          if (attempt?.id) await f.admin.from("diner_checkouts").delete().eq("id", attempt.id);
           if (food?.id) await f.admin.from("orders").delete().eq("id", food.id);
           await lend();
         };
       },
       body: async f => ({ splitId: f.lockedSplitId, sessionId: f.splitSessionId,
         diner: `${MARK}-unpaid`, restaurantId: r, tableId: f.splitTableId }),
-      expect: [409], expectError: /pago en línea en curso para tu parte|already in progress/i },
+      expect: [200, 502],
+      effect: async f => {
+        const { count } = await f.admin.from("diner_checkouts").select("id", { count: "exact", head: true })
+          .eq("restaurant_id", r).eq("scope_key", f.openShareScope).eq("status", "open");
+        return count === 1 || `${count} open checkouts for one share`;
+      } },
     { name: "POST /api/split/pay (a share already paid)", as: "diner", method: "POST",
       path: "/api/split/pay", arrange: f => f.withCardReader(),
       body: async f => ({ splitId: f.lockedSplitId, sessionId: f.splitSessionId,
@@ -1742,8 +1758,9 @@ export function cases(fx) {
         orderIds: [f.billOrder],
       }),
       // Scoped by restaurant AND table, so an id from elsewhere matches
-      // nothing and the bill reads as settled rather than as somebody else's.
-      expect: [409], expectError: /pagada|settled/i },
+      // nothing, and the diner is asked to look again: never told it is paid,
+      // which would send them away from a table they still owe.
+      expect: [409], expectError: /cambió|changed/i },
 
     // ── promotions: the rest of their life ───────────────────────────────
     { name: "PATCH /api/promotions (switch off)", as: "manager", method: "PATCH", path: "/api/promotions",
