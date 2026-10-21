@@ -382,7 +382,15 @@ dishes on a bill the restaurant has just cancelled.
   asked first so a row is never marked for a refund that does not exist; a
   retry finds the refund Stripe already made by its `refund_due` tag instead
   of making a second. One already refunded by hand in Stripe is marked done
-  and our fee on it returned. Its log line carries no `method`, because the
+  and our fee on it returned. Customer completion stays independent of fee
+  completion: a failed fee return or lookup leaves `fee_reconciled_at` empty,
+  keeps the row visible with a fee-only retry, and is recovered after a Bills
+  response. Its exact fee request is saved before Stripe is called and provider
+  metadata recovers lost responses after idempotency expires. The obligation
+  keeps the verified charge's currency and account from its frozen checkout;
+  older rows are verified from checkout or Stripe evidence where possible and
+  otherwise displayed as unverified. Display, approval, activity and the money
+  report never substitute the menu's current currency. Its log line carries no `method`, because the
   corte takes `refunded` rows with one out of the day's takings and this money
   was never in them. The bell's notice opens Cuentas abiertas.
 - **The month's fee ceiling lives in its own ledger.** Each plan caps our

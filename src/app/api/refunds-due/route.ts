@@ -27,5 +27,5 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const answer = await refundDue(createAdminClient(), actor.restaurantId, body.id, actor.email);
   if (!answer.ok) return await apiError(answer.error, answer.status);
-  return NextResponse.json({ ok: true, amount: answer.amount, alreadyInStripe: answer.alreadyInStripe });
+  return NextResponse.json({ ok: true, amount: answer.amount, alreadyInStripe: answer.alreadyInStripe, feePending: answer.feePending ?? false });
 }

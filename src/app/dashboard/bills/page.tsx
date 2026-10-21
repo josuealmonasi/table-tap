@@ -20,7 +20,7 @@ import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { EMPTY_TILL, tillFrom } from "@/lib/till";
 import TillCard from "@/components/dashboard/TillCard";
 import RefundsDue from "@/components/dashboard/RefundsDue";
-import type { RefundDueRow } from "@/lib/refund-due";
+import { refundsDue } from "@/lib/refunds/due-list";
 import type { Order } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -108,17 +108,7 @@ export default async function BillsPage() {
   // waiting to be given back. Owner and manager only, the same line as the
   // route that refunds them. The Stripe account is read with the secret key
   // because a browser's own client is not granted that column.
-  const refunds = MANAGES(membership.role)
-    ? ((unwrap(
-        await db
-          .from("refunds_due")
-          .select("id, amount, table_label, account_name, created_at")
-          .eq("restaurant_id", r.id)
-          .is("refunded_at", null)
-          .order("created_at", { ascending: true }),
-        "the refunds due",
-      ) ?? []) as RefundDueRow[])
-    : [];
+  const refunds = MANAGES(membership.role) ? await refundsDue(r.id) : [];
   const stripeAccount = refunds.length
     ? (unwrap(
         await db.from("restaurants").select("stripe_account_id").eq("id", r.id).single(),
@@ -213,7 +203,6 @@ export default async function BillsPage() {
         <OrderRefunds refunds={MANAGES(membership.role) ? await orderRefunds(r.id) : []} />
         <RefundsDue
           refunds={refunds}
-          currency={r.currency}
           canRefund={Boolean(stripeAccount?.stripe_account_id)}
         />
         {/* Above the log, because counting your own drawer is a thing you do

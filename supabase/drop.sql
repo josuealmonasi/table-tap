@@ -237,3 +237,5 @@ drop function if exists public.diner_checkout_bind(uuid, jsonb);
 drop function if exists public.finish_diner_checkout(uuid, boolean);
 drop function if exists public.bind_diner_coupon() cascade;
 drop function if exists public.bind_redemption_checkout() cascade;
+drop function if exists public.start_refund_due_fee(uuid, uuid, text, int);
+drop function if exists public.stamp_refund_due_charge() cascade;

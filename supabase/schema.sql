@@ -7436,28 +7436,83 @@ revoke all on refund_due_attempts from anon, authenticated;
 revoke all on refund_due_attempts from public;
 grant select, insert, update, delete on refund_due_attempts to service_role;
 
+-- Customer completion and our fee completion are separate facts. A failed fee
+-- lookup must remain recoverable even after the diner's money is back.
+alter table refunds_due add column if not exists fee_reconciled_at timestamptz;
+alter table refunds_due add column if not exists fee_request jsonb;
+alter table refunds_due add column if not exists currency text check (currency ~ '^[A-Z]{3}$');
+alter table refunds_due add column if not exists stripe_account_id text;
+
+-- The verified checkout exists before settlement inserts an obligation. Use
+-- its frozen currency/account, never today's menu or the order's display price.
+create or replace function public.stamp_refund_due_charge()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare c diner_checkouts;
+begin
+  select * into c from diner_checkouts
+    where restaurant_id = new.restaurant_id and stripe_payment_intent = new.stripe_payment_intent;
+  if c.id is not null then
+    new.currency := c.currency;
+    new.stripe_account_id := c.stripe_account_id;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.stamp_refund_due_charge() from public, anon, authenticated;
+grant execute on function public.stamp_refund_due_charge() to service_role;
+drop trigger if exists refund_due_charge on refunds_due;
+create trigger refund_due_charge before insert on refunds_due
+  for each row execute function public.stamp_refund_due_charge();
+
+-- Older rows with no charge evidence stay unverified. Do not infer currency
+-- from the restaurant, its orders, or a notification written from menu settings.
+update refunds_due d set currency = c.currency, stripe_account_id = coalesce(d.stripe_account_id, c.stripe_account_id)
+  from diner_checkouts c where d.restaurant_id = c.restaurant_id
+    and d.stripe_payment_intent = c.stripe_payment_intent and d.currency is null;
+
 create or replace function public.start_refund_due_attempt(p_restaurant uuid, p_due uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare d refunds_due; a refund_due_attempts; v_account text; v_no int;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   select * into d from refunds_due where id = p_due and restaurant_id = p_restaurant for update;
-  if d.id is null or d.refunded_at is not null then return null; end if;
+  if d.id is null then return null; end if;
   select * into a from refund_due_attempts where due_id = d.id order by attempt_no desc limit 1;
-  if a.id is null or a.provider_status in ('failed', 'canceled') then
+  if a.id is null or (d.refunded_at is null and a.provider_status in ('failed', 'canceled')) then
     v_no := coalesce(a.attempt_no, 0) + 1;
-    v_account := a.stripe_account_id;
+    v_account := coalesce(a.stripe_account_id, d.stripe_account_id);
     if v_account is null then select stripe_account_id into v_account from restaurants where id = p_restaurant; end if;
     if v_account is null then return null; end if;
-    insert into refund_due_attempts(restaurant_id, due_id, attempt_no, idempotency_key, amount, stripe_account_id, stripe_payment_intent)
+    insert into refund_due_attempts(restaurant_id, due_id, attempt_no, idempotency_key, amount, stripe_account_id, stripe_payment_intent, stripe_refund_id, provider_status)
       values(p_restaurant, d.id, v_no, 'refund-due-' || d.id || case when v_no = 1 then '' else '-' || v_no end,
-        coalesce(a.amount, d.amount), v_account, coalesce(a.stripe_payment_intent, d.stripe_payment_intent)) returning * into a;
+        coalesce(a.amount, d.amount), v_account, coalesce(a.stripe_payment_intent, d.stripe_payment_intent),
+        d.stripe_refund_id, case when d.refunded_at is not null then 'succeeded' end) returning * into a;
   end if;
+  update refunds_due set stripe_account_id = a.stripe_account_id where id = d.id and stripe_account_id is null;
   return to_jsonb(a);
 end;
 $$;
 revoke all on function public.start_refund_due_attempt(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.start_refund_due_attempt(uuid, uuid) to service_role;
+
+-- Persist the exact fee request before calling Stripe. Concurrent retries and
+-- a lost response must reuse its amount even if another refund changes the fee.
+create or replace function public.start_refund_due_fee(p_restaurant uuid, p_due uuid, p_fee text, p_amount int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare d refunds_due;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into d from refunds_due where restaurant_id = p_restaurant and id = p_due for update;
+  if d.id is null or d.refunded_at is null then return null; end if;
+  if d.fee_request is not null then return d.fee_request; end if;
+  if p_fee is null or p_amount is null or p_amount <= 0 then raise exception 'invalid fee return'; end if;
+  update refunds_due set fee_request = jsonb_build_object('fee_id', p_fee, 'amount', p_amount)
+    where id = d.id returning fee_request into d.fee_request;
+  return d.fee_request;
+end;
+$$;
+revoke all on function public.start_refund_due_fee(uuid, uuid, text, int) from public, anon, authenticated;
+grant execute on function public.start_refund_due_fee(uuid, uuid, text, int) to service_role;
 
 create or replace function public.finish_refund_due_attempt(
   p_restaurant uuid, p_due uuid, p_attempt uuid, p_actor text, p_refund text, p_status text

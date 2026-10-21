@@ -37,7 +37,13 @@ export function useLogWords(currency: string): {
     if (fields.table) parts.push(t("dash.tableN", { label: fields.table }));
     if (fields.code) parts.push(fields.code);
     if (fields.orders) parts.push(t("dash.logOrders", { n: fields.orders }));
-    if (fields.amount) parts.push(`${formatMoney(Number(fields.amount), fields.currency ?? currency)}${fields.currency ? ` ${fields.currency}` : ""}`);
+    if (fields.amount) {
+      // Older duplicate charges have no proven currency. Today's menu cannot
+      // supply one, even for an activity row written before currency was saved.
+      const unknown = fields.currency === "unverified" || (fields.why === "paid twice" && !fields.currency);
+      parts.push(unknown ? `${Number(fields.amount).toFixed(2)} · ${t("refunds.currencyUnknown")}`
+        : `${formatMoney(Number(fields.amount), fields.currency ?? currency)}${fields.currency ? ` ${fields.currency}` : ""}`);
+    }
     if (fields.method) parts.push(t(`dash.pay${fields.method}`));
     if (fields.order) parts.push(`#${fields.order}`);
     // What a part-payment left behind, so the line says how much of the bill

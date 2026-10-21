@@ -61,6 +61,26 @@ describe("refunding a payment taken twice", () => {
     expect(rows[0]).toMatchObject({ stripe_refund_id: "re_1", refunded_at: expect.any(String) });
   });
 
+  it("retries an outstanding fee after customer completion without another customer refund", async () => {
+    vi.mocked(syncReturnedFee).mockRejectedValueOnce(new Error("fee unavailable"));
+    const rows = [due()]; const db = fakeDb(rows); const { client, calls } = fakeStripe();
+    expect(await refundDue(db, "r1", "d1", "manager", client)).toMatchObject({ ok: true, feePending: true });
+    expect(rows[0].fee_reconciled_at).toBeUndefined();
+    const completed = rows[0].refunded_at;
+    expect(await refundDue(db, "r1", "d1", "manager", client)).toMatchObject({ ok: true });
+    expect(rows[0].fee_reconciled_at).toEqual(expect.any(String));
+    expect(syncReturnedFee).toHaveBeenCalledTimes(2);
+    expect(calls.create).toHaveBeenCalledTimes(1);
+    expect(rows[0].refunded_at).toBe(completed);
+    expect(logged).toHaveLength(1);
+  });
+
+  it("reports the charge currency instead of relabelling the refund", async () => {
+    const rows = [due()]; const { client } = fakeStripe();
+    await refundDue(fakeDb(rows), "r1", "d1", "manager", client);
+    expect(logged[0].detail).toContain("currency=USD");
+  });
+
   it("preserves a pending attempt and retrieves it without creating another refund", async () => {
     const rows = [due()]; const db = fakeDb(rows);
     const { client, calls } = fakeStripe({ create: async () => ({ id: "re_wait", status: "pending" }),
@@ -109,7 +129,7 @@ describe("refunding a payment taken twice", () => {
 
   it("refuses one already refunded, another restaurant's, or one with no Stripe account", async () => {
     const { client, calls } = fakeStripe();
-    expect(await refundDue(fakeDb([due({ refunded_at: "2026-10-03" })]), "r1", "d1", "a", client)).toMatchObject({ status: 409 });
+    expect(await refundDue(fakeDb([due({ refunded_at: "2026-10-03", fee_reconciled_at: "2026-10-03" })]), "r1", "d1", "a", client)).toMatchObject({ status: 409 });
     expect(await refundDue(fakeDb([due()]), "r2", "d1", "a", client)).toMatchObject({ status: 404 });
     expect(await refundDue(fakeDb([due()], null), "r1", "d1", "a", client)).toMatchObject({
       error: "apiErr.refundNeedsStripe",
