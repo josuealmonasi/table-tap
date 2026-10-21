@@ -1444,7 +1444,6 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     restaurantDeleteRefund: "Este restaurante todavía tiene devoluciones por terminar. Complétalas antes de eliminarlo.",
     restaurantDeleteRefundDue: "Este restaurante todavía debe dinero a clientes por pagos duplicados. Devuélvelo antes de eliminar el restaurante.",
     restaurantDeleteProvider: "Un pago con tarjeta o una devolución todavía necesita confirmación. Revisa su resultado antes de eliminar este restaurante.",
-    restaurantDeleteAccounting: "Este restaurante tiene pedidos, recibos o registros contables que deben conservarse. No se puede eliminar de forma permanente.",
     adminAuditUnavailable: "El historial de administración no está disponible. Intenta más tarde.",
     adminActionUncertain: "La acción pudo haberse completado, pero no se pudo confirmar su resultado. Revisa el restaurante o el usuario antes de intentar de nuevo.",
     restaurantNotFound: "Restaurante no encontrado",

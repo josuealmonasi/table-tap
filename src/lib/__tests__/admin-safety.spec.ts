@@ -10,6 +10,7 @@ let resultAuditFails = false;
 let finalBlocker: string | null;
 let planRefused = false;
 let allowed = true;
+let staffIds: string[] = [];
 const admin = { userId: "11111111-1111-4111-8111-111111111111", email: "admin@test.dev" };
 vi.mock("@/lib/admin", () => ({ getPlatformAdmin: async () => allowed ? admin : null }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => NextResponse.json({ error }, { status }) }));
@@ -50,7 +51,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
           events.push(insert);
         }
         if (deleting) effects.push(`delete:${table}`);
-        return Promise.resolve({ data: table === "staff" ? [] : null, error: null }).then(resolve);
+        return Promise.resolve({ data: table === "staff" ? staffIds.map(user_id => ({ user_id })) : null, error: null }).then(resolve);
       },
     };
     return q;
@@ -63,7 +64,7 @@ const request = (path: string, method: string, body: object) => new NextRequest(
 });
 beforeEach(() => {
   events.length = 0; effects.length = 0; blocker = null; finalBlocker = null;
-  auditFails = false; resultAuditFails = false; allowed = true; planRefused = false;
+  auditFails = false; resultAuditFails = false; allowed = true; planRefused = false; staffIds = [];
   rpc.mockReset().mockImplementation(async (fn: string, args: { p_check_only?: boolean }) => {
     if (fn === "admin_delete_restaurant") {
       if (blocker) return { data: { outcome: blocker }, error: null };
@@ -74,7 +75,7 @@ beforeEach(() => {
     return { data: true, error: null };
   });
 });
-it.each(["refund", "refundDue", "provider", "accounting"])("refuses deletion for %s before touching billing or logins and records it", async reason => {
+it.each(["refund", "refundDue", "provider"])("refuses deletion for %s before touching billing or logins and records it", async reason => {
   blocker = reason;
   const response = await restaurants.DELETE(request("restaurants", "DELETE", { id: "33333333-3333-4333-8333-333333333333" }));
   expect(response.status).toBe(409);
@@ -86,6 +87,15 @@ it("deletes only through the locked RPC, after billing ends and before login cle
   expect((await restaurants.DELETE(request("restaurants", "DELETE", { id: "33333333-3333-4333-8333-333333333333" }))).status).toBe(200);
   expect(effects).toEqual(["billing", "restaurant-delete"]);
   expect(rpc).toHaveBeenCalledWith("admin_delete_restaurant", expect.objectContaining({ p_check_only: false }));
+});
+it("leaves staff logins intact and records uncertainty when the final accounting copy fails", async () => {
+  staffIds = ["55555555-5555-4555-8555-555555555555"];
+  rpc.mockImplementation(async (_fn: string, args: { p_check_only?: boolean }) =>
+    args.p_check_only ? { data: { outcome: "ready" }, error: null }
+      : { data: null, error: { message: "accounting copy failed" } });
+  expect((await restaurants.DELETE(request("restaurants", "DELETE", { id: "33333333-3333-4333-8333-333333333333" }))).status).toBe(500);
+  expect(effects).toEqual(["billing"]);
+  expect(events.at(-1)).toMatchObject({ outcome: "uncertain" });
 });
 it("records founding-owner password resets without ever storing the password", async () => {
   const password = "never-put-this-in-audit";

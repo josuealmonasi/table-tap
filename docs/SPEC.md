@@ -39,15 +39,22 @@ cleared, nothing is charged, the move is written in the restaurant's activity
 log, and one still billed by a live Stripe subscription is refused, since the
 next billing event would write Stripe's plan back over it.
 
-Permanent deletion is limited to restaurants with no orders, receipts or other
-accounting history. `admin_delete_restaurant` takes `lock_restaurant_money` and
-the restaurant row lock, refuses unfinished refunds, duplicate-payment refunds
-and unconfirmed provider work with a specific admin message, and retains even
-completed refund records by refusing deletion. The route checks before touching
-billing or logins and checks atomically again at deletion. Staff logins are
-removed only after that guarded deletion; their IDs survive in the billing
-recovery record until cleanup completes. Existing restaurants stay available
-for their team to finish refunds. There is no archive state in this change.
+Permanent deletion is refused only while a refund, duplicate-payment return or
+provider operation is unfinished. `admin_delete_restaurant` takes
+`lock_restaurant_money` and the restaurant row lock, then copies completed books
+to `restaurant_accounting_records` before cascading the live restaurant away.
+Each copy keeps its source table, original row ID and contents under the
+restaurant ID, with no restaurant FK. Orders, receipts and their allocations,
+returns and attempts, adjustments, cash records, customer accounts, purchases,
+checkout provenance, activity and visit/admission records survive. Customer
+account email and statement access codes are excluded. RLS denies clients;
+only the guarded definer inserts, and service-only reads/deletes support
+accounting retention and expiry under the privacy notice. No profile, menu or
+staff directory is copied. A failed copy or deletion rolls back the transaction.
+The route checks before touching billing or logins and checks atomically again
+at deletion. Staff logins are removed only after that guarded deletion; their
+IDs survive in the billing recovery record until cleanup completes. A restaurant
+with money outstanding stays available for its team to finish refunds.
 
 Platform actions have a separate append-only `platform_admin_audit` stream:
 actor and target identities, action, outcome and allowlisted before/after facts.

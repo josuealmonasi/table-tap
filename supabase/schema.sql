@@ -8072,8 +8072,26 @@ drop trigger if exists platform_admin_audit_immutable on platform_admin_audit;
 create trigger platform_admin_audit_immutable before update or delete or truncate
   on platform_admin_audit for each statement execute function public.keep_platform_admin_audit();
 
+-- Accounting survives the live restaurant. Keep original IDs and row contents,
+-- not a restaurant/profile copy; no FK may cascade this retained record away.
+create table if not exists restaurant_accounting_records (
+  restaurant_id uuid not null,
+  source_table text not null,
+  source_id uuid not null,
+  row_data jsonb not null,
+  retained_at timestamptz not null default now(),
+  primary key (restaurant_id, source_table, source_id)
+);
+alter table restaurant_accounting_records enable row level security;
+revoke all on restaurant_accounting_records from anon;
+revoke all on restaurant_accounting_records from public, authenticated, service_role;
+-- Only the guarded definer copies records. Service deletion permits expiry
+-- under the privacy notice and removal of disposable API fixtures.
+grant select, delete on restaurant_accounting_records to service_role;
+
 create or replace function public.admin_delete_restaurant(p_restaurant uuid, p_check_only boolean default true)
 returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_table text;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   -- FK inserts take a key-share lock here. Once held, no new receipt or
@@ -8095,24 +8113,31 @@ begin
     or exists (select 1 from platform_fees where restaurant_id = p_restaurant and status = 'open') then
     return jsonb_build_object('outcome', 'provider');
   end if;
-  -- Retain completed refunds too. Deletion is for unused restaurants only;
-  -- closing a real business does not make its receipts disposable.
-  if exists (select 1 from orders where restaurant_id = p_restaurant)
-    or exists (select 1 from payments where restaurant_id = p_restaurant)
-    or exists (select 1 from refund_operations where restaurant_id = p_restaurant)
-    or exists (select 1 from refunds_due where restaurant_id = p_restaurant)
-    or exists (select 1 from refund_attempts where restaurant_id = p_restaurant)
-    or exists (select 1 from refund_due_attempts where restaurant_id = p_restaurant)
-    or exists (select 1 from order_adjustments where restaurant_id = p_restaurant)
-    or exists (select 1 from platform_fees where restaurant_id = p_restaurant)
-    or exists (select 1 from cash_shifts where restaurant_id = p_restaurant)
-    or exists (select 1 from cash_movements where restaurant_id = p_restaurant)
-    or exists (select 1 from terminal_deposits where restaurant_id = p_restaurant)
-    or exists (select 1 from customer_accounts where restaurant_id = p_restaurant)
-    or exists (select 1 from ingredient_purchases where restaurant_id = p_restaurant) then
-    return jsonb_build_object('outcome', 'accounting');
-  end if;
+  -- Retain completed refunds too. Closing a real business does not make its
+  -- receipts disposable, but completed books must not prevent its deletion.
   if p_check_only is distinct from false then return jsonb_build_object('outcome', 'ready'); end if;
+  foreach v_table in array array[
+    'orders', 'payments', 'payment_allocations', 'refund_operations',
+    'refund_allocations', 'refund_attempts', 'order_adjustments', 'refunds_due',
+    'refund_due_attempts', 'platform_fees', 'cash_shifts', 'cash_movements',
+    'terminal_deposits', 'customer_accounts', 'ingredient_purchases',
+    'account_checkouts', 'diner_checkouts', 'table_sessions', 'user_logs'
+  ] loop
+    -- Lock existing rows as they are copied too: an update must not change a
+    -- receipt after its copy. A failed copy or cascade rolls back both writes.
+    -- Account email is only kept while open; its statement code grants access.
+    execute format(
+      'insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
+       select $1, %L, t.id, to_jsonb(t) - $2
+       from (select * from public.%I where restaurant_id = $1 for update) t', v_table, v_table)
+      using p_restaurant, case when v_table = 'customer_accounts' then array['email', 'code'] else array[]::text[] end;
+  end loop;
+  -- The privacy notice keeps admission decisions with the visit and orders.
+  -- Members have no restaurant_id; reach them only through this restaurant's visits.
+  insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
+    select p_restaurant, 'table_session_members', t.id, to_jsonb(t)
+    from (select m.* from table_session_members m join table_sessions s on s.id = m.session_id
+      where s.restaurant_id = p_restaurant for update of m) t;
   delete from restaurants where id = p_restaurant;
   return jsonb_build_object('outcome', 'deleted');
 end;

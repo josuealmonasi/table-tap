@@ -11,8 +11,8 @@ import { endRestaurantBilling } from "@/lib/billing-delete";
 export const runtime = "nodejs";
 
 // DELETE /api/admin/restaurants — a platform admin erases a restaurant and
-// everything under it only when there is no money or accounting to retain
-// (menus, tables and staff rows then cascade via FK).
+// its live data only when no payment or refund is outstanding. The locked RPC
+// retains accounting copies first; menus, tables and staff then cascade via FK.
 // The founding owner's LOGIN survives; delete it separately if wanted.
 async function deleteRestaurant(req: NextRequest) {
   const admin = await getPlatformAdmin();
@@ -34,7 +34,7 @@ async function deleteRestaurant(req: NextRequest) {
       if (error || !data) return await apiError("apiErr.restaurantDelete", 500);
       const errors: Record<string, string> = {
         refund: "apiErr.restaurantDeleteRefund", refundDue: "apiErr.restaurantDeleteRefundDue",
-        provider: "apiErr.restaurantDeleteProvider", accounting: "apiErr.restaurantDeleteAccounting",
+        provider: "apiErr.restaurantDeleteProvider",
       };
       if (errors[data.outcome]) return await apiError(errors[data.outcome], 409);
       if (!["ready", "deleted", "gone"].includes(data.outcome)) return await apiError("apiErr.restaurantDelete", 500);

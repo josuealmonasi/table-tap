@@ -1449,7 +1449,6 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     restaurantDeleteRefund: "This restaurant still has refunds to finish. Complete them before deleting it.",
     restaurantDeleteRefundDue: "This restaurant still owes customers money from duplicate payments. Return it before deleting the restaurant.",
     restaurantDeleteProvider: "A card payment or refund still needs confirmation. Check its result before deleting this restaurant.",
-    restaurantDeleteAccounting: "This restaurant has orders, receipts or accounting records that must be kept. It cannot be permanently deleted.",
     adminAuditUnavailable: "The admin activity log is unavailable. Try again later.",
     adminActionUncertain: "This action may have completed, but its result could not be confirmed. Check the restaurant or login before trying again.",
     restaurantNotFound: "Restaurant not found",
