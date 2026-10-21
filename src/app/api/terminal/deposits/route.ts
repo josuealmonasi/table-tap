@@ -8,8 +8,6 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { cashAmount, cashNote } from "@/lib/cash-drawer";
 import { decimal } from "@/lib/costs/input";
-import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
-import { readTerminal } from "@/lib/terminal-server";
 
 export const runtime = "nodejs";
 
@@ -26,13 +24,12 @@ export const runtime = "nodejs";
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-async function guard(): Promise<{ restaurantId: string; email: string; timeZone: string } | NextResponse> {
+async function guard(): Promise<{ restaurantId: string; email: string } | NextResponse> {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const blocked = (await frozenBlocks(actor.restaurantId)) ?? (await planBlocks(actor.restaurantId, "pos"));
   if (blocked) return blocked;
-  const { data } = await createAdminClient().from("restaurants").select("timezone").eq("id", actor.restaurantId).single();
-  return { restaurantId: actor.restaurantId, email: actor.email, timeZone: data?.timezone ?? DEFAULT_TIME_ZONE };
+  return { restaurantId: actor.restaurantId, email: actor.email };
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -46,21 +43,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const received = cashAmount(body?.received, false);
   if (received === null) return await apiError("apiErr.depositAmount", 400);
 
-  const view = await readTerminal(actor.restaurantId, actor.timeZone, new Date(), currency);
-  const row = view.days.find(d => d.day === day);
-  if (!row || row.count === 0) return await apiError("apiErr.depositNoSales", 404);
-
-  const { error } = await createAdminClient().from("terminal_deposits").insert({
-    restaurant_id: actor.restaurantId, sales_day: day, currency, expected: row.expected, received,
-    note: cashNote(body?.note), recorded_by: actor.email,
+  const { data, error } = await createAdminClient().rpc("record_terminal_deposit_v1", {
+    p_restaurant: actor.restaurantId, p_day: day, p_currency: currency, p_received: received,
+    p_note: cashNote(body?.note), p_actor: actor.email,
   });
-  if (error?.code === "23505") return await apiError("apiErr.depositMarked", 409);
-  if (error) return await apiError("apiErr.generic", 500);
+  if (error?.code === "23505" || data?.error === "marked") return await apiError("apiErr.depositMarked", 409);
+  if (data?.error === "no_sales") return await apiError("apiErr.depositNoSales", 404);
+  if (error?.code === "22007" || error?.code === "22008") return await apiError("apiErr.depositDay", 400);
+  if (error || typeof data?.expected !== "number") return await apiError("apiErr.generic", 500);
   await logEvent({
     restaurantId: actor.restaurantId, actor: actor.email, entity: "terminal", action: "collected",
     detail: logDetail({ note: day, currency, amount: received.toFixed(2) }),
   });
-  return NextResponse.json({ ok: true, expected: row.expected, received });
+  return NextResponse.json({ ok: true, expected: data.expected, received });
 }
 
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
@@ -71,10 +66,11 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   if (!day) return await apiError("apiErr.depositDay", 400);
   const currency = body?.currency;
   if (currency !== "MXN" && currency !== "USD") return await apiError("apiErr.invalidRequest", 400);
-  const { data, error } = await createAdminClient().from("terminal_deposits")
-    .delete().eq("restaurant_id", actor.restaurantId).eq("sales_day", day).eq("currency", currency).select("id");
+  const { data, error } = await createAdminClient().rpc("delete_terminal_deposit_v1", {
+    p_restaurant: actor.restaurantId, p_day: day, p_currency: currency,
+  });
   if (error) return await apiError("apiErr.generic", 500);
-  if (!data?.length) return await apiError("apiErr.notFound", 404);
+  if (!data) return await apiError("apiErr.notFound", 404);
   await logEvent({
     restaurantId: actor.restaurantId, actor: actor.email, entity: "terminal", action: "deleted",
     detail: logDetail({ note: day, currency }),

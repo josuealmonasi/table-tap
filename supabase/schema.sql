@@ -8037,3 +8037,112 @@ revoke all on function public.decide_table_member(uuid, uuid, uuid, boolean, tex
 grant execute on function public.decide_table_member(uuid, uuid, uuid, boolean, text, text) to service_role;
 
 revoke truncate, references, trigger on all tables in schema public from authenticated;
+-- Exact membership is the cutoff: transaction timestamps can predate a waited lock.
+-- Old marks keep null manifests and their deployed timestamp interpretation.
+alter table public.terminal_deposits add column if not exists snapshot_at timestamptz;
+alter table public.terminal_deposits add column if not exists payment_ids uuid[];
+alter table public.terminal_deposits add column if not exists return_ids text[];
+alter table public.terminal_deposits add column if not exists fee_pct numeric;
+
+-- Allocation dates distinguish a same-day void (fee reversed) from a later refund.
+create or replace function public.terminal_deposit_ledger_v1(p_restaurant uuid, p_currency text)
+returns table(id text, payment_id uuid, amount numeric, tip numeric, created_at timestamptz,
+  recorded_at timestamptz, voided_at timestamptz, returned_at timestamptz, order_id uuid, terminal_ref text)
+language sql stable security definer set search_path = public as $$
+  select p.id::text, p.id, p.amount,
+    case when p.tip > 0 then p.tip when abs(o.total - p.amount) < 0.005 then coalesce(o.tip, 0) else 0 end,
+    p.created_at, p.recorded_at,
+    case when p.allocation_origin = 'legacy' and o.status = 'cancelled'
+      and not exists(select 1 from order_adjustments a where a.restaurant_id = p_restaurant and a.order_id = p.order_id)
+      then coalesce(o.cancelled_at, p.created_at) end,
+    null::timestamptz, p.order_id, p.terminal_ref
+  from payments p left join orders o on o.id = p.order_id and o.restaurant_id = p_restaurant
+  where p.restaurant_id = p_restaurant and p.currency = p_currency and p.method = 'card' and p.stripe_payment_intent is null
+  union all
+  select 'return:' || ra.id, p.id, ra.amount, ra.tip, p.created_at, r.completed_at,
+    null::timestamptz, r.completed_at, p.order_id, p.terminal_ref
+  from refund_operations r
+  join refund_allocations ra on ra.operation_id = r.id and ra.restaurant_id = p_restaurant
+  join payment_allocations pa on pa.id = ra.allocation_id and pa.restaurant_id = p_restaurant
+  join payments p on p.id = pa.payment_id and p.restaurant_id = p_restaurant
+  where r.restaurant_id = p_restaurant and r.currency = p_currency and r.source = 'terminal'
+    and r.status = 'succeeded' and r.completed_at is not null
+    and p.currency = p_currency and p.method = 'card' and p.stripe_payment_intent is null;
+$$;
+revoke all on function public.terminal_deposit_ledger_v1(uuid, text) from public, anon, authenticated;
+grant execute on function public.terminal_deposit_ledger_v1(uuid, text) to service_role;
+
+create or replace function public.record_terminal_deposit_v1(
+  p_restaurant uuid, p_day date, p_currency text, p_received numeric, p_note text, p_actor text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_zone text; v_fee numeric; v_expected numeric; v_payments uuid[]; v_returns text[]; v_has_sales boolean;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select coalesce(timezone, 'America/Mexico_City'), terminal_fee_pct into v_zone, v_fee
+    from restaurants where id = p_restaurant for share;
+  if not found or p_day is null or p_currency not in ('MXN', 'USD') or p_received is null
+    or p_received < 0 or p_received <> round(p_received, 2) then raise exception 'invalid deposit'; end if;
+  if exists(select 1 from terminal_deposits where restaurant_id = p_restaurant and sales_day = p_day and currency = p_currency) then
+    return jsonb_build_object('error', 'marked');
+  end if;
+  with ledger as materialized (
+    select *, (created_at at time zone v_zone)::date sale_day
+    from public.terminal_deposit_ledger_v1(p_restaurant, p_currency)
+  ), marks as materialized (
+    select * from terminal_deposits where restaurant_id = p_restaurant and currency = p_currency
+  ), returns as (
+    select id, payment_id, amount, sale_day, returned_at at_time, (returned_at at time zone v_zone)::date day
+      from ledger where returned_at is not null
+    union all
+    select 'void:' || id, payment_id, amount, sale_day, voided_at, (voided_at at time zone v_zone)::date
+      from ledger where returned_at is null and voided_at is not null
+  ), receipts as (
+    select l.*, l.amount - coalesce((select sum(r.amount) from returns r
+      where r.payment_id = l.payment_id and r.day = l.sale_day
+        and not exists(select 1 from marks d where d.sales_day = l.sale_day)), 0) net
+    from ledger l where l.returned_at is null
+  ), sales as (
+    select distinct sale_day day from receipts where net > 0
+  ), assigned as (
+    select r.*,
+      r.sale_day = r.day and not exists(select 1 from marks d where d.sales_day = r.sale_day) same_day,
+      (select d.sales_day from marks d where r.id = any(d.return_ids)
+        or (d.return_ids is null and r.at_time <= d.created_at
+          and d.sales_day = (select min(s.day) from sales s where s.day >= r.day)) order by (d.return_ids is not null) desc limit 1) consumed,
+      (select min(s.day) from sales s where s.day >= r.day and not exists(select 1 from marks d where d.sales_day = s.day)) target,
+      case when r.sale_day = r.day then r.amount - round(r.amount * coalesce(
+        (select d.fee_pct from marks d where d.sales_day = r.sale_day), v_fee) / 100, 2) else r.amount end debit
+    from returns r
+  )
+  select coalesce((select sum(net) - round(sum(net) * v_fee / 100, 2) from receipts where sale_day = p_day), 0)
+      - coalesce((select sum(debit) from assigned where not same_day and consumed is null and target = p_day), 0),
+    coalesce((select array_agg(payment_id order by payment_id) from receipts where sale_day = p_day), '{}'::uuid[]),
+    coalesce((select array_agg(id order by id) from assigned where consumed is null
+      and ((same_day and sale_day = p_day) or (not same_day and target = p_day))), '{}'::text[]),
+    exists(select 1 from receipts where sale_day = p_day and net > 0)
+  into v_expected, v_payments, v_returns, v_has_sales;
+  if not v_has_sales then return jsonb_build_object('error', 'no_sales'); end if;
+  -- Calculate and insert before releasing the settlement lock. A later receipt
+  -- is outside payment_ids even if its recorded_at was set before it waited.
+  insert into terminal_deposits(restaurant_id, sales_day, currency, expected, received, note, recorded_by,
+    snapshot_at, payment_ids, return_ids, fee_pct)
+  values(p_restaurant, p_day, p_currency, v_expected, p_received, p_note, p_actor,
+    clock_timestamp(), v_payments, v_returns, v_fee);
+  return jsonb_build_object('expected', v_expected);
+end;
+$$;
+revoke all on function public.record_terminal_deposit_v1(uuid, date, text, numeric, text, text) from public, anon, authenticated;
+grant execute on function public.record_terminal_deposit_v1(uuid, date, text, numeric, text, text) to service_role;
+
+-- Taking back a mark releases its returns to another deposit under the same lock.
+create or replace function public.delete_terminal_deposit_v1(p_restaurant uuid, p_day date, p_currency text)
+returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  delete from terminal_deposits where restaurant_id = p_restaurant and sales_day = p_day and currency = p_currency;
+  return found;
+end;
+$$;
+revoke all on function public.delete_terminal_deposit_v1(uuid, date, text) from public, anon, authenticated;
+grant execute on function public.delete_terminal_deposit_v1(uuid, date, text) to service_role;

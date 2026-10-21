@@ -921,7 +921,7 @@ to know what should reach the bank and when.
   dialog asks; `cancel_order` stamps `orders.cancelled_at`. Voided the day it
   was taken, the bank never pays it: it counts in no day, and its payment is
   listed as voided. Voided on a later day, the bank paid it and takes it back
-  out of a deposit to come: the first day from the void on with sales of its
+  out of a deposit to come: the first unsigned day from the void on with sales of its
   own shows it as voided from earlier days and expects that much less; with no
   such day yet, the void waits on its own day as coming. A sale from before
   the 14 days voided inside them is still taken back. Orders cancelled before
@@ -932,10 +932,20 @@ to know what should reach the bank and when.
   day. Within MX$0.50 it is received; otherwise it came in short or over, and
   the difference is shown. A day marked wrong is taken back and marked again.
   Unmarked, a day is coming, due today, or late. A card sale from a marked
-  day that reached the server after it was marked (`payments.recorded_at`
-  later than the mark — a sale the till held offline) is shown beside it, and
-  the deposit is judged against what was marked plus that sale; the figure
-  that was reconciled is kept.
+  day that is outside its saved receipt IDs is shown beside it, and the
+  deposit is judged against what was marked plus that sale; the figure that
+  was reconciled is kept. Calculation and insertion share the restaurant
+  money lock with settlement. New marks save exact payment and return IDs,
+  the cutoff time and fee rate; old marks retain their timestamp rule.
+  Returns after sign-off carry to the next unsigned day with sales, or stay
+  visible waiting for it. Taking back a mark uses the same money lock.
+- **Whole days and recovered sales:** the recent window starts at local
+  midnight fourteen calendar days back. Older unsigned sales days and signed
+  days with late receipts remain visible, with each day's complete contents.
+  Confirmed typed terminal returns follow allocations to the original payment.
+  A same-day void reverses its amount and fee; a later refund reverses the
+  gross amount. A same-day void after sign-off carries the net return using
+  that mark's fee rate without rewriting its original expected amount.
 
 Sending the amount to the terminal itself waits for a provider choice.
 

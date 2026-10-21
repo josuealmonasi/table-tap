@@ -13,6 +13,7 @@ import { checkTableJoin } from "./check-table-join.mjs";
 // ============================================================================
 import { MARK, PART_AMOUNT, PART_TIP } from "./api-fixtures.mjs";
 import { offlineCases } from "./api-offline-cases.mjs";
+import { terminalDepositRace } from "./api-terminal-deposit.mjs";
 import { twoSittingCollection } from "./api-part-collection.mjs";
 import { loginByEmail } from "./logins.mjs";
 
@@ -1320,6 +1321,7 @@ export function cases(fx) {
         return data?.length === 1 && data[0].method === "card" && data[0].terminal_ref === "AUTH 482913"
           && data[0].stripe_payment_intent === null || `recorded ${JSON.stringify(data)}`;
       } },
+    terminalDepositRace(),
     // The terminal's deposits, on a day the demo took cards on its terminal.
     { name: "POST /api/terminal/deposits (a day's deposit arrived short)", as: "manager", method: "POST",
       path: "/api/terminal/deposits",
