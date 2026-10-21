@@ -3,10 +3,13 @@ import { legacyStockDemand } from "@/lib/legacy-stock";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { unpackOrderIds } from "@/lib/stripe-limits";
 import { abandonAccountCheckout } from "@/lib/account-checkout";
+import { verifyDinerCheckout, type ConnectContext } from "@/lib/diner-checkout";
 import { releaseSessionFee } from "@/lib/platform-fee";
 
 /** Repeated expiry deliveries return the coupon and reserved stock only once. */
-export async function abandonCheckout(session: Stripe.Checkout.Session): Promise<void> {
+export async function abandonCheckout(session: Stripe.Checkout.Session, context: ConnectContext): Promise<void> {
+  await verifyDinerCheckout(session, context);
+  if (session.payment_status === "paid") throw new Error("A paid checkout cannot expire");
   // Nobody paid: the fee it reserved stops counting toward the month.
   await releaseSessionFee(session);
   if (session.metadata?.account_checkout) return await abandonAccountCheckout(session);

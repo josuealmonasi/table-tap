@@ -1,3 +1,4 @@
+import { requireVerifiedCheckout } from "@/lib/diner-checkout";
 import type Stripe from "stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -33,6 +34,7 @@ export async function settleCardOrders(
   what: string,
   opts: { tip?: number; tipOrder?: string; status?: "received"; charged?: number } = {},
 ): Promise<CardSettlement & { sessions: { session_id: string | null }[] }> {
+  requireVerifiedCheckout(session, ids);
   const db = createAdminClient();
   const { data, error } = await db.rpc("settle_card_orders_v2", {
     p_orders: ids,

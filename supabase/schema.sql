@@ -3655,6 +3655,37 @@ create table if not exists account_checkouts (
 alter table account_checkouts enable row level security;
 revoke all on account_checkouts from anon, authenticated;
 
+-- A Stripe signature names its sender, not who was meant to receive the food.
+-- Only sessions we created can reach the diner ledger; metadata is a snapshot,
+-- never authority supplied by a connected account's owner.
+create table if not exists diner_checkouts (
+  id uuid primary key default gen_random_uuid(),
+  stripe_session_id text not null unique,
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  stripe_account_id text not null,
+  livemode boolean not null,
+  currency text not null check (currency in ('MXN', 'USD')),
+  amount_cents integer not null check (amount_cents >= 0),
+  metadata jsonb not null,
+  order_ids uuid[] not null check (cardinality(order_ids) > 0),
+  stripe_payment_intent text unique,
+  created_at timestamptz not null default now()
+);
+alter table diner_checkouts enable row level security;
+revoke all on diner_checkouts from public;
+revoke all on diner_checkouts from anon;
+revoke all on diner_checkouts from authenticated;
+grant select, insert, update on diner_checkouts to service_role;
+
+-- No currency conversion happens anywhere in diner checkout. Refuse an old
+-- unsupported value rather than silently relabelling somebody's money.
+do $$ begin
+  if not exists (select 1 from pg_constraint where conrelid = 'public.restaurants'::regclass
+    and conname = 'restaurants_diner_currency') then
+    alter table restaurants add constraint restaurants_diner_currency check (currency in ('MXN', 'USD'));
+  end if;
+end $$;
+
 alter table customer_accounts add column if not exists checkout_id uuid;
 -- Keep a hold opened before this column was added, without extending it.
 update customer_accounts a set checkout_id = (
@@ -5470,6 +5501,21 @@ begin
   end if;
   if new.account_id is not null and exists(select 1 from orders where id = any(new.allocation_scope)
     and account_id is distinct from new.account_id) then raise exception 'receipt scope has another account'; end if;
+  -- Pooled card receipts used today's menu currency. A diner pays the frozen
+  -- checkout currency, including a split/account opened after a menu change.
+  if new.method = 'card' and new.stripe_payment_intent is not null then
+    if exists (select 1 from diner_checkouts c where c.stripe_payment_intent = new.stripe_payment_intent
+      and c.restaurant_id = new.restaurant_id) then
+      select c.currency, c.stripe_account_id into new.currency, new.stripe_account_id
+        from diner_checkouts c where c.stripe_payment_intent = new.stripe_payment_intent
+          and c.restaurant_id = new.restaurant_id;
+      if exists (select 1 from unnest(new.allocation_scope) x where not exists
+        (select 1 from diner_checkouts c where c.stripe_payment_intent = new.stripe_payment_intent
+          and c.restaurant_id = new.restaurant_id and x = any(c.order_ids))) then
+        raise exception 'receipt scope differs from checkout';
+      end if;
+    end if;
+  end if;
   if exists(select 1 from orders where id = any(new.allocation_scope) and currency <> new.currency) then
     raise exception 'receipt scope has another currency';
   end if;
@@ -5483,6 +5529,7 @@ begin
 end;
 $$;
 revoke all on function public.snapshot_payment_scope() from public, anon, authenticated;
+grant execute on function public.snapshot_payment_scope() to service_role;
 drop trigger if exists snapshot_payment_scope on payments;
 create trigger snapshot_payment_scope before insert on payments for each row execute function public.snapshot_payment_scope();
 

@@ -1,3 +1,4 @@
+import { requireVerifiedCheckout } from "@/lib/diner-checkout";
 import type Stripe from "stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -12,6 +13,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * recorded nowhere.
  */
 export async function settleAccountCheckout(session: Stripe.Checkout.Session): Promise<void> {
+  requireVerifiedCheckout(session);
   const checkout = session.metadata?.account_checkout;
   if (!checkout) return;
   const intent = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id ?? null;
@@ -27,6 +29,7 @@ export async function settleAccountCheckout(session: Stripe.Checkout.Session): P
  * collect the account again without waiting out the half hour.
  */
 export async function abandonAccountCheckout(session: Stripe.Checkout.Session): Promise<void> {
+  requireVerifiedCheckout(session);
   const checkout = session.metadata?.account_checkout;
   if (!checkout) return;
   await releaseAccountCheckout(checkout);

@@ -7,6 +7,7 @@ import { logEvent } from "@/lib/activity-log";
 import { actingManager } from "@/lib/api-guard";
 import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
 import { isOwnStorageUrl } from "@/lib/images";
+import { isDinerCurrency } from "@/lib/diner-currency";
 import { repriceOpenService } from "@/lib/service-reprice";
 
 export const runtime = "nodejs";
@@ -88,6 +89,10 @@ export async function POST(req: NextRequest) {
   if (update.allow_pay_later === true) {
     const blocked = await planBlocks(actor.restaurantId, "deferredPayment");
     if (blocked) return blocked;
+  }
+
+  if ("currency" in update && !isDinerCurrency(update.currency)) {
+    return await apiError("apiErr.badCurrency", 400);
   }
 
   // Only a zone the selector actually offers. An arbitrary string would make

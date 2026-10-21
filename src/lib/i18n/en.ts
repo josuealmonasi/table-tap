@@ -1290,6 +1290,8 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     noExtras: "This dish takes no extras.",
   },
   apiErr: {
+    badCurrency: "Choose MXN or USD for your currency.",
+    mixedCurrencies: "These orders use different currencies. Please ask your waiter to help you pay each currency separately.",
     offlineTooOld: "This sale is over 30 days old. A manager must review when the money was collected.",
     offlineQueueRequired: "Send this saved sale first, then review the copy received here.",
     offlineCollector: "Refresh the till before making a new sale. A manager must verify the original collector of this saved sale.",

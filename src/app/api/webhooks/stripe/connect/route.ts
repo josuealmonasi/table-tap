@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 // A diner's food is a direct charge on the restaurant's own Stripe account, so
 // this is where the money a diner pays is confirmed. It is also the only place
 // a payment is believed: a browser coming back from Stripe proves nothing, the
-// signature on this request does.
+// signature and the durable record of our own checkout do.
 //
 // Register it in Stripe as "events on connected accounts" and give it its own
 // signing secret — Stripe issues a separate one per endpoint, and using the
@@ -26,14 +26,14 @@ export async function POST(req: NextRequest) {
   if (refusal) return refusal;
 
   if (event!.type === "checkout.session.completed") {
-    await settleCheckout(event!.data.object as Stripe.Checkout.Session);
+    await settleCheckout(event!.data.object as Stripe.Checkout.Session, event!);
   }
 
   // Opened Stripe Checkout and never paid. Give the coupon use back so a
   // limited code is not burned by an abandoned cart, and clear the order that
   // will never be paid for.
   if (event!.type === "checkout.session.expired") {
-    await abandonCheckout(event!.data.object as Stripe.Checkout.Session);
+    await abandonCheckout(event!.data.object as Stripe.Checkout.Session, event!);
   }
 
   // The restaurant's own account changed: Stripe finished reviewing it, asked

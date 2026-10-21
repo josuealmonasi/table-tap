@@ -1284,6 +1284,8 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     noExtras: "Este platillo no lleva extras.",
   },
   apiErr: {
+    badCurrency: "Elige MXN o USD como moneda.",
+    mixedCurrencies: "Estos pedidos están en monedas distintas. Pide ayuda a tu mesero para pagar cada moneda por separado.",
     offlineTooOld: "Esta venta tiene más de 30 días. Un gerente debe revisar cuándo se cobró.",
     offlineQueueRequired: "Envía primero esta venta guardada y luego revisa la copia recibida aquí.",
     offlineCollector: "Actualiza la caja antes de una venta nueva. Un gerente debe verificar quién hizo el cobro de esta venta guardada.",

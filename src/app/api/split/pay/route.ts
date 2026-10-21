@@ -1,3 +1,6 @@
+import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
+import { dinerCurrency } from "@/lib/diner-currency";
+import { recordDinerCheckout } from "@/lib/diner-checkout";
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { packOrderIds, stripeProductName } from "@/lib/stripe-limits";
@@ -69,7 +72,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const { data: split } = await db
     .from("bill_splits")
-    .select("id, status, locked_at, session_id, shares, amount, restaurant_id")
+    .select("id, status, locked_at, session_id, shares, amount, restaurant_id, order_ids")
     .eq("id", splitId)
     .eq("session_id", sessionId)
     .maybeSingle();
@@ -104,6 +107,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const own = orders.filter(
     o => wanted.has(o.id) && !o.paid && Date.parse(o.created_at) > froze,
   );
+  // The split's frozen food determines its money, even when the menu changed.
+  const frozenOrders = await dinerCheckoutOrders(split.order_ids).catch(() => null);
+  if (!frozenOrders?.length || frozenOrders.length !== split.order_ids.length) return await apiError("apiErr.verifyOrders", 503);
+  const currency = dinerCurrency([...frozenOrders, ...own]);
+  if (!currency) return await apiError("apiErr.mixedCurrencies", 409);
   const ownTotal = round2(own.reduce((sum, o) => sum + Number(o.total), 0));
 
   const payable = round2(Number(claim.amount) + ownTotal);
@@ -177,7 +185,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           {
             quantity: 1,
             price_data: {
-              currency: restaurant.currency.toLowerCase(),
+              currency: currency.toLowerCase(),
               unit_amount: cents,
               product_data: { name: stripeProductName(`${restaurant.name} — 1/${split.shares}`) },
             },
@@ -185,6 +193,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         ],
         // The webhook is the only thing that believes any of this happened.
         metadata: {
+          restaurant_id: restaurantId,
           split_id: splitId,
           split_share: String(claim.share_no),
           split_amount: String(claim.amount),
@@ -205,6 +214,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { stripeAccount: restaurant.stripe_account_id },
     );
 
+    await recordDinerCheckout(session, {
+      restaurantId, stripeAccount: restaurant.stripe_account_id, currency, amountCents: cents,
+      orderIds: [...split.order_ids, ...own.map(o => o.id)],
+    }, () => stripe.checkout.sessions.expire(session.id, {}, onTheirAccount));
     await attachFeeSession(fee, session.id);
     // A session with no page is still a session: its fee waits for expiry.
     if (!session.url) return await apiError("apiErr.generic", 502);

@@ -275,6 +275,7 @@ export async function POST(req: NextRequest) {
           tip: pricing.tip,
           tipLabel: tipAmount !== null ? "Tip" : `Tip (${tipPct}%)`,
         }),
+        amountCents: Math.round(pricing.total * 100),
         amountOffCents: Math.round((pricing.couponDiscount + pricing.promoDiscount) * 100),
         couponCode: coupon?.code ?? null,
         currency: cur,

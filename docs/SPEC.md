@@ -1724,3 +1724,61 @@ must repeat main's api/money/attack/smoke window run against the delta, verify
 refund and fee recovery, and run the full new-code gate, including allocation
 and split probes. Local Vitest SQL source contracts complement those checks;
 they do not establish PostgreSQL execution or concurrency correctness.
+
+
+## Diner card checkout provenance (S4)
+
+A diner Checkout Session becomes trusted only when Stripe's verified Connect
+signature and our durable `diner_checkouts` row agree. A connected restaurant
+owner can create sessions on their own account and choose their metadata, so
+metadata alone never authorizes settlement or expiry cleanup.
+
+Every pay-now order, bill, split share and account checkout saves the exact
+session ID returned by our Stripe request, restaurant, connected account,
+livemode derived from `STRIPE_SECRET_KEY` (`sk`/`rk`, test/live), integer cents,
+currency, metadata and order IDs before returning its URL. Split scope contains
+its frozen food and that diner's additional orders; account scope uses the
+existing `account_checkouts.order_ids`. Scope reads page through large accounts.
+The table has RLS, no anon/authenticated grants or policies, and server-only
+select/insert/update access. It stores no provider credential.
+
+The Connect route passes signed `event.account` and `event.livemode` to both
+settlement and expiry. They must match the frozen record, the environment's
+key mode and the restaurant's current `stripe_account_id`; session identity,
+mode, currency, amount and complete metadata must match as well. Scope orders
+must belong to the same restaurant and original currency. Only then may fees,
+shares, accounts, orders, coupons or stock change. Lower settlement exports
+require that verified session, and card settlement accepts only the order IDs
+its metadata originally named. A repeated expiry can still authenticate after
+its own pending order has already been deleted.
+
+A successful paid-event check binds its intent to the record before financial
+RPCs run. Card receipt snapshots, including pooled split/account receipts, use
+that checkout's original currency and Stripe account and cannot allocate
+outside its scope. Existing deployed financial RPC signatures are preserved;
+legacy callers without a record keep their prior SQL behavior until cutover.
+
+Restaurant settings and `restaurants.currency` allow only MXN/USD, both using
+cent arithmetic. A bill uses its orders' currency even if the menu changed. A
+split uses its frozen orders plus the diner's selected later orders. Account
+checkout uses its frozen orders too. Mixing currencies in one checkout returns
+a bilingual refusal before any card charge; no conversion or relabelling occurs.
+The seed is MXN; subscription `plan_limits` prices remain independent of menu
+currency.
+
+Cutover deliberately refuses settlement and expiry events for sessions without
+provenance. There is no metadata-only fallback or synthetic backfill; the release
+brief reports no connected production accounts. Creation returns no URL until
+its record is durable. A failed save attempts to expire the session. A webhook
+arriving before the insert fails for retry; an unknown creation/save outcome
+remains refused and requires investigation. Existing reservation cleanup and
+conservative fee-hold rules continue to apply.
+
+Production received this as an additive delta, applied before the deploy: the
+private table, the currency check and the receipt trigger function, with no
+signature changed. It fails on an unsupported existing restaurant currency
+rather than silently changing it (production was all MXN, with no connected
+Stripe account, when it was applied).
+
+This boundary follows Stripe's [Connect webhook account/mode guidance](https://support.stripe.com/questions/connect-account-webhook-configurations?locale=en-GB)
+and [currency amount rules](https://docs.stripe.com/currencies).

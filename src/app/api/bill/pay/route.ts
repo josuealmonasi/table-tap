@@ -1,3 +1,5 @@
+import { dinerCurrency } from "@/lib/diner-currency";
+import { recordDinerCheckout } from "@/lib/diner-checkout";
 import { NextResponse, type NextRequest } from "next/server";
 import Stripe from "stripe";
 import { apiError } from "@/lib/api-error";
@@ -119,10 +121,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // wrong one of the two sends somebody away from the table owing money.
   if (rowsError) return await apiError("apiErr.verifyOrders", 503);
 
-  const orders = (rows ?? []) as (Pick<Order, "id" | "total" | "items"> & {
+  const orders = (rows ?? []) as (Pick<Order, "id" | "total" | "items" | "currency"> & {
     coupon_code: string | null;
   })[];
   if (orders.length === 0) return await apiError("apiErr.billSettled", 409);
+
+  const currency = dinerCurrency(orders);
+  if (!currency) return await apiError("apiErr.mixedCurrencies", 409);
 
   const coverage = await paymentCoverage(restaurantId, orders).catch(error => error instanceof PaymentAttributionRequired ? "review" : null);
   if (coverage === "review") return await apiError("apiErr.attributionRequired", 409);
@@ -223,7 +228,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           {
             quantity: 1,
             price_data: {
-              currency: restaurant.currency.toLowerCase(),
+              currency: currency.toLowerCase(),
               unit_amount: cents,
               // One line: the diner is settling a bill, not re-picking dishes,
               // and the itemised list is on the screen they came from.
@@ -238,6 +243,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // The webhook marks exactly these rows paid. It is the only thing that
         // does: a returning browser proves nothing about whether money moved.
         metadata: {
+          restaurant_id: restaurantId,
           // Split across keys: one value stops at 500 characters, which is
           // fourteen order ids — a table of twelve on its second round.
           ...packOrderIds(orders.map(o => o.id)),
@@ -266,6 +272,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       },
       { stripeAccount: restaurant.stripe_account_id },
     );
+
+    await recordDinerCheckout(session, {
+      restaurantId, stripeAccount: restaurant.stripe_account_id, currency, amountCents: cents,
+      orderIds: orders.map(o => o.id),
+    }, () => stripe.checkout.sessions.expire(session.id, {}, { stripeAccount: restaurant.stripe_account_id }));
 
     // Reserved, not yet real: the webhook confirms it when the money lands,
     // and the expiry handler gives it back if the diner walks away from Stripe.
