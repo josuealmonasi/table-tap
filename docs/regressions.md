@@ -14,6 +14,7 @@ us, and what now catches each one.
 
 | Rule | The bug it came from |
 |---|---|
+| A statement email is capped per account and per restaurant, never on the recipient (G5) | One account code could mail the same stranger ~400 times a day |
 | A signed card event matches our own frozen checkout before any money or expiry write (S4 E1) | A connected owner could stamp another restaurant's orders onto a cheap test session |
 | Settings and the database accept the same cent-based currencies (S4 E2) | JPY entered arithmetic that multiplied every charge by 100 |
 | Bill, split and account charges and receipts keep the orders' original currency (S4 E3) | Changing the menu from MXN to USD relabelled an unpaid peso bill as dollars |
@@ -2801,3 +2802,23 @@ Still needs a person once a restaurant connects Stripe: a real Connect
 completion and expiry, a repeated delivery, a wrong-account and a test-mode
 event, and an old MXN bill, split and account paid after a switch to USD.
 Nothing on production could exercise them when this shipped.
+
+## Security review G5: one account code could mail a stranger hundreds of times
+
+The statement email and the receipt had to agree on what limits a send. The
+receipt is capped per order per day; the statement was capped only per caller
+address, three every ten minutes, so one person holding one account code could
+send about 400 statements a day to the same inbox from the app's own sender,
+and more addresses meant more allowances. It is now capped per account (four a
+day, the receipt's allowance) and per restaurant (100 a day), and on nothing
+about the recipient, so no limit stores anything about a stranger's inbox.
+`account-mail-limits.spec.ts` sends six from six addresses and expects four.
+
+## Security review G7: a refusal that sent diners to staff who cannot help
+
+When a table's visit cards run out, the refusal told the diner to ask the
+staff, and staff have no way to make a card. It now says to try on the next
+visit. The ceiling itself stays: it keeps cards nobody carries out of the
+owner's numbers. Who may be handed a table's pass is decided with the table's
+sitting (staff confirm new phones), which is where a stranger holding an old
+QR is stopped.
