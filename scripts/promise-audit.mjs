@@ -61,8 +61,17 @@ const cookieFor = async (email, password = "demo123") => {
 
 const { data: restaurant } = await admin
   .from("restaurants").select("id").eq("name", "Demo Bistro").maybeSingle();
-const { data: table } = await admin
-  .from("restaurant_tables").select("id").eq("restaurant_id", restaurant.id).limit(1).maybeSingle();
+// The table a diner arrives at: one nobody is eating at, so the menu is judged
+// as a party sitting down sees it. Strangers at somebody else's meal are shown
+// less on purpose (they wait to be let in), and an unordered pick landed on an
+// occupied table, so the visit card on the menu read as taken away. Ordered,
+// so every run judges the same table.
+const { data: tables } = await admin
+  .from("restaurant_tables").select("id, label").eq("restaurant_id", restaurant.id).order("label");
+const { data: seated } = await admin
+  .from("table_sessions").select("table_id").eq("restaurant_id", restaurant.id).is("closed_at", null);
+const busy = new Set((seated ?? []).map(s => s.table_id));
+const table = (tables ?? []).find(t => !busy.has(t.id)) ?? (tables ?? [])[0] ?? null;
 
 // Compile every route this sweep opens, before it opens any of them. In
 // development Next builds a route the first time anything asks for it, and a

@@ -56,3 +56,17 @@ export async function tableMember(
   if (member?.status !== "approved") return null;
   return { id: member.id, sessionId: session.id, restaurantId, tableId, closed: Boolean(session.closed_at) };
 }
+
+/**
+ * The table's sitting, if a party is eating at it now. Asked by the table page
+ * and the visit card route alike, so the two cannot disagree about whether a
+ * phone is arriving at an empty table or at somebody else's meal.
+ */
+export async function openSittingAt(restaurantId: string, tableId: string): Promise<string | null> {
+  const { data, error } = await createAdminClient().from("table_sessions").select("id")
+    .eq("restaurant_id", restaurantId).eq("table_id", tableId).is("closed_at", null)
+    .gte("opened_at", new Date(Date.now() - OPEN_BILL_HOURS * 3600000).toISOString())
+    .limit(1).maybeSingle();
+  if (error) throw new Error("Could not check the table");
+  return data?.id ?? null;
+}

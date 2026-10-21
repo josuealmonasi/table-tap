@@ -791,8 +791,11 @@ try {
 
   // ── A bill the waiter opened is not payable online ──────────────────────
   {
+    // Open, as the case says: the blocks above settle this table, which closes
+    // its sitting, and a closed sitting is refused at the door (the phone is a
+    // stranger to it) before the waiter's bill is ever asked about.
     await admin.from("table_sessions")
-      .update({ opened_by: "demo-waiter@tabletap.dev" }).eq("id", sitting.id);
+      .update({ opened_by: "demo-waiter@tabletap.dev", closed_at: null, close_reason: null }).eq("id", sitting.id);
     const { data: owed } = await admin
       .from("orders").select("id").eq("session_id", sitting.id).eq("paid", false);
     const before = await takings(home.id);

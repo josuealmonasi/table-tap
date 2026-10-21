@@ -7,6 +7,8 @@ import { menuShowsLoyalty, loadCoverState, loadOrderingData, unwrap } from "@/li
 import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
 import type { RestaurantTable } from "@/lib/types";
+import { offerAt } from "@/lib/loyalty/pass";
+import { openSittingAt } from "@/lib/table-membership";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +56,10 @@ async function Menu({
   // points at nothing.
   if (!data.restaurant) notFound();
   const seatedAt = dineIn ? table : null;
+  // Whether a party is eating here decides the visit card's pass: an empty
+  // table offers it before ordering, somebody else's meal only after the phone
+  // is let in. A failed read is treated as somebody's meal: no pass, menu intact.
+  const sitting = seatedAt ? await openSittingAt(restaurantId, seatedAt.id).catch(() => "unknown") : null;
 
   return (
     <OrderingApp
@@ -69,7 +75,7 @@ async function Menu({
       closedNow={data.closedNow}
       orderAtRegister={data.orderAtRegister}
       receipts={data.receipts}
-      loyalty={seatedAt && data.loyalty ? { ...data.loyalty, pass: "" } : data.loyalty}
+      loyalty={seatedAt && data.loyalty ? (sitting ? { ...data.loyalty, pass: "" } : offerAt(data.loyalty, { table: seatedAt.id })) : data.loyalty}
       dietaryTags={data.dietaryTags}
     />
   );

@@ -217,8 +217,20 @@ export async function setup(env, base) {
   // diner's phone does — which also proves each page still hands one out.
   const passesHanded = [];
   const visitPass = async path => {
-    const html = await (await fetch(base + path)).text();
-    const pass = /\\?"pass\\?":\\?"([A-Za-z0-9_.-]+)\\?"/.exec(html)?.[1];
+    // A seated table hands its pass only to a phone let in, and through
+    // admission rather than in the page; an empty table's page carries one.
+    const table = /^\/r\/[^/?]+\/t\/([^/?]+)/.exec(path)?.[1];
+    let pass;
+    if (table) {
+      const cookie = await phoneMembers.cookieFor(`/api/table-membership?tableId=${table}`, { tableId: table });
+      const res = await fetch(base + "/api/table-membership", {
+        method: "POST", headers: { "Content-Type": "application/json", cookie },
+        body: JSON.stringify({ restaurantId: restaurant.id, tableId: table }),
+      });
+      pass = (await res.json().catch(() => ({}))).pass || undefined;
+    }
+    const html = pass ? "" : await (await fetch(base + path)).text();
+    pass ??= /\\?"pass\\?":\\?"([A-Za-z0-9_.-]+)\\?"/.exec(html)?.[1];
     if (!pass) throw new Error(`${path} handed out no visit pass`);
     passesHanded.push(pass);
     return pass;
