@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
     const body = await jsonBody<CheckoutBody>(req);
     if (!body) return await apiError("apiErr.invalidRequest", 400);
-    const { restaurantId, tableId, tableLabel, items, couponCode, payLater } = body;
+    const { restaurantId, tableId, items, couponCode, payLater } = body;
     if (await isTableLimited(req, "checkout", typeof tableId === "string" ? tableId : null, 10)) {
       return await apiError("apiErr.tooManyAttempts", 429);
     }
@@ -98,7 +98,8 @@ export async function POST(req: NextRequest) {
     // The table must belong to this restaurant, or the sitting it opens blocks
     // another venue's diners. Asked before anything is reserved: after the
     // coupon claim, this answer once kept a use nobody spent.
-    if (tableId && !(await tableOf(restaurantId, tableId))) {
+    const table = tableId ? await tableOf(restaurantId, tableId) : null;
+    if (tableId && !table) {
       return await apiError("apiErr.tableNotFound", 404);
     }
 
@@ -210,8 +211,7 @@ export async function POST(req: NextRequest) {
         stock_reservation_id: stockReservationId,
         ...checkoutOrderRow({
           restaurantId,
-          tableId,
-          tableLabel,
+          table,
           sessionId,
           diner: body.diner,
           deferred,

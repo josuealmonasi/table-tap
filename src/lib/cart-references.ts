@@ -21,7 +21,10 @@ export function referencedItemIds(
     .flatMap(p => p.items.map(i => i.item_id));
   return [
     ...new Set([
-      ...items.flatMap(i => [i.itemId, ...(i.extras?.map(e => e.id) ?? [])]),
+      ...items.flatMap(i => [
+        i.itemId, ...(i.extras?.map(e => e.id) ?? []),
+        ...(i.comboId ? (i.components ?? []).flatMap(part => part.extras?.map(extra => extra.id) ?? []) : []),
+      ]),
       ...comboComponents,
     ]),
   ];

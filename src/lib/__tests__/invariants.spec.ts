@@ -41,6 +41,66 @@ const schema = fs.readFileSync("supabase/schema.sql", "utf8");
 const sources = walk("src");
 const read = (f: string) => fs.readFileSync(f, "utf8");
 
+describe("an order stores only verified choices and a validated destination", () => {
+  it("keeps client mods, extras and tableLabel out of every order builder", () => {
+    // An order carried free component extras, arbitrary modifier JSON and a
+    // table label unrelated to its debt. Discover the writers so a new one
+    // must declare how its items and destination were verified too.
+    const writers = sources.filter(file => {
+      const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true);
+      let writesOrder = false;
+      const visit = (node: ts.Node): void => {
+        if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+          node.expression.name.text === "insert" && /\.from\("orders"\)/.test(node.expression.expression.getText(source))) {
+          writesOrder = true;
+        }
+        if (ts.isPropertyAssignment(node) && node.name.getText(source) === "p_order" &&
+          ts.isObjectLiteralExpression(node.initializer) && node.initializer.properties.some(property =>
+            ts.isPropertyAssignment(property) && property.name.getText(source) === "items")) writesOrder = true;
+        ts.forEachChild(node, visit);
+      };
+      visit(source);
+      return writesOrder;
+    });
+    expect(writers.sort()).toEqual([
+      "src/app/api/checkout/route.ts", "src/app/api/pos/order/route.ts",
+      "src/app/api/table-order/route.ts", "src/lib/pos-offline.ts",
+    ]);
+    for (const file of writers.filter(file => file !== "src/lib/pos-offline.ts")) {
+      const code = read(file);
+      expect(code, file).toMatch(/const verified = result\.lines;/);
+      expect(code, file).toMatch(/(?:verifyCart|verifiedLines)\(/);
+      expect(code, file).not.toMatch(/\b(?:mods|extras|table_label):\s*(?:body\.|line\.|chosen\.|tableLabel\b)/);
+      if (file.includes("/checkout/")) {
+        expect(code).toMatch(/const table = tableId \? await tableOf\(restaurantId, tableId\) : null;/);
+        expect(code).toMatch(/checkoutOrderRow\(\{\s*restaurantId,\s*table,/);
+        expect(code).not.toMatch(/\btableLabel\b/);
+      } else {
+        expect(code).toMatch(/items: verified/);
+        if (file.includes("/table-order/")) expect(code).toMatch(/table_label: table\.label/);
+        else expect(code).not.toMatch(/table_label:|tableLabel/);
+      }
+    }
+    // A recovered sale already happened: only verified current lines, or the
+    // bounded historical snapshot after manager approval, may record it.
+    const offline = read("src/lib/pos-offline.ts");
+    expect(offline).toContain("const savedLines = offlineLines(body.items)");
+    expect(offline).toContain("const lines = approval ? savedLines : current!.lines");
+    expect(offline).toMatch(/items: lines/);
+    const row = read("src/lib/checkout/order-row.ts");
+    expect(row).toContain("items: o.verified");
+    expect(row).toContain("table_label: o.table?.label ?? null");
+    for (const file of ["src/lib/verify-cart.ts", "src/lib/verify-combo.ts"]) {
+      const code = read(file);
+      expect(code).toMatch(/verifyModifiers\(/);
+      expect(code).toMatch(/verifyExtras\(/);
+      expect(code).not.toMatch(/\b(?:mods|extras):\s*(?:line|chosen|component)\.(?:mods|extras)/);
+    }
+    expect(read("src/app/api/service-requests/route.ts")).toContain("table_label: table.label");
+    expect(read("src/hooks/useCart.ts")).toContain("removeLineExtras(line, drop)");
+  });
+});
+
 describe("a new table decides whether the world can read it", () => {
   it("locks down or explicitly grants every table created after the blanket revoke", () => {
     // `revoke all on all tables in schema public from anon` runs once, partway

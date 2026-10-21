@@ -64,7 +64,7 @@ describe("the row a checkout writes", () => {
     itemDiscount: 0, promoDiscount: 0, couponDiscount: 0,
   } as PricedCart;
   const base = {
-    restaurantId: "r", tableId: "t", tableLabel: "Mesa 1", sessionId: "s", diner: "phone-1",
+    restaurantId: "r", table: { id: "t", label: "Mesa 1" }, sessionId: "s", diner: "phone-1",
     deferred: false, pricing, taxPct: 16, couponCode: null, currency: "MXN",
     verified: [] as OrderLineItem[], note: undefined, customerName: "Ana",
   };
@@ -77,7 +77,7 @@ describe("the row a checkout writes", () => {
 
   it("keeps a name only off a table, and only a phone id that could be ours", () => {
     expect(checkoutOrderRow(base).customer_name).toBeNull();
-    expect(checkoutOrderRow({ ...base, tableId: null }).customer_name).toBe("Ana");
+    expect(checkoutOrderRow({ ...base, table: null }).customer_name).toBe("Ana");
     expect(checkoutOrderRow({ ...base, diner: "x".repeat(65) }).diner).toBeNull();
     expect(checkoutOrderRow({ ...base, diner: 42 }).diner).toBeNull();
   });

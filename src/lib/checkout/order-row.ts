@@ -4,8 +4,8 @@ import type { OrderLineItem } from "@/lib/types";
 
 interface CheckoutOrderInput {
   restaurantId: string;
-  tableId: string | null;
-  tableLabel: string | null;
+  /** The row returned by the restaurant-scoped table lookup, never its client label. */
+  table: { id: string; label: string } | null;
   sessionId: string | null;
   /** The throwaway id the phone gave itself, exactly as the client sent it. */
   diner: unknown;
@@ -24,8 +24,8 @@ export function checkoutOrderRow(o: CheckoutOrderInput) {
   const { pricing } = o;
   return {
     restaurant_id: o.restaurantId,
-    table_id: o.tableId,
-    table_label: o.tableLabel,
+    table_id: o.table?.id ?? null,
+    table_label: o.table?.label ?? null,
     session_id: o.sessionId,
     // Which phone this was. Bounded because it comes from the client and
     // is written with the secret key; anything longer is not one of ours.
@@ -62,7 +62,7 @@ export function checkoutOrderRow(o: CheckoutOrderInput) {
     // Ignored outright when there is a table. A name is how the counter
     // finds a person; a table already has one, and storing a name nobody
     // asked for would be collecting personal data for nothing.
-    customer_name: o.tableId ? null : (capName(o.customerName) ?? null),
+    customer_name: o.table ? null : (capName(o.customerName) ?? null),
     paid: false,
   };
 }

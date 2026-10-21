@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { trimCartToStock, type StockLimit } from "@/lib/cart-stock";
 import type { OrderLineItem } from "@/lib/types";
 import { MAX_LINE_QTY } from "@/lib/pricing";
+import { removeLineExtras } from "@/lib/cart-extras";
 
 /** A cart line is an order line item plus a client-side id for list keys/removal. */
 export type CartItem = OrderLineItem & { cartId: number };
@@ -115,13 +116,7 @@ export function useCart(restaurantId: string) {
   /** Strips the given extras from every line — used when they sell out at checkout. */
   function removeExtras(extraIds: string[]) {
     const drop = new Set(extraIds);
-    setItems(prev =>
-      prev.map(line => {
-        if (!line.extras?.some(e => drop.has(e.id))) return line;
-        const kept = line.extras.filter(e => !drop.has(e.id));
-        return { ...line, extras: kept.length ? kept : undefined };
-      }),
-    );
+    setItems(prev => prev.map(line => removeLineExtras(line, drop)));
   }
 
   /**

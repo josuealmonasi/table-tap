@@ -1,9 +1,11 @@
 import { buildCombos } from "@/lib/promotions";
 import { MAX_LINE_QTY } from "@/lib/pricing";
 import { capDishName, capNote } from "@/lib/notes";
-import { missingRequired } from "@/lib/modifiers";
+import { verifyModifiers } from "@/lib/modifiers";
+import { verifyExtras } from "@/lib/verify-extras";
+import { verifyCombo } from "@/lib/verify-combo";
 import type { PromotionWithItems } from "@/lib/promotions";
-import type { MenuItem, Modifier, OrderExtra, OrderLineItem } from "@/lib/types";
+import type { MenuItem, Modifier, OrderLineItem } from "@/lib/types";
 import { MAX_CART_LINES, type CartRejection } from "@/lib/cart-limits";
 
 // Kept importable from here, where the routes that check a cart find them.
@@ -40,7 +42,6 @@ function clampQty(qty: number): number {
  * full HTTP round trip against Stripe, so the rules that protect the money
  * were the least-tested code in the app.
  */
-
 /** The `menu_items` columns the verification actually reads. */
 export interface VerifiableItem {
   id: string;
@@ -75,24 +76,6 @@ export interface VerifyCartInput {
 
 export type VerifyCartResult =
   { ok: true; lines: OrderLineItem[] } | { ok: false; rejection: CartRejection };
-
-/** Re-prices an extra from the DB, or reports it as gone. */
-function verifyExtras(
-  requested: OrderExtra[] | undefined,
-  priceMap: Map<string, VerifiableItem>,
-  removed: Map<string, string>,
-): OrderExtra[] {
-  const kept: OrderExtra[] = [];
-  for (const extra of requested ?? []) {
-    const db = priceMap.get(extra.id);
-    if (!db || !db.available) {
-      removed.set(extra.id, extra.name);
-      continue;
-    }
-    kept.push({ id: db.id, name: db.name, emoji: db.emoji, price: db.price });
-  }
-  return kept;
-}
 
 export function verifyCart(input: VerifyCartInput): VerifyCartResult {
   const { items, promotions, dbItems, isOnOpenMenu } = input;
@@ -133,62 +116,9 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
       }
     }
 
-    // Extras chosen inside the bundle are charged on top of it, so they get the
-    // same treatment as an ordinary line's. Trusting the client here would let
-    // a forged payload attach a MX$0 truffle oil to a MX$5 deal.
-    const comboExtras = verifyExtras(line.extras, priceMap, removedExtras);
-
-    // Required option groups apply per component: a deal containing a steak
-    // can't be ordered without its doneness any more than the steak could be
-    // on its own.
-    for (const component of line.components ?? []) {
-      const product = priceMap.get(component.itemId);
-      if (!product) continue;
-      const unanswered = missingRequired(product.modifiers ?? [], component.mods);
-      if (unanswered.length > 0) {
-        return {
-          ok: false,
-          rejection: {
-            kind: "missingModifiers",
-            unanswered,
-            forName: component.name,
-            itemId: component.itemId,
-          },
-        };
-      }
-    }
-
-    lines.push({
-      itemId: combo.id,
-      comboId: combo.id,
-      name: combo.name,
-      emoji: combo.emoji || "🎁",
-      // The bundle price, from the promotion row. Extras sit alongside it and
-      // priceCart sums them — the deal fixes what the dishes cost, not what an
-      // upgrade costs.
-      price: combo.price,
-      qty: clampQty(line.qty),
-      mods: {},
-      // The client's per-component choices are kept for the kitchen ticket
-      // (they're instructions, not money), but every component and its
-      // structure comes from the DB-built combo.
-      components: combo.components.map(c => {
-        const chosen = (line.components ?? []).find(x => x.itemId === c.itemId);
-        return chosen ? { ...c, mods: chosen.mods, extras: chosen.extras } : c;
-      }),
-      ...(comboExtras.length > 0 ? { extras: comboExtras } : {}),
-      notes: capNote(line.notes),
-      // A bundle needs no preparation only when NONE of its plates do. One
-      // burger in a meal deal is enough to send the whole thing to a cook.
-      ...(combo.components.length > 0 &&
-      combo.components.every(c => priceMap.get(c.itemId)?.skips_kitchen)
-        ? { skipsKitchen: true }
-        : {}),
-      // A bundle goes to the bar only when all of it is made there.
-      ...(combo.components.length > 0 && combo.components.every(c => madeAtBar(priceMap.get(c.itemId)))
-        ? { station: "bar" as const }
-        : {}),
-    });
+    const result = verifyCombo(combo, line, clampQty(line.qty), priceMap, removedExtras);
+    if (!result.ok) return result;
+    lines.push(result.line);
   }
 
   for (const line of plainLines) {
@@ -204,13 +134,13 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
     // stale (a tab left open while the manager marked a group required) or
     // simply absent, so this is the one that decides — otherwise the kitchen
     // gets a ticket it can't cook from.
-    const unanswered = missingRequired(db.modifiers ?? [], line.mods);
-    if (unanswered.length > 0) {
+    const choices = verifyModifiers(db.modifiers ?? [], line.mods);
+    if (!choices.ok) {
       return {
         ok: false,
         rejection: {
           kind: "missingModifiers",
-          unanswered,
+          unanswered: choices.unanswered.length ? choices.unanswered : [db.name],
           forName: db.name,
           itemId: db.id,
         },
@@ -226,7 +156,7 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
       // a customer set their own price.
       discountPct: Number(db.discount_pct) || 0,
       qty: clampQty(line.qty),
-      mods: line.mods ?? {},
+      mods: choices.mods,
       extras: verifiedExtras.length ? verifiedExtras : undefined,
       notes: capNote(line.notes),
       // From the DB, like the name and the price: the ticket has to say what

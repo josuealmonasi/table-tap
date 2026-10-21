@@ -18,6 +18,9 @@ us, and what now catches each one.
 | Staff write only a service request's status; duplicates match within the restaurant (H2) | A member pointed a request at another restaurant's table and silenced its calls |
 | Every `.rpc()` call names the arguments of a function in schema.sql (E10) | Proposing a split called the old signature and left the proposer without a seat |
 | Links the app sends are built on its own address, never on `Origin` (G3) | A statement email carried a pay link to the caller's site |
+| Menu modifier verification and defensive rendering agree (S1 G1) | Arbitrary modifier JSON crashed the kitchen board and blocked the printer queue |
+| Combo extras on paper, in prices and in stock agree (S1 E5) | Component extras reached the kitchen without being charged or reserved |
+| Stored destinations and validated tables agree (S1 G4) | A diner could attach table 8's label to table 7's debt, or label a counter order |
 | Cashier recovery access and upload authority agree (PR2 review) | Losing POS hid the only upload surface while sign-out still protected held money |
 | Deposit identity and display use the same original currency (PR2 review) | A peso deposit was reconciled against a later dollar sale |
 | Saved and verified carts compare line multisets (PR2 review) | Verification moved combos first and falsely flagged unchanged mixed carts |
@@ -2651,3 +2654,45 @@ JSON of the wrong type (a string for a list, a `null` rating, a number for a
 name, a signature of the right length in letters but not in bytes); each now
 checks the type it uses. `pnpm api` sends each of those bodies, and
 `loyalty-pass.spec.ts` the signature.
+## S1 G1: the menu and the kitchen agree on modifiers
+
+The menu's allowed choices and the stored instructions had to agree. Plain
+lines and every DB-defined combo plate now rebuild modifiers from its own
+groups and options. Unknown groups, removed options, wrong single/multi shapes
+and nested values use the existing `missingModifiers` refusal, including for
+optional groups; nothing silently changes the diner's choice. Multi choices
+are deduplicated. Omitted combo plates still answer their required groups.
+Like vanished extras, an invalid choice must be corrected before ordering.
+
+Old snapshots need a second defense: the card, detail dialog and kitchen
+ticket share string-only modifier formatting, ignoring non-string values even
+inside arrays. `cart-integrity.spec.ts` and `order-modifiers.spec.tsx` reproduce
+the forged JSON and render the actual board components and printer text.
+`invariants.spec.ts` discovers order writers and guards verified inputs.
+
+## S1 E5: a combo upgrade is the same on paper and on the bill
+
+The component instructions, charged extras and stock demand had to agree.
+The current UI sends each upgrade twice: on its plate and flattened on the
+combo line. Both inputs are verified against restaurant-scoped rows, matching
+copies one at a time; two plates taking cheese still mean two upgrades.
+Component-only upgrades are fetched, priced and reserved too. Unmatched
+parent-only upgrades remain supported and attach to the first plate so the
+ticket prints them. The line's priced extras are rebuilt from those verified
+plates, which also supply the ticket; stock reads that same flattened list.
+
+Gone extras retain the existing refusal. Removing one from the cart clears
+both copies, so retrying cannot restore it from a component. The E5 cases in
+`cart-integrity.spec.ts` exercise the real UI builder, verification, pricing,
+stock and ticket, plus the vanished-extra retry and legacy parent-only carts.
+
+## S1 G4: where the debt belongs is where the plate goes
+
+The validated table and the order's printed destination had to agree.
+Checkout now passes the restaurant-scoped table row into `checkoutOrderRow`;
+both `table_id` and `table_label` come from that row. Counter orders store
+neither. The request's label is ignored. The waiter route and service requests
+already take their labels from the table row, and POS accepts no table label.
+`checkout-table-label.spec.ts` calls the actual route with mocked database
+answers for a forged destination, a counter label and a foreign/missing table.
+`invariants.spec.ts` guards those writers and the shared checkout row builder.
