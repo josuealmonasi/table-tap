@@ -992,12 +992,45 @@ export function cases(fx) {
           ? true
           : `a refund Stripe never made was marked done (${data?.refunded_at ?? "row gone"})`;
       } },
+    // Customer completion must not turn an outstanding fee retry into 409.
+    // The demo account cannot answer Stripe: the fee stays pending and the
+    // customer's original completion evidence must survive both requests.
+    { name: "POST /api/refunds-due (completed customer refund retries its outstanding fee)", as: "manager",
+      method: "POST", path: "/api/refunds-due",
+      arrange: async f => {
+        const restore = await f.withCardReader();
+        const { data, error } = await f.admin.from("refunds_due").insert({
+          restaurant_id: r, stripe_payment_intent: `pi_${MARK}_${crypto.randomUUID()}`,
+          amount: 12.5, currency: "USD", table_label: MARK,
+          refunded_at: "2026-10-01T12:00:00Z", stripe_refund_id: "re_api_customer_completed",
+        }).select("id").single();
+        if (error) { await restore(); throw new Error(error.message); }
+        f.feeRetryId = data.id;
+        return async () => {
+          await f.admin.from("refunds_due").delete().eq("id", f.feeRetryId);
+          await restore();
+        };
+      },
+      body: f => ({ id: f.feeRetryId }), expect: [200],
+      check: async (answer, f) => {
+        const retry = await fetch(`${f.base}/api/refunds-due`, {
+          method: "POST", headers: { "Content-Type": "application/json", Cookie: f.who.manager },
+          body: JSON.stringify({ id: f.feeRetryId }),
+        });
+        const second = await retry.json();
+        const { data } = await f.admin.from("refunds_due")
+          .select("refunded_at, stripe_refund_id, fee_reconciled_at").eq("id", f.feeRetryId).single();
+        return answer.feePending === true && retry.status === 200 && second.feePending === true
+          && data?.stripe_refund_id === "re_api_customer_completed"
+          && new Date(data.refunded_at).toISOString() === "2026-10-01T12:00:00.000Z"
+          && data.fee_reconciled_at === null || `fee retry lost its pending state or customer evidence: ${JSON.stringify({ answer, second, data })}`;
+      } },
     { name: "POST /api/refunds-due (one already given back)", as: "manager",
       method: "POST", path: "/api/refunds-due",
       arrange: async f => {
         const { data } = await f.admin.from("refunds_due").insert({
           restaurant_id: r, stripe_payment_intent: `pi_${MARK}_${crypto.randomUUID()}`,
-          amount: 12.5, table_label: MARK, refunded_at: new Date().toISOString(),
+          amount: 12.5, table_label: MARK, refunded_at: new Date().toISOString(), fee_reconciled_at: new Date().toISOString(),
         }).select("id").single();
         f.refundedId = data?.id ?? "";
         return async () => { await f.admin.from("refunds_due").delete().eq("id", f.refundedId); };

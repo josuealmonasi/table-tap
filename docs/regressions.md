@@ -13,6 +13,8 @@ us, and what now catches each one.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
+| A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
 | Price breaks are whole quantities, priced by division, and the database refuses others (J4) | A tier of 1e-20 units froze the server |
 | A print job closes only on the printer's success code (J9) | A printer out of paper dropped tickets unprinted |
@@ -3221,3 +3223,44 @@ Check both staff screens in English and Spanish: repeat a handover after a
 lost response, then use an old screen after another device closed its round.
 Check today's unused stamp can still be undone and a stamp used for a reward
 cannot. Run the API, RLS, attack and complete release gates in isolation.
+
+
+## A duplicate refund and the fee still owed (S11 I5)
+
+`refunded_at` proves that the diner was paid back; `fee_reconciled_at` proves
+that TableTap's fee was returned and verified in the fee ledger. A provider
+failure between them used to hide the fee forever: Bills removed the row and
+a retry answered already refunded. Bills now keeps the fee visible, offers a
+fee-only retry, and schedules recovery after its response. The saved fee
+request fixes its amount before Stripe is called; retries reuse that request
+and check provider metadata even after an idempotency key expires. A lost
+response never creates another customer refund. An unverifiable fee remains
+pending and keeps consuming the month's fee ceiling.
+
+`refund-due.spec.ts` checks the failed-lookup retry and single customer log;
+`refund-due-recovery.spec.ts` checks fee failure, restart, lost response,
+provider evidence and the original connected account. `refund-due-list.spec.ts`
+checks recovery without blocking Bills or refunding an unapproved payment.
+`refund-due-api.spec.ts` checks the pending-fee response and manager guard.
+The `api` case **completed customer refund retries its outstanding fee** is
+written for the release runner and was not run here.
+
+## A duplicate refund and the currency it was charged in (S11 I9)
+
+A menu setting and an existing charge are two different facts. An insert
+trigger copies currency and account from the verified frozen checkout onto
+the obligation. The additive backfill uses that same evidence; background
+recovery can verify older rows directly with Stripe. Without evidence the
+currency stays unknown. Bills, the confirmation, activity and the money report
+show the original currency or an explicit unverified amount, never today's
+menu currency. The refund log still omits `method`: this money never entered
+the corte and must not be deducted from it.
+
+`refunds-due.spec.tsx` checks original-currency display and confirmation,
+unverified legacy rows and activity, and the fee retry button.
+`refund-due.spec.ts` checks the logged currency; `refund-due-recovery.spec.ts`
+checks verified backfill and unavailable evidence. Release checks must apply
+the S11 schema block first, then run the complete gates, including `dialogs`.
+Look at Bills and its confirmation in both languages at 360/390px, 820px and
+1280px: a USD obligation beside an MXN menu, an unverified older amount, and
+a customer-complete refund whose fee is still pending.

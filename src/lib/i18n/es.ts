@@ -1047,6 +1047,10 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
   },
 
   refunds: {
+    currencyUnknown: "Moneda sin verificar",
+    feePending: "El comensal ya recibió su reembolso. Falta devolver o verificar la comisión de TableTap.",
+    retryFee: "Verificar / devolver comisión",
+
     title: "Reembolsos pendientes",
     intro: "Pagos con tarjeta que llegaron por una cuenta que ya estaba cobrada. Ese dinero es del comensal.",
     table: "Mesa {label}",

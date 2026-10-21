@@ -1050,6 +1050,10 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
   },
 
   refunds: {
+    currencyUnknown: "Currency unverified",
+    feePending: "The diner has been refunded. TableTap’s fee still needs to be returned or checked.",
+    retryFee: "Check / return fee",
+
     title: "Refunds due",
     intro: "Card payments that arrived for a bill already collected. That money belongs to the diner.",
     table: "Table {label}",
