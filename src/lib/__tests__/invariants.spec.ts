@@ -2877,3 +2877,22 @@ describe("a link the app sends is built on its own address", () => {
     expect(sources.filter(f => /siteOrigin\(req\)/.test(read(f))).length).toBeGreaterThanOrEqual(9);
   });
 });
+
+describe("a sitting lasts as long in SQL as in the app", () => {
+  it("writes the table-member functions' window as OPEN_BILL_HOURS", () => {
+    // Two places that must agree: the routes treat a sitting older than
+    // OPEN_BILL_HOURS as over, and the member functions close and refuse it by
+    // their own interval. Changed in one place only, a phone would be let into
+    // a sitting the bill no longer shows, or kept out of one it still owes on.
+    const hours = Number(/export const OPEN_BILL_HOURS = (\d+);/.exec(read("src/lib/table-bill.ts"))?.[1]);
+    expect(hours, "OPEN_BILL_HOURS moved").toBeGreaterThan(0);
+    for (const name of ["request_table_member", "decide_table_member"]) {
+      const start = schema.indexOf(`create or replace function public.${name}(`);
+      expect(start, name).toBeGreaterThan(-1);
+      const body = schema.slice(start, schema.indexOf("$$;", schema.indexOf("$$", start) + 2));
+      const intervals = [...body.matchAll(/interval '(\d+) hours'/g)].map(m => Number(m[1]));
+      expect(intervals.length, `${name} has no sitting window`).toBeGreaterThan(0);
+      expect(intervals.every(h => h === hours), `${name}: ${intervals}`).toBe(true);
+    }
+  });
+});
