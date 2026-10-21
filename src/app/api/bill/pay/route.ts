@@ -22,6 +22,7 @@ import {
 } from "@/lib/coupon-service";
 import type { Order } from "@/lib/types";
 import { round2 } from "@/lib/money";
+import { siteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
 
@@ -197,7 +198,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.generic", 500);
   }
 
-  const origin = req.headers.get("origin") ?? new URL(req.url).origin;
+  const origin = siteOrigin(req);
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
   // Reserved under the month's ceiling before Stripe is asked; given back

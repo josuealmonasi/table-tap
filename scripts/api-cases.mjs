@@ -383,6 +383,52 @@ export function cases(fx) {
     { name: "POST /api/split (refuses one person)", as: "diner", method: "POST", path: "/api/split",
       body: { sessionId: fx.sessionId ?? "", diner: "apicheck", restaurantId: r, tableId: table.id, shares: 1 },
       expect: [400] },
+    // Proposed for real, on a table of its own with two diners' unpaid orders,
+    // and judged by the seat: the call that seats the proposer once named the
+    // old function's arguments, failed unread, and left them without a share.
+    { name: "POST /api/split (the proposer takes a seat)", as: "diner", method: "POST", path: "/api/split",
+      arrange: async f => {
+        const { data: t } = await f.admin.from("restaurant_tables")
+          .insert({ restaurant_id: r, label: `${MARK}-propose` }).select("id, label").single();
+        const { data: sit } = await f.admin.from("table_sessions")
+          .insert({ restaurant_id: r, table_id: t.id }).select("id").single();
+        const order = diner => ({
+          restaurant_id: r, table_id: t.id, table_label: t.label, session_id: sit.id, diner,
+          items: [{ itemId: f.dish.id, name: f.dish.name, emoji: "🍽️", price: f.lineTotal, qty: 1, mods: {} }],
+          subtotal: f.lineTotal, service_fee: 0, tip: 0, tax_pct: 0, discount: 0, total: f.lineTotal,
+          note: MARK, status: "received", paid: false,
+        });
+        const { error } = await f.admin.from("orders").insert([order(`${MARK}-a`), order(`${MARK}-b`)]);
+        if (error) throw new Error(`could not seat two diners: ${error.message}`);
+        f.propose = { table: t.id, session: sit.id };
+        return async () => {
+          const { data: splits } = await f.admin.from("bill_splits").select("id").eq("session_id", sit.id);
+          const ids = (splits ?? []).map(x => x.id);
+          if (ids.length) {
+            await f.admin.from("bill_split_claims").delete().in("split_id", ids);
+            await f.admin.from("bill_splits").delete().in("id", ids);
+          }
+          await f.admin.from("orders").delete().eq("session_id", sit.id);
+          await f.admin.from("table_sessions").delete().eq("id", sit.id);
+          await f.admin.from("restaurant_tables").delete().eq("id", t.id);
+        };
+      },
+      body: f => ({ sessionId: f.propose.session, diner: `${MARK}-a`, restaurantId: r, tableId: f.propose.table, shares: 2 }),
+      expect: [200],
+      check: async (_d, f) => {
+        const { data: split } = await f.admin.from("bill_splits").select("id")
+          .eq("session_id", f.propose.session).eq("status", "proposed").maybeSingle();
+        if (!split) return "no proposal was recorded";
+        const { data: seats } = await f.admin.from("bill_split_claims").select("diner").eq("split_id", split.id);
+        return (seats ?? []).some(x => x.diner === `${MARK}-a`) || `the proposer has no seat (${JSON.stringify(seats)})`;
+      } },
+    // Valid JSON with the wrong types: each of these once answered 500.
+    { name: "POST /api/receipt (order ids that are not a list)", as: "diner", method: "POST", path: "/api/receipt",
+      body: { orderIds: "x", email: "a@example.com" }, expect: [400, 429] },
+    { name: "POST /api/ratings (a rating that is null)", as: "diner", method: "POST", path: "/api/ratings",
+      body: { restaurantId: r, ratings: [null] }, expect: [400, 429] },
+    { name: "POST /api/signup (a name that is a number)", as: "diner", method: "POST", path: "/api/signup",
+      body: { acceptedTerms: true, restaurantName: 7, email: "a@example.com", password: "abcdefgh" }, expect: [400, 429] },
     { name: "POST /api/split/join (no such split)", as: "diner", method: "POST", path: "/api/split/join",
       body: { splitId: "00000000-0000-0000-0000-000000000000", sessionId: fx.sessionId ?? "",
               diner: "apicheck", restaurantId: r, tableId: table.id },

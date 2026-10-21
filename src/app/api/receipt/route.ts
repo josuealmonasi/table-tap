@@ -52,7 +52,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // One ticket, or every ticket a table settled together. Capped: a table
   // settles a handful of orders, and an uncapped list is a way to make one
   // request read the whole table and build an enormous email.
-  const ids = (orderIds?.length ? orderIds : [orderId])
+  // Read as an array only when it is one: JSON can say anything, and a string
+  // here once reached `.filter` and answered 500.
+  const ids = (Array.isArray(orderIds) && orderIds.length ? orderIds : [orderId])
     .filter((v): v is string => typeof v === "string" && v.length > 0)
     .slice(0, 40);
   const address = normalizeEmail(String(email ?? ""));

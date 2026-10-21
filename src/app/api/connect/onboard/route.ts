@@ -3,6 +3,7 @@ import { apiError } from "@/lib/api-error";
 import { actingOwner } from "@/lib/api-guard";
 import { getMembership } from "@/lib/membership";
 import { createOnboardingLink, ensureConnectAccount } from "@/lib/stripe-connect";
+import { siteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
 
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
   const membership = await getMembership();
   if (!membership) return await apiError("apiErr.forbidden", 403);
 
-  const origin = req.headers.get("origin") ?? new URL(req.url).origin;
+  const origin = siteOrigin(req);
 
   try {
     const accountId = await ensureConnectAccount(actor.restaurantId, {

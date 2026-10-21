@@ -7,6 +7,7 @@ import { isSelfServe, readPlanName } from "@/lib/billing";
 import { startRestaurantBilling } from "@/lib/billing-checkout";
 import { billingFailure } from "@/lib/billing-operation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { siteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
 
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // count the Plan screen saw, so what is charged and what was shown cannot
     // disagree.
     const taken = await foundersTaken();
-    const origin = req.headers.get("origin") ?? new URL(req.url).origin;
+    const origin = siteOrigin(req);
     return NextResponse.json(await startRestaurantBilling(createAdminClient(), actor, limits, taken, origin));
   } catch (err) {
     return await billingFailure(err);

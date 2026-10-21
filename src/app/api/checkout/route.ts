@@ -25,6 +25,7 @@ import { payLaterAllowed } from "@/lib/checkout/pay-later";
 import { checkoutFee } from "@/lib/checkout/app-fee";
 import { NO_FEE, releaseFee, stripeRefusedOutright, type FeeHold } from "@/lib/platform-fee";
 import { checkoutHold } from "@/lib/checkout/hold";
+import { siteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
 
@@ -259,7 +260,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ orderId: order.id, deferred: true, sessionId });
     }
 
-    const origin = req.headers.get("origin") ?? new URL(req.url).origin;
+    const origin = siteOrigin(req);
     const cur = restaurant.currency.toLowerCase();
 
     let session;

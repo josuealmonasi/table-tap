@@ -43,7 +43,8 @@ export async function POST(req: NextRequest) {
   // ask; this is the place that makes the answer mean something.
   if (!acceptedTerms) return await apiError("auth.termsRequired", 400);
 
-  if (!restaurantName?.trim() || !email) {
+  // Strings, or nothing: a number for a name once reached `.trim()` and answered 500.
+  if (typeof restaurantName !== "string" || !restaurantName.trim() || typeof email !== "string" || !email) {
     return await apiError("apiErr.signupFields", 400);
   }
   // Held to the same length as every other password in the app. This account

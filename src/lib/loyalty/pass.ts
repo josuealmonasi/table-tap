@@ -89,7 +89,11 @@ export function readVisitPass(restaurantId: string, pass: unknown, now = Date.no
   const [key, issued36, nonce, sig] = parts;
   const expected = sign(restaurantId, `${key}.${issued36}.${nonce}`);
   if (!expected || sig.length !== expected.length) return null;
-  if (!timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+  // Compared as bytes, so the byte lengths must agree too: 22 accented letters
+  // are 22 characters but 44 bytes, and timingSafeEqual threw on them (a 500).
+  const given = Buffer.from(sig);
+  const wanted = Buffer.from(expected);
+  if (given.length !== wanted.length || !timingSafeEqual(given, wanted)) return null;
 
   const age = Math.floor(now / 1000) - parseInt(issued36, 36);
   // A minute of grace for two servers whose clocks disagree.
