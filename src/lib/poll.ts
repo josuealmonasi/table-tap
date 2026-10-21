@@ -29,3 +29,6 @@ export const BILL_POLL_MS = 10_000;
 export function perMinute(ms: number): number {
   return Math.ceil(60_000 / ms);
 }
+
+/** Admission decisions, on the diner phone and the staff board. */
+export const MEMBER_POLL_MS = 5_000;

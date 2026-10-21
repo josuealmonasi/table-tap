@@ -50,6 +50,44 @@ next billing event would write Stripe's plan back over it.
 The difference is not a setting. What changes is **who holds the order** — a
 table holds its own, and where there is no table the counter does.
 
+## How a phone joins a table (S7)
+
+The printed QR opens the menu. It never grants access to the people eating
+there now. `/api/table-membership` issues a random 256-bit credential in an
+HttpOnly, SameSite=Lax cookie (Secure in production). Only its SHA-256 hash is
+stored in `table_session_members`, with RLS enabled and all public and
+signed-in client access revoked. The server's service role alone reads it.
+
+An empty table stays empty while someone browses. The first phone to order
+opens the sitting and becomes approved in the same database transaction,
+under the physical table's lock. Another phone, including one returning from
+an earlier party, is pending. It can browse and call the waiter, but cannot
+read the shared bill, order onto it, divide it, request collection or claim
+the table's visit card. It sees its phone code and a waiting message.
+
+A waiter, cashier, manager or owner approves or rejects it next to the open
+requests on the board. The kitchen cannot. Any approved phone at that same
+sitting may also decide, matching the short phone code. Both screens poll
+at `MEMBER_POLL_MS` (five seconds); credentials are never opened to realtime
+readers. A rejection lasts for that credential and sitting; a decision cannot
+revoke a phone that is already approved or has ordered.
+
+Staff-opened bills keep their existing collection rules. A diner joining one
+is pending too. Approval needs no plan entitlement, so a downgrade cannot
+prevent the floor from helping someone pay. Table orders and split seats use
+the verified member id; a browser-supplied `diner` never proves identity.
+
+Membership ends with the sitting. An approved phone retains read/payment
+access to its own closed sitting's orders without an age cutoff, never the
+next party's food. Its credential cookie lasts a year to keep that payment
+path available; retaining a cookie grants no membership of a later sitting.
+Private order links for orders predating membership also remain payable, but
+only for the exact remembered legacy orders: they cannot join, approve,
+divide a new bill or obtain a table loyalty pass. New member orders cannot use
+that legacy exception. Table loyalty passes name the sitting and are checked
+against live membership again when the card is claimed. Table ratings require
+the member that actually ordered; counter tracker capabilities stay as before.
+
 ## End to end
 
 1. Scan → the menu loads (public read, RLS-filtered).
@@ -226,7 +264,7 @@ dishes on a bill the restaurant has just cancelled.
   guard. Nothing is at risk if somebody posts past it, because what a share
   costs is summed from the orders either way.
 - **Only between the people who are actually eating.** The ceiling is the
-  number of DEVICES that have ordered on the table — `orders.diner`, counted by
+  number of DEVICES that have ordered on this sitting — `orders.diner`, counted by
   `diningOn` — never the number of chairs, and never more than 20, which is
   what the `shares` column allows. Orders a waiter typed in carry no device and
   count as one party between them rather than one each. Under two devices the
@@ -440,13 +478,13 @@ dishes on a bill the restaurant has just cancelled.
 ## Data model
 
 `supabase/schema.sql` is one idempotent script; git history is the changelog.
-Fifty-nine tables, RLS on every one of them, in groups:
+Every table has RLS enabled, in groups:
 
 - **The restaurant** — `restaurants`, `staff`, `profiles`, `platform_admins`,
   `plan_limits`, `user_logs`
 - **The menu** — `menus`, `categories`, `menu_items`, `item_addons`,
   `dietary_tags`, `icon_groups`, `icon_group_items`
-- **Selling** — `orders`, `payments`, `table_sessions`, `restaurant_tables`,
+- **Selling** — `orders`, `payments`, `table_sessions`, `table_session_members`, `restaurant_tables`,
   `service_requests`, `dish_ratings`, `bill_splits`, `bill_split_claims`
 - **The pass** — `kitchen_tickets`, `kitchen_requests` (safe live projections)
 - **Paper** — `print_jobs`
@@ -468,13 +506,12 @@ HMAC-SHA256 under the server's secret, 20 hex characters), never the address
 itself, and `rate_limit_hit` sweeps windows older than a day. The privacy
 notice says both.
 
-`orders.diner` is the throwaway token a phone gives itself for the evening —
-localStorage, per restaurant, bounded to 64 characters and rejected rather than
-truncated past that. It names a device and nothing else: no account, no person,
-nothing that outlives the meal. `/api/checkout` is its only writer, so an order
-the waiter's pad or the till typed in has none, and that is what makes them the
-single anonymous party when a table is divided. It is also the only identity
-anybody has at a table, which is what lets it hold a seat in a split.
+`orders.diner` is the server-verified member id for a new table order. The
+credential itself lives only in the HttpOnly cookie, with its hash in the
+private membership table. Counter orders may still carry the old throwaway
+localStorage id. Orders typed by staff carry no diner and count as one
+anonymous party when dividing the bill. Split seats and later rounds are
+matched to the member the server verified, never a client-chosen id.
 
 ## Security
 

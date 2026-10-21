@@ -240,6 +240,8 @@ export function lineUnitPrice(item: { price: number; extras?: OrderExtra[] }): n
 }
 
 export type Order = {
+  /** The server-verified member that placed a table order. */
+  diner?: string | null;
   /** Retained payment coverage, supplied by the server for bill display. */
   collected?: number;
   collected_tip?: number;

@@ -17,10 +17,9 @@ export interface CheckoutBody {
   /**
    * The throwaway id this phone gave itself for the evening.
    *
-   * Stored on the order so a table can be divided between the people who
-   * actually ate: the number of devices that have ordered on the sitting
-   * is the most ways its bill can go. Absent from a waiter's order, and
-   * from a phone with storage switched off.
+   * A counter-only hint. At a table the server replaces it with the verified
+   * member id, so copying another phone's hint cannot claim its orders or a
+   * split seat. Absent from a waiter's order and when storage is switched off.
    */
   diner?: string;
 }

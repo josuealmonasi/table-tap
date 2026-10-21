@@ -20,6 +20,9 @@ us, and what now catches each one.
 | Financial scope and Stripe retries agree independently of fees (S5 E8) | Bills and fee-free split shares could open two payable pages |
 | Fee caps and remaining food principal agree (S5 E9) | Existing gratuities raised the ten-percent cap on bill and split fees |
 | Displayed and payable sitting scopes agree (S5 E11) | A valid sitting older than eight hours showed debt that payment called paid |
+
+
+| A table QR and membership of its current sitting are separate (S7 G2/G7) | A saved QR could read the next party’s bill, add unpaid food and claim its table pass |
 | A signed card event matches our own frozen checkout before any money or expiry write (S4 E1) | A connected owner could stamp another restaurant's orders onto a cheap test session |
 | Settings and the database accept the same cent-based currencies (S4 E2) | JPY entered arithmetic that multiplied every charge by 100 |
 | Bill, split and account charges and receipts keep the orders' original currency (S4 E3) | Changing the menu from MXN to USD relabelled an unpaid peso bill as dollars |
@@ -2952,3 +2955,38 @@ hours and rejects a selection outside the displayed scope. The invariant also
 checks that the phone sends its sitting and payment has no second age cutoff.
 Claude must check the older sitting, a new party scanning the same table, and
 the changed-bill copy on screen.
+
+## S7 — a saved table QR was admission to the next party
+
+The bill reader fell back from a missing or stale sitting to the table's
+current sitting, while checkout joined that sitting without proving which
+phone was asking. The menu, bill, split, service, session, ratings and loyalty
+paths had to agree on admission; a self-chosen `diner` was not a credential.
+
+`table-membership-bill.spec.ts` first reproduced the leak with two failing
+tests. It now forbids either fallback. `table-membership.spec.ts` checks
+pending/rejected phones, a forged credential, wrong restaurant/table, and
+payment access to an expired closed sitting. `table-member-decisions.spec.ts`
+checks all four floor roles, kitchen refusal, same-sitting member approval,
+and stale decisions. `table-member-client.spec.ts` keeps overlapping first
+loads from replacing the cookie and losing access to an order. Checkout tests
+check refusal before stock or orders and
+the unaffected first phone. `legacy-bill-access.spec.ts` protects payment for
+pre-credential orders without granting membership. Invariants keep every
+public table route behind these checks and keep the new credential table
+private, including the reset and RLS sweeps.
+
+`pnpm api` and `pnpm attack` include real-cookie admission, staff approval,
+member rejection, forged diner ids, old-party reads/orders, stealing a table
+pass, and paying one's own old orders. Their isolated table, members, orders,
+requests, stock holds, accidental cards and rate counters are cleaned up. They
+are written here for the release runner; they were not run in this worktree.
+
+Look in Spanish at 360/390px and 1280px: the pending and rejected menu and
+cart, the approved phone's question and matching code, and the board's
+approval/rejection chips as waiter, manager, owner and cashier. The kitchen
+must have no phone decisions. Approve without reloading either device, and
+confirm the new phone can then order and open the bill. Close the sitting,
+seat a new party, and confirm the old phone can still see/pay its own food
+without seeing the new bill. Also check a staff-opened bill and a legacy
+phone's own-order payment during rollout.

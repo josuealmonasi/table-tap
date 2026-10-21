@@ -24,6 +24,9 @@ interface CartOverlayProps
     | "onEditItem"
     | "onCheckout"
   > {
+  /** Admission blocks a new order, never an existing bill. */
+  admissionBlocked?: boolean;
+  admissionNotice?: React.ReactNode;
   restaurant: Restaurant;
   table: RestaurantTable | null;
   cart: ReturnType<typeof useCart>;
@@ -45,11 +48,14 @@ export default function CartOverlay({
   cart,
   totals,
   onClose,
+  admissionBlocked = false,
+  admissionNotice,
   ...rest
 }: CartOverlayProps) {
   const { pricing, soldOut, orderableItems, tipPct, tipCustom, coupon, setCoupon } = totals;
   return (
     <DetailOverlay wide onClose={onClose}>
+      {admissionNotice}
       <CartScreen
         {...rest}
         restaurant={restaurant}
@@ -70,7 +76,7 @@ export default function CartOverlay({
         hints={pricing.hints}
         promoSavings={pricing.promoSavings}
         canCheckout={
-          orderableItems.length > 0 && restaurant.accepting_orders && !rest.orderAtRegister
+          !admissionBlocked && orderableItems.length > 0 && restaurant.accepting_orders && !rest.orderAtRegister
         }
         onChangeTip={totals.choosePct}
         onCustomTip={totals.setTipCustom}

@@ -1,3 +1,4 @@
+import { ownBillAccess } from "@/lib/legacy-bill-access";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -22,6 +23,8 @@ export async function POST(req: NextRequest) {
     restaurantId?: string;
     tableId?: string;
     kind?: string;
+    sessionId?: string;
+    ownOrderIds?: string[];
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { restaurantId, tableId, kind } = body;
@@ -53,6 +56,13 @@ export async function POST(req: NextRequest) {
     if (!plan || !can(plan.limits, "dineIn") || !can(plan.limits, "waiterService")) {
       return await apiError("plan.needs.dineIn", 403, { plan: "Servicio" });
     }
+  }
+
+  // A raised hand stays available to a phone waiting for admission. Asking
+  // for this sitting's bill or collection requires approved membership.
+  if (kind !== "waiter") {
+    const member = await ownBillAccess(req, restaurantId, tableId, body.sessionId, Array.isArray(body.ownOrderIds) ? body.ownOrderIds : []).catch(() => null);
+    if (!member) return await apiError("apiErr.tableJoin", 403);
   }
 
   // Don't stack duplicates: one open request per table+kind is enough.

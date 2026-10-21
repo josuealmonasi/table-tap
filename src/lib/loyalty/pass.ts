@@ -22,7 +22,7 @@ import { MAX_SHARES } from "@/lib/split-shares";
 import { PHONES_PER_ADDRESS } from "@/lib/rate-limit";
 
 /** Where a card was offered: a table, an order's tracker, or the counter menu. */
-export type VisitPlace = { table: string } | { order: string } | "counter";
+export type VisitPlace = { table: string; session?: string } | { order: string } | "counter";
 
 /** A pass lasts as long as a sitting can: a page left open all evening still works. */
 export const PASS_SECONDS = OPEN_BILL_HOURS * 3600;
@@ -42,14 +42,15 @@ const SIG_LENGTH = 22;
 
 function placeKey(place: VisitPlace): string {
   if (place === "counter") return "menu";
-  return "table" in place ? `t-${place.table}` : `o-${place.order}`;
+  return "table" in place ? `t-${place.table}${place.session ? `~${place.session}` : ""}` : `o-${place.order}`;
 }
 
 function placeOf(key: string): VisitPlace | null {
   if (key === "menu") return "counter";
-  const id = key.slice(2);
-  if (!UUID.test(id)) return null;
-  if (key.startsWith("t-")) return { table: id };
+  const [id, session, extra] = key.slice(2).split("~");
+  if (!UUID.test(id) || extra || (session && !UUID.test(session))) return null;
+  if (key.startsWith("t-")) return { table: id, ...(session ? { session } : {}) };
+  if (session) return null;
   if (key.startsWith("o-")) return { order: id };
   return null;
 }
@@ -83,7 +84,7 @@ export interface VisitPass {
  * one from yesterday, one from the future — is null.
  */
 export function readVisitPass(restaurantId: string, pass: unknown, now = Date.now()): VisitPass | null {
-  if (typeof pass !== "string" || pass.length > 120) return null;
+  if (typeof pass !== "string" || pass.length > 180) return null;
   const parts = pass.split(".");
   if (parts.length !== 4) return null;
   const [key, issued36, nonce, sig] = parts;

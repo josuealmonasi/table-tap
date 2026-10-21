@@ -23,7 +23,8 @@ vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: numb
 vi.mock("@/lib/rate-limit", () => ({ isRoomLimited: async () => false, isTableLimited: async () => false }));
 vi.mock("@/lib/plan-server", () => ({ getPlan: async () => ({ limits: { allows_deferred_payment: true } }) }));
 vi.mock("@/lib/plan", () => ({ can: () => true }));
-vi.mock("@/lib/table-session", () => ({ openSession: async () => "s" }));
+vi.mock("@/lib/table-member-cookie", () => ({ memberHash: () => "hash" }));
+vi.mock("@/lib/table-membership", () => ({ requestTableMember: async () => ({ status: "approved", sessionId: "s", diner: "member" }) }));
 vi.mock("@/lib/promotions-on-sale", () => ({ promotionsOnSale: async () => [] }));
 vi.mock("@/lib/checkout/orderable-now", () => ({ orderableNow: async () => ({ closedNow: false, onOpenMenu: () => true }) }));
 vi.mock("@/lib/checkout/verified-lines", () => ({ verifiedLines: async () => ({ ok: true, lines: [] }) }));

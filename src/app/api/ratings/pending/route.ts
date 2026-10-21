@@ -1,3 +1,4 @@
+import { memberRatingOrders } from "@/lib/rating-membership";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -13,11 +14,9 @@ import type { OrderLineItem } from "@/lib/types";
  * dishes from those orders that are paid, belong to this restaurant, and
  * haven't been rated yet.
  *
- * What guards it is that an order id is an unguessable uuid — the same trust
- * boundary as the tracker link, which shows the order to anyone holding it.
- * Whoever has the id already knows what was ordered. It does NOT check that
- * this device is the one that placed the order, and the comment here used to
- * claim it did.
+ * Counter orders use the unguessable tracker id. Table orders additionally
+ * require the approved member cookie and the member id stored on the order,
+ * so reading another dish on a shared bill never grants permission to rate it.
  */
 export async function POST(req: NextRequest) {
   if (await isRateLimited(`rating-pending:${clientKey(req)}`, 30, 60)) {
@@ -37,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   const { data: orders, error } = await supabase
     .from("orders")
-    .select("id, items")
+    .select("id, items, table_id, session_id, diner")
     .in("id", ids)
     .eq("restaurant_id", restaurantId)
     .eq("paid", true);
@@ -47,6 +46,9 @@ export async function POST(req: NextRequest) {
   }
   if (!orders?.length) return NextResponse.json({ dishes: [] });
 
+  const owned = await memberRatingOrders(req, restaurantId, orders ?? []).catch(() => null);
+  if (!owned) return await apiError("apiErr.verifyOrders", 503);
+
   // Already-rated pairs drop out, so re-asking after a partial submit only
   // offers what's left rather than starting over.
   const { data: rated } = await supabase
@@ -54,11 +56,11 @@ export async function POST(req: NextRequest) {
     .select("order_id, item_id")
     .in(
       "order_id",
-      orders.map(o => o.id),
+      owned.map(o => o.id),
     );
 
   const dishes = rateableDishes(
-    orders.map(o => ({ id: o.id, items: (o.items ?? []) as OrderLineItem[] })),
+    owned.map(o => ({ id: o.id, items: (o.items ?? []) as OrderLineItem[] })),
     (rated ?? []).map(r => ({ orderId: r.order_id, itemId: r.item_id })),
   );
 

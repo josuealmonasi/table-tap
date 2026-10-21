@@ -1,3 +1,4 @@
+import { tableMember } from "@/lib/table-membership";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -20,16 +21,16 @@ export const dynamic = "force-dynamic";
  * GET  — what is happening, and what this phone owes because of it.
  * POST — propose dividing it N ways.
  *
- * The sitting id is the capability, the same way an order id is on the tracker:
- * unguessable, and useless anywhere but this table. Nothing here trusts an
- * amount from the browser — what is owed is always summed from the orders.
+ * The cookie proves approved membership of this sitting. Its id alone proves
+ * nothing. Nothing here trusts an amount from the browser — what is owed is
+ * always summed from the orders.
  */
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const p = req.nextUrl.searchParams;
-  const [sessionId, diner, restaurantId, tableId] = [
-    p.get("sessionId"), p.get("diner"), p.get("restaurantId"), p.get("tableId"),
+  const [sessionId, restaurantId, tableId] = [
+    p.get("sessionId"), p.get("restaurantId"), p.get("tableId"),
   ];
-  if (!sessionId || !diner || !restaurantId || !tableId) {
+  if (!sessionId || !restaurantId || !tableId) {
     return await apiError("apiErr.invalidRequest", 400);
   }
   // Polled by every phone in a split, and one address is the whole room: at 60
@@ -38,11 +39,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.tooManyRequests", 429);
   }
 
+  const member = await tableMember(req, restaurantId, tableId, sessionId).catch(() => null);
+  if (!member) return await apiError("apiErr.tableJoin", 403);
+  const diner = member.id;
+
   // What this phone says it ordered. Checked against the sitting before it
   // counts for anything — it decides what THEY pay, never what anyone else does.
   const own = (p.get("own") ?? "").split(",").map(x => x.trim()).filter(Boolean);
-  const split = await currentSplit(sessionId, diner, restaurantId, tableId, own);
-  return NextResponse.json({ split });
+  const split = await currentSplit(sessionId, diner, restaurantId, tableId, own, member);
+  return NextResponse.json({ split, diner });
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -54,20 +59,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     sessionId?: string; diner?: string; restaurantId?: string; tableId?: string; shares?: number;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
-  const { sessionId, diner, restaurantId, tableId, shares } = body;
+  const { sessionId, restaurantId, tableId, shares } = body;
   if (await isTableLimited(req, "splitnew", tableId, 10)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
-  if (!sessionId || !diner || !restaurantId || !tableId) {
+  if (!sessionId || !restaurantId || !tableId) {
     return await apiError("apiErr.invalidRequest", 400);
   }
   if (!Number.isInteger(shares) || (shares as number) < 2 || (shares as number) > MAX_SHARES) {
     return await apiError("apiErr.splitPeople", 400);
   }
 
+  const member = await tableMember(req, restaurantId, tableId, sessionId).catch(() => null);
+  if (!member) return await apiError("apiErr.tableJoin", 403);
+  const diner = member.id;
+
   // Nothing to divide: the waiter who opened this bill is the one collecting
   // it, and they have a calculator that does the same job at the table.
-  const waiterSettles = await staffOpenedBill(restaurantId, tableId).catch(() => null);
+  const waiterSettles = await staffOpenedBill(restaurantId, tableId, sessionId).catch(() => null);
   if (waiterSettles === null) return await apiError("apiErr.verifyOrders", 503);
   if (waiterSettles) return await apiError("apiErr.waiterSettles", 409);
 
@@ -89,13 +98,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // everybody: the diner who proposed twelve, alone at Mesa 10, could not pay
   // at all until the proposal was called off. The screen caps the dropdown;
   // this is the rule, because a dropdown is not a guard.
-  const party = await tableParty(restaurantId, tableId);
+  const party = await tableParty(restaurantId, tableId, sessionId);
   if (party < 2 || (shares as number) > party) {
     return await apiError("apiErr.splitTooMany", 409, { n: party });
   }
 
   // Nothing to divide is not a split, it is a bill that is already settled.
-  const orders = await fetchTableBill(restaurantId, tableId, "diner", sessionId);
+  const orders = await fetchTableBill(restaurantId, tableId, "diner", sessionId, member);
   if (tableBill(orders, []).total <= 0) return await apiError("apiErr.nothingToSplit", 409);
 
   const { data: made, error } = await db
@@ -123,7 +132,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   return NextResponse.json({
-    split: await currentSplit(sessionId, diner, restaurantId, tableId),
+    split: await currentSplit(sessionId, diner, restaurantId, tableId, [], member),
   });
 }
 
@@ -133,8 +142,8 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
     splitId?: string; sessionId?: string; diner?: string; restaurantId?: string; tableId?: string;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
-  const { splitId, sessionId, diner, restaurantId, tableId } = body;
-  if (!splitId || !sessionId || !diner || !restaurantId || !tableId) {
+  const { splitId, sessionId, restaurantId, tableId } = body;
+  if (!splitId || !sessionId || !restaurantId || !tableId) {
     return await apiError("apiErr.invalidRequest", 400);
   }
   // Limited like proposing one: every call reaches the database with the
@@ -142,6 +151,10 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   if (await isRoomLimited(req, "splitend", 10) || await isTableLimited(req, "splitend", tableId, 10)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
+
+  const member = await tableMember(req, restaurantId, tableId, sessionId).catch(() => null);
+  if (!member) return await apiError("apiErr.tableJoin", 403);
+  const diner = member.id;
 
   const db = createAdminClient();
   // Only while it is still a proposal: once it has frozen, people are paying
@@ -157,6 +170,6 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   if (!killed?.length) return await apiError("apiErr.splitLocked", 409);
 
   return NextResponse.json({
-    split: await currentSplit(sessionId, diner, restaurantId, tableId),
+    split: await currentSplit(sessionId, diner, restaurantId, tableId, [], member),
   });
 }

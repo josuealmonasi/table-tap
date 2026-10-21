@@ -6,6 +6,7 @@
 // happened: a test order with a made-up itemId ended up looking like a fault
 // calificaciones.)
 // ============================================================================
+import { memberFixture } from "./table-member-fixture.mjs";
 import { createClient } from "@supabase/supabase-js";
 import { loginByEmail } from "./logins.mjs";
 
@@ -268,11 +269,18 @@ export async function setup(env, base) {
     return data.id;
   };
 
+  const phoneMembers = memberFixture(admin, restaurant.id);
+
   // An open table session, which is what /api/session asks for by id.
   const { data: session } = await admin
-    .from("table_sessions").select("id")
+    .from("table_sessions").select("id, table_id")
     .eq("restaurant_id", restaurant.id).is("closed_at", null)
     .limit(1).maybeSingle();
+
+  // Admission needs the sitting and its actual table to agree. The old
+  // fixture paired the first table with whichever sitting happened to arrive.
+  const seatedIndex = session ? tables.findIndex(table => table.id === session.table_id) : -1;
+  if (seatedIndex > 0) [tables[0], tables[seatedIndex]] = [tables[seatedIndex], tables[0]];
 
   // Every sitting this restaurant already had, by id. The waiter's case places
   // an order at a table, which opens one — and deleting the order afterwards
@@ -593,6 +601,7 @@ export async function setup(env, base) {
     withServicedOrder, servicedOrder,
     onCaja,
     onCarta,
+    phoneMembers,
     accountId: account.id,
     accountCode: account.code,
     acctOrder,
@@ -678,6 +687,7 @@ export async function setup(env, base) {
 
 /** Everything marked goes, whatever happened to the tests. */
 export async function teardown(fx) {
+  await fx.phoneMembers?.cleanup();
   const { admin, restaurant } = fx;
   await admin.from("offline_sale_queue").delete().eq("restaurant_id", restaurant.id).like("body->>note", `${MARK} offline%`);
   // The fees its checkouts reserved and gave back when Stripe refused the

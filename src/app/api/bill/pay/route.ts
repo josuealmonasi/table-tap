@@ -1,3 +1,4 @@
+import { ownBillAccess } from "@/lib/legacy-bill-access";
 import { dinerCurrency } from "@/lib/diner-currency";
 import { openDinerAttempt, resumeDinerAttempt } from "@/lib/diner-attempt";
 import { remainingPrincipal, billEntitlements } from "@/lib/bill-principal";
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     couponCode?: string;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
-  const { restaurantId, tableId, orderIds, tipPct, tipAmount, couponCode, sessionId } = body;
+  const { restaurantId, tableId, orderIds, tipPct, tipAmount, couponCode } = body;
   if (await isTableLimited(req, "billpay", tableId, 10)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
@@ -66,6 +67,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.invalidRequest", 400);
   }
 
+  const member = await ownBillAccess(req, restaurantId, tableId, body.sessionId, orderIds).catch(() => null);
+  if (!member) return await apiError("apiErr.tableJoin", 403);
+
   // A bill a waiter opened is settled with the waiter. They are standing at
   // the table with a machine and a running balance, and a card charged here at
   // the same moment pays for food they are about to collect for — the table
@@ -74,7 +78,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Neither guard may answer "no" because it could not read: that is the one
   // answer that lets the charge through. A failed read refuses, like the
   // orders read below.
-  const waiterSettles = await staffOpenedBill(restaurantId, tableId).catch(() => null);
+  const waiterSettles = await staffOpenedBill(restaurantId, tableId, member.sessionId).catch(() => null);
   if (waiterSettles === null) return await apiError("apiErr.verifyOrders", 503);
   if (waiterSettles) return await apiError("apiErr.waiterSettles", 409);
 
@@ -82,7 +86,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // that ordered but never took a share still saw this button — three ordered,
   // two halved it — and paying here charges for food the shares are already
   // being collected for. The screen hides it; this is what makes it true.
-  const dividing = await splitInProgress(restaurantId, tableId).catch(() => null);
+  const dividing = await splitInProgress(restaurantId, tableId, member.sessionId).catch(() => null);
   if (dividing === null) return await apiError("apiErr.verifyOrders", 503);
   if (dividing) return await apiError("apiErr.splitInProgress", 409);
 
@@ -104,7 +108,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // matters most.
   // A read that failed is not a bill that is paid. Told apart, because the
   // wrong one of the two sends somebody away from the table owing money.
-  const visible = await fetchTableBill(restaurantId, tableId, "diner", sessionId)
+  // The sitting the cookie proved, never the one the client names.
+  const visible = await fetchTableBill(restaurantId, tableId, "diner", member.sessionId, member)
     .catch(error => error instanceof PaymentAttributionRequired ? "review" as const : null);
   if (visible === "review") return await apiError("apiErr.attributionRequired", 409);
   if (!visible) return await apiError("apiErr.verifyOrders", 503);

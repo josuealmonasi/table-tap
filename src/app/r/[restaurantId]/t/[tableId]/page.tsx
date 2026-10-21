@@ -6,7 +6,6 @@ import MenuSkeleton from "@/components/customer/MenuSkeleton";
 import { menuShowsLoyalty, loadCoverState, loadOrderingData, unwrap } from "@/lib/ordering-data";
 import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
-import { offerAt } from "@/lib/loyalty/pass";
 import type { RestaurantTable } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +21,7 @@ async function Menu({
   // Read with the secret key, scoped to both ids in the URL. Tables are not
   // readable with the publishable key on purpose — listable table ids would let
   // anyone see any table's bill, or charge an order to it — so the QR code the
-  // diner scanned is what proves which table this is.
+  // diner scanned names the table; only approved membership opens its bill.
   const [data, tableRes, plan] = await Promise.all([
     loadOrderingData(restaurantId),
     createAdminClient()
@@ -70,7 +69,7 @@ async function Menu({
       closedNow={data.closedNow}
       orderAtRegister={data.orderAtRegister}
       receipts={data.receipts}
-      loyalty={seatedAt ? offerAt(data.loyalty, { table: seatedAt.id }) : data.loyalty}
+      loyalty={seatedAt && data.loyalty ? { ...data.loyalty, pass: "" } : data.loyalty}
       dietaryTags={data.dietaryTags}
     />
   );

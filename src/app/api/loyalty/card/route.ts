@@ -1,3 +1,4 @@
+import { tableMember } from "@/lib/table-membership";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -42,6 +43,12 @@ export async function POST(req: NextRequest) {
   if (!restaurantId) return await apiError("apiErr.invalidRequest", 400);
   const pass = readVisitPass(restaurantId, body?.pass);
   if (!pass) return await apiError("apiErr.loyaltyNeedsVisit", 403);
+
+  if (pass.place !== "counter" && "table" in pass.place) {
+    if (!pass.place.session) return await apiError("apiErr.tableJoin", 403);
+    const member = await tableMember(req, restaurantId, pass.place.table, pass.place.session).catch(() => null);
+    if (!member) return await apiError("apiErr.tableJoin", 403);
+  }
 
   const plan = await getPlan(restaurantId);
   if (!(await loyaltyOn(restaurantId, plan?.limits ?? null))) return await apiError("apiErr.loyaltyOff", 409);

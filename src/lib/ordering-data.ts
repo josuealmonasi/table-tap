@@ -249,8 +249,8 @@ export async function loadOrderingData(
     restaurant && program
       ? {
           restaurantId, restaurantName: restaurant.name, goal: program.goal, reward: program.reward, steps: program.steps,
-          // The counter menu's pass; a table's page and an order's tracker
-          // narrow it to their own place with `offerAt`.
+          // The counter menu's pass; a table page clears it until admission
+          // issues a sitting-bound pass. A tracker narrows it with `offerAt`.
           pass: issueVisitPass(restaurantId, "counter"),
         }
       : null;

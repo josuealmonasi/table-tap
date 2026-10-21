@@ -34,6 +34,7 @@ const NOT_DEMO_DATA = new Set([
   "menu_items",
   "item_addons", // filled by populateMenu()
   "stock_reservations", // internal checkout recovery records, not a demo feature
+  "table_session_members", // server-issued credentials; demo bills must never seed usable phone access
   "diner_checkouts", // genuine Stripe session provenance; demo rows must never authorize money
   "kitchen_tickets", // filled by the trigger on the seeder's orders
   "kitchen_requests", // filled by the trigger on the seeder's service requests

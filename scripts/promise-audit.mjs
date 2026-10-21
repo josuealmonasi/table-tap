@@ -1,3 +1,4 @@
+import { memberFixture, forgetBrowserMember } from "./table-member-fixture.mjs";
 // ============================================================================
 // TableTap — does the screen promise something the system cannot deliver?
 //
@@ -85,6 +86,11 @@ const held = [];
 async function newContext(options) {
   const ctx = await browser.newContext(options);
   if (prod) await holdWrites(ctx, held);
+  const close = ctx.close.bind(ctx);
+  ctx.close = async options => {
+    try { if (!prod) await forgetBrowserMember(ctx, admin); }
+    finally { await close(options); }
+  };
   return ctx;
 }
 console.log(`\nPromises — ${prod ? "production" : "development"}\n`);
@@ -289,7 +295,7 @@ async function withCounterOrder(run) {
  * is sitting at, and says so loudly if there is none rather than measuring the
  * wrong screen.
  */
-async function withTableBill(run, frozen = false) {
+async function withTableBill(run, frozen = false, context) {
   const MARK = "promise-audit-bill";
   const { data: dish } = await admin.from("menu_items")
     .select("id, name, emoji, price").eq("restaurant_id", restaurant.id)
@@ -334,9 +340,15 @@ async function withTableBill(run, frozen = false) {
     ]);
   }
 
+  const phones = memberFixture(admin, restaurant.id);
   try {
+    const cookie = await phones.cookieFor("/api/bill", {
+      restaurantId: restaurant.id, tableId: free.id, sessionId: sitting.id,
+    });
+    await context.addCookies([{ name: "tt-table-member", value: cookie.split("=")[1], url: BASE, httpOnly: true, sameSite: "Lax" }]);
     return await run(free);
   } finally {
+    await phones.cleanup();
     if (split) {
       await admin.from("bill_split_claims").delete().eq("split_id", split);
       await admin.from("bill_splits").delete().eq("id", split);
@@ -497,7 +509,7 @@ for (const state of STATES) {
   try {
     if (state.as === "tracker") await withCounterOrder(id => visit(`/order/${id}`));
     else if (state.as === "bill") {
-      await withTableBill(free => visit(`/r/${restaurant.id}/t/${free.id}`), state.frozen);
+      await withTableBill(free => visit(`/r/${restaurant.id}/t/${free.id}`), state.frozen, context);
     } else {
       // A path can depend on the data — a visit card's page needs a card's code.
       const path = typeof state.path === "function" ? await state.path(admin, ctx) : state.path;

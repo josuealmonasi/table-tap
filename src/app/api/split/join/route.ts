@@ -1,3 +1,4 @@
+import { tableMember } from "@/lib/table-membership";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -26,13 +27,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     splitId?: string; sessionId?: string; diner?: string; restaurantId?: string; tableId?: string;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
-  const { splitId, sessionId, diner, restaurantId, tableId } = body;
+  const { splitId, sessionId, restaurantId, tableId } = body;
   if (await isTableLimited(req, "splitjoin", tableId, 20)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
-  if (!splitId || !sessionId || !diner || !restaurantId || !tableId) {
+  if (!splitId || !sessionId || !restaurantId || !tableId) {
     return await apiError("apiErr.invalidRequest", 400);
   }
+
+  const member = await tableMember(req, restaurantId, tableId, sessionId, true).catch(() => null);
+  if (!member) return await apiError("apiErr.tableJoin", 403);
+  const diner = member.id;
+  if (member.closed) return await apiError("apiErr.sessionGone", 409);
 
   const db = createAdminClient();
   const { data: seat, error } = await db.rpc("join_bill_split_v2", {
@@ -46,6 +52,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (error || seat === null) return await apiError("apiErr.splitFull", 409);
 
   return NextResponse.json({
-    split: await currentSplit(sessionId, diner, restaurantId, tableId),
+    split: await currentSplit(sessionId, diner, restaurantId, tableId, [], member),
   });
 }

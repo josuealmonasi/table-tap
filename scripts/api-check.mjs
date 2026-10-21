@@ -57,8 +57,6 @@ const chainInScope = all.some(c => chained(c) && inScope.get(c));
 try {
   for (const c of all) {
     if (!(chained(c) ? chainInScope : inScope.get(c))) continue;
-    const headers = { "Content-Type": "application/json", ...(c.headers ?? {}) };
-    if (c.as !== "diner") headers.cookie = fx.who[c.as];
 
     // Some refusals only exist on the far side of a switch. `/api/split/pay`
     // turns everybody away when the restaurant has no card reader, and no
@@ -93,6 +91,11 @@ try {
       // a case has to address is only known once the fixture exists — a
       // printer's token, the id of the job it was handed.
       const path = typeof c.path === "function" ? await c.path(fx, saved) : c.path;
+      const body = typeof c.body === "function" ? await c.body(fx, saved) : c.body;
+      const customHeaders = typeof c.headers === "function" ? await c.headers(fx) : c.headers ?? {};
+      const headers = { "Content-Type": "application/json", ...customHeaders };
+      if (c.as !== "diner") headers.cookie = fx.who[c.as];
+      else if (!("cookie" in customHeaders)) headers.cookie = await fx.phoneMembers.cookieFor(path, body);
       res = await retryFetch(
         BASE + path,
         {
@@ -101,7 +104,7 @@ try {
           body:
             c.body === undefined
               ? undefined
-              : JSON.stringify(typeof c.body === "function" ? await c.body(fx, saved) : c.body),
+              : JSON.stringify(body),
         },
         BASE,
       );
