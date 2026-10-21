@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     code,
+    round: card.round_no,
     standing: standing(state.progress, state.ladder, state.done),
     since: card.created_at.slice(0, 10),
     // Only today's may be undone, and not once a reward was spent after it:
