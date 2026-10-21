@@ -14,6 +14,11 @@ us, and what now catches each one.
 
 | Rule | The bug it came from |
 |---|---|
+| Browser navigation and the visit verdict agree (S8) | Dialog visits whose navigation failed silently vanished from coverage |
+| Typing errors and failed checks agree (S8) | A failed page-field check became an empty fault list and printed ok |
+| Probe deadlines and context lifetimes agree (S8) | A timeout printed a skip while its old probe kept clicking into the next one |
+| Planned browser visits and reported verdicts agree (S8) | A partial sweep could finish green without accounting for every visit |
+| Restart reports and the target port agree (S8) | Another checkout's Next worker restart was attributed to the server being checked |
 | A statement email is capped per account and per restaurant, never on the recipient (G5) | One account code could mail the same stranger ~400 times a day |
 | Coupon entitlements and card receipts agree before money moves (S5 E4) | A MX$90 discounted charge recorded MX$100 and could later reserve a MX$100 return |
 | A coupon use belongs to one checkout attempt (S5 E7) | An old expiry released the newer payment page's reservation on the same order |
@@ -2990,3 +2995,51 @@ confirm the new phone can then order and open the bill. Close the sitting,
 seat a new party, and confirm the old phone can still see/pay its own food
 without seeing the new bill. Also check a staff-opened bill and a legacy
 phone's own-order payment during rollout.
+
+
+## S8: a failed navigation is a failed visit
+
+The dialogs runner and its coverage count had to agree. A navigation exception
+used to `continue`, so the page vanished without a red verdict. Both browser
+sweeps now run explicit visits through `browser-jobs.mjs`; navigation and route
+errors fail that visit. `browser-gate-regressions.spec.ts` prevents the silent
+skip, and `browser-ready.spec.ts` exercises failed navigation and redirects.
+
+## S8: typing errors never become an empty audit
+
+The typing probe and the reported result had to agree. Page typing exceptions
+used to become `[]`, which printed ok. Field failures now produce faults;
+uncaught typing or evaluation errors fail the whole visit. The regression test
+holds this boundary; `dialog-probe.spec.ts` exercises navigation and typing
+exceptions directly, and the pool's throwing-visit test checks failure delivery
+at concurrency one and three.
+
+## S8: a timed-out probe stops its own browser
+
+The deadline and the probe's lifetime had to agree. `Promise.race` formerly
+returned a timeout marker without stopping the losing probe or counting a
+failure. A probe deadline now closes the visit's context before returning a
+failure. The worker never resumes that visit. `browser-jobs.spec.ts` plants a
+late click and proves it cannot fire at concurrency one or three. Diner cleanup
+stops pages before removing that context's own member cookie, and its failure
+also fails the visit (`browser-fixtures.spec.ts`). Production never removes a
+member row.
+
+## S8: every planned browser visit reports
+
+The role/path/viewport manifest and completed work had to agree. Both sweeps
+now record passed, failed and explicitly skipped visits, reject a missing
+verdict, and report planned/completed counts. The pool self-tests inject a throw,
+a hang and real overlapping DOM geometry at concurrency one and three; none can
+make a run green. The real planted-overlap control runs before either sweep.
+Readiness waits for the expected route and content, pending data, skeletons,
+fonts, images and stable geometry using Node-side polling under production CSP.
+`browser-ready.spec.ts` verifies unresolved pages cannot be audited early.
+
+## S8: a worker restart belongs to the checked port
+
+The restart warning and `DEV_URL` had to agree. A machine-wide `pgrep` counted
+all Next workers, so another worktree could explain away a real failure.
+`watchDevWorker()` now compares only listener PIDs on the checked localhost
+port, including a lost listener. `browser-jobs.spec.ts` checks the exact port
+query and excludes remote sites.

@@ -743,6 +743,18 @@ The gate, all of which must pass before anything ships:
 | `pnpm dialogs` | every dialog, found by opening it rather than by listing it — with every write held back in the browser, and the demo data compared before and after |
 | `pnpm money` | the ledger and the orders tell the same story |
 
+The layout and dialog sweeps use one browser with isolated contexts per complete
+role/path/viewport or diner-flow visit. `GATE_BROWSER_CONCURRENCY` defaults to 3
+and accepts integers 1–4; 1 runs the same visits serially. Actions inside each
+visit stay sequential, each diner has its own member cookie and development
+cleanup, and job logs print together in manifest order. Navigation, typing,
+audit, readiness, timeout and cleanup errors fail the visit. Missing verdicts
+fail the run. Both sweeps retain the planted-overlap control, report visit and
+audit counts, and print navigation/readiness/audit/auth worker seconds plus wall
+time. Readiness observes route/content, completed data, absent skeletons, fonts,
+images and stable geometry; dialog no-ops retain bounded observation windows.
+Run different gates serially: contexts isolate browser state, not the database.
+
 The table left `attack` out for a while and the prose below listed it, which is
 the same drift this document exists to prevent. `pnpm api` does not police its
 own list either — the invariant that fails when a route has no case lives in

@@ -1,4 +1,3 @@
-import { forgetBrowserMember } from "./table-member-fixture.mjs";
 // ============================================================================
 // TableTap — can the screen actually be read?
 //
@@ -12,46 +11,29 @@ import { forgetBrowserMember } from "./table-member-fixture.mjs";
 // ============================================================================
 import { join } from "node:path";
 import { chromium } from "playwright";
-import { AUDIT } from "./layout-audit.mjs";
-import { CREW, DIALOGS, DINER, PUBLIC } from "./layout-paths.mjs";
+import { createClient } from "@supabase/supabase-js";
+import { CREW, DINER, PUBLIC } from "./layout-paths.mjs";
 import { requireServer } from "./preflight.mjs";
 import { holdWrites } from "./hold-writes.mjs";
 import { DEV_URL } from "./dev-url.mjs";
 import { pageInScope, reportScope } from "./gate-scope.mjs";
+import { browserConcurrency, phaseTimings, runBrowserJobs } from "./browser-jobs.mjs";
+import { crewCookies, isolateMember } from "./browser-fixtures.mjs";
+import { layoutFixtures } from "./layout-fixtures.mjs";
+import { assertAuditControl, look } from "./browser-audit.mjs";
+import { navigate, trackData } from "./browser-ready.mjs";
+import { dinerVisit, teamVisit } from "./layout-visits.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
-const BASE = prod
-  ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
-  : DEV_URL;
-
+const BASE = prod ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app") : DEV_URL;
+const concurrency = browserConcurrency();
+const timings = phaseTimings();
+const started = performance.now();
 await requireServer(BASE, prod);
-
-const { createClient } = await import("@supabase/supabase-js");
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
-const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0];
-
-const { data: r } = await admin
-  .from("restaurants").select("id").eq("name", "Demo Bistro").maybeSingle();
-// A free table: one with an open bill opens the order tracker, not the menu,
-// and then there is no cart to check.
-const { data: tables } = await admin
-  .from("restaurant_tables").select("id").eq("restaurant_id", r.id);
-const { data: busy } = await admin
-  .from("orders").select("table_id").eq("restaurant_id", r.id).eq("paid", false);
-const taken = new Set((busy ?? []).map(o => o.table_id));
-const table = tables.find(t => !taken.has(t.id)) ?? tables[0];
-
-// Any order at all is enough to measure the tracker: the screen is the same
-// shape whether it is paid or still owing, apart from the payment QR.
-const { data: tracked } = await admin
-  .from("orders")
-  .select("id")
-  .eq("restaurant_id", r.id)
-  .neq("status", "pending_payment")
-  .limit(1)
-  .maybeSingle();
-const anyOrder = tracked?.id ?? null;
+const fixtures = await layoutFixtures(admin);
+const cookies = await crewCookies(CREW.filter(w => w.pages.some(pageInScope)), BASE, timings.phase);
 
 // The CSS pivots at 1025px, so everything from 768 to 1024 gets the
 // non-desktop layout stretched to its widest — which is every iPad in portrait
@@ -69,10 +51,69 @@ const SIZES = [
   { name: "desktop", width: 1280, height: 900 },
 ];
 
-let failed = 0;
+const jobs = [];
+for (const size of SIZES) {
+  const options = { viewport: { width: size.width, height: size.height }, locale: "es-MX" };
+  // ── The diner ─────────────────────────────────────────────────────────────
+  // In both languages: English is longer on some labels and shorter on others,
+  // and the cart broke once over a label that did not fit. The dashboard is
+  // checked in Spanish only, which is where the team works.
+  for (const lang of ["es", "en"]) for (const flow of DINER) {
+    if (!pageInScope(flow.at ?? "/r/_/t/_")) continue;
+    jobs.push({ id: `${size.width}px · diner ${lang} · ${flow.name}`, diner: true,
+      options: { ...options, locale: lang === "es" ? "es-MX" : "en-US" },
+      run: job => dinerVisit(job, { lang, flow, base: BASE, ...fixtures }),
+    });
+  }
+  // ── The front door, signed out ────────────────────────────────────────────
+  for (const path of PUBLIC.filter(pageInScope)) jobs.push({
+    id: `${size.width}px · signed out · ${path}`, options,
+    run: async ({ tab, log, phase }) => {
+      await navigate(tab, BASE + path, phase, trackData(tab));
+      return { failures: await look(tab, `signed out · ${path}`, phase, log), audits: 1 };
+    },
+  });
+  if (pageInScope("/rewards")) jobs.push({
+    id: `${size.width}px · signed out · /rewards (a card)`, options,
+    skip: !fixtures.card && prod ? "no card to show yet" : undefined,
+    run: async ({ tab, log, phase }) => {
+      if (!fixtures.card) throw new Error("the seed has no card with a reward spent");
+      await navigate(tab, `${BASE}/rewards?c=${fixtures.card.code}`, phase, trackData(tab));
+      await tab.waitForSelector(".tt-rewards", { timeout: 30000 });
+      return { failures: await look(tab, "signed out · /rewards (a card)", phase, log), audits: 1 };
+    },
+  });
+  // ── The team ─────────────────────────────────────────────────────────────
+  for (const who of CREW) for (const path of who.pages.filter(pageInScope)) jobs.push({
+    id: `${size.width}px · ${who.role} · ${path}`, options, timeout: 300000,
+    skip: cookies.get(who.role)?.skip,
+    run: async job => {
+      const auth = cookies.get(who.role);
+      if (auth.error) throw auth.error;
+      await job.ctx.addCookies([auth.cookie]);
+      return teamVisit(job, { who, path, base: BASE, width: size.width });
+    },
+  });
+}
+const browser = await chromium.launch();
+// Against production nothing this gate does may reach the server. It clicks
+// dialogs open and walks a diner to the cart, and one click on the wrong
+// button is an order in a real restaurant's books — so every write a page
+// sends is answered in the browser instead (see hold-writes.mjs) and listed
+// at the end.
+const held = [];
+console.log(`\nLayout — ${prod ? "production" : "development"}; ${concurrency} worker(s)\n`);
+let result;
+try {
+  await assertAuditControl(browser);
+  result = await runBrowserJobs(browser, jobs, { concurrency, timings, prepare: async (ctx, job) => {
+    await isolateMember(ctx, admin, BASE, job.diner, prod);
+    if (prod) await holdWrites(ctx, held);
+  } });
+} finally { await browser.close(); }
+let failed = result.failures;
 /** Dialogs that needed a fresh load to open — said at the end, not hidden. */
-let reloads = 0;
-
+const reloads = result.records.reduce((n, r) => n + (r.result?.reloads ?? 0), 0);
 /**
  * Which widths each team dialog opened at, and which it did not.
  *
@@ -84,351 +125,25 @@ let reloads = 0;
  * reads".
  */
 const opened = new Map();
-const noteDialog = (key, width, didOpen) => {
-  const seen = opened.get(key) ?? { at: [], missed: [] };
-  (didOpen ? seen.at : seen.missed).push(width);
-  opened.set(key, seen);
-};
-const ok = m => console.log(`    ok       ${m}`);
-const bad = (where, faults) => {
-  failed += faults.length;
-  console.log(`    BAD      ${where}`);
-  for (const f of faults) console.log(`             ${f.kind}: «${f.text}» (${f.w}px)`);
-};
-
-/**
- * A navigation that retries once.
- *
- * The dev server drops mid-run and the network failure showed up as though the
- * screen were broken. A false red teaches people to ignore reds.
- */
-async function gotoOnce(tab, url, opts) {
-  try {
-    return await tab.goto(url, opts);
-  } catch {
-    await tab.waitForTimeout(2000);
-    return await tab.goto(url, opts);
-  }
+for (const record of result.records) for (const dialog of record.result?.dialogs ?? []) {
+  const seen = opened.get(dialog.key) ?? { at: [], missed: [] };
+  (dialog.open ? seen.at : seen.missed).push(dialog.width);
+  opened.set(dialog.key, seen);
 }
-
-/**
- * Wait for the page to stop changing.
- *
- * The bar used to be "more than 200 characters of text", which is a stand-in
- * for settled rather than a measure of it — and the front door walked straight
- * into it: /login has exactly 200 and /reset-password 174, so both real,
- * fully-rendered pages sat here for thirty seconds and were reported as
- * failures. Two consecutive samples that agree is what settled actually means,
- * and it does not care how much a screen has to say.
- *
- * Polled from here rather than with `waitForFunction`: Playwright runs that
- * predicate through `eval` inside the page — a function too, not just a
- * string — and production's CSP forbids `eval`, so against the deployed site
- * every screen failed before it was measured. `evaluate` goes through the
- * DevTools protocol, which a CSP does not govern, and the page keeps the
- * policy it really ships with.
- */
-async function settle(tab) {
-  const deadline = Date.now() + 30000;
-  let before = -1;
-  for (;;) {
-    // A sample taken mid-navigation has no page to read; it just counts as unsettled.
-    const n = await tab.evaluate("document.body ? document.body.innerText.trim().length : 0").catch(() => -1);
-    if (n >= 40 && n === before) break;
-    if (Date.now() > deadline) throw new Error(`the page never settled in 30s (${n} characters of text)`);
-    before = n;
-    await tab.waitForTimeout(400);
-  }
-  await tab.waitForTimeout(900);
-}
-
-/** Click from inside the page: Playwright's click waits for everything to settle. */
-const tap = (tab, sel) =>
-  tab.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(sel)}); if(e){e.click(); return true;} return false;})()`);
-
-const tapText = (tab, text) =>
-  tab.evaluate(`(()=>{const b=[...document.querySelectorAll('button,a')].find(x=>x.textContent.includes(${JSON.stringify(text)})); if(b){b.click(); return true;} return false;})()`);
-
-async function look(tab, where) {
-  const faults = await tab.evaluate(AUDIT);
-  if (faults.length === 0) ok(where);
-  else bad(where, faults);
-}
-
-// A failed sign-in stops the run rather than measuring the login screen once
-// for every page the role was meant to see — which reads as ok, every time.
-const cookieFor = async (email, password = "demo123") => {
-  const auth = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-  const { data, error } = await auth.auth.signInWithPassword({ email, password });
-  if (error || !data?.session) throw new Error(`could not sign in as ${email}: ${error?.message ?? "no session"}`);
-  return {
-    name: `sb-${ref}-auth-token`,
-    value: `base64-${Buffer.from(JSON.stringify(data.session)).toString("base64")}`,
-    url: BASE,
-  };
-};
-
-const browser = await chromium.launch();
-
-// Against production nothing this gate does may reach the server. It clicks
-// dialogs open and walks a diner to the cart, and one click on the wrong
-// button is an order in a real restaurant's books — so every write a page
-// sends is answered in the browser instead (see hold-writes.mjs) and listed
-// at the end.
-const held = [];
-async function newContext(options) {
-  const ctx = await browser.newContext(options);
-  if (prod) await holdWrites(ctx, held);
-  const close = ctx.close.bind(ctx);
-  ctx.close = async options => {
-    try { if (!prod) await forgetBrowserMember(ctx, admin); }
-    finally { await close(options); }
-  };
-  return ctx;
-}
-console.log(`\nLayout — ${prod ? "production" : "development"}\n`);
-
-/**
- * Does the audit still find anything?
- *
- * The overlap check is the expensive one, so it is also the one most likely to
- * be quietly broken by making it cheaper — and a check that finds nothing
- * reports every page as fine. Two blocks are planted overlapping on a blank
- * page before the run starts; if the audit shrugs at them, the whole gate is
- * worthless and says so rather than printing a column of ok.
- */
-{
-  const ctx = await newContext({ viewport: { width: 390, height: 844 } });
-  const tab = await ctx.newPage();
-  await tab.setContent(`<!doctype html><body style="margin:0">
-    <div style="font:20px/1.2 sans-serif;color:#000;height:40px">PLANTED ALPHA TEXT</div>
-    <div style="font:20px/1.2 sans-serif;color:#000;height:40px;margin-top:-34px;margin-left:30px">PLANTED BETA TEXT</div>
-  </body>`);
-  const faults = await tab.evaluate(AUDIT);
-  const caught = faults.some(f => f.kind === "overlapping" && f.text.includes("PLANTED"));
-  await ctx.close();
-  if (!caught) {
-    console.log("  The audit no longer sees text painted over text.");
-    console.log("  Every ok below would be meaningless. Fix layout-audit.mjs first.\n");
-    await browser.close();
-    process.exit(1);
-  }
-  console.log("  ok       the audit still catches a planted overlap\n");
-}
-
-for (const size of SIZES) {
-  console.log(`  ${size.name} (${size.width}px)\n`);
-
-  // ── The diner ─────────────────────────────────────────────────────────────
-  // In both languages: English is longer on some labels and shorter on others,
-  // and the cart broke once over a label that did not fit. The dashboard is
-  // checked in Spanish only, which is where the team works.
-  for (const lang of ["es", "en"]) {
-  const diner = await newContext({
-    viewport: { width: size.width, height: size.height },
-    locale: lang === "es" ? "es-MX" : "en-US",
-  });
-  // The language belongs to the restaurant, not the phone: the app starts in
-  // Spanish no matter what and only the cookie changes it. Setting the browser
-  // `locale` and believing it was English measured Spanish twice.
-  await diner.addCookies([{ name: "tt-locale", value: lang, url: BASE }]);
-  for (const flow of DINER) {
-    if (!pageInScope(flow.at ?? "/r/_/t/_")) continue;
-    const tab = await diner.newPage();
-    try {
-      // Most flows start at the table. One does not: the tracker has its own
-      // URL, so it says where it begins.
-      const start = flow.at
-        ? `${BASE}${flow.at.replace(":orderId", anyOrder ?? "")}`
-        : `${BASE}/r/${r.id}/t/${table.id}`;
-      if (flow.at && !anyOrder) throw new Error("no order in the demo data to track");
-      await gotoOnce(tab, start, { waitUntil: "load", timeout: 60000 });
-      await settle(tab);
-      for (const step of flow.steps) {
-        if (step.addToCart) {
-          await tap(tab, lang === "es"
-            ? "button[aria-label^='Agregar ']"
-            : "button[aria-label^='Add ']");
-          await tab.waitForTimeout(500);
-          await tab.evaluate(`(()=>{const b=[...document.querySelectorAll('button')].find(x=>/Agregar al carrito|Add to (cart|order)/i.test(x.textContent)); if(b) b.click();})()`);
-          await tab.waitForSelector(".tt-fab", { timeout: 8000 });
-        }
-        // A step that cannot find its button leaves the previous screen up, and then
-        // the menu gets measured twice while we think the dish detail was checked.
-        // That does not get to pass quietly.
-        if (step.click) {
-          const sel = typeof step.click === "string" ? step.click : step.click[lang];
-          if (!(await tap(tab, sel))) throw new Error(`could not find «${sel}»`);
-        }
-        if (step.text) {
-          const label = typeof step.text === "string" ? step.text : step.text[lang];
-          if (!(await tapText(tab, label))) {
-            throw new Error(`could not find the button «${label}»`);
-          }
-        }
-        if (step.bottom) {
-          await tab.evaluate(`(()=>{const o=document.querySelector('.tt-detail-overlay'); if(o) o.scrollTop=o.scrollHeight;})()`);
-        }
-        await tab.waitForTimeout(700);
-      }
-      if (flow.expect?.[lang]) {
-        const there = await tab.evaluate(
-          `document.body.innerText.includes(${JSON.stringify(flow.expect[lang])})`,
-        );
-        if (!there) throw new Error(`did not arrive — missing «${flow.expect[lang]}»`);
-      }
-      await look(tab, `diner ${lang} · ${flow.name}`);
-    } catch (e) {
-      failed++;
-      console.log(`    BAD      diner ${lang} · ${flow.name}: ${e.message.split("\n")[0]}`);
-    }
-    await tab.close();
-  }
-  await diner.close();
-  }
-
-  // ── The front door, signed out ────────────────────────────────────────────
-  const outside = await newContext({
-    viewport: { width: size.width, height: size.height },
-    locale: "es-MX",
-  });
-  for (const path of PUBLIC) {
-    if (!pageInScope(path)) continue;
-    const tab = await outside.newPage();
-    try {
-      await gotoOnce(tab, BASE + path, { waitUntil: "load", timeout: 60000 });
-      await settle(tab);
-      await look(tab, `signed out · ${path}`);
-    } catch (e) {
-      failed++;
-      console.log(`    BAD      signed out · ${path}: ${e.message.split("\n")[0]}`);
-    }
-    await tab.close();
-  }
-
-  // The rewards page with a card on it, as a diner's camera opens it. A code
-  // cannot be known in advance, so it is read from the seed — one that has
-  // spent a reward, so the history is on the page too. None in development
-  // means the seed lost the feature, which is a fault; none in production just
-  // means nobody has a card yet, and is said rather than counted.
-  const { data: spent } = await admin
-    .from("loyalty_redemptions").select("card_id").limit(1).maybeSingle();
-  const { data: card } = spent
-    ? await admin.from("loyalty_cards").select("code").eq("id", spent.card_id).maybeSingle()
-    : { data: null };
-  if (!pageInScope("/rewards")) {
-    // Not in this change's reach.
-  } else if (!card) {
-    if (prod) console.log("    –        signed out · /rewards (a card): no card to show yet");
-    else { failed++; console.log("    BAD      signed out · /rewards (a card): the seed has no card with a reward spent"); }
-  } else {
-    const tab = await outside.newPage();
-    try {
-      await gotoOnce(tab, `${BASE}/rewards?c=${card.code}`, { waitUntil: "load", timeout: 60000 });
-      await tab.waitForSelector(".tt-rewards", { timeout: 30000 });
-      await settle(tab);
-      await look(tab, "signed out · /rewards (a card)");
-    } catch (e) {
-      failed++;
-      console.log(`    BAD      signed out · /rewards (a card): ${e.message.split("\n")[0]}`);
-    }
-    await tab.close();
-  }
-  await outside.close();
-
-  // ── The team ─────────────────────────────────────────────────────────────
-  for (const who of CREW) {
-    const password = who.passwordEnv ? process.env[who.passwordEnv] : undefined;
-    if (who.passwordEnv && !password) {
-      console.log(`    –        ${who.role}: ${who.passwordEnv} is not set — skipped`);
-      continue;
-    }
-    const ctx = await newContext({
-      viewport: { width: size.width, height: size.height },
-      locale: "es-MX",
-    });
-    await ctx.addCookies([await cookieFor(who.email, password)]);
-    for (const path of who.pages) {
-      if (!pageInScope(path)) continue;
-      const tab = await ctx.newPage();
-      try {
-        await gotoOnce(tab, BASE + path, { waitUntil: "load", timeout: 60000 });
-        await settle(tab);
-        await look(tab, `${who.role} · ${path}`);
-
-        for (const dialog of DIALOGS[path] ?? []) {
-          const press = () => dialog.text ? tapText(tab, dialog.text) : tap(tab, dialog.click);
-          const isOpen = () => tab.evaluate(`!!document.querySelector(${JSON.stringify(dialog.shows ?? "[role=dialog]")})`);
-          let clicked = await press();
-          await tab.waitForTimeout(900);
-          // Having clicked does not mean anything opened. A silent no-op reads exactly
-          // like an ok, and that is how a whole role went unchecked with nothing
-          // saying so.
-          let open = await isOpen();
-          // Again, after a pause, and once more after a longer one: a click that
-          // lands before the page is ready is the usual reason, and now that a
-          // dialog missing at one width fails the run, a slow page must not read
-          // as a broken one. One pause of 1.5s was not enough right after a
-          // deploy: the first pages of a production run are cold, and every one
-          // of the owner's dialogs at 360px read as missing while all of them
-          // opened on a warm page a minute later.
-          for (const pause of [1500, 3000]) {
-            if (clicked && open) break;
-            await tab.waitForTimeout(pause);
-            clicked = await press();
-            await tab.waitForTimeout(900);
-            open = await isOpen();
-          }
-          // And once more on a fresh load. When the dev server swaps its worker
-          // mid-run, the page already open keeps a bundle that no longer
-          // answers, and pressing it again changes nothing: five times in one
-          // day a dialog read as missing at exactly one width, on a page this
-          // change never touched, during a restart — and opened on the rerun.
-          // A fresh navigation is what a person would do, and a dialog that
-          // still does not open after it is missing.
-          if (!clicked || !open) {
-            await gotoOnce(tab, BASE + path, { waitUntil: "load", timeout: 60000 });
-            await settle(tab);
-            clicked = await press();
-            await tab.waitForTimeout(900);
-            open = await isOpen();
-            if (clicked && open) reloads++;
-          }
-          noteDialog(`${who.role} · ${path} → ${dialog.name}`, size.width, clicked && open);
-          if (!clicked || !open) {
-            console.log(`    –        ${who.role} · ${path} → ${dialog.name}: did not open (no data)`);
-            continue;
-          }
-          await look(tab, `${who.role} · ${path} → ${dialog.name}`);
-          await tab.keyboard.press("Escape");
-          await tab.waitForTimeout(400);
-        }
-      } catch (e) {
-        failed++;
-        console.log(`    BAD      ${who.role} · ${path}: ${e.message.split("\n")[0]}`);
-      }
-      await tab.close();
-    }
-    await ctx.close();
-  }
-  console.log("");
-}
-
-await browser.close();
 for (const [key, seen] of opened) {
   if (seen.at.length > 0 && seen.missed.length > 0) {
     failed++;
     console.log(`    BAD      ${key}: opened at ${seen.at.join("/")}px but not at ${seen.missed.join("/")}px`);
   }
 }
-if (reloads) {
-  console.log(`  ${reloads} dialog(s) opened only after the page was loaded again — a worker restart, or a page slow to wire its buttons.`);
-}
+if (reloads) console.log(`  ${reloads} dialog(s) opened only after the page was loaded again — a worker restart, or a page slow to wire its buttons.`);
 if (held.length) {
   console.log(`  Held ${held.length} write(s) the pages tried to send; none reached the server:`);
   for (const w of [...new Set(held)]) console.log(`    ${w}`);
-  console.log("");
 }
+console.log(`  Audits: ${result.records.reduce((n, r) => n + (r.result?.audits ?? 0), 0)}`);
+timings.report();
+console.log(`  Wall time: ${((performance.now() - started) / 1000).toFixed(2)}s`);
 reportScope("layout");
 console.log(failed === 0 ? "Everything reads.\n" : `${failed} READABILITY PROBLEM(S).\n`);
 process.exit(failed === 0 ? 0 : 1);
