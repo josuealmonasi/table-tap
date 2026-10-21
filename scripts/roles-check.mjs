@@ -152,6 +152,8 @@ const ROUTES = [
   { m: "POST", p: "/api/costs/waste", body: {}, allow: ALL, passes: 400 },
   { m: "DELETE", p: "/api/costs/waste", body: {}, allow: MANAGES, passes: 400 },
   { m: "POST", p: "/api/costs/purchases", body: {}, allow: MANAGES, passes: 400 },
+  { m: "PATCH", p: "/api/products", body: {}, allow: MANAGES, passes: 400 },
+  { m: "POST", p: "/api/products", body: {}, allow: MANAGES, passes: 400 },
   { m: "POST", p: "/api/costs/counts", body: {}, allow: MANAGES, passes: 400 },
   // The terminal's deposits: the owner's and the managers'. Refused on shape —
   // no day, no number of days — so nothing is marked or changed anywhere.

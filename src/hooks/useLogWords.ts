@@ -39,6 +39,7 @@ export function useLogWords(currency: string): {
     if (fields.orders) parts.push(t("dash.logOrders", { n: fields.orders }));
     if (fields.amount) parts.push(`${formatMoney(Number(fields.amount), fields.currency ?? currency)}${fields.currency ? ` ${fields.currency}` : ""}`);
     if (fields.method) parts.push(t(`dash.pay${fields.method}`));
+    if (fields.stock === "unproven") parts.push(t("menu.legacyStockUnknown"));
     if (fields.order) parts.push(`#${fields.order}`);
     // What a part-payment left behind, so the line says how much of the bill
     // this was rather than just how much changed hands.
@@ -50,7 +51,7 @@ export function useLogWords(currency: string): {
     }
     if (fields.note) parts.push(fields.note);
     if (fields.explained) parts.push(fields.explained);
-    const shown = ["currency", "table", "code", "orders", "amount", "method", "order", "left", "note", "explained", ...MONEY_FIELDS];
+    const shown = ["stock", "currency", "table", "code", "orders", "amount", "method", "order", "left", "note", "explained", ...MONEY_FIELDS];
     for (const [key, value] of Object.entries(fields)) {
       if (!shown.includes(key)) parts.push(`${key}: ${value}`);
     }

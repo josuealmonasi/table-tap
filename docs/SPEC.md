@@ -1895,3 +1895,24 @@ no snapshot use current remaining principal conservatively. Every pooled
 attempt also saves its explicit principal. Bill display and payment read the
 same validated sitting, including a phone's valid sitting older than eight
 hours. A stale selection requests review and never reports the debt as paid.
+
+
+### Stock recounts and older orders
+
+A product's description and price edits do not write its opening stock count.
+A changed count is a separate manager operation at `POST /api/products`, with
+both the expected count and `stock_epoch`; a concurrent sale or recount refuses
+it so the manager can reopen the dish and check the shelf. Ordinary product
+edits use `PATCH /api/products` and keep RLS and frozen-dashboard guards.
+
+A recount is the new authoritative available count. It advances the generation
+and supersedes prior holds for that dish; those holds remain recorded, but
+cannot later add portions to the new count. Sales, waste and valid returns keep
+their generation. Older orders without proof of a deduction never receive a
+stock credit on cancellation or expiry; activity asks the manager to check the
+count, and cancellation and its money handling continue normally. Existing SQL
+function signatures remain callable during deployment.
+
+The menu editor pages all menus, sections, items and links with stable ordering
+and refuses edits and copies until the whole read succeeds. Waiter orders obey
+the restaurant's low-stock alert preference, just like checkout and the till.

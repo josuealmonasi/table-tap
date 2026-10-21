@@ -211,6 +211,8 @@ export const en = {
     stockHint: "Empty: the switch decides. With a number: it counts down and leaves the menu at zero.",
     stockLocked: "Counting stock comes with the paid plans.",
     stockPlaceholder: "Not counted",
+    legacyStockUnknown: "No portions were returned to the count: this older order has no record of taking stock. Check how many are left.",
+    stockChanged: "The count changed while you were editing. Reopen the dish, check how many are left and enter your count again.",
     stockLeft: "{count} left",
     stockOut: "Sold out",
     trackThisOrder: "Track your order {code}",

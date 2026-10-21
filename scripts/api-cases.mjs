@@ -118,6 +118,30 @@ export function cases(fx) {
         try { return await checkTableJoin(f.joinScenario, f.who); }
         catch (error) { return error.message; }
       } },
+    { name: "PATCH /api/products (J5: an unrelated edit preserves stock)",
+      as: "manager", method: "PATCH", path: "/api/products",
+      arrange: async f => {
+        const { data: item, error } = await f.admin.from("menu_items").select("description, stock")
+          .eq("id", f.dish.id).single();
+        if (error || !item) throw new Error("Could not read the product before editing");
+        f.productBeforeEdit = item;
+        return async () => {
+          const { error: restoreError } = await f.admin.from("menu_items")
+            .update({ description: item.description }).eq("id", f.dish.id);
+          if (restoreError) throw new Error(restoreError.message);
+        };
+      },
+      body: f => ({ id: f.dish.id, changes: { description: `${MARK} description`,
+        stock: (f.productBeforeEdit.stock ?? 0) + 3 } }), expect: [200],
+      check: async (_data, f) => {
+        const { data: item, error } = await f.admin.from("menu_items").select("description, stock")
+          .eq("id", f.dish.id).single();
+        if (error || !item) return "could not verify the saved product";
+        if (item.stock !== f.productBeforeEdit.stock) return "an unrelated edit changed stock";
+        if (item.description !== `${MARK} description`) return "the description was not saved";
+      } },
+    { name: "POST /api/products (a recount requires the opening count)", as: "manager", method: "POST",
+      path: "/api/products", body: { id: dish.id, stock: 5 }, expect: [400] },
     { name: "POST /api/pos/upload (new money is refused)", as: "cashier", method: "POST", path: "/api/pos/upload", body: {}, expect: [400] },
     { name: "POST /api/terminal/deposits/verify (missing bank confirmation)", as: "manager", method: "POST", path: "/api/terminal/deposits/verify", body: {}, expect: [400] },
     { name: "POST /api/pos/recover (missing attestation)", as: "owner", method: "POST", path: "/api/pos/recover", body: {}, expect: [400] },
