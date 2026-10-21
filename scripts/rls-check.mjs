@@ -421,12 +421,22 @@ if (!signIn.error && theirs) {
       const { data: odd } = await admin.from("service_requests").select("status").eq("id", probe.id).single();
       if (odd.status === "open") ok("kitchen cannot give a request a status the app does not have");
       else bad(`kitchen set a request's status to ${odd.status}`);
-      // The control: the one write staff need still lands, so the two refusals
-      // above are the policy speaking and not a dead session.
+      // The kitchen answers calls through its own route now and writes nothing
+      // here; the control is the floor's one write, so the refusals above are
+      // the policy speaking and not a dead session.
       await kitchen.from("service_requests").update({ status: "done" }).eq("id", probe.id);
-      const { data: done } = await admin.from("service_requests").select("status").eq("id", probe.id).single();
-      if (done.status === "done") ok("kitchen can still mark a request answered");
-      else bad(`kitchen could not mark its own request answered (${done.status})`);
+      const { data: still } = await admin.from("service_requests").select("status").eq("id", probe.id).single();
+      if (still.status === "open") ok("kitchen cannot write a service request directly");
+      else bad(`kitchen wrote a service request directly (${still.status})`);
+      const waiter = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+      const { error: waiterError } = await waiter.auth.signInWithPassword({ email: "demo-waiter@tabletap.dev", password: "demo123" });
+      if (waiterError) bad(`cannot sign in as the waiter — the control did not run: ${waiterError.message}`);
+      else {
+        await waiter.from("service_requests").update({ status: "done" }).eq("id", probe.id);
+        const { data: done } = await admin.from("service_requests").select("status").eq("id", probe.id).single();
+        if (done.status === "done") ok("the floor can still mark a request answered");
+        else bad(`the waiter could not mark the request answered (${done.status})`);
+      }
     } finally {
       await admin.from("service_requests").delete().eq("id", probe.id);
     }
@@ -707,7 +717,9 @@ if (!signIn.error && theirs) {
   } else {
     // 1. Live? Its own restaurant's ticket must arrive, or nothing below means
     //    anything.
-    const own = await listen(kitchen, mine.id);
+    // The kitchen's board follows its money-free tickets; the floor follows orders.
+    const own = await listen(kitchen, mine.id, "kitchen_tickets");
+    const ownOrders = await listen(kitchen, mine.id);
     // Planted twice if the first one does not arrive. SUBSCRIBED is the client
     // saying it asked, not the server saying it is wired up, and the gap
     // between the two is real — a first ticket can fall into it. A second one
@@ -721,6 +733,9 @@ if (!signIn.error && theirs) {
       await settle(own.seen, 1, 20000);
     }
     await kitchen.removeAllChannels();
+    ownOrders.seen.length === 0
+      ? ok("the kitchen hears its tickets, never its restaurant's orders")
+      : bad(`realtime handed the kitchen ${ownOrders.seen.length} of its own restaurant's orders, money and all`);
 
     if (own.seen.length === 0) {
       bad(`realtime delivered nothing for the kitchen's own restaurant after two tickets (${own.status}) — the check below would prove nothing`);
@@ -734,7 +749,9 @@ if (!signIn.error && theirs) {
         process.env.NEXT_PUBLIC_SUPABASE_URL,
         process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
       );
-      const [asStaff, asAnon] = await Promise.all([listen(kitchen, theirs.id), listen(anon, theirs.id)]);
+      const [asStaff, asAnon, asAnonTickets] = await Promise.all([
+        listen(kitchen, theirs.id, "kitchen_tickets"), listen(anon, theirs.id), listen(anon, theirs.id, "kitchen_tickets"),
+      ]);
       const theirId = await plant(theirs.id);
       // Nothing SHOULD arrive here, so there is nothing to wait for: this is
       // the one place a fixed wait is right, and it is as long as the wait
@@ -745,9 +762,9 @@ if (!signIn.error && theirs) {
       asStaff.seen.length === 0
         ? ok("a kitchen elsewhere hears nothing of another restaurant's orders")
         : bad(`realtime handed ${asStaff.seen.length} of another restaurant's orders to a signed-in kitchen`);
-      asAnon.seen.length === 0
+      asAnon.seen.length + asAnonTickets.seen.length === 0
         ? ok("nobody at all hears them either")
-        : bad(`realtime handed ${asAnon.seen.length} of another restaurant's orders to an anonymous listener`);
+        : bad(`realtime handed ${asAnon.seen.length + asAnonTickets.seen.length} of another restaurant's orders or tickets to an anonymous listener`);
 
       if (theirId) await admin.from("orders").delete().eq("id", theirId);
 
