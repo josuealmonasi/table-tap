@@ -705,13 +705,21 @@ business's profit.
   (`src/lib/costs/margins.ts`). A line with any dish or extra lacking a recipe
   is left out of the totals and named apart — counted at nothing, a mostly
   uncosted menu would show a margin of nearly everything.
+  Analytics product rows and contribution use the same final food revenue:
+  `max(0, total - service_fee - tip)`, including IVA, allocated by line value
+  in whole cents. This includes later table discounts without taking checkout
+  discounts twice. Contribution then removes the order's inclusive IVA.
 - **The fee** is the restaurant's own mix over the last 30 days, from the
   ledger: cash costs nothing; a card through TableTap pays Stripe's Mexican
   rate (3.6% + MX$3, IVA on the fee) and TableTap's per-order fee
-  (`orders.platform_fee`); a card on the restaurant's terminal pays
+  (`platform_fees`, net of returned fees); a card on the restaurant's terminal pays
   `restaurants.terminal_fee_pct`, which the owner sets (3.5% until they do).
   Fees over takings is one rate, applied to each product's price
   (`src/lib/costs/fees.ts`).
+  Takings and platform fees use the current report currency. A fee's original
+  currency comes from its saved checkout, joined by payment intent within the
+  restaurant. Fees without that evidence are excluded and their count is shown
+  for review; changing settings never relabels an old fee.
 
 ### Waste, the shelf, and what to buy
 
@@ -1598,6 +1606,12 @@ lean on who is trusted with what:
   is in that person's drawer, one online is online. Underneath it shows what
   went on accounts today and what customers still owe across all accounts,
   because the corte closes the night, not anybody's account.
+  Outstanding debt and monetary activity use the report's currency. New
+  monetary log entries carry the original orders' currency when their whole
+  scope agrees; mixed or unverifiable entries are excluded from money totals
+  and called out for review in the activity log. Refund-only, write-off-only,
+  and debt-only days remain visible and printable, including negative online
+  and drawer balances.
 - **`pnpm money`** reconciles each account's paid orders against its
   payments, and the drawer check reads account collections too.
 

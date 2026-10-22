@@ -115,6 +115,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     actor: actor.email,
     entity: "discount",
     action: "approved",
+    orderIds: orders.map(o => o.id),
     detail: logDetail({ code: coupon.code, amount: amount.toFixed(2) }),
   });
   return NextResponse.json({ ok: true, approved: true, amount });

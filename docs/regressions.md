@@ -14,6 +14,10 @@ us, and what now catches each one.
 
 | Rule | The bug it came from |
 |---|---|
+| Corte account debt and adjustments use the report currency; unverified activity is called out (S12 I8) | MX$100 and US$10 appeared as US$110 owed |
+| Cost fees use the saved charge currency, net of returned fees (S12 I10) | An old MX$10 fee created a false 10% rate on US$100 cash |
+| Product revenue and contribution share final food revenue after every discount (S12 I11/J11) | MX$100 food discounted to MX$80 still showed MX$100 revenue and MX$60 contribution |
+| A corte is empty only without financial activity, including returns (S12 I12) | A refund-only MX$100 cash day hid its negative drawer and print button |
 | Price breaks are whole quantities, priced by division, and the database refuses others (J4) | A tier of 1e-20 units froze the server |
 | A print job closes only on the printer's success code (J9) | A printer out of paper dropped tickets unprinted |
 
@@ -3149,3 +3153,52 @@ the original dish. Availability stays as saved, including unavailable dishes.
 `menu-duplicate.spec.ts` checks the request and failure handling;
 `offers-schema.spec.ts` checks the SQL copy contract. Run the added menu-copy
 API case and inspect the confirmation text in both languages before release.
+
+## S12 I8 — the corte's currency and account debt disagreed
+
+The currency printed beside a corte and every amount it adds must agree.
+An MX$100 account debt and a US$10 debt appeared as US$110 after a currency
+change. The unpaid-account query now reads only the report currency.
+Monetary activity is filtered by original order currency too: new write-off,
+discount and account-charge logs stamp that currency from their scoped orders.
+Mixed, missing or older unverified entries stay outside arithmetic, with a
+count and a review sentence on screen and paper in both languages. Ingredient
+waste is not a bill write-off; discount approvals count like direct discounts.
+Duplicate-charge refunds still never leave takings they never entered.
+`report-currency.spec.ts` checks the real page, original-currency logging,
+tenant scope, verified/foreign/unverified activity and approved discounts.
+
+## S12 I10 — platform fees and the takings used different currencies
+
+The numerator and denominator of a fee rate had to agree on the money.
+MX$10 of old platform fees created a false 10% rate on US$100 cash. The fee
+reader now joins each taken fee to its saved checkout's original currency,
+scoped to the restaurant, and subtracts its returned fee cents once. Fees
+without charge evidence stay outside the rate and their count is shown for
+review. No historical fee is relabelled from current restaurant settings.
+`report-currency.spec.ts` checks the MXN/USD probe, numeric strings, returned
+fees, missing and foreign evidence, paged/chunked reads and read failures.
+
+## S12 I11 / J11 — the final bill and product revenue disagreed
+
+A later table coupon reduced total but left subtotal unchanged. MX$100 food
+costing MX$40 with MX$20 taken off therefore appeared as MX$100 revenue and
+MX$60 contribution, although analytics' total was MX$80. Both product readers
+now allocate `max(0, total - service_fee - tip)` by line value, in whole cents.
+Checkout discounts are already in total and are never subtracted again.
+Contribution removes inclusive IVA after that same allocation; ingredients
+still cost money when the food was free. `report-revenue.spec.ts` reproduces
+MX$80 revenue and MX$40 contribution, then checks service, tips, IVA, coupons,
+item discounts, combos, extras, full discounts and a cent shared three ways.
+`report-currency.spec.ts` also checks both readers request the final amounts.
+
+## S12 I12 — refund activity and the empty corte disagreed
+
+Yesterday's MX$100 sale returned today correctly produced a negative drawer,
+but the screen's collection-count check hid it as empty. The screen and print
+button now consider all financial activity, including waived bills, account
+debt, unverified entries and negative online takings. `corte-card.spec.tsx`
+renders the cash-return-only day and checks the return, cashier and print
+button, plus online returns, each non-collection activity and the truly empty
+day. Claude must check the screen and printed sheet in both languages at
+360/390/820/1280px, including the new currency-review sentences.

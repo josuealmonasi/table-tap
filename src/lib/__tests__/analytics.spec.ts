@@ -26,6 +26,7 @@ function line(over: Partial<OrderLineItem> = {}): OrderLineItem {
 function order(over: Partial<AnalyticsOrder> = {}): AnalyticsOrder {
   return {
     total: 100,
+    service_fee: 0,
     tip: 0,
     created_at: new Date().toISOString(),
     items: [line()],
@@ -128,7 +129,7 @@ describe("computeAnalytics", () => {
       qty: 2,
       extras: [{ id: "e1", name: "Extra sauce", emoji: "🥫", price: 20 }],
     });
-    const a = computeAnalytics([order({ items: [withExtra] })], "today", MX);
+    const a = computeAnalytics([order({ total: 200, items: [withExtra] })], "today", MX);
     const gyoza = a.topProducts.find(p => p.name === "Gyoza");
     expect(gyoza).toBeTruthy();
     expect(gyoza!.qty).toBe(2);
