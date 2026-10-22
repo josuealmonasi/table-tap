@@ -72,7 +72,9 @@ export async function arrangeRetry(f, state, kind) {
       state.items = [{ itemId: dish.id, name: "Retry dish", price: 10, qty: 1, mods: {}, emoji: "" }];
       if (kind === "checkout") {
         state.coupon = await checked(f.admin.from("coupons").insert({ restaurant_id: r,
-          code: `R${state.ref.replaceAll("-", "").slice(0, 10).toUpperCase()}`, kind: "fixed", value: 1, max_uses: 1 }).select("id, code").single());
+          // Codes are XXX-XXX (`COUPON_PATTERN`): a longer one is normalised to its
+        // first six characters and never found, so checkout said "notFound".
+        code: `R${state.ref.replaceAll("-", "").slice(0, 2)}-${state.ref.replaceAll("-", "").slice(2, 5)}`.toUpperCase(), kind: "fixed", value: 1, max_uses: 1 }).select("id, code").single());
       }
       if (kind === "table-order") {
         state.table = (await checked(f.admin.from("restaurant_tables").insert({ restaurant_id: r, label: `${MARK} retry` }).select("id").single())).id;

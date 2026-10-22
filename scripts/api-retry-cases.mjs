@@ -9,7 +9,10 @@ export function retryCases(fx) {
       ? { posRef: state.ref, method: "account", accountId: state.account, items: state.items, noReceipt: true }
       : { ref: state.ref, restaurantId: r, tableId: state.table ?? null, payLater: true, items: state.items, couponCode: state.coupon?.code };
     return { name: `S20 K${kind === "pos" ? 3 : 4}: ${path} one intent, one ticket`, as: kind === "checkout" ? "diner" : "manager",
-      method: "POST", path, expect: [200], headers: { "x-forwarded-for": "203.0.113.220" },
+      // The retry below is sent with no member cookie, so the first one is too:
+      // the harness gives a diner's first request a phone's cookie, and a
+      // reference reused from a different phone is refused by design (409).
+      method: "POST", path, expect: [200], headers: { "x-forwarded-for": "203.0.113.220", ...(kind === "checkout" ? { cookie: "" } : {}) },
       arrange: f => arrangeRetry(f, state, kind), body,
       check: async (first, f) => {
         const second = await ask(f, path, body(), kind === "checkout" ? "diner" : "manager");
