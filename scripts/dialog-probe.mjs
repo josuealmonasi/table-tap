@@ -86,6 +86,12 @@ export async function typingFaults(tab, scope = "[role=dialog]", most = 4) {
   return faults;
 }
 
+/** Still on the page this visit is for. */
+export function samePage(current, planned) {
+  const a = new URL(current), b = new URL(planned);
+  return a.origin === b.origin && a.pathname === b.pathname && a.search === b.search;
+}
+
 export async function probeDialogs({ tab, log, phase, stop }, { url, role, path }) {
   defuse(tab);
   const pending = trackData(tab);
@@ -109,6 +115,12 @@ export async function probeDialogs({ tab, log, phase, stop }, { url, role, path 
   for (const label of await tab.evaluate(LABELS)) {
     if (seen.has(label) || LEAVES_THE_APP.test(label)) continue;
     seen.add(label);
+    // A click that navigated (a link-like button) left every later label to be
+    // looked for on another page, and skipped without a word: on /dashboard,
+    // «Main Menu Abrir →» went first, so the menus' rename, copy and delete
+    // dialogs were never checked by any run. Come back before the next click,
+    // outside the probe's deadline so a slow page is not a timed-out probe.
+    if (!samePage(tab.url(), url)) await navigate(tab, url, phase, pending);
     await deadline(20000, async () => {
       if (!(await clickByLabel(tab, label))) return;
       // A button can legitimately open nothing. Observe the full window then.

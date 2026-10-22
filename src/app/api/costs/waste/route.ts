@@ -6,7 +6,7 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { actingManager, actingStaff } from "@/lib/api-guard";
 import { costsBlocks, uuidOf } from "@/lib/costs/guard";
-import { dishCount, recipeQuantity, wasteNote } from "@/lib/costs/input";
+import { dishCount, quantityRefusal, recipeQuantity, wasteNote } from "@/lib/costs/input";
 import { defaultChoices, dishCost, recipeBook, unitCosts, type RecipeLine } from "@/lib/costs/recipe-cost";
 import { WASTE_REASONS, type WasteReason } from "@/lib/costs/usage";
 import type { Modifier } from "@/lib/types";
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!ingredientId === !itemId) return await apiError("apiErr.wasteWhat", 400);
   // A dish goes in the bin whole; an ingredient by the gram.
   const quantity = itemId ? dishCount(body.quantity) : recipeQuantity(body.quantity);
-  if (quantity === null) return await apiError("apiErr.wasteQuantity", 400);
+  if (quantity === null) return await apiError(quantityRefusal(body.quantity, "apiErr.wasteQuantity"), 400);
   const reason = WASTE_REASONS.includes(body.reason as WasteReason) ? (body.reason as WasteReason) : null;
   if (!reason) return await apiError("apiErr.wasteReason", 400);
 

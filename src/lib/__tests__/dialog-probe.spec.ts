@@ -21,3 +21,16 @@ it("reports a visible field that could not be typed into", async () => {
   const tab = { locator: () => ({ last: () => ({ locator: () => ({ count: async () => 1, nth: () => field }) }) }) };
   expect(await typingFaults(tab)).toEqual(["could not type in «amount»: click timed out"]);
 });
+
+it("comes back to its page when a click navigated away, before the next label", async () => {
+  // «Main Menu Abrir →» on /dashboard left for the menu editor, and the menus'
+  // rename, copy and delete dialogs were looked for there and never checked.
+  const { samePage } = await import("../../../scripts/dialog-probe.mjs");
+  expect(samePage("http://localhost/dashboard", "http://localhost/dashboard")).toBe(true);
+  expect(samePage("http://localhost/dashboard/main-menu", "http://localhost/dashboard")).toBe(false);
+  expect(samePage("http://localhost/dashboard?tab=a", "http://localhost/dashboard")).toBe(false);
+  const source = (await import("node:fs")).readFileSync("scripts/dialog-probe.mjs", "utf8");
+  const loop = source.slice(source.indexOf("for (const label of"));
+  expect(loop.indexOf("if (!samePage(tab.url(), url)) await navigate(")).toBeGreaterThan(-1);
+  expect(loop.indexOf("if (!samePage(tab.url(), url))")).toBeLessThan(loop.indexOf("clickByLabel(tab, label)"));
+});

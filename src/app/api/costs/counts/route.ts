@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { actingManager } from "@/lib/api-guard";
 import { costsBlocks, uuidOf } from "@/lib/costs/guard";
-import { decimal, MAX_INGREDIENTS } from "@/lib/costs/input";
+import { decimal, MAX_INGREDIENTS, quantityRefusal } from "@/lib/costs/input";
 
 export const runtime = "nodejs";
 
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   for (const raw of body.counts as { ingredientId?: unknown; counted?: unknown }[]) {
     const id = uuidOf(raw?.ingredientId);
     const quantity = decimal(raw?.counted, MAX_COUNTED, 3);
-    if (!id || quantity === null || counted.has(id)) return await apiError("apiErr.countQuantity", 400);
+    if (!id || quantity === null || counted.has(id)) return await apiError(quantityRefusal(raw?.counted, "apiErr.countQuantity"), 400);
     counted.set(id, quantity);
   }
 
