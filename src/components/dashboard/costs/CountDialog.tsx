@@ -131,7 +131,7 @@ function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialog
   return (
     <form className="tt-prodform" onSubmit={e => void save(e)}>
       <p className="tt-muted tt-costs-hint">{t("costs.countHint")}</p>
-      {pending && <PendingAttempt message={t("pending.count")} busy={busy} onDiscard={() => { if (!inFlight.current) attempt.clear(); }} />}
+      {attempt.unconfirmed(busy) && <PendingAttempt message={t("pending.count")} busy={busy} onDiscard={() => { if (!inFlight.current) attempt.clear(); }} />}
       <ul className="tt-costs-count-list">
         {ingredients.map(i => {
           const unit = inShown(0, i.unit).unit;

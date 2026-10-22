@@ -4186,3 +4186,37 @@ problems. Codex then hit its usage limit, and Claude fixed all seven:
    now opens the charge and the till's dish sheet through `before` steps.
    After measuring, Escape must close them. Each diner flow checks how many
    dialogs Escape leaves open (`escape`).
+
+### «Este pedido no se confirmó» while it was being placed (production, 2026-10-22)
+
+A diner on production saw «Este pedido no se confirmó. Envíalo otra vez…»
+over a «Guardando…» button, while the order was still on its way. It read as
+an order that had failed.
+
+- **Why.** Every retry banner was shown whenever a retry key existed. A key
+  exists from the moment a request goes out, so the banner showed during
+  every first send. That affected the diner's order, the waiter's pad, the
+  POS account sale, the withdrawal, the drawer close, purchases, counts and
+  waste.
+- **Now.** `useRetryIntent.unconfirmed(sending)` is true only once a send has
+  ended without an answer, and through the retries after it. The first send
+  shows the screen's own loading state: «Enviando a la cocina…».
+- **The words.** Each message now says what is known: «No recibimos la
+  confirmación… Puede que ya haya llegado a la cocina: envíalo otra vez para
+  saberlo, no se repetirá». The retry button says «Enviando…», not
+  «Guardando…».
+- **One message at a time.** A lost order no longer opens «Atención: Error de
+  red» over its own retry screen. A refusal still shows, because it says
+  something the screen does not.
+- **The screen itself.** The banner's paragraphs had their default margins,
+  and its discard answers borrowed the sticky form footer, which drew a white
+  block across it at 1280 px. Both now have their own classes.
+- **Tests:** `useRetryIntent.spec.ts` and `s20-client-retry.spec.ts`.
+
+### The diner's header, spaced as one stack
+
+The «¿Dejar entrar a otro teléfono?» card sat flush under «Sigue tu pedido».
+Every other card in the header carries `margin-top: 12px`, and the request
+chip, which is shared with the staff bar, had none. `.tt-menu-header
+.tt-request-chip` gets it there only. Measured at 390 px: 12 px between the
+banners, and 12 px to the card.

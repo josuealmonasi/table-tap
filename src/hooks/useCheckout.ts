@@ -165,17 +165,23 @@ export function useCheckout(input: CheckoutInput): {
       if (data.unavailableItemId) {
         input.markSoldOut(data.unavailableItemId);
         input.notify(`${data.error} ${t("notice.markedSoldOut")}`);
-      } else {
+      } else if (!(payLater && attempt.pending() && res.status >= 500)) {
+        // A refusal says something the retry screen does not, so it shows;
+        // a server error on a kept order is what that screen already says.
         input.notify(data.error ?? t("notice.generic"));
       }
       setLoading(false);
     } catch {
-      input.notify(t("notice.network"));
+      // An order kept for a retry has its own screen saying what happened and
+      // what to do. A modal over it, «Atención: Error de red» or «No pudimos
+      // crear tu pedido», read as an order that had failed while the screen
+      // said it may already be with the kitchen.
+      if (!(payLater && attempt.pending())) input.notify(t("notice.network"));
       setLoading(false);
     } finally {
       inFlight.current = false;
     }
   }
 
-  return { checkout, discard: () => { if (!inFlight.current) attempt.clear(); }, loading, frozen: attempt.frozen<PendingCheckout>() };
+  return { checkout, discard: () => { if (!inFlight.current) attempt.clear(); }, loading, frozen: attempt.unconfirmed(loading) ? attempt.frozen<PendingCheckout>() : null };
 }

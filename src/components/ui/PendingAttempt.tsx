@@ -19,15 +19,15 @@ export default function PendingAttempt({ message, onDiscard, busy = false }: Pen
     onDiscard?.();
   }
   return (
-    <div className="tt-offline-banner" role="status">
+    <div className="tt-offline-banner tt-pending-attempt" role="status">
       <p>{message}</p>
       {onDiscard && (confirm ? <>
         <p>{t("pending.discardWarning")}</p>
-        <div className="tt-prodform-actions">
-          <button type="button" className="tt-btn tt-btn-ghost" disabled={busy} onClick={discard}>{t("pending.discardConfirm")}</button>
-          <button type="button" className="tt-btn tt-btn-ghost" disabled={busy} onClick={() => setConfirm(false)}>{t("common.cancel")}</button>
+        <div className="tt-pending-actions">
+          <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" disabled={busy} onClick={discard}>{t("pending.discardConfirm")}</button>
+          <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" disabled={busy} onClick={() => setConfirm(false)}>{t("common.cancel")}</button>
         </div>
-      </> : <button type="button" className="tt-btn tt-btn-ghost" disabled={busy} onClick={() => setConfirm(true)}>{t("pending.discard")}</button>)}
+      </> : <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" disabled={busy} onClick={() => setConfirm(true)}>{t("pending.discard")}</button>)}
     </div>
   );
 }

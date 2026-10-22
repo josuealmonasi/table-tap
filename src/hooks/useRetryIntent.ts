@@ -9,6 +9,14 @@ export interface RetryIntent {
   pending(): boolean;
   /** Whether this refusal settles the attempt, so its reference may go. */
   settles(status: number, data: { retryUncommitted?: unknown }): boolean;
+  /**
+   * Whether to say the request was not confirmed. Not while its first send
+   * is still on its way: the saved request exists from the moment it goes
+   * out, and «Este pedido no se confirmó» over a «Guardando…» read as an
+   * order that had failed while it was being placed. Only once a send ended
+   * without an answer, and through the retries after it.
+   */
+  unconfirmed(sending: boolean): boolean;
 }
 
 /** A lost reply must retry the exact request, even if the form changed. */
@@ -33,6 +41,9 @@ export function useRetryIntent(): RetryIntent {
     pending(): boolean { return saved.current !== null; },
     settles(status: number, data: { retryUncommitted?: unknown }): boolean {
       return refusalSettles(status, sends.current > 1, data.retryUncommitted === true);
+    },
+    unconfirmed(sending: boolean): boolean {
+      return saved.current !== null && (sends.current > 1 || !sending);
     },
   };
 }

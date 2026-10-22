@@ -136,7 +136,7 @@ export default function CloseShiftDialog({ open, currency, shiftId, onClose, onC
       {!closed ? (
         <form className="tt-prodform" onSubmit={e => void count(e)}>
           <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>{t("shift.countHint")}</p>
-          {pending && <PendingAttempt message={t("pending.close", { amount: shownMoney(frozen?.counted, shownCurrency) })} busy={busy} onDiscard={() => { if (!inFlight.current) attempt.clear(); }} />}
+          {attempt.unconfirmed(busy) && <PendingAttempt message={t("pending.close", { amount: shownMoney(frozen?.counted, shownCurrency) })} busy={busy} onDiscard={() => { if (!inFlight.current) attempt.clear(); }} />}
           <label className="tt-field">
             <span className="tt-mod-label">{t("shift.counted")} · {shownCurrency}</span>
             <input

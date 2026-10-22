@@ -93,7 +93,7 @@ export default function CashMovementDialog({ kind, currency, shiftId, onClose, o
         <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
           {shownKind === "opening" ? t("shift.openHint") : t("corte.withdrawalHint")}
         </p>
-        {pending && <PendingAttempt message={t("pending.withdrawal", { amount: shownMoney(frozen?.amount, shownCurrency) })} busy={busy} onDiscard={() => { if (!inFlight.current) attempt.clear(); }} />}
+        {attempt.unconfirmed(busy) && <PendingAttempt message={t("pending.withdrawal", { amount: shownMoney(frozen?.amount, shownCurrency) })} busy={busy} onDiscard={() => { if (!inFlight.current) attempt.clear(); }} />}
         <label className="tt-field">
           <span className="tt-mod-label">{shownKind === "opening" ? t("corte.opening") : t("corte.amount")} · {shownCurrency}</span>
           <input

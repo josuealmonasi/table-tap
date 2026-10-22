@@ -9,6 +9,7 @@ export interface CostsSender {
   pending: RetryIntent["pending"];
   discard: RetryIntent["clear"];
   frozen: RetryIntent["frozen"];
+  unconfirmed: RetryIntent["unconfirmed"];
 }
 
 /**
@@ -40,5 +41,5 @@ export function useCostsSend(retry = false): CostsSender {
       inFlight.current = false;
     }
   }, [t, retry, attempt]);
-  return Object.assign(send, { pending: attempt.pending, frozen: attempt.frozen, discard: () => { if (!inFlight.current) attempt.clear(); } });
+  return Object.assign(send, { pending: attempt.pending, frozen: attempt.frozen, unconfirmed: attempt.unconfirmed, discard: () => { if (!inFlight.current) attempt.clear(); } });
 }

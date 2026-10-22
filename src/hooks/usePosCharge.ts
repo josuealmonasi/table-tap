@@ -65,6 +65,8 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
   const { tipPct, tipCustom } = details;
   const accountRequest = useRef<string | null>(null);
   const accountReview = useRef<{ name: string; amount: number; currency: string } | null>(null);
+  // Whether the account request now on its way is a retry of one that went unconfirmed.
+  const accountResent = useRef(false);
   const inFlight = useRef(false);
   const [busy, setBusy] = useState(false);
   const [, refreshAccount] = useState(0);
@@ -132,6 +134,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     const posRef = accountRequest.current ? JSON.parse(accountRequest.current).posRef as string : crypto.randomUUID();
     // A held account request has been sent before: this is its retry.
     const retriedAccount = accountRequest.current !== null;
+    accountResent.current = retriedAccount;
     const sale: HeldSale | null = method === "account" ? null : {
       posRef, collector, collectorContext, restaurantId: restaurant.id, at: new Date().toISOString(), method, items: lines,
       charge: { ...pricing }, currency: restaurant.currency, tipPct: tipCustom === null ? tipPct : undefined, tipAmount: tipCustom ?? undefined,
@@ -260,7 +263,10 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     }
   }
 
-  const accountRetry: PendingAccountSale | null = accountRequest.current && accountReview.current
+  // Not while the first send is on its way: the request is held from the
+  // moment it goes out, and «no se confirmó» over a sale being rung read as a
+  // sale that had failed. Only once a send ended unconfirmed, and its retries.
+  const accountRetry: PendingAccountSale | null = accountRequest.current && accountReview.current && (accountResent.current || !busy)
     ? { ...JSON.parse(accountRequest.current), ...accountReview.current } : null;
   function discardAccount(): void {
     if (inFlight.current) return;

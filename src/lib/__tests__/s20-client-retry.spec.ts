@@ -72,3 +72,23 @@ it.each(["purchases", "waste"])("K6 %s keeps its frozen request through a networ
   expect(bodies()[1]).toEqual(bodies()[0]); expect(bodies()[2]).toEqual(bodies()[0]);
   expect(bodies()[3].quantity).toBe(4); expect(bodies()[3].ref).not.toBe(bodies()[0].ref);
 });
+it("a lost order shows its retry screen alone, never a modal saying it failed (production, 2026-10-22)", async () => {
+  // «Atención: Error de red» over a screen saying the order may already be
+  // with the kitchen read as an order that had failed.
+  const cart = useMenu();
+  state.fetch.mockRejectedValueOnce(new Error("lost"))
+    .mockResolvedValueOnce(Response.json({ error: "No pudimos crear tu pedido" }, { status: 503 }))
+    .mockResolvedValueOnce(Response.json({ error: "Esto ya se había enviado antes con otros datos" }, { status: 409 }));
+  await cart.checkout(true);
+  await cart.checkout(true);
+  expect(cart.input.notify).not.toHaveBeenCalled();
+  // A refusal says something the retry screen does not, so it still shows.
+  await cart.checkout(true);
+  expect(cart.input.notify).toHaveBeenCalledWith("Esto ya se había enviado antes con otros datos");
+});
+it("a refused first order still says why", async () => {
+  const cart = useMenu();
+  state.fetch.mockResolvedValueOnce(Response.json({ error: "La cocina está cerrada" }, { status: 409 }));
+  await cart.checkout(true);
+  expect(cart.input.notify).toHaveBeenCalledWith("La cocina está cerrada");
+});

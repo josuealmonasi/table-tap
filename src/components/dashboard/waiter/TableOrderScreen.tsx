@@ -196,7 +196,7 @@ export default function TableOrderScreen({
               total={pending ? reviewedTotal.current : pricing.total}
               sending={sending}
               busy={busy}
-              pending={pending}
+              pending={attempt.unconfirmed(busy)}
               onDiscard={() => { if (!inFlight.current) attempt.clear(); }}
               closedNow={closedNow}
               onChangeQty={(id, qty) => { if (!sending) cart.changeQty(id, qty); }}
