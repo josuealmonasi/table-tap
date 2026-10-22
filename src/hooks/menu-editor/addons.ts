@@ -48,7 +48,7 @@ export function addonActions(ctx: EditorContext) {
     }, id, direction);
   }
 
-  // ── Availability toggle (products and add-ons) — optimistic, rolls back on failure ──
+  // ── Availability toggle (products and add-ons) — optimistic, then read back ──
   async function setAvailability(id: string, available: boolean): Promise<void> {
     if (!(await ctx.ready())) return;
     setProducts(prev => prev.map(p => (p.id === id ? { ...p, available } : p)));
@@ -58,13 +58,17 @@ export function addonActions(ctx: EditorContext) {
         .from("menu_items")
         .update({ available })
         .eq("id", id).select("id"));
-      if (reportError("write.updateAvailability", error)) return;
+      reportError("write.updateAvailability", error);
     } catch {
       reportError("write.updateAvailability", { message: "Availability did not save" });
     }
-    // Rolled back by reading what is saved. The arrays this was called with
-    // are the render before the read `ready` waited for, and putting them back
-    // undid that read too (audit L, finding 7).
+    // Read back what is saved, whether it saved or not. A failure rolls back
+    // that way, never by restoring the arrays this was called with: they are
+    // the render before the read `ready` waited for (audit L, finding 7). A
+    // success reads too, so the editor's latest read holds the new value (a
+    // copy made next copied the old one) and a reload another switch's
+    // failure started cannot leave this one showing what it was before. The
+    // later read wins; the loader drops the earlier (cross-review of batch 5).
     await reload();
   }
 

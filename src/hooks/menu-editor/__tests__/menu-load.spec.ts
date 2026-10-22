@@ -108,7 +108,11 @@ it("J17: an edit waits for the newest read, not the one it found running", async
   await settle();
   expect(state.sent).not.toHaveBeenCalled();
   finish[1](menu);
-  await Promise.all([second, edit]);
+  await second;
+  // The switch reads back what it saved (cross-review of batch 5).
+  await vi.waitFor(() => expect(finish).toHaveLength(3));
+  finish[2](menu);
+  await edit;
   expect(state.sent).toHaveBeenCalledTimes(1);
 });
 it("J17: menu names and availability cannot write before the full read", async () => {
@@ -117,4 +121,19 @@ it("J17: menu names and availability cannot write before the full read", async (
   await editor.setMenuActive("menu", true);
   await editor.setAvailability("dish", true);
   expect(state.sent).not.toHaveBeenCalled();
+});
+it("cross-review of batch 5, 5: a dish switched off and then copied is copied switched off", async () => {
+  // The switch saved and did not read back, so the editor's latest read still
+  // said the MX$100 dish was available and the copy came out available.
+  const dish = { id: "dish", menu_id: "m", category_id: null, name: "Dish", price: 100, available: true, sort_order: 0,
+    description: "", emoji: "", image_url: null, popular: false, modifiers: [], dietary: [], discount_pct: 0, skips_kitchen: false };
+  state.read.mockResolvedValueOnce({ ...menu, products: [dish] });
+  await Editor().reload();
+  state.read.mockResolvedValue({ ...menu, products: [{ ...dish, available: false }] });
+  await Editor().setAvailability("dish", false);
+  const inserted: Record<string, unknown>[] = [];
+  const insert = { select: () => insert, single: async () => ({ data: { id: "copy" }, error: null }) };
+  state.from.mockReturnValue({ insert: (row: Record<string, unknown>) => { inserted.push(row); return insert; } });
+  expect(await Editor().duplicateProduct("dish")).toBe("copy");
+  expect(inserted[0]).toMatchObject({ name: "Dish copy", price: 100, available: false });
 });

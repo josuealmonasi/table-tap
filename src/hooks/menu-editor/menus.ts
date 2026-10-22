@@ -46,16 +46,22 @@ export function menuActions(ctx: EditorContext) {
   ): Promise<boolean> {
     if (!(await ctx.ready())) return false;
     setMenus(m => m.map(x => (x.id === id ? { ...x, schedule } : x)));
+    let saved = false;
     try {
       const error = writeError(await supabase.from("menus").update({ schedule }).eq("id", id).select("id"));
-      if (reportError("write.updateMenu", error)) return true;
+      saved = reportError("write.updateMenu", error);
     } catch {
       toast(t("write.updateMenu"), "error");
     }
-    // Rolled back by reading what is saved, never by restoring the menus this
-    // was called with: they predate the read `ready` waited for.
+    // Read back what is saved, whether it saved or not. A failure rolls back
+    // that way, never by restoring the arrays this was called with: they are
+    // the render before the read `ready` waited for (audit L, finding 7). A
+    // success reads too, so the editor's latest read holds the new value (a
+    // copy made next copied the old one) and a reload another switch's
+    // failure started cannot leave this one showing what it was before. The
+    // later read wins; the loader drops the earlier (cross-review of batch 5).
     await reload();
-    return false;
+    return saved;
   }
 
   async function setMenuActive(id: string, active: boolean): Promise<void> {
@@ -63,11 +69,12 @@ export function menuActions(ctx: EditorContext) {
     setMenus(m => m.map(x => (x.id === id ? { ...x, active } : x)));
     try {
       const error = writeError(await supabase.from("menus").update({ active }).eq("id", id).select("id"));
-      if (reportError("write.updateMenu", error)) return;
+      reportError("write.updateMenu", error);
     } catch {
       toast(t("write.updateMenu"), "error");
     }
-    await reload(); // roll back the optimistic flip by reading what is saved
+    // Read back either way, as the availability switch does.
+    await reload();
   }
 
   /** Deep-copies a menu: its sections, products, extras, and add-on links. Returns the new menu's id. */
