@@ -41,8 +41,7 @@ describe("fetchPromotions", () => {
   it("returns each promotion with what it includes", async () => {
     const promos = await fetchPromotions(
       client({
-        promotions: { data: [PROMO], error: null },
-        promotion_items: { data: [{ promotion_id: "p1", item_id: "i1", qty: 2 }], error: null },
+        promotions: { data: [{ ...PROMO, items: [{ item_id: "i1", qty: 2 }] }], error: null },
       }),
       "r1",
     );
@@ -54,9 +53,13 @@ describe("fetchPromotions", () => {
     await expect(fetchPromotions(client({ promotions: down }), "r1")).rejects.toThrow("Could not load the promotions");
   });
 
-  it("throws when what they include cannot be read, rather than pricing a combo with nothing in it", async () => {
-    await expect(
-      fetchPromotions(client({ promotions: { data: [PROMO], error: null }, promotion_items: down }), "r1"),
-    ).rejects.toThrow("Could not load what the promotions include");
+  it("J2 reads terms and components in one request", async () => {
+    let requests = 0;
+    const db = client({ promotions: { data: [{ ...PROMO, items: [{ item_id: "old", qty: 2 }] }], error: null } });
+    const from = db.from.bind(db);
+    db.from = ((table: string) => { requests++; return from(table); }) as typeof db.from;
+    const result = await fetchPromotions(db, "r1");
+    expect(requests).toBe(1);
+    expect(result[0].items).toEqual([{ item_id: "old", qty: 2 }]);
   });
 });

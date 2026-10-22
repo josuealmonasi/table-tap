@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { PromotionRow, PromotionWithItems } from "@/lib/promotions";
+import type { PromotionWithItems } from "@/lib/promotions";
 
 const PROMO_COLUMNS =
   "id, restaurant_id, kind, name, emoji, description, combo_price, buy_qty, pay_qty, tiers, active, sort_order";
@@ -16,7 +16,7 @@ export async function fetchPromotions(
 ): Promise<PromotionWithItems[]> {
   let query = supabase
     .from("promotions")
-    .select(PROMO_COLUMNS)
+    .select(`${PROMO_COLUMNS}, items:promotion_items(item_id, qty)`)
     .eq("restaurant_id", restaurantId)
     .order("sort_order");
   if (activeOnly) query = query.eq("active", true);
@@ -26,26 +26,7 @@ export async function fetchPromotions(
   // as two — and the till and the waiter's order did the same.
   const { data, error } = await query;
   if (error) throw new Error(`Could not load the promotions: ${error.message}`);
-  const promos = (data as PromotionRow[] | null) ?? [];
-  if (promos.length === 0) return [];
-
-  const { data: links, error: linksError } = await supabase
-    .from("promotion_items")
-    .select("promotion_id, item_id, qty")
-    .in(
-      "promotion_id",
-      promos.map(p => p.id),
-    );
-  if (linksError) throw new Error(`Could not load what the promotions include: ${linksError.message}`);
-
-  const byPromo = new Map<string, { item_id: string; qty: number }[]>();
-  for (const row of (links as
-    | { promotion_id: string; item_id: string; qty: number }[]
-    | null) ?? []) {
-    const list = byPromo.get(row.promotion_id) ?? [];
-    list.push({ item_id: row.item_id, qty: row.qty });
-    byPromo.set(row.promotion_id, list);
-  }
-
-  return promos.map(p => ({ ...p, items: byPromo.get(p.id) ?? [] }));
+  // The nested relation is one SQL statement: prices and components come from
+  // the same snapshot even when a manager saves a replacement during checkout.
+  return (data as PromotionWithItems[] | null) ?? [];
 }

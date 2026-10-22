@@ -39,6 +39,35 @@ cleared, nothing is charged, the move is written in the restaurant's activity
 log, and one still billed by a live Stripe subscription is refused, since the
 next billing event would write Stripe's plan back over it.
 
+Permanent deletion is refused only while a refund, duplicate-payment return or
+provider operation is unfinished. `admin_delete_restaurant` takes
+`lock_restaurant_money` and the restaurant row lock, then copies completed books
+to `restaurant_accounting_records` before cascading the live restaurant away.
+Each copy keeps its source table, original row ID and contents under the
+restaurant ID, with no restaurant FK. Orders, receipts and their allocations,
+returns and attempts, adjustments, cash records, customer accounts, purchases,
+checkout provenance, activity and visit/admission records survive. Customer
+account email and statement access codes are excluded. RLS denies clients;
+only the guarded definer inserts, and service-only reads/deletes support
+accounting retention and expiry under the privacy notice. No profile, menu or
+staff directory is copied. A failed copy or deletion rolls back the transaction.
+The route checks before touching billing or logins and checks atomically again
+at deletion. Staff logins are removed only after that guarded deletion; their
+IDs survive in the billing recovery record until cleanup completes. A restaurant
+with money outstanding stays available for its team to finish refunds.
+
+Platform actions have a separate append-only `platform_admin_audit` stream:
+actor and target identities, action, outcome and allowlisted before/after facts.
+It covers login creation, updates (including founding-owner password resets),
+platform admin creation/deletion, restaurant deletion and plan moves. Passwords
+are never copied; only set/reset flags are recorded. A durable start precedes
+writes and a result shares its attempt ID. Missing results mean unresolved work,
+not a promise to retry safely. No actor or target FK can cascade this history.
+RLS denies clients and only the service can insert/read; mutation and truncation
+are refused. `GET /api/admin/audit` checks platform membership and returns
+uncached keyset pages of 100. The API checks intentionally retain their genuine
+admin audit events after removing disposable business fixtures.
+
 ## The two ways in
 
 - **A table QR** → `/r/<restaurantId>/t/<tableId>`. The order knows its table,
@@ -517,7 +546,8 @@ Every table has RLS enabled, in groups:
   `loyalty_redemptions`
 - **The drawer** — `cash_shifts`, `cash_movements`
 - **Costs** — `ingredients`, `ingredient_prices`, `recipe_lines`,
-  `waste_entries`, `ingredient_purchases`, `ingredient_counts`
+  `waste_entries`, `ingredient_purchases`, `ingredient_counts`,
+  `ingredient_consumption`, `ingredient_movements`
 - **Telling people** — `notifications`
 - **Keeping the door shut** — `rate_limits`
 
@@ -699,13 +729,21 @@ business's profit.
   (`src/lib/costs/margins.ts`). A line with any dish or extra lacking a recipe
   is left out of the totals and named apart — counted at nothing, a mostly
   uncosted menu would show a margin of nearly everything.
+  Analytics product rows and contribution use the same final food revenue:
+  `max(0, total - service_fee - tip)`, including IVA, allocated by line value
+  in whole cents. This includes later table discounts without taking checkout
+  discounts twice. Contribution then removes the order's inclusive IVA.
 - **The fee** is the restaurant's own mix over the last 30 days, from the
   ledger: cash costs nothing; a card through TableTap pays Stripe's Mexican
   rate (3.6% + MX$3, IVA on the fee) and TableTap's per-order fee
-  (`orders.platform_fee`); a card on the restaurant's terminal pays
+  (`platform_fees`, net of returned fees); a card on the restaurant's terminal pays
   `restaurants.terminal_fee_pct`, which the owner sets (3.5% until they do).
   Fees over takings is one rate, applied to each product's price
   (`src/lib/costs/fees.ts`).
+  Takings and platform fees use the current report currency. A fee's original
+  currency comes from its saved checkout, joined by payment intent within the
+  restaurant. Fees without that evidence are excluded and their count is shown
+  for review; changing settings never relabels an old fee.
 
 ### Waste, the shelf, and what to buy
 
@@ -730,12 +768,21 @@ on the costs screen, and one screen for the whole team:
 - **A count** of the shelf is blind, like the drawer's: the counter sees the
   names and empty boxes, the expected figures are worked out at the moment
   the count lands and kept beside it, and only then shown. An ingredient's
-  first count has nothing to compare with.
+  first count has nothing to compare with. `record_ingredient_counts` writes
+  the expected figure, count and serial movement cutoff in one transaction.
+  Sales, deliveries, waste and corrections use the same restaurant lock.
 - **What the shelf should hold** is each ingredient's last count, plus the
   deliveries since, less what the orders made since and the waste since took
-  (`src/lib/costs/stock.ts`). An order takes what its recipe says whether or
-  not it is paid yet — the food was made. Never counted, the answer is
-  unknown rather than zero.
+  (`src/lib/costs/stock.ts`). Each sale and waste entry freezes its ingredient
+  quantities in server-only `ingredient_consumption`; later recipe edits or
+  removals never change them. `ingredient_movements` records their signed
+  quantities and any later corrections. An order takes ingredients when it
+  reaches a made state whether or not it is paid yet — the food was made.
+  A pending checkout accepted after a count moves that count even if the
+  checkout started earlier. Never counted, the answer is unknown rather than
+  zero. New counts use a serial cutoff; older counts retain their date boundary.
+  The upgrade freezes legacy rows using the recipe still available then; it
+  cannot recover recipes already overwritten before the upgrade.
 - **What to buy**: what a day took over the last 14 days, times the
   supplier's delivery days plus the days the restaurant buys for (7 unless it
   says otherwise), less what the shelf should hold, rounded up to whole packs
@@ -1199,7 +1246,12 @@ and the receipt button, and the route enforces the same boundary.
 Asking again is not the same as asking twice by accident. `print_jobs_once` is
 unique on `(order_id, kind)` precisely so a repeated trigger cannot put one
 ticket on the paper twice, which means a reprint cannot insert a second row: it
-re-arms the existing one, unclaimed and unprinted, back in the queue.
+re-arms the existing one, unclaimed and unprinted, back in the queue. Each copy
+has a fresh `delivery_token`, advertised as the CloudPRNT `jobToken`. GET must
+name that exact pending delivery; a missing, old or completed token never gets
+the next ticket. A successful DELETE closes only that token after it was
+fetched, so a late confirmation cannot close a reprint. Printers must support
+echoing the advertised job token on GET and DELETE.
 
 A restaurant with no printer address is told so rather than having a job queued
 for a machine that will never ask for it.
@@ -1606,6 +1658,12 @@ lean on who is trusted with what:
   is in that person's drawer, one online is online. Underneath it shows what
   went on accounts today and what customers still owe across all accounts,
   because the corte closes the night, not anybody's account.
+  Outstanding debt and monetary activity use the report's currency. New
+  monetary log entries carry the original orders' currency when their whole
+  scope agrees; mixed or unverifiable entries are excluded from money totals
+  and called out for review in the activity log. Refund-only, write-off-only,
+  and debt-only days remain visible and printable, including negative online
+  and drawer balances.
 - **`pnpm money`** reconciles each account's paid orders against its
   payments, and the drawer check reads account collections too.
 
@@ -1908,6 +1966,22 @@ attempt also saves its explicit principal. Bill display and payment read the
 same validated sitting, including a phone's valid sitting older than eight
 hours. A stale selection requests review and never reports the debt as paid.
 
+
+## Promotion edits, freezes and menu copies (S14)
+
+Promotion creation and full edits save terms and product links in one private
+server transaction. Complete promotions are loaded with one nested query.
+Frozen restaurants may only switch an existing promotion or coupon off; they
+cannot create, edit, resume or delete offers, including through authenticated
+direct database writes. Server coupon redemption remains available to diners.
+
+Menu duplication uses a private manager route and a single transaction. It
+reads saved settings in one snapshot and copies schedules, categories with
+preparation stations, products, extras, modifiers, prices, discounts, dietary
+tags, kitchen settings and add-on links. The copy becomes visible only after
+all writes succeed and retains the source active switch and schedule. Copying
+a schedule requires the menu-schedule feature. Availability is preserved;
+stock counts are not copied or shared, and stock tracking starts fresh.
 
 ### Stock recounts and older orders
 

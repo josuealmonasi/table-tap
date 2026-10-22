@@ -1,4 +1,4 @@
-import { lineUnitPrice, type OrderLineItem } from "@/lib/types";
+import { lineRevenues, type RevenueOrder } from "@/lib/report-revenue";
 import {
   localDayKey,
   localHour,
@@ -19,11 +19,8 @@ export const PERIODS: { key: Period; label: string }[] = [
 ];
 
 /** The minimal order shape analytics needs (paid, non-cancelled rows). */
-export interface AnalyticsOrder {
-  total: number;
-  tip: number;
+export interface AnalyticsOrder extends RevenueOrder {
   created_at: string;
-  items: OrderLineItem[];
 }
 
 export interface DayBar {
@@ -117,7 +114,8 @@ export function computeAnalytics(
     if (di !== undefined) days[di].revenue += Number(o.total);
     byHour[localHour(when, timeZone)].count += 1;
 
-    for (const line of o.items ?? []) {
+    const revenues = lineRevenues(o);
+    for (const [index, line] of (o.items ?? []).entries()) {
       const key = line.itemId || line.name;
       const stat = products.get(key) ?? {
         name: line.name,
@@ -126,7 +124,7 @@ export function computeAnalytics(
         revenue: 0,
       };
       stat.qty += line.qty;
-      stat.revenue += lineUnitPrice(line) * line.qty;
+      stat.revenue = Math.round((stat.revenue + revenues[index]) * 100) / 100;
       products.set(key, stat);
     }
   }

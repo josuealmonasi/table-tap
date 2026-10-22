@@ -13,6 +13,7 @@ interface FeeCardProps {
   fees: FeeRate;
   terminalFeePct: number;
   currency: string;
+  unverifiedFees: number;
 }
 
 /**
@@ -20,7 +21,7 @@ interface FeeCardProps {
  * mix of cash, cards through TableTap and the restaurant's own terminal. The
  * terminal's rate is the one figure only the owner knows, so it is asked here.
  */
-export default function FeeCard({ fees, terminalFeePct, currency }: FeeCardProps) {
+export default function FeeCard({ fees, terminalFeePct, currency, unverifiedFees }: FeeCardProps) {
   const t = useT();
   const toast = useToast();
   const router = useRouter();
@@ -51,6 +52,7 @@ export default function FeeCard({ fees, terminalFeePct, currency }: FeeCardProps
           : t("costs.feeNoSales")}
       </p>
       <p className="tt-muted">{t("costs.feeStripe")}</p>
+      {unverifiedFees > 0 && <p className="tt-muted">{t("costs.feeUnverified", { count: unverifiedFees })}</p>}
       <form className="tt-costs-fee-form" onSubmit={e => void save(e)}>
         <label className="tt-field">
           <span className="tt-mod-label">{t("costs.feeTerminal")}</span>

@@ -16,8 +16,21 @@ us, and what now catches each one.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Corte account debt and adjustments use the report currency; unverified activity is called out (S12 I8) | MX$100 and US$10 appeared as US$110 owed |
+| Cost fees use the saved charge currency, net of returned fees (S12 I10) | An old MX$10 fee created a false 10% rate on US$100 cash |
+| Product revenue and contribution share final food revenue after every discount (S12 I11/J11) | MX$100 food discounted to MX$80 still showed MX$100 revenue and MX$60 contribution |
+| A corte is empty only without financial activity, including returns (S12 I12) | A refund-only MX$100 cash day hid its negative drawer and print button |
 | Price breaks are whole quantities, priced by division, and the database refuses others (J4) | A tier of 1e-20 units froze the server |
 | A print job closes only on the printer's success code (J9) | A printer out of paper dropped tickets unprinted |
+
+| Restaurant deletion and refund obligations share the money lock (S17 J1) | Deleting a restaurant cascaded away money still owed and completed accounting records |
+| Settled books survive restaurant deletion without blocking it (S17b) | Completed receipts blocked deletion forever; removing that guard alone would erase the books |
+| Sensitive admin actions and platform history survive the same deletion (S17 J15) | Password resets, admin logins, deletions and plan moves left no durable platform trail |
+| A promotion's terms and components commit and read together (S14 J2) | Separate writes and reads exposed a new price with old or missing dishes |
+| Frozen offers only switch off, through routes and direct writes (S14 J16) | A manager could edit or resume promotions and coupons on a frozen restaurant |
+| A menu copy keeps settings and publishes only after every row succeeds (S14 J14) | A partial, active copy lost discounts, schedules, dietary tags and preparation settings |
+
+| A printer fetch and confirmation name the same delivery generation (S16 J10) | A delayed GET fetched the next ticket, and an old confirmation closed a reprint |
 
 | A terminal deposit names its receipt cutoff (S10 I3) | MX$50 arriving between the MX$100 read and insert was missing from both expected and late money |
 | A terminal return belongs to one signed manifest or the next unsigned deposit (S10 I4) | A MX$100 return after Tuesday's sign-off reduced neither Tuesday nor Wednesday |
@@ -108,6 +121,8 @@ us, and what now catches each one.
 | Every fee we charge Stripe carries the ledger row that reserved it | Summed from orders, the month's fee ceiling missed divided bills, late webhooks, account payments, a fee filed under the month its food was ordered, and two diners at once |
 | The month's fee ceiling counts only fees we took, or a checkout still open | It counted abandoned checkouts and refunded cancellations, and orders past the early ceiling paid no fee |
 | Every read of the extras each dish offers pages, or is one dish's | Past 1000 links the menu editor read the first thousand, and saving a dish's extras deleted the ones it never saw |
+| Ingredient consumption belongs to its sale or waste entry | Editing a recipe from 20 g to 30 g changed ten old dishes from 200 g used to 300 g (J12) |
+| A count and its movement cutoff are one database operation | A 1,000 ml delivery between reading stock and inserting a count disappeared, or left the saved expected figure stale (J13) |
 | Server code takes only components from a `"use client"` module | The costs page imported its tab list from a client component and every tab failed to render |
 | A cancelled terminal sale leaves the deposit it never reaches | The terminal deposits expected a voided sale, and read the bank short for money correctly given back |
 | A refusal always carries a sentence, and every `CartRejection` has one | `/api/table-order` answered `{ rejection }`, which the waiter's screen read as "network error" |
@@ -3039,6 +3054,233 @@ not), and every confirmation closed the job, so a printer out of paper dropped
 the order unprinted. Only a success closes it now, and a failed write answers
 500 so the printer confirms again. `pnpm api` confirms with `code=520` and
 expects the job still open.
+
+
+## S17 J1 — deletion and money owed
+
+Deleting a restaurant cascaded through its refunds and receipts. The admin
+route and the money ledger had to agree, and nothing checked that they did.
+`admin_delete_restaurant` takes the restaurant money lock and locks its parent
+row before checking pending refunds, duplicate-payment returns, unconfirmed
+provider work. A check runs before billing or login changes, and the final
+deletion checks again in its own transaction. The restaurant stays usable so
+its team can finish returning money. Completed refunds and receipts are retained
+separately under S17b below, so those records no longer prevent deletion.
+
+`admin-safety.spec.ts` reproduces each refusal and the intervening-refund race;
+`admin-safety-schema.spec.ts` checks locks, retained record classes and grants.
+`billing-delete.spec.ts` preserves Stripe cancellation/retry coverage, including
+retained staff IDs for cleanup after a failed Auth deletion. The API case in
+`api-admin-cases.mjs` plants a disposable restaurant with a pending cash refund,
+asserts refusal, the surviving refund and the audit row in the `effect` hook
+(which runs for 409 too), finishes the refund, then retries deletion and compares
+every retained accounting row with its pre-deletion contents. It removes its
+live, retained and billing fixtures; real audit attempts stay in platform history
+by design. The case is written here for Claude to run, not run in this worktree.
+
+The terms now explain that closing does not cancel refunds or erase books.
+Version 2026-10-21 stays: this clarifies accounting retention already stated in
+the privacy notice, without adding a data category, purpose or retention term.
+Both legal PDFs are regenerated from their JSON sources.
+
+## S17b — completed books and deletion must agree
+
+S17 kept books by refusing every restaurant that had them. The owner's rule is
+to block only while money is owed: the deletion and the retained accounting copy
+must agree, rather than tying a closed business to a live account forever.
+`restaurant_accounting_records` stores one row per source record under the
+restaurant ID, without a foreign key to the deleted restaurant. The locked RPC
+copies orders, payments and allocations, refunds and their attempts/allocations,
+adjustments, duplicate-payment returns, fees, cash records, customer accounts,
+purchases, checkout provenance, activity and visits/admission decisions before
+the cascade. Existing source rows are locked while copied so an update cannot
+change a receipt afterward. A copy or cascade failure rolls everything back;
+the route does not remove staff logins on that failure. No menu, staff directory
+or restaurant profile is copied. Customer-account email (kept only while open)
+and the statement's access code are omitted. Original financial IDs, amounts,
+currencies, dates and actors remain in the retained records.
+
+The table has RLS and no client policies or grants. Service can read and delete
+for the privacy notice's existing fiscal/legal retention period or disposable
+fixture cleanup; only the guarded definer inserts. There is no new indefinite
+retention promise or automatic expiry job. `admin-safety-schema.spec.ts` failed
+before the fix and now checks the copy, locks, grants and removal of the
+completed-history refusal. `admin-safety.spec.ts` checks a failed final copy
+leaves logins intact and records uncertainty. The API case above verifies the
+pending-to-complete transition and exact retained receipt contents; Claude must
+run it. J15's append-only audit stream is unchanged.
+
+The terms now say deletion proceeds after pending money is resolved while a
+separate accounting copy remains. Version 2026-10-21 stays because the privacy
+notice already retains orders and amounts after account closure; no new data
+category, purpose or period is introduced. Both PDFs are regenerated.
+
+## S17 J15 — platform history and sensitive changes
+
+Restaurant activity logs once disappeared with their restaurant, and founding-owner
+password resets and platform admin changes were not written there at all.
+Every admin login create/update/delete, restaurant delete and plan move now
+appends a durable start before mutation and a result afterward, sharing one
+attempt ID. Facts are explicitly allowlisted: identity, role, plan, profile name
+and password-set/reset flags, never passwords, request bodies or provider errors.
+If the start cannot be written, no action runs. A missing result remains an
+unresolved start and the caller is told to inspect before retrying.
+
+`platform_admin_audit` has no actor/target foreign keys, RLS with no client
+policies, revoked anon/authenticated grants and service-only SELECT/INSERT.
+A trigger rejects UPDATE, DELETE and TRUNCATE. Only a platform admin can read
+`GET /api/admin/audit`; it sends uncached pages ordered by timestamp and ID.
+`admin-safety.spec.ts` covers real handlers, successful and refused plan moves,
+founding-owner resets, platform admin creation/deletion and both audit failure
+windows. `admin-audit-read.spec.ts` covers authorization, keyset pagination,
+invalid cursors and read failures. `admin-safety-schema.spec.ts` covers the
+append-only stream's lack of cascading identities and mutation privileges.
+
+## A promotion edited and read in pieces (S14 J2)
+
+The promotion's terms and components had to agree. PATCH saved the new price,
+then separately deleted and inserted the links. Restoring links after a failure
+kept the changed price. POST also exposed its parent before attaching products.
+`save_promotion_v1` now locks the owned parent and commits every write together;
+a failure rolls back the whole change. `fetchPromotions` uses one nested SELECT,
+so a concurrent edit cannot split a read across two versions.
+`offers-atomic.spec.ts` reproduces split writes and failed replacement;
+`promotions-data.spec.ts` checks one request. `offers-schema.spec.ts` checks SQL
+contracts; it does not execute PostgreSQL. The new SQL leaves price and tier
+constraints in place, including the upcoming `promotions_tiers_sound` check.
+
+## Frozen offers that kept changing (S14 J16)
+
+The routes and database had to agree on a freeze. Creation checked it, but
+edits, resuming and deletion did not. Both routes now refuse those writes;
+only `{ id, active: false }` may bypass the freeze. A database trigger applies
+the same rule to authenticated writes to promotions, their components and
+coupons. Changing any other field with the off flag is refused. Server coupon
+claims still work, so a billing freeze cannot interrupt payment.
+`offers-atomic.spec.ts` reproduces each route bypass. `api-frozen-offers.mjs`
+adds cases for both kinds, with before/after effect checks and cleanup; these
+cases must be run by the release owner after applying SQL.
+
+## A menu copy that lost settings and stopped halfway (S14 J14)
+
+The editor's loaded rows and the saved menu had to agree. It copied rows one at
+a time, published immediately, omitted schedule, discount, dietary and kitchen
+settings, and left earlier writes behind on failure. Prices were already
+copied; that part of the audit claim did not reproduce. `duplicate_menu_v1`
+reads the complete source in one snapshot, explicitly copies settings for both
+products and extras, remaps sections and links, then publishes as its last
+write. A failure rolls everything back. The copy preserves the original active
+switch and schedule; a newly copied schedule still requires its plan feature.
+Stock is always null with a fresh tracking state: physical stock stays with
+the original dish. Availability stays as saved, including unavailable dishes.
+`menu-duplicate.spec.ts` checks the request and failure handling;
+`offers-schema.spec.ts` checks the SQL copy contract. Run the added menu-copy
+API case and inspect the confirmation text in both languages before release.
+
+## S12 I8 — the corte's currency and account debt disagreed
+
+The currency printed beside a corte and every amount it adds must agree.
+An MX$100 account debt and a US$10 debt appeared as US$110 after a currency
+change. The unpaid-account query now reads only the report currency.
+Monetary activity is filtered by original order currency too: new write-off,
+discount and account-charge logs stamp that currency from their scoped orders.
+Mixed, missing or older unverified entries stay outside arithmetic, with a
+count and a review sentence on screen and paper in both languages. Ingredient
+waste is not a bill write-off; discount approvals count like direct discounts.
+Duplicate-charge refunds still never leave takings they never entered.
+`report-currency.spec.ts` checks the real page, original-currency logging,
+tenant scope, verified/foreign/unverified activity and approved discounts.
+
+## S12 I10 — platform fees and the takings used different currencies
+
+The numerator and denominator of a fee rate had to agree on the money.
+MX$10 of old platform fees created a false 10% rate on US$100 cash. The fee
+reader now joins each taken fee to its saved checkout's original currency,
+scoped to the restaurant, and subtracts its returned fee cents once. Fees
+without charge evidence stay outside the rate and their count is shown for
+review. No historical fee is relabelled from current restaurant settings.
+`report-currency.spec.ts` checks the MXN/USD probe, numeric strings, returned
+fees, missing and foreign evidence, paged/chunked reads and read failures.
+
+## S12 I11 / J11 — the final bill and product revenue disagreed
+
+A later table coupon reduced total but left subtotal unchanged. MX$100 food
+costing MX$40 with MX$20 taken off therefore appeared as MX$100 revenue and
+MX$60 contribution, although analytics' total was MX$80. Both product readers
+now allocate `max(0, total - service_fee - tip)` by line value, in whole cents.
+Checkout discounts are already in total and are never subtracted again.
+Contribution removes inclusive IVA after that same allocation; ingredients
+still cost money when the food was free. `report-revenue.spec.ts` reproduces
+MX$80 revenue and MX$40 contribution, then checks service, tips, IVA, coupons,
+item discounts, combos, extras, full discounts and a cent shared three ways.
+`report-currency.spec.ts` also checks both readers request the final amounts.
+
+## S12 I12 — refund activity and the empty corte disagreed
+
+Yesterday's MX$100 sale returned today correctly produced a negative drawer,
+but the screen's collection-count check hid it as empty. The screen and print
+button now consider all financial activity, including waived bills, account
+debt, unverified entries and negative online takings. `corte-card.spec.tsx`
+renders the cash-return-only day and checks the return, cashier and print
+button, plus online returns, each non-collection activity and the truly empty
+day. Claude must check the screen and printed sheet in both languages at
+360/390/820/1280px, including the new currency-review sentences.
+
+## S16 / security review J10: a printer confirms only the copy it fetched
+
+The advertised token, the paper fetched and the confirmation had to agree on
+one delivery. GET ignored the token and returned the oldest pending ticket, so
+a second printer asking late for A received B but still confirmed A. Reprints
+also reused A's row id, so an old confirmation could close a new copy.
+
+Each requested copy now has a fresh `delivery_token`. GET matches that exact
+pending generation, and its claim checks the generation again so a concurrent
+reprint cannot be claimed as the old paper. DELETE has no oldest-pending
+fallback: it closes only the named, fetched generation on success. Missing,
+malformed, foreign, completed and superseded tokens cannot move another job.
+A jam leaves the same generation available to fetch again.
+
+`cloudprnt-delivery.spec.ts` reproduces the two-printer and late-confirmation
+races, repeated reprints, a reprint during GET, and claim/confirmation failures.
+`scripts/api-print-delivery.mjs` adds a real API case that fetches both the old
+and new copies, sends the old success confirmation, and checks that the new
+copy stays open until its own confirmation. It uses the gate's own order, which
+fixture teardown removes. Apply the schema and run `pnpm api` before shipping;
+check that deployed printer firmware echoes `jobToken` on GET and DELETE.
+
+### Ingredient history survives recipe edits (J12)
+
+A recipe and the history of what was used were two places that had to agree.
+Starting at 1,000 g, ten dishes at 20 g left 800 g. Changing the recipe to 30 g
+quietly made the same shelf read 700 g; two wasted dishes also grew from 40 g
+to 60 g. Removing a recipe erased its old consumption altogether.
+
+Sales and waste now freeze their quantities in `ingredient_consumption`.
+`ingredient_movements` records the signed effect, including later cancellations
+and corrections. The stock and buying tabs read that history, without joining
+old sales to today's recipe. Snapshots are simpler than recipe versions because
+only the quantities used need to survive. Legacy rows are frozen once from the
+recipe available at upgrade; already overwritten recipes cannot be recovered.
+`costs-history.spec.ts` reproduces the 1,000 g / ten dishes / 20 → 30 g case
+and the waste case; `costs-history-sql.spec.ts` checks the snapshot writers.
+
+### A shelf count has one movement boundary (J13)
+
+The expected figure and the inserted count were two places that had to agree.
+A purchase between the separate read and insert left a stale expected figure,
+and its timestamp could put it before the new count and lose its 1,000 ml.
+
+`record_ingredient_counts` returns the rows the database actually recorded.
+The insert trigger calculates their expected quantities and serial cutoffs
+under the same transaction lock used by all movement writers. It protects the
+old deployed insert caller too. Purchases take that lock before their ingredient
+row lock; counts do not lock orders or menu items. Pending sales becoming food,
+cancellations and waste taken back record adjustments after the cutoff.
+`costs-counts.spec.ts` reproduces both sides of the 1,000 ml purchase race with
+a mocked database. `costs-history.spec.ts` checks sequence order against an old
+transaction timestamp. `costs-history-sql.spec.ts` checks the shared lock and
+trigger coverage. Claude must verify the actual two-connection race and the
+additive upgrade against PostgreSQL in the isolated release gate.
 
 ## S9 I1 — a withdrawal and its shift's count share one transaction
 

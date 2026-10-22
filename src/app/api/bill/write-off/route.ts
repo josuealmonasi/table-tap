@@ -110,6 +110,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     actor: actor.email,
     entity: "bill",
     action: "written_off",
+    orderIds: orders.map(o => o.id),
     detail,
   });
   return NextResponse.json({ ok: true, amount });

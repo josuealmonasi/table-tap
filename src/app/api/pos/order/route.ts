@@ -217,6 +217,7 @@ export async function POST(req: NextRequest) {
   }
   if (onAccount) {
     await logEvent({ restaurantId: actor.restaurantId, actor: actor.email, entity: "account", action: "charged",
+      orderIds: [order.id],
       detail: logDetail({ name: ticket.onAccount.name, code: orderCode(order.id), amount: pricing.total.toFixed(2), owed: Number(ticket.onAccount.owed).toFixed(2) }) });
     return NextResponse.json({ ...ticket, code: orderCode(order.id) });
   }

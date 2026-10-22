@@ -13,9 +13,13 @@ import { checkTableJoin } from "./check-table-join.mjs";
 // (409, 400) — that is working. What is never right is a 500.
 // ============================================================================
 import { MARK, PART_AMOUNT, PART_TIP } from "./api-fixtures.mjs";
+import { adminCases } from "./api-admin-cases.mjs";
+import { arrangeMenuCopy, checkMenuCopy } from "./api-menu-copy.mjs";
+import { frozenOfferCases } from "./api-frozen-offers.mjs";
 import { offlineCases } from "./api-offline-cases.mjs";
 import { terminalDepositRace } from "./api-terminal-deposit.mjs";
 import { twoSittingCollection } from "./api-part-collection.mjs";
+import { printReprintRace } from "./api-print-delivery.mjs";
 import { loginByEmail } from "./logins.mjs";
 
 // The pass holds a ticket id, never the diner's order lookup credential.
@@ -106,6 +110,13 @@ export function cases(fx) {
   const r = restaurant.id;
 
   return [
+    ...adminCases(),
+    ...frozenOfferCases(),
+    { name: "POST /api/menu/duplicate (copy and remove the copy)", as: "manager", method: "POST",
+      path: "/api/menu/duplicate",
+      arrange: arrangeMenuCopy,
+      body: f => ({ sourceId: f.s14MenuSource }),
+      expect: [200], check: checkMenuCopy },
     { name: "POST /api/table-membership (approval, rejection, a new party and paying old food)",
       as: "diner", method: "POST", path: "/api/table-membership",
       headers: f => ({ cookie: f.joinScenario.second.cookie }),
@@ -1458,22 +1469,23 @@ export function cases(fx) {
     // to call it with.
     { name: "POST /api/print/cloudprnt (the printer's own address)", as: "diner",
       method: "POST", path: async f => `/api/print/cloudprnt/${await f.printToken()}`, expect: [200],
-      check: d => d.jobReady === true || "a real printer with a ticket waiting was told the counter was quiet" },
+      check: (d, f) => d.jobReady === true && d.jobToken === f.printDeliveryToken
+        || "a real printer was not offered the fixture's own delivery" },
     { name: "GET  /api/print/cloudprnt (collects its ticket)", as: "diner", method: "GET",
-      path: async f => `/api/print/cloudprnt/${await f.printToken()}`, expect: [200],
+      path: async f => `/api/print/cloudprnt/${await f.printToken()}?token=${f.printDeliveryToken}`, expect: [200],
       // Plain text, not JSON: this is what comes out on paper.
       checkText: t => (t.includes(MARK) || t.length > 20) || `the paper came out empty: ${JSON.stringify(t.slice(0, 40))}`,
       // A kitchen ticket is dishes. A printer is not a login, and money has no
       // business on a roll of paper in a corridor.
       },
     { name: "GET  /api/print/cloudprnt (no money on the paper)", as: "diner", method: "GET",
-      path: async f => `/api/print/cloudprnt/${await f.printToken()}`, expect: [200],
+      path: async f => `/api/print/cloudprnt/${await f.printToken()}?token=${f.printDeliveryToken}`, expect: [200],
       checkText: t => !/MX\$|tarjeta|\bcard\b|total:/i.test(t) || "the kitchen ticket carries money" },
     // The printer reports how it went; a failure must leave the ticket queued.
     // Every confirmation used to close the job, so a printer out of paper
     // (code 520) dropped the order from the queue unprinted.
     { name: "DELETE /api/print/cloudprnt (a failed print keeps the job)", as: "diner", method: "DELETE",
-      path: async f => `/api/print/cloudprnt/${await f.printToken()}?token=${f.printJobId}&code=520%20Paper%20Empty`,
+      path: async f => `/api/print/cloudprnt/${await f.printToken()}?token=${f.printDeliveryToken}&code=520%20Paper%20Empty`,
       expect: [200],
       check: async (_d, f) => {
         const { data } = await f.admin.from("print_jobs").select("printed_at").eq("id", f.printJobId).maybeSingle();
@@ -1481,7 +1493,7 @@ export function cases(fx) {
       } },
     { name: "DELETE /api/print/cloudprnt (closes the job it was handed)", as: "diner",
       method: "DELETE",
-      path: async f => `/api/print/cloudprnt/${await f.printToken()}?token=${f.printJobId}`,
+      path: async f => `/api/print/cloudprnt/${await f.printToken()}?token=${f.printDeliveryToken}`,
       expect: [200],
       check: async (_d, f) => {
         const { data } = await f.admin
@@ -1545,6 +1557,7 @@ export function cases(fx) {
           .eq("order_id", f.printableOrder).eq("kind", "kitchen").single();
         return data && data.claimed_at === null && data.printed_at === null || "the print job was not re-armed";
       } },
+    printReprintRace(),
     { name: "POST /api/orders/print (receipt)", as: "waiter", method: "POST",
       path: "/api/orders/print",
       body: async f => ({ orderId: await anyOrderId(f), to: "receipt" }),

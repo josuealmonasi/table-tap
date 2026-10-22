@@ -3,7 +3,7 @@
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import { escapeHtml } from "@/lib/html";
-import type { Corte } from "@/lib/corte";
+import { hasCorteActivity, type Corte } from "@/lib/corte";
 import type { ShiftView } from "@/lib/cash-shift";
 import ShiftBlock from "@/components/dashboard/cash/ShiftBlock";
 
@@ -36,6 +36,7 @@ export default function CorteCard({
 }) {
   const t = useT();
   const money = (n: number) => formatMoney(n, currency);
+  const hasActivity = hasCorteActivity(corte);
 
   /** A sheet somebody can sign. Same approach as the QR cards. */
   function print(): void {
@@ -83,7 +84,7 @@ export default function CorteCard({
         `<td>${money(corte.totals.cash)}</td><td>${money(corte.totals.card)}</td>` +
         `<td>${money(corte.totals.total)}</td></tr></tfoot></table>` +
         `<p style="margin-top:20px;font-size:14px">` +
-        (corte.online > 0
+        (corte.online !== 0
           ? `${escapeHtml(t("corte.online"))}: ${money(corte.online)} &nbsp;·&nbsp; `
           : "") +
         `${escapeHtml(t("corte.writtenOff"))}: ${money(corte.writtenOff)}` +
@@ -98,6 +99,8 @@ export default function CorteCard({
           ? ` &nbsp;·&nbsp; ${escapeHtml(t("corte.accountsOwed"))}: ${money(corte.accountsOwed)}`
           : "") +
         `</p>` +
+        (corte.unverifiedAdjustments > 0
+          ? `<p>${escapeHtml(t("corte.unverified", { count: corte.unverifiedAdjustments }))}</p>` : "") +
         `<p style="margin-top:44px;font-size:13px;color:#70707a">${escapeHtml(t("corte.signature"))}</p>` +
         `<div style="margin-top:34px;border-top:1px solid #111113;width:260px"></div>` +
         `</body>`,
@@ -113,7 +116,7 @@ export default function CorteCard({
         <h3 className="tt-serif" style={{ margin: 0 }}>
           {t("corte.title")}
         </h3>
-        {(corte.totals.count > 0 || shifts.length > 0) && (
+        {(hasActivity || shifts.length > 0) && (
           <button className="tt-btn tt-btn-ghost tt-btn-sm" onClick={print}>
             {t("corte.print")}
           </button>
@@ -125,7 +128,7 @@ export default function CorteCard({
 
       <ShiftBlock shifts={shifts} currency={currency} timeZone={timeZone} restaurantName={restaurantName} />
 
-      {corte.totals.count === 0 && corte.online === 0 ? (
+      {!hasActivity ? (
         <p className="tt-muted" style={{ fontSize: 13, margin: 0 }}>
           {t("corte.empty")}
         </p>
@@ -174,7 +177,7 @@ export default function CorteCard({
           {/* Underneath, not netted off: subtracting what never arrived would
               hide the two numbers a manager most wants on a bad night. */}
           <div className="tt-corte-foot">
-            {corte.online > 0 && (
+            {corte.online !== 0 && (
               <span className="tt-muted">
                 {t("corte.online")} <strong>{money(corte.online)}</strong>
               </span>
@@ -204,6 +207,9 @@ export default function CorteCard({
               </span>
             )}
           </div>
+          {corte.unverifiedAdjustments > 0 && <p className="tt-muted">
+            {t("corte.unverified", { count: corte.unverifiedAdjustments })}
+          </p>}
         </>
       )}
     </div>

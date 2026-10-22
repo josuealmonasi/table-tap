@@ -3108,6 +3108,12 @@ create table if not exists print_jobs (
   claimed_at    timestamptz,
   printed_at    timestamptz
 );
+-- The row stays the same on a reprint, but each requested copy has its own
+-- token. A late confirmation of the old paper must not close the new copy.
+alter table print_jobs add column if not exists delivery_token uuid not null default gen_random_uuid();
+create unique index if not exists print_jobs_delivery_token_once
+  on print_jobs (delivery_token);
+
 -- The queue is read as "the oldest thing this restaurant has not printed",
 -- which is exactly this index.
 create index if not exists print_jobs_pending_idx
@@ -8216,6 +8222,543 @@ do $$ begin
     alter table promotions add constraint promotions_tiers_sound check (public.tiers_sound(tiers));
   end if;
 end $$;
+
+-- S17: a restaurant's deletion cannot erase money it still owes or its books.
+-- No foreign keys on the audit: actor and target must survive their deletion.
+create table if not exists platform_admin_audit (
+  id uuid primary key default gen_random_uuid(),
+  attempt_id uuid not null,
+  created_at timestamptz not null default clock_timestamp(),
+  actor_id uuid not null,
+  actor_email text not null,
+  target_type text not null check (target_type in ('restaurant', 'login')),
+  target_id text,
+  action text not null check (action in ('login.create', 'login.update', 'login.delete', 'restaurant.delete', 'restaurant.plan')),
+  outcome text not null check (outcome in ('started', 'succeeded', 'refused', 'uncertain')),
+  before_facts jsonb not null default '{}'::jsonb check (jsonb_typeof(before_facts) = 'object'),
+  after_facts jsonb not null default '{}'::jsonb check (jsonb_typeof(after_facts) = 'object')
+);
+create index if not exists platform_admin_audit_time on platform_admin_audit(created_at desc, id desc);
+create index if not exists platform_admin_audit_attempt on platform_admin_audit(attempt_id);
+alter table platform_admin_audit enable row level security;
+revoke all on platform_admin_audit from anon, authenticated, public, service_role;
+grant select, insert on platform_admin_audit to service_role;
+
+-- Even a service-side mistake must append a correction, never rewrite history.
+create or replace function public.keep_platform_admin_audit()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  raise exception 'Platform admin audit is append-only';
+end;
+$$;
+revoke all on function public.keep_platform_admin_audit() from public, anon, authenticated;
+grant execute on function public.keep_platform_admin_audit() to service_role;
+drop trigger if exists platform_admin_audit_immutable on platform_admin_audit;
+create trigger platform_admin_audit_immutable before update or delete or truncate
+  on platform_admin_audit for each statement execute function public.keep_platform_admin_audit();
+
+-- Accounting survives the live restaurant. Keep original IDs and row contents,
+-- not a restaurant/profile copy; no FK may cascade this retained record away.
+create table if not exists restaurant_accounting_records (
+  restaurant_id uuid not null,
+  source_table text not null,
+  source_id uuid not null,
+  row_data jsonb not null,
+  retained_at timestamptz not null default now(),
+  primary key (restaurant_id, source_table, source_id)
+);
+alter table restaurant_accounting_records enable row level security;
+revoke all on restaurant_accounting_records from anon;
+revoke all on restaurant_accounting_records from public, authenticated, service_role;
+-- Only the guarded definer copies records. Service deletion permits expiry
+-- under the privacy notice and removal of disposable API fixtures.
+grant select, delete on restaurant_accounting_records to service_role;
+
+create or replace function public.admin_delete_restaurant(p_restaurant uuid, p_check_only boolean default true)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_table text;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  -- FK inserts take a key-share lock here. Once held, no new receipt or
+  -- obligation can arrive between these checks and the cascading deletion.
+  perform 1 from restaurants where id = p_restaurant for update;
+  if not found then return jsonb_build_object('outcome', 'gone'); end if;
+  if exists (select 1 from refund_operations where restaurant_id = p_restaurant and status <> 'succeeded') then
+    return jsonb_build_object('outcome', 'refund');
+  end if;
+  if exists (select 1 from refunds_due where restaurant_id = p_restaurant and refunded_at is null) then
+    return jsonb_build_object('outcome', 'refundDue');
+  end if;
+  if exists (select 1 from refund_attempts where restaurant_id = p_restaurant
+      and (provider_status is null or provider_status not in ('succeeded', 'failed', 'canceled')))
+    or exists (select 1 from refund_due_attempts where restaurant_id = p_restaurant
+      and (provider_status is null or provider_status not in ('succeeded', 'failed', 'canceled')))
+    or exists (select 1 from diner_checkouts where restaurant_id = p_restaurant and status = 'open')
+    or exists (select 1 from account_checkouts where restaurant_id = p_restaurant and status = 'open')
+    or exists (select 1 from platform_fees where restaurant_id = p_restaurant and status = 'open') then
+    return jsonb_build_object('outcome', 'provider');
+  end if;
+  -- Retain completed refunds too. Closing a real business does not make its
+  -- receipts disposable, but completed books must not prevent its deletion.
+  if p_check_only is distinct from false then return jsonb_build_object('outcome', 'ready'); end if;
+  foreach v_table in array array[
+    'orders', 'payments', 'payment_allocations', 'refund_operations',
+    'refund_allocations', 'refund_attempts', 'order_adjustments', 'refunds_due',
+    'refund_due_attempts', 'platform_fees', 'cash_shifts', 'cash_movements',
+    'terminal_deposits', 'customer_accounts', 'ingredient_purchases',
+    'account_checkouts', 'diner_checkouts', 'table_sessions', 'user_logs'
+  ] loop
+    -- Lock existing rows as they are copied too: an update must not change a
+    -- receipt after its copy. A failed copy or cascade rolls back both writes.
+    -- Account email is only kept while open; its statement code grants access.
+    execute format(
+      'insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
+       select $1, %L, t.id, to_jsonb(t) - $2
+       from (select * from public.%I where restaurant_id = $1 for update) t', v_table, v_table)
+      using p_restaurant, case when v_table = 'customer_accounts' then array['email', 'code'] else array[]::text[] end;
+  end loop;
+  -- The privacy notice keeps admission decisions with the visit and orders.
+  -- Members have no restaurant_id; reach them only through this restaurant's visits.
+  insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
+    select p_restaurant, 'table_session_members', t.id, to_jsonb(t)
+    from (select m.* from table_session_members m join table_sessions s on s.id = m.session_id
+      where s.restaurant_id = p_restaurant for update of m) t;
+  delete from restaurants where id = p_restaurant;
+  return jsonb_build_object('outcome', 'deleted');
+end;
+$$;
+revoke all on function public.admin_delete_restaurant(uuid, boolean) from public, anon, authenticated;
+grant execute on function public.admin_delete_restaurant(uuid, boolean) to service_role;
+
+revoke truncate, references, trigger on all tables in schema public from authenticated;
+-- S14: an offer's terms and products commit together. Additive for old callers.
+create or replace function public.save_promotion_v1(
+  p_restaurant uuid, p_id uuid, p_fields jsonb, p_items jsonb
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_id uuid;
+  v_status text;
+begin
+  -- Serialize with plan changes before checking the freeze or replacing links.
+  select plan_status into v_status from restaurants where id = p_restaurant for no key update;
+  if not found then raise exception 'tt_restaurant_missing'; end if;
+  if v_status = 'locked' then raise exception 'tt_plan_frozen' using errcode = 'check_violation'; end if;
+
+  if p_id is not null then
+    select id into v_id from promotions where id = p_id and restaurant_id = p_restaurant for update;
+    if not found then return null; end if;
+  end if;
+  if jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) = 0 then
+    raise exception 'tt_promotion_items_required' using errcode = 'check_violation';
+  end if;
+  -- Lock dishes in order so a concurrent move or delete cannot invalidate
+  -- ownership between checking it and writing the foreign keys.
+  perform 1 from menu_items where restaurant_id = p_restaurant
+    and id in (select x.item_id from jsonb_to_recordset(p_items) as x(item_id uuid, qty int))
+    order by id for share;
+  -- Recheck ownership inside the write: a preflight read is not a boundary.
+  if exists (
+    select 1 from jsonb_to_recordset(p_items) as x(item_id uuid, qty int)
+    left join menu_items i on i.id = x.item_id and i.restaurant_id = p_restaurant
+    where i.id is null or x.qty is null or x.qty < 1
+  ) then raise exception 'tt_promotion_unknown_item' using errcode = 'check_violation'; end if;
+
+  if p_id is null then
+    insert into promotions (restaurant_id, kind, name, emoji, description, combo_price, buy_qty, pay_qty, tiers)
+    values (p_restaurant, p_fields->>'kind', p_fields->>'name', p_fields->>'emoji', p_fields->>'description',
+      (p_fields->>'combo_price')::numeric, (p_fields->>'buy_qty')::int, (p_fields->>'pay_qty')::int,
+      nullif(p_fields->'tiers', 'null'::jsonb)) returning id into v_id;
+  else
+    update promotions set kind = p_fields->>'kind', name = p_fields->>'name', emoji = p_fields->>'emoji',
+      description = p_fields->>'description', combo_price = (p_fields->>'combo_price')::numeric,
+      buy_qty = (p_fields->>'buy_qty')::int, pay_qty = (p_fields->>'pay_qty')::int,
+      tiers = nullif(p_fields->'tiers', 'null'::jsonb)
+    where id = v_id and restaurant_id = p_restaurant;
+  end if;
+  delete from promotion_items where promotion_id = v_id;
+  insert into promotion_items (promotion_id, item_id, qty)
+    select v_id, x.item_id, x.qty from jsonb_to_recordset(p_items) as x(item_id uuid, qty int);
+  return v_id;
+end $$;
+revoke all on function public.save_promotion_v1(uuid, uuid, jsonb, jsonb) from public, anon, authenticated;
+grant execute on function public.save_promotion_v1(uuid, uuid, jsonb, jsonb) to service_role;
+
+-- Browser writes obey the same freeze as the routes. Coupon claims by the
+-- server must still work: a billing freeze never prevents a diner from paying.
+create or replace function public.enforce_offer_write()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_restaurant uuid;
+  v_next uuid;
+  v_frozen boolean;
+begin
+  if auth.uid() is null then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+  if tg_table_name = 'promotion_items' then
+    if tg_op <> 'INSERT' then
+      select restaurant_id into v_restaurant from promotions where id = old.promotion_id;
+    end if;
+    if tg_op <> 'DELETE' then
+      select restaurant_id into v_next from promotions where id = new.promotion_id;
+    end if;
+  else
+    if tg_op <> 'INSERT' then v_restaurant := old.restaurant_id; end if;
+    if tg_op <> 'DELETE' then v_next := new.restaurant_id; end if;
+  end if;
+  select exists (select 1 from restaurants where id in (v_restaurant, v_next) and plan_status = 'locked') into v_frozen;
+  if v_frozen then
+    -- Nothing besides active may change, including ownership and usage counts.
+    if tg_table_name <> 'promotion_items' and tg_op = 'UPDATE' then
+      if new.active = false and (to_jsonb(new) - 'active') = (to_jsonb(old) - 'active') then return new; end if;
+    end if;
+    raise exception 'tt_plan_frozen' using errcode = 'check_violation';
+  end if;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end $$;
+revoke all on function public.enforce_offer_write() from public, anon, authenticated;
+grant execute on function public.enforce_offer_write() to service_role;
+drop trigger if exists promotions_dashboard_write on promotions;
+create trigger promotions_dashboard_write before insert or update or delete on promotions
+  for each row execute function public.enforce_offer_write();
+drop trigger if exists promotion_items_dashboard_write on promotion_items;
+create trigger promotion_items_dashboard_write before insert or update or delete on promotion_items
+  for each row execute function public.enforce_offer_write();
+drop trigger if exists coupons_dashboard_write on coupons;
+create trigger coupons_dashboard_write before insert or update or delete on coupons
+  for each row execute function public.enforce_offer_write();
+
+-- The entire copy is invisible until commit; any failed insert rolls it back.
+create or replace function public.duplicate_menu_v1(p_restaurant uuid, p_source uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_status text;
+  v_snapshot jsonb;
+  v_source menus%rowtype;
+  v_section categories%rowtype;
+  v_item menu_items%rowtype;
+  v_menu uuid;
+  v_id uuid;
+  v_name text;
+  v_n int := 2;
+  v_sections jsonb := '{}'::jsonb;
+  v_items jsonb := '{}'::jsonb;
+begin
+  -- The menu ceiling trigger uses this same lock; competing copies also need
+  -- one name each. Read all source rows in one snapshot after taking it.
+  select plan_status into v_status from restaurants where id = p_restaurant for no key update;
+  if not found then raise exception 'tt_restaurant_missing'; end if;
+  if v_status = 'locked' then raise exception 'tt_plan_frozen' using errcode = 'check_violation'; end if;
+  select jsonb_build_object(
+    'menu', to_jsonb(m),
+    'sections', coalesce((select jsonb_agg(c) from categories c where c.menu_id = m.id and c.restaurant_id = p_restaurant), '[]'::jsonb),
+    'items', coalesce((select jsonb_agg(i) from menu_items i where i.menu_id = m.id and i.restaurant_id = p_restaurant), '[]'::jsonb),
+    'links', coalesce((select jsonb_agg(a) from item_addons a join menu_items i on i.id = a.product_id
+      where i.menu_id = m.id and i.restaurant_id = p_restaurant), '[]'::jsonb)
+  ) into v_snapshot from menus m where m.id = p_source and m.restaurant_id = p_restaurant;
+  if not found then return null; end if;
+  v_source := jsonb_populate_record(null::menus, v_snapshot->'menu');
+  -- A copied schedule is a newly set schedule, so the browser's feature check
+  -- still applies even though this write uses the server key.
+  if v_source.schedule is not null and not coalesce((select l.allows_menu_schedules from plan_limits l
+      where l.plan = public.effective_restaurant_plan(p_restaurant)), false) then
+    raise exception 'tt_plan_feature allows_menu_schedules' using errcode = 'check_violation';
+  end if;
+  -- Find a free "{name} copy" / "{name} copy 2" ... name.
+  v_name := v_source.name || ' copy';
+  while exists (select 1 from menus where restaurant_id = p_restaurant and lower(btrim(name)) = lower(btrim(v_name))) loop
+    v_name := v_source.name || ' copy ' || v_n;
+    v_n := v_n + 1;
+  end loop;
+  insert into menus (restaurant_id, name, active, schedule, sort_order)
+  values (p_restaurant, v_name, false, v_source.schedule,
+    (select coalesce(max(sort_order), -1) + 1 from menus where restaurant_id = p_restaurant)) returning id into v_menu;
+  -- Sections. Every foreign key is remapped onto a freshly inserted row.
+  for v_section in select * from jsonb_populate_recordset(null::categories, v_snapshot->'sections') loop
+    insert into categories (restaurant_id, menu_id, name, sort_order, station)
+    values (p_restaurant, v_menu, v_section.name, v_section.sort_order, v_section.station) returning id into v_id;
+    v_sections := v_sections || jsonb_build_object(v_section.id::text, v_id);
+  end loop;
+  -- Extras and products use the same explicit fields so neither loses settings.
+  -- Physical stock belongs to the original dish: the copy starts uncounted.
+  for v_item in select * from jsonb_populate_recordset(null::menu_items, v_snapshot->'items') loop
+    insert into menu_items (restaurant_id, menu_id, category_id, name, description, price, emoji, image_url,
+      popular, available, is_addon, modifiers, dietary, discount_pct, sort_order, skips_kitchen, stock, stock_auto_off)
+    values (p_restaurant, v_menu, (v_sections->>v_item.category_id::text)::uuid, v_item.name, v_item.description,
+      v_item.price, v_item.emoji, v_item.image_url, v_item.popular, v_item.available, v_item.is_addon,
+      v_item.modifiers, v_item.dietary, v_item.discount_pct, v_item.sort_order, v_item.skips_kitchen, null, false)
+    returning id into v_id;
+    v_items := v_items || jsonb_build_object(v_item.id::text, v_id);
+  end loop;
+  -- Products, plus their add-on links. Both sides must belong to this copy.
+  insert into item_addons (product_id, addon_id, sort_order)
+    select (v_items->>a.product_id::text)::uuid, (v_items->>a.addon_id::text)::uuid, a.sort_order
+    from jsonb_populate_recordset(null::item_addons, v_snapshot->'links') a
+    where v_items ? a.product_id::text and v_items ? a.addon_id::text;
+  -- Publishing is the last write. Nothing is exposed if any earlier step fails.
+  update menus set active = v_source.active where id = v_menu;
+  return jsonb_build_object('newMenuId', v_menu, 'copyName', v_name);
+end $$;
+revoke all on function public.duplicate_menu_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.duplicate_menu_v1(uuid, uuid) to service_role;
+
+-- S18: keep ingredient history when recipes change, and count at one cutoff.
+-- The release delta runs this in one transaction, before the new count caller
+-- deploys; no begin/commit here, which would split db:create's single run.
+lock table orders, waste_entries, ingredient_purchases, ingredient_counts in share row exclusive mode;
+
+create table if not exists ingredient_consumption (
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  source_kind text not null check (source_kind in ('sale', 'waste', 'purchase')),
+  source_id uuid not null,
+  usage jsonb not null,
+  active boolean not null,
+  primary key (source_kind, source_id)
+);
+create table if not exists ingredient_movements (
+  id bigint generated always as identity primary key,
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  ingredient_id uuid not null,
+  quantity numeric not null,
+  kind text not null check (kind in ('sale', 'waste', 'purchase')),
+  created_at timestamptz not null default clock_timestamp()
+);
+create index if not exists ingredient_movements_stock_idx on ingredient_movements(restaurant_id, ingredient_id, id);
+alter table ingredient_consumption enable row level security;
+alter table ingredient_movements enable row level security;
+revoke all on ingredient_consumption from anon;
+revoke all on ingredient_movements from anon;
+revoke all on ingredient_consumption, ingredient_movements from public, authenticated;
+grant all on ingredient_consumption, ingredient_movements to service_role;
+revoke all on sequence ingredient_movements_id_seq from public, anon, authenticated;
+grant usage, select on sequence ingredient_movements_id_seq to service_role;
+alter table ingredient_counts add column if not exists movement_cutoff bigint;
+
+-- A separate lock name keeps this out of the money and stock-reservation locks.
+create or replace function public.lock_ingredient_movements(p_restaurant uuid)
+returns void language sql set search_path = public as $$
+  select pg_advisory_xact_lock(hashtextextended('ingredient-movements:' || p_restaurant::text, 0));
+$$;
+revoke all on function public.lock_ingredient_movements(uuid) from public, anon, authenticated;
+grant execute on function public.lock_ingredient_movements(uuid) to service_role;
+
+-- Freeze quantities, including combo counts, choices and extras. No recipe
+-- version is needed: these are the grams that this particular sale used.
+create or replace function public.sale_ingredient_usage(p_restaurant uuid, p_items jsonb)
+returns jsonb language sql stable security definer set search_path = public as $$
+  with lines as (
+    select l from jsonb_array_elements(coalesce(p_items, '[]')) l
+  ), dishes as (
+    select c->>'itemId' as item_id, coalesce(c->'mods', '{}') as choices,
+      (c->>'qty')::numeric * (l->>'qty')::numeric as quantity
+      from lines cross join lateral jsonb_array_elements(coalesce(l->'components', '[]')) c
+    union all
+    select l->>'itemId', coalesce(l->'mods', '{}'), (l->>'qty')::numeric from lines
+      where jsonb_array_length(coalesce(l->'components', '[]')) = 0
+    union all
+    select e->>'id', '{}'::jsonb, (l->>'qty')::numeric
+      from lines cross join lateral jsonb_array_elements(coalesce(l->'extras', '[]')) e
+  ), used as (
+    select r.ingredient_id, -sum(r.quantity * d.quantity) as quantity
+      from dishes d join recipe_lines r on r.item_id::text = d.item_id and r.restaurant_id = p_restaurant
+      where r.mod_label is null or d.choices->r.mod_label = to_jsonb(r.mod_option)
+        or (jsonb_typeof(d.choices->r.mod_label) = 'array' and (d.choices->r.mod_label) ? r.mod_option)
+      group by r.ingredient_id
+  ) select coalesce(jsonb_object_agg(ingredient_id, quantity), '{}') from used;
+$$;
+revoke all on function public.sale_ingredient_usage(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.sale_ingredient_usage(uuid, jsonb) to service_role;
+
+create or replace function public.waste_ingredient_usage(p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select case when p_ingredient is not null then jsonb_build_object(p_ingredient, -p_quantity)
+    else public.sale_ingredient_usage(p_restaurant, jsonb_build_array(jsonb_build_object(
+      'itemId', p_item, 'qty', p_quantity, 'mods', coalesce((
+        select jsonb_object_agg(m->>'label', m->'options'->0)
+          from menu_items i cross join lateral jsonb_array_elements(coalesce(i.modifiers, '[]')) m
+          where i.id = p_item and i.restaurant_id = p_restaurant and m->>'type' = 'single'
+            and jsonb_array_length(m->'options') > 0
+      ), '{}')))) end;
+$$;
+revoke all on function public.waste_ingredient_usage(uuid, uuid, uuid, numeric) from public, anon, authenticated;
+grant execute on function public.waste_ingredient_usage(uuid, uuid, uuid, numeric) to service_role;
+
+-- Existing recipes cannot tell us what an older, already edited recipe was.
+-- Freeze the best evidence left at upgrade, once; never recalculate it later.
+with added as (
+  insert into ingredient_consumption(restaurant_id, source_kind, source_id, usage, active)
+    select restaurant_id, 'sale', id, public.sale_ingredient_usage(restaurant_id, items),
+      status in ('received', 'preparing', 'ready', 'completed') from orders
+    on conflict do nothing returning *
+) insert into ingredient_movements(restaurant_id, ingredient_id, quantity, kind, created_at)
+  select a.restaurant_id, u.key::uuid, u.value::numeric, a.source_kind, o.created_at
+    from added a join orders o on o.id = a.source_id cross join lateral jsonb_each_text(a.usage) u where a.active;
+with added as (
+  insert into ingredient_consumption(restaurant_id, source_kind, source_id, usage, active)
+    select restaurant_id, 'waste', id, public.waste_ingredient_usage(restaurant_id, ingredient_id, item_id, quantity), true from waste_entries
+    on conflict do nothing returning *
+) insert into ingredient_movements(restaurant_id, ingredient_id, quantity, kind, created_at)
+  select a.restaurant_id, u.key::uuid, u.value::numeric, a.source_kind, w.created_at
+    from added a join waste_entries w on w.id = a.source_id cross join lateral jsonb_each_text(a.usage) u;
+with added as (
+  insert into ingredient_consumption(restaurant_id, source_kind, source_id, usage, active)
+    select restaurant_id, 'purchase', id, jsonb_build_object(ingredient_id, quantity), true from ingredient_purchases
+    on conflict do nothing returning *
+) insert into ingredient_movements(restaurant_id, ingredient_id, quantity, kind, created_at)
+  select a.restaurant_id, u.key::uuid, u.value::numeric, a.source_kind, p.created_at
+    from added a join ingredient_purchases p on p.id = a.source_id cross join lateral jsonb_each_text(a.usage) u;
+
+-- Keep the old callers: every write, including waste taken back and a pending
+-- checkout becoming food, records its delta under the same count lock.
+create or replace function public.track_ingredient_movement()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_row jsonb := case when tg_op = 'DELETE' then to_jsonb(old) else to_jsonb(new) end;
+  v_restaurant uuid := (v_row->>'restaurant_id')::uuid;
+  v_kind text := case tg_table_name when 'orders' then 'sale' when 'waste_entries' then 'waste' else 'purchase' end;
+  v_previous ingredient_consumption;
+  v_usage jsonb;
+  v_active boolean := tg_op <> 'DELETE';
+  v_changed boolean := false;
+begin
+  if tg_op = 'UPDATE' and new.restaurant_id is distinct from old.restaurant_id then
+    raise exception 'ingredient history belongs to one restaurant';
+  end if;
+  -- An update that changes neither what a row used nor whether it counts moves
+  -- no ingredient, so it takes no lock. Otherwise the kitchen walking an order
+  -- from preparing to ready queues behind a count, and can deadlock a payment
+  -- that writes two orders: each would hold what the other one waits for.
+  if tg_op = 'UPDATE' then
+    if v_kind = 'sale' then
+      v_changed := new.items is distinct from old.items;
+      if not v_changed and (new.status in ('received', 'preparing', 'ready', 'completed'))
+          is not distinct from (old.status in ('received', 'preparing', 'ready', 'completed')) then
+        return null;
+      end if;
+    elsif v_kind = 'waste' then
+      v_changed := (new.ingredient_id, new.item_id, new.quantity) is distinct from (old.ingredient_id, old.item_id, old.quantity);
+      if not v_changed then return null; end if;
+    else
+      v_changed := (new.ingredient_id, new.quantity) is distinct from (old.ingredient_id, old.quantity);
+      if not v_changed then return null; end if;
+    end if;
+  end if;
+  -- A restaurant deletion already removes both books by cascade.
+  if not exists(select 1 from restaurants where id = v_restaurant) then return null; end if;
+  perform public.lock_ingredient_movements(v_restaurant);
+  select * into v_previous from ingredient_consumption where source_kind = v_kind and source_id = (v_row->>'id')::uuid;
+  v_usage := v_previous.usage;
+  if v_usage is null or v_changed then
+    if v_kind = 'sale' then v_usage := public.sale_ingredient_usage(v_restaurant, v_row->'items');
+    elsif v_kind = 'waste' then v_usage := public.waste_ingredient_usage(v_restaurant,
+      (v_row->>'ingredient_id')::uuid, (v_row->>'item_id')::uuid, (v_row->>'quantity')::numeric);
+    else v_usage := jsonb_build_object(v_row->>'ingredient_id', (v_row->>'quantity')::numeric); end if;
+  end if;
+  if v_kind = 'sale' then v_active := v_active and v_row->>'status' in ('received', 'preparing', 'ready', 'completed'); end if;
+  insert into ingredient_movements(restaurant_id, ingredient_id, quantity, kind, created_at)
+    select v_restaurant, key::uuid, sum(quantity), v_kind,
+      case when tg_op = 'INSERT' then (v_row->>'created_at')::timestamptz else clock_timestamp() end from (
+      select key, value::numeric as quantity from jsonb_each_text(v_usage) where v_active
+      union all
+      select key, -value::numeric from jsonb_each_text(coalesce(v_previous.usage, '{}')) where coalesce(v_previous.active, false)
+    ) delta group by key having sum(quantity) <> 0;
+  insert into ingredient_consumption(restaurant_id, source_kind, source_id, usage, active)
+    values(v_restaurant, v_kind, (v_row->>'id')::uuid, v_usage, v_active)
+    on conflict (source_kind, source_id) do update set usage = excluded.usage, active = excluded.active;
+  return null;
+end;
+$$;
+revoke all on function public.track_ingredient_movement() from public, anon, authenticated;
+drop trigger if exists track_ingredient_movement on orders;
+create trigger track_ingredient_movement after insert or update or delete on orders for each row execute function public.track_ingredient_movement();
+drop trigger if exists track_ingredient_movement on waste_entries;
+create trigger track_ingredient_movement after insert or update or delete on waste_entries for each row execute function public.track_ingredient_movement();
+drop trigger if exists track_ingredient_movement on ingredient_purchases;
+create trigger track_ingredient_movement after insert or update or delete on ingredient_purchases for each row execute function public.track_ingredient_movement();
+
+-- Counts never lock an order or a menu item. Take the movement lock before
+-- the purchase's ingredient row lock too, so its FK cannot deadlock a count.
+create or replace function public.record_purchase(
+  p_restaurant uuid, p_ingredient uuid, p_packs numeric, p_total numeric, p_actor text
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_ingredient ingredients%rowtype;
+  v_pack_price numeric;
+  v_id uuid;
+begin
+  perform public.lock_ingredient_movements(p_restaurant);
+  if p_packs <= 0 then return null; end if;
+  select * into v_ingredient from ingredients
+   where id = p_ingredient and restaurant_id = p_restaurant and archived_at is null for update;
+  if v_ingredient.id is null then return null; end if;
+  v_pack_price := round(p_total / p_packs, 2);
+  if v_pack_price is distinct from v_ingredient.pack_price then
+    update ingredients set pack_price = v_pack_price, updated_by = p_actor where id = p_ingredient;
+  end if;
+  insert into ingredient_purchases (restaurant_id, ingredient_id, quantity, total, recorded_by)
+  values (p_restaurant, p_ingredient, p_packs * v_ingredient.pack_size, p_total, p_actor)
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+revoke all on function public.record_purchase(uuid, uuid, numeric, numeric, text) from public, anon, authenticated;
+grant execute on function public.record_purchase(uuid, uuid, numeric, numeric, text) to service_role;
+
+-- This also protects the deployed caller that still inserts count rows.
+create or replace function public.cutoff_ingredient_count()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_last ingredient_counts;
+begin
+  perform public.lock_ingredient_movements(new.restaurant_id);
+  select * into v_last from ingredient_counts where restaurant_id = new.restaurant_id and ingredient_id = new.ingredient_id
+    order by movement_cutoff desc nulls last, created_at desc, id desc limit 1;
+  new.movement_cutoff := nextval('public.ingredient_movements_id_seq');
+  new.created_at := clock_timestamp();
+  new.expected := null;
+  if v_last.id is not null then
+    select v_last.counted + coalesce(sum(quantity), 0) into new.expected from ingredient_movements
+      where restaurant_id = new.restaurant_id and ingredient_id = new.ingredient_id
+        and id <= new.movement_cutoff and case when v_last.movement_cutoff is null then created_at > v_last.created_at
+          else id > v_last.movement_cutoff end;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.cutoff_ingredient_count() from public, anon, authenticated;
+drop trigger if exists cutoff_ingredient_count on ingredient_counts;
+create trigger cutoff_ingredient_count before insert on ingredient_counts for each row execute function public.cutoff_ingredient_count();
+
+create or replace function public.record_ingredient_counts(p_restaurant uuid, p_counts jsonb, p_actor text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_results jsonb;
+begin
+  perform public.lock_ingredient_movements(p_restaurant);
+  if jsonb_typeof(p_counts) is distinct from 'array' then raise exception 'invalid counts'; end if;
+  if jsonb_array_length(p_counts) not between 1 and 500 or exists (
+    select 1 from jsonb_to_recordset(p_counts) as c(ingredient_id uuid, counted numeric)
+      where ingredient_id is null or counted is null or counted < 0 or counted > 10000000
+        or counted::text in ('NaN', 'Infinity', '-Infinity') or counted <> round(counted, 3)
+  ) or (select count(distinct c->>'ingredient_id') from jsonb_array_elements(p_counts) c) <> jsonb_array_length(p_counts) then
+    raise exception 'invalid counts';
+  end if;
+  if exists(select 1 from jsonb_to_recordset(p_counts) as c(ingredient_id uuid) where not exists(
+    select 1 from ingredients i where i.id = c.ingredient_id and i.restaurant_id = p_restaurant and i.archived_at is null
+  )) then return null; end if;
+  with recorded as (
+    insert into ingredient_counts(restaurant_id, ingredient_id, counted, counted_by)
+      select p_restaurant, c.ingredient_id, c.counted, p_actor
+        from jsonb_to_recordset(p_counts) as c(ingredient_id uuid, counted numeric)
+      returning ingredient_id, counted, expected
+  ) select jsonb_agg(to_jsonb(recorded)) into v_results from recorded;
+  return v_results;
+end;
+$$;
+revoke all on function public.record_ingredient_counts(uuid, jsonb, text) from public, anon, authenticated;
+grant execute on function public.record_ingredient_counts(uuid, jsonb, text) to service_role;
+revoke truncate, references, trigger on all tables in schema public from authenticated;
+revoke truncate, references, trigger on all tables in schema public from public, anon, authenticated;
 
 -- S9: the drawer keeps the currency it opened in. Old rows have no evidence
 -- of the float's original currency; receipts alone cannot prove it. Use the

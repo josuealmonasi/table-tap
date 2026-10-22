@@ -1,5 +1,7 @@
 // ============================================================================
 // The demo's ingredients and recipes.
+// Sales, waste and purchases fill ingredient_consumption and ingredient_movements
+// through their triggers, just as they do for a restaurant.
 //
 // Enough for the costs screen to have something true to say: a café's drinks
 // and a burger with their recipes, extras with theirs, a supplier's rise on the
@@ -93,11 +95,18 @@ async function seedStock(pg, rid, ids, products) {
     await pg.query(`update ingredients set lead_days = $2 where id = $1`, [ids.get(name), days]);
   }
   const at = days => `now() - interval '${days} days'`;
-  const count = (name, counted, expected, days, who) => pg.query(
-    `insert into ingredient_counts (restaurant_id, ingredient_id, counted, expected, counted_by, created_at)
-     values ($1, $2, $3, $4, $5, ${at(days)})`,
-    [rid, ids.get(name), counted, expected, who],
-  );
+  const count = async (name, counted, expected, days, who) => {
+    const { rows: [row] } = await pg.query(
+      `insert into ingredient_counts (restaurant_id, ingredient_id, counted, counted_by)
+       values ($1, $2, $3, $4) returning id`, [rid, ids.get(name), counted, who],
+    );
+    // These are historical demo counts, before serial cutoffs existed. Keep
+    // their dates and expected figures; a live insert always gets today's cutoff.
+    await pg.query(
+      `update ingredient_counts set created_at = ${at(days)}, expected = $2, movement_cutoff = null where id = $1`,
+      [row.id, expected],
+    );
+  };
   await count("Whole milk", 12000, null, 10, "demo-manager@tabletap.dev");
   await count("Whole milk", 6100, 6500, 3, "demo-manager@tabletap.dev");
   await count("Coffee beans", 2400, null, 3, "demo@tabletap.dev");

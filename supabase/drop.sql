@@ -1,3 +1,7 @@
+drop table if exists restaurant_accounting_records cascade;
+drop table if exists platform_admin_audit cascade;
+drop function if exists public.keep_platform_admin_audit();
+drop function if exists public.admin_delete_restaurant(uuid, boolean);
 drop table if exists table_session_members cascade;
 drop function if exists public.recount_stock(uuid, uuid, int, int, int) cascade;
 drop function if exists public.request_table_member(uuid, uuid, text, boolean);
@@ -31,6 +35,9 @@ drop function if exists public.release_restaurant_billing(uuid, uuid);
 drop table if exists diner_checkouts cascade;
 drop table if exists platform_fees       cascade;
 drop table if exists terminal_deposits   cascade;
+drop table if exists ingredient_consumption cascade;
+drop table if exists ingredient_movements cascade;
+
 drop function if exists public.delete_terminal_deposit_v1(uuid, date, text);
 drop function if exists public.record_terminal_deposit_v1(uuid, date, text, numeric, text, text);
 drop function if exists public.terminal_deposit_ledger_v1(uuid, text);
@@ -249,5 +256,17 @@ drop function if exists public.diner_checkout_bind(uuid, jsonb);
 drop function if exists public.finish_diner_checkout(uuid, boolean);
 drop function if exists public.bind_diner_coupon() cascade;
 drop function if exists public.bind_redemption_checkout() cascade;
+drop function if exists public.save_promotion_v1(uuid, uuid, jsonb, jsonb);
+drop function if exists public.duplicate_menu_v1(uuid, uuid);
+drop function if exists public.enforce_offer_write();
+
+
+drop function if exists public.track_ingredient_movement();
+drop function if exists public.cutoff_ingredient_count();
+drop function if exists public.record_ingredient_counts(uuid, jsonb, text);
+drop function if exists public.waste_ingredient_usage(uuid, uuid, uuid, numeric);
+drop function if exists public.sale_ingredient_usage(uuid, jsonb);
+drop function if exists public.lock_ingredient_movements(uuid);
+
 drop function if exists public.start_refund_due_fee(uuid, uuid, text, int);
 drop function if exists public.stamp_refund_due_charge() cascade;

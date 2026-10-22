@@ -108,6 +108,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     actor: actor.email,
     entity: "discount",
     action: "discounted",
+    orderIds: orders.map(o => o.id),
     detail: logDetail({ code: coupon.code, amount: amount.toFixed(2), table: orders[0].table_label }),
   });
   return NextResponse.json({ ok: true, amount, code: coupon.code });

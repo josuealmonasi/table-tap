@@ -1,4 +1,5 @@
-import type { Modifier, OrderLineItem } from "@/lib/types";
+import type { Modifier } from "@/lib/types";
+import { lineRevenues, type RevenueOrder } from "@/lib/report-revenue";
 import { itemSalePrice } from "@/lib/pricing";
 import { defaultChoices, dishCost, lineCost, type RecipeBook, type UnitCosts } from "./recipe-cost";
 
@@ -64,10 +65,8 @@ export function unitMargins(items: CostedItem[], book: RecipeBook, costs: UnitCo
 }
 
 /** An order as the period reads it. */
-export interface SoldOrder {
-  items: OrderLineItem[];
-  /** After every discount; what the lines actually came to. */
-  subtotal: number;
+export interface SoldOrder extends RevenueOrder {
+  // What the lines actually came to after every discount is total less service and tip.
   tax_pct: number;
 }
 
@@ -101,13 +100,6 @@ export interface PeriodContribution {
   uncosted: number;
 }
 
-/** What one line came to before the order's own discounts: its dish's sale price and extras. */
-function lineValue(line: OrderLineItem): number {
-  const base = line.comboId ? Number(line.price) : itemSalePrice(Number(line.price), line.discountPct);
-  const extras = (line.extras ?? []).reduce((s, e) => s + Number(e.price), 0);
-  return (base + extras) * line.qty;
-}
-
 /**
  * What the period's sales left, product by product.
  *
@@ -119,11 +111,9 @@ export function periodContribution(orders: SoldOrder[], book: RecipeBook, costs:
   const total = { revenue: 0, cost: 0, fees: 0, uncosted: 0 };
   for (const order of orders) {
     const lines = Array.isArray(order.items) ? order.items : [];
-    const values = lines.map(lineValue);
-    const before = values.reduce((s, v) => s + v, 0);
-    const share = before > 0 ? Number(order.subtotal) / before : 0;
+    const revenues = lineRevenues(order);
     lines.forEach((line, i) => {
-      const gross = values[i] * share;
+      const gross = revenues[i];
       const revenue = withoutIva(gross, Number(order.tax_pct) || 0);
       const fees = gross * feeRate;
       const { cost, complete } = lineCost(line, book, costs);

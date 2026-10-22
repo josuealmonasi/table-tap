@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
 
-vi.mock("@/lib/platform-fee", () => ({ feesKeptSince: async () => 0 }));
+vi.mock("@/lib/report-fees", () => ({ feesKeptSince: async () => ({ kept: 0, unverified: 0 }) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => { const from = (table: string) => {
   let currency: unknown;
   let method: unknown;
@@ -21,7 +21,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => { const from =
       id: `${c}-${m}`, currency: c, method: m, amount: c === "MXN" ? 100 : 200, tip: 0, actor_email: "cashier@example.com",
       created_at: "2026-10-20T12:00:00Z", orders: null, stripe_payment_intent: null,
     })));
-    if (table === "orders") data = currencies.map(c => ({ items: [{ itemId: "dish", name: "Dish", price: c === "MXN" ? 100 : 200, qty: 1 }], subtotal: c === "MXN" ? 100 : 200, tax_pct: 0 }));
+    if (table === "orders") data = currencies.map(c => ({ items: [{ itemId: "dish", name: "Dish", price: c === "MXN" ? 100 : 200, qty: 1 }], total: c === "MXN" ? 100 : 200, service_fee: 0, tip: 0, tax_pct: 0 }));
     if (table === "refund_operations") data = currencies.map(c => ({ source: "cash", amount: c === "MXN" ? 10 : 50, payout_actor: "cashier@example.com", completed_at: "2026-10-20T13:00:00Z", tip: 0 }));
     // An imported return already counted by its old log must not leave the
     // drawer twice, even when its currency matches the current restaurant.

@@ -1,6 +1,5 @@
 import type Stripe from "stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { everyRow } from "@/lib/paged";
 import { orderFeeCents, type PlanLimits } from "@/lib/plan";
 
 /**
@@ -202,16 +201,4 @@ export async function attachFeeSession(hold: FeeHold, sessionId: string): Promis
 /** Stripe's expiry for a session nobody paid. */
 export async function releaseSessionFee(session: Stripe.Checkout.Session): Promise<void> {
   await releaseFee(session.metadata?.fee_id);
-}
-
-/** The fees we kept on payments settled since `since`, in pesos: the costs screen's figure. */
-export async function feesKeptSince(restaurantId: string, since: string): Promise<number> {
-  const db = createAdminClient();
-  const rows = await everyRow<{ cents: number; refunded_cents: number }>((a, b) => db
-    .from("platform_fees")
-    .select("cents, refunded_cents")
-    .eq("restaurant_id", restaurantId).eq("status", "taken")
-    .gte("settled_at", since)
-    .order("id").range(a, b), "the fees kept");
-  return rows.reduce((sum, f) => sum + f.cents - f.refunded_cents, 0) / 100;
 }

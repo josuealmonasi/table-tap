@@ -54,14 +54,14 @@ console.log("The key on every diner's phone");
 for (const table of [
   "kitchen_tickets", "kitchen_requests", "orders", "table_sessions", "write_off_requests", "discount_requests",
   "coupons", "coupon_redemptions", "staff", "user_logs", "profiles",
-  "platform_admins", "rate_limits", "restaurant_tables",
+  "platform_admins", "platform_admin_audit", "restaurant_accounting_records", "rate_limits", "restaurant_tables",
   "icon_groups", "icon_group_items",
   "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions",
   // A customer's name and what they owe: read only through the routes.
   "customer_accounts", "account_checkouts", "diner_checkouts", "table_session_members",
   // The drawer's shifts and what was taken out of it; the restaurant's costs.
   "cash_shifts", "cash_movements", "ingredients", "ingredient_prices", "recipe_lines",
-  "waste_entries", "ingredient_purchases", "ingredient_counts",
+  "waste_entries", "ingredient_purchases", "ingredient_counts", "ingredient_consumption", "ingredient_movements",
   // The ledger and everything around it, the bell, the kitchen's paper, a
   // table's division, and what the routes keep for themselves.
   "offline_sale_queue", "payment_allocations", "order_adjustments", "refund_operations", "refund_allocations", "refund_attempts", "refund_due_attempts",
@@ -99,6 +99,8 @@ for (const [fn, args] of [
   ["open_table_session", { p_restaurant: crypto.randomUUID(), p_table: crypto.randomUUID(), p_max_hours: 8 }],
   ["close_session_if_clear", { p_session: crypto.randomUUID(), p_reason: "paid" }],
   ["claim_founding_price", { p_restaurant: crypto.randomUUID(), p_limit: 50 }],
+  ["save_promotion_v1", { p_restaurant: crypto.randomUUID(), p_id: null, p_fields: {}, p_items: [] }],
+  ["duplicate_menu_v1", { p_restaurant: crypto.randomUUID(), p_source: crypto.randomUUID() }],
   ["redeem_coupon", { p_coupon_id: crypto.randomUUID() }],
   ["rate_limit_hit", { p_bucket: "probe", p_window_seconds: 60 }],
   // Seeding dietary tags belongs to the trigger and nobody else. RLS would stop
@@ -195,6 +197,7 @@ for (const [method, path, body] of [
   ["POST", "/api/bill/write-off/approve", { requestId: crypto.randomUUID(), approve: true }],
   ["POST", "/api/table-payment", { tableId: crypto.randomUUID(), settlement: "cash" }],
   ["POST", "/api/settings", { name: "hacked" }],
+  ["POST", "/api/menu/duplicate", {}],
   ["POST", "/api/coupons", { code: "AAA-BBB", kind: "percent", value: 10 }],
   ["POST", "/api/staff", { email: "x@y.z", role: "owner" }],
   ["PATCH", "/api/orders", { id: crypto.randomUUID(), status: "ready" }],
@@ -563,7 +566,7 @@ if (!signIn.error && theirs) {
     "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions",
     "customer_accounts", "account_checkouts", "diner_checkouts", "table_session_members",
     "cash_shifts", "cash_movements", "ingredients", "ingredient_prices", "recipe_lines",
-    "waste_entries", "ingredient_purchases", "ingredient_counts", "terminal_deposits", "platform_fees"];
+    "waste_entries", "ingredient_purchases", "ingredient_counts", "ingredient_consumption", "ingredient_movements", "terminal_deposits", "platform_fees"];
   const TEAM = [["anon", null], ["owner", "demo@tabletap.dev"], ["manager", "demo-manager@tabletap.dev"],
     ["waiter", "demo-waiter@tabletap.dev"], ["cashier", "demo-cashier@tabletap.dev"],
     ["kitchen", "demo-kitchen@tabletap.dev"]];

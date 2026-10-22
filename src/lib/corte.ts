@@ -78,6 +78,8 @@ export interface Corte {
    * the number that says so.
    */
   accountsOwed: number;
+  /** Activity without currency evidence, excluded from every money total. */
+  unverifiedAdjustments: number;
 }
 
 export const EMPTY_CORTE: Corte = {
@@ -89,7 +91,15 @@ export const EMPTY_CORTE: Corte = {
   refunded: 0,
   onAccount: 0,
   accountsOwed: 0,
+  unverifiedAdjustments: 0,
 };
+
+/** Returns and waived bills are activity even when nobody collected today. */
+export function hasCorteActivity(corte: Corte): boolean {
+  return corte.people.length > 0 || Object.values(corte.totals).some(v => v !== 0)
+    || [corte.online, corte.writtenOff, corte.discounted, corte.refunded, corte.onAccount,
+      corte.accountsOwed, corte.unverifiedAdjustments].some(v => v !== 0);
+}
 
 export function corteFrom(
   payments: CortePayment[],
@@ -184,5 +194,6 @@ export function corteFrom(
     onAccount: round2(onAccount),
     // Not the period's: the page reads the open balances and sets it.
     accountsOwed: 0,
+    unverifiedAdjustments: 0,
   };
 }

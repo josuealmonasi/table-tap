@@ -104,6 +104,7 @@ const PAGES = {
 // invite an address at a stranger's domain. `passes` is the one answer an allowed role may get; any
 // other, a 2xx above all, fails the run.
 const ROUTES = [
+  { m: "POST", p: "/api/menu/duplicate", body: {}, allow: MANAGES, passes: 400 },
   { m: "GET", p: "/api/pos/recover", allow: MANAGES },
   { m: "POST", p: "/api/pos/recover", body: {}, allow: MANAGES, passes: 400 },
   { m: "GET", p: "/api/order-refunds", allow: MANAGES },
@@ -163,6 +164,7 @@ const ROUTES = [
   // What that console calls — moving a restaurant between plans, deleting
   // one, managing any login — is the platform admin's alone. Each checks who
   // is asking first and answers the platform admin 400 for an empty body.
+  { m: "GET", p: "/api/admin/audit", allow: [], passes: 200 },
   { m: "PATCH", p: "/api/admin/restaurants", body: {}, allow: [], passes: 400 },
   { m: "DELETE", p: "/api/admin/restaurants", body: {}, allow: [], passes: 400 },
   { m: "POST", p: "/api/admin/users", body: {}, allow: [], passes: 400 },

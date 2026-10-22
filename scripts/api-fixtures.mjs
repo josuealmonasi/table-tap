@@ -580,7 +580,9 @@ export async function setup(env, base) {
   // that trigger on the unique (order_id, kind).
   const printableOrder = await make({ paid: false, status: "received" });
   const { data: printJob } = await admin
-    .from("print_jobs").select("id").eq("order_id", printableOrder).maybeSingle();
+    // Put only our own ticket first; the printer cases must not consume seed paper.
+    .from("print_jobs").update({ created_at: "1970-01-01T00:00:00Z" })
+    .eq("order_id", printableOrder).select("id, delivery_token").maybeSingle();
 
   // The seed's open shift, set aside: one shift is open at a time, and the
   // cases open and close their own. Put back at teardown.
@@ -653,6 +655,7 @@ export async function setup(env, base) {
     splitSessionId: splitSession?.id ?? null,
     splitTableId: splitTable.id,
     printJobId: printJob?.id ?? null,
+    printDeliveryToken: printJob?.delivery_token ?? null,
     billLogsBefore: (logsBefore ?? []).map(l => l.id),
     // Rows the run itself writes to the cash drawer are the ones after this.
     startedAt: new Date().toISOString(),
