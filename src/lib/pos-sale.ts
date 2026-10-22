@@ -80,8 +80,10 @@ export async function existingTicket(
     || (expected?.method && expected.method !== "account" && (data.account_id || data.pay_method !== expected.method))) {
     return await apiError("apiErr.posMismatch", 409, undefined, { held: true });
   }
+  // A sale rung before the request was saved with it has no scope; it is
+  // matched on its account, as it always was, so its unchanged retry replays.
   if (expected?.method === "account" && (data.account_id !== expected.accountId
-    || data.request_scope !== orderRequestScope("pos-account", expected))) {
+    || (data.request_scope !== null && data.request_scope !== orderRequestScope("pos-account", expected)))) {
     return await apiError("apiErr.retryConflict", 409);
   }
   const approved = data.account_id && data.charged_at && data.status !== "pending_payment";

@@ -7427,9 +7427,11 @@ begin
   v_ticket := public.pos_ticket(p_restaurant, p_ref);
   if v_ticket is not null then
     select * into o from orders where restaurant_id = p_restaurant and pos_ref = p_ref;
-    if o.account_id is distinct from p_account or o.request_scope is distinct from p_order->>'request_scope'
-      or (o.request_scope is null and (o.items, o.total, o.currency, o.note, o.customer_name) is distinct from
-        (p_order->'items', (p_order->>'total')::numeric, p_order->>'currency', p_order->>'note', p_order->>'customer_name')) then
+    -- A sale rung before its request was saved has no scope. It is matched
+    -- on its account, as it always was: the clients in production forget a
+    -- reference on a 409, so refusing its retry rang it a second time.
+    if o.account_id is distinct from p_account
+      or (o.request_scope is not null and o.request_scope is distinct from p_order->>'request_scope') then
       return jsonb_build_object('outcome', 'conflict');
     end if;
     return v_ticket;
@@ -8365,13 +8367,17 @@ begin
         and r.stripe_payment_intent = f.stripe_payment_intent and r.source = 'stripe'
         and r.status = 'succeeded' and r.fee_reconciled_at is null))
   ) or exists (
-    -- A provider-verified fee request is evidence even on an older charge
-    -- without a platform ledger amount. Keep it until recovery can finish.
+    -- A provider-verified fee request is evidence of its own, ledger row or
+    -- not. The arithmetic above sees only the refunds this app recorded: a
+    -- charge refunded in full outside it left MX$3 of fee to return while the
+    -- local share rounded to zero, and the restaurant could be deleted owed
+    -- that (cross-review of batch 5). Only a share already returned in full
+    -- lets it go.
     select 1 from refunds_due d where d.restaurant_id = p_restaurant and d.refunded_at is not null
-      and d.fee_reconciled_at is null and (d.fee_request->>'amount')::numeric > 0
+      and d.fee_reconciled_at is null and coalesce((d.fee_request->>'amount')::numeric, 0) > 0
       and not exists (select 1 from platform_fees f where f.restaurant_id = p_restaurant
         and f.stripe_payment_intent = d.stripe_payment_intent and f.status = 'taken'
-        and (f.charge_cents > 0 or f.refunded_cents = f.cents))
+        and f.refunded_cents = f.cents)
   ) then return jsonb_build_object('outcome', 'refundFee'); end if;
   -- Retain completed refunds too. Closing a real business does not make its
   -- receipts disposable, but completed books must not prevent its deletion.
@@ -9274,9 +9280,12 @@ declare i ingredients; p ingredient_purchases; v_id uuid; v_price numeric;
 begin
   perform public.lock_ingredient_movements(p_restaurant);
   select * into p from ingredient_purchases where restaurant_id = p_restaurant and request_ref = p_ref;
-  -- Old receipts did not save packs. Guessing from a changed pack size can
-  -- answer with another request's money; ask the owner to check that receipt.
-  if found and (p.ingredient_id, p.request_packs, p.total) is distinct from (p_ingredient, p_packs, p_total) then
+  -- Old receipts did not save packs, so those match on ingredient and money.
+  -- Never on packs times today's pack size, which may have changed; and never
+  -- refused outright, because the clients in production forget a reference
+  -- on a 409 and the next send recorded the MX$100 a second time.
+  if found and (p.ingredient_id is distinct from p_ingredient or p.total is distinct from p_total
+    or (p.request_packs is not null and p.request_packs is distinct from p_packs)) then
     raise exception 'reference belongs to another purchase' using errcode = 'PT409';
   end if;
   if found then return p.id; end if;

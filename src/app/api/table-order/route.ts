@@ -69,7 +69,8 @@ export async function POST(req: NextRequest) {
 
   const ref = uuidOf(body.ref);
   if (body.ref !== undefined && !ref) return await apiError("apiErr.invalidRequest", 400);
-  const intent = ref ? { restaurantId: actor.restaurantId, ref, scope: orderRequestScope(`table-order:${body.tableId}`, body) } : null;
+  const surface = `table-order:${body.tableId}`;
+  const intent = ref ? { restaurantId: actor.restaurantId, ref, scope: orderRequestScope(surface, body), legacyScope: surface } : null;
   if (intent) {
     const previous = await readOrderIntent(intent);
     if (previous?.conflict) return await apiError("apiErr.retryConflict", 409);

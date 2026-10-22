@@ -59,3 +59,23 @@ it("L tiers_sound refuses zero prices in the database CHECK too", () => {
   expect(fn("tiers_sound")).toContain("(t->>'price')::numeric <= 0");
   expect(sql).toContain("check (public.tiers_sound(tiers))");
 });
+
+it("batch 5 cross-review 3: rows saved before the request was saved still replay", () => {
+  // Purchases without packs match on ingredient and money; account sales
+  // without a scope match on their account. Refused, the clients in
+  // production forgot the reference and recorded MX$100 twice.
+  const purchase = fn("record_purchase_once");
+  expect(purchase).toContain("p.request_packs is not null and p.request_packs is distinct from p_packs");
+  expect(purchase).not.toMatch(/\(p\.ingredient_id, p\.request_packs, p\.total\) is distinct from/);
+  const account = fn("ring_pos_account_v2");
+  expect(account).toContain("o.request_scope is not null and o.request_scope is distinct from p_order->>'request_scope'");
+  expect(account).not.toMatch(/or o\.request_scope is distinct from p_order->>'request_scope'\n/);
+});
+
+it("batch 5 cross-review 4: a saved provider fee request blocks deletion even beside a fee ledger row", () => {
+  // A MX$100 charge refunded in full outside the app: MX$3 of fee to return,
+  // a local share that rounds to zero, and a fee row with charge_cents > 0.
+  const body = fn("admin_delete_restaurant");
+  expect(body).not.toContain("f.charge_cents > 0 or f.refunded_cents = f.cents");
+  expect(body).toMatch(/coalesce\(\(d\.fee_request->>'amount'\)::numeric, 0\) > 0[\s\S]*and f\.refunded_cents = f\.cents\)/);
+});

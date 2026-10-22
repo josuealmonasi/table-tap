@@ -63,7 +63,8 @@ export async function POST(req: NextRequest) {
     const ref = uuidOf(body.ref);
     if (body.ref !== undefined && !ref) return await apiError("apiErr.invalidRequest", 400);
     const hash = memberHash(req);
-    const intent = payLater && ref ? { restaurantId, ref, scope: orderRequestScope(`checkout:${tableId ?? ""}:${hash ?? ""}`, body) } : null;
+    const surface = `checkout:${tableId ?? ""}:${hash ?? ""}`;
+    const intent = payLater && ref ? { restaurantId, ref, scope: orderRequestScope(surface, body), legacyScope: surface } : null;
     if (intent) {
       const previous = await readOrderIntent(intent);
       if (previous?.conflict) return await apiError("apiErr.retryConflict", 409);
