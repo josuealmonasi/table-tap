@@ -1757,6 +1757,13 @@ export function cases(fx) {
       body: async f => { partReview ??= await collectionReview(f,table.id); return { tableId: table.id, ...partReview, amount: PART_AMOUNT, tip: PART_TIP, method: "cash", ref: partRef }; },
       expect: [200],
       check: d => d.duplicate === true || "the same collection was recorded twice" },
+    // A tab opened before the reviewed balance sends neither the balance nor
+    // the currency it showed. Nothing proves what it displayed, so it is asked
+    // to refresh, and nothing reaches the ledger (audit L, finding 2).
+    { name: "POST /api/table-payment/part (a tab from before the reviewed balance)", as: "waiter", method: "POST",
+      path: "/api/table-payment/part",
+      body: { tableId: table.id, amount: PART_AMOUNT, method: "cash", ref: `${partRef}-old` },
+      expect: [409], expectError: /desactualizada|out of date/i },
     { name: "POST /api/table-payment/part (kitchen refused)", as: "kitchen", method: "POST",
       path: "/api/table-payment/part",
       body: { tableId: table.id, amount: PART_AMOUNT, method: "cash", ref: `${partRef}-k` },
