@@ -11,12 +11,17 @@ export async function attackCashShift({ ok, bad }) {
   const restaurant = randomUUID();
   let made = false;
   let pending;
+  // Asked from the side holding the lock: is anybody blocked behind it? The
+  // pooler hands a client a stand-in process id, so watching the peer's own
+  // pid (as this did) never matched a real backend and always reported "did
+  // not wait". The holder's transaction is pinned, so pg_backend_pid() is real.
   async function queued() {
     const until = Date.now() + 5000;
     while (Date.now() < until) {
       await db.query("select pg_stat_clear_snapshot()");
-      const { rows } = await db.query("select wait_event_type from pg_stat_activity where pid=$1", [peer.processID]);
-      if (rows[0]?.wait_event_type === "Lock") return;
+      const { rows } = await db.query(
+        "select exists(select 1 from pg_stat_activity where pg_backend_pid() = any(pg_blocking_pids(pid))) waiting");
+      if (rows[0]?.waiting) return;
       await pause(20);
     }
     throw new Error("the withdrawal did not wait for the money lock");

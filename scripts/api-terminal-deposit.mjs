@@ -49,6 +49,8 @@ export function terminalDepositRace() {
         await holder.query("begin");
         await holder.query("set local idle_in_transaction_session_timeout = '20s'");
         await holder.query("select public.lock_restaurant_money($1)", [r]);
+        // The real backend behind the pooler: the client's processID is a stand-in.
+        f.depositHolderPid = (await holder.query("select pg_backend_pid() pid")).rows[0].pid;
         await holder.query(`insert into payments(id, restaurant_id, order_id, amount, method, currency, actor_email, created_at)
           values($1, $2, $3, 50, 'card', $4, 'demo-manager@tabletap.dev', $5)`, [receipts[1], r, orders[1], f.restaurant.currency, at]);
         return clean;
@@ -60,7 +62,7 @@ export function terminalDepositRace() {
         // server takes. The timeout also releases an old, unlocked implementation.
         for (let n = 0; n < 100; n++) {
           const { rows } = await observer.query(`select exists(select 1 from pg_stat_activity
-            where $1 = any(pg_blocking_pids(pid)) and query like '%record_terminal_deposit_v1%') waiting`, [holder.processID]);
+            where $1 = any(pg_blocking_pids(pid)) and query like '%record_terminal_deposit_v1%') waiting`, [f.depositHolderPid]);
           if (rows[0].waiting) { waited = true; break; }
           await pause(100);
         }

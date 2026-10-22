@@ -140,6 +140,7 @@ export function cases(fx) {
         if (error || !item) return "could not verify the saved product";
         if (item.stock !== f.productBeforeEdit.stock) return "an unrelated edit changed stock";
         if (item.description !== `${MARK} description`) return "the description was not saved";
+        return true;
       } },
     { name: "POST /api/products (a recount requires the opening count)", as: "manager", method: "POST",
       path: "/api/products", body: { id: dish.id, stock: 5 }, expect: [400] },

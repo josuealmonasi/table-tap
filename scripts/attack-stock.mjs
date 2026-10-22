@@ -72,7 +72,11 @@ export async function attackStock({ admin, ok, bad }) {
     await db.query("update coupons set uses_count=1 where id=$1", [coupon]);
     await db.query("insert into coupon_redemptions(restaurant_id,coupon_id,order_id,code,amount) values($1,$2,$3,'RECOVERY',1)", [restaurant, coupon, held]);
     // Trigger a genuine stock-update failure without installing a global trigger.
+    // Written as a trusted movement: a plain direct write is a recount now (J6),
+    // which starts a new generation, and the old reservation would rightly
+    // return nothing to overflow.
     await db.query("begin");
+    await db.query("select set_config('tabletap.stock_movement', 'on', true)");
     await db.query("update menu_items set stock=2147483647 where id=$1", [item]);
     await db.query("savepoint release_failure");
     await assert.rejects(db.query("select abandon_checkout($1,true)", [held]), /out of range/);
