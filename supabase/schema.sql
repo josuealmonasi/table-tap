@@ -8626,16 +8626,29 @@ begin
   if tg_op = 'UPDATE' and new.restaurant_id is distinct from old.restaurant_id then
     raise exception 'ingredient history belongs to one restaurant';
   end if;
+  -- An update that changes neither what a row used nor whether it counts moves
+  -- no ingredient, so it takes no lock. Otherwise the kitchen walking an order
+  -- from preparing to ready queues behind a count, and can deadlock a payment
+  -- that writes two orders: each would hold what the other one waits for.
+  if tg_op = 'UPDATE' then
+    if v_kind = 'sale' then
+      v_changed := new.items is distinct from old.items;
+      if not v_changed and (new.status in ('received', 'preparing', 'ready', 'completed'))
+          is not distinct from (old.status in ('received', 'preparing', 'ready', 'completed')) then
+        return null;
+      end if;
+    elsif v_kind = 'waste' then
+      v_changed := (new.ingredient_id, new.item_id, new.quantity) is distinct from (old.ingredient_id, old.item_id, old.quantity);
+      if not v_changed then return null; end if;
+    else
+      v_changed := (new.ingredient_id, new.quantity) is distinct from (old.ingredient_id, old.quantity);
+      if not v_changed then return null; end if;
+    end if;
+  end if;
   -- A restaurant deletion already removes both books by cascade.
   if not exists(select 1 from restaurants where id = v_restaurant) then return null; end if;
   perform public.lock_ingredient_movements(v_restaurant);
   select * into v_previous from ingredient_consumption where source_kind = v_kind and source_id = (v_row->>'id')::uuid;
-  if tg_op = 'UPDATE' then
-    if v_kind = 'sale' then v_changed := new.items is distinct from old.items;
-    elsif v_kind = 'waste' then
-      v_changed := (new.ingredient_id, new.item_id, new.quantity) is distinct from (old.ingredient_id, old.item_id, old.quantity);
-    else v_changed := (new.ingredient_id, new.quantity) is distinct from (old.ingredient_id, old.quantity); end if;
-  end if;
   v_usage := v_previous.usage;
   if v_usage is null or v_changed then
     if v_kind = 'sale' then v_usage := public.sale_ingredient_usage(v_restaurant, v_row->'items');

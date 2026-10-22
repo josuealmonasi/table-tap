@@ -35,6 +35,16 @@ describe("S18 ingredient SQL contracts", () => {
     expect(writer).toContain("having sum(quantity) <> 0");
   });
 
+  it("takes no lock for an update that moves no ingredient", () => {
+    // Paid flags and kitchen steps between counted statuses must not queue
+    // behind a count or deadlock a payment that writes two orders.
+    const writer = fn("track_ingredient_movement");
+    const lock = writer.indexOf("perform public.lock_ingredient_movements");
+    expect(writer.indexOf("is not distinct from (old.status in")).toBeGreaterThan(-1);
+    expect(writer.indexOf("is not distinct from (old.status in")).toBeLessThan(lock);
+    expect(writer.lastIndexOf("if not v_changed then return null; end if;")).toBeLessThan(lock);
+  });
+
   it("records the expected figure and serial cutoff inside the count insert, including old callers", () => {
     const count = fn("cutoff_ingredient_count");
     expect(count.indexOf("lock_ingredient_movements")).toBeLessThan(count.indexOf("select * into v_last"));
