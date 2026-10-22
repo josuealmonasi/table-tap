@@ -1,3 +1,4 @@
+import { auditedAdminAction, type AdminAuditContext } from "@/lib/admin-audit";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -16,7 +17,7 @@ const MAX_OWNERS = 3;
 // (owner/manager/kitchen) of an existing restaurant.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function POST(req: NextRequest) {
+async function createUser(req: NextRequest, audit: AdminAuditContext) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
 
@@ -78,6 +79,7 @@ export async function POST(req: NextRequest) {
     return await apiError("apiErr.loginCreate", 400);
   }
 
+  audit.targetId = created.user.id;
   try {
     if (role === "admin") {
       const { error } = await db
@@ -123,7 +125,7 @@ export async function POST(req: NextRequest) {
 // PATCH /api/admin/users — a platform admin edits a login: name, email, a
 // password reset (sets a NEW one; the old is never readable), and — for team
 // members — the role. Founding-owner and admin roles can't be changed here.
-export async function PATCH(req: NextRequest) {
+async function updateUser(req: NextRequest) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
 
@@ -222,7 +224,7 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE /api/admin/users — a platform admin removes any login. Founding
 // owners must have their restaurant deleted (or transferred) first.
-export async function DELETE(req: NextRequest) {
+async function deleteUser(req: NextRequest) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
 
@@ -264,3 +266,7 @@ export async function DELETE(req: NextRequest) {
     await logUserChange(member.restaurant_id, admin.email, "deleted", member.role, member.email);
   return NextResponse.json({ ok: true });
 }
+
+export const POST = auditedAdminAction("login.create", createUser);
+export const PATCH = auditedAdminAction("login.update", updateUser);
+export const DELETE = auditedAdminAction("login.delete", deleteUser);

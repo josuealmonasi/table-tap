@@ -29,7 +29,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   from: (table: string) => {
     let deleting = false;
     const q = {
-      select: () => q, eq: () => q, delete: () => { deleting = true; return q; },
+      select: () => q, eq: () => q, insert: () => q, delete: () => { deleting = true; return q; },
       maybeSingle: async () => ({ data: table === "restaurant_billing_operations" ? { state: record } : restaurantGone ? null : restaurant, error: null }),
       then: (resolve: (v: unknown) => unknown) => {
         if (deleting) { remove(); if (!deletionFailure) restaurantGone = true; }
@@ -46,7 +46,14 @@ const run = () => DELETE(new NextRequest("https://tabletap.test/api/admin/restau
 beforeEach(() => {
   vi.resetAllMocks(); active = true; open = false; record = {}; deletionFailure = false; restaurantGone = false;
   restaurant = { stripe_customer_id: "cus_1", stripe_subscription_id: "sub_1" };
-  rpc.mockImplementation(async (fn: string, args: { p_state: object }) => {
+  rpc.mockImplementation(async (fn: string, args: { p_state: object; p_check_only?: boolean }) => {
+    if (fn === "admin_delete_restaurant") {
+      if (args.p_check_only) return { data: { outcome: restaurantGone ? "gone" : "ready" }, error: null };
+      remove();
+      if (deletionFailure) return { data: null, error: { message: "database unavailable" } };
+      restaurantGone = true;
+      return { data: { outcome: "deleted" }, error: null };
+    }
     if (fn === "record_restaurant_billing") {
       const next = { ...record, ...args.p_state } as Record<string, unknown>;
       for (const key of ["customers", "sessions", "subscriptions"]) {
@@ -94,7 +101,7 @@ it("retries a failed restaurant deletion without charging or canceling again", a
   expect((await run()).status).toBe(200); expect(cancel).toHaveBeenCalledTimes(1);
 });
 it("refuses deletion while a recent request owns the billing lock", async () => {
-  rpc.mockResolvedValue({ data: false, error: null });
+  rpc.mockImplementation(async (fn: string) => ({ data: fn === "admin_delete_restaurant" ? { outcome: "ready" } : false, error: null }));
   expect((await run()).status).toBe(409);
   expect(retrieve).not.toHaveBeenCalled(); expect(remove).not.toHaveBeenCalled();
 });
@@ -105,4 +112,14 @@ it("confirms a completed deletion again using the retained Stripe IDs", async ()
   expect((await run()).status).toBe(200);
   expect(cancel).toHaveBeenCalledTimes(1); expect(deleteUser).toHaveBeenCalledTimes(1);
   expect(record.subscriptions).toEqual(["sub_1"]);
+});
+it("retries staff cleanup from the retained IDs after the restaurant has gone", async () => {
+  deleteUser.mockResolvedValueOnce({ error: { message: "Auth unavailable" } });
+  expect((await run()).status).toBe(502);
+  expect(restaurantGone).toBe(true);
+  expect(record.staff_ids).toEqual(["u1"]);
+  expect((await run()).status).toBe(200);
+  expect(deleteUser).toHaveBeenLastCalledWith("u1");
+  expect(record).toMatchObject({ deleted: true, staff_ids: [] });
+  expect(cancel).toHaveBeenCalledTimes(1);
 });

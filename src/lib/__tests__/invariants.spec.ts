@@ -666,7 +666,7 @@ describe("the checks know about every route and screen", () => {
     fs.readFileSync(path.join("scripts", file), "utf8");
 
   it("has an api case for every API route", () => {
-    const cases = listed("api-cases.mjs");
+    const cases = listed("api-cases.mjs") + listed("api-admin-cases.mjs");
     const routes = walkAll("src/app/api")
       .filter(f => f.endsWith("route.ts"))
       .map(f => f.replace(/^src\/app/, "").replace(/\/route\.ts$/, ""));

@@ -16,6 +16,10 @@ us, and what now catches each one.
 |---|---|
 | Price breaks are whole quantities, priced by division, and the database refuses others (J4) | A tier of 1e-20 units froze the server |
 | A print job closes only on the printer's success code (J9) | A printer out of paper dropped tickets unprinted |
+
+| Restaurant deletion and refund obligations share the money lock (S17 J1) | Deleting a restaurant cascaded away money still owed and completed accounting records |
+| Settled books survive restaurant deletion without blocking it (S17b) | Completed receipts blocked deletion forever; removing that guard alone would erase the books |
+| Sensitive admin actions and platform history survive the same deletion (S17 J15) | Password resets, admin logins, deletions and plan moves left no durable platform trail |
 | A statement email is capped per account and per restaurant, never on the recipient (G5) | One account code could mail the same stranger ~400 times a day |
 | Coupon entitlements and card receipts agree before money moves (S5 E4) | A MX$90 discounted charge recorded MX$100 and could later reserve a MX$100 return |
 | A coupon use belongs to one checkout attempt (S5 E7) | An old expiry released the newer payment page's reservation on the same order |
@@ -3020,3 +3024,84 @@ not), and every confirmation closed the job, so a printer out of paper dropped
 the order unprinted. Only a success closes it now, and a failed write answers
 500 so the printer confirms again. `pnpm api` confirms with `code=520` and
 expects the job still open.
+
+
+## S17 J1 — deletion and money owed
+
+Deleting a restaurant cascaded through its refunds and receipts. The admin
+route and the money ledger had to agree, and nothing checked that they did.
+`admin_delete_restaurant` takes the restaurant money lock and locks its parent
+row before checking pending refunds, duplicate-payment returns, unconfirmed
+provider work. A check runs before billing or login changes, and the final
+deletion checks again in its own transaction. The restaurant stays usable so
+its team can finish returning money. Completed refunds and receipts are retained
+separately under S17b below, so those records no longer prevent deletion.
+
+`admin-safety.spec.ts` reproduces each refusal and the intervening-refund race;
+`admin-safety-schema.spec.ts` checks locks, retained record classes and grants.
+`billing-delete.spec.ts` preserves Stripe cancellation/retry coverage, including
+retained staff IDs for cleanup after a failed Auth deletion. The API case in
+`api-admin-cases.mjs` plants a disposable restaurant with a pending cash refund,
+asserts refusal, the surviving refund and the audit row in the `effect` hook
+(which runs for 409 too), finishes the refund, then retries deletion and compares
+every retained accounting row with its pre-deletion contents. It removes its
+live, retained and billing fixtures; real audit attempts stay in platform history
+by design. The case is written here for Claude to run, not run in this worktree.
+
+The terms now explain that closing does not cancel refunds or erase books.
+Version 2026-10-21 stays: this clarifies accounting retention already stated in
+the privacy notice, without adding a data category, purpose or retention term.
+Both legal PDFs are regenerated from their JSON sources.
+
+## S17b — completed books and deletion must agree
+
+S17 kept books by refusing every restaurant that had them. The owner's rule is
+to block only while money is owed: the deletion and the retained accounting copy
+must agree, rather than tying a closed business to a live account forever.
+`restaurant_accounting_records` stores one row per source record under the
+restaurant ID, without a foreign key to the deleted restaurant. The locked RPC
+copies orders, payments and allocations, refunds and their attempts/allocations,
+adjustments, duplicate-payment returns, fees, cash records, customer accounts,
+purchases, checkout provenance, activity and visits/admission decisions before
+the cascade. Existing source rows are locked while copied so an update cannot
+change a receipt afterward. A copy or cascade failure rolls everything back;
+the route does not remove staff logins on that failure. No menu, staff directory
+or restaurant profile is copied. Customer-account email (kept only while open)
+and the statement's access code are omitted. Original financial IDs, amounts,
+currencies, dates and actors remain in the retained records.
+
+The table has RLS and no client policies or grants. Service can read and delete
+for the privacy notice's existing fiscal/legal retention period or disposable
+fixture cleanup; only the guarded definer inserts. There is no new indefinite
+retention promise or automatic expiry job. `admin-safety-schema.spec.ts` failed
+before the fix and now checks the copy, locks, grants and removal of the
+completed-history refusal. `admin-safety.spec.ts` checks a failed final copy
+leaves logins intact and records uncertainty. The API case above verifies the
+pending-to-complete transition and exact retained receipt contents; Claude must
+run it. J15's append-only audit stream is unchanged.
+
+The terms now say deletion proceeds after pending money is resolved while a
+separate accounting copy remains. Version 2026-10-21 stays because the privacy
+notice already retains orders and amounts after account closure; no new data
+category, purpose or period is introduced. Both PDFs are regenerated.
+
+## S17 J15 — platform history and sensitive changes
+
+Restaurant activity logs once disappeared with their restaurant, and founding-owner
+password resets and platform admin changes were not written there at all.
+Every admin login create/update/delete, restaurant delete and plan move now
+appends a durable start before mutation and a result afterward, sharing one
+attempt ID. Facts are explicitly allowlisted: identity, role, plan, profile name
+and password-set/reset flags, never passwords, request bodies or provider errors.
+If the start cannot be written, no action runs. A missing result remains an
+unresolved start and the caller is told to inspect before retrying.
+
+`platform_admin_audit` has no actor/target foreign keys, RLS with no client
+policies, revoked anon/authenticated grants and service-only SELECT/INSERT.
+A trigger rejects UPDATE, DELETE and TRUNCATE. Only a platform admin can read
+`GET /api/admin/audit`; it sends uncached pages ordered by timestamp and ID.
+`admin-safety.spec.ts` covers real handlers, successful and refused plan moves,
+founding-owner resets, platform admin creation/deletion and both audit failure
+windows. `admin-audit-read.spec.ts` covers authorization, keyset pagination,
+invalid cursors and read failures. `admin-safety-schema.spec.ts` covers the
+append-only stream's lack of cascading identities and mutation privileges.

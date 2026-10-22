@@ -54,7 +54,7 @@ console.log("The key on every diner's phone");
 for (const table of [
   "kitchen_tickets", "kitchen_requests", "orders", "table_sessions", "write_off_requests", "discount_requests",
   "coupons", "coupon_redemptions", "staff", "user_logs", "profiles",
-  "platform_admins", "rate_limits", "restaurant_tables",
+  "platform_admins", "platform_admin_audit", "restaurant_accounting_records", "rate_limits", "restaurant_tables",
   "icon_groups", "icon_group_items",
   "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions",
   // A customer's name and what they owe: read only through the routes.

@@ -83,7 +83,7 @@ export async function checkKitchenMoney({ admin, kitchen, home, ok, bad, base })
     for (const name of ["payment_allocations", "order_adjustments", "refund_operations", "refund_allocations", "refund_attempts", "refund_due_attempts",
       "cash_shifts", "cash_movements", "terminal_deposits", "platform_fees", "offline_sale_queue",
       "customer_accounts", "account_checkouts", "ingredients", "ingredient_prices", "recipe_lines",
-      "waste_entries", "ingredient_purchases", "ingredient_counts", "restaurant_billing_operations", "restaurant_subscription_prices", "print_jobs",
+      "waste_entries", "ingredient_purchases", "ingredient_counts", "restaurant_billing_operations", "restaurant_subscription_prices", "platform_admin_audit", "restaurant_accounting_records", "print_jobs",
       "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions"]) {
       const seen = await kitchen.from(name).select("*").limit(1);
       if (seen.error?.code === "42501") ok(`kitchen is denied ${name}`);
