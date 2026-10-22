@@ -16,7 +16,7 @@ export function importActions(ctx: EditorContext) {
 
   /** Writes the rows into a menu; returns how many products were added. */
   async function importRows(menuId: string, rows: ImportRow[]): Promise<number> {
-    if (!ctx.ready()) return 0;
+    if (!(await ctx.ready())) return 0;
     if (rows.length === 0) return 0;
     const inMenu = sections.filter(s => s.menu_id === menuId);
     const missing = sectionsOf(rows).filter(name => !inMenu.some(s => sameSection(s.name, name)));

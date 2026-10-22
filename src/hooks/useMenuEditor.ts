@@ -37,10 +37,15 @@ export function useMenuEditor(restaurantId: string) {
 
   const ready = useRef(false);
   const loadId = useRef(0);
-  const reload = useCallback(async () => {
+  // The read in flight. The menu stays on screen while it runs, so a click
+  // there waits for it instead of being dropped without a word.
+  const settled = useRef<Promise<void>>(Promise.resolve());
+  const load = useCallback(async () => {
     const requestId = ++loadId.current;
+    // Edits wait for the whole menu (J17), but the menu already on screen
+    // stays there while it reloads after a save. Swapping it for skeletons
+    // blanked the editor after every edit and threw the owner back to the top.
     ready.current = false;
-    setLoading(true);
     let data: Awaited<ReturnType<typeof fetchMenuData>>;
     try {
       data = await fetchMenuData(supabase, restaurantId);
@@ -49,6 +54,7 @@ export function useMenuEditor(restaurantId: string) {
       // Left loading, so nothing can be edited: an editor holding part of the
       // menu would save that part over the whole.
       console.error(err);
+      setLoading(true);
       toast(t("menu.loadFailed"), "error");
       return;
     }
@@ -62,6 +68,21 @@ export function useMenuEditor(restaurantId: string) {
     setLoading(false);
   }, [restaurantId, supabase, toast, t]);
 
+  const reload = useCallback(() => {
+    const read = load();
+    settled.current = read.catch(() => {});
+    return read;
+  }, [load]);
+
+  /** True once the latest read holds the whole menu; false if it failed. */
+  const whenReady = useCallback(async () => {
+    // A save can start another read while this one finishes: wait for the last.
+    for (let seen = settled.current; ; seen = settled.current) {
+      await seen;
+      if (seen === settled.current) return ready.current;
+    }
+  }, []);
+
   const cancelReload = useCallback(() => {
     loadId.current++;
     ready.current = false;
@@ -73,7 +94,7 @@ export function useMenuEditor(restaurantId: string) {
   }, [reload, cancelReload]);
 
   const ctx = {
-    ready: () => ready.current,
+    ready: whenReady,
     supabase,
     restaurantId,
     toast,
@@ -87,7 +108,7 @@ export function useMenuEditor(restaurantId: string) {
     setProducts,
     setAddons,
     reload,
-    w: makeWriter({ supabase, toast, t, reload, ready: () => ready.current }),
+    w: makeWriter({ supabase, toast, t, reload, ready: whenReady }),
   };
 
   return {

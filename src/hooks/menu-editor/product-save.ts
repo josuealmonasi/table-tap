@@ -6,7 +6,7 @@ export async function saveProduct(
   id: string,
   input: Partial<ProductInput & { category_id: string | null }>,
 ): Promise<void> {
-  if (!ctx.ready()) throw new Error("Menu has not loaded");
+  if (!(await ctx.ready())) throw new Error("Menu has not loaded");
   const { stock, expectedStock, expectedEpoch, ...changes } = input;
   async function send(method: string, body: object): Promise<void> {
     let message = ctx.t("write.updateProduct");

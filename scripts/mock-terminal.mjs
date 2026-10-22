@@ -22,13 +22,19 @@ export async function seedTerminal(pg, rid) {
   );
   for (const [i, d] of days.entries()) {
     if (i === 2) continue; // never marked: it reads late
-    const expected = Math.round(Number(d.takings) * (1 - Number(d.fee_pct) / 100) * 100) / 100;
     const short = i === 1;
+    // Marked the way the screen marks it, so each deposit carries the signed
+    // manifest `pnpm money` reconciles. A direct insert had none, and every
+    // demo deposit read as unsigned. The bank's figure is set afterwards.
+    const { rows: [mark] } = await pg.query(
+      `select record_terminal_deposit_v1($1, $2, $3, 0, $4, 'demo-manager@tabletap.dev') as result`,
+      [rid, d.day, d.currency, short ? "Bank statement shows a chargeback" : null],
+    );
+    if (mark.result?.error) continue;
     await pg.query(
-      `insert into terminal_deposits (restaurant_id, sales_day, currency, expected, received, note, recorded_by)
-       values ($1, $2, $6, $3, $4, $5, 'demo-manager@tabletap.dev')`,
-      [rid, d.day, expected, short ? Math.round((expected - 12.4) * 100) / 100 : expected,
-        short ? "Bank statement shows a chargeback" : null, d.currency],
+      `update terminal_deposits set received = greatest(0, expected - $4)
+        where restaurant_id = $1 and sales_day = $2 and currency = $3`,
+      [rid, d.day, d.currency, short ? 12.4 : 0],
     );
   }
   await pg.query(

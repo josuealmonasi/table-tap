@@ -22,33 +22,39 @@ us, and what now catches each one.
 | A corte is empty only without financial activity, including returns (S12 I12) | A refund-only MX$100 cash day hid its negative drawer and print button |
 | Price breaks are whole quantities, priced by division, and the database refuses others (J4) | A tier of 1e-20 units froze the server |
 | A print job closes only on the printer's success code (J9) | A printer out of paper dropped tickets unprinted |
-
 | Restaurant deletion and refund obligations share the money lock (S17 J1) | Deleting a restaurant cascaded away money still owed and completed accounting records |
 | Settled books survive restaurant deletion without blocking it (S17b) | Completed receipts blocked deletion forever; removing that guard alone would erase the books |
 | Sensitive admin actions and platform history survive the same deletion (S17 J15) | Password resets, admin logins, deletions and plan moves left no durable platform trail |
 | A promotion's terms and components commit and read together (S14 J2) | Separate writes and reads exposed a new price with old or missing dishes |
 | Frozen offers only switch off, through routes and direct writes (S14 J16) | A manager could edit or resume promotions and coupons on a frozen restaurant |
 | A menu copy keeps settings and publishes only after every row succeeds (S14 J14) | A partial, active copy lost discounts, schedules, dietary tags and preparation settings |
-
 | A printer fetch and confirmation name the same delivery generation (S16 J10) | A delayed GET fetched the next ticket, and an old confirmation closed a reprint |
-
 | A terminal deposit names its receipt cutoff (S10 I3) | MX$50 arriving between the MX$100 read and insert was missing from both expected and late money |
 | A terminal return belongs to one signed manifest or the next unsigned deposit (S10 I4) | A MX$100 return after Tuesday's sign-off reduced neither Tuesday nor Wednesday |
 | A terminal day is read whole, including older recovery (S10 I6) | A 15:00 cutoff counted only MX$100 of the oldest day's MX$200 and hid a twenty-day recovery |
 | A terminal return retains its original payment day (S10 I7) | A same-day MX$100 typed void left an expected −MX$3.50 at a 3.5% fee |
-
 | Product edits and the opening stock count are separate (S13 J5) | Saving a description restored portions sold while the editor was open |
 | A physical recount and older reservation releases use different generations (S13 J6) | Cancelling two held portions after a count of five raised it to seven |
 | Legacy stock returns require a deduction record (S13 J7) | An old untracked sale returned portions only counted later |
 | Editing and duplication wait for every menu page (S13 J17) | A thousand-row cap or read failure silently removed dishes and extras from the editor |
+| A reload after a save keeps the menu on screen, and an edit made meanwhile waits for it (J17 follow-up) | Every save swapped the editor for skeletons: 289 buttons fell to 7 and the page jumped from 2,388 px to 172 px |
 | Waiter orders and checkout use the same alert preference (S13 J18) | Turning off stock alerts still left waiter orders filling the bell |
-
 | A reward handover names the displayed round, step and saved retry key (S15 J8) | Two identical requests closed one round and spent the same step in the next |
+| Browser deadlines include context teardown and the whole run (S8b) | A dead worker left layout waiting on an unbounded browser call for over three hours |
+| Restart retries and their evidence agree (S8b) | Concurrency three overloaded next dev; dropped visits needed bounded recovery without hiding audit failures |
+| A server that hangs up or sends nothing in 60 s is retried once; a page fault never is (S8b follow-up) | On an 8 GB Mac in swap, empty responses and navigation timeouts failed whole runs with retries=0 |
+| Browser admission and measured server memory agree (S8b) | Three workers repeatedly crossed the development server's memory threshold with no peak RSS in the summary |
+| Browser navigation and the visit verdict agree (S8) | Dialog visits whose navigation failed silently vanished from coverage |
+| Typing errors and failed checks agree (S8) | A failed page-field check became an empty fault list and printed ok |
+| Probe deadlines and context lifetimes agree (S8) | A timeout printed a skip while its old probe kept clicking into the next one |
+| Planned browser visits and reported verdicts agree (S8) | A partial sweep could finish green without accounting for every visit |
+| Restart reports and the target port agree (S8) | Another checkout's Next worker restart was attributed to the server being checked |
 | A statement email is capped per account and per restaurant, never on the recipient (G5) | One account code could mail the same stranger ~400 times a day |
 | Coupon entitlements and card receipts agree before money moves (S5 E4) | A MX$90 discounted charge recorded MX$100 and could later reserve a MX$100 return |
 | A coupon use belongs to one checkout attempt (S5 E7) | An old expiry released the newer payment page's reservation on the same order |
 | Financial scope and Stripe retries agree independently of fees (S5 E8) | Bills and fee-free split shares could open two payable pages |
 | Closing and changing a withdrawal share the money lock (S9 I1) | A withdrawal inserted or deleted after its shift closed rewrote the reviewed drawer |
+| The money gate independently reconciles signed shifts and terminal deposits (S19) | A correct receipt ledger hid a wrong drawer sign-off or deposit snapshot |
 | A drawer's amounts and labels keep its opening currency (S9 I2) | Changing the menu currency recalculated and relabelled an earlier shift |
 | Shift review follows closes and late receipts, as well as openings (S9 I13) | Overnight closes and next-day corrections disappeared from the handover |
 | Fee caps and remaining food principal agree (S5 E9) | Existing gratuities raised the ten-percent cap on bill and split fees |
@@ -3436,6 +3442,27 @@ checks the write and copy guard while loading.
 `menu-load.spec.ts` also keeps an older read from unlocking a failed reload,
 and refuses the extras replacement after that failure.
 
+## The menu editor blanked after every save (J17 follow-up)
+
+J17 marked the editor unready during a reload, which was right, but it also
+put the whole editor back into its loading state. Every save reloads, so after
+each edit the menu was replaced by three skeleton sections until the read came
+back. The page shrank under the owner and threw them back to the top: in a
+browser probe the save of the lowest dish dropped the page from 289 buttons to
+7 and the scroll from 2,388 px to 172 px. `pnpm dialogs` lost the same moment:
+after the first dialog that saved, every later button was gone, and the menu's
+55 dish dialogs went unvisited while the visit still passed.
+
+A reload now keeps the menu on screen. Keeping it there made a second
+problem visible: every writer refused with a bare `if (!ready()) return;`, so a
+switch flipped during the read was dropped without a word. Every writer now
+awaits `ready()`, which resolves when the newest read finishes. It is true only
+when that read holds the whole menu, so the edit applies a moment later, or not
+at all if the read failed. A failed reload still shows the loading state, so a
+stale menu never looks editable. `menu-load.spec.ts` holds reads open and
+checks all three: the edit waits, it is never sent after a failed read, and it
+waits for the newest read rather than the one it found running.
+
 ## S13 J18 — the manager decides when the bell warns
 
 A waiter's order now reads and checks the same `low_stock_alerts_enabled`
@@ -3506,3 +3533,126 @@ the S11 schema block first, then run the complete gates, including `dialogs`.
 Look at Bills and its confirmation in both languages at 360/390px, 820px and
 1280px: a USD obligation beside an MXN menu, an unverified older amount, and
 a customer-complete refund whose fee is still pending.
+
+## S8: a failed navigation is a failed visit
+
+The dialogs runner and its coverage count had to agree. A navigation exception
+used to `continue`, so the page vanished without a red verdict. Both browser
+sweeps now run explicit visits through `browser-jobs.mjs`; navigation and route
+errors fail that visit. `browser-gate-regressions.spec.ts` prevents the silent
+skip, and `browser-ready.spec.ts` exercises failed navigation and redirects.
+
+## S8: typing errors never become an empty audit
+
+The typing probe and the reported result had to agree. Page typing exceptions
+used to become `[]`, which printed ok. Field failures now produce faults;
+uncaught typing or evaluation errors fail the whole visit. The regression test
+holds this boundary; `dialog-probe.spec.ts` exercises navigation and typing
+exceptions directly, and the pool's throwing-visit test checks failure delivery
+at concurrency one and three.
+
+## S8: a timed-out probe stops its own browser
+
+The deadline and the probe's lifetime had to agree. `Promise.race` formerly
+returned a timeout marker without stopping the losing probe or counting a
+failure. A probe deadline now closes the visit's context before returning a
+failure. The worker never resumes that visit. `browser-jobs.spec.ts` plants a
+late click and proves it cannot fire at concurrency one or three. Diner cleanup
+stops pages before removing that context's own member cookie, and its failure
+also fails the visit (`browser-fixtures.spec.ts`). Production never removes a
+member row.
+
+## S8: every planned browser visit reports
+
+The role/path/viewport manifest and completed work had to agree. Both sweeps
+now record passed, failed and explicitly skipped visits, reject a missing
+verdict, and report planned/completed counts. The pool self-tests inject a throw,
+a hang and real overlapping DOM geometry at concurrency one and three; none can
+make a run green. The real planted-overlap control runs before either sweep.
+Readiness waits for the expected route and content, pending data, skeletons,
+fonts, images and stable geometry using Node-side polling under production CSP.
+`browser-ready.spec.ts` verifies unresolved pages cannot be audited early.
+
+## S8: a worker restart belongs to the checked port
+
+The restart warning and `DEV_URL` had to agree. A machine-wide `pgrep` counted
+all Next workers, so another worktree could explain away a real failure.
+`watchDevWorker()` now compares only listener PIDs on the checked localhost
+port, including a lost listener. `browser-jobs.spec.ts` checks the exact port
+query and excludes remote sites.
+
+
+## S8b: a timeout cannot wait forever for cleanup
+
+The deadline and the context lifetime had to agree. A visit deadline called
+`close()` with no deadline of its own; normal close, the planted-overlap control,
+readiness samples and final browser shutdown could also wait forever. Each now
+has a bounded wait. A 90-minute whole-script watchdog fails loudly even during
+setup or final fingerprints. The pool also fails every unreported visit and
+cancels active contexts when its watchdog expires. Failed context cleanup stops
+admission rather than leaking an old page into later jobs.
+`browser-deadlines.spec.ts` reproduces the old hanging close at concurrency one
+and three, and covers never-settling context/page creation, audit, late contexts,
+missing jobs and both watchdogs. `browser-ready.spec.ts` holds a page evaluation
+forever and requires readiness to fail within its deadline.
+
+## S8b: a restart is evidence for one retry, never for an audit pass
+
+A connection failure and the target server's availability had to agree.
+Development pools now check DEV_URL's port before admitting work, pause all
+workers behind a shared recovery wait of at most 90 seconds, and retry a
+connection-level failure once in a new context. A not-ready outcome qualifies
+only when the monitor saw an outage or listener PID change during that visit.
+The old unconditional navigation retry is removed so a visit cannot secretly
+retry more than once. Audit faults already printed, redirects, cleanup failures
+and a failed second attempt stay red. Every retry is printed immediately and
+retained in the visit log. Production does not use this recovery policy.
+`browser-restarts.spec.ts` checks connection retry delivery at concurrency one,
+two and three, unavailable servers, readiness evidence, and preserving faults
+found before a later connection failure. Claude must still run the real sweeps;
+these tests use fake pages and server samples without opening a browser.
+
+## S8b: concurrency needs a memory measurement
+
+The worker count and the server's capacity had to agree. The default is now two,
+with one through four still accepted. Both development sweeps sample only the
+listener PIDs on DEV_URL's port once per second and report the peak per-process
+RSS and its PID, including across worker restarts. Process lookup itself has a
+deadline, so measurement cannot hang the run. Missing or remote listener data
+prints unavailable. `browser-restarts.spec.ts` checks the exact port, rejects
+unrelated process rows and preserves the peak after a lower later reading.
+Actual time and memory at one, two and three workers remain Claude's live proof.
+## S19 — the ledger, the signed drawer and the bank snapshot must agree
+
+The money gate previously compared payments with orders but never checked
+`cash_shifts.expected_cash` or `terminal_deposits.expected`. S9 and S10 could
+regress while the ledger still passed. `money-drawer.mjs` now reads every
+source through the gate's ordered pagination, independently rebuilds each
+closed shift at its close, and checks its signed expected amount and counted
+difference. Cash receipts recorded after the close, later refunds and later
+withdrawals cannot rewrite that sign-off. Imported return logs count once.
+
+Terminal snapshots are rebuilt from their receipt and return manifests using
+the saved fee rate: a same-day void reverses its fee, a later refund does not.
+Duplicate membership, omitted due returns and wrong totals name the offending
+row. The terminal ledger projection is also compared with raw receipts and
+allocations, so a missing late arrival fails even if the old deposit adds up.
+Unnamed receipts on signed days are printed individually as late adjustments;
+pending returns remain visible until a later deposit consumes them. Membership
+is the cutoff: a transaction can be dated before it waited for the money lock.
+
+The era is #527's merge time, `2026-10-22T00:44:04Z`. Every run prints how many
+older shifts and deposits it skips, plus checked counts, including zero.
+Modern rows without snapshot evidence fail. All reads, including the terminal
+projection RPC, are paginated; any read error fails the check. No writes or
+snapshot-calculation RPCs are used, including by `money:prod`.
+
+`money-drawer.spec.ts`, `money-drawer-history.spec.ts` and
+`money-terminal-returns.spec.ts` cover clean reconciliation, a MX$10 sign-off
+error, duplicate receipts/returns, missing late money, partial-page failures,
+legacy skips, later activity and return fees. Claude runs the live gates.
+The mock seed has a closed and an open shift, but its direct deposit inserts
+have no S10 manifests. Before expecting a clean modern deposit run, seed one
+unsigned sales day through `record_terminal_deposit_v1` after its receipts
+exist; older illustrative deposits need genuine pre-era dates. This task does
+not change the seed or schema.

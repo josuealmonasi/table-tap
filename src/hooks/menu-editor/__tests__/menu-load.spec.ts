@@ -60,6 +60,54 @@ it("J17: an older read cannot unlock editing after the latest read fails", async
   await expect(editor.updateProduct("dish", { description: "New" })).rejects.toThrow();
   expect(state.from).not.toHaveBeenCalled();
 });
+const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+it("a reload after a save keeps the menu on screen, and an edit made meanwhile waits for it", async () => {
+  // Every save reloads. Showing skeletons for each one blanked the editor
+  // after every edit, and the shorter page threw the owner back to the top.
+  // With the menu left on screen, a click during the read must not vanish.
+  const editor = Editor();
+  await editor.reload();
+  expect(Editor().loading).toBe(false);
+  let finish!: (data: MenuData) => void;
+  state.read.mockImplementationOnce(() => new Promise<MenuData>(resolve => { finish = resolve; }));
+  const again = editor.reload();
+  expect(Editor().loading).toBe(false);
+  const edit = editor.setAvailability("dish", false);
+  await settle();
+  expect(state.sent).not.toHaveBeenCalled();
+  finish(menu);
+  await Promise.all([again, edit]);
+  expect(state.sent).toHaveBeenCalledTimes(1);
+  expect(Editor().loading).toBe(false);
+});
+it("J17: an edit waiting on a read that fails is never sent", async () => {
+  const editor = Editor();
+  await editor.reload();
+  let fail!: (error: Error) => void;
+  state.read.mockImplementationOnce(() => new Promise<MenuData>((_, reject) => { fail = reject; }));
+  const again = editor.reload();
+  const edit = editor.setAvailability("dish", false);
+  fail(new Error("read failed"));
+  await Promise.all([again, edit]);
+  expect(state.sent).not.toHaveBeenCalled();
+  expect(Editor().loading).toBe(true);
+});
+it("J17: an edit waits for the newest read, not the one it found running", async () => {
+  const editor = Editor();
+  await editor.reload();
+  const finish: ((data: MenuData) => void)[] = [];
+  state.read.mockImplementation(() => new Promise<MenuData>(resolve => { finish.push(resolve); }));
+  const first = editor.reload();
+  const edit = editor.setAvailability("dish", false);
+  const second = editor.reload();
+  finish[0](menu);
+  await first;
+  await settle();
+  expect(state.sent).not.toHaveBeenCalled();
+  finish[1](menu);
+  await Promise.all([second, edit]);
+  expect(state.sent).toHaveBeenCalledTimes(1);
+});
 it("J17: menu names and availability cannot write before the full read", async () => {
   const editor = Editor();
   await editor.renameMenu("menu", "New name");

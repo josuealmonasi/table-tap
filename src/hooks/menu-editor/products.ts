@@ -31,7 +31,7 @@ export function productActions(ctx: EditorContext) {
    * so nobody serves the wrong one while it is being edited.
    */
   async function duplicateProduct(id: string): Promise<string | undefined> {
-    if (!ctx.ready()) return undefined;
+    if (!(await ctx.ready())) return undefined;
     const source = products.find(p => p.id === id);
     if (!source) return undefined;
 

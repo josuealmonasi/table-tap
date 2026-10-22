@@ -11,6 +11,7 @@
 // ============================================================================
 import { checkAllocations } from "./money-allocations.mjs";
 import { checkStockReturns } from "./money-stock.mjs";
+import { checkDrawer } from "./money-drawer.mjs";
 import { createClient } from "@supabase/supabase-js";
 import { join } from "node:path";
 
@@ -401,6 +402,7 @@ const REFUND_ERA = "2026-09-22T00:00:00Z";
 }
 
 await checkStockReturns(db, { ok, bad });
+await checkDrawer(db, all, { ok, bad });
 
 console.log(
   failed === 0
