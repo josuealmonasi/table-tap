@@ -28,7 +28,9 @@ it("K22/K23: Auth codes translate while recovery hides account existence", () =>
     }
   }
   expect(authErrorKey({ code: "user_not_found" }, true)).toBeNull();
-  expect(authErrorKey({ status: 503 }, true)).toBe("auth.unavailable");
+  // Recovery answers every provider result alike, so no address is revealed.
+  expect(authErrorKey({ status: 503 }, true)).toBeNull();
+  expect(authErrorKey({ status: 429, code: "over_email_send_rate_limit" }, true)).toBeNull();
 });
 it("K15: coupon times round-trip in the restaurant zone, independent of the device", () => {
   expect(zonedTimestamp("2026-10-22T12:00", "America/Mexico_City")).toBe("2026-10-22T12:00:00-06:00");

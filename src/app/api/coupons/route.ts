@@ -141,14 +141,28 @@ export async function PATCH(req: NextRequest) {
     if (frozen) return frozen;
   }
 
+  // The caller's own coupon, read first. An update scoped to the restaurant
+  // touches no row for an id from elsewhere and returns no error, which this
+  // route answered as saved.
+  const { data: saved, error: readError } = await createAdminClient()
+    .from("coupons")
+    .select("id, code")
+    .eq("id", id)
+    .eq("restaurant_id", actor.restaurantId)
+    .maybeSingle();
+  if (readError) return await apiError("apiErr.promoUpdate", 500);
+  if (!saved) return await apiError("apiErr.couponNotFound", 404);
+
   // Pausing is a single-field update and skips the rest of the validation.
   if (typeof body.active === "boolean" && Object.keys(body).length === 2) {
-    const { error } = await createAdminClient()
+    const { data: paused, error } = await createAdminClient()
       .from("coupons")
       .update({ active: body.active })
       .eq("id", id)
-      .eq("restaurant_id", actor.restaurantId);
+      .eq("restaurant_id", actor.restaurantId)
+      .select("id");
     if (error) return await apiError("apiErr.promoUpdate", 500);
+    if (!paused?.length) return await apiError("apiErr.couponNotFound", 404);
     await logEvent({
       restaurantId: actor.restaurantId,
       actor: actor.email,
@@ -161,8 +175,13 @@ export async function PATCH(req: NextRequest) {
 
   const fields = readFields(body);
   if ("key" in fields) return await apiError(fields.key);
+  // A printed code cannot change: the update never saved one, and answered
+  // ok while the old code stayed. Typed differently is still the same code.
+  if (body.code !== undefined && normalizeCoupon(String(body.code)) !== normalizeCoupon(saved.code)) {
+    return await apiError("coupons.codeFixed", 400);
+  }
 
-  const { error } = await createAdminClient()
+  const { data: updated, error } = await createAdminClient()
     .from("coupons")
     .update({
       kind: fields.kind,
@@ -176,8 +195,10 @@ export async function PATCH(req: NextRequest) {
     })
     .eq("id", id)
     // Scoped to the caller's restaurant so an id from elsewhere can't be edited.
-    .eq("restaurant_id", actor.restaurantId);
+    .eq("restaurant_id", actor.restaurantId)
+    .select("id");
   if (error) return await apiError("apiErr.promoUpdate", 500);
+  if (!updated?.length) return await apiError("apiErr.couponNotFound", 404);
   await logEvent({
     restaurantId: actor.restaurantId,
     actor: actor.email,
