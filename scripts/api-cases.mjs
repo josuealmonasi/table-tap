@@ -157,6 +157,80 @@ export function cases(fx) {
         if (item.description !== `${MARK} description`) return "the description was not saved";
         return true;
       } },
+    // S23 K11: a dish and its extras are one write (save_product_addons_v1).
+    // A failed link insert used to leave the dish with no extras at all.
+    ...(() => {
+      const made = [];
+      const extra = async (f, name) => {
+        const { data: dishRow, error: readError } = await f.admin.from("menu_items").select("menu_id").eq("id", f.dish.id).single();
+        if (readError) throw new Error(readError.message);
+        const { data, error } = await f.admin.from("menu_items").insert({ restaurant_id: r, menu_id: dishRow.menu_id,
+          name: `${MARK} S23 ${name}`, price: 5, is_addon: true, available: true, modifiers: [], discount_pct: 0 }).select("id, menu_id").single();
+        if (error) throw new Error(error.message);
+        made.push(data.id);
+        return data;
+      };
+      const links = async (f, id) => {
+        const { data, error } = await f.admin.from("item_addons").select("addon_id").eq("product_id", id);
+        if (error) throw new Error(error.message);
+        return data.map(l => l.addon_id).sort();
+      };
+      const cleanup = f => async () => {
+        const { error } = await f.admin.from("menu_items").delete().in("id", made.splice(0));
+        if (error) throw new Error(error.message);
+        await f.admin.from("menu_items").delete().eq("restaurant_id", r).like("name", `${MARK} S23 %`);
+      };
+      const dishWith = async (f, addon) => {
+        const { data, error } = await f.admin.from("menu_items").insert({ restaurant_id: r, menu_id: addon.menu_id,
+          name: `${MARK} S23 dish`, price: 12, is_addon: false, available: true, modifiers: [], discount_pct: 0 }).select("id").single();
+        if (error) throw new Error(error.message);
+        made.push(data.id);
+        const { error: linkError } = await f.admin.from("item_addons").insert({ product_id: data.id, addon_id: addon.id, sort_order: 0 });
+        if (linkError) throw new Error(linkError.message);
+        return data.id;
+      };
+      return [
+        { name: "PATCH /api/products (S23: a new dish and its extra save together)", as: "manager", method: "PATCH", path: "/api/products",
+          arrange: async f => { f.s23 = { extra: await extra(f, "extra") }; return cleanup(f); },
+          body: f => ({ menuId: f.s23.extra.menu_id, categoryId: null, changes: { name: `${MARK} S23 new dish`, price: 12 }, addonIds: [f.s23.extra.id] }),
+          expect: [200],
+          check: async (data, f) => {
+            if (!data.id) return "no dish id came back";
+            made.push(data.id);
+            const { data: dish } = await f.admin.from("menu_items").select("name, price, menu_id").eq("id", data.id).single();
+            if (dish?.name !== `${MARK} S23 new dish` || Number(dish.price) !== 12) return `the dish saved as ${JSON.stringify(dish)}`;
+            const got = await links(f, data.id);
+            return (got.length === 1 && got[0] === f.s23.extra.id) || `extras ${JSON.stringify(got)}`;
+          } },
+        { name: "PATCH /api/products (S23: an edit replaces the extras in the same write)", as: "manager", method: "PATCH", path: "/api/products",
+          arrange: async f => {
+            const first = await extra(f, "first"), second = await extra(f, "second");
+            f.s23 = { first, second, dish: await dishWith(f, first) };
+            return cleanup(f);
+          },
+          body: f => ({ id: f.s23.dish, changes: { description: `${MARK} S23 described` }, addonIds: [f.s23.second.id] }), expect: [200],
+          check: async (_data, f) => {
+            const { data: dish } = await f.admin.from("menu_items").select("description").eq("id", f.s23.dish).single();
+            const got = await links(f, f.s23.dish);
+            return (dish?.description === `${MARK} S23 described` && got.length === 1 && got[0] === f.s23.second.id)
+              || `description ${dish?.description}, extras ${JSON.stringify(got)}`;
+          } },
+        { name: "PATCH /api/products (S23: a refused extra leaves the dish as it was)", as: "manager", method: "PATCH", path: "/api/products",
+          arrange: async f => {
+            const first = await extra(f, "kept");
+            f.s23 = { first, dish: await dishWith(f, first) };
+            return cleanup(f);
+          },
+          // The demo dish itself is not an extra: the write must refuse it and change nothing.
+          body: f => ({ id: f.s23.dish, changes: { description: `${MARK} S23 must not save` }, addonIds: [f.dish.id] }), expect: [503],
+          effect: async f => {
+            const { data: dish } = await f.admin.from("menu_items").select("description").eq("id", f.s23.dish).single();
+            const got = await links(f, f.s23.dish);
+            return (dish?.description !== `${MARK} S23 must not save` && got.length === 1 && got[0] === f.s23.first.id)
+              || `a refused write changed the dish: description ${dish?.description}, extras ${JSON.stringify(got)}`;
+          } },
+      ];
+    })(),
     { name: "POST /api/products (a recount requires the opening count)", as: "manager", method: "POST",
       path: "/api/products", body: { id: dish.id, stock: 5 }, expect: [400] },
     { name: "POST /api/pos/upload (new money is refused)", as: "cashier", method: "POST", path: "/api/pos/upload", body: {}, expect: [400] },

@@ -233,7 +233,7 @@ export default function MenuEditor({
                       links={editor.links}
                       currency={currency}
                       onRename={async () => false}
-                      onDelete={async () => {}}
+                      onDelete={async () => false}
                       onAddProduct={addProductWithAddons}
                       onUpdateProduct={updateProductWithAddons}
                       onDeleteProduct={editor.deleteProduct}

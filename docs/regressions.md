@@ -60,6 +60,14 @@ us, and what now catches each one.
 | A collection's food is sent to the cent (K cross-review 3) | 135.80 - 12.35 reached SQL as 123.45000000000002 and the MX$135.80 handed over was refused |
 | Every account refusal at the till is final, the currency one included (K cross-review 4) | Answered as held, the till resent the refused account sale even after the cashier chose cash |
 | A pay-later coupon's minimum is judged before the coupon, as checkout judges it (K cross-review 5) | MX$100 with a MX$10 coupon and a MX$100 minimum passed the route and was refused in SQL on MX$90 |
+| A write that failed never confirms, clears or closes its form (S23 K10, K13, K20, K25) | A refused section said "added" and closed; a rejected MX$90 combo lost its fields; table 7 renamed to 8 said done and stayed 7 |
+| A dish and its extras save in one transaction (S23 K11) | A failed extras insert after the delete left a MX$100 dish with none, even on a description edit |
+| A failed read keeps the last good view and offers a retry (S23 K12, K16) | A failed menu refetch dropped a 200-character draft; three coupons vanished behind "no coupons" |
+| An error lands in the dialog the person is looking at (S23 K17, K18, K22) | A refused write-off showed in a hidden dialog; split and approval errors and a rate-limited reset said nothing, or said sent |
+| A field takes no more than is kept (S23 K14, K21, K24) | An edited coupon code said updated and kept the old one; a 200-character kitchen note lost its last 50; a MX$12.34 tip was refused |
+| A coupon's hours are the restaurant's, with their offset (S23 K15) | 18:00Z showed to a Mexico City manager as 18:00, meaning 12:00 |
+| Unsaved price, recipe and deal edits ask before closing (S23 K19) | Escape or the backdrop dropped a MX$80 to MX$100 price change without a word |
+| The Spanish screen speaks Spanish, refusals and Stripe lines included (S23 K23) | Pricing refusals, sign-in errors and the service and tip lines on the payment page were English |
 | Browser admission and measured server memory agree (S8b) | Three workers repeatedly crossed the development server's memory threshold with no peak RSS in the summary |
 | Browser navigation and the visit verdict agree (S8) | Dialog visits whose navigation failed silently vanished from coverage |
 | Typing errors and failed checks agree (S8) | A failed page-field check became an empty fault list and printed ok |
@@ -3475,8 +3483,9 @@ problem visible: every writer refused with a bare `if (!ready()) return;`, so a
 switch flipped during the read was dropped without a word. Every writer now
 awaits `ready()`, which resolves when the newest read finishes. It is true only
 when that read holds the whole menu, so the edit applies a moment later, or not
-at all if the read failed. A failed reload still shows the loading state, so a
-stale menu never looks editable. `menu-load.spec.ts` holds reads open and
+at all if the read failed. A failed reload keeps the last complete menu and
+its drafts on screen but disables the editor, with a retry (S23), so a stale
+menu never looks editable. `menu-load.spec.ts` holds reads open and
 checks all three: the edit waits, it is never sent after a failed read, and it
 waits for the newest read rather than the one it found running.
 
@@ -3865,3 +3874,39 @@ and inspect these eight surfaces in both languages at 390 and 1280 pixels.
 Use a lost reply followed by close/reopen or an attempted edit, then a repeated
 send. Also check an order after ordering pauses, the diner's later additions,
 and an account retry after the account picker closes. There is no schema change.
+
+## A form says what happened (S23, audit K findings 10–25)
+
+Codex started this and was cut off by its usage limit; Claude finished it
+(typing, a missing return, docs, a field guard and the live api cases). The
+findings share seven shapes, each fixed everywhere it appeared:
+
+- **A failed write looked like success.** The menu writer's `run`,
+  `insertReturningId` and `move` now return whether they wrote, and callers
+  confirm, clear or close only on success. The same goes for the promotion
+  forms (now awaited), the table rename and the ratings sheet.
+- **Extras were replaced in two steps.** `save_product_addons_v1` saves a dish
+  and its extras together. `product-save-fields.spec.ts` keeps its field list
+  equal to the route's, and three api cases check a create, a replacement, and
+  a refused extra that leaves the dish untouched.
+- **A failed read showed "nothing".** The menu editor keeps the last complete
+  view and the open drafts, disables editing, and offers a retry. J17 still
+  holds: nothing saves from a partial menu. The coupon list keeps its last
+  rows and says it could not load.
+- **Errors landed out of sight.** The write-off refusal is shown in its own
+  dialog. Split and approval errors are shown. The password reset reports a
+  rate limit or an outage, and still never reveals whether an email has an
+  account.
+- **Fields took more than was kept.** A coupon's code is read-only once it
+  exists. The till's name and kitchen note share the route's limits and count
+  what is left. The custom tip takes cents.
+- **Times had no zone.** Coupon hours are shown and read in the restaurant's
+  zone and saved with their offset (`zoned-input.ts`). A daylight-saving
+  minute that is skipped or repeated is refused rather than guessed.
+- **English on the Spanish screen.** Promotion pricing refusals return keys,
+  sign-in errors map the provider's codes (`auth-error.ts`), and the service
+  and tip lines sent to Stripe are in the diner's language.
+
+Unsaved dish, extra, recipe and deal forms ask before closing through
+`useDirtyClose`, which a modal consults only when its form opts in.
+
