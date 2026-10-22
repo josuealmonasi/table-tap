@@ -16,6 +16,9 @@ us, and what now catches each one.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| The offered collection and the receipt share the same tip ceiling (S21 K1) | MX$10 plus MX$50 was offered as MX$60 but recorded as MX$20 |
+| A collection checks the reviewed balance under the money lock (S21 K1) | A waiter took MX$100 after a colleague left only MX$50 owed |
+| Every debt display and collection keeps the saved currency (S21 K2) | US$100 appeared as MX$100 after a menu currency change |
 | Corte account debt and adjustments use the report currency; unverified activity is called out (S12 I8) | MX$100 and US$10 appeared as US$110 owed |
 | Cost fees use the saved charge currency, net of returned fees (S12 I10) | An old MX$10 fee created a false 10% rate on US$100 cash |
 | Product revenue and contribution share final food revenue after every discount (S12 I11/J11) | MX$100 food discounted to MX$80 still showed MX$100 revenue and MX$60 contribution |
@@ -3506,3 +3509,58 @@ the S11 schema block first, then run the complete gates, including `dialogs`.
 Look at Bills and its confirmation in both languages at 360/390px, 820px and
 1280px: a USD obligation beside an MXN menu, an unverified older amount, and
 a customer-complete refund whose fee is still pending.
+
+## S21 K1 — the offered tip and the receipt agree
+
+The calculator uses `applyPayment`, the same ceiling as the server. MX$10 with
+MX$50 typed as a tip shows the MX$20 ceiling and refuses collection until the
+tip is corrected. A frozen MX$50 share with a ten-percent tip now offers
+MX$55, matching its card charge; its tip is shown on the split card too.
+`collection-currency.spec.tsx` reproduced the MX$50 button before this fix,
+and `diner-currency.spec.ts` verifies the MX$55 charge. The shared tip picker keeps an oversized entry open with an
+English or Spanish explanation. Success shows the amount and tip returned by
+the receipt, including on a retry, rather than repeating what was typed.
+`collection-currency.spec.tsx` and `part-payment-route.spec.ts` reproduced the
+MX$60 offer and the route's silent reduction before the fix.
+
+## S21 K1 — the reviewed balance and the locked balance agree
+
+The screen sends the owed amount it reviewed. `collect_table_reviewed_v1`
+checks it under the restaurant money lock, before attaching legacy sittings,
+adding a tip, inserting receipts or ending a split. A reviewed MX$100 now owing
+MX$50 answers 409 with the new balance and a request to check the money and
+return change. Nothing is collected. A lost response returns the saved receipt
+before checking the debt its own collection changed. Full table collection uses
+the same writer without a plan gate. Closing orders checks live coverage too,
+so a new round cannot be closed with yesterday's receipt.
+
+`part-payment-route.spec.ts` covers the refusal and saved response;
+`collection-reviewed-schema.spec.ts` guards lock order, scope, rollback and
+service-only grants. `scripts/api-collection-refusals.mjs` judges both stale
+balance and excessive tip refusals by unchanged receipts, allocations and
+orders. It is written for Claude's isolated release run, not run here.
+
+## S21 K2 — the debt and every currency label agree
+
+`collection-currency.spec.tsx` reproduced a USD debt on an MXN menu, and
+`accounts-server.spec.tsx` reproduced the missing currency on its statement.
+Bills, table collection, account lists, statements, emailed/printed statements,
+tips and collection confirmations now carry saved currencies. Different
+currencies have separate balances and separate payment choices; their numbers
+never become one displayed total. New account writers collect only the chosen
+currency, while the deployed signatures remain available. New credit charges
+must match the account's unpaid currency; staff can first collect it or take
+cash/card for the new order, without inventing an exchange rate or extra credit. Cash and independent
+terminal receipts infer their currency from their order scope; verified Stripe
+receipts continue using the frozen checkout. The existing bill, split and
+account card tests continue to cover original-currency charges and mixed-scope
+refusals. Legacy partial-write recovery remains on the existing batch writer.
+
+Claude must apply the changed schema definitions and new functions, run all
+release gates including dialogs, and inspect Spanish copy at 360/390, 820 and
+1280 pixels. Check the diner's bill, split-share payment card and tip dialog; Bills rows, totals and
+promotion/write-off confirmation and manager approvals; full and partial table collection; Tables;
+Accounts list, account picker, account detail and collection; and the diner's
+account statement, payment choice, history, print and email. Use a US$100 debt
+beside an MXN menu, USD and MXN debt on one table/account, and an excessive tip
+followed by a stale-balance refusal. No live or browser gate ran in this fix.

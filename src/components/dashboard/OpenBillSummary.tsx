@@ -7,12 +7,13 @@ import type { OpenBill } from "@/lib/open-bills";
 /** An open bill's lines and total, as the floor reads them at the table. */
 export default function OpenBillSummary({
   bill,
-  currency,
+  currency: menuCurrency,
 }: {
   bill: OpenBill;
   currency: string;
 }) {
   const t = useT();
+  const currency = bill.currency ?? menuCurrency;
   return (
     <>
       <h3 className="tt-serif" style={{ marginTop: 0 }}>

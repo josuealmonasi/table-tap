@@ -80,6 +80,10 @@ async function post(path, body, cookie) {
   if (!cookie && phoneMembers && /^\/api\/(bill|split)(\/|$)/.test(path)) {
     cookie = await phoneMembers.cookieFor(path, body);
   }
+  if (path === "/api/table-payment/part") {
+    const review = await get(`/api/table-bill?tableId=${body.tableId}`, cookie);
+    body = { expected: review.body.outstanding?.owed || body.amount, currency: "MXN", ...body };
+  }
   const res = await fetch(`${base}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(cookie ? { cookie } : {}) },
@@ -290,14 +294,14 @@ try {
       .order("created_at", { ascending: false }).limit(1).maybeSingle();
     const { data: after } = await admin
       .from("orders").select("total, tip, paid").eq("id", order.id).maybeSingle();
-    // 100 of food is all there was; the tip is capped at the food it thanks
-    // somebody for, exactly as every other tip in the app is.
-    Number(row?.amount) === 200 && Number(row?.tip) === 100 && res.body.settled === true
-      ? ok("a mistyped million collects the bill and no more")
-      : bad(`a mistyped million recorded ${row?.amount} with ${row?.tip} of tip`);
-    Number(after?.total) === 200 && after?.paid === true
-      ? ok("and the order carries exactly the gratuity that was taken")
-      : bad(`the order reads ${after?.total} with ${after?.tip} of tip, paid=${after?.paid}`);
+    // Oversized cash must be refused before anybody takes it, never trimmed.
+    res.status === 400 && !row && Number(after?.total) === 100 && after?.paid === false
+      ? ok("a mistyped million is refused without changing money or the bill")
+      : bad(`a mistyped million changed the bill or recorded ${row?.amount}`);
+    // Keep the next case's paid sitting, with a real, reviewed collection.
+    const corrected = await post("/api/table-payment/part",
+      { tableId: table.id, expected: 100, currency: "MXN", amount: 100, tip: 100, method: "cash", ref: `${MARK}-corrected` },who.waiter);
+    if (corrected.status !== 200) bad("the corrected collection was refused");
   }
 
   // ── The same tap twice ──────────────────────────────────────────────────

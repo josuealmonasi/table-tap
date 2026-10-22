@@ -1,4 +1,5 @@
 import { formatMoney, dateLocale } from "@/lib/format";
+import { balancesLabel } from "@/lib/currency-balances";
 import type { Statement } from "@/lib/accounts-server";
 
 type T = (key: string, vars?: Record<string, string | number>) => string;
@@ -16,7 +17,6 @@ export function statementMail(
   opts: { restaurant: string; name: string; currency: string; link: string; locale: string; timeZone: string },
   t: T,
 ): { subject: string; text: string; html: string } {
-  const money = (n: number) => formatMoney(n, opts.currency);
   const day = (key: string) =>
     new Intl.DateTimeFormat(dateLocale(opts.locale), { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })
       .format(new Date(`${key}T12:00:00Z`));
@@ -28,18 +28,18 @@ export function statementMail(
   const lines: string[] = [t("account.mailIntro", { name: opts.name, restaurant: opts.restaurant }), ""];
   let html = `<p>${esc(t("account.mailIntro", { name: opts.name, restaurant: opts.restaurant }))}</p>`;
   for (const d of statement.days) {
-    lines.push(`${day(d.day)} — ${money(d.total)}`);
-    html += `<h3 style="margin:16px 0 4px">${esc(day(d.day))} — ${esc(money(d.total))}</h3><ul style="padding-left:18px;margin:0">`;
+    lines.push(`${day(d.day)} — ${formatMoney(d.total, d.currency ?? opts.currency)}`);
+    html += `<h3 style="margin:16px 0 4px">${esc(day(d.day))} — ${esc(formatMoney(d.total, d.currency ?? opts.currency))}</h3><ul style="padding-left:18px;margin:0">`;
     for (const c of d.charges) {
       for (const l of c.lines) {
-        const row = `${time(c.at)} · ${l.qty}× ${l.name}${l.extras.length ? ` + ${l.extras.join(", ")}` : ""} — ${money(l.amount)}`;
+        const row = `${time(c.at)} · ${l.qty}× ${l.name}${l.extras.length ? ` + ${l.extras.join(", ")}` : ""} — ${formatMoney(l.amount, c.currency ?? d.currency ?? opts.currency)}`;
         lines.push(`  ${row}`);
         html += `<li>${esc(row)}</li>`;
       }
     }
     html += "</ul>";
   }
-  const owed = t("account.mailOwed", { amount: money(statement.owed) });
+  const owed = t("account.mailOwed", { amount: balancesLabel(statement.balances ?? [{ currency: statement.currency ?? opts.currency, amount: statement.owed }]) });
   lines.push("", owed, t("account.mailPay", { link: opts.link }));
   html += `<p style="font-size:18px;font-weight:700">${esc(owed)}</p><p><a href="${esc(opts.link)}">${esc(t("account.mailPayLink"))}</a></p>`;
   return { subject, text: lines.join("\n"), html };

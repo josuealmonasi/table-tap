@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
+import { balancesLabel, currencyBalances } from "@/lib/currency-balances";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import PlanLock from "@/components/dashboard/plan/PlanLock";
 import QrScanner from "@/components/dashboard/QrScanner";
@@ -42,7 +43,7 @@ export default function AccountsPanel({ currency, timeZone, canOpen, unlocksWith
     return (accounts ?? []).filter(a => !q || a.name.toLowerCase().includes(q));
   }, [accounts, query]);
   const current: AccountListItem | null = (accounts ?? []).find(a => a.id === shownId) ?? null;
-  const owedTotal = (accounts ?? []).reduce((sum, a) => sum + a.owed, 0);
+  const owedTotal = currencyBalances((accounts ?? []).flatMap(a => a.balances ?? [{ currency: a.currency ?? currency, amount: a.owed }]));
 
   return (
     <div className="tt-dash">
@@ -78,7 +79,7 @@ export default function AccountsPanel({ currency, timeZone, canOpen, unlocksWith
         <section className="tt-section">
           <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
             {t("accounts.intro")}
-            {accounts && owedTotal > 0 && ` ${t("accounts.owedTotal", { amount: money(owedTotal) })}`}
+            {accounts && owedTotal.some(b => b.amount > 0) && ` ${t("accounts.owedTotal", { amount: balancesLabel(owedTotal) })}`}
           </p>
           {failed ? (
             <p className="tt-field-error" role="alert">
@@ -108,7 +109,7 @@ export default function AccountsPanel({ currency, timeZone, canOpen, unlocksWith
                         {a.status === "closed" ? (
                           <span className="tt-muted">{t("accounts.closedTag")}</span>
                         ) : (
-                          t("accounts.owesOf", { owed: money(a.owed), limit: money(Number(a.credit_limit)) })
+                          t("accounts.owesOf", { owed: balancesLabel(a.balances ?? [{ currency: a.currency ?? currency, amount: a.owed }]), limit: money(Number(a.credit_limit)) })
                         )}
                       </span>
                     </button>

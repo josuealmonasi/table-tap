@@ -1,5 +1,6 @@
 import { applyCoupon, type AppliedCoupon } from "@/lib/pricing";
 import { round2 } from "@/lib/money";
+import { applyPayment } from "@/lib/table-balance";
 import { servicePercent, type TableBill } from "@/lib/table-bill";
 
 export interface BillAmounts {
@@ -44,8 +45,7 @@ export function billAmounts(
   const couponOff = coupon ? applyCoupon(coupon, Math.max(0, round2(food - priorTip))) : 0;
   const discount = round2(applied + couponOff);
   const base = round2(food - couponOff);
-  const tip =
-    tipCustom !== null ? Math.min(tipCustom, base) : round2(base * (tipPct / 100));
+  const { tip } = applyPayment(base, base, tipCustom ?? round2(base * (tipPct / 100)));
   const total = round2(base + tip);
   const service = scope === "mine" ? bill.mine.service : bill.service;
   const dishes = round2(food - service - priorTip);

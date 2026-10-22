@@ -44,6 +44,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const body = await jsonBody<{
     tableId?: string;
+    currency?: string;
     orderId?: string;
     code?: string;
   }>(req);
@@ -63,6 +64,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .eq("restaurant_id", actor.restaurantId);
   query = orderId ? query.eq("id", orderId) : query.eq("table_id", tableId!);
 
+  if (body.currency) query = query.eq("currency", body.currency);
   const { data: rows } = await query;
   const orders = discountableOrders((rows ?? []) as Order[]);
   if (orders.length === 0) return await apiError("apiErr.nothingToDiscount", 409);

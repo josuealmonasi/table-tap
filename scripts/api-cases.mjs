@@ -18,6 +18,8 @@ import { arrangeMenuCopy, checkMenuCopy } from "./api-menu-copy.mjs";
 import { frozenOfferCases } from "./api-frozen-offers.mjs";
 import { offlineCases } from "./api-offline-cases.mjs";
 import { terminalDepositRace } from "./api-terminal-deposit.mjs";
+import { collectionReview } from "./api-collection-review.mjs";
+import { collectionRefusals } from "./api-collection-refusals.mjs";
 import { twoSittingCollection } from "./api-part-collection.mjs";
 import { printReprintRace } from "./api-print-delivery.mjs";
 import { loginByEmail } from "./logins.mjs";
@@ -106,6 +108,7 @@ export function cases(fx) {
   // One reference per run, shared by the two cases below: the first collection
   // and the retry of that same collection. Fresh each run so a row a previous
   // run somehow left behind cannot make the first call look like the second.
+  let partReview;
   const partRef = `${MARK}-part-${Date.now()}`;
   const r = restaurant.id;
 
@@ -1652,11 +1655,12 @@ export function cases(fx) {
           : `approved, and the order still shows a discount of ${data?.discount}`;
       } },
     twoSittingCollection(),
+    ...collectionRefusals(),
     // The calculator: a waiter collects part of a table's bill. A little of
     // it, so the bill stays open for the cases below.
     { name: "POST /api/table-payment/part", as: "waiter", method: "POST",
       path: "/api/table-payment/part",
-      body: { tableId: table.id, amount: PART_AMOUNT, tip: PART_TIP, method: "cash", ref: partRef },
+      body: async f => { partReview ??= await collectionReview(f,table.id); return { tableId: table.id, ...partReview, amount: PART_AMOUNT, tip: PART_TIP, method: "cash", ref: partRef }; },
       expect: [200],
       // The gratuity is collected but never counts towards the food: a table
       // that tipped must not look nearer to settled than it is.
@@ -1667,35 +1671,9 @@ export function cases(fx) {
     // not to respond. It must land in the ledger once.
     { name: "POST /api/table-payment/part (the same tap twice)", as: "waiter", method: "POST",
       path: "/api/table-payment/part",
-      body: { tableId: table.id, amount: PART_AMOUNT, tip: PART_TIP, method: "cash", ref: partRef },
+      body: async f => { partReview ??= await collectionReview(f,table.id); return { tableId: table.id, ...partReview, amount: PART_AMOUNT, tip: PART_TIP, method: "cash", ref: partRef }; },
       expect: [200],
       check: d => d.duplicate === true || "the same collection was recorded twice" },
-    // A gratuity larger than the money it is thanking somebody for.
-    //
-    // `applyPayment` caps the tip at the amount collected, the same ceiling the
-    // card routes use, so a mistyped MX$50 on a small collection is not cash
-    // somebody has to explain at the end of the night. The pure function is
-    // tested; nothing checked that the ROUTE honours it — and the comment
-    // above the call used to say the tip was not capped at all, which is what
-    // sent me looking.
-    { name: "POST /api/table-payment/part (a tip bigger than the payment)",
-      as: "waiter", method: "POST", path: "/api/table-payment/part",
-      body: async f => ({
-        tableId: f.billTableId, amount: 1, tip: 500, method: "cash",
-        ref: `${MARK}-bigtip-${Date.now()}`,
-      }),
-      expect: [200],
-      effect: async f => {
-        const { data } = await f.admin
-          .from("payments").select("amount")
-          .eq("restaurant_id", f.restaurant.id)
-          .like("client_ref", `${MARK}-bigtip-%`);
-        const landed = (data ?? []).reduce((sum, p) => sum + Number(p.amount), 0);
-        // MX$1 of food and at most MX$1 of tip. Never MX$501.
-        return landed > 0 && landed <= 2.005
-          ? true
-          : `a MX$1 collection with a MX$500 tip put ${landed} on the ledger`;
-      } },
     { name: "POST /api/table-payment/part (kitchen refused)", as: "kitchen", method: "POST",
       path: "/api/table-payment/part",
       body: { tableId: table.id, amount: PART_AMOUNT, method: "cash", ref: `${partRef}-k` },

@@ -270,3 +270,7 @@ drop function if exists public.lock_ingredient_movements(uuid);
 
 drop function if exists public.start_refund_due_fee(uuid, uuid, text, int);
 drop function if exists public.stamp_refund_due_charge() cascade;
+
+drop function if exists public.account_checkout_currency_v1(uuid, uuid, numeric, numeric, numeric, text) cascade;
+drop function if exists public.account_settle_currency_v1(uuid, uuid, numeric, numeric, text, text, text, text) cascade;
+drop function if exists public.collect_table_reviewed_v1(uuid,uuid,numeric,text,numeric,numeric,text,text,text) cascade;

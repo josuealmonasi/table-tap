@@ -12,6 +12,7 @@ import type { StatementDay } from "@/lib/accounts";
 import type { AccountListItem } from "@/hooks/useOpenAccounts";
 import StatementDays from "@/components/accounts/StatementDays";
 import SettleAccountDialog from "./SettleAccountDialog";
+import { balancesLabel, type CurrencyBalance } from "@/lib/currency-balances";
 
 interface AccountDialogProps {
   account: AccountListItem | null;
@@ -24,6 +25,8 @@ interface AccountDialogProps {
 }
 
 interface StaffStatement {
+  currency?: string | null;
+  balances?: CurrencyBalance[];
   owed: number;
   days: StatementDay[];
   chargedBy: Record<string, string | null>;
@@ -41,7 +44,7 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
   const [statement, setStatement] = useState<StaffStatement | null>(null);
   const [failed, setFailed] = useState(false);
   const [svg, setSvg] = useState<string | null>(null);
-  const [collecting, setCollecting] = useState(false);
+  const [collecting, setCollecting] = useState<string | null>(null);
   const [limit, setLimit] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -77,7 +80,9 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
 
   if (!account) return null;
   const money = (n: number) => formatMoney(n, currency);
-  const owed = statement?.owed ?? account.owed;
+  const balances = statement?.balances ?? account.balances ?? [{ currency: account.currency ?? currency, amount: account.owed }];
+  const selected = balances.find(b => b.currency === collecting) ?? balances[0];
+  const hasDebt = balances.some(b => b.amount > 0);
 
   async function change(body: Record<string, unknown>, done: string): Promise<void> {
     setError(null);
@@ -103,7 +108,7 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
     <>
       <Modal open onClose={onClose} maxWidth={560} title={account.name}>
         <p className="tt-account-owed">
-          {t("accounts.owesOf", { owed: money(owed), limit: money(Number(account.credit_limit)) })}
+          {t("accounts.owesOf", { owed: balancesLabel(balances), limit: money(Number(account.credit_limit)) })}
         </p>
         {account.email && <p className="tt-muted" style={{ marginTop: 0 }}>{account.email}</p>}
 
@@ -128,11 +133,11 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
         )}
 
         <div className="tt-bill-actions">
-          {account.status === "open" && owed > 0 && (
-            <button type="button" className="tt-btn tt-btn-primary tt-btn-lg" style={{ width: "100%" }} onClick={() => setCollecting(true)}>
-              {t("accounts.settleOpen", { amount: money(owed) })}
+          {account.status === "open" && hasDebt && statement && balances.map(b => (
+            <button type="button" className="tt-btn tt-btn-primary tt-btn-lg" style={{ width: "100%" }} key={b.currency} onClick={() => setCollecting(b.currency)}>
+              {t("accounts.settleOpen", { amount: formatMoney(b.amount,b.currency) })}
             </button>
-          )}
+          ))}
         </div>
 
         <section className="tt-account-qr">
@@ -185,7 +190,7 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
             >
               {t("accounts.newCode")}
             </button>
-            {owed === 0 && (
+            {!hasDebt && (
               <button
                 type="button"
                 className="tt-btn tt-btn-ghost tt-btn-sm tt-danger-text"
@@ -206,12 +211,13 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
         )}
       </Modal>
       <SettleAccountDialog
-        open={collecting}
-        onClose={() => setCollecting(false)}
+        key={selected?.currency}
+        open={Boolean(collecting)}
+        onClose={() => setCollecting(null)}
         accountId={account.id}
         name={account.name}
-        owed={owed}
-        currency={currency}
+        owed={selected?.amount ?? 0}
+        currency={selected?.currency ?? currency}
         onSettled={() => {
           setAttempt(n => n + 1);
           onChanged();

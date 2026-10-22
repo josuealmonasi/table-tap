@@ -12,6 +12,8 @@ import { useToast } from "@/components/ui/Toast";
 import { tableBill, unpaidOrders } from "@/lib/table-bill";
 import type { Order } from "@/lib/types";
 import ChargeToAccountDialog from "@/components/dashboard/accounts/ChargeToAccountDialog";
+import { formatMoney } from "@/lib/format";
+import { newRef } from "@/lib/collection-ref";
 
 interface SettleTableDialogProps {
   open: boolean;
@@ -55,7 +57,7 @@ export default function SettleTableDialog({
   tableId,
   orderId = null,
   tableLabel,
-  currency,
+  currency: menuCurrency,
   onSettled,
   canApprove,
   onDiscount,
@@ -77,6 +79,8 @@ export default function SettleTableDialog({
   const [inParts, setInParts] = useState(false);
   // "Ponlo en mi cuenta": the bill onto a customer's account.
   const [toAccount, setToAccount] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null);
+  const [ref] = useState(newRef);
 
   useEffect(() => {
     if (!open) return;
@@ -97,7 +101,10 @@ export default function SettleTableDialog({
   }, [open, restaurantId, tableId, orderId, attempt]);
 
   // The waiter is settling the whole table, so nothing here is "mine".
-  const bill = orders ? tableBill(orders, []) : null;
+  const currencies = [...new Set(unpaidOrders(orders ?? []).map(o => o.currency))];
+  const currency = selectedCurrency && currencies.includes(selectedCurrency) ? selectedCurrency : currencies[0] ?? menuCurrency;
+  const selectedOrders = orders?.filter(o => o.currency === currency) ?? null;
+  const bill = selectedOrders ? tableBill(selectedOrders, []) : null;
 
   async function writeOff(reason: WriteOffReason, note: string): Promise<void> {
     setBusy(true);
@@ -105,7 +112,7 @@ export default function SettleTableDialog({
       const res = await fetch("/api/bill/write-off", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tableId, reason, note }),
+        body: JSON.stringify({ orderIds: unpaidOrders(selectedOrders ?? []).map(o => o.id), reason, note }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -136,14 +143,15 @@ export default function SettleTableDialog({
       const res = await fetch("/api/table-payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(tableId ? { tableId, settlement } : { orderId, settlement }),
+        body: JSON.stringify(tableId ? { tableId, settlement, expected: bill?.total, currency, ref } : { orderId, settlement, currency }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast(data.error ?? t("settle.failed"), "error");
         return;
       }
-      toast(t("settle.done"));
+      const data = await res.json();
+      toast(data.amount !== undefined ? t("settle.recorded", { amount: formatMoney(data.amount, data.currency), tip: formatMoney(data.tip, data.currency) }) : t("settle.done"));
       onSettled();
       onClose();
     } catch {
@@ -172,6 +180,13 @@ export default function SettleTableDialog({
         {t(tableId ? "settle.title" : "settle.titleToGo", { label: tableLabel })}
       </h3>
 
+      {currencies.length > 1 && <div role="group" aria-label={t("settle.currency")}>
+        <p className="tt-muted">{t("settle.mixed")}</p>
+        {currencies.map(c => <button key={c} className="tt-tip-chip" disabled={busy} onClick={() => setSelectedCurrency(c)}>
+          {formatMoney(tableBill((orders ?? []).filter(o => o.currency === c), []).total,c)}
+        </button>)}
+      </div>}
+
       {unread ? (
         <>
           <p className="tt-field-error" role="alert">{t("settle.loadFailed")}</p>
@@ -191,7 +206,7 @@ export default function SettleTableDialog({
         <p className="tt-muted">{t("settle.nothing")}</p>
       ) : (
         <>
-          <SettleBillLines bill={bill} currency={currency} />
+          <SettleBillLines bill={{ ...bill, paid: tableBill(orders ?? [], []).paid }} currency={currency} />
 
           <div className="tt-bill-actions">
             <button
@@ -274,7 +289,7 @@ export default function SettleTableDialog({
         <ChargeToAccountDialog
           open={toAccount}
           onClose={() => setToAccount(false)}
-          orderIds={unpaidOrders(orders).map(o => o.id)}
+          orderIds={unpaidOrders(selectedOrders ?? []).map(o => o.id)}
           amount={bill.total}
           currency={currency}
           label={tableLabel}

@@ -10,6 +10,7 @@ import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 import { Modal } from "@/components/ui/Modal";
 import { formatMoney } from "@/lib/format";
 import type { TableStatus } from "@/lib/table-status";
+import { balancesLabel } from "@/lib/currency-balances";
 
 interface TableRowProps {
   table: RestaurantTable;
@@ -55,7 +56,7 @@ export default function TableRow({
         <span className={`tt-table-state ${status.free ? "" : "tt-table-state-busy"}`}>
           {status.free
             ? t("dash.tableFree")
-            : t("dash.tableOwes", { amount: formatMoney(status.owed, currency) })}
+            : t("dash.tableOwes", { amount: status.balances ? balancesLabel(status.balances) : formatMoney(status.owed, currency) })}
         </span>
       </div>
       <QrCard

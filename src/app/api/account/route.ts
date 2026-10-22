@@ -48,10 +48,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     name: account.name,
     status: account.status,
     owed: statement.owed,
+    currency: statement.currency,
+    balances: statement.balances,
     // Without the order ids: row ids are nobody's business outside the staff.
     days: statement.days.map(d => ({
       ...d,
-      charges: d.charges.map(c => ({ at: c.at, tableLabel: c.tableLabel, lines: c.lines, total: c.total })),
+      charges: d.charges.map(c => ({ at: c.at, tableLabel: c.tableLabel, lines: c.lines, total: c.total, currency: c.currency })),
     })),
     payments: statement.payments,
     returns: statement.returns,

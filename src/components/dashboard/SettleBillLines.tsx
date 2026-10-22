@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import { PAID_LINES_SHOWN, type TableBill } from "@/lib/table-bill";
+import { balancesLabel, currencyBalances } from "@/lib/currency-balances";
 
 interface SettleBillLinesProps {
   bill: TableBill;
@@ -42,7 +43,7 @@ export default function SettleBillLines({ bill, currency }: SettleBillLinesProps
             onClick={() => setShowPaid(v => !v)}
           >
             {t("settle.alreadyPaid", {
-              amount: formatMoney(bill.paid.total, currency),
+              amount: balancesLabel(currencyBalances(bill.paid.orders.map(o => ({ currency: o.currency ?? currency, amount: Number(o.total) })))),
             })}
             {bill.paid.items.length > PAID_LINES_SHOWN && (
               <span className="tt-muted">

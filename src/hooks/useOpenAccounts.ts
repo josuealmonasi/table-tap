@@ -1,4 +1,5 @@
 "use client";
+import type { CurrencyBalance } from "@/lib/currency-balances";
 
 import { useCallback, useEffect, useState } from "react";
 
@@ -13,6 +14,8 @@ export interface AccountListItem {
   opened_by: string;
   opened_at: string;
   owed: number;
+  currency?: string | null;
+  balances?: CurrencyBalance[];
   lastChargeAt: string | null;
   checkout_until: string | null;
 }

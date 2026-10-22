@@ -1157,9 +1157,8 @@ say that dish was paid for. `payments.tip` says how much of each was a gratuity,
 which is what lets a corte separate the food from the tips. When a collection
 covers more than one sitting it is shared out oldest first, the remainder
 landing on the first, and the gratuity rides with that first share. Settling a
-whole table is the other shape: on an untouched table it writes one row per
-order carrying its `order_id`, and only shares out against sittings when
-something had already been collected.
+whole table uses the same reviewed collection; older callers can still write
+one receipt per order on an untouched table.
 
 **A tap is not a payment; a collection is.** `payments.client_ref` is unique per
 restaurant: the phone names each collection and reuses that name on every retry,
@@ -1589,6 +1588,24 @@ restaurant that runs one: cards made, visits stamped, cards that came back
 cause), rewards spent, and the stamps each person gave, most first, which is
 where a stamp with nothing sold behind it would show. Counted by
 `loyaltyStats()` from the rows, read with the secret key like the corte.
+
+## Debt currency and reviewed collections (S21)
+
+An existing debt keeps each order's saved currency after a menu currency change.
+Diner bills, staff collection, account statements, printed/emailed copies and
+confirmations show separate currency balances and let each currency be paid
+separately. A mixed bill cannot be divided into one card-payment scope. A new
+account charge must match its outstanding debt currency: collect that debt
+first or take cash/card for the new order. No exchange rate or second credit
+ceiling is invented.
+
+The partial calculator and server share `applyPayment`. An excessive tip must
+be corrected before collection; it is never silently reduced. The screen sends
+the balance it reviewed. Full and partial table collection compare that balance
+inside the restaurant money transaction; a changed balance refuses all writes,
+shows the new balance and asks staff to check the customer's cash and change.
+A retry returns the saved receipt, whose actual amount and tip supply the
+confirmation. Closing orders also verifies that their live remainder is covered.
 
 ## Customer accounts
 
