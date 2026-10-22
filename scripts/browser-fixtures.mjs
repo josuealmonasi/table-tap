@@ -3,6 +3,11 @@ import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { forgetBrowserMember } from "./table-member-fixture.mjs";
 
+/** A role this run leaves out on purpose: `GATE_SKIP_ROLES=admin,…`. */
+export function skippedOnPurpose(role) {
+  return (process.env.GATE_SKIP_ROLES ?? "").split(",").map(r => r.trim()).includes(role);
+}
+
 // A failed sign-in stops the visit rather than measuring the login screen once
 // for every page the role was meant to see — which reads as ok, every time.
 export async function crewCookies(crew, base, phase) {
@@ -11,7 +16,13 @@ export async function crewCookies(crew, base, phase) {
   for (const who of crew) {
     const password = who.passwordEnv ? process.env[who.passwordEnv] : "demo123";
     if (!password) {
-      cookies.set(who.role, { skip: `${who.passwordEnv} is not set — skipped` });
+      // A login that cannot be made is a screen nobody checked. It used to be
+      // "skipped", and a skipped visit counts as passed, so every admin screen
+      // could go unchecked under a green gate (audit L, finding 9). Only a run
+      // that names the role on purpose leaves it out.
+      cookies.set(who.role, skippedOnPurpose(who.role)
+        ? { skip: `${who.passwordEnv} is not set — skipped (GATE_SKIP_ROLES)` }
+        : { error: new Error(`${who.passwordEnv} is not set, so no ${who.role} screen can be checked. Set it, or GATE_SKIP_ROLES=${who.role} to leave them out on purpose`) });
       continue;
     }
     try {

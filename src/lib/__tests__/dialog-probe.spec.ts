@@ -51,3 +51,22 @@ it("answers the discard question a dirty form asks, and leaves other dialogs alo
   const source = (await import("node:fs")).readFileSync("scripts/dialog-probe.mjs", "utf8");
   expect(source.indexOf("await answerDiscard(tab);")).toBeGreaterThan(source.indexOf('await tab.keyboard.press("Escape");'));
 });
+
+it("waits for a read the click started before deciding nothing opened (audit L, 9)", async () => {
+  // «Cobrar» reads the bill, then opens. At 700 ms it was a button that opens
+  // nothing, so its dialog was never measured.
+  const { dialogOpened } = await import("../../../scripts/dialog-probe.mjs");
+  let reads = 1; let shown = false;
+  const pending = { get size() { return reads; } };
+  const tab = {
+    isClosed: () => false,
+    locator: () => ({ count: async () => (shown ? 1 : 0), first: () => ({ isVisible: async () => shown }) }),
+    evaluate: async () => { if (reads > 0) { reads = 0; shown = true; } return { ready: true, signature: "settled" }; },
+  };
+  expect(await dialogOpened(tab, pending, phaseTimings().phase)).toBe(true);
+  // And a button that started nothing is not waited on.
+  shown = false; reads = 0;
+  const started = Date.now();
+  expect(await dialogOpened(tab, pending, phaseTimings().phase)).toBe(false);
+  expect(Date.now() - started).toBeLessThan(2000);
+});

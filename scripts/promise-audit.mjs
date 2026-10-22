@@ -29,6 +29,7 @@ import { requireServer, warm } from "./preflight.mjs";
 import { holdWrites } from "./hold-writes.mjs";
 import { DEV_URL } from "./dev-url.mjs";
 import { pageInScope, reportScope } from "./gate-scope.mjs";
+import { skippedOnPurpose } from "./browser-fixtures.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -110,8 +111,10 @@ for (const who of CREW) {
   // with demo123 regardless, fail, and check the admin screen signed out on
   // every run there has been — reported ok each time.
   const password = who.passwordEnv ? process.env[who.passwordEnv] : undefined;
+  // Missing, it is a gap, not a skip: a skip prints and passes (audit L, 9).
   if (who.passwordEnv && !password) {
-    console.log(`    –        ${who.passwordEnv} is not set — skipped\n`);
+    if (skippedOnPurpose(who.role)) console.log(`    –        ${who.passwordEnv} is not set — skipped (GATE_SKIP_ROLES)\n`);
+    else bad(`${who.role}: ${who.passwordEnv} is not set, so none of its screens were checked`);
     continue;
   }
   const ctx = await newContext({ viewport: { width: 1280, height: 900 } });
