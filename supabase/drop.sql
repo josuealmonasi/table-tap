@@ -34,6 +34,8 @@ drop function if exists public.release_restaurant_billing(uuid, uuid);
 drop table if exists diner_checkouts cascade;
 drop table if exists platform_fees       cascade;
 drop table if exists terminal_deposits   cascade;
+drop table if exists ingredient_consumption cascade;
+drop table if exists ingredient_movements cascade;
 drop table if exists waste_entries       cascade;
 drop table if exists ingredient_purchases cascade;
 drop table if exists ingredient_counts   cascade;
@@ -245,3 +247,11 @@ drop function if exists public.bind_redemption_checkout() cascade;
 drop function if exists public.save_promotion_v1(uuid, uuid, jsonb, jsonb);
 drop function if exists public.duplicate_menu_v1(uuid, uuid);
 drop function if exists public.enforce_offer_write();
+
+
+drop function if exists public.track_ingredient_movement();
+drop function if exists public.cutoff_ingredient_count();
+drop function if exists public.record_ingredient_counts(uuid, jsonb, text);
+drop function if exists public.waste_ingredient_usage(uuid, uuid, uuid, numeric);
+drop function if exists public.sale_ingredient_usage(uuid, jsonb);
+drop function if exists public.lock_ingredient_movements(uuid);

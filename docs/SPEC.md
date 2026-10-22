@@ -523,7 +523,8 @@ Every table has RLS enabled, in groups:
   `loyalty_redemptions`
 - **The drawer** — `cash_shifts`, `cash_movements`
 - **Costs** — `ingredients`, `ingredient_prices`, `recipe_lines`,
-  `waste_entries`, `ingredient_purchases`, `ingredient_counts`
+  `waste_entries`, `ingredient_purchases`, `ingredient_counts`,
+  `ingredient_consumption`, `ingredient_movements`
 - **Telling people** — `notifications`
 - **Keeping the door shut** — `rate_limits`
 
@@ -744,12 +745,21 @@ on the costs screen, and one screen for the whole team:
 - **A count** of the shelf is blind, like the drawer's: the counter sees the
   names and empty boxes, the expected figures are worked out at the moment
   the count lands and kept beside it, and only then shown. An ingredient's
-  first count has nothing to compare with.
+  first count has nothing to compare with. `record_ingredient_counts` writes
+  the expected figure, count and serial movement cutoff in one transaction.
+  Sales, deliveries, waste and corrections use the same restaurant lock.
 - **What the shelf should hold** is each ingredient's last count, plus the
   deliveries since, less what the orders made since and the waste since took
-  (`src/lib/costs/stock.ts`). An order takes what its recipe says whether or
-  not it is paid yet — the food was made. Never counted, the answer is
-  unknown rather than zero.
+  (`src/lib/costs/stock.ts`). Each sale and waste entry freezes its ingredient
+  quantities in server-only `ingredient_consumption`; later recipe edits or
+  removals never change them. `ingredient_movements` records their signed
+  quantities and any later corrections. An order takes ingredients when it
+  reaches a made state whether or not it is paid yet — the food was made.
+  A pending checkout accepted after a count moves that count even if the
+  checkout started earlier. Never counted, the answer is unknown rather than
+  zero. New counts use a serial cutoff; older counts retain their date boundary.
+  The upgrade freezes legacy rows using the recipe still available then; it
+  cannot recover recipes already overwritten before the upgrade.
 - **What to buy**: what a day took over the last 14 days, times the
   supplier's delivery days plus the days the restaurant buys for (7 unless it
   says otherwise), less what the shelf should hold, rounded up to whole packs

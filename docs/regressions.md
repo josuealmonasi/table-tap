@@ -103,6 +103,8 @@ us, and what now catches each one.
 | Every fee we charge Stripe carries the ledger row that reserved it | Summed from orders, the month's fee ceiling missed divided bills, late webhooks, account payments, a fee filed under the month its food was ordered, and two diners at once |
 | The month's fee ceiling counts only fees we took, or a checkout still open | It counted abandoned checkouts and refunded cancellations, and orders past the early ceiling paid no fee |
 | Every read of the extras each dish offers pages, or is one dish's | Past 1000 links the menu editor read the first thousand, and saving a dish's extras deleted the ones it never saw |
+| Ingredient consumption belongs to its sale or waste entry | Editing a recipe from 20 g to 30 g changed ten old dishes from 200 g used to 300 g (J12) |
+| A count and its movement cutoff are one database operation | A 1,000 ml delivery between reading stock and inserting a count disappeared, or left the saved expected figure stale (J13) |
 | Server code takes only components from a `"use client"` module | The costs page imported its tab list from a client component and every tab failed to render |
 | A cancelled terminal sale leaves the deposit it never reaches | The terminal deposits expected a voided sale, and read the bank short for money correctly given back |
 | A refusal always carries a sentence, and every `CartRejection` has one | `/api/table-order` answered `{ rejection }`, which the waiter's screen read as "network error" |
@@ -3226,3 +3228,37 @@ and new copies, sends the old success confirmation, and checks that the new
 copy stays open until its own confirmation. It uses the gate's own order, which
 fixture teardown removes. Apply the schema and run `pnpm api` before shipping;
 check that deployed printer firmware echoes `jobToken` on GET and DELETE.
+
+### Ingredient history survives recipe edits (J12)
+
+A recipe and the history of what was used were two places that had to agree.
+Starting at 1,000 g, ten dishes at 20 g left 800 g. Changing the recipe to 30 g
+quietly made the same shelf read 700 g; two wasted dishes also grew from 40 g
+to 60 g. Removing a recipe erased its old consumption altogether.
+
+Sales and waste now freeze their quantities in `ingredient_consumption`.
+`ingredient_movements` records the signed effect, including later cancellations
+and corrections. The stock and buying tabs read that history, without joining
+old sales to today's recipe. Snapshots are simpler than recipe versions because
+only the quantities used need to survive. Legacy rows are frozen once from the
+recipe available at upgrade; already overwritten recipes cannot be recovered.
+`costs-history.spec.ts` reproduces the 1,000 g / ten dishes / 20 → 30 g case
+and the waste case; `costs-history-sql.spec.ts` checks the snapshot writers.
+
+### A shelf count has one movement boundary (J13)
+
+The expected figure and the inserted count were two places that had to agree.
+A purchase between the separate read and insert left a stale expected figure,
+and its timestamp could put it before the new count and lose its 1,000 ml.
+
+`record_ingredient_counts` returns the rows the database actually recorded.
+The insert trigger calculates their expected quantities and serial cutoffs
+under the same transaction lock used by all movement writers. It protects the
+old deployed insert caller too. Purchases take that lock before their ingredient
+row lock; counts do not lock orders or menu items. Pending sales becoming food,
+cancellations and waste taken back record adjustments after the cutoff.
+`costs-counts.spec.ts` reproduces both sides of the 1,000 ml purchase race with
+a mocked database. `costs-history.spec.ts` checks sequence order against an old
+transaction timestamp. `costs-history-sql.spec.ts` checks the shared lock and
+trigger coverage. Claude must verify the actual two-connection race and the
+additive upgrade against PostgreSQL in the isolated release gate.

@@ -61,7 +61,7 @@ for (const table of [
   "customer_accounts", "account_checkouts", "diner_checkouts", "table_session_members",
   // The drawer's shifts and what was taken out of it; the restaurant's costs.
   "cash_shifts", "cash_movements", "ingredients", "ingredient_prices", "recipe_lines",
-  "waste_entries", "ingredient_purchases", "ingredient_counts",
+  "waste_entries", "ingredient_purchases", "ingredient_counts", "ingredient_consumption", "ingredient_movements",
   // The ledger and everything around it, the bell, the kitchen's paper, a
   // table's division, and what the routes keep for themselves.
   "offline_sale_queue", "payment_allocations", "order_adjustments", "refund_operations", "refund_allocations", "refund_attempts", "refund_due_attempts",
@@ -565,7 +565,7 @@ if (!signIn.error && theirs) {
     "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions",
     "customer_accounts", "account_checkouts", "diner_checkouts", "table_session_members",
     "cash_shifts", "cash_movements", "ingredients", "ingredient_prices", "recipe_lines",
-    "waste_entries", "ingredient_purchases", "ingredient_counts", "terminal_deposits", "platform_fees"];
+    "waste_entries", "ingredient_purchases", "ingredient_counts", "ingredient_consumption", "ingredient_movements", "terminal_deposits", "platform_fees"];
   const TEAM = [["anon", null], ["owner", "demo@tabletap.dev"], ["manager", "demo-manager@tabletap.dev"],
     ["waiter", "demo-waiter@tabletap.dev"], ["cashier", "demo-cashier@tabletap.dev"],
     ["kitchen", "demo-kitchen@tabletap.dev"]];
