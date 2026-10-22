@@ -25,3 +25,29 @@ it("L5 an explicit no-write result unlocks the request", async () => {
   await send("/api/costs/purchases", "POST", { packs: 1, total: 100 });
   expect(send.pending()).toBe(false);
 });
+it("batch 5 cross-review 1: a refused first send lets the form go back to editing", async () => {
+  // A sold-out dish or a closed kitchen on the first try: no other request
+  // ever carried this reference, so the person fixes the cart and sends anew.
+  state.fetch.mockResolvedValueOnce(Response.json({ error: "closed" }, { status: 409 }));
+  const send = useCostsSend(true);
+  await send("/api/costs/purchases", "POST", { packs: 1, total: 100 });
+  expect(send.pending()).toBe(false);
+});
+it("batch 5 cross-review 1: a route's refusal of a retry keeps the reference while the first may still commit", async () => {
+  // Request A stalls on its way to committing and its reply is lost; retry B
+  // meets "orders paused" before A lands. Forgetting the reference there let
+  // the next send record a second MX$100 purchase.
+  const purchases = new Map<string, number>();
+  let call = 0;
+  state.fetch.mockImplementation(async (_path, init) => {
+    const body = JSON.parse(init.body);
+    call++;
+    if (call === 1) throw new Error("reply lost; the request is still on its way");
+    if (call === 2) { purchases.set(body.ref, 100); return Response.json({ error: "paused" }, { status: 409 }); }
+    if (!purchases.has(body.ref)) purchases.set(body.ref, 100);
+    return Response.json({ ok: true, id: body.ref });
+  });
+  const send = useCostsSend(true);
+  for (let n = 0; n < 3; n++) await send("/api/costs/purchases", "POST", { packs: 1, total: 100 });
+  expect(purchases.size).toBe(1);
+});

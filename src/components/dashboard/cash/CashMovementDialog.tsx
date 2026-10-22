@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRetryIntent, refusalSettles } from "@/hooks/useRetryIntent";
+import { useRetryIntent } from "@/hooks/useRetryIntent";
 import PendingAttempt from "@/components/ui/PendingAttempt";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
@@ -67,7 +67,7 @@ export default function CashMovementDialog({ kind, currency, shiftId, onClose, o
           : attempt.body({ kind: "withdrawal", shiftId, amount, note }),
       });
       const data = await res.json();
-      if (shownKind === "withdrawal" && ((res.ok && data.id) || (!res.ok && (refusalSettles(res.status) && data.retryUncommitted === true)))) attempt.clear();
+      if (shownKind === "withdrawal" && ((res.ok && data.id) || (!res.ok && attempt.settles(res.status, data)))) attempt.clear();
       if (!res.ok) {
         setError(data.error ?? t("apiErr.generic"));
         return;

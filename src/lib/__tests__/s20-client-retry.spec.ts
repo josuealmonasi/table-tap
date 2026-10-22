@@ -49,9 +49,16 @@ it("K4 a rate limit keeps the intent: a lost order is never placed twice (cross-
   await cart.checkout(true); await cart.checkout(true); await cart.checkout(true); await cart.checkout(true);
   expect(new Set(bodies().map(b => b.ref)).size).toBe(1);
 });
-it("only an answer given after the lookup settles an attempt", () => {
-  for (const status of [400, 404, 409, 410, 422]) expect(refusalSettles(status), String(status)).toBe(true);
-  for (const status of [401, 403, 408, 425, 429, 500, 502, 503]) expect(refusalSettles(status), String(status)).toBe(false);
+it("a first send settles on any refusal; a retry only on the writer's own mark", () => {
+  // The first send is the only request that ever carried its reference.
+  for (const status of [400, 401, 402, 403, 404, 409, 410, 422, 429]) expect(refusalSettles(status), String(status)).toBe(true);
+  // A timeout or a server error can arrive while the work goes on.
+  for (const status of [408, 425, 500, 502, 503]) expect(refusalSettles(status), String(status)).toBe(false);
+  // A retry follows a lost reply: unmarked, the first request may have committed.
+  for (const status of [400, 404, 409, 410, 422]) expect(refusalSettles(status, true), `retry ${status}`).toBe(false);
+  for (const status of [400, 404, 409, 410, 422]) expect(refusalSettles(status, true, true), `marked retry ${status}`).toBe(true);
+  // Answered before the writer ran, a mark is not believed.
+  for (const status of [401, 402, 403, 408, 425, 429, 503]) expect(refusalSettles(status, true, true), `marked retry ${status}`).toBe(false);
 });
 it("K4 card checkout retains its existing request shape", async () => {
   state.fetch.mockResolvedValue(Response.json({ error: "no card" }, { status: 409 }));

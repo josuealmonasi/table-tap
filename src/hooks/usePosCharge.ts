@@ -130,6 +130,8 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     // One reference per sale, made before anything is sent: a request that
     // dies on the way and is held and sent again is the same sale, rung once.
     const posRef = accountRequest.current ? JSON.parse(accountRequest.current).posRef as string : crypto.randomUUID();
+    // A held account request has been sent before: this is its retry.
+    const retriedAccount = accountRequest.current !== null;
     const sale: HeldSale | null = method === "account" ? null : {
       posRef, collector, collectorContext, restaurantId: restaurant.id, at: new Date().toISOString(), method, items: lines,
       charge: { ...pricing }, currency: restaurant.currency, tipPct: tipCustom === null ? tipPct : undefined, tipAmount: tipCustom ?? undefined,
@@ -193,8 +195,9 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // Account retries need proof from the writer, not just a 4xx status.
-        if (refusalSettles(res.status) && data.retryUncommitted === true && !data.held) accountRequest.current = null;
+        // A retry needs proof from the writer, not just a 4xx status; a first
+        // send is the only request that ever carried this reference.
+        if (refusalSettles(res.status, retriedAccount, data.retryUncommitted === true) && !data.held) accountRequest.current = null;
         // A refusal is the sale not happening — out of stock, the menu closed,
         // an account at its ceiling. The held copy goes and the cart stays, so
         // the cashier fixes it or hands the money back, as before the till

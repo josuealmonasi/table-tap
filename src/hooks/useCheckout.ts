@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRetryIntent, refusalSettles } from "@/hooks/useRetryIntent";
+import { useRetryIntent } from "@/hooks/useRetryIntent";
 import type { RestaurantTable } from "@/lib/types";
 import type { AppliedCoupon } from "@/lib/pricing";
 import type { CartItem, useCart } from "@/hooks/useCart";
@@ -103,7 +103,7 @@ export function useCheckout(input: CheckoutInput): {
       });
       const data = await res.json();
       const frozen = payLater ? attempt.frozen<PendingCheckout>() : null;
-      if (payLater && ((res.ok && data.deferred && data.orderId) || (!res.ok && (refusalSettles(res.status) && data.retryUncommitted === true)))) attempt.clear();
+      if (payLater && ((res.ok && data.deferred && data.orderId) || (!res.ok && attempt.settles(res.status, data)))) attempt.clear();
       // Deferred: the food is already with the kitchen, so there is no Stripe
       // hop. Remember the id — it is the only thing that tells this phone's
       // share apart from the rest of the table's on the bill.

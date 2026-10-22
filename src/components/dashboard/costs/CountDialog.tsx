@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRetryIntent, refusalSettles } from "@/hooks/useRetryIntent";
+import { useRetryIntent } from "@/hooks/useRetryIntent";
 import { useRouter } from "next/navigation";
 import PendingAttempt from "@/components/ui/PendingAttempt";
 import { Modal } from "@/components/ui/Modal";
@@ -82,7 +82,7 @@ function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialog
         method: "POST", headers: { "Content-Type": "application/json" }, body: attempt.body({ counts }),
       });
       const data = await res.json();
-      if ((res.ok && Array.isArray(data.results)) || (!res.ok && (refusalSettles(res.status) && data.retryUncommitted === true))) attempt.clear();
+      if ((res.ok && Array.isArray(data.results)) || (!res.ok && attempt.settles(res.status, data))) attempt.clear();
       if (!res.ok) return setError(typeof data.error === "string" ? data.error : t("apiErr.generic"));
       if (!Array.isArray(data.results)) throw new Error("Missing count result");
       setResults(data.results);

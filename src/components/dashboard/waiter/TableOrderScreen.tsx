@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { useRetryIntent, refusalSettles } from "@/hooks/useRetryIntent";
+import { useRetryIntent } from "@/hooks/useRetryIntent";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
 import { shortMessage } from "@/lib/stock-message";
@@ -130,7 +130,7 @@ export default function TableOrderScreen({
         body: attempt.body({ tableId, items: lines, note: note.trim() || undefined }),
       });
       const data = await res.json();
-      if ((res.ok && data.orderId) || (!res.ok && (refusalSettles(res.status) && data.retryUncommitted === true))) attempt.clear();
+      if ((res.ok && data.orderId) || (!res.ok && attempt.settles(res.status, data))) attempt.clear();
       if (!res.ok) {
         if (data.code === "outOfStock") {
           // With the numbers in it. The refusal has always known how many are
