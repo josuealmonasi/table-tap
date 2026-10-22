@@ -6,7 +6,7 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { actingManager } from "@/lib/api-guard";
 import { costsBlocks, uuidOf } from "@/lib/costs/guard";
-import { ingredientName, ingredientUnit, leadDays, MAX_INGREDIENTS, packPrice, packSize, supplierName, type IngredientUnit } from "@/lib/costs/input";
+import { ingredientName, ingredientUnit, leadDays, MAX_INGREDIENTS, packPrice, packSize, quantityRefusal, supplierName, type IngredientUnit } from "@/lib/costs/input";
 
 export const runtime = "nodejs";
 
@@ -32,7 +32,7 @@ async function fieldsOf(body: IngredientBody, unit: IngredientUnit): Promise<Fie
   const name = ingredientName(body.name);
   if (!name) return await apiError("apiErr.ingredientName", 400);
   const size = packSize(body.packSize, body.packUnit, unit);
-  if (size === null) return await apiError("apiErr.packSize", 400);
+  if (size === null) return await apiError(quantityRefusal(body.packSize, "apiErr.packSize"), 400);
   const price = packPrice(body.packPrice);
   if (price === null) return await apiError("apiErr.packPrice", 400);
   const supplier = supplierName(body.supplier);

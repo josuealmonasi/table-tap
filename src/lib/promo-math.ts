@@ -1,4 +1,5 @@
 import { round2 } from "@/lib/money";
+import { typedDecimal } from "@/lib/typed-decimal";
 // Quantity-deal maths: what a given number of one product actually costs.
 // Pure and self-contained so the pricing engine stays readable and this can be
 // unit-tested on its own.
@@ -110,4 +111,21 @@ export function addedLineCost(
   const before = promo ? promoCost(promo, otherQty, unit) : otherQty * unit;
   const after = promo ? promoCost(promo, otherQty + qty, unit) : (otherQty + qty) * unit;
   return round2(after - before);
+}
+
+/**
+ * The price breaks as an owner typed them, and whether every row is a real
+ * break. A row with no price is not a break at MX$0: Number("") is 0, and a
+ * number field the browser could not read ("12,50" on some phones) reports ""
+ * too, so either way the deal used to give the dishes away. Prices read like
+ * every other amount the team types.
+ */
+export function typedTiers(rows: { qty: string; price: string }[]): {
+  tiers: { qty: number; price: number }[];
+  complete: boolean;
+} {
+  const tiers = rows
+    .map(row => ({ qty: Math.floor(Number(row.qty)), price: typedDecimal(row.price, 2) ?? NaN }))
+    .filter(row => row.qty > 0 && Number.isFinite(row.price) && row.price > 0);
+  return { tiers, complete: rows.length > 0 && tiers.length === rows.length };
 }

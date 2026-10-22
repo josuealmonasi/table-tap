@@ -1,4 +1,5 @@
 import { round2 } from "@/lib/money";
+import { ambiguousDecimal, typedDecimal } from "@/lib/typed-decimal";
 
 /**
  * How what an owner types about their ingredients is read.
@@ -31,15 +32,13 @@ export const MAX_RECIPE_QUANTITY = 100_000;
 export const MAX_TERMINAL_FEE_PCT = 15;
 
 /**
- * A positive or zero decimal as people type it: "1,250.50", "0.5", "18".
- * At most `decimals` places, at most `max`. Null when it is not one.
+ * A positive or zero decimal as people type it: "1,250.50", "0.5", "0,5", "18".
+ * At most `decimals` places, at most `max`. Null when it is not one, or when it
+ * would have to be guessed ("1,500" kg; see `ambiguousDecimal`).
  */
 export function decimal(raw: unknown, max: number, decimals: number): number | null {
-  const text = typeof raw === "number" ? String(raw) : typeof raw === "string" ? raw.trim().replace(/,/g, "") : "";
-  const shape = decimals > 0 ? new RegExp(`^\\d+(\\.\\d{1,${decimals}})?$`) : /^\d+$/;
-  if (!shape.test(text)) return null;
-  const value = Number(text);
-  return Number.isFinite(value) && value <= max ? value : null;
+  const value = typedDecimal(raw, decimals);
+  return value !== null && value <= max ? value : null;
 }
 
 /** An ingredient's name: trimmed, 1–80 characters. */
@@ -81,6 +80,14 @@ export function packPrice(raw: unknown): number | null {
 }
 
 /** How much of an ingredient one product takes: more than nothing, three decimals. */
+/**
+ * Which refusal a quantity gets: "1,500" could be 1.5 or 1500 and says so,
+ * instead of a message about something the person did not get wrong.
+ */
+export function quantityRefusal(raw: unknown, key: string): string {
+  return ambiguousDecimal(raw, 3) ? "apiErr.ambiguousQuantity" : key;
+}
+
 export function recipeQuantity(raw: unknown): number | null {
   const quantity = decimal(raw, MAX_RECIPE_QUANTITY, 3);
   return quantity !== null && quantity > 0 ? quantity : null;

@@ -6,7 +6,7 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { actingManager } from "@/lib/api-guard";
 import { costsBlocks, uuidOf } from "@/lib/costs/guard";
-import { decimal, packPrice } from "@/lib/costs/input";
+import { decimal, packPrice, quantityRefusal } from "@/lib/costs/input";
 
 export const runtime = "nodejs";
 
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const ingredientId = uuidOf(body?.ingredientId);
   if (!body || !ingredientId) return await apiError("apiErr.invalidRequest", 400);
   const packs = decimal(body.packs, MAX_PACKS, 3);
-  if (packs === null || packs <= 0) return await apiError("apiErr.purchasePacks", 400);
+  if (packs === null || packs <= 0) return await apiError(quantityRefusal(body.packs, "apiErr.purchasePacks"), 400);
   const total = packPrice(body.total);
   if (total === null) return await apiError("apiErr.purchaseTotal", 400);
 

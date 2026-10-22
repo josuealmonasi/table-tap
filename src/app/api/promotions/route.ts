@@ -45,10 +45,12 @@ function validate(body: Body): { key: string } | null {
   } else if (body.kind === "tiered") {
     // Whole units within reason, a real price, and a handful of brackets: what
     // is stored is what pricing reads, so anything else must not be saved.
+    // A price of nothing gives the dishes away: Number("") is 0, so a blank
+    // field used to save "2 for MX$0".
     const tiers = body.tiers ?? [];
     const sound = (t: { qty?: unknown; price?: unknown }) =>
       Number.isInteger(Number(t.qty)) && Number(t.qty) >= 1 && Number(t.qty) <= MAX_TIER_QTY &&
-      Number.isFinite(Number(t.price)) && Number(t.price) >= 0;
+      Number.isFinite(Number(t.price)) && Number(t.price) > 0;
     if (tiers.length === 0) return { key: "apiErr.promoTierNeeded" };
     if (tiers.length > MAX_TIERS || !tiers.every(sound)) return { key: "apiErr.promoTierInvalid" };
   } else {

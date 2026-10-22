@@ -25,7 +25,14 @@ export function trackData(tab) {
   tab.on("request", start);
   tab.on("requestfinished", end);
   tab.on("requestfailed", end);
-  return { get size() { return active.length; } };
+  // A navigation abandons the last page's requests, and some are never
+  // reported finished or failed. Turning back 0.7 s after a click had left
+  // the menu editor, it fired another wave of reads as goto began; the count
+  // stayed at 4 and /dashboard could never be ready again in that tab. When
+  // the new page commits, nothing started before it is this page's data.
+  const forget = () => { active.length = 0; };
+  tab.on("framenavigated", frame => { if (frame === tab.mainFrame?.()) forget(); });
+  return { get size() { return active.length; }, reset: forget };
 }
 
 export function contentFor(url) {
@@ -117,6 +124,7 @@ export async function overlay(tab, selector = "[role=dialog]", open = true, time
  * screen were broken. A false red teaches people to ignore reds.
  */
 export async function navigate(tab, url, phase, pending) {
+  pending?.reset?.();
   await phase("navigation", async () => {
     const response = await tab.goto(url, { waitUntil: "load", timeout: 60000 });
     if (response && response.status() >= 400) throw new Error(`navigation returned HTTP ${response.status()}`);

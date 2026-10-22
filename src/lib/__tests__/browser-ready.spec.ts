@@ -117,3 +117,33 @@ it("bounds a readiness sample whose page evaluation never settles", async () => 
   await vi.advanceTimersByTimeAsync(21);
   await result;
 });
+
+it("forgets the last page's requests once the new page commits", async () => {
+  // Turning back 0.7 s after a click had left the menu editor, the editor
+  // was still loading: it fired another wave of reads as goto began, and the
+  // navigation killed them without any finished or failed event. The count
+  // stayed at 4, so /dashboard could never be ready again in that tab.
+  const page = new FakePage();
+  const main = {};
+  Object.assign(page, { mainFrame: () => main });
+  const pending = trackData(page);
+  page.emit("request", { resourceType: () => "fetch" });
+  const goto = vi.fn(async () => {
+    page.emit("request", { resourceType: () => "fetch" }); // the dying page's next wave
+    page.emit("framenavigated", main);                       // the new page commits
+    return null;
+  });
+  Object.assign(page, { goto });
+  const phase = async (_name: string, work: () => Promise<unknown>) => work();
+  const work = navigate(page as never, page.url(), phase, pending);
+  await vi.advanceTimersByTimeAsync(1000);
+  await work;
+  expect(pending.size).toBe(0);
+  // A child frame navigating is not a new page; what the new page starts is waited for.
+  const fresh = { resourceType: () => "fetch" };
+  page.emit("request", fresh);
+  page.emit("framenavigated", {});
+  expect(pending.size).toBe(1);
+  page.emit("requestfinished", fresh);
+  expect(pending.size).toBe(0);
+});
