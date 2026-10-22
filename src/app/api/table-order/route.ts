@@ -1,4 +1,3 @@
-import { uncommittedRefusal } from "@/lib/retry-response";
 import { orderRequestScope } from "@/lib/order-request";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -62,26 +61,20 @@ export async function POST(req: NextRequest) {
     note?: string;
     ref?: string;
   }>(req);
-  if (!body) return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
   const items = Array.isArray(body.items) ? body.items : [];
   if (!body.tableId || items.length === 0) {
-    return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
+    return await apiError("apiErr.invalidRequest", 400);
   }
 
   const ref = uuidOf(body.ref);
-  if (body.ref !== undefined && !ref) return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
+  if (body.ref !== undefined && !ref) return await apiError("apiErr.invalidRequest", 400);
   const intent = ref ? { restaurantId: actor.restaurantId, ref, scope: orderRequestScope(`table-order:${body.tableId}`, body) } : null;
   if (intent) {
     const previous = await readOrderIntent(intent);
     if (previous?.conflict) return await apiError("apiErr.retryConflict", 409);
     if (previous) return NextResponse.json({ ...previous, code: orderCode(previous.orderId) });
   }
-  // From here on the reference was looked up and nothing was saved under it,
-  // so a refusal settles it and the phone may let it go: a dish that sold out,
-  // a closed kitchen. Kept, it left the person on "send again" with a cart
-  // that could never go. The refusals above it (a frozen plan, a lapsed
-  // sign-in) come before the lookup and keep the reference (audit L, 5).
-  const afterLookup = (refusal: NextResponse) => (intent ? uncommittedRefusal(refusal) : refusal);
 
   const db = createAdminClient();
 
@@ -93,7 +86,7 @@ export async function POST(req: NextRequest) {
     .eq("id", body.tableId)
     .eq("restaurant_id", actor.restaurantId)
     .maybeSingle();
-  if (!table) return await afterLookup(await apiError("apiErr.tableNotFound", 404));
+  if (!table) return await apiError("apiErr.tableNotFound", 404);
 
   // Read with the secret key: the same reason the till does. `public read
   // available menu` gives a browser only what is available, and a waiter needs
@@ -103,7 +96,7 @@ export async function POST(req: NextRequest) {
     .select("id, currency, service_pct, service_enabled, tax_pct, timezone, low_stock_threshold, low_stock_alerts_enabled")
     .eq("id", actor.restaurantId)
     .maybeSingle();
-  if (!restaurant) return await afterLookup(await apiError("apiErr.restaurantNotFound", 404));
+  if (!restaurant) return await apiError("apiErr.restaurantNotFound", 404);
 
   const [menusRes, catsRes] = await Promise.all([
     db.from("menus").select("id, active, schedule").eq("restaurant_id", actor.restaurantId),
@@ -118,7 +111,7 @@ export async function POST(req: NextRequest) {
     (restaurant.timezone as string | null) ?? DEFAULT_TIME_ZONE,
     { schedules: await tierIncludes(actor.restaurantId, "menuSchedules") },
   );
-  if (closedNow) return await afterLookup(await apiError("apiErr.closedNow", 409));
+  if (closedNow) return await apiError("apiErr.closedNow", 409);
 
   const menuOfCategory = new Map(
     ((catsRes.data as { id: string; menu_id: string | null }[] | null) ?? []).map(c => [c.id, c.menu_id]),
@@ -134,7 +127,7 @@ export async function POST(req: NextRequest) {
   const refs = cartReferences(items, promotions);
   if (!refs.ok) {
     const { key, vars } = rejectionMessage(refs.rejection);
-    return await afterLookup(await apiError(key, 400, vars));
+    return await apiError(key, 400, vars);
   }
   const referencedIds = refs.ids;
   const { data: dbItems } = await db
@@ -142,7 +135,7 @@ export async function POST(req: NextRequest) {
     .select("id, name, price, emoji, available, discount_pct, modifiers, category_id, skips_kitchen, menu_id, categories(station)")
     .in("id", referencedIds)
     .eq("restaurant_id", actor.restaurantId);
-  if (!dbItems) return await afterLookup(await apiError("apiErr.verifyItems", 400));
+  if (!dbItems) return await apiError("apiErr.verifyItems", 400);
 
   const result = verifyCart({
     items,
@@ -152,7 +145,7 @@ export async function POST(req: NextRequest) {
   });
   if (!result.ok) {
     const { key, vars } = rejectionMessage(result.rejection);
-    return await afterLookup(await apiError(key, 400, vars));
+    return await apiError(key, 400, vars);
   }
   const verified = result.lines;
 
@@ -172,7 +165,7 @@ export async function POST(req: NextRequest) {
     Number(restaurant.low_stock_threshold) || 0,
   );
   if (!reservation.ok) {
-    return await afterLookup(NextResponse.json({ short: reservation.short, code: "outOfStock" }, { status: 409 }));
+    return await NextResponse.json({ short: reservation.short, code: "outOfStock" }, { status: 409 });
   }
 
   // Joins the sitting already open at this table, or opens one. Two waiters

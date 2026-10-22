@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
   if (!TAKES_COUNTER_ORDERS(actor.role)) return await apiError("apiErr.forbidden", 403);
 
   const body = await jsonBody<PosSaleBody & { offline?: unknown }>(req);
-  if (!body) return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
+  if (!body) return await apiError("apiErr.invalidRequest", 400);
   const elsewhere = await otherRestaurant(body, actor.restaurantId);
   if (elsewhere) return elsewhere;
   // Rung while the connection was gone and sent now: it already happened.
@@ -78,17 +78,17 @@ export async function POST(req: NextRequest) {
   // The till's own random UUID, never a guessable string: the reference is
   // what a retry is matched on, and it becomes the order's id.
   if (typeof posRef !== "string" || !UUID.test(posRef) || !Array.isArray(items) || items.length === 0) {
-    return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
+    return await apiError("apiErr.invalidRequest", 400);
   }
   if (method !== "cash" && method !== "card" && method !== "account") {
-    return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
+    return await apiError("apiErr.invalidRequest", 400);
   }
   // "Ponlo en mi cuenta": the food goes out now and the account owes it. The
   // cashier ringing it is the approval; the account's ceiling is checked
   // under its lock, in the same transaction that creates the sale.
   const onAccount = method === "account";
   if (onAccount) {
-    if (typeof body.accountId !== "string") return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
+    if (typeof body.accountId !== "string") return await apiError("apiErr.invalidRequest", 400);
     const noAccounts = await planBlocks(actor.restaurantId, "openAccounts");
     if (noAccounts) return noAccounts;
   }
@@ -99,9 +99,6 @@ export async function POST(req: NextRequest) {
   // rather than ringing it again — and only this restaurant's ticket.
   const already = await existingTicket(db, posRef, actor.restaurantId, body);
   if (already) return already;
-  // Past this lookup nothing is saved under the reference, so a refusal below
-  // settles it and the till may let the sale go (audit L, 5). The frozen plan
-  // and plan checks above come first and keep it.
 
   // Read with the secret key, not the staff session. `restaurants` grants a
   // browser only the columns a diner's menu needs, so a cashier's own client
@@ -113,22 +110,22 @@ export async function POST(req: NextRequest) {
     .select("id, name, currency, tax_pct, service_pct, service_enabled, timezone, low_stock_threshold, low_stock_alerts_enabled")
     .eq("id", actor.restaurantId)
     .single();
-  if (!restaurant) return await uncommittedRefusal(await apiError("apiErr.forbidden", 403));
+  if (!restaurant) return await apiError("apiErr.forbidden", 403);
 
   // Only what the restaurant is actually serving right now: a cashier should
   // not be able to ring a dish from a menu that closed at lunch. The same
   // decision the diner's own menu makes, from the same function.
   const { closedNow, onOpenMenu } = await orderableNow(db, actor.restaurantId);
-  if (closedNow) return await uncommittedRefusal(await apiError("apiErr.closedNow", 409));
+  if (closedNow) return await apiError("apiErr.closedNow", 409);
 
   // Priced from the database by the same function checkout uses, so a dish
   // cannot be one price at the counter and another on a phone.
   const promotions = await promotionsOnSale(db, actor.restaurantId);
   const result = await verifiedLines(db, actor.restaurantId, { items, promotions, onOpenMenu });
   if (!result.ok) {
-    if (!result.rejection) return await uncommittedRefusal(await apiError("apiErr.verifyItems", 400));
+    if (!result.rejection) return await apiError("apiErr.verifyItems", 400);
     const { key, vars } = rejectionMessage(result.rejection);
-    return await uncommittedRefusal(await apiError(key, 400, vars));
+    return await apiError(key, 400, vars);
   }
   const verified = result.lines;
 

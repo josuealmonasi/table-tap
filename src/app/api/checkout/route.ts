@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await jsonBody<CheckoutBody>(req);
-    if (!body) return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
+    if (!body) return await apiError("apiErr.invalidRequest", 400);
     const { restaurantId, tableId, items, couponCode, payLater } = body;
     if (await isTableLimited(req, "checkout", typeof tableId === "string" ? tableId : null, 10)) {
       return await apiError("apiErr.tooManyAttempts", 429);
@@ -57,11 +57,11 @@ export async function POST(req: NextRequest) {
     const { tipPct, tipAmount } = checkoutTip(body);
 
     if (!restaurantId || !items?.length) {
-      return await uncommittedRefusal(await apiError("apiErr.orderData", 400));
+      return await apiError("apiErr.orderData", 400);
     }
 
     const ref = uuidOf(body.ref);
-    if (body.ref !== undefined && !ref) return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
+    if (body.ref !== undefined && !ref) return await apiError("apiErr.invalidRequest", 400);
     const hash = memberHash(req);
     const intent = payLater && ref ? { restaurantId, ref, scope: orderRequestScope(`checkout:${tableId ?? ""}:${hash ?? ""}`, body) } : null;
     if (intent) {
@@ -69,12 +69,6 @@ export async function POST(req: NextRequest) {
       if (previous?.conflict) return await apiError("apiErr.retryConflict", 409);
       if (previous) return NextResponse.json({ ...previous, deferred: true });
     }
-    // From here on the reference was looked up and nothing was saved under it,
-    // so a refusal settles it and the phone may let it go: a dish that sold out,
-    // a closed kitchen. Kept, it left the person on "send again" with a cart
-    // that could never go. The refusals above it (a frozen plan, a lapsed
-    // sign-in) come before the lookup and keep the reference (audit L, 5).
-    const afterLookup = (refusal: NextResponse) => (intent ? uncommittedRefusal(refusal) : refusal);
     const supabase = createAdminClient();
 
     // Re-fetch the restaurant to get the authoritative service % and currency.
@@ -87,12 +81,12 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (rErr || !restaurant) {
-      return await afterLookup(await apiError("apiErr.restaurantNotFound", 404));
+      return await apiError("apiErr.restaurantNotFound", 404);
     }
 
     // Kill switch: the owner paused orders (maybe after this page loaded).
     if (!restaurant.accepting_orders) {
-      return await afterLookup(await apiError("apiErr.notAccepting", 409));
+      return await apiError("apiErr.notAccepting", 409);
     }
 
     // Caja takes the order at the register, never from the diner's phone. The
@@ -100,20 +94,20 @@ export async function POST(req: NextRequest) {
     // asks anyway, with the same sentence the menu shows.
     const plan = await getPlan(restaurantId);
     if (plan && !can(plan.limits, "onlineOrdering")) {
-      return await afterLookup(await apiError("apiErr.orderAtRegister", 409));
+      return await apiError("apiErr.orderAtRegister", 409);
     }
 
     // A retained table after a downgrade does not grant new table orders.
     // Existing bills use separate settlement routes and stay payable.
     if (tableId && (!plan || !can(plan.limits, "dineIn"))) {
-      return await afterLookup(await apiError("plan.needs.dineIn", 403, { plan: "Servicio" }));
+      return await apiError("plan.needs.dineIn", 403, { plan: "Servicio" });
     }
 
     // A menu switched off — or outside its opening hours — stops being
     // orderable, not just invisible (`orderableNow`).
     const { closedNow, onOpenMenu } = await orderableNow(supabase, restaurantId);
     if (closedNow) {
-      return await afterLookup(await apiError("apiErr.closedNow", 409));
+      return await apiError("apiErr.closedNow", 409);
     }
 
     // The table must belong to this restaurant, or the sitting it opens blocks
@@ -121,24 +115,24 @@ export async function POST(req: NextRequest) {
     // coupon claim, this answer once kept a use nobody spent.
     const table = tableId ? await tableOf(restaurantId, tableId) : null;
     if (tableId && !table) {
-      return await afterLookup(await apiError("apiErr.tableNotFound", 404));
+      return await apiError("apiErr.tableNotFound", 404);
     }
 
     // Check an occupied table before reserving anything. Empty-table races
     // are decided under the table lock below, with any claims returned if
     // another phone opened the sitting while this cart was being checked.
-    if (tableId && !hash) return await afterLookup(await apiError("apiErr.tableJoin", 403));
+    if (tableId && !hash) return await apiError("apiErr.tableJoin", 403);
 
     const waiting = tableId && hash ? await requestTableMember(restaurantId, tableId, hash) : null;
     if (waiting && (waiting.status === "pending" || waiting.status === "rejected")) {
-      return await afterLookup(await apiError("apiErr.tableJoin", 403));
+      return await apiError("apiErr.tableJoin", 403);
     }
 
     // Pay later is decided from the database and the plan (`payLaterAllowed`).
     const allowDeferred = payLaterAllowed(restaurant.allow_pay_later, plan?.limits);
     const deferred = Boolean(payLater) && allowDeferred;
     if (payLater && !deferred) {
-      return await afterLookup(await apiError("apiErr.payLaterNotAllowed", 403));
+      return await apiError("apiErr.payLaterNotAllowed", 403);
     }
 
     // No payouts without a connected Stripe account: refuse to charge a card
@@ -146,7 +140,7 @@ export async function POST(req: NextRequest) {
     // in Settings → Payments before customers can check out. A deferred order
     // takes no card here, so it is exempt — the waiter settles it later.
     if (!deferred && (!restaurant.stripe_account_id || !restaurant.stripe_charges_enabled)) {
-      return await afterLookup(await apiError("apiErr.noCardPayments", 409));
+      return await apiError("apiErr.noCardPayments", 409);
     }
 
     // Promotions come from the DB too, so a combo's price and a quantity deal's
@@ -165,8 +159,8 @@ export async function POST(req: NextRequest) {
       maxLines: MAX_CARD_CART_LINES,
     });
     if (!result.ok) {
-      if (!result.rejection) return await afterLookup(await apiError("apiErr.verifyItems", 400));
-      return await afterLookup(await refuseCart(result.rejection));
+      if (!result.rejection) return await apiError("apiErr.verifyItems", 400);
+      return await refuseCart(result.rejection);
     }
     const verified = result.lines;
 
@@ -218,12 +212,12 @@ export async function POST(req: NextRequest) {
     const admission = tableId && hash ? await requestTableMember(restaurantId, tableId, hash, true) : null;
     if (admission && admission.status !== "approved") {
       await held.giveBack();
-      return await afterLookup(await apiError("apiErr.tableJoin", 403));
+      return await apiError("apiErr.tableJoin", 403);
     }
     const sessionId = admission?.sessionId ?? null;
     if (tableId && !sessionId) {
       await held.giveBack();
-      return await afterLookup(await apiError("apiErr.sessionGone", 409));
+      return await apiError("apiErr.sessionGone", 409);
     }
 
     if (intent) {
@@ -369,7 +363,7 @@ export async function POST(req: NextRequest) {
       await held.giveBack();
       const code = err && typeof err === "object" && "code" in err ? err.code : undefined;
       if (code === "amount_too_small") {
-        return await afterLookup(await apiError("apiErr.belowCardMinimum", 400));
+        return await apiError("apiErr.belowCardMinimum", 400);
       }
       throw err; // anything else falls through to the generic handler below
     }

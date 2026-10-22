@@ -31,11 +31,3 @@ it("L4 a different request under an old reference has its own 409 key", async ()
   expect(response.status).toBe(409);
   expect(await response.json()).toEqual({ error: "apiErr.retryConflict" });
 });
-it("L5 a refusal of what was typed settles the attempt; the same request can never succeed", async () => {
-  // Kept, the MX$100 purchase with no packs sat on "send again" for ever.
-  const response = await POST(new NextRequest("https://test/api/costs/purchases", { method: "POST",
-    body: JSON.stringify({ ...body, packs: 0, ref: body.ingredientId }) }));
-  expect(response.status).toBe(400);
-  expect(await response.json()).toMatchObject({ retryUncommitted: true });
-  expect(state.rpcs).toEqual([]);
-});

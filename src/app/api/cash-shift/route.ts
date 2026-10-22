@@ -1,4 +1,3 @@
-import { uncommittedRefusal } from "@/lib/retry-response";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -47,9 +46,9 @@ export async function POST(req: NextRequest) {
 
   if (body?.action === "close") {
     // The closer signs it off: they counted, and the count is theirs.
-    if (body.confirm !== true) return await uncommittedRefusal(await apiError("apiErr.shiftConfirm", 400));
+    if (body.confirm !== true) return await apiError("apiErr.shiftConfirm", 400);
     const counted = cashAmount(body.counted, false);
-    if (counted === null) return await uncommittedRefusal(await apiError("apiErr.cashAmount", 400));
+    if (counted === null) return await apiError("apiErr.cashAmount", 400);
     const shiftId = uuidOf(body.shiftId);
     const ref = uuidOf(body.ref);
     if (!shiftId || !ref) return await apiError("apiErr.shiftChanged", 409);
