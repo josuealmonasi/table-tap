@@ -37,10 +37,26 @@ export interface AddonInput {
   emoji: string;
 }
 
+/** The menu as the latest complete read returned it. */
+export interface MenuSnapshot {
+  menus: Menu[];
+  sections: Category[];
+  products: MenuItem[];
+  addons: MenuItem[];
+  /** product_id → addon_id[] */
+  links: Record<string, string[]>;
+}
+
 /** What every group of editor actions works from: the client, the state and the writer. */
 export interface EditorContext {
   /** Resolves once the latest read finishes: true only when the whole menu is held. */
   ready: () => Promise<boolean>;
+  /**
+   * The menu that read returned. An action that waited for `ready` reads this,
+   * never the arrays it was called with: those are the render before the read
+   * it waited for, and a copy made from them was a copy of the old price.
+   */
+  latest: { readonly current: MenuSnapshot };
   supabase: ReturnType<typeof createClient>;
   restaurantId: string;
   toast: ReturnType<typeof useToast>;

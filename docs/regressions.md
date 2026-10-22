@@ -4009,3 +4009,37 @@ Found while checking S23's POS counters in a browser, at 390 px and 1280 px.
   overlay by hand. `useOverlayDialog.spec.ts` fails if any component spells
   `className="tt-detail-overlay"` outside `DetailOverlay`, and the `label`
   prop is required.
+
+## Audit L (S25a): collections, the editor's latest read, and gates that pass unchecked
+
+Codex audited everything shipped on 2026-10-21 and 22 (audit L). Claude
+verified each finding in code and fixed these four. Codex fixed 3, 4, 5, 6
+and 8 in S25b.
+
+| Bug | The two places that had to agree | What catches it now |
+|---|---|---|
+| A table collected without the balance its screen showed recorded what it owed on arrival: MX$150 cleared for MX$100 seen | `SettleTableDialog`'s reviewed figure and `/api/table-payment`'s old-tab branch | `collection-full-account.spec.ts` (L1); `attack-money` checks the unreviewed shape records nothing |
+| An old tab's part payment took the debt's currency: MX$100 typed cleared US$100 | The menu currency the old calculator showed and the shim's inferred currency | `part-payment-route.spec.ts` (L2) |
+| A copy made during a reload copied the old price and extras; reorders and failed toggles used the menu from before the read | The arrays an action was called with and the read `ready` waited for | `s23b-writes.spec.ts` (L7) |
+| A role whose password was missing was "skipped", and skipped counted as passed; a dialog that opened after a read was never measured | `crewCookies`' skip and `manifestFailures`; the 700 ms look and the read the click started | `browser-fixtures.spec.ts`, `dialog-probe.spec.ts` |
+
+- **Finding 1.** Today's dialog always sends the reviewed figure. Its
+  buttons appear only once the bill has loaded. The unreviewed branch
+  served tabs opened before #531, and it collected whatever the table owed
+  when the request landed. It now answers «Esta pantalla está
+  desactualizada…» (409) and records nothing. The table-only code that sat in
+  the counter-order path afterwards is gone. `rls-check` and `attack-money`
+  send tables the reviewed shape, with the table's real balance. Without
+  it, the other-restaurant check would pass on the refresh answer and never
+  test the scope.
+- **Finding 2.** The old calculator showed every figure in the menu's
+  currency. The shim now infers a currency only when the debt is in that
+  one, and refreshes otherwise.
+- **Finding 7.** `ctx.latest` holds what the latest complete read returned.
+  The duplicate and the import read it after waiting. `move` picks the
+  siblings from it. A failed switch or schedule reloads, rather than
+  restoring arrays from before that read.
+- **Finding 9.** A missing password fails that role's visits (dialogs,
+  layout) and is a GAP in promises, unless the run names the role in
+  `GATE_SKIP_ROLES` on purpose. The dialogs sweep waits for a read the click
+  started before deciding that nothing opened.

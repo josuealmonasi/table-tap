@@ -243,9 +243,22 @@ if (!signIn.error && theirs) {
     if (r1.status !== 200 || /"orders":\s*\[\]/.test(r1.text)) ok("table-bill of another restaurant's table is empty");
     else bad(`table-bill returned another restaurant's bill: ${r1.text.slice(0, 90)}`);
 
-    const r2 = await call("POST", "/api/table-payment", { tableId: theirTable, settlement: "cash" });
-    if (r2.status >= 400) ok(`cannot settle another restaurant's table (${r2.status})`);
-    else bad(`settled another restaurant's table (${r2.status})`);
+    // Sent as the dialog sends it, with that table's real balance, so only the
+    // restaurant scope stands in the way. Without a balance the route asks for
+    // a refresh first, and this would pass without testing the scope at all.
+    const { data: theirOwed } = await admin.from("orders").select("total, currency")
+      .eq("table_id", theirTable).eq("paid", false);
+    const owed = Number((theirOwed ?? []).reduce((sum, o) => sum + Number(o.total), 0).toFixed(2)) || 1;
+    const payments = async () => (await admin.from("payments").select("id", { count: "exact", head: true })
+      .eq("restaurant_id", theirs.id)).count;
+    const before = await payments();
+    const r2 = await call("POST", "/api/table-payment", {
+      tableId: theirTable, settlement: "cash", expected: owed,
+      currency: theirOwed?.[0]?.currency ?? "MXN", ref: crypto.randomUUID(),
+    });
+    const after = await payments();
+    if (r2.status >= 400 && after === before) ok(`cannot settle another restaurant's table (${r2.status})`);
+    else bad(`settled another restaurant's table (${r2.status}, payments ${before} → ${after})`);
 
     const r3 = await call("POST", "/api/bill/write-off", { tableId: theirTable, reason: "walkout" });
     if (r3.status >= 400) ok(`cannot cancel another restaurant's bill (${r3.status})`);

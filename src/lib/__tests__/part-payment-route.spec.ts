@@ -5,6 +5,10 @@ const record = vi.fn();
 const outstanding = vi.fn();
 const closeBill = vi.fn();
 const logEvent = vi.fn();
+let menuCurrency: string | null = "MXN";
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
+  from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: menuCurrency ? { currency: menuCurrency } : null }) }) }) }),
+}) }));
 vi.mock("@/lib/api-guard", () => ({ actingFrontOfHouse: async () => ({ restaurantId: "r1", email: "waiter@example.com" }) }));
 vi.mock("@/lib/plan-guard", () => ({ planBlocks: async () => null }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (key: string, status: number) => Response.json({ error: key }, { status }) }));
@@ -20,6 +24,7 @@ import { POST } from "@/app/api/table-payment/part/route";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  menuCurrency = "MXN";
   outstanding.mockResolvedValue({ orders: [], sittings: [], ordered: 200, owed: 200, collected: 0, tips: 0 });
 });
 
@@ -96,5 +101,27 @@ it("asks an old tab to refresh when the table owes in two currencies, and says w
   }));
   expect(response.status).toBe(409);
   expect(await response.json()).toEqual({ error: "apiErr.nothingToSettle" });
+  expect(record).not.toHaveBeenCalled();
+});
+
+it("L2: an old tab showing pesos never clears a dollar-only debt", async () => {
+  // The tab before the reviewed balance showed every figure as MX$. The waiter
+  // typed 100 holding 100 pesos; taking it as US$100 cleared a dollar debt.
+  outstanding.mockResolvedValue({ orders: [], sittings: [], ordered: 100, owed: 100, collected: 0, tips: 0,
+    currency: "USD", balances: [{ currency: "USD", ordered: 100, collected: 0, tips: 0, owed: 100 }] });
+  const response = await POST(new NextRequest("http://localhost/api/table-payment/part", {
+    method: "POST", body: JSON.stringify({ tableId: "t1", amount: 100, method: "cash", ref: "old-usd" }),
+  }));
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ error: "apiErr.refreshToCollect" });
+  expect(record).not.toHaveBeenCalled();
+  // And a restaurant it cannot read is not assumed to be in pesos.
+  menuCurrency = null;
+  outstanding.mockResolvedValue({ orders: [], sittings: [], ordered: 200, owed: 200, collected: 0, tips: 0,
+    currency: "MXN", balances: [{ currency: "MXN", ordered: 200, collected: 0, tips: 0, owed: 200 }] });
+  const unread = await POST(new NextRequest("http://localhost/api/table-payment/part", {
+    method: "POST", body: JSON.stringify({ tableId: "t1", amount: 100, method: "cash", ref: "old-unread" }),
+  }));
+  expect(unread.status).toBe(409);
   expect(record).not.toHaveBeenCalled();
 });

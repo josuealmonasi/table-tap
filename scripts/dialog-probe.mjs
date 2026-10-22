@@ -89,6 +89,20 @@ export async function typingFaults(tab, scope = "[role=dialog]", most = 4) {
 const DISCARD = /^\s*(Descartar cambios|Discard changes)\s*$/i;
 
 /** Clicks Discard when a dirty form asked before closing; does nothing otherwise. */
+/**
+ * Whether a click opened a dialog. Most buttons open nothing, so the first
+ * look is short. A click that started a read may be waiting on it to open one
+ * («Cobrar» reads the bill first); 700 ms later it read as a button that opens
+ * nothing, never measured and never failed (audit L, finding 9). So while a
+ * read is in flight, wait for it and look again.
+ */
+export async function dialogOpened(tab, pending, phase) {
+  if (await phase("readiness", () => overlay(tab, "[role=dialog]", true, 700, false))) return true;
+  if (!pending?.size) return false;
+  await phase("readiness", () => ready(tab, { pending }));
+  return phase("readiness", () => overlay(tab, "[role=dialog]", true, 700, false));
+}
+
 export async function answerDiscard(tab) {
   const discard = tab.getByRole("button", { name: DISCARD });
   // The question opens a frame after Escape; 300 ms is ample, and every
@@ -141,7 +155,7 @@ export async function probeDialogs({ tab, log, phase, stop }, { url, role, path 
     await deadline(20000, async () => {
       if (!(await clickByLabel(tab, label))) return;
       // A button can legitimately open nothing. Observe the full window then.
-      if (!(await phase("readiness", () => overlay(tab, "[role=dialog]", true, 700, false)))) return;
+      if (!(await dialogOpened(tab, pending, phase))) return;
       await phase("readiness", () => ready(tab, { pending }));
       opened++;
       const where = `${role} · ${path} → «${label}»`;

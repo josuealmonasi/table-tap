@@ -34,7 +34,7 @@ export function menuActions(ctx: EditorContext) {
       "done.menuDeleted",
     );
   const moveMenu = (id: string, direction: "up" | "down") =>
-    move("write.reorderMenus", "menus", menus, id, direction);
+    move("write.reorderMenus", "menus", menu => menu.menus, id, direction);
 
   /**
    * Opening hours for one menu. Null clears them, which returns the menu to
@@ -45,7 +45,6 @@ export function menuActions(ctx: EditorContext) {
     schedule: MenuSchedule | null,
   ): Promise<boolean> {
     if (!(await ctx.ready())) return false;
-    const prev = menus;
     setMenus(m => m.map(x => (x.id === id ? { ...x, schedule } : x)));
     try {
       const error = writeError(await supabase.from("menus").update({ schedule }).eq("id", id).select("id"));
@@ -53,13 +52,14 @@ export function menuActions(ctx: EditorContext) {
     } catch {
       toast(t("write.updateMenu"), "error");
     }
-    setMenus(prev);
+    // Rolled back by reading what is saved, never by restoring the menus this
+    // was called with: they predate the read `ready` waited for.
+    await reload();
     return false;
   }
 
   async function setMenuActive(id: string, active: boolean): Promise<void> {
     if (!(await ctx.ready())) return;
-    const prev = menus;
     setMenus(m => m.map(x => (x.id === id ? { ...x, active } : x)));
     try {
       const error = writeError(await supabase.from("menus").update({ active }).eq("id", id).select("id"));
@@ -67,7 +67,7 @@ export function menuActions(ctx: EditorContext) {
     } catch {
       toast(t("write.updateMenu"), "error");
     }
-    setMenus(prev); // roll back the optimistic flip
+    await reload(); // roll back the optimistic flip by reading what is saved
   }
 
   /** Deep-copies a menu: its sections, products, extras, and add-on links. Returns the new menu's id. */
@@ -116,10 +116,10 @@ export function menuActions(ctx: EditorContext) {
     );
 
   async function moveSection(id: string, direction: "up" | "down"): Promise<void> {
-    const section = sections.find(s => s.id === id);
-    if (!section) return;
-    const siblings = sections.filter(s => s.menu_id === section.menu_id);
-    await move("write.reorderSections", "categories", siblings, id, direction);
+    await move("write.reorderSections", "categories", menu => {
+      const section = menu.sections.find(s => s.id === id);
+      return section ? menu.sections.filter(s => s.menu_id === section.menu_id) : [];
+    }, id, direction);
   }
 
   return {
