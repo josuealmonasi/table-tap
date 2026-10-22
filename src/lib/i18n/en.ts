@@ -1319,6 +1319,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     accountCurrency: "This account owes in another currency. Collect that balance first, or pay for this order by cash or card.",
     collectionTipLimit: "This payment can carry a tip of up to {max}. Check the tip before taking the money.",
     collectionBalanceChanged: "The bill changed. It now owes {owed}. Check the money with the customer and return any change.",
+    refreshToCollect: "This screen is out of date. Refresh the page to collect this table.",
     tableJoin: "Wait for someone at the table or a waiter to let this phone in.",
     badCurrency: "Choose MXN or USD for your currency.",
     mixedCurrencies: "These orders use different currencies. Please ask your waiter to help you pay each currency separately.",

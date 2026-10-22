@@ -9175,7 +9175,9 @@ begin
     end if;
     if p_coupon is not null then
       insert into coupon_redemptions(restaurant_id, coupon_id, order_id, code, amount, confirmed_at)
-      values(p_restaurant, v_coupon.id, v_id, v_coupon.code, (p_order->'promo_detail'->>'coupon')::numeric, clock_timestamp());
+      -- promo_detail is null when the cart's discount is 0, and the amount is
+      -- required: recorded as 0, as logCheckoutCoupon records it.
+      values(p_restaurant, v_coupon.id, v_id, v_coupon.code, coalesce((p_order->'promo_detail'->>'coupon')::numeric, 0), clock_timestamp());
     end if;
   exception when sqlstate 'PT020' then return '{"couponReason":"limitReached"}'::jsonb;
     when sqlstate 'PT021' then return public.order_intent_result(p_restaurant, p_ref, p_scope);
