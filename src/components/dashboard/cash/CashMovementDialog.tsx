@@ -6,6 +6,8 @@ import PendingAttempt from "@/components/ui/PendingAttempt";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
+import { formatMoney } from "@/lib/format";
+import { typedDecimal } from "@/lib/typed-decimal";
 
 interface CashMovementDialogProps {
   /** A shift opened with its cash, or cash taken out; null when shut. */
@@ -21,6 +23,12 @@ interface CashMovementDialogProps {
  * taken out of it. One form for both: an amount, and for a withdrawal what it
  * was for.
  */
+/** A typed amount as money ("50" → MX$50.00); left as typed if it is not one. */
+function shownMoney(typed: string | undefined, currency: string): string {
+  const value = typedDecimal(typed, 2);
+  return value === null ? `${typed ?? ""} ${currency}` : formatMoney(value, currency);
+}
+
 export default function CashMovementDialog({ kind, currency, shiftId, onClose, onSaved }: CashMovementDialogProps) {
   const t = useT();
   const attempt = useRetryIntent();
@@ -85,7 +93,7 @@ export default function CashMovementDialog({ kind, currency, shiftId, onClose, o
         <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
           {shownKind === "opening" ? t("shift.openHint") : t("corte.withdrawalHint")}
         </p>
-        {pending && <PendingAttempt message={t("pending.withdrawal", { amount: `${frozen?.amount} ${shownCurrency}` })} />}
+        {pending && <PendingAttempt message={t("pending.withdrawal", { amount: shownMoney(frozen?.amount, shownCurrency) })} />}
         <label className="tt-field">
           <span className="tt-mod-label">{shownKind === "opening" ? t("corte.opening") : t("corte.amount")} · {shownCurrency}</span>
           <input

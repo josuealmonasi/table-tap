@@ -5,8 +5,9 @@ import { useRetryIntent, refusalSettles } from "@/hooks/useRetryIntent";
 import PendingAttempt from "@/components/ui/PendingAttempt";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
-import { formatMoney } from "@/lib/format";
 import { useToast } from "@/components/ui/Toast";
+import { formatMoney } from "@/lib/format";
+import { typedDecimal } from "@/lib/typed-decimal";
 
 interface CloseShiftDialogProps {
   open: boolean;
@@ -32,6 +33,12 @@ interface Closed {
  * by the time they see it, so the count cannot drift toward the answer. A
  * difference is explained there and then, while they remember why.
  */
+/** A typed amount as money ("50" → MX$50.00); left as typed if it is not one. */
+function shownMoney(typed: string | undefined, currency: string): string {
+  const value = typedDecimal(typed, 2);
+  return value === null ? `${typed ?? ""} ${currency}` : formatMoney(value, currency);
+}
+
 export default function CloseShiftDialog({ open, currency, shiftId, onClose, onClosed }: CloseShiftDialogProps) {
   const t = useT();
   const attempt = useRetryIntent();
@@ -129,7 +136,7 @@ export default function CloseShiftDialog({ open, currency, shiftId, onClose, onC
       {!closed ? (
         <form className="tt-prodform" onSubmit={e => void count(e)}>
           <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>{t("shift.countHint")}</p>
-          {pending && <PendingAttempt message={t("pending.close", { amount: `${frozen?.counted} ${shownCurrency}` })} />}
+          {pending && <PendingAttempt message={t("pending.close", { amount: shownMoney(frozen?.counted, shownCurrency) })} />}
           <label className="tt-field">
             <span className="tt-mod-label">{t("shift.counted")} · {shownCurrency}</span>
             <input
