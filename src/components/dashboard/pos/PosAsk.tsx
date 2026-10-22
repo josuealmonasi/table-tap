@@ -1,6 +1,7 @@
 "use client";
 
 import { useT } from "@/lib/i18n/context";
+import DetailOverlay from "@/components/customer/DetailOverlay";
 import { NAME_MAX, NOTE_MAX } from "@/lib/notes";
 import { formatMoney } from "@/lib/format";
 import TipPicker from "@/components/customer/TipPicker";
@@ -44,135 +45,140 @@ export default function PosAsk({
 }: PosAskProps) {
   const t = useT();
   const d = details;
+  const title = t("pos.askTitle", { amount: formatMoney(total, currency) });
   return (
-    <div className="tt-detail-overlay" onClick={onClose}>
-      <div className="tt-pos-ask" onClick={e => e.stopPropagation()}>
-        <h3 className="tt-serif" style={{ marginTop: 0 }}>
-          {t("pos.askTitle", { amount: formatMoney(total, currency) })}
-        </h3>
+    <DetailOverlay label={title} panelClassName="tt-pos-ask" onClose={onClose}>
+      <h3 className="tt-serif" style={{ marginTop: 0 }}>
+        {title}
+      </h3>
 
-        {/* The same chips a diner sees, so the two screens cannot offer
-            different tips on the same menu. */}
-        <div className="tt-pos-tip">
-          <TipPicker
-            currency={currency}
-            tipPct={d.tipCustom !== null ? 0 : d.tipPct}
-            tipCustom={d.tipCustom}
-            maxTip={subtotal}
-            onPresetTip={pct => {
-              d.setTipCustom(null);
-              d.setTipPct(pct);
-            }}
-            onCustomTip={amount => {
-              d.setTipCustom(amount);
-              if (amount !== null) d.setTipPct(0);
-            }}
-          />
-        </div>
+      {/* The same chips a diner sees, so the two screens cannot offer
+          different tips on the same menu. */}
+      <div className="tt-pos-tip">
+        <TipPicker
+          currency={currency}
+          tipPct={d.tipCustom !== null ? 0 : d.tipPct}
+          tipCustom={d.tipCustom}
+          maxTip={subtotal}
+          onPresetTip={pct => {
+            d.setTipCustom(null);
+            d.setTipPct(pct);
+          }}
+          onCustomTip={amount => {
+            d.setTipCustom(amount);
+            if (amount !== null) d.setTipPct(0);
+          }}
+        />
+      </div>
 
-        {/* What to key into the terminal, tip included — the one figure the
-            cashier types twice, so it is the one they must not have to
-            work out. And the voucher's reference, to find this sale from
-            the voucher later. */}
-        {method === "card" && (
-          <div className="tt-pos-terminal">
-            <span>{t("pos.terminalCharge")}</span>
-            <strong>{formatMoney(total, currency)}</strong>
-            <label className="tt-field">
-              <span className="tt-mod-label">{t("pos.terminalRef")} <span className="tt-muted">{t("common.optional")}</span></span>
-              <input
-                className="tt-input"
-                value={d.terminalRef}
-                maxLength={40}
-                onChange={e => d.setTerminalRef(e.target.value)}
-                placeholder={t("pos.terminalRefHint")}
-              />
-            </label>
-          </div>
-        )}
-
-        <label className="tt-field">
-          <span className="tt-mod-label">{t("pos.customerName")}</span>
-          <input
-            className="tt-input"
-            autoFocus
-            maxLength={NAME_MAX}
-            aria-describedby="pos-customerName-remaining"
-            value={d.customerName}
-            onChange={e => d.setCustomerName(e.target.value)}
-            placeholder={t("pos.customerNameHint")}
-          />
-          <span id="pos-customerName-remaining" className="tt-muted" style={{ fontSize: 12 }}>{t("common.charactersLeft", { count: Math.max(0, NAME_MAX - d.customerName.length) })}</span>
-        </label>
-
-        <label className="tt-field">
-          <span className="tt-mod-label">{t("pos.note")}</span>
-          <input
-            className="tt-input"
-            maxLength={NOTE_MAX}
-            aria-describedby="pos-note-remaining"
-            value={d.note}
-            onChange={e => d.setNote(e.target.value)}
-            placeholder={t("pos.noteHint")}
-          />
-          <span id="pos-note-remaining" className="tt-muted" style={{ fontSize: 12 }}>{t("common.charactersLeft", { count: Math.max(0, NOTE_MAX - d.note.length) })}</span>
-        </label>
-
-        {/* Not a second way to pay — a modifier on the one there is. The
-            customer said no thank you, so there is nowhere to send a
-            receipt and nothing to print, and the address field goes away
-            rather than sitting there asking a question that no longer has
-            a point. */}
-        <label className="tt-pos-noticket">
-          <input
-            type="checkbox"
-            checked={d.noTicket}
-            disabled={busy}
-            onChange={e => d.setNoTicket(e.target.checked)}
-          />
-          <span>{t("pos.noTicket")}</span>
-        </label>
-
-        {d.noTicket ? (
-          <p className="tt-muted" style={{ fontSize: 13, margin: "0 0 4px" }}>
-            {t("pos.noTicketHint")}
-          </p>
-        ) : canEmailReceipt ? (
+      {/* What to key into the terminal, tip included — the one figure the
+          cashier types twice, so it is the one they must not have to
+          work out. And the voucher's reference, to find this sale from
+          the voucher later. */}
+      {method === "card" && (
+        <div className="tt-pos-terminal">
+          <span>{t("pos.terminalCharge")}</span>
+          <strong>{formatMoney(total, currency)}</strong>
           <label className="tt-field">
-            <span className="tt-mod-label">{t("pos.receiptEmail")}</span>
+            <span className="tt-mod-label">{t("pos.terminalRef")} <span className="tt-muted">{t("common.optional")}</span></span>
             <input
               className="tt-input"
-              type="email"
-              value={d.email}
-              onChange={e => d.setEmail(e.target.value)}
-              placeholder={t("pos.receiptEmailHint")}
+              value={d.terminalRef}
+              maxLength={40}
+              onChange={e => d.setTerminalRef(e.target.value)}
+              placeholder={t("pos.terminalRefHint")}
             />
           </label>
-        ) : (
-          <p className="tt-muted" style={{ fontSize: 13 }}>
-            {t("pos.receiptPrintOnly")}
-          </p>
-        )}
-
-        {/* One way forward. Filled in or left blank, this sends the order —
-            a second button offering the same thing with a different name
-            is a choice nobody has to make. Clicking outside closes and
-            changes nothing, so a stray click never takes money. */}
-        <div className="tt-pos-ask-actions">
-          <button
-            type="button"
-            className="tt-btn tt-btn-primary"
-            disabled={busy}
-            onClick={onSend}
-          >
-            {busy
-              ? t("cart.placingOrder")
-              : allHandedOver
-                ? t("pos.finishSale")
-                : t("pos.sendToKitchen")}
-          </button>
         </div>
+      )}
+
+      <label className="tt-field">
+        <span className="tt-mod-label">{t("pos.customerName")}</span>
+        <input
+          className="tt-input"
+          autoFocus
+          maxLength={NAME_MAX}
+          aria-describedby="pos-customerName-remaining"
+          value={d.customerName}
+          onChange={e => d.setCustomerName(e.target.value)}
+          placeholder={t("pos.customerNameHint")}
+        />
+        <span id="pos-customerName-remaining" className="tt-muted" style={{ fontSize: 12 }}>{t("common.charactersLeft", { count: Math.max(0, NAME_MAX - d.customerName.length) })}</span>
+      </label>
+
+      <label className="tt-field">
+        <span className="tt-mod-label">{t("pos.note")}</span>
+        <input
+          className="tt-input"
+          maxLength={NOTE_MAX}
+          aria-describedby="pos-note-remaining"
+          value={d.note}
+          onChange={e => d.setNote(e.target.value)}
+          placeholder={t("pos.noteHint")}
+        />
+        <span id="pos-note-remaining" className="tt-muted" style={{ fontSize: 12 }}>{t("common.charactersLeft", { count: Math.max(0, NOTE_MAX - d.note.length) })}</span>
+      </label>
+
+      {/* Not a second way to pay — a modifier on the one there is. The
+          customer said no thank you, so there is nowhere to send a
+          receipt and nothing to print, and the address field goes away
+          rather than sitting there asking a question that no longer has
+          a point. */}
+      <label className="tt-pos-noticket">
+        <input
+          type="checkbox"
+          checked={d.noTicket}
+          disabled={busy}
+          onChange={e => d.setNoTicket(e.target.checked)}
+        />
+        <span>{t("pos.noTicket")}</span>
+      </label>
+
+      {d.noTicket ? (
+        <p className="tt-muted" style={{ fontSize: 13, margin: "0 0 4px" }}>
+          {t("pos.noTicketHint")}
+        </p>
+      ) : canEmailReceipt ? (
+        <label className="tt-field">
+          <span className="tt-mod-label">{t("pos.receiptEmail")}</span>
+          <input
+            className="tt-input"
+            type="email"
+            value={d.email}
+            onChange={e => d.setEmail(e.target.value)}
+            placeholder={t("pos.receiptEmailHint")}
+          />
+        </label>
+      ) : (
+        <p className="tt-muted" style={{ fontSize: 13 }}>
+          {t("pos.receiptPrintOnly")}
+        </p>
+      )}
+
+      {/* One way forward. Filled in or left blank, this sends the order —
+          a second button offering the same thing with a different name
+          is a choice nobody has to make. And one way back, in words:
+          below 1025px this sheet fills the screen, so "click outside" was
+          an empty strip nobody would think to tap, and a cashier who
+          pressed cash for a card sale had no visible way out but to send
+          it. Back changes nothing; the name and note stay for next time. */}
+      <div className="tt-pos-ask-actions">
+        <button type="button" className="tt-btn tt-btn-ghost" disabled={busy} onClick={onClose}>
+          {t("pos.backToSale")}
+        </button>
+        <button
+          type="button"
+          className="tt-btn tt-btn-primary"
+          disabled={busy}
+          onClick={onSend}
+        >
+          {busy
+            ? t("cart.placingOrder")
+            : allHandedOver
+              ? t("pos.finishSale")
+              : t("pos.sendToKitchen")}
+        </button>
       </div>
-    </div>
+    </DetailOverlay>
   );
 }

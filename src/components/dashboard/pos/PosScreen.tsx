@@ -298,7 +298,7 @@ export default function PosScreen({
         )}
 
         {openCombo && (
-          <DetailOverlay onClose={() => setOpenCombo(null)}>
+          <DetailOverlay label={openCombo.name} onClose={() => setOpenCombo(null)}>
             <DietaryTagsProvider tags={dietaryTags}>
               <ComboDetailScreen
                 combo={openCombo}
@@ -328,7 +328,7 @@ export default function PosScreen({
             it a second way is how one dish ends up with "less onion" and another
             in the same sale has nowhere to say "extra onion". */}
         {dish && (
-          <DetailOverlay onClose={closeDish}>
+          <DetailOverlay label={dish.name} onClose={closeDish}>
             <DietaryTagsProvider tags={dietaryTags}>
               <ItemDetailScreen
                 item={dish}

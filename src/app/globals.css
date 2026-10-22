@@ -1268,6 +1268,10 @@ a.tt-btn {
   flex: 1;
   min-width: 0;
 }
+/* The way back is the quiet one; sending keeps the width. */
+.tt-pos-ask-actions .tt-btn-ghost {
+  flex: 0 0 auto;
+}
 /* The confirmation, inside a dialog. It used to be a full-bleed sheet of its
    own — right for choosing modifiers, wrong for four lines saying it worked —
    so the box, the width and the ground now come from `Modal` and what is left

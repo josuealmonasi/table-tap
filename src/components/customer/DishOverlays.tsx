@@ -55,7 +55,7 @@ export default function DishOverlays({
   return (
     <>
       {(screen === "item" || screen === "edit") && selected && (
-        <DetailOverlay onClose={closeDetail}>
+        <DetailOverlay label={selected.name} onClose={closeDetail}>
           <ItemDetailScreen
             item={selected}
             extras={selectedExtras}
@@ -71,7 +71,7 @@ export default function DishOverlays({
         </DetailOverlay>
       )}
       {screen === "combo" && selectedCombo && (
-        <DetailOverlay onClose={screens.closeCombo}>
+        <DetailOverlay label={selectedCombo.name} onClose={screens.closeCombo}>
           <ComboDetailScreen
             combo={selectedCombo}
             currency={currency}

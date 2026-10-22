@@ -1316,6 +1316,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     finishSale: "Finish the sale",
     calledOut: "On the pass. Call them when it is ready.",
     chargeCash: "Charge cash",
+    backToSale: "Back to the sale",
     chargeCard: "Charge card",
     chargeAccount: "On account",
     chargeAccountTitle: "Put {amount} on an account",

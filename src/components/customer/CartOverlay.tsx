@@ -59,7 +59,7 @@ export default function CartOverlay({
 }: CartOverlayProps) {
   const t = useT();
   if (pendingOrder) return (
-    <DetailOverlay wide onClose={onClose}>
+    <DetailOverlay wide label={t("cart.title")} onClose={onClose}>
       <div style={{ padding: 16 }}>
         <PendingOrder currency={restaurant.currency} order={pendingOrder} message={t("pending.order")} busy={rest.loading} onSend={() => rest.onCheckout(true)}>
           <p>{t("pending.moreFood")}</p>
@@ -70,7 +70,7 @@ export default function CartOverlay({
   );
   const { pricing, soldOut, orderableItems, tipPct, tipCustom, coupon, setCoupon } = totals;
   return (
-    <DetailOverlay wide onClose={onClose}>
+    <DetailOverlay wide label={t("cart.title")} onClose={onClose}>
       {admissionNotice}
       <CartScreen
         {...rest}

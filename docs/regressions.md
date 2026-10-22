@@ -3984,3 +3984,28 @@ count before confirming. Reorder checks both siblings, optimistic switches
 roll back, inserts require an id, and imports and bulk deletes require the
 whole expected count. `s23b-writes.spec.ts` pairs zero rows with explicit errors
 and checks successful writes as well.
+
+## S24: a full-screen sheet is a dialog, and the till's charge has a way back
+
+Found while checking S23's POS counters in a browser, at 390 px and 1280 px.
+
+- **The till's charge had no way back below 1025 px.** «Cobrar en efectivo»
+  opens a sheet that fills a phone or an iPad. Its only exit was "click
+  outside", an empty strip under the form that nobody would think to tap. A
+  cashier who pressed cash for a card sale could only send the order. The
+  sheet now has «Volver a la venta» beside the send button. It changes
+  nothing, and the name and note stay.
+- **No sheet said it was a dialog.** `DetailOverlay` (the dish, the cart, a
+  combo, the order tracker, the till's charge) had no `role="dialog"`, no
+  label, no Escape and no focus handling. A screen reader read the menu behind
+  it, and Tab walked into that menu. The dialogs sweep looks for
+  `[role=dialog]`, so it never measured these sheets, and it left each one
+  open over its next click. `useOverlayDialog` now moves focus in (the first
+  button, so a phone doesn't raise its keyboard, or a field that asked for
+  focus), traps Tab, gives focus back on close, and answers Escape only when
+  it is the topmost dialog. The coupon dialog over the cart therefore closes
+  alone.
+- **Two places that must agree:** the till's charge and the tracker built the
+  overlay by hand. `useOverlayDialog.spec.ts` fails if any component spells
+  `className="tt-detail-overlay"` outside `DetailOverlay`, and the `label`
+  prop is required.

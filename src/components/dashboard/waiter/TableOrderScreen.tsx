@@ -206,7 +206,7 @@ export default function TableOrderScreen({
         </div>
 
         {openItem && (
-          <DetailOverlay onClose={() => setOpenItem(null)}>
+          <DetailOverlay label={openItem.name} onClose={() => setOpenItem(null)}>
             <DietaryTagsProvider tags={dietaryTags}>
               <ItemDetailScreen
                 item={openItem}
@@ -223,7 +223,7 @@ export default function TableOrderScreen({
         )}
 
         {editing && edited && (
-          <DetailOverlay onClose={() => setEditing(null)}>
+          <DetailOverlay label={edited.name} onClose={() => setEditing(null)}>
             <DietaryTagsProvider tags={dietaryTags}>
               <ItemDetailScreen
                 item={edited}
@@ -241,7 +241,7 @@ export default function TableOrderScreen({
         )}
 
         {openCombo && (
-          <DetailOverlay onClose={() => setOpenCombo(null)}>
+          <DetailOverlay label={openCombo.name} onClose={() => setOpenCombo(null)}>
             <DietaryTagsProvider tags={dietaryTags}>
               <ComboDetailScreen
                 combo={openCombo}

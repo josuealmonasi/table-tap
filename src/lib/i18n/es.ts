@@ -1310,6 +1310,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     finishSale: "Terminar la venta",
     calledOut: "En la cocina. Llama al cliente cuando esté listo.",
     chargeCash: "Cobrar en efectivo",
+    backToSale: "Volver a la venta",
     chargeCard: "Cobrar con tarjeta",
     chargeAccount: "A cuenta",
     chargeAccountTitle: "Cargar {amount} a una cuenta",
