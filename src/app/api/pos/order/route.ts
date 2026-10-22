@@ -1,3 +1,5 @@
+import { uncommittedRefusal } from "@/lib/retry-response";
+import { orderRequestScope } from "@/lib/order-request";
 import { readOfflineContext, contextCoveredSale } from "@/lib/offline-authority";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -60,7 +62,7 @@ export async function POST(req: NextRequest) {
   if (!TAKES_COUNTER_ORDERS(actor.role)) return await apiError("apiErr.forbidden", 403);
 
   const body = await jsonBody<PosSaleBody & { offline?: unknown }>(req);
-  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  if (!body) return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
   const elsewhere = await otherRestaurant(body, actor.restaurantId);
   if (elsewhere) return elsewhere;
   // Rung while the connection was gone and sent now: it already happened.
@@ -76,17 +78,17 @@ export async function POST(req: NextRequest) {
   // The till's own random UUID, never a guessable string: the reference is
   // what a retry is matched on, and it becomes the order's id.
   if (typeof posRef !== "string" || !UUID.test(posRef) || !Array.isArray(items) || items.length === 0) {
-    return await apiError("apiErr.invalidRequest", 400);
+    return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
   }
   if (method !== "cash" && method !== "card" && method !== "account") {
-    return await apiError("apiErr.invalidRequest", 400);
+    return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
   }
   // "Ponlo en mi cuenta": the food goes out now and the account owes it. The
   // cashier ringing it is the approval; the account's ceiling is checked
   // under its lock, in the same transaction that creates the sale.
   const onAccount = method === "account";
   if (onAccount) {
-    if (typeof body.accountId !== "string") return await apiError("apiErr.invalidRequest", 400);
+    if (typeof body.accountId !== "string") return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
     const noAccounts = await planBlocks(actor.restaurantId, "openAccounts");
     if (noAccounts) return noAccounts;
   }
@@ -97,6 +99,9 @@ export async function POST(req: NextRequest) {
   // rather than ringing it again — and only this restaurant's ticket.
   const already = await existingTicket(db, posRef, actor.restaurantId, body);
   if (already) return already;
+  // Past this lookup nothing is saved under the reference, so a refusal below
+  // settles it and the till may let the sale go (audit L, 5). The frozen plan
+  // and plan checks above come first and keep it.
 
   // Read with the secret key, not the staff session. `restaurants` grants a
   // browser only the columns a diner's menu needs, so a cashier's own client
@@ -108,22 +113,22 @@ export async function POST(req: NextRequest) {
     .select("id, name, currency, tax_pct, service_pct, service_enabled, timezone, low_stock_threshold, low_stock_alerts_enabled")
     .eq("id", actor.restaurantId)
     .single();
-  if (!restaurant) return await apiError("apiErr.forbidden", 403);
+  if (!restaurant) return await uncommittedRefusal(await apiError("apiErr.forbidden", 403));
 
   // Only what the restaurant is actually serving right now: a cashier should
   // not be able to ring a dish from a menu that closed at lunch. The same
   // decision the diner's own menu makes, from the same function.
   const { closedNow, onOpenMenu } = await orderableNow(db, actor.restaurantId);
-  if (closedNow) return await apiError("apiErr.closedNow", 409);
+  if (closedNow) return await uncommittedRefusal(await apiError("apiErr.closedNow", 409));
 
   // Priced from the database by the same function checkout uses, so a dish
   // cannot be one price at the counter and another on a phone.
   const promotions = await promotionsOnSale(db, actor.restaurantId);
   const result = await verifiedLines(db, actor.restaurantId, { items, promotions, onOpenMenu });
   if (!result.ok) {
-    if (!result.rejection) return await apiError("apiErr.verifyItems", 400);
+    if (!result.rejection) return await uncommittedRefusal(await apiError("apiErr.verifyItems", 400));
     const { key, vars } = rejectionMessage(result.rejection);
-    return await apiError(key, 400, vars);
+    return await uncommittedRefusal(await apiError(key, 400, vars));
   }
   const verified = result.lines;
 
@@ -179,6 +184,7 @@ export async function POST(req: NextRequest) {
     p_inventory: Boolean(plan && can(plan.limits, "inventory")),
     p_demand: toDemandPayload(stockDemand(verified)),
     p_order: {
+      ...(onAccount ? { request_scope: orderRequestScope("pos-account", body) } : {}),
       subtotal: pricing.subtotal, service_fee: pricing.serviceFee, tip: pricing.tip,
       tax_pct: Number(restaurant.tax_pct) || 0, discount: pricing.discount, total: pricing.total,
       promo_detail: pricing.discount > 0 ? { item: pricing.itemDiscount, promos: pricing.promoDiscount, coupon: 0 } : null,
@@ -197,18 +203,18 @@ export async function POST(req: NextRequest) {
   // The transaction owns cleanup: a lost response may already have committed.
   if (error || !ticket) return await apiError("apiErr.orderCreate", 503);
   if (ticket.outcome === "stock") {
-    return NextResponse.json({ short: parseReserveResult(ticket).short, code: "outOfStock" }, { status: 409 });
+    return NextResponse.json({ short: parseReserveResult(ticket).short, code: "outOfStock", retryUncommitted: true }, { status: 409 });
   }
   if (ticket.outcome !== "settled") {
     // Every account refusal is final, including the currency one: answered
     // as `held`, the till kept the refused account request and sent it
     // again even when the cashier then chose cash.
     if (onAccount && ["limit", "closed", "stale", "paying", "partly_paid", "mixed_currency"].includes(ticket.outcome)) {
-      return await chargeRefusal(ticket as Exclude<ChargeResult, { outcome: "charged" }>, restaurant.currency);
+      return await uncommittedRefusal(await chargeRefusal(ticket as Exclude<ChargeResult, { outcome: "charged" }>, restaurant.currency));
     }
     // A reference that belongs to another order, here or anywhere: refused,
     // and nothing about that order is said.
-    if (ticket.outcome === "conflict") return await apiError("apiErr.invalidRequest", 409);
+    if (ticket.outcome === "conflict") return await apiError("apiErr.retryConflict", 409);
     // A ticket that exists but is not settled yet: not a refusal of the sale —
     // the device keeps it and sends it again (`held`).
     return await apiError("apiErr.posUnsettled", 409, undefined, { held: true });

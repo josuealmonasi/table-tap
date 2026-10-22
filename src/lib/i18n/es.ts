@@ -4,6 +4,9 @@ import type { Messages } from "./en";
 // compile error.
 export const es: Messages = {
   pending: {
+    discard: "Ya no enviar esto",
+    discardWarning: "Puede que ya haya quedado registrado. Revisa primero tus pedidos o registros: dejar de enviarlo no lo cancela ni devuelve dinero, y mandarlo como algo nuevo podría registrarlo dos veces.",
+    discardConfirm: "Ya revisé, ya no enviar",
     sendAgain: "Enviar otra vez",
     withdrawal: "El retiro de {amount} no se confirmó. Envíalo otra vez para saberlo; no se registrará dos veces.",
     close: "El cierre con un conteo de {amount} no se confirmó. Envía el mismo conteo otra vez; no se cerrará dos veces.",
@@ -1492,6 +1495,9 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     restaurantDeleteRefund: "Este restaurante todavía tiene devoluciones por terminar. Complétalas antes de eliminarlo.",
     restaurantDeleteRefundDue: "Este restaurante todavía debe dinero a clientes por pagos duplicados. Devuélvelo antes de eliminar el restaurante.",
     restaurantDeleteProvider: "Un pago con tarjeta o una devolución todavía necesita confirmación. Revisa su resultado antes de eliminar este restaurante.",
+    restaurantDeleteOfflineSale: "Revisa las ventas sin conexión que ya se cobraron antes de eliminar este restaurante.",
+    restaurantDeleteRefundFee: "Todavía falta devolverle a este restaurante su parte de la comisión de pagos reembolsados. Termina de devolverla antes de eliminarlo.",
+    retryConflict: "Esto ya se había enviado antes con otros datos, así que no se registró de nuevo. Revisa lo que quedó registrado antes de volver a empezar.",
     adminAuditUnavailable: "El historial de administración no está disponible. Intenta más tarde.",
     adminActionUncertain: "La acción pudo haberse completado, pero no se pudo confirmar su resultado. Revisa el restaurante o el usuario antes de intentar de nuevo.",
     restaurantNotFound: "Restaurante no encontrado",

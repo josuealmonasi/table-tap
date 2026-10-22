@@ -1,3 +1,4 @@
+import { uncommittedRefusal } from "@/lib/retry-response";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -25,13 +26,13 @@ export async function POST(req: NextRequest) {
   if (!actor || !HOLDS_THE_DRAWER(actor.role)) return await apiError("apiErr.forbidden", 403);
 
   const body = await jsonBody<{ kind?: unknown; amount?: unknown; note?: unknown; ref?: unknown; shiftId?: unknown }>(req);
-  if (body?.kind !== "withdrawal") return await apiError("apiErr.invalidRequest", 400);
+  if (body?.kind !== "withdrawal") return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
   const amount = cashAmount(body?.amount, true);
-  if (amount === null) return await apiError("apiErr.cashAmount", 400);
+  if (amount === null) return await uncommittedRefusal(await apiError("apiErr.cashAmount", 400));
   const note = cashNote(body?.note);
   const ref = uuidOf(body.ref);
   const reviewedShift = uuidOf(body.shiftId);
-  if (body.ref !== undefined && (!ref || !reviewedShift)) return await apiError("apiErr.invalidRequest", 400);
+  if (body.ref !== undefined && (!ref || !reviewedShift)) return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
   const shift = reviewedShift ? { id: reviewedShift } : await openShift(actor.restaurantId);
   if (!shift) return await apiError("apiErr.noOpenShift", 409);
 
@@ -41,8 +42,9 @@ export async function POST(req: NextRequest) {
     ...(ref ? { p_ref: ref } : {}),
     p_restaurant: actor.restaurantId, p_shift: shift.id, p_amount: amount, p_note: note, p_actor: actor.email,
   });
+  if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
   if (error) return await apiError("apiErr.generic", 500);
-  if (!data) return await apiError("apiErr.noOpenShift", 409);
+  if (!data) return await apiError("apiErr.noOpenShift", 409, undefined, { retryUncommitted: true });
 
   await logEvent({
     restaurantId: actor.restaurantId,

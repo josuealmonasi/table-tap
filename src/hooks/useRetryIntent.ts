@@ -28,7 +28,7 @@ export function useRetryIntent(): RetryIntent {
 }
 
 /**
- * Whether a refusal settles the attempt, so its reference may go. Only an
+ * Whether a status can settle an attempt, together with retryUncommitted. Only an
  * answer given after the server looked the reference up says the first try
  * did not commit. A rate limit (429), a timeout (408, 425) or a sign-in that
  * lapsed (401, 403) is answered before that. Cleared on a 429, a lost MX$100
@@ -37,5 +37,5 @@ export function useRetryIntent(): RetryIntent {
  * duplicates.
  */
 export function refusalSettles(status: number): boolean {
-  return status >= 400 && status < 500 && ![401, 403, 408, 425, 429].includes(status);
+  return status >= 400 && status < 500 && ![401, 402, 403, 408, 425, 429].includes(status);
 }

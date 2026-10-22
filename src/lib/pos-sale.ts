@@ -1,3 +1,4 @@
+import { orderRequestScope } from "@/lib/order-request";
 import { apiError } from "@/lib/api-error";
 import { NextResponse } from "next/server";
 import type { createAdminClient } from "@/lib/supabase/admin";
@@ -68,16 +69,20 @@ export async function existingTicket(
   db: ReturnType<typeof createAdminClient>,
   posRef: string,
   restaurantId: string,
-  expected?: Pick<PosSaleBody, "currency" | "method">,
+  expected?: PosSaleBody,
 ): Promise<NextResponse | null> {
   const { data, error } = await db.from("orders")
-    .select("id, total, paid, status, account_id, charged_at, currency, pay_method, customer_accounts(name)")
+    .select("id, total, paid, status, account_id, charged_at, currency, pay_method, request_scope, customer_accounts(name)")
     .eq("pos_ref", posRef).eq("restaurant_id", restaurantId).maybeSingle();
   if (error) return await apiError("apiErr.orderCreate", 503);
   if (!data) return null;
   if ((typeof expected?.currency === "string" && data.currency !== expected.currency)
     || (expected?.method && expected.method !== "account" && (data.account_id || data.pay_method !== expected.method))) {
     return await apiError("apiErr.posMismatch", 409, undefined, { held: true });
+  }
+  if (expected?.method === "account" && (data.account_id !== expected.accountId
+    || data.request_scope !== orderRequestScope("pos-account", expected))) {
+    return await apiError("apiErr.retryConflict", 409);
   }
   const approved = data.account_id && data.charged_at && data.status !== "pending_payment";
   if (data.status === "pending_payment" || (!data.paid && !approved)) {

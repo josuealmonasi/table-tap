@@ -16,6 +16,12 @@ us, and what now catches each one.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Deletion preserves collected offline receipts and unfinished fee returns (Audit L3, S25b) | Deleting a restaurant erased unapproved cash and the fee still owed after a refund |
+| A saved reference names the same subject and request (Audit L4, S25b) | A milk purchase reference returned another ingredient's purchase, and a replay logged paid twice |
+| A retry key is cleared only on success or an explicit no-write result (Audit L5, S25b) | A frozen retry forgot the lost MX$100 purchase and added it again after unfreezing |
+| A counter reference names the first requested meal (Audit L6, S25b) | A different phone could reuse the reference with another cart and receive the first order |
+| Ingredient movements lock before ingredient rows and foreign keys (Audit L8, S25b) | Legacy waste could hold the ingredient FK while waiting for a purchase's movement lock |
+| Tier prices stay positive in SQL as well as forms (Audit L, S25b) | Direct writes could save zero-price tiers despite the form refusing them |
 | An unresolved attempt shows and locks the request it will send again (S20b) | Reopened forms showed blank values, edited carts lost food, and cash resent a hidden account sale |
 | An account sale retries its frozen cart and reference (S20 K3) | A lost reply charged the same sale to an account twice |
 | Pay-later and waiter retries claim one order before stock (S20 K4) | Retrying an unseen ticket took another portion and sent another ticket |
@@ -3984,3 +3990,104 @@ count before confirming. Reorder checks both siblings, optimistic switches
 roll back, inserts require an id, and imports and bulk deletes require the
 whole expected count. `s23b-writes.spec.ts` pairs zero rows with explicit errors
 and checks successful writes as well.
+
+
+## Audit L (S25b)
+
+### L3 — deletion and unresolved money
+
+`admin_delete_restaurant` refuses unapproved `offline_sale_queue` receipts and
+completed refunds whose cumulative rounded fee share is still owed. No fee,
+a share rounding to zero, and a share already returned do not block deletion.
+A provider-verified `fee_request` also protects older charges without a fee
+ledger amount. Approved queue rows are archived by `pos_ref`, outside the
+restaurant cascade. The new admin refusals are translated in both languages.
+`audit-l-s25b-sql.spec.ts` checks the guards precede deletion and the queue copy.
+Claude must execute the SQL scenarios with and without outstanding fees.
+
+### L4 — references and the first request
+
+Purchase retries compare the ingredient, original pack count and total before
+returning their saved id. Packs are saved because today's pack size cannot
+prove yesterday's request. Waste compares subject, quantity, reason and note;
+counts compare the whole sorted set; withdrawals compare shift, amount and
+note; closes compare shift and counted cash. Account sales compare account and
+canonical request in both the early read and locked writer. Conflicts return
+409 with `apiErr.retryConflict`, without the earlier result. A referenced
+purchase uses the additive `record_purchase_once_v2` writer to save its one
+paid log inside the same transaction, and every
+service-key ingredient-name read is restaurant-scoped.
+The old purchase RPC remains available for old routes that log separately;
+apply this SQL before deploying the new route.
+`audit-l-s25b-purchases.spec.ts`, `audit-l-s25b-account.spec.ts` and
+`audit-l-s25b-sql.spec.ts` cover the routes and SQL contracts.
+
+### L5 — a refusal is not evidence that an earlier send failed
+
+Clients keep their frozen reference on every unmarked refusal, including 402,
+paused ordering, plan changes and validation. Only a serialized SQL outcome
+that committed none of the requested action carries `retryUncommitted: true`.
+A success ends the attempt too. Every pending screen offers an explicit stop
+retrying action with a second confirmation: check the records first; stopping
+a retry neither cancels a committed action nor returns its money. Existing
+retry fixtures now mark their definite no-write answers; they no longer teach
+clients to trust a bare status. `audit-l-s25b-retry.spec.ts` proves that a lost
+MX$100 purchase, a refusal while frozen, and an unfrozen retry record once.
+`audit-l-s25b-discard.spec.tsx` exercises the deliberate discard confirmation.
+
+### L6 — the counter request is part of its identity
+
+Diner and waiter scopes include a SHA-256 digest of canonical items, choices,
+extras, combo components, table (or none), coupon, tip, note and customer name.
+Display prices and names are excluded because the server prices the meal.
+A counter diner needs no new browser credential: the random reference plus the
+same request recovers the saved order, even with browser storage unavailable.
+A changed request returns only a conflict. Older scopes cannot prove a match
+and are refused for review instead of being answered or recorded again.
+`audit-l-s25b-orders.spec.ts` verifies changed requests and exact replays with
+no member cookie; `audit-l-s25b-account.spec.ts` checks display-only changes.
+
+### L8 — the legacy waste/purchase cycle is real
+
+A legacy waste insert can acquire an ingredient FK key-share lock before its
+AFTER movement trigger waits for the restaurant movement lock. A purchase can
+hold that movement lock and wait for `ingredients FOR UPDATE`, which conflicts
+with the waste's key-share lock. Legacy waste now explicitly locks movement
+before reading an ingredient or inserting a foreign key. Product waste keeps
+the shared sales order: menu item, movement, ingredient. Both old and referenced
+purchase, waste and count RPCs obey that ingredient order.
+`audit-l-s25b-sql.spec.ts` checks these boundaries. Claude must run a concurrent
+legacy-waste/purchase exercise; no live database was used here.
+
+### Tier prices — CHECK and form agree
+
+`tiers_sound` now refuses prices <= 0. The existing
+`promotions_tiers_sound` CHECK is recreated and validated so older rows cannot
+silently keep the weaker rule. Before applying SQL, count violating rows:
+
+```sql
+select count(*) as violating_rows
+from public.promotions
+where jsonb_path_exists(tiers, '$[*] ? (@.price <= 0)');
+```
+
+Correct those offers before applying; do not make up replacement prices.
+`audit-l-s25b-sql.spec.ts` checks the stricter rule and CHECK wiring.
+
+### Claude's review of S25b
+
+- **Too strict about what settles a reference.** As written, only the
+  transaction's own refusals (short stock, a coupon) released a reference.
+  Every other refusal after the lookup left the diner, waiter or cashier on
+  «Enviar otra vez» with a cart that could never go: a dish taken off the
+  menu, a closed kitchen, «not accepting orders». Before S25b all of those
+  returned to the cart. Once the lookup has found nothing saved, a refusal
+  settles the attempt, and so does a refusal of what was typed, wherever it
+  falls, since the same request can never succeed. The frozen plan, plan
+  checks, a lapsed sign-in and «no open shift» come before the lookup or
+  depend on state, so they keep the reference, which was the point of
+  finding 5. `audit-l-s25b-lookup.spec.ts` fails on a refusal after the
+  lookup without the mark, and on a frozen-plan check moved after it.
+- **Copy in the system's words.** «Esta referencia ya se usó…» and «Dejar de
+  reenviar este intento» became «Esto ya se había enviado antes con otros
+  datos…» and «Ya no enviar esto».

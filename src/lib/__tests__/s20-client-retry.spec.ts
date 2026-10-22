@@ -32,7 +32,7 @@ it("K4 pay-later retries the frozen order after a lost or unreadable reply, then
 it("K4 a definite refusal releases the intent while a server failure keeps it", async () => {
   const cart = useMenu();
   state.fetch.mockResolvedValueOnce(Response.json({ error: "unknown" }, { status: 503 }))
-    .mockResolvedValueOnce(Response.json({ error: "closed" }, { status: 409 }))
+    .mockResolvedValueOnce(Response.json({ error: "closed", retryUncommitted: true }, { status: 409 }))
     .mockResolvedValueOnce(Response.json({ orderId: "one", deferred: true }));
   await cart.checkout(true); await cart.checkout(true); await cart.checkout(true);
   expect(bodies()[1].ref).toBe(bodies()[0].ref); expect(bodies()[2].ref).not.toBe(bodies()[0].ref);

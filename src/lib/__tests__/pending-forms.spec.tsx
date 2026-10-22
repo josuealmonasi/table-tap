@@ -43,7 +43,7 @@ it("S20b shift close reopens with the original blind count and confirmation", as
   state.ui.change(state.ui.all("input")[0], "125"); state.ui.change(state.ui.all("input")[1], true); await state.ui.submit();
   open = false; state.ui.render(); open = true; state.ui.render();
   expect(state.ui.all("input")[0].props.value).toBe("125"); expect(state.ui.all("input")[1].props.checked).toBe(true); locked();
-  state.fetch.mockResolvedValueOnce(Response.json({ error: "stale" }, { status: 409 })); await state.ui.submit();
+  state.fetch.mockResolvedValueOnce(Response.json({ error: "stale", retryUncommitted: true }, { status: 409 })); await state.ui.submit();
   expect(bodies()[1]).toEqual(bodies()[0]); expect(state.ui.all("input")[0].disabled).toBe(false);
   open = false; state.ui.render(); open = true; state.ui.render(); expect(state.ui.all("input")[0].props.value).toBe("");
 });
@@ -61,7 +61,7 @@ it("S20b shelf count restores display units on reopen and releases them after re
   state.ui.render(() => <CountDialog open={open} currency="MXN" ingredients={available} onClose={vi.fn()} />);
   state.ui.change(state.ui.all("input")[0], "1.5"); await state.ui.submit(); open = false; state.ui.render(); available = [{ ...ingredients[0], name: "Changed", unit: "pza" }]; open = true; state.ui.render();
   expect(state.ui.all("input")[0].props.value).toBe("1.5"); locked(); expect(state.ui.text()).toContain("Milk"); expect(state.ui.text()).toContain("costs.unitShort.l");
-  state.fetch.mockResolvedValueOnce(Response.json({ error: "refused" }, { status: 422 })); await state.ui.submit();
+  state.fetch.mockResolvedValueOnce(Response.json({ error: "refused", retryUncommitted: true }, { status: 422 })); await state.ui.submit();
   expect(bodies()[1]).toEqual(bodies()[0]); expect(bodies()[0].counts[0].counted).toBe(1500); expect(state.ui.all("input")[0].disabled).toBe(false);
 });
 it("S20b waste locks the visible choice, quantity, reason and note until resolved", async () => {
@@ -81,7 +81,7 @@ it.each([401, 403, 408, 425, 429, 503])("S20b purchase stays visible and locked 
   open = false; state.ui.render(); open = true; state.ui.render();
   state.fetch.mockResolvedValueOnce(Response.json({ error: "try later" }, { status })); await state.ui.submit(); locked();
   expect(state.ui.all("input").map(n => n.props.value)).toEqual(["2", "40"]); expect(bodies()[1]).toEqual(bodies()[0]);
-  state.fetch.mockResolvedValueOnce(Response.json({ error: "refused" }, { status: 422 })); await state.ui.submit();
+  state.fetch.mockResolvedValueOnce(Response.json({ error: "refused", retryUncommitted: true }, { status: 422 })); await state.ui.submit();
   expect(state.ui.all("input")[0].disabled).toBe(false); state.ui.change(state.ui.all("input")[1], "60");
   state.fetch.mockResolvedValueOnce(Response.json({ ok: true })); await state.ui.submit();
   expect(bodies()[3].ref).not.toBe(bodies()[0].ref); expect(bodies()[3].total).toBe("60");

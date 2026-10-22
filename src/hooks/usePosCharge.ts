@@ -67,6 +67,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
   const accountReview = useRef<{ name: string; amount: number; currency: string } | null>(null);
   const inFlight = useRef(false);
   const [busy, setBusy] = useState(false);
+  const [, refreshAccount] = useState(0);
   const [ticket, setTicket] = useState<PosTicket | null>(null);
   /** How the customer is paying, asked about before the sale is sent. */
   const [pending, setPending] = useState<"cash" | "card" | null>(null);
@@ -192,7 +193,8 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if ((res.ok || refusalSettles(res.status)) && !data.held) accountRequest.current = null;
+        // Account retries need proof from the writer, not just a 4xx status.
+        if (refusalSettles(res.status) && data.retryUncommitted === true && !data.held) accountRequest.current = null;
         // A refusal is the sale not happening — out of stock, the menu closed,
         // an account at its ceiling. The held copy goes and the cart stays, so
         // the cashier fixes it or hands the money back, as before the till
@@ -257,5 +259,13 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
 
   const accountRetry: PendingAccountSale | null = accountRequest.current && accountReview.current
     ? { ...JSON.parse(accountRequest.current), ...accountReview.current } : null;
-  return { charge, busy, pending, setPending, ticket, setTicket, accountRetry };
+  function discardAccount(): void {
+    if (inFlight.current) return;
+    accountRequest.current = null;
+    accountReview.current = null;
+    setPending(null);
+    // Refs alone do not redraw the panel when the warning is confirmed.
+    refreshAccount(n => n + 1);
+  }
+  return { charge, busy, pending, setPending, ticket, setTicket, accountRetry, discardAccount };
 }

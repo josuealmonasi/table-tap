@@ -93,6 +93,6 @@ it("S20b POS names the frozen account and amount before any cash or card choice"
   expect(state.ui.text()).toContain("Ana's tab"); expect(state.ui.text()).toContain("MX$50"); expect(state.ui.text()).toContain("Soup");
   expect(state.ui.text()).not.toContain("pos.chargeCash"); expect(state.ui.text()).not.toContain("pos.chargeCard"); expect(state.ui.text()).not.toContain("Pick account");
   expect(state.ui.all("input")).toHaveLength(0); expect(state.ui.all("select")).toHaveLength(0);
-  state.fetch.mockResolvedValueOnce(Response.json({ error: "refused" }, { status: 409 })); await click("pending.sendAgain");
+  state.fetch.mockResolvedValueOnce(Response.json({ error: "refused", retryUncommitted: true }, { status: 409 })); await click("pending.sendAgain");
   expect(bodies()[1]).toEqual(bodies()[0]); expect(till.accountRetry).toBeNull(); expect(state.ui.text()).toContain("pos.chargeCash");
 });
