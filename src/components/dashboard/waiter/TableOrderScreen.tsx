@@ -130,7 +130,7 @@ export default function TableOrderScreen({
         body: attempt.body({ tableId, items: lines, note: note.trim() || undefined }),
       });
       const data = await res.json();
-      if ((res.ok && data.orderId) || (!res.ok && refusalSettles(res.status))) attempt.clear();
+      if ((res.ok && data.orderId) || (!res.ok && (refusalSettles(res.status) && data.retryUncommitted === true))) attempt.clear();
       if (!res.ok) {
         if (data.code === "outOfStock") {
           // With the numbers in it. The refusal has always known how many are
@@ -197,6 +197,7 @@ export default function TableOrderScreen({
               sending={sending}
               busy={busy}
               pending={pending}
+              onDiscard={() => { if (!inFlight.current) attempt.clear(); }}
               closedNow={closedNow}
               onChangeQty={(id, qty) => { if (!sending) cart.changeQty(id, qty); }}
               onEdit={line => { if (!sending) setEditing(line); }}

@@ -1,3 +1,4 @@
+import { uncommittedRefusal } from "@/lib/retry-response";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -48,17 +49,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const blocked = await costsBlocks(actor.restaurantId);
   if (blocked) return blocked;
   const body = await jsonBody<{ ingredientId?: unknown; itemId?: unknown; quantity?: unknown; reason?: unknown; note?: unknown; ref?: unknown }>(req);
-  if (!body) return await apiError("apiErr.invalidRequest", 400);
+  if (!body) return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
   const ref = uuidOf(body?.ref);
-  if (body?.ref !== undefined && !ref) return await apiError("apiErr.invalidRequest", 400);
+  if (body?.ref !== undefined && !ref) return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
   const ingredientId = uuidOf(body.ingredientId);
   const itemId = uuidOf(body.itemId);
-  if (!ingredientId === !itemId) return await apiError("apiErr.wasteWhat", 400);
+  if (!ingredientId === !itemId) return await uncommittedRefusal(await apiError("apiErr.wasteWhat", 400));
   // A dish goes in the bin whole; an ingredient by the gram.
   const quantity = itemId ? dishCount(body.quantity) : recipeQuantity(body.quantity);
-  if (quantity === null) return await apiError(quantityRefusal(body.quantity, "apiErr.wasteQuantity"), 400);
+  if (quantity === null) return await uncommittedRefusal(await apiError(quantityRefusal(body.quantity, "apiErr.wasteQuantity"), 400));
   const reason = WASTE_REASONS.includes(body.reason as WasteReason) ? (body.reason as WasteReason) : null;
-  if (!reason) return await apiError("apiErr.wasteReason", 400);
+  if (!reason) return await uncommittedRefusal(await apiError("apiErr.wasteReason", 400));
 
   const cost = await costOf(actor.restaurantId, ingredientId, itemId, quantity);
   const { data: id, error } = await createAdminClient().rpc(ref ? "record_waste_once" : "record_waste", {
@@ -66,8 +67,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     p_restaurant: actor.restaurantId, p_ingredient: ingredientId, p_item: itemId, p_quantity: quantity,
     p_reason: reason, p_note: wasteNote(body.note), p_cost: cost, p_actor: actor.email,
   });
+  if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
   if (error) return await apiError("apiErr.generic", 500);
-  if (!id) return await apiError("apiErr.notFound", 404);
+  if (!id) return await apiError("apiErr.notFound", 404, undefined, { retryUncommitted: true });
   const { data: entry } = await createAdminClient().from("waste_entries").select("name").eq("id", id).maybeSingle();
   await logEvent({
     restaurantId: actor.restaurantId, actor: actor.email, entity: "costs", action: "written_off",

@@ -138,7 +138,7 @@ export default function PosScreen({
       tipCustom,
     ],
   );
-  const { charge, busy, pending, setPending, ticket, setTicket, accountRetry } = usePosCharge({
+  const { charge, busy, pending, setPending, ticket, setTicket, accountRetry, discardAccount } = usePosCharge({
     restaurant,
     collectorContext,
     collector,
@@ -271,6 +271,7 @@ export default function PosScreen({
               accountAmount={Math.round((pricing.total - pricing.tip) * 100) / 100}
               locked={busy || (!accountRetry && (closedNow || lines.length === 0))}
               accountRetry={accountRetry}
+              onDiscardAccount={discardAccount}
               onRetryAccount={() => void charge("account")}
               canChargeAccount={canChargeAccount}
               onChangeQty={cart.changeQty}

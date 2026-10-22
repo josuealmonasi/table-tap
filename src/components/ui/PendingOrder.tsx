@@ -21,15 +21,16 @@ interface PendingOrderProps {
   currency: string;
   busy: boolean;
   onSend: () => void;
+  onDiscard?: () => void;
   children?: React.ReactNode;
 }
 
 /** Read from the saved request, so a retry never hides behind today's cart. */
-export default function PendingOrder({ order, message, currency, busy, onSend, children }: PendingOrderProps) {
+export default function PendingOrder({ order, message, currency, busy, onSend, onDiscard, children }: PendingOrderProps) {
   const t = useT();
   return (
     <div className="tt-prodform">
-      <PendingAttempt message={message} />
+      <PendingAttempt message={message} busy={busy} onDiscard={onDiscard} />
       {order.tableLabel && <p>{t("menu.table", { label: order.tableLabel })}</p>}
       {order.customerName && <p>{order.customerName}</p>}
       <ol>

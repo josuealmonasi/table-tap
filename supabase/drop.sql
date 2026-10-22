@@ -273,6 +273,7 @@ drop function if exists public.stamp_refund_due_charge() cascade;
 drop function if exists public.order_intent_result(uuid, uuid, text);
 drop function if exists public.create_order_intent(uuid, uuid, text, jsonb, jsonb, boolean, int, jsonb);
 drop function if exists public.create_cash_withdrawal_once(uuid, uuid, numeric, text, text, uuid);
+drop function if exists public.record_purchase_once_v2(uuid, uuid, numeric, numeric, text, uuid);
 drop function if exists public.record_purchase_once(uuid, uuid, numeric, numeric, text, uuid);
 drop function if exists public.record_waste_once(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid);
 drop function if exists public.record_ingredient_counts_once(uuid, jsonb, text, uuid);

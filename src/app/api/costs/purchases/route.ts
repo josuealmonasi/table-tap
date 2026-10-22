@@ -1,3 +1,4 @@
+import { uncommittedRefusal } from "@/lib/retry-response";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -24,25 +25,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (blocked) return blocked;
   const body = await jsonBody<{ ingredientId?: unknown; packs?: unknown; total?: unknown; ref?: unknown }>(req);
   const ref = uuidOf(body?.ref);
-  if (body?.ref !== undefined && !ref) return await apiError("apiErr.invalidRequest", 400);
+  if (body?.ref !== undefined && !ref) return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
   const ingredientId = uuidOf(body?.ingredientId);
-  if (!body || !ingredientId) return await apiError("apiErr.invalidRequest", 400);
+  if (!body || !ingredientId) return await uncommittedRefusal(await apiError("apiErr.invalidRequest", 400));
   const packs = decimal(body.packs, MAX_PACKS, 3);
-  if (packs === null || packs <= 0) return await apiError(quantityRefusal(body.packs, "apiErr.purchasePacks"), 400);
+  if (packs === null || packs <= 0) return await uncommittedRefusal(await apiError(quantityRefusal(body.packs, "apiErr.purchasePacks"), 400));
   const total = packPrice(body.total);
-  if (total === null) return await apiError("apiErr.purchaseTotal", 400);
+  if (total === null) return await uncommittedRefusal(await apiError("apiErr.purchaseTotal", 400));
 
   const db = createAdminClient();
-  const { data: id, error } = await db.rpc(ref ? "record_purchase_once" : "record_purchase", {
+  const { data: id, error } = await db.rpc(ref ? "record_purchase_once_v2" : "record_purchase", {
     ...(ref ? { p_ref: ref } : {}),
     p_restaurant: actor.restaurantId, p_ingredient: ingredientId, p_packs: packs, p_total: total, p_actor: actor.email,
   });
+  if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
   if (error) return await apiError("apiErr.generic", 500);
-  if (!id) return await apiError("apiErr.notFound", 404);
-  const { data: ingredient } = await db.from("ingredients").select("name").eq("id", ingredientId).maybeSingle();
-  await logEvent({
-    restaurantId: actor.restaurantId, actor: actor.email, entity: "costs", action: "paid",
-    detail: logDetail({ note: `${ingredient?.name ?? ""} × ${packs}`, amount: total.toFixed(2) }),
-  });
+  if (!id) return await apiError("apiErr.notFound", 404, undefined, { retryUncommitted: true });
+  if (!ref) {
+    const { data: ingredient } = await db.from("ingredients").select("name").eq("id", ingredientId).eq("restaurant_id", actor.restaurantId).maybeSingle();
+    await logEvent({
+      restaurantId: actor.restaurantId, actor: actor.email, entity: "costs", action: "paid",
+      detail: logDetail({ note: `${ingredient?.name ?? ""} × ${packs}`, amount: total.toFixed(2) }),
+    });
+  }
   return NextResponse.json({ ok: true, id });
 }

@@ -1,3 +1,4 @@
+import { uncommittedRefusal } from "@/lib/retry-response";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -46,9 +47,9 @@ export async function POST(req: NextRequest) {
 
   if (body?.action === "close") {
     // The closer signs it off: they counted, and the count is theirs.
-    if (body.confirm !== true) return await apiError("apiErr.shiftConfirm", 400);
+    if (body.confirm !== true) return await uncommittedRefusal(await apiError("apiErr.shiftConfirm", 400));
     const counted = cashAmount(body.counted, false);
-    if (counted === null) return await apiError("apiErr.cashAmount", 400);
+    if (counted === null) return await uncommittedRefusal(await apiError("apiErr.cashAmount", 400));
     const shiftId = uuidOf(body.shiftId);
     const ref = uuidOf(body.ref);
     if (!shiftId || !ref) return await apiError("apiErr.shiftChanged", 409);
@@ -59,8 +60,9 @@ export async function POST(req: NextRequest) {
       p_ref: ref,
       p_restaurant: actor.restaurantId, p_shift: shiftId, p_counted: counted, p_actor: actor.email,
     });
+    if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
     if (error) return await apiError("apiErr.generic", 500);
-    if (!data) return await apiError("apiErr.shiftChanged", 409);
+    if (!data) return await apiError("apiErr.shiftChanged", 409, undefined, { retryUncommitted: true });
     await logEvent({
       restaurantId: actor.restaurantId, actor: actor.email, entity: "cash", action: "closed",
       detail: logDetail({ counted: counted.toFixed(2), expected: Number(data.expected).toFixed(2),

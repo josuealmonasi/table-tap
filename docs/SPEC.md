@@ -2065,14 +2065,20 @@ the restaurant's low-stock alert preference, just like checkout and the till.
 An account POS sale, pay-later checkout, waiter order, withdrawal, ingredient
 purchase, waste entry, physical count and cash-shift close each freeze a client
 reference with their request on first submit. An unknown response keeps both;
-a definite refusal or success ends that intent. A second action gets a new
+a success or an explicit `retryUncommitted: true` refusal from the serialized
+writer ends that intent. An unmarked refusal, including a freeze, keeps it.
+Every pending screen offers a deliberate stop-retrying action after a warning
+to check the records; this neither cancels an action nor returns its money. A second action gets a new
 reference. Account POS uses its existing `posRef` transaction. Card checkout
 keeps its own payment-attempt handling and receives no pay-later reference.
 
 Kitchen-order intents reserve stock, write the ticket and spend any coupon in
 one transaction; repeats return the original order before reserving anything.
 References are restaurant-scoped and retrieval also checks the ordering surface
-and, at a customer table, the server-issued member identity. Withdrawals use a
+and a canonical request hash (items, table, coupon, tip, note and name), and, at
+a customer table, the server-issued member identity. Counter diners need no
+additional browser credential. Changed requests receive a 409 without the
+original result. Account POS sales bind their account and meal too. Withdrawals use a
 reference unique per shift and remain under the money lock. Ingredient writers
 check their reference under the movement lock before touching an ingredient;
 a retried count returns its original expected figure and movement cutoff,
@@ -2083,3 +2089,15 @@ close reference. Repeats return the saved close even if another shift is now
 open; a stale or unnamed close is refused with an instruction to refresh and
 count the open drawer. New SQL columns are nullable and indexes partial, and
 old RPC signatures remain available while deployed writers roll forward.
+
+
+Restaurant deletion also refuses collected offline sales awaiting approval and
+completed refunds whose rounded fee share remains owed. Approved offline queue
+rows survive deletion with the accounting books. Reference purchases save the
+original pack count, compare ingredient/packs/total before replay, and write
+one paid log transactionally through the additive `record_purchase_once_v2`
+RPC (the old route and signature remain deployable); other referenced cost and drawer writes compare
+the complete original request too. Legacy references without enough evidence
+are refused for review. Ingredient movement writers lock movement before any
+ingredient row lock or foreign-key insert; product locks still come first as
+in sales. The SQL promotion CHECK requires strictly positive tier prices.

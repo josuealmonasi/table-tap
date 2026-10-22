@@ -68,7 +68,7 @@ function PurchaseForm({ ingredients, currency, onClose, send }: Omit<PurchaseDia
 
   return (
     <form className="tt-prodform" onSubmit={e => void save(e)}>
-      {pending && <PendingAttempt message={t("pending.purchase")} />}
+      {pending && <PendingAttempt message={t("pending.purchase")} busy={busy} onDiscard={send.discard} />}
       <label className="tt-field">
         <span className="tt-mod-label">{t("costs.purchaseIngredient")}</span>
         <select disabled={busy || pending} className="tt-input" value={ingredientId} onChange={e => setIngredientId(e.target.value)} required>

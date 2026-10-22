@@ -27,7 +27,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
     state.calls.push({ name, args });
     if (state.reply) return { data: state.reply, error: null };
     state.ticket = { id: args.p_ref, total: 100, currency: "MXN", pay_method: args.p_method, paid: name !== "ring_pos_account_v2", status: "completed",
-      ...(name === "ring_pos_account_v2" ? { account_id: "a", charged_at: "now", customer_accounts: { name: "Guest" } } : {}) };
+      ...(name === "ring_pos_account_v2" ? { account_id: args.p_account, request_scope: (args.p_order as Record<string, unknown>)?.request_scope, charged_at: "now", customer_accounts: { name: "Guest" } } : {}) };
     if (state.lost) return { data: null, error: { message: "response lost after commit" } };
     return { data: { outcome: "settled", orderId: args.p_ref, total: 100, settled: true, ...(name === "ring_pos_account_v2" ? { onAccount: { name: "Guest", owed: 100 } } : {}) }, error: null };
   },

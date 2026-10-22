@@ -7,6 +7,7 @@ import { useT } from "@/lib/i18n/context";
 export interface CostsSender {
   (path: string, method: string, body: unknown): Promise<string | null>;
   pending: RetryIntent["pending"];
+  discard: RetryIntent["clear"];
   frozen: RetryIntent["frozen"];
 }
 
@@ -30,7 +31,7 @@ export function useCostsSend(retry = false): CostsSender {
       });
       if (res.ok && !retry) return null;
       const data = await res.json();
-      if (retry && ((res.ok && data.ok) || (!res.ok && refusalSettles(res.status)))) attempt.clear();
+      if (retry && ((res.ok && data.ok) || (!res.ok && (refusalSettles(res.status) && data.retryUncommitted === true)))) attempt.clear();
       if (res.ok && (!retry || data.ok)) return null;
       return typeof data.error === "string" ? data.error : t("apiErr.generic");
     } catch {
@@ -39,5 +40,5 @@ export function useCostsSend(retry = false): CostsSender {
       inFlight.current = false;
     }
   }, [t, retry, attempt]);
-  return Object.assign(send, { pending: attempt.pending, frozen: attempt.frozen });
+  return Object.assign(send, { pending: attempt.pending, frozen: attempt.frozen, discard: () => { if (!inFlight.current) attempt.clear(); } });
 }

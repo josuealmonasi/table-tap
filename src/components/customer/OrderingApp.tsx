@@ -169,7 +169,7 @@ export default function OrderingApp({
     return (itemId: string) => byId.get(itemId) ?? null;
   }, [items]);
 
-  const { checkout, loading, frozen } = useCheckout({
+  const { checkout, loading, frozen, discard } = useCheckout({
     restaurantId: restaurant.id,
     table,
     orderableItems,
@@ -257,6 +257,7 @@ export default function OrderingApp({
             onChangeName={setCustomerName}
             loading={loading}
             pendingOrder={frozen}
+            onDiscardOrder={discard}
             orderAtRegister={orderAtRegister}
             onEditItem={editLine}
             admissionBlocked={!canOrder}

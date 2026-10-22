@@ -82,7 +82,7 @@ function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialog
         method: "POST", headers: { "Content-Type": "application/json" }, body: attempt.body({ counts }),
       });
       const data = await res.json();
-      if ((res.ok && Array.isArray(data.results)) || (!res.ok && refusalSettles(res.status))) attempt.clear();
+      if ((res.ok && Array.isArray(data.results)) || (!res.ok && (refusalSettles(res.status) && data.retryUncommitted === true))) attempt.clear();
       if (!res.ok) return setError(typeof data.error === "string" ? data.error : t("apiErr.generic"));
       if (!Array.isArray(data.results)) throw new Error("Missing count result");
       setResults(data.results);
@@ -131,7 +131,7 @@ function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialog
   return (
     <form className="tt-prodform" onSubmit={e => void save(e)}>
       <p className="tt-muted tt-costs-hint">{t("costs.countHint")}</p>
-      {pending && <PendingAttempt message={t("pending.count")} />}
+      {pending && <PendingAttempt message={t("pending.count")} busy={busy} onDiscard={() => { if (!inFlight.current) attempt.clear(); }} />}
       <ul className="tt-costs-count-list">
         {ingredients.map(i => {
           const unit = inShown(0, i.unit).unit;

@@ -43,6 +43,7 @@ export interface CheckoutInput {
  */
 export function useCheckout(input: CheckoutInput): {
   checkout: (payLater?: boolean) => Promise<void>;
+  discard: () => void;
   loading: boolean;
   frozen: PendingCheckout | null;
 } {
@@ -102,7 +103,7 @@ export function useCheckout(input: CheckoutInput): {
       });
       const data = await res.json();
       const frozen = payLater ? attempt.frozen<PendingCheckout>() : null;
-      if (payLater && ((res.ok && data.deferred && data.orderId) || (!res.ok && refusalSettles(res.status)))) attempt.clear();
+      if (payLater && ((res.ok && data.deferred && data.orderId) || (!res.ok && (refusalSettles(res.status) && data.retryUncommitted === true)))) attempt.clear();
       // Deferred: the food is already with the kitchen, so there is no Stripe
       // hop. Remember the id — it is the only thing that tells this phone's
       // share apart from the rest of the table's on the bill.
@@ -176,5 +177,5 @@ export function useCheckout(input: CheckoutInput): {
     }
   }
 
-  return { checkout, loading, frozen: attempt.frozen<PendingCheckout>() };
+  return { checkout, discard: () => { if (!inFlight.current) attempt.clear(); }, loading, frozen: attempt.frozen<PendingCheckout>() };
 }

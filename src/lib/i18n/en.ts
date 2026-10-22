@@ -2,6 +2,9 @@
 // truth for the message keys; es.ts must mirror its shape (enforced by types).
 export const en = {
   pending: {
+    discard: "Stop sending this",
+    discardWarning: "It may already be recorded. Check your orders or records first: not sending it doesn't cancel it or return any money, and sending it as something new could record it twice.",
+    discardConfirm: "I checked — stop sending",
     sendAgain: "Send again",
     withdrawal: "The withdrawal of {amount} wasn't confirmed. Send it again to find out; it won't be recorded twice.",
     close: "The drawer close counted at {amount} wasn't confirmed. Send the same count again; it won't close twice.",
@@ -1498,6 +1501,9 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     restaurantDeleteRefund: "This restaurant still has refunds to finish. Complete them before deleting it.",
     restaurantDeleteRefundDue: "This restaurant still owes customers money from duplicate payments. Return it before deleting the restaurant.",
     restaurantDeleteProvider: "A card payment or refund still needs confirmation. Check its result before deleting this restaurant.",
+    restaurantDeleteOfflineSale: "Review the offline sales already collected before deleting this restaurant.",
+    restaurantDeleteRefundFee: "This restaurant's share of the fee on refunded payments hasn't been returned yet. Finish returning it before deleting the restaurant.",
+    retryConflict: "This was already sent before with different details, so nothing new was recorded. Check what was recorded before starting again.",
     adminAuditUnavailable: "The admin activity log is unavailable. Try again later.",
     adminActionUncertain: "This action may have completed, but its result could not be confirmed. Check the restaurant or login before trying again.",
     restaurantNotFound: "Restaurant not found",
