@@ -1,26 +1,33 @@
 import { saveProduct } from "./product-save";
 import type { MenuItem } from "@/lib/types";
 import type { EditorContext, ProductInput } from "./types";
+import { writeError } from "@/lib/write-result";
 
 /** Products: add, copy, edit, delete, reorder within their section. */
 export function productActions(ctx: EditorContext) {
   const { supabase, restaurantId, sections, products, links, reload } = ctx;
   const { reportError, run, insertReturningId, move } = ctx.w;
   // ── Products ──
-  const addProduct = (menuId: string, categoryId: string | null, input: ProductInput) =>
-    insertReturningId(
-      "write.createProduct",
-      "menu_items",
-      {
-        restaurant_id: restaurantId,
-        menu_id: menuId,
-        category_id: categoryId,
-        is_addon: false,
-        sort_order: products.filter(p => p.menu_id === menuId).length,
-        ...input,
-      },
-      "done.productAdded",
-    );
+  async function addProduct(menuId: string, categoryId: string | null, input: ProductInput, addonIds: string[] = []): Promise<string | undefined> {
+    if (!(await ctx.ready())) return undefined;
+    try {
+      const res = await fetch("/api/products", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ menuId, categoryId, changes: input, addonIds }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.id) {
+        ctx.toast(data.error ?? ctx.t("write.createProduct"), "error");
+        return undefined;
+      }
+      ctx.toast(ctx.t("done.productAdded"));
+      await reload();
+      return data.id;
+    } catch {
+      ctx.toast(ctx.t("write.createProduct"), "error");
+      return undefined;
+    }
+  }
   /**
    * Copies a product, its options and its add-on links, into the same section.
    *
@@ -66,7 +73,6 @@ export function productActions(ctx: EditorContext) {
         // Straight after the original, not at the end of the section.
         sort_order: source.sort_order + 1,
       },
-      "done.productDuplicated",
     );
     if (!newId) return undefined;
 
@@ -74,28 +80,33 @@ export function productActions(ctx: EditorContext) {
     // tedious half of copying a dish.
     const addonIds = links[id] ?? [];
     if (addonIds.length > 0) {
-      // Said, not swallowed: the copy was announced as made, and one that lost
-      // its extras on the way would otherwise be found by a diner.
-      const { error } = await supabase
+      // Said, not swallowed: only announce the copy once its extras land;
+      // lost extras would otherwise first be found by a diner.
+      const result = await supabase
         .from("item_addons")
         .insert(
           addonIds.map((addon_id, i) => ({ product_id: newId, addon_id, sort_order: i })),
-        );
-      reportError("write.updateProductExtras", error);
+        ).select("product_id, addon_id");
+      if (!reportError("write.updateProductExtras", writeError(result, addonIds.length))) {
+        await reload();
+        return undefined;
+      }
     }
 
     await reload();
+    ctx.toast(ctx.t("done.productDuplicated"));
     return newId;
   }
 
   const updateProduct = (
     id: string,
     input: Partial<ProductInput & { category_id: string | null }>,
-  ) => saveProduct(ctx, id, input);
+    addonIds?: string[],
+  ) => saveProduct(ctx, id, input, addonIds);
   const deleteProduct = (id: string) =>
     run(
       "write.deleteProduct",
-      supabase.from("menu_items").delete().eq("id", id),
+      supabase.from("menu_items").delete().eq("id", id).select("id"),
       "done.productDeleted",
     );
 

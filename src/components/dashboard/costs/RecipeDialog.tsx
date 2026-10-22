@@ -11,6 +11,8 @@ import { recipeQuantity } from "@/lib/costs/input";
 import { unitMargin } from "@/lib/costs/margins";
 import { recipeBook, unitCosts, type Ingredient, type RecipeLine } from "@/lib/costs/recipe-cost";
 import type { CostedProduct } from "@/lib/costs/server";
+import { useDirty } from "@/hooks/useDirty";
+import { useDirtyClose } from "@/hooks/useDirtyClose";
 import { useCostsSend } from "@/hooks/useCostsSend";
 import RecipeLineRow, { choiceOf, choiceValue, type DraftLine } from "./RecipeLineRow";
 
@@ -51,6 +53,8 @@ function RecipeForm({ product, ingredients, recipes, feeRate, taxPct, currency, 
   const [lines, setLines] = useState<DraftLine[]>(() => recipes.filter(r => r.item_id === product.id).map(draftOf));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dirty = useDirty(lines);
+  const close = useDirtyClose(dirty, onClose, busy);
   const money = (n: number) => formatMoney(n, currency);
   const choices = useMemo(
     () => product.modifiers.flatMap(m => m.options.map(o => ({ value: choiceValue(m.label, o), label: `${m.label}: ${o}` }))),
@@ -135,7 +139,7 @@ function RecipeForm({ product, ingredients, recipes, feeRate, taxPct, currency, 
         <button type="submit" className="tt-btn tt-btn-primary" disabled={busy || ingredients.length === 0}>
           {busy ? t("common.saving") : t("common.save")}
         </button>
-        <button type="button" className="tt-btn tt-btn-ghost" onClick={onClose}>{t("common.cancel")}</button>
+        <button type="button" className="tt-btn tt-btn-ghost" onClick={close}>{t("common.cancel")}</button>
       </div>
     </form>
   );

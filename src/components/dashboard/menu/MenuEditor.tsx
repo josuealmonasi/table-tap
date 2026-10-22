@@ -21,6 +21,8 @@ import SectionEditor from "./SectionEditor";
 import ImportMenuDialog from "./ImportMenuDialog";
 import EditorHeader from "./EditorHeader";
 import { OrdersIcon } from "@/components/ui/icons";
+import { ModalRecoveryContext } from "@/components/ui/ModalRecovery";
+import MenuReloadNotice from "./MenuReloadNotice";
 
 interface MenuEditorProps {
   restaurant: Restaurant;
@@ -61,10 +63,10 @@ export default function MenuEditor({
   // If this menu was deleted from another tab, bounce back to the dashboard
   // instead of showing a dead editor.
   useEffect(() => {
-    if (!editor.loading && !editor.menus.some(m => m.id === menuId)) {
+    if (!editor.loading && !editor.loadFailed && !editor.menus.some(m => m.id === menuId)) {
       router.replace("/dashboard");
     }
-  }, [editor.loading, editor.menus, menuId, router]);
+  }, [editor.loading, editor.loadFailed, editor.menus, menuId, router]);
 
   const currentMenu = editor.menus.find(m => m.id === menuId);
   const liveName = currentMenu?.name ?? menuName;
@@ -97,12 +99,16 @@ export default function MenuEditor({
 
   const menuEmpty = menuSections.length === 0 && menuProducts.length === 0;
   const addSection = (name: string) => editor.addSection(menuId, name);
+  const recoveryNotice = editor.loadFailed ? <MenuReloadNotice reload={editor.reload} /> : null;
 
   return (
     <DietaryTagsProvider tags={dietaryTags}>
       <IconGroupsProvider groups={iconGroups}>
         <div className="tt-dash">
           <div className="container">
+            {recoveryNotice}
+            <ModalRecoveryContext.Provider value={{ blocked: editor.loadFailed, notice: recoveryNotice }}>
+            <fieldset disabled={editor.loadFailed} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
             <ImportMenuDialog
               open={importing !== null}
               withTemplate={importing === "template"}
@@ -132,7 +138,7 @@ export default function MenuEditor({
                 <SectionSkeleton rows={3} />
                 <SectionSkeleton rows={2} />
               </div>
-            ) : menuEmpty ? (
+            ) : !editor.hasLoaded ? null : menuEmpty ? (
               // A fresh menu: invite the first section instead of showing the bare form.
               <div className="tt-section">
                 <div className="tt-empty">
@@ -227,8 +233,8 @@ export default function MenuEditor({
                       addons={menuAddons}
                       links={editor.links}
                       currency={currency}
-                      onRename={async () => {}}
-                      onDelete={async () => {}}
+                      onRename={async () => false}
+                      onDelete={async () => false}
                       onAddProduct={addProductWithAddons}
                       onUpdateProduct={updateProductWithAddons}
                       onDeleteProduct={editor.deleteProduct}
@@ -285,25 +291,26 @@ export default function MenuEditor({
                 count={bulk.selected.size}
                 onCancel={bulk.exit}
                 onDelete={async () => {
-                  await editor.deleteItems([...bulk.selected]);
-                  bulk.exit();
+                  if (await editor.deleteItems([...bulk.selected])) bulk.exit();
                 }}
               />
             )}
+            </fieldset>
+            </ModalRecoveryContext.Provider>
           </div>
         </div>
       </IconGroupsProvider>
     </DietaryTagsProvider>
   );
 
-  // Create a product in this menu, then attach its chosen add-ons.
+  // Create the dish and its chosen extras together, or keep the draft open.
   async function addProductWithAddons(
     categoryId: string | null,
     input: Parameters<typeof editor.addProduct>[2],
     addonIds: string[],
   ) {
-    const id = await editor.addProduct(menuId, categoryId, input);
-    if (id && addonIds.length) await editor.setProductAddons(id, addonIds);
+    const id = await editor.addProduct(menuId, categoryId, input, addonIds);
+    if (!id) throw new Error("Product did not save");
   }
 
   async function updateProductWithAddons(
@@ -311,7 +318,6 @@ export default function MenuEditor({
     input: Parameters<typeof editor.updateProduct>[1],
     addonIds: string[],
   ) {
-    await editor.updateProduct(id, input);
-    await editor.setProductAddons(id, addonIds);
+    await editor.updateProduct(id, input, addonIds);
   }
 }

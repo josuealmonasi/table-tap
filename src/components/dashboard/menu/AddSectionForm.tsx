@@ -6,7 +6,7 @@ import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 
 interface AddSectionFormProps {
-  onAdd: (name: string) => Promise<unknown>;
+  onAdd: (name: string) => Promise<string | undefined>;
   autoFocus?: boolean;
 }
 
@@ -27,7 +27,7 @@ export default function AddSectionForm({
           onSubmit={async e => {
             e.preventDefault();
             if (name.trim()) {
-              await onAdd(name.trim());
+              if (!(await onAdd(name.trim()))) return;
               toast(t("done.sectionAdded"));
               setName("");
               close();

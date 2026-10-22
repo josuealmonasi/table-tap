@@ -17,7 +17,7 @@ interface MenuSwitcherProps {
   menus: Menu[];
   currentId: string;
   currentName: string;
-  onRename: (id: string, name: string) => Promise<void>;
+  onRename: (id: string, name: string) => Promise<boolean>;
   nameTaken: (name: string, exceptId?: string) => boolean;
 }
 
@@ -59,7 +59,7 @@ export default function MenuSwitcher({
       setError(t("menu.nameTaken", { name }));
       return;
     }
-    await onRename(currentId, name);
+    if (!(await onRename(currentId, name))) return;
     setRenaming(false);
     setOpen(false);
     router.replace(`/dashboard/${menuSlug(name)}`);

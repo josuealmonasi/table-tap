@@ -62,6 +62,11 @@ export default function DashboardHome({ restaurant, role, schedules, setup = [] 
 
         <SetupChecklist steps={setup} />
 
+        {editor.loadFailed && <div className="tt-section" role="alert">
+          <p>{t("menu.reloadFailed")}</p>
+          <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={editor.reload}>{t("fallback.retry")}</button>
+        </div>}
+        <fieldset disabled={editor.loadFailed} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
         {editor.loading ? (
           <div
             className="tt-section"
@@ -72,7 +77,7 @@ export default function DashboardHome({ restaurant, role, schedules, setup = [] 
               <Skeleton key={i} width="100%" height={44} radius={12} />
             ))}
           </div>
-        ) : (
+        ) : !editor.hasLoaded ? null : (
           <MenusPanel
             menus={editor.menus}
             onOpen={openMenu}
@@ -88,6 +93,7 @@ export default function DashboardHome({ restaurant, role, schedules, setup = [] 
           />
         )}
 
+        </fieldset>
         <div className="tt-tiles">
           {/* Not a tile linking to the page you are standing on: the menus
               live in the card above, and the nav bar names this screen. */}

@@ -22,6 +22,8 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
       update: () => { write = true; state.writes.push(table); return q; },
       delete: () => { write = true; state.writes.push(table); return q; },
       single: async () => ({ data: { id: "p1" }, error: null }),
+      // The coupon route reads the caller's coupon before editing it.
+      maybeSingle: async () => ({ data: { id: "p1", code: "ABC-123" }, error: null }),
       then: (resolve: (v: unknown) => unknown) => Promise.resolve({
         data: write ? [{ id: "p1" }] : [{ id: "i1", price: 100 }, { id: "i2", price: 100 }], error: null,
       }).then(resolve),

@@ -21,7 +21,7 @@ describe("promoPricingError — tiered", () => {
   });
 
   it("rejects the reported case: 2 tacos for 30 when two cost 21", () => {
-    expect(promoPricingError(tier(2, 30), priced)).toMatch(/21\.00/);
+    expect(promoPricingError(tier(2, 30), priced)).toMatchObject({ vars: { regular: "21.00" } });
   });
 
   it("rejects a break priced exactly at the normal total", () => {
@@ -42,7 +42,7 @@ describe("promoPricingError — tiered", () => {
       ],
       tiers: [{ qty: 2, price: 6 }],
     };
-    expect(promoPricingError(mixed, priced)).toMatch(/5\.00/);
+    expect(promoPricingError(mixed, priced)).toMatchObject({ vars: { regular: "5.00" } });
   });
 });
 
@@ -57,7 +57,7 @@ describe("promoPricingError — combo", () => {
   });
 
   it("rejects a bundle dearer than its parts", () => {
-    expect(promoPricingError(combo(15), priced)).toMatch(/13\.00/);
+    expect(promoPricingError(combo(15), priced)).toMatchObject({ vars: { regular: "13.00" } });
   });
 
   it("rejects a bundle priced at exactly its parts", () => {

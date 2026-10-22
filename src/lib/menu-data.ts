@@ -1,6 +1,7 @@
 import type { createClient } from "@/lib/supabase/client";
 import type { Category, Menu, MenuItem } from "@/lib/types";
 import { everyRow, everyRowIn } from "@/lib/paged";
+import { writeError } from "@/lib/write-result";
 
 type Supabase = ReturnType<typeof createClient>;
 
@@ -81,9 +82,9 @@ export async function reorderRows(
   if (index === -1 || swapIndex < 0 || swapIndex >= ordered.length) return null;
   const a = ordered[index];
   const b = ordered[swapIndex];
-  const [{ error: e1 }, { error: e2 }] = await Promise.all([
-    supabase.from(table).update({ sort_order: b.sort_order }).eq("id", a.id),
-    supabase.from(table).update({ sort_order: a.sort_order }).eq("id", b.id),
+  const [first, second] = await Promise.all([
+    supabase.from(table).update({ sort_order: b.sort_order }).eq("id", a.id).select("id"),
+    supabase.from(table).update({ sort_order: a.sort_order }).eq("id", b.id).select("id"),
   ]);
-  return e1 ?? e2;
+  return writeError(first) ?? writeError(second);
 }

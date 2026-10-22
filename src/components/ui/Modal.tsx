@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { DirtyCloseContext, type CloseGuard } from "@/hooks/useDirtyClose";
+import { useContext, useEffect, useLayoutEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import { ModalRecoveryContext } from "./ModalRecovery";
 
 const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"]):not(:disabled)';
 
 /**
  * Generic modal shell, reusing the same overlay/dialog look as ConfirmDialog
@@ -41,6 +44,18 @@ export function Modal({
   variant?: "center" | "sheet";
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const recovery = useContext(ModalRecoveryContext);
+  const guard: CloseGuard = useRef<CloseGuard["current"]>(null);
+  const closing = useRef(false);
+  async function requestClose(): Promise<void> {
+    if (closing.current) return;
+    closing.current = true;
+    try {
+      if (!guard.current || await guard.current()) onCloseRef.current();
+    } finally { closing.current = false; }
+  }
+  const requestCloseRef = useRef(requestClose);
+  useLayoutEffect(() => { requestCloseRef.current = requestClose; });
   // The latest onClose, read when a key is pressed. It used to be a dependency
   // of the effect below, and callers pass a new arrow on every render — so
   // every keystroke in a form inside the dialog re-ran the effect, which moved
@@ -61,8 +76,9 @@ export function Modal({
     (first ?? dialog)?.focus();
 
     function onKey(e: KeyboardEvent) {
+      if (closing.current || guard.confirming || e.defaultPrevented) return;
       if (e.key === "Escape") {
-        onCloseRef.current();
+        void requestCloseRef.current();
         return;
       }
       if (e.key !== "Tab" || !dialog) return;
@@ -73,7 +89,10 @@ export function Modal({
       const firstEl = items[0];
       const lastEl = items[items.length - 1];
       // Wrap at both ends so focus can't escape to the page behind.
-      if (e.shiftKey && document.activeElement === firstEl) {
+      if (!dialog.contains(document.activeElement)) {
+        e.preventDefault();
+        (e.shiftKey ? lastEl : firstEl).focus();
+      } else if (e.shiftKey && document.activeElement === firstEl) {
         e.preventDefault();
         lastEl.focus();
       } else if (!e.shiftKey && document.activeElement === lastEl) {
@@ -91,10 +110,10 @@ export function Modal({
 
   if (!open) return null;
 
-  return (
+  const overlay = (
     <div
       className={`tt-dialog-overlay ${variant === "sheet" ? "tt-overlay-sheet" : ""}`}
-      onClick={onClose}
+      onClick={() => void requestClose()}
     >
       <div
         ref={dialogRef}
@@ -107,8 +126,14 @@ export function Modal({
         onClick={e => e.stopPropagation()}
       >
         {title && <h3 className="tt-modal-title">{title}</h3>}
-        {children}
+        {recovery?.notice}
+        <DirtyCloseContext.Provider value={guard}>
+          {recovery ? <fieldset disabled={recovery.blocked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>{children}</fieldset> : children}
+        </DirtyCloseContext.Provider>
       </div>
     </div>
   );
+  // Stay outside the editor's disabled fieldset even before a read fails.
+  // Keeping the portal and fieldset in place preserves the mounted draft.
+  return recovery ? createPortal(overlay, document.body) : overlay;
 }

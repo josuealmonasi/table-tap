@@ -121,6 +121,7 @@ export default function BillSheet({
     split,
     diner,
     busy: splitBusy,
+    error: splitError,
     propose,
     join,
     cancel: cancelSplit,
@@ -173,6 +174,7 @@ export default function BillSheet({
 
   return (
     <Modal open={open} onClose={onClose} maxWidth={460} label={t("bill.open")}>
+      {splitError && <p className="tt-field-error" role="alert">{splitError}</p>}
       <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 12 }}>
         {t("bill.title", { label: tableLabel })}
       </h3>

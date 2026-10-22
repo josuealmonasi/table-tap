@@ -20,6 +20,7 @@ import { useRowMemory } from "@/hooks/useRowMemory";
 export default function PromotionsPanel({
   restaurantId,
   currency,
+  timeZone = "America/Mexico_City",
   couponsAllowed,
   couponsUnlockWith,
   promosAllowed = true,
@@ -28,6 +29,7 @@ export default function PromotionsPanel({
 }: {
   restaurantId: string;
   currency: string;
+  timeZone?: string;
   /** This tier includes coupon codes. Decided on the server. */
   couponsAllowed: boolean;
   /** The cheapest tier that does, named by the lock. */
@@ -85,6 +87,7 @@ export default function PromotionsPanel({
       err ?? (editing ? t("promos.updated") : t("promos.created")),
       err ? "error" : "info",
     );
+    return !err;
   }
 
   // Confirm the pause too: without it the only feedback was the label
@@ -209,7 +212,7 @@ export default function PromotionsPanel({
               other two rather than buried in Settings. On a tier without them
               the lock stands in the same column, so the page keeps its shape. */}
           {couponsAllowed ? (
-            <CouponsPanel restaurantId={restaurantId} currency={currency} />
+            <CouponsPanel restaurantId={restaurantId} currency={currency} timeZone={timeZone} />
           ) : (
             <PlanLock
               feature="coupons"

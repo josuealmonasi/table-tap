@@ -21,7 +21,7 @@ interface ProductRowProps {
   linkedAddonIds: string[];
   currency: string;
   onUpdate: (id: string, input: ProductInput, addonIds: string[]) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
+  onDelete: (id: string) => Promise<boolean>;
   /** Copies the dish, its options and its extras into the same section. */
   onDuplicate?: (id: string) => Promise<string | undefined>;
   onToggleAvailable: (id: string, available: boolean) => void;

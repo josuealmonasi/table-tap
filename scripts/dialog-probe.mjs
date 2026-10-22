@@ -86,6 +86,23 @@ export async function typingFaults(tab, scope = "[role=dialog]", most = 4) {
   return faults;
 }
 
+const DISCARD = /^\s*(Descartar cambios|Discard changes)\s*$/i;
+
+/** Clicks Discard when a dirty form asked before closing; does nothing otherwise. */
+export async function answerDiscard(tab) {
+  const discard = tab.getByRole("button", { name: DISCARD });
+  // The question opens a frame after Escape; 300 ms is ample, and every
+  // probe pays it, so it is kept short.
+  for (let tries = 0; tries < 3; tries++) {
+    if (await discard.count() && await discard.first().isVisible()) {
+      await discard.first().click();
+      return true;
+    }
+    await tab.waitForTimeout(100);
+  }
+  return false;
+}
+
 /** Still on the page this visit is for. */
 export function samePage(current, planned) {
   const a = new URL(current), b = new URL(planned);
@@ -137,6 +154,11 @@ export async function probeDialogs({ tab, log, phase, stop }, { url, role, path 
       ]);
       faults.length ? bad(where, faults) : ok(where);
       await tab.keyboard.press("Escape");
+      // A form this probe typed into is dirty now, and asks before it closes
+      // (useDirtyClose). Answer it as a person would, so the question itself
+      // is exercised and the dialog closes, instead of the sweep waiting on a
+      // dialog that is waiting on it.
+      await answerDiscard(tab);
       // A dialog that will not close makes every later click hit it instead.
       if (!(await phase("readiness", () => overlay(tab, "[role=dialog]", false, 1000, false)))) {
         await navigate(tab, url, phase, pending);

@@ -20,17 +20,17 @@ interface SectionEditorProps {
   addons: MenuItem[];
   links: Record<string, string[]>;
   currency: string;
-  onRename: (id: string, name: string) => Promise<void>;
+  onRename: (id: string, name: string) => Promise<boolean>;
   /** Where the section's dishes are made; absent for the uncategorized bucket. */
-  onSetStation?: (id: string, station: "kitchen" | "bar") => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
+  onSetStation?: (id: string, station: "kitchen" | "bar") => Promise<boolean>;
+  onDelete: (id: string) => Promise<boolean>;
   onAddProduct: (
     categoryId: string | null,
     input: ProductInput,
     addonIds: string[],
   ) => Promise<void>;
   onUpdateProduct: (id: string, input: ProductInput, addonIds: string[]) => Promise<void>;
-  onDeleteProduct: (id: string) => Promise<void>;
+  onDeleteProduct: (id: string) => Promise<boolean>;
   onDuplicateProduct?: (id: string) => Promise<string | undefined>;
   onToggleAvailable: (id: string, available: boolean) => void;
   /** Open add/edit forms in a focused modal instead of expanding inline. Defaults to on. */
@@ -114,7 +114,7 @@ export default function SectionEditor({
               onSubmit={async e => {
                 e.preventDefault();
                 if (!nameChanged) return;
-                await onRename(section.id, name.trim());
+                if (!(await onRename(section.id, name.trim()))) return;
                 setRenaming(false);
               }}
             >

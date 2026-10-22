@@ -3,6 +3,7 @@ import type { useToast } from "@/components/ui/Toast";
 import { reorderRows, type Reorderable, type ReorderTable } from "@/lib/menu-data";
 import { parsePlanLimit, planLimitText } from "@/lib/plan-error";
 import { planLabel } from "@/lib/plan";
+import { writeError, type WriteResult } from "@/lib/write-result";
 
 interface WriterDeps {
   supabase: ReturnType<typeof createClient>;
@@ -47,13 +48,21 @@ export function makeWriter({ supabase, toast, t, reload, ready = async () => tru
    */
   async function run(
     key: string,
-    write: PromiseLike<{ error: { message: string } | null }>,
+    write: PromiseLike<WriteResult>,
     done?: string,
-  ): Promise<void> {
-    if (!(await ready())) return;
-    const { error } = await write;
-    if (reportError(key, error) && done) toast(t(done));
-    await reload();
+    expected = 1,
+  ): Promise<boolean> {
+    if (!(await ready())) return false;
+    try {
+      const error = writeError(await write, expected);
+      if (!reportError(key, error)) return false;
+      if (done) toast(t(done));
+      await reload();
+      return true;
+    } catch {
+      toast(t(key), "error");
+      return false;
+    }
   }
 
   /** Inserts a row, reports any failure, refreshes, and returns the new row's id. */
@@ -64,11 +73,16 @@ export function makeWriter({ supabase, toast, t, reload, ready = async () => tru
     done?: string,
   ): Promise<string | undefined> {
     if (!(await ready())) return undefined;
-    const { data, error } = await supabase.from(table).insert(row).select("id").single();
-    if (!reportError(key, error)) return undefined;
-    if (done) toast(t(done));
-    await reload();
-    return (data as { id: string } | null)?.id;
+    try {
+      const { data, error } = await supabase.from(table).insert(row).select("id").single();
+      if (!reportError(key, error ?? (data?.id ? null : { message: "The insert returned no id" }))) return undefined;
+      if (done) toast(t(done));
+      await reload();
+      return (data as { id: string } | null)?.id;
+    } catch {
+      toast(t(key), "error");
+      return undefined;
+    }
   }
 
   /** Moves a row one step among its siblings, reporting any failure. */
@@ -78,10 +92,16 @@ export function makeWriter({ supabase, toast, t, reload, ready = async () => tru
     siblings: Reorderable[],
     id: string,
     direction: "up" | "down",
-  ): Promise<void> {
-    if (!(await ready())) return;
-    reportError(key, await reorderRows(supabase, table, siblings, id, direction));
-    await reload();
+  ): Promise<boolean> {
+    if (!(await ready())) return false;
+    try {
+      if (!reportError(key, await reorderRows(supabase, table, siblings, id, direction))) return false;
+      await reload();
+      return true;
+    } catch {
+      toast(t(key), "error");
+      return false;
+    }
   }
 
   return { reportError, run, insertReturningId, move };

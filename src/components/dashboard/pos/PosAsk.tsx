@@ -1,6 +1,7 @@
 "use client";
 
 import { useT } from "@/lib/i18n/context";
+import { NAME_MAX, NOTE_MAX } from "@/lib/notes";
 import { formatMoney } from "@/lib/format";
 import TipPicker from "@/components/customer/TipPicker";
 import type { PosSaleDetails } from "@/hooks/usePosSaleDetails";
@@ -95,20 +96,26 @@ export default function PosAsk({
           <input
             className="tt-input"
             autoFocus
+            maxLength={NAME_MAX}
+            aria-describedby="pos-customerName-remaining"
             value={d.customerName}
             onChange={e => d.setCustomerName(e.target.value)}
             placeholder={t("pos.customerNameHint")}
           />
+          <span id="pos-customerName-remaining" className="tt-muted" style={{ fontSize: 12 }}>{t("common.charactersLeft", { count: Math.max(0, NAME_MAX - d.customerName.length) })}</span>
         </label>
 
         <label className="tt-field">
           <span className="tt-mod-label">{t("pos.note")}</span>
           <input
             className="tt-input"
+            maxLength={NOTE_MAX}
+            aria-describedby="pos-note-remaining"
             value={d.note}
             onChange={e => d.setNote(e.target.value)}
             placeholder={t("pos.noteHint")}
           />
+          <span id="pos-note-remaining" className="tt-muted" style={{ fontSize: 12 }}>{t("common.charactersLeft", { count: Math.max(0, NOTE_MAX - d.note.length) })}</span>
         </label>
 
         {/* Not a second way to pay — a modifier on the one there is. The

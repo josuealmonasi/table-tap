@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { MenuItem } from "@/lib/types";
 import type { AddonInput } from "@/hooks/useMenuEditor";
 import { useT } from "@/lib/i18n/context";
+import { useDirtyClose } from "@/hooks/useDirtyClose";
 import { useDirty } from "@/hooks/useDirty";
 import IconPicker from "./IconPicker";
 
@@ -27,6 +28,8 @@ export default function AddonForm({
   const [emoji, setEmoji] = useState(initial?.emoji ?? "");
   const [saving, setSaving] = useState(false);
   const dirty = useDirty([name, price, emoji]);
+
+  const close = useDirtyClose(dirty, onCancel, saving);
 
   return (
     <form
@@ -65,7 +68,7 @@ export default function AddonForm({
         <button
           type="button"
           className="tt-btn tt-btn-ghost tt-btn-sm"
-          onClick={onCancel}
+          onClick={close}
         >
           {t("menu.cancel")}
         </button>

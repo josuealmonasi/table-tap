@@ -8,6 +8,7 @@ import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 interface CouponRowProps {
   coupon: Coupon;
   currency: string;
+  timeZone?: string;
   onEdit: (c: Coupon) => void;
   onToggle: (c: Coupon) => void;
   onDelete: (c: Coupon) => void;
@@ -17,6 +18,7 @@ interface CouponRowProps {
 export default function CouponRow({
   coupon: c,
   currency,
+  timeZone = "America/Mexico_City",
   onEdit,
   onToggle,
   onDelete,
@@ -46,7 +48,7 @@ export default function CouponRow({
     // working" is almost always a schedule that hasn't started or has passed.
     // In the app's language, not the browser's: a Spanish owner on an English
     // phone read "9/30/2026" beside Spanish words.
-    const day = (iso: string) => new Date(iso).toLocaleDateString(dateLocale(locale));
+    const day = (iso: string) => new Date(iso).toLocaleString(dateLocale(locale), { timeZone, year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
     if (c.starts_at && c.ends_at) {
       parts.push(t("coupons.between", { from: day(c.starts_at), to: day(c.ends_at) }));
     } else if (c.starts_at) {

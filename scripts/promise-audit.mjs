@@ -442,7 +442,10 @@ for (const state of STATES) {
       // explains nothing" — a red gate over nothing, then green on a rerun,
       // which is how a gate teaches people to ignore it. A screen that truly
       // never says it still fails, ten seconds later.
-      const deadline = Date.now() + 10000;
+      // Thirty seconds, as every other readiness wait in the gates: a bill
+      // read that took nine on a slow server read as a screen that had hidden
+      // its working button (cross-review of S23). It stops as soon as it sees.
+      const deadline = Date.now() + 30000;
       while (Date.now() < deadline) {
         const text = await tab.evaluate("document.body.innerText");
         // The most specific signal first. The words a case looks for can be on
@@ -475,7 +478,7 @@ for (const state of STATES) {
         // that takes 1.3s on a slow compile made this case report the screen
         // as having hidden its own working button — a red gate over nothing,
         // which is how a gate teaches people to ignore it.
-        const deadline = Date.now() + 8000;
+        const deadline = Date.now() + 30000;
         while (Date.now() < deadline) {
           const ready = state.keeps
             ? (await visible(tab, state.keeps)) > 0

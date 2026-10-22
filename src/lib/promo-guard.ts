@@ -39,17 +39,17 @@ export function regularTotal(
  * happily applies whatever the deal says, and the customer just sees a worse
  * number.
  *
- * Returns an error message, or null when the deal is genuinely a deal.
+ * Returns a translation key and its figures, or null when the deal saves money.
  */
 export function promoPricingError(
   promo: PromoShape,
   priced: Map<string, PricedProduct>,
-): string | null {
+): { key: string; vars: Record<string, string | number> } | null {
   if (promo.kind === "combo") {
     const regular = regularTotal(promo.items, priced);
     const price = Number(promo.comboPrice);
     if (regular > 0 && price >= regular) {
-      return `A combo has to beat buying the products separately (${regular.toFixed(2)}).`;
+      return { key: "apiErr.comboNotCheaper", vars: { regular: regular.toFixed(2) } };
     }
     return null;
   }
@@ -71,7 +71,7 @@ export function promoPricingError(
       if (!Number.isFinite(qty) || qty < 1 || !Number.isFinite(price)) continue;
       const normal = round2(qty * cheapest);
       if (price >= normal) {
-        return `Buying ${qty} costs ${normal.toFixed(2)} already — the price break has to be lower.`;
+        return { key: "apiErr.tierNotCheaper", vars: { qty, regular: normal.toFixed(2) } };
       }
     }
     return null;

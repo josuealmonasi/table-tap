@@ -5,6 +5,7 @@ export async function saveProduct(
   ctx: EditorContext,
   id: string,
   input: Partial<ProductInput & { category_id: string | null }>,
+  addonIds?: string[],
 ): Promise<void> {
   if (!(await ctx.ready())) throw new Error("Menu has not loaded");
   const { stock, expectedStock, expectedEpoch, ...changes } = input;
@@ -29,7 +30,7 @@ export async function saveProduct(
   if (stock !== undefined && expectedStock !== undefined && expectedEpoch !== undefined) {
     await send("POST", { id, stock, expectedStock, expectedEpoch });
   }
-  if (Object.keys(changes).length) await send("PATCH", { id, changes });
+  if (Object.keys(changes).length || addonIds) await send("PATCH", { id, changes, ...(addonIds ? { addonIds } : {}) });
   ctx.toast(ctx.t("done.productUpdated"));
   await ctx.reload();
 }

@@ -14,14 +14,16 @@ import CouponRow from "./CouponRow";
 export default function CouponsPanel({
   restaurantId,
   currency,
+  timeZone = "America/Mexico_City",
 }: {
   restaurantId: string;
   currency: string;
+  timeZone?: string;
 }) {
   const t = useT();
   const toast = useToast();
   const confirm = useConfirm();
-  const { coupons, loading, create, update, setActive, remove } =
+  const { coupons, loading, loadFailed, reload, create, update, setActive, remove } =
     useCoupons(restaurantId);
   const rows = useRowMemory("coupons", 3, loading ? undefined : coupons.length);
   const [adding, setAdding] = useState(false);
@@ -83,15 +85,18 @@ export default function CouponsPanel({
       {adding && (
         <CouponForm
           editing={editing}
-          currency={currency}
+          currency={currency} timeZone={timeZone}
           onClose={closeForm}
           onSave={input => (editing ? update(editing.id, input) : create(input))}
         />
       )}
 
+      {loadFailed && <p className="tt-field-error" role="alert">
+        {t("coupons.loadFailed")} <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={reload}>{t("fallback.retry")}</button>
+      </p>}
       {loading ? (
         <ListSkeleton rows={rows} />
-      ) : coupons.length === 0 ? (
+      ) : coupons.length === 0 && !loadFailed ? (
         <p className="tt-muted">{t("coupons.empty")}</p>
       ) : (
         <div className="tt-coupon-list">
@@ -99,7 +104,7 @@ export default function CouponsPanel({
             <CouponRow
               key={c.id}
               coupon={c}
-              currency={currency}
+              currency={currency} timeZone={timeZone}
               onEdit={startEdit}
               onToggle={c2 => void toggle(c2)}
               onDelete={c2 => void del(c2)}

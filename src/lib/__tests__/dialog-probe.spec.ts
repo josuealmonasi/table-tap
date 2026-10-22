@@ -34,3 +34,20 @@ it("comes back to its page when a click navigated away, before the next label", 
   expect(loop.indexOf("if (!samePage(tab.url(), url)) await navigate(")).toBeGreaterThan(-1);
   expect(loop.indexOf("if (!samePage(tab.url(), url))")).toBeLessThan(loop.indexOf("clickByLabel(tab, label)"));
 });
+
+it("answers the discard question a dirty form asks, and leaves other dialogs alone", async () => {
+  // The probe types into a form, so Escape now asks before closing. Unanswered,
+  // the visit waited on a dialog that was waiting on it (cross-review of S23, 7).
+  const { answerDiscard } = await import("../../../scripts/dialog-probe.mjs");
+  const click = vi.fn();
+  const tab = (shown: boolean) => ({
+    getByRole: () => ({ count: async () => (shown ? 1 : 0), first: () => ({ isVisible: async () => shown, click }) }),
+    waitForTimeout: async () => {},
+  });
+  expect(await answerDiscard(tab(true))).toBe(true);
+  expect(click).toHaveBeenCalledTimes(1);
+  expect(await answerDiscard(tab(false))).toBe(false);
+  expect(click).toHaveBeenCalledTimes(1);
+  const source = (await import("node:fs")).readFileSync("scripts/dialog-probe.mjs", "utf8");
+  expect(source.indexOf("await answerDiscard(tab);")).toBeGreaterThan(source.indexOf('await tab.keyboard.press("Escape");'));
+});

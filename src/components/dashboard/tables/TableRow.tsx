@@ -18,9 +18,9 @@ interface TableRowProps {
   /** Free to seat, or what is still owed on it. */
   status: TableStatus;
   currency: string;
-  /** Both report whether the write landed; the row only cares that it finished. */
-  onRename: (id: string, label: string) => Promise<unknown>;
-  onDelete: (id: string) => Promise<unknown>;
+  /** A refused rename keeps the draft open. */
+  onRename: (id: string, label: string) => Promise<boolean>;
+  onDelete: (id: string) => Promise<boolean>;
 }
 
 /** One table: its QR plus rename (inline) and delete (confirmed) actions. */
@@ -81,7 +81,7 @@ export default function TableRow({
               e.preventDefault();
               const label = value.trim();
               if (label && label !== table.label) {
-                await onRename(table.id, label);
+                if (!(await onRename(table.id, label))) return;
                 toast(t("done.tableRenamed"));
               }
               setRenaming(false);

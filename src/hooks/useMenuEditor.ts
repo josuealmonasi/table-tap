@@ -28,6 +28,8 @@ export function useMenuEditor(restaurantId: string) {
   const toast = useToast();
   const t = useT();
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [menus, setMenus] = useState<Menu[]>([]);
   const [sections, setSections] = useState<Category[]>([]);
   const [products, setProducts] = useState<MenuItem[]>([]);
@@ -51,10 +53,11 @@ export function useMenuEditor(restaurantId: string) {
       data = await fetchMenuData(supabase, restaurantId);
     } catch (err) {
       if (requestId !== loadId.current) return;
-      // Left loading, so nothing can be edited: an editor holding part of the
-      // menu would save that part over the whole.
+      // Keep the last complete view and its drafts. Readiness stays false:
+      // an editor holding part of the menu must never save it over the whole.
       console.error(err);
-      setLoading(true);
+      setLoadFailed(true);
+      setLoading(false);
       toast(t("menu.loadFailed"), "error");
       return;
     }
@@ -64,6 +67,8 @@ export function useMenuEditor(restaurantId: string) {
     setProducts(data.products);
     setAddons(data.addons);
     setLinks(data.links);
+    setLoadFailed(false);
+    setHasLoaded(true);
     ready.current = true;
     setLoading(false);
   }, [restaurantId, supabase, toast, t]);
@@ -113,6 +118,8 @@ export function useMenuEditor(restaurantId: string) {
 
   return {
     loading,
+    loadFailed,
+    hasLoaded,
     menus,
     sections,
     products,

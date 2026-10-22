@@ -60,6 +60,20 @@ us, and what now catches each one.
 | A collection's food is sent to the cent (K cross-review 3) | 135.80 - 12.35 reached SQL as 123.45000000000002 and the MX$135.80 handed over was refused |
 | Every account refusal at the till is final, the currency one included (K cross-review 4) | Answered as held, the till resent the refused account sale even after the cashier chose cash |
 | A pay-later coupon's minimum is judged before the coupon, as checkout judges it (K cross-review 5) | MX$100 with a MX$10 coupon and a MX$100 minimum passed the route and was refused in SQL on MX$90 |
+| A write that failed never confirms, clears or closes its form (S23 K10, K13, K20, K25) | A refused section said "added" and closed; a rejected MX$90 combo lost its fields; table 7 renamed to 8 said done and stayed 7 |
+| A dish and its extras save in one transaction (S23 K11) | A failed extras insert after the delete left a MX$100 dish with none, even on a description edit |
+| A failed read keeps the last good view and offers a retry (S23 K12, K16) | A failed menu refetch dropped a 200-character draft; three coupons vanished behind "no coupons" |
+| An error lands in the dialog the person is looking at (S23 K17, K18, K22) | A refused write-off showed in a hidden dialog; split and approval errors and a rate-limited reset said nothing, or said sent |
+| A field takes no more than is kept (S23 K14, K21, K24) | An edited coupon code said updated and kept the old one; a 200-character kitchen note lost its last 50; a MX$12.34 tip was refused |
+| A coupon's hours are the restaurant's, with their offset (S23 K15) | 18:00Z showed to a Mexico City manager as 18:00, meaning 12:00 |
+| Unsaved price, recipe and deal edits ask before closing (S23 K19) | Escape or the backdrop dropped a MX$80 to MX$100 price change without a word |
+| A replacement confirmation settles the old ask and keeps focus (S23b 3 / Q3) | A second question stranded the MX$80 to MX$100 discard guard; saving during the question could still discard |
+| Retry is inside the retained menu draft's dialog (S23b 4 / Q4) | A failed reload after a 10 to 9 stock conflict covered Retry with the modal holding a recount of 5 and a 200-character description |
+| A confirmed write has affected rows behind it (S23b 5 / Q8) | An RLS-filtered MX$5 to MX$10 extra edit and table 7 to 8 rename said done after changing zero rows |
+| The Spanish screen speaks Spanish, refusals and Stripe lines included (S23 K23) | Pricing refusals, sign-in errors and the service and tip lines on the payment page were English |
+| A password reset answers the same whatever the provider says (S23 cross-review 2) | Supabase rate-limits only existing addresses, so showing its 429 told anyone which emails had accounts |
+| A coupon edit is refused when it changes the code, and a missing coupon is not found (S23 cross-review 6) | A new code answered 200 while the old one stayed; an id from elsewhere answered ok for an update that touched nothing |
+| The dialogs sweep answers a dirty form's discard question, and promises waits 30 s for a control (S23 cross-review 1, 7) | Typed-into forms now ask before closing and the sweep never answered; a bill read slower than 8 s read as a missing button |
 | Browser admission and measured server memory agree (S8b) | Three workers repeatedly crossed the development server's memory threshold with no peak RSS in the summary |
 | Browser navigation and the visit verdict agree (S8) | Dialog visits whose navigation failed silently vanished from coverage |
 | Typing errors and failed checks agree (S8) | A failed page-field check became an empty fault list and printed ok |
@@ -3475,8 +3489,9 @@ problem visible: every writer refused with a bare `if (!ready()) return;`, so a
 switch flipped during the read was dropped without a word. Every writer now
 awaits `ready()`, which resolves when the newest read finishes. It is true only
 when that read holds the whole menu, so the edit applies a moment later, or not
-at all if the read failed. A failed reload still shows the loading state, so a
-stale menu never looks editable. `menu-load.spec.ts` holds reads open and
+at all if the read failed. A failed reload keeps the last complete menu and
+its drafts on screen but disables the editor, with a retry (S23), so a stale
+menu never looks editable. `menu-load.spec.ts` holds reads open and
 checks all three: the edit waits, it is never sent after a failed read, and it
 waits for the newest read rather than the one it found running.
 
@@ -3865,3 +3880,107 @@ and inspect these eight surfaces in both languages at 390 and 1280 pixels.
 Use a lost reply followed by close/reopen or an attempted edit, then a repeated
 send. Also check an order after ordering pauses, the diner's later additions,
 and an account retry after the account picker closes. There is no schema change.
+
+## A form says what happened (S23, audit K findings 10–25)
+
+Codex started this and was cut off by its usage limit; Claude finished it
+(typing, a missing return, docs, a field guard and the live api cases). The
+findings share seven shapes, each fixed everywhere it appeared:
+
+- **A failed write looked like success.** The menu writer's `run`,
+  `insertReturningId` and `move` now return whether they wrote, and callers
+  confirm, clear or close only on success. The same goes for the promotion
+  forms (now awaited), the table rename and the ratings sheet.
+- **Extras were replaced in two steps.** `save_product_addons_v1` saves a dish
+  and its extras together. `product-save-fields.spec.ts` keeps its field list
+  equal to the route's, and three api cases check a create, a replacement, and
+  a refused extra that leaves the dish untouched.
+- **A failed read showed "nothing".** The menu editor keeps the last complete
+  view and the open drafts, disables editing, and offers a retry. J17 still
+  holds: nothing saves from a partial menu. The coupon list keeps its last
+  rows and says it could not load.
+- **Errors landed out of sight.** The write-off refusal is shown in its own
+  dialog. Split and approval errors are shown. The password reset reports a
+  rate limit or an outage, and still never reveals whether an email has an
+  account.
+- **Fields took more than was kept.** A coupon's code is read-only once it
+  exists. The till's name and kitchen note share the route's limits and count
+  what is left. The custom tip takes cents.
+- **Times had no zone.** Coupon hours are shown and read in the restaurant's
+  zone and saved with their offset (`zoned-input.ts`). A daylight-saving
+  minute that is skipped or repeated is refused rather than guessed.
+- **English on the Spanish screen.** Promotion pricing refusals return keys,
+  sign-in errors map the provider's codes (`auth-error.ts`), and the service
+  and tip lines sent to Stripe are in the diner's language.
+
+Unsaved dish, extra, recipe and deal forms ask before closing through
+`useDirtyClose`, which a modal consults only when its form opts in.
+
+## Codex's cross-review of S23
+
+A fresh Codex session reviewed S23 after Claude had finished it, and found
+six problems. Claude fixed three in fix-s23c; Codex fixed the other three
+(S23b):
+
+- **Recovery revealed accounts.** `authErrorKey(…, true)` now returns null
+  for every provider answer. Only a request that got no answer at all says
+  the service is unavailable. The tests that expected a 429 or a 503 to show
+  now expect the neutral confirmation.
+- **The coupon route ignored a changed code and answered ok for nothing.** It
+  reads the caller's coupon first (404 if missing), refuses a code that
+  normalises differently from the saved one, and confirms an update only when
+  a row came back. See `coupon-edit.spec.ts`.
+- **The gates did not keep up with the forms.** `answerDiscard` clicks
+  «Descartar cambios» after the sweep's Escape. Both of promises' waits for a
+  control are now 30 s, like every other readiness wait.
+
+
+### The coupon dialog, looked at
+
+Screenshots of the edit dialog at 390 px and 1280 px, in Spanish, after the
+cross-review fixes:
+
+- **The zone note read "America/Mexico_City".** It now names the zone as
+  Settings does: «Ciudad de México (GMT-6)», through `zoneName` in
+  `timezones.ts`. A zone the list does not offer keeps its IANA name.
+  Tested in `timezones.spec.ts`.
+- **The read-only code looked typeable.** `.tt-input[readonly]` gets the
+  inset surface and a dashed border. The other read-only field, the printer
+  link in Settings, gets the same look.
+- **An edit opened on «50 · 100 · 200» with nothing saying which number was
+  which.** The placeholders were the only names, and a filled field has
+  none. Every field is now a `.tt-field` label above its input. The type
+  select grew to 160 px, because «% de descuento» was clipped at 130.
+
+### The discard question must finish (S23b finding 3, Q3)
+
+The confirmation provider and the dirty-close guard had to agree on when an
+ask finished. Replacing the single resolver left the first caller waiting
+forever. A newer question now cancels the older one, and provider unmount
+cancels its pending answer. The confirmation contains keyboard and programmatic
+focus, restores it on close, and sits above a menu form's portal. The guard
+checks saving and mounting again after the answer. `s23b-confirm.spec.tsx`
+exercises the real provider, including the MX$80 to MX$100 draft, replacement,
+unmount, a save overtaking discard, and Tab in both directions.
+
+### A retained draft must be able to retry (S23b finding 4, Q4)
+
+The reload notice and the active form had to agree on where recovery lived.
+Retry was outside a disabled fieldset, but behind its modal. Menu dialogs now
+keep a stable portal outside that fieldset, put the same retry notice inside
+the dialog, and disable only its form after a failed read. The portal and form
+wrapper stay mounted through failure and recovery, preserving the draft.
+`s23b-retry.spec.tsx` checks that recovery stays outside the disabled draft.
+The writer's separate J17 readiness check still refuses every mutation until
+the latest read holds the complete menu; `menu-load.spec.ts` checks that rule.
+
+### A null error does not mean a row changed (S23b finding 5, Q8)
+
+RLS and form feedback had to agree on what success meant. An update filtered
+to zero rows returned no error, so the extra form closed with MX$5 still saved
+and a table rename reported success with its old label. Menu and table writers
+now request affected rows, and `writeError` checks the returned rows or exact
+count before confirming. Reorder checks both siblings, optimistic switches
+roll back, inserts require an id, and imports and bulk deletes require the
+whole expected count. `s23b-writes.spec.ts` pairs zero rows with explicit errors
+and checks successful writes as well.

@@ -5,6 +5,7 @@ import type { MenuItem, Modifier } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
 import { useT } from "@/lib/i18n/context";
 import { cleanModifiers } from "@/lib/clean-modifiers";
+import { useDirtyClose } from "@/hooks/useDirtyClose";
 import { useDirty } from "@/hooks/useDirty";
 import IconPicker from "./IconPicker";
 import ModifiersEditor from "./ModifiersEditor";
@@ -79,6 +80,8 @@ export default function ProductForm({
     stock,
     picked,
   ]);
+
+  const close = useDirtyClose(dirty, onCancel, saving);
 
   // Clamp to the same 0–99 range the DB constraint enforces.
   const pct = Math.min(99, Math.max(0, Number(discountPct) || 0));
@@ -224,7 +227,7 @@ export default function ProductForm({
         <button
           type="button"
           className="tt-btn tt-btn-ghost tt-btn-sm"
-          onClick={onCancel}
+          onClick={close}
         >
           {t("menu.cancel")}
         </button>

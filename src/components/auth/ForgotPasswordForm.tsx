@@ -1,5 +1,6 @@
 "use client";
 
+import { authErrorKey } from "@/lib/auth-error";
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -11,18 +12,27 @@ export default function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setLoading(true);
     // The email link returns to /auth/callback, which establishes the session
     // and forwards to the reset form.
-    await createClient().auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
-    });
-    // Always show the same confirmation, whether or not the account exists.
-    setSent(true);
-    setLoading(false);
+    setError(null);
+    try {
+      const { error } = await createClient().auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+      });
+      const key = error ? authErrorKey(error, true) : null;
+      if (key) { setError(t(key)); return; }
+      // Always show the same confirmation, whether or not the account exists.
+      setSent(true);
+    } catch {
+      setError(t("auth.unavailable"));
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -65,6 +75,7 @@ export default function ForgotPasswordForm() {
               style={{ marginBottom: 12 }}
               required
             />
+            {error && <p className="tt-field-error" role="alert">{error}</p>}
             <button
               className="tt-btn tt-btn-primary"
               style={{ width: "100%" }}

@@ -10,6 +10,8 @@ import { NextRequest, NextResponse } from "next/server";
  * dies, and nothing goes back once somebody else owns it.
  */
 
+vi.mock("@/lib/i18n/server", () => ({ getLocale: async () => "es" }));
+
 let admissionStatus = "approved";
 const step = {
   openSession: vi.fn(async (): Promise<string | null> => "sitting-1"),

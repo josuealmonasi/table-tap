@@ -2042,6 +2042,10 @@ A changed count is a separate manager operation at `POST /api/products`, with
 both the expected count and `stock_epoch`; a concurrent sale or recount refuses
 it so the manager can reopen the dish and check the shelf. Ordinary product
 edits use `PATCH /api/products` and keep RLS and frozen-dashboard guards.
+A dish and its extras are one write: `PATCH /api/products` with `addonIds`
+creates a dish (with `menuId`) or edits one, and replaces its extras in the
+same transaction (`save_product_addons_v1`). The route and the function accept
+the same fields, and a refused extra changes nothing about the dish.
 
 A recount is the new authoritative available count. It advances the generation
 and supersedes prior holds for that dish; those holds remain recorded, but

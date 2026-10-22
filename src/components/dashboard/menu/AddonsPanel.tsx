@@ -11,9 +11,9 @@ import AddonRow from "./AddonRow";
 interface AddonsPanelProps {
   addons: MenuItem[];
   currency: string;
-  onAdd: (input: AddonInput) => Promise<void>;
-  onUpdate: (id: string, input: AddonInput) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
+  onAdd: (input: AddonInput) => Promise<boolean>;
+  onUpdate: (id: string, input: AddonInput) => Promise<boolean>;
+  onDelete: (id: string) => Promise<boolean>;
   onToggleAvailable: (id: string, available: boolean) => void;
   onMove: (id: string, direction: "up" | "down") => Promise<void>;
   /** Open add/edit forms in a focused modal instead of expanding inline. Defaults to on. */
@@ -78,7 +78,7 @@ export default function AddonsPanel({
             submitLabel={t("menu.addExtra")}
             onCancel={() => setAdding(false)}
             onSubmit={async input => {
-              await onAdd(input);
+              if (!(await onAdd(input))) return;
               setAdding(false);
             }}
           />
@@ -119,7 +119,7 @@ export default function AddonsPanel({
             submitLabel={t("menu.saveShort")}
             onCancel={() => setEditingId(null)}
             onSubmit={async input => {
-              await onUpdate(addon.id, input);
+              if (!(await onUpdate(addon.id, input))) return;
               setEditingId(null);
             }}
           />

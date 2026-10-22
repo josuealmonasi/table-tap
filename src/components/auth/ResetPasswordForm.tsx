@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { authErrorKey } from "@/lib/auth-error";
 import { createClient } from "@/lib/supabase/client";
 import { PASSWORD_MIN } from "@/lib/password";
 import { useT } from "@/lib/i18n/context";
@@ -36,14 +37,19 @@ export default function ResetPasswordForm() {
     }
     setLoading(true);
     setError("");
-    const { error } = await createClient().auth.updateUser({ password });
-    if (error) {
-      setError(error.message);
+    try {
+      const { error } = await createClient().auth.updateUser({ password });
+      if (error) {
+        setError(t(authErrorKey(error) ?? "auth.unavailable"));
+        setLoading(false);
+        return;
+      }
+      // Hard navigate so the server picks up the refreshed session.
+      window.location.assign("/dashboard");
+    } catch {
+      setError(t("auth.unavailable"));
       setLoading(false);
-      return;
     }
-    // Hard navigate so the server picks up the refreshed session.
-    window.location.assign("/dashboard");
   }
 
   return (
