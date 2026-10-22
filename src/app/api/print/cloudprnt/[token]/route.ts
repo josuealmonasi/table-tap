@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { printerForToken } from "@/lib/cloudprnt-printer";
 import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { kitchenTicket } from "@/lib/ticket";
 import { DEFAULT_LOCALE, messagesFor, translate } from "@/lib/i18n";
-import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,61 +34,14 @@ export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/**
- * Compare in constant time.
- *
- * Belt and braces, and worth being honest about which: the row was already
- * found with `.eq("print_token", …)`, so Postgres matched it exactly and this
- * can only ever agree. It is here so that a later refactor which loosens that
- * lookup — a prefix, a join, a cache — does not quietly turn the comparison
- * into a byte-by-byte one that answers faster the closer a guess gets.
- *
- * The length check returns early because `timingSafeEqual` throws on unequal
- * lengths. That does leak the length, which is fine: every token this issues
- * is the same 43 characters, so the length tells an attacker nothing they
- * could not read off the format.
- */
-function tokenMatches(given: string, actual: string): boolean {
-  const a = Buffer.from(given);
-  const b = Buffer.from(actual);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
-
-interface Printer {
-  restaurantId: string;
-  name: string;
-  timeZone: string;
-}
-
-/**
- * Resolve the token to the restaurant that owns it, or nothing.
- *
- * The lookup is by token, so an attacker cannot ask about a restaurant they
- * name — they can only present a secret and be told nothing if it is wrong.
- */
-async function printerFor(req: NextRequest, token: string): Promise<Printer | null> {
+async function printerFor(req: NextRequest, token: string) {
   if (!token || token.length < 32 || token.length > 128) return null;
   // Bucketed by CALLER, not by token. Keying the limit on the token would give
   // somebody guessing a fresh bucket with every guess, which is no limit at
   // all. A real printer polls from one address every few seconds; 120 a minute
   // is generous for that and useless for a search.
   if (await isRateLimited(`cloudprnt:${clientKey(req)}`, 120, 60)) return null;
-
-  const db = createAdminClient();
-  const { data } = await db
-    .from("restaurants")
-    .select("id, name, timezone, print_token")
-    .eq("print_token", token)
-    .maybeSingle();
-  if (!data?.print_token) return null;
-  if (!tokenMatches(token, data.print_token as string)) return null;
-
-  return {
-    restaurantId: data.id as string,
-    name: (data.name as string) ?? "",
-    timeZone: (data.timezone as string) ?? DEFAULT_TIME_ZONE,
-  };
+  return printerForToken(token);
 }
 
 /** The oldest ticket this restaurant has not printed yet. */
@@ -97,7 +49,7 @@ async function pendingJob(restaurantId: string) {
   const db = createAdminClient();
   const { data } = await db
     .from("print_jobs")
-    .select("id, order_id")
+    .select("delivery_token")
     .eq("restaurant_id", restaurantId)
     .is("printed_at", null)
     .order("created_at", { ascending: true })
@@ -130,7 +82,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
   const job = await pendingJob(printer.restaurantId);
   if (!job) return NextResponse.json(IDLE);
 
-  return NextResponse.json({ ...IDLE, jobReady: true, jobToken: job.id as string });
+  return NextResponse.json({ ...IDLE, jobReady: true, jobToken: job.delivery_token as string });
 }
 
 // GET — hand over the ticket. Repeatable on purpose: the protocol says a GET
@@ -140,10 +92,19 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
   const printer = await printerFor(req, (await ctx.params).token);
   if (!printer) return new NextResponse(null, { status: 404 });
 
-  const job = await pendingJob(printer.restaurantId);
-  if (!job) return new NextResponse(null, { status: 404 });
+  const delivery = req.nextUrl.searchParams.get("token");
+  if (!delivery || !UUID.test(delivery)) return new NextResponse(null, { status: 404 });
 
   const db = createAdminClient();
+  const { data: job, error: lookupError } = await db
+    .from("print_jobs")
+    .select("id, order_id")
+    .eq("delivery_token", delivery)
+    .eq("restaurant_id", printer.restaurantId)
+    .is("printed_at", null)
+    .maybeSingle();
+  if (lookupError) return new NextResponse(null, { status: 500 });
+  if (!job) return new NextResponse(null, { status: 404 });
   const { data: order } = await db
     .from("orders")
     .select("id, items, note, table_label, customer_name, created_at")
@@ -154,11 +115,19 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
     .maybeSingle();
   if (!order) return new NextResponse(null, { status: 404 });
 
-  await db
+  // A reprint can replace this copy while the order is being read. Claim only
+  // the generation we looked up, or do not hand out any paper.
+  const { data: claimed, error: claimError } = await db
     .from("print_jobs")
     .update({ claimed_at: new Date().toISOString() })
     .eq("id", job.id as string)
-    .eq("restaurant_id", printer.restaurantId);
+    .eq("restaurant_id", printer.restaurantId)
+    .eq("delivery_token", delivery)
+    .is("printed_at", null)
+    .select("id")
+    .maybeSingle();
+  if (claimError) return new NextResponse(null, { status: 500 });
+  if (!claimed) return new NextResponse(null, { status: 404 });
 
   // A printer carries no cookie, so nothing here can ask the reader what
   // language they want — the ticket has to pick one. It picks the app's own
@@ -193,10 +162,11 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ token: s
   // `jobToken` we sent, and using it matters the moment a restaurant points
   // two printers at one URL: closing "whatever is oldest" would let the
   // counter printer's confirmation throw away the kitchen's unprinted ticket.
-  // Shape-checked before it reaches a query: an id column asked for something
+  // Shape-checked before it reaches a query: a uuid column asked for something
   // that is not a uuid is a database error, not a 200 with nothing done.
   const echoed = req.nextUrl.searchParams.get("token");
-  const jobId = echoed && UUID.test(echoed) ? echoed : null;
+  const delivery = echoed && UUID.test(echoed) ? echoed : null;
+  if (!delivery) return new NextResponse(null, { status: 200 });
 
   // The printer says how it went in `code`: OK (or a 2xx) when the ticket came
   // out, anything else when it could not print it. Every confirmation used to
@@ -206,18 +176,16 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ token: s
   const code = req.nextUrl.searchParams.get("code");
   if (code !== null && !/^\s*(ok|2\d\d)\b/i.test(code)) return new NextResponse(null, { status: 200 });
 
-  const job = jobId ? { id: jobId } : await pendingJob(printer.restaurantId);
-  if (job) {
-    const { error } = await createAdminClient()
-      .from("print_jobs")
-      .update({ printed_at: new Date().toISOString() })
-      .eq("id", job.id as string)
-      // Scoped by the restaurant the TOKEN resolved to, so an echoed id from
-      // somewhere else closes nothing.
-      .eq("restaurant_id", printer.restaurantId)
-      .is("printed_at", null);
-    // Not closed is not printed: answered 500, the printer confirms again.
-    if (error) return new NextResponse(null, { status: 500 });
-  }
+  const { error } = await createAdminClient()
+    .from("print_jobs")
+    .update({ printed_at: new Date().toISOString() })
+    .eq("delivery_token", delivery)
+    // Scoped by the restaurant the TOKEN resolved to, so an echoed id from
+    // somewhere else closes nothing.
+    .eq("restaurant_id", printer.restaurantId)
+    .is("printed_at", null)
+    .not("claimed_at", "is", null);
+  // Not closed is not printed: answered 500, the printer confirms again.
+  if (error) return new NextResponse(null, { status: 500 });
   return new NextResponse(null, { status: 200 });
 }

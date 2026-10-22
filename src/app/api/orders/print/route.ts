@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { actingStaff, actingFrontOfHouse } from "@/lib/api-guard";
@@ -72,7 +73,8 @@ export async function POST(req: NextRequest) {
     // (order_id, kind) — it exists so a repeated trigger cannot put the same
     // ticket on the paper twice, and a second insert here would be refused by
     // it. Asking again deliberately is a different act from asking twice by
-    // accident: the row goes back in the queue, unclaimed and unprinted.
+    // accident: the row goes back in the queue, unclaimed and unprinted, with
+    // a new delivery token so an old copy's confirmation cannot close it.
     const { error } = await db
       .from("print_jobs")
       .upsert(
@@ -80,6 +82,7 @@ export async function POST(req: NextRequest) {
           restaurant_id: actor.restaurantId,
           order_id: order.id as string,
           kind: "kitchen",
+          delivery_token: randomUUID(),
           claimed_at: null,
           printed_at: null,
           created_at: new Date().toISOString(),

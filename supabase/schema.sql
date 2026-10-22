@@ -3104,6 +3104,12 @@ create table if not exists print_jobs (
   claimed_at    timestamptz,
   printed_at    timestamptz
 );
+-- The row stays the same on a reprint, but each requested copy has its own
+-- token. A late confirmation of the old paper must not close the new copy.
+alter table print_jobs add column if not exists delivery_token uuid not null default gen_random_uuid();
+create unique index if not exists print_jobs_delivery_token_once
+  on print_jobs (delivery_token);
+
 -- The queue is read as "the oldest thing this restaurant has not printed",
 -- which is exactly this index.
 create index if not exists print_jobs_pending_idx

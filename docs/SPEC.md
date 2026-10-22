@@ -1166,7 +1166,12 @@ and the receipt button, and the route enforces the same boundary.
 Asking again is not the same as asking twice by accident. `print_jobs_once` is
 unique on `(order_id, kind)` precisely so a repeated trigger cannot put one
 ticket on the paper twice, which means a reprint cannot insert a second row: it
-re-arms the existing one, unclaimed and unprinted, back in the queue.
+re-arms the existing one, unclaimed and unprinted, back in the queue. Each copy
+has a fresh `delivery_token`, advertised as the CloudPRNT `jobToken`. GET must
+name that exact pending delivery; a missing, old or completed token never gets
+the next ticket. A successful DELETE closes only that token after it was
+fetched, so a late confirmation cannot close a reprint. Printers must support
+echoing the advertised job token on GET and DELETE.
 
 A restaurant with no printer address is told so rather than having a job queued
 for a machine that will never ask for it.
