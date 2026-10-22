@@ -40,7 +40,7 @@ export default function MarginsPanel({ view, currency }: MarginsPanelProps) {
         </section>
       )}
       {view.rises.length > 0 && <PriceRises rises={view.rises} currency={currency} />}
-      <FeeCard fees={view.fees} terminalFeePct={view.terminalFeePct} currency={currency} />
+      <FeeCard fees={view.fees} terminalFeePct={view.terminalFeePct} currency={currency} unverifiedFees={view.unverifiedFees} />
       <ProductMargins
         margins={view.margins}
         products={view.products}

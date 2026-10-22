@@ -19,7 +19,8 @@ import { programOf } from "@/lib/loyalty/server";
 import { readLoyaltyStats } from "@/lib/loyalty/analytics-read";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { startOfLocalDay } from "@/lib/day-window";
-import { corteFrom, EMPTY_CORTE, type CorteAdjustment, type CortePayment } from "@/lib/corte";
+import { corteFrom, type CortePayment } from "@/lib/corte";
+import { corteLogs, type CorteLog } from "@/lib/corte-log";
 import { todaysShiftViews } from "@/lib/cash-shift-server";
 import { readTerminalReport } from "@/lib/terminal-report";
 import { everyRow } from "@/lib/paged";
@@ -54,7 +55,7 @@ export default async function AnalyticsPage({
   // orders. A failed page throws to the error screen, like any failed read.
   const rows = await everyRow<AnalyticsOrder>((a, b) => supabase
     .from("orders")
-    .select("total, tip, created_at, items")
+    .select("total, service_fee, tip, created_at, items")
     .eq("restaurant_id", membership.restaurant.id).eq("currency", membership.restaurant.currency)
     .eq("paid", true)
     .neq("status", "cancelled")
@@ -87,34 +88,35 @@ export default async function AnalyticsPage({
       .eq("restaurant_id", membership.restaurant.id).eq("currency", membership.restaurant.currency)
       .gte("created_at", since)
       .order("id").range(a, b), "today's takings"),
-    everyRow<CorteAdjustment>((a, b) => admin
+    everyRow<CorteLog>((a, b) => admin
       .from("user_logs")
-      .select("action, detail")
+      .select("entity, action, detail")
       .eq("restaurant_id", membership.restaurant.id)
       // "refunded" is money handed back after it arrived. It comes out of the
       // drawer of whoever took it, which is why the corte needs to see it.
       // "charged" is food put on a customer's account: out of the kitchen,
       // owed, and in nobody's drawer.
-      .in("action", ["written_off", "discounted", "refunded", "charged"])
+      .in("action", ["written_off", "discounted", "approved", "refunded", "charged"])
       .gte("created_at", since)
       .order("id").range(a, b), "today's write-offs and discounts"),
-    // What customers owe on their accounts right now, however old.
+    // What customers owe on their accounts right now, however old, in this
+    // currency only. An old MX$100 debt cannot become US$100 after settings change.
     everyRow<{ total: number }>((a, b) => admin
       .from("orders")
       .select("total")
-      .eq("restaurant_id", membership.restaurant.id)
+      .eq("restaurant_id", membership.restaurant.id).eq("currency", membership.restaurant.currency)
       .not("account_id", "is", null)
       .eq("paid", false).eq("written_off", false)
       .neq("status", "cancelled")
       .order("id").range(a, b), "what customer accounts owe"),
     returnedAdjustments(membership.restaurant.id, since, undefined, membership.restaurant.currency),
   ]);
-  const corte = paidRows
-    ? {
-        ...corteFrom(paidRows as CortePayment[], [...givenUp, ...returns]),
-        accountsOwed: Math.round((owedRows ?? []).reduce((s, o) => s + Number(o.total), 0) * 100) / 100,
-      }
-    : EMPTY_CORTE;
+  const log = corteLogs(givenUp, membership.restaurant.currency);
+  const corte = {
+    ...corteFrom(paidRows, [...log.verified, ...returns]),
+    accountsOwed: Math.round(owedRows.reduce((s, o) => s + Number(o.total), 0) * 100) / 100,
+    unverifiedAdjustments: log.unverified,
+  };
   // The drawer it is counted against, shift by shift: today's, and the one
   // still open. A failed read throws to the error screen — a drawer shown as
   // empty would be a wrong number to count to.

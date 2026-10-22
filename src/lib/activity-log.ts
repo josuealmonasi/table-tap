@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { withOrderCurrency } from "@/lib/log-money";
 
 /**
  * The restaurant's record of who did what.
@@ -70,6 +71,8 @@ export interface LogEvent {
   action: LogAction;
   /** The specifics, already in words: "Table 4 · MX$120.00", "IVA 16% → 8%". */
   detail?: string | null;
+  /** Orders behind a monetary entry, so reports can verify its currency. */
+  orderIds?: string[];
   /** Kept for the staff rows, which the log has always carried. */
   targetEmail?: string | null;
   targetRole?: string | null;
@@ -82,7 +85,7 @@ export async function logEvent(event: LogEvent): Promise<void> {
       actor_email: event.actor,
       entity: event.entity,
       action: event.action,
-      detail: event.detail ?? null,
+      detail: event.orderIds ? await withOrderCurrency(event.detail, event.restaurantId, event.orderIds) : event.detail ?? null,
       target_email: event.targetEmail ?? null,
       target_role: event.targetRole ?? null,
     });

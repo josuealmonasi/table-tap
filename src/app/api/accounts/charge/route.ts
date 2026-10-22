@@ -42,6 +42,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     actor: actor.email,
     entity: "account",
     action: "charged",
+    orderIds: orderIds as string[],
     detail: logDetail({ name: account.name, amount: result.amount.toFixed(2), owed: result.owed.toFixed(2) }),
   });
   return NextResponse.json({ ok: true, amount: result.amount, owed: result.owed });
