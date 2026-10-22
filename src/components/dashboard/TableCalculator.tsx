@@ -7,7 +7,7 @@ import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
 import { tipFor } from "@/lib/pricing";
-import { suggestEqual } from "@/lib/table-balance";
+import { applyPayment, suggestEqual } from "@/lib/table-balance";
 import { newRef } from "@/lib/collection-ref";
 import CollectionAmount, { type Mode } from "./CollectionAmount";
 import type { Outstanding } from "@/lib/table-outstanding";
@@ -50,7 +50,7 @@ export default function TableCalculator({
   onClose,
   tableId,
   tableLabel,
-  currency,
+  currency: menuCurrency,
   onCollected,
   onDiscount,
 }: TableCalculatorProps) {
@@ -69,6 +69,7 @@ export default function TableCalculator({
   const [ref, setRef] = useState(newRef);
   /** The balance could not be read, so there is no number to collect against. */
   const [lost, setLost] = useState(false);
+  const [chosenCurrency, setChosenCurrency] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -94,13 +95,18 @@ export default function TableCalculator({
     void load();
   }, [open, load]);
 
-  const owed = bill?.owed ?? 0;
+  const balance = bill?.balances?.find(b => b.currency === chosenCurrency && b.owed > 0) ?? bill?.balances?.find(b => b.owed > 0) ?? bill;
+  const currency = balance?.currency ?? menuCurrency;
+  const owed = balance?.owed ?? 0;
   // Never more than is owed: the server caps it too, but a button that offers
   // to take MX$1,000 on a MX$100 bill has already misled the person holding it.
   const asked =
     mode === "full" ? owed : mode === "split" ? (plan[done] ?? 0) : Number(typed) || 0;
-  const amount = Math.min(Math.max(0, asked), owed);
-  const tip = tipCustom ?? tipFor(amount, tipPct);
+  const amount = applyPayment(owed, asked, 0).food;
+  const requestedTip = tipCustom ?? tipFor(amount, tipPct);
+  const taken = applyPayment(owed, amount, requestedTip);
+  const tip = taken.tip;
+  const tipTooLarge = requestedTip > amount;
 
   function divide(people: number): void {
     setMode("split");
@@ -109,16 +115,18 @@ export default function TableCalculator({
   }
 
   async function collect(method: "cash" | "card"): Promise<void> {
+    if (tipTooLarge || busy) return;
     setBusy(true);
     try {
       const res = await fetch("/api/table-payment/part", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tableId, amount, tip, method, ref }),
+        body: JSON.stringify({ tableId, expected: owed, currency, amount, tip, method, ref }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         toast(data.error ?? t("settle.failed"), "error");
+        if (data.code === "balance_changed") { setPlan([]); setDone(0); setMode("full"); await load(); }
         return;
       }
 
@@ -129,7 +137,7 @@ export default function TableCalculator({
       setTyped("");
 
       if (data.settled) {
-        toast(t("settle.done"));
+        toast(t("settle.recorded", { amount: formatMoney(data.amount, data.currency), tip: formatMoney(data.tip, data.currency) }));
         onClose();
         return;
       }
@@ -139,14 +147,17 @@ export default function TableCalculator({
         collected: data.collected,
         tips: data.tips,
         owed: data.owed,
+        currency: data.currency,
       });
       setDone(n => n + 1);
       toast(
-        t("settle.collectedOk", {
-          amount: formatMoney(amount + tip, currency),
+        t("settle.collectedRecorded", {
+          amount: formatMoney(data.amount, data.currency),
+          tip: formatMoney(data.tip, data.currency),
           left: formatMoney(data.owed ?? 0, currency),
         }),
       );
+      await load();
     } catch {
       // Money, so it never queues: a collection replayed on reconnect is a
       // table charged twice. Refuse it and say why.
@@ -170,15 +181,20 @@ export default function TableCalculator({
         <p className="tt-muted">{t("settle.nothing")}</p>
       ) : (
         <>
+          {(bill.balances?.length ?? 0) > 1 && <div role="group" aria-label={t("settle.currency")}>
+            {bill.balances?.filter(b => b.owed > 0).map(b => <button key={b.currency} className="tt-tip-chip" disabled={busy} onClick={() => {
+              setChosenCurrency(b.currency); setMode("full"); setPlan([]); setDone(0); setTipCustom(null); setTipPct(0);
+            }}>{formatMoney(b.owed, b.currency)}</button>)}
+          </div>}
           <div className="tt-calc-figures">
             <div className="tt-row">
               <span className="tt-muted">{t("settle.total")}</span>
-              <span>{formatMoney(bill.ordered, currency)}</span>
+              <span>{formatMoney(balance?.ordered ?? 0, currency)}</span>
             </div>
-            {bill.collected > 0 && (
+            {(balance?.collected ?? 0) > 0 && (
               <div className="tt-row">
                 <span className="tt-muted">{t("settle.collected")}</span>
-                <span className="tt-save">−{formatMoney(bill.collected, currency)}</span>
+                <span className="tt-save">−{formatMoney(balance?.collected ?? 0, currency)}</span>
               </div>
             )}
             <div className="tt-bill-total tt-row">
@@ -208,23 +224,24 @@ export default function TableCalculator({
             }}
             onCustomTip={setTipCustom}
           />
+          {tipTooLarge && <p className="tt-field-error" role="alert">{t("tip.tooLarge", { max: formatMoney(amount, currency) })}</p>}
 
           <div className="tt-bill-actions">
             <button
               className="tt-btn tt-btn-primary tt-btn-lg"
               style={{ width: "100%" }}
-              disabled={busy || amount <= 0}
+              disabled={busy || amount <= 0 || tipTooLarge}
               onClick={() => collect("cash")}
             >
-              {t("settle.cash")} · {formatMoney(amount + tip, currency)}
+              {t("settle.cash")} · {formatMoney(taken.amount, currency)}
             </button>
             <button
               className="tt-btn tt-btn-ghost tt-btn-lg"
               style={{ width: "100%", marginTop: 8 }}
-              disabled={busy || amount <= 0}
+              disabled={busy || amount <= 0 || tipTooLarge}
               onClick={() => collect("card")}
             >
-              {t("settle.card")} · {formatMoney(amount + tip, currency)}
+              {t("settle.card")} · {formatMoney(taken.amount, currency)}
             </button>
             {/* A promotion still goes through whoever may grant one — the
                 waiter asks from here rather than leaving the table to do it. */}

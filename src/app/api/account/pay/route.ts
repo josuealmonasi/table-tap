@@ -1,5 +1,5 @@
 import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
-import { dinerCurrency } from "@/lib/diner-currency";
+import { dinerCurrency, isDinerCurrency } from "@/lib/diner-currency";
 import { DinerAttemptRejected, openDinerAttempt, resumeDinerAttempt } from "@/lib/diner-attempt";
 import { billEntitlements, remainingPrincipal } from "@/lib/bill-principal";
 import { NextResponse, type NextRequest } from "next/server";
@@ -29,10 +29,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (await isRateLimited(`account-pay:${clientKey(req)}`, 10, 60)) {
     return await apiError("apiErr.tooManyWait", 429);
   }
-  const body = await jsonBody<{ c?: unknown; expected?: unknown; tipPct?: unknown; tipAmount?: unknown }>(req);
+  const body = await jsonBody<{ c?: unknown; expected?: unknown; tipPct?: unknown; tipAmount?: unknown; currency?: unknown }>(req);
   const code = normalizeCode(typeof body?.c === "string" ? body.c : "");
   const expected = Number(body?.expected);
   if (!code || !Number.isFinite(expected) || expected <= 0) return await apiError("apiErr.invalidRequest", 400);
+  if (body?.currency !== undefined && !isDinerCurrency(body.currency)) return await apiError("apiErr.invalidRequest", 400);
 
   const account = await accountByCode(code).catch(() => undefined);
   if (account === undefined) return await apiError("apiErr.generic", 500);
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-  const scopeKey = `account:${account.id}`;
+  const scopeKey = body?.currency ? `account:${account.id}:${body.currency}` : `account:${account.id}`;
   try {
     const prior = await resumeDinerAttempt(stripe, restaurant.id, scopeKey);
     if (prior) return NextResponse.json({ url: prior.url });
@@ -63,12 +64,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const tip = Math.min(Math.max(0, round2(Number.isFinite(asked) ? asked : 0)), expected);
 
   const refused = async (key: string, status: number) => await apiError(key, status);
-  const { data: opened, error: openError } = await db.rpc("account_checkout_open_v2", {
+  const { data: opened, error: openError } = await db.rpc(body?.currency ? "account_checkout_currency_v1" : "account_checkout_open_v2", {
     p_restaurant: restaurant.id,
     p_account: account.id,
     p_expected: expected,
     p_tip: tip,
     p_fee: 0,
+    ...(body?.currency ? { p_currency: body.currency } : {}),
   });
   if (openError) return await refused("apiErr.generic", 500);
   const r = opened as { outcome: string; checkout?: string; amount?: number; tip?: number };

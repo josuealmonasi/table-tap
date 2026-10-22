@@ -5,12 +5,15 @@ import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import type { SplitState } from "@/hooks/useSplit";
 import { shareChoices } from "@/lib/split-shares";
+import { applyPayment } from "@/lib/table-balance";
+import { tipFor } from "@/lib/pricing";
 
 interface SplitBillCardProps {
   split: SplitState | null;
   diner: string;
   busy: boolean;
   currency: string;
+  tipPct?: number;
   /** What the table owes right now — what a new proposal would divide. */
   outstanding: number;
   /**
@@ -59,6 +62,7 @@ export default function SplitBillCard({
   diner,
   busy,
   currency,
+  tipPct = 0,
   outstanding,
   party,
   cardsEnabled,
@@ -159,6 +163,7 @@ export default function SplitBillCard({
   // ── Agreed, and this is the bill
   if (split.status === "locked" && mine) {
     const total = mine.amount + split.ownSince;
+    const taken = applyPayment(total,total,tipFor(total,tipPct));
     return (
       <div className="tt-split tt-split-locked">
         <strong>{t("split.yourShare")}</strong>
@@ -173,11 +178,12 @@ export default function SplitBillCard({
             <strong>{formatMoney(total, currency)}</strong>
           </span>
         )}
+        {!mine.paid && taken.tip > 0 && <span className="tt-muted">{t("totals.tip")} · {formatMoney(taken.tip,currency)}</span>}
         {mine.paid ? (
           <span className="tt-split-done">{t("split.paid")}</span>
         ) : (
           <button type="button" className="tt-btn tt-btn-primary" onClick={onPay} disabled={busy}>
-            {t("split.payShare", { amount: formatMoney(total, currency) })}
+            {t("split.payShare", { amount: formatMoney(taken.amount, currency) })}
           </button>
         )}
       </div>

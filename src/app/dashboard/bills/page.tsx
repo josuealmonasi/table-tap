@@ -13,7 +13,7 @@ import { requireSettles } from "@/lib/page-guard";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import BillsPanel from "@/components/dashboard/BillsPanel";
 import UserLogs from "@/components/dashboard/staff/UserLogs";
-import { openBills, withCollected, withSplits } from "@/lib/open-bills";
+import { openBills, withSplits } from "@/lib/open-bills";
 import { currentUser } from "@/lib/current-user";
 import { startOfLocalDay } from "@/lib/day-window";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
@@ -22,6 +22,7 @@ import TillCard from "@/components/dashboard/TillCard";
 import RefundsDue from "@/components/dashboard/RefundsDue";
 import { refundsDue } from "@/lib/refunds/due-list";
 import type { Order } from "@/lib/types";
+import { billRequestCurrencies } from "@/lib/bill-request-currency";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,7 @@ export default async function BillsPage() {
     db
       .from("orders")
       .select(
-        "id, session_id, table_id, table_label, items, total, discount, paid, written_off, status, coupon_code, customer_name, created_at",
+        "id, session_id, table_id, table_label, currency, items, total, discount, paid, written_off, status, coupon_code, customer_name, created_at",
       )
       .eq("restaurant_id", r.id)
       .eq("paid", false)
@@ -84,6 +85,7 @@ export default async function BillsPage() {
   const requests = unwrap(requestsRes, "the discount requests");
   const writeOffs = unwrap(writeOffsRes, "the write-off requests");
   const asking = unwrap(askingRes, "who asked for the bill");
+  const requestCurrencies = await billRequestCurrencies(r.id,[...(requests ?? []),...(writeOffs ?? [])]);
 
   // Their own takings, read here with the secret key rather than by widening
   // any policy. `payments` is nobody's to read from a browser, and it stays
@@ -153,11 +155,6 @@ export default async function BillsPage() {
   // it the sitting's rather than one order's — an order-level payment left
   // with the order it settled.
   const coverage = await paymentCoverage(r.id, rows, true);
-  const collected = new Map<string, number>();
-  for (const o of rows) {
-    if (!o.session_id) continue;
-    collected.set(o.session_id, (collected.get(o.session_id) ?? 0) + (coverage.get(o.id) ?? 0));
-  }
 
   const unresolved = MANAGES(membership.role) ? await everyRow<{
     id: string; amount: number; tip: number; currency: string; created_at: string;
@@ -172,13 +169,11 @@ export default async function BillsPage() {
   return (
     <ConfirmProvider>
       <BillsPanel
-        bills={withCollected(
-          withSplits(openBills(rows as Order[]), splits, sessionOf),
-          collected,
-          sessionOf,
-        )}
-        requests={MANAGES(membership.role) ? (requests ?? []) : []}
-        writeOffs={MANAGES(membership.role) ? (writeOffs ?? []) : []}
+        bills={withSplits(openBills(rows as Order[]), splits, sessionOf).map(b => ({
+          ...b, collected: b.orderIds.reduce((sum,id) => sum + (coverage.get(id) ?? 0),0),
+        }))}
+        requests={MANAGES(membership.role) ? (requests ?? []).map(a => ({ ...a,currency: requestCurrencies.get(a.id) ?? null })) : []}
+        writeOffs={MANAGES(membership.role) ? (writeOffs ?? []).map(a => ({ ...a,currency: requestCurrencies.get(a.id) ?? null })) : []}
         currency={r.currency}
         canApprove={MANAGES(membership.role)}
         restaurantId={r.id}

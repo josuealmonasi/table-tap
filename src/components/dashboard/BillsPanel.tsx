@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
-import { formatMoney } from "@/lib/format";
+import { balancesLabel, currencyBalances } from "@/lib/currency-balances";
 import { matchesBill, type OpenBill } from "@/lib/open-bills";
 import BillDiscountDialog from "./BillDiscountDialog";
 import SettleTableDialog from "./SettleTableDialog";
@@ -118,7 +118,7 @@ export default function BillsPanel({
   }, []);
 
   const shown = useMemo(() => bills.filter(b => matchesBill(b, query)), [bills, query]);
-  const owed = shown.reduce((sum, b) => sum + b.total, 0);
+  const owed = currencyBalances(shown.map(b => ({ currency: b.currency ?? currency, amount: b.total })));
 
   // Having a balance and asking for the bill are not the same: the first is
   // nearly the whole room, the second is somebody with a hand up. The ones
@@ -166,7 +166,7 @@ export default function BillsPanel({
               {t("dash.bills")}
             </h3>
             <span className="tt-muted" style={{ fontSize: 12 }}>
-              {formatMoney(owed, currency)}
+              {balancesLabel(owed)}
             </span>
           </div>
           <p className="tt-muted" style={{ fontSize: 13, marginTop: 0 }}>
@@ -227,7 +227,7 @@ export default function BillsPanel({
             settling.tableLabel ??
             [settling.code, settling.customerName].filter(Boolean).join(" · ")
           }
-          currency={currency}
+          currency={settling.currency ?? currency}
           canApprove={canApprove}
           canCollectInParts={canCollectInParts}
           canDiscount={canDiscount}

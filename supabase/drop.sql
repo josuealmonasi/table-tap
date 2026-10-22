@@ -277,3 +277,7 @@ drop function if exists public.record_purchase_once(uuid, uuid, numeric, numeric
 drop function if exists public.record_waste_once(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid);
 drop function if exists public.record_ingredient_counts_once(uuid, jsonb, text, uuid);
 drop function if exists public.close_cash_shift_once(uuid, uuid, numeric, text, uuid);
+
+drop function if exists public.account_checkout_currency_v1(uuid, uuid, numeric, numeric, numeric, text) cascade;
+drop function if exists public.account_settle_currency_v1(uuid, uuid, numeric, numeric, text, text, text, text) cascade;
+drop function if exists public.collect_table_reviewed_v1(uuid,uuid,numeric,text,numeric,numeric,text,text,text) cascade;

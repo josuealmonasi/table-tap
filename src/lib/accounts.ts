@@ -56,6 +56,7 @@ export interface StatementLine {
 
 /** One order put on the account. */
 export interface StatementCharge {
+  currency?: string;
   orderId: string;
   /** When it was charged (the order's time if it was charged at once). */
   at: string;
@@ -66,6 +67,7 @@ export interface StatementCharge {
 
 /** A day of charges, in the restaurant's own time zone. */
 export interface StatementDay {
+  currency?: string;
   day: string;
   charges: StatementCharge[];
   total: number;
@@ -80,11 +82,12 @@ export interface StatementDay {
 export function byDay(charges: StatementCharge[], timeZone: string): StatementDay[] {
   const days = new Map<string, StatementCharge[]>();
   for (const charge of [...charges].sort((a, b) => a.at.localeCompare(b.at))) {
-    const day = localDayKey(new Date(charge.at), timeZone);
+    const day = `${localDayKey(new Date(charge.at), timeZone)}|${charge.currency ?? ""}`;
     days.set(day, [...(days.get(day) ?? []), charge]);
   }
-  return [...days].map(([day, list]) => ({
-    day,
+  return [...days].map(([key, list]) => ({
+    day: key.split("|")[0],
+    ...(list[0]?.currency ? { currency: list[0].currency } : {}),
     charges: list,
     total: round2(list.reduce((sum, c) => sum + c.total, 0)),
   }));

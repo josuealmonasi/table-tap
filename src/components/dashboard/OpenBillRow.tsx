@@ -18,13 +18,14 @@ interface OpenBillRowProps {
 /** An open bill: tapped for the promotion or the close, collected separately. */
 export default function OpenBillRow({
   bill,
-  currency,
+  currency: menuCurrency,
   now,
   canSettle,
   onOpen,
   onCollect,
 }: OpenBillRowProps) {
   const t = useT();
+  const currency = bill.currency ?? menuCurrency;
   return (
     <div className="tt-bill-row tt-bill-open">
       {/* The row opens the promotion or the close; collecting is its own

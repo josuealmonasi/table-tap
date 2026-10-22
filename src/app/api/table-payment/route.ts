@@ -9,6 +9,7 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { tableOutstanding } from "@/lib/table-outstanding";
 import { shareOut } from "@/lib/table-balance";
+import { settleReviewedTable } from "@/lib/settle-reviewed-table";
 
 export const runtime = "nodejs";
 
@@ -45,6 +46,9 @@ async function collect(req: NextRequest): Promise<NextResponse> {
     tableId?: string;
     orderId?: string;
     settlement?: Settlement;
+    expected?: number;
+    currency?: string;
+    ref?: string;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { tableId, orderId, settlement } = body;
@@ -56,6 +60,7 @@ async function collect(req: NextRequest): Promise<NextResponse> {
   }
 
   const db = createAdminClient();
+  if (tableId && body.expected !== undefined) return settleReviewedTable(actor, tableId, body, settlement!);
 
   // What this table has already handed over in parts, read before anything is
   // marked paid. A bill the waiter collected MX$100 of ten minutes ago is

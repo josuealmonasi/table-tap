@@ -5624,6 +5624,10 @@ begin
   end if;
   if new.account_id is not null and exists(select 1 from orders where id = any(new.allocation_scope)
     and account_id is distinct from new.account_id) then raise exception 'receipt scope has another account'; end if;
+  -- Cash and the restaurant's terminal repay the saved debt, not today's menu.
+  if new.stripe_payment_intent is null and cardinality(new.allocation_scope) > 0 then
+    select min(currency) into new.currency from orders where id = any(new.allocation_scope);
+  end if;
   -- Pooled card receipts used today's menu currency. A diner pays the frozen
   -- checkout currency, including a split/account opened after a menu change.
   if new.method = 'card' and new.stripe_payment_intent is not null then
@@ -6678,6 +6682,23 @@ begin
     raise exception 'settle_orders: a sitting that is not this restaurant''s';
   end if;
 
+  perform 1 from orders where restaurant_id = p_restaurant and id = any(p_orders) order by id for update;
+
+  -- Closing a collected bill and collecting its remainder must use the same
+  -- live coverage. A new round after the read cannot be marked paid for free.
+  if p_sittings is not null and exists (
+    select 1 from (
+      select session_id, sum(total - public.retained_order_coverage(p_restaurant,id)) as owed
+      from orders where restaurant_id = p_restaurant and id = any(p_orders)
+        and not paid and not written_off and account_id is null and status not in ('cancelled','pending_payment')
+      group by session_id
+    ) debt full join (
+      select (s->>'session_id')::uuid as session_id, sum((s->>'amount')::numeric) as amount
+      from jsonb_array_elements(p_sittings) s group by 1
+    ) receipt using(session_id)
+    where abs(coalesce(debt.owed,0) - coalesce(receipt.amount,0)) > 0.005
+  ) then raise exception 'not_owed'; end if;
+
   if p_sittings is null and exists(select 1 from orders where id = any(p_orders)
     and public.retained_order_coverage(p_restaurant, id) > 0) then raise exception 'not_owed'; end if;
   with settled as (
@@ -6989,6 +7010,7 @@ declare
   v_amount   numeric;
   v_sessions uuid[];
   v_owed     numeric;
+  v_currency text;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   perform set_config('tabletap.allocation_writer', 'v1', true);
@@ -7032,9 +7054,17 @@ begin
     return jsonb_build_object('outcome', 'partly_paid');
   end if;
 
+  -- A credit ceiling has no exchange rate. Keep new debt in the existing
+  -- currency; older mixed accounts can still collect each currency separately.
+  select min(currency) into v_currency from orders where id = any(p_orders) and restaurant_id = p_restaurant;
+  if exists(select 1 from orders where id = any(p_orders) and currency <> v_currency)
+    or exists(select 1 from orders where account_id = p_account and not paid and not written_off
+      and status <> 'cancelled' and currency <> v_currency) then
+    return jsonb_build_object('outcome','mixed_currency');
+  end if;
   v_owed := public.account_owed(p_account);
   if v_owed + v_amount > v_account.credit_limit then
-    return jsonb_build_object('outcome', 'limit', 'owed', v_owed, 'limit', v_account.credit_limit);
+    return jsonb_build_object('outcome', 'limit', 'owed', v_owed, 'limit', v_account.credit_limit, 'currency', v_currency);
   end if;
 
   update orders set account_id = p_account, charged_by = p_actor, charged_at = now()
@@ -9285,3 +9315,206 @@ end;
 $$;
 revoke all on function public.close_cash_shift_once(uuid, uuid, numeric, text, uuid) from public, anon, authenticated;
 grant execute on function public.close_cash_shift_once(uuid, uuid, numeric, text, uuid) to service_role;
+-- S21: refuse a changed handful before writing any of it. The old batch stays
+-- available for deployed callers and recovery of its historical partial writes.
+create or replace function public.collect_table_reviewed_v1(
+  p_restaurant uuid, p_table uuid, p_expected numeric, p_currency text,
+  p_amount numeric, p_tip numeric, p_method text, p_actor text, p_ref text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_owed numeric; v_seen numeric; v_tip numeric; v_left numeric; v_take numeric;
+  v_session uuid; v_ids uuid[]; v_row record; v_first boolean := true;
+  v_scope text := coalesce(current_setting('tabletap.allocation_scope', true), '');
+begin
+  if p_restaurant is null or p_table is null or p_currency is null or p_currency not in ('MXN', 'USD')
+    or p_expected is null or p_expected <= 0 or p_amount is null or p_amount <= 0 or p_amount > p_expected
+    or p_tip is null or p_tip < 0 or p_tip > p_amount or p_method is null or p_method not in ('cash', 'card')
+    or nullif(btrim(p_ref), '') is null or p_expected::text in ('NaN','Infinity','-Infinity')
+    or p_amount::text in ('NaN','Infinity','-Infinity') or p_tip::text in ('NaN','Infinity','-Infinity')
+    or p_expected <> round(p_expected,2) or p_amount <> round(p_amount,2) or p_tip <> round(p_tip,2) then
+    raise exception 'invalid reviewed collection';
+  end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  perform public.backfill_payment_allocations(p_restaurant);
+  -- A lost response returns the saved receipt even after the bill has closed.
+  select coalesce(sum(amount),0), coalesce(sum(tip),0) into v_seen,v_tip from payments
+    where restaurant_id = p_restaurant and (client_ref = p_ref or left(client_ref,length(p_ref)+1) = p_ref || '#');
+  if v_seen > 0 then
+    if v_seen <> p_amount + p_tip or exists(select 1 from payments p where p.restaurant_id = p_restaurant
+      and (p.client_ref = p_ref or left(p.client_ref,length(p_ref)+1) = p_ref || '#')
+      and (p.currency is distinct from p_currency or not exists(select 1 from table_sessions s where s.id = p.session_id and s.table_id = p_table and s.restaurant_id = p_restaurant))) then
+      raise exception 'collection reference differs';
+    end if;
+    return jsonb_build_object('outcome','duplicate','amount',v_seen,'tip',v_tip,'currency',p_currency);
+  end if;
+  perform 1 from orders where restaurant_id = p_restaurant and table_id = p_table
+    and currency = p_currency and not paid and not written_off and account_id is null
+    and status not in ('cancelled','pending_payment') order by id for update;
+  select coalesce(sum(total - public.retained_order_coverage(p_restaurant,id)),0), array_agg(id order by created_at,id)
+    into v_owed,v_ids from orders where restaurant_id = p_restaurant and table_id = p_table
+    and currency = p_currency and not paid and not written_off and account_id is null
+    and status not in ('cancelled','pending_payment');
+  if v_owed <> p_expected then
+    return jsonb_build_object('outcome','changed','owed',v_owed,'currency',p_currency);
+  end if;
+  if exists(select 1 from orders where id = any(v_ids) and card_checkout_at > now() - interval '35 minutes') then
+    return jsonb_build_object('outcome','paying');
+  end if;
+  if exists(select 1 from orders where id = any(v_ids) and session_id is null) then
+    v_session := public.open_table_session(p_restaurant,p_table,8,p_actor);
+    update orders set session_id = v_session where id = any(v_ids) and session_id is null;
+  end if;
+  -- Only this currency's orders enter a receipt, even on a mixed sitting.
+  perform set_config('tabletap.allocation_scope',to_json(v_ids)::text,true);
+  v_left := p_amount;
+  for v_row in select session_id, min(created_at) as first_at,
+    sum(total - public.retained_order_coverage(p_restaurant,id)) as owed,
+    sum(greatest(tip - coalesce((select sum(a.tip) from payment_allocations a where a.order_id = orders.id),0),0)) as old_tip
+    from orders where id = any(v_ids) group by session_id order by first_at, session_id loop
+    exit when v_left <= 0;
+    if exists(select 1 from payments where restaurant_id = p_restaurant and session_id = v_row.session_id
+      and allocation_quality = 'unresolved') then raise exception 'historical pooled money requires attribution'; end if;
+    v_take := least(v_left,v_row.owed);
+    if v_take <= 0 then continue; end if;
+    v_tip := case when v_first then p_tip else 0 end;
+    if v_tip > 0 then
+      update orders set total = total + v_tip, tip = tip + v_tip where id = (
+        select id from orders where id = any(v_ids) and session_id = v_row.session_id order by created_at,id limit 1);
+    end if;
+    insert into payments(restaurant_id,session_id,amount,tip,method,actor_email,client_ref)
+      values(p_restaurant,v_row.session_id,v_take + v_tip,
+        v_tip + round(v_take * least(v_row.owed,v_row.old_tip) / v_row.owed,2),p_method,p_actor,
+        p_ref || '#' || v_row.session_id::text);
+    update bill_splits set status = 'cancelled' where restaurant_id = p_restaurant
+      and session_id = v_row.session_id and status in ('proposed','locked');
+    v_first := false;
+    v_left := v_left - v_take;
+  end loop;
+  if v_left <> 0 then raise exception 'reviewed collection changed'; end if;
+  perform set_config('tabletap.allocation_scope',v_scope,true);
+  select sum(amount),sum(tip) into v_seen,v_tip from payments where restaurant_id = p_restaurant
+    and left(client_ref,length(p_ref)+1) = p_ref || '#';
+  return jsonb_build_object('outcome','written','amount',v_seen,'tip',v_tip,'currency',p_currency);
+end;
+$$;
+revoke all on function public.collect_table_reviewed_v1(uuid,uuid,numeric,text,numeric,numeric,text,text,text) from public,anon,authenticated;
+grant execute on function public.collect_table_reviewed_v1(uuid,uuid,numeric,text,numeric,numeric,text,text,text) to service_role;
+
+
+-- S21: collect one saved currency at a time; deployed account callers keep v2.
+create or replace function public.account_settle_currency_v1(
+  p_restaurant uuid,
+  p_account    uuid,
+  p_expected   numeric,
+  p_tip        numeric,
+  p_method     text,
+  p_actor      text,
+  p_ref        text,
+  p_currency text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_account customer_accounts;
+  v_ids     uuid[];
+  v_owed    numeric;
+  v_recorded_tip numeric;
+  v_tip     numeric := greatest(coalesce(p_tip, 0), 0);
+begin
+  if p_currency is null or p_currency not in ('MXN', 'USD') then raise exception 'invalid account currency'; end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  select * into v_account from customer_accounts
+   where id = p_account and restaurant_id = p_restaurant for update;
+  if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if p_ref is not null and exists (select 1 from payments
+                                    where restaurant_id = p_restaurant and client_ref = p_ref) then
+    if exists(select 1 from payments where restaurant_id = p_restaurant and client_ref = p_ref
+      and (account_id is distinct from p_account or currency is distinct from p_currency or amount <> p_expected + p_tip)) then
+      raise exception 'account collection reference differs';
+    end if;
+    return (select jsonb_build_object('outcome','duplicate','amount',amount,'tip',tip,'currency',currency) from payments where restaurant_id = p_restaurant and client_ref = p_ref);
+  end if;
+  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+    return jsonb_build_object('outcome', 'paying');
+  end if;
+
+  perform 1 from orders where restaurant_id = p_restaurant and currency = p_currency and account_id = p_account and paid = false and written_off = false and status <> 'cancelled' order by id for update;
+  select coalesce(sum(total), 0), array_agg(id order by created_at desc)
+    into v_owed, v_ids
+    from orders where restaurant_id = p_restaurant and currency = p_currency and account_id = p_account and paid = false and written_off = false and status <> 'cancelled';
+  if v_owed <= 0 then return jsonb_build_object('outcome', 'nothing'); end if;
+  if abs(v_owed - p_expected) > 0.005 then
+    return jsonb_build_object('outcome', 'changed', 'owed', v_owed);
+  end if;
+  -- A gratuity is never more than what it thanks somebody for.
+  v_tip := least(v_tip, v_owed);
+
+  perform set_config('tabletap.allocation_scope',to_json(v_ids)::text,true);
+  insert into payments (restaurant_id, account_id, amount, tip, method, actor_email, client_ref)
+  values (p_restaurant, p_account, v_owed + v_tip,
+    v_tip + (select coalesce(sum(tip), 0) from orders where id = any(v_ids) and written_off = false), p_method, p_actor, p_ref) returning tip into v_recorded_tip;
+  update orders set paid = true, pay_method = p_method where id = any(v_ids);
+  -- The gratuity lands on the latest order, as a table's does on its first.
+  if v_tip > 0 then
+    update orders set tip = tip + v_tip, total = total + v_tip where id = v_ids[1];
+  end if;
+  perform set_config('tabletap.allocation_scope','',true);
+  return jsonb_build_object('outcome', 'paid', 'amount', v_owed + v_tip, 'tip', v_recorded_tip, 'currency', p_currency);
+end;
+$$;
+revoke all on function public.account_settle_currency_v1(uuid, uuid, numeric, numeric, text, text, text, text) from public, anon, authenticated;
+grant execute on function public.account_settle_currency_v1(uuid, uuid, numeric, numeric, text, text, text, text) to service_role;
+
+
+-- S21: collect one saved currency at a time; deployed account callers keep v2.
+create or replace function public.account_checkout_currency_v1(
+  p_restaurant uuid,
+  p_account    uuid,
+  p_expected   numeric,
+  p_tip        numeric,
+  p_fee        numeric,
+  p_currency text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_account customer_accounts;
+  v_ids     uuid[];
+  v_owed    numeric;
+  v_tip     numeric := greatest(coalesce(p_tip, 0), 0);
+  v_id      uuid;
+begin
+  if p_currency is null or p_currency not in ('MXN', 'USD') then raise exception 'invalid account currency'; end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  select * into v_account from customer_accounts
+   where id = p_account and restaurant_id = p_restaurant for update;
+  if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+    return jsonb_build_object('outcome', 'paying');
+  end if;
+  perform 1 from orders where restaurant_id = p_restaurant and currency = p_currency and account_id = p_account and paid = false
+    and written_off = false and status <> 'cancelled' order by id for update;
+  select coalesce(sum(total), 0), array_agg(id order by created_at desc)
+    into v_owed, v_ids
+    from orders where restaurant_id = p_restaurant and currency = p_currency and account_id = p_account and paid = false and written_off = false and status <> 'cancelled';
+  if v_owed <= 0 then return jsonb_build_object('outcome', 'nothing'); end if;
+  if abs(v_owed - p_expected) > 0.005 then
+    return jsonb_build_object('outcome', 'changed', 'owed', v_owed);
+  end if;
+  -- A checkout still open once its hold has lapsed is dead: its Stripe session
+  -- expired at thirty minutes, five before the hold. Closed here, so its
+  -- expiry arriving late (Stripe retries for days) finds nothing to release.
+  -- Releasing it lifted the hold of the checkout opened now, and the till
+  -- could collect the account while the customer was paying it by card.
+  update account_checkouts set status = 'expired' where account_id = p_account and status = 'open';
+  v_tip := least(v_tip, v_owed);
+  insert into account_checkouts (restaurant_id, account_id, order_ids, amount, tip, fee)
+  values (p_restaurant, p_account, v_ids, v_owed, v_tip, greatest(coalesce(p_fee, 0), 0)) returning id into v_id;
+  update customer_accounts set checkout_until = now() + interval '35 minutes', checkout_id = v_id where id = p_account;
+  return jsonb_build_object('outcome', 'open', 'checkout', v_id, 'amount', v_owed, 'tip', v_tip);
+end;
+$$;
+revoke all on function public.account_checkout_currency_v1(uuid, uuid, numeric, numeric, numeric, text) from public, anon, authenticated;
+grant execute on function public.account_checkout_currency_v1(uuid, uuid, numeric, numeric, numeric, text) to service_role;

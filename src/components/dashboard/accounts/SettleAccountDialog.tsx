@@ -6,6 +6,7 @@ import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
 import TipPicker from "@/components/customer/TipPicker";
+import { applyPayment } from "@/lib/table-balance";
 
 interface SettleAccountDialogProps {
   open: boolean;
@@ -36,7 +37,8 @@ export default function SettleAccountDialog({
   const ref = useMemo(() => (open ? crypto.randomUUID() : ""), [open]);
 
   const tip = tipCustom ?? Math.round(owed * tipPct) / 100;
-  const safeTip = Math.min(Math.max(0, tip), owed);
+  const taken = applyPayment(owed, owed, tip);
+  const safeTip = taken.tip;
   const money = (n: number) => formatMoney(n, currency);
 
   async function collect(method: "cash" | "card"): Promise<void> {
@@ -46,14 +48,14 @@ export default function SettleAccountDialog({
       const res = await fetch("/api/accounts/settle", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountId, expected: owed, tip: safeTip, method, ref }),
+        body: JSON.stringify({ accountId, expected: owed, currency, tip: safeTip, method, ref }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error ?? t("apiErr.generic"));
         return;
       }
-      toast(t("accounts.settled", { name, amount: money(owed + safeTip) }));
+      toast(t("settle.recorded", { amount: formatMoney(data.amount, data.currency ?? currency), tip: formatMoney(data.tip, data.currency ?? currency) }));
       onSettled();
       onClose();
     } catch {
@@ -83,12 +85,13 @@ export default function SettleAccountDialog({
         />
       </div>
       <p className="tt-account-settle-total">{t("accounts.settleTotal", { amount: money(owed + safeTip) })}</p>
+      {tip > owed && <p className="tt-field-error" role="alert">{t("tip.tooLarge", { max: money(owed) })}</p>}
       {error && <p className="tt-field-error" role="alert">{error}</p>}
       <div className="tt-bill-actions">
-        <button type="button" className="tt-btn tt-btn-primary tt-btn-lg" style={{ width: "100%" }} disabled={busy} onClick={() => void collect("cash")}>
+        <button type="button" className="tt-btn tt-btn-primary tt-btn-lg" style={{ width: "100%" }} disabled={busy || tip > owed} onClick={() => void collect("cash")}>
           {t("settle.cash")}
         </button>
-        <button type="button" className="tt-btn tt-btn-ghost tt-btn-lg" style={{ width: "100%", marginTop: 8 }} disabled={busy} onClick={() => void collect("card")}>
+        <button type="button" className="tt-btn tt-btn-ghost tt-btn-lg" style={{ width: "100%", marginTop: 8 }} disabled={busy || tip > owed} onClick={() => void collect("card")}>
           {t("settle.card")}
         </button>
       </div>

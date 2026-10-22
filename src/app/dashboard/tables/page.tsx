@@ -37,7 +37,7 @@ export default async function TablesPage() {
     // rather than a flag somebody has to remember to clear.
     supabase
       .from("orders")
-      .select("id, table_id, total, paid, written_off, status, created_at")
+      .select("id, table_id, total, currency, paid, written_off, status, created_at")
       .eq("restaurant_id", r.id)
       .eq("paid", false)
       .is("account_id", null)

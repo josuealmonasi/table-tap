@@ -43,6 +43,15 @@ beforeEach(() => {
   failedPage = -1;
 });
 describe("account statement and list agree about debt", () => {
+  it("S21 carries a US$100 debt and separates it from MX$100", async () => {
+    tables.orders = [{ ...charge("usd"), currency: "USD" }];
+    expect(await statementOf(account)).toMatchObject({ currency: "USD", owed: 100 });
+    tables.orders.push({ ...charge("mxn"), currency: "MXN" });
+    const statement = await statementOf(account);
+    expect(statement).toMatchObject({ currency: null, owed: 0, balances: [{ currency: "USD", amount: 100 }, { currency: "MXN", amount: 100 }] });
+    expect(statement.days.map(d => [d.currency,d.total])).toEqual([["USD",100],["MXN",100]]);
+    expect((await listAccounts("r1"))[0]).toMatchObject({ owed: 0, balances: statement.balances });
+  });
   it("counts all 1001 charges, with a unique page order", async () => {
     tables.orders = Array.from({ length: 1001 }, (_, i) => charge(String(i)));
     expect((await statementOf(account)).owed).toBe(100100);
