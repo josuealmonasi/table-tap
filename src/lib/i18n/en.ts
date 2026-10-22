@@ -1,6 +1,19 @@
 // English UI strings for the customer-facing screens. This is the source of
 // truth for the message keys; es.ts must mirror its shape (enforced by types).
 export const en = {
+  pending: {
+    sendAgain: "Send again",
+    withdrawal: "The withdrawal of {amount} wasn't confirmed. Send it again to find out; it won't be recorded twice.",
+    close: "The drawer close counted at {amount} wasn't confirmed. Send the same count again; it won't close twice.",
+    purchase: "This delivery wasn't confirmed. Send it again to find out; it won't be added twice.",
+    count: "This shelf count wasn't confirmed. Send the same count again; it won't be recorded twice.",
+    waste: "This waste wasn't confirmed. Send it again to find out; it won't be taken from stock twice.",
+    order: "This order wasn't confirmed. Send it again to find out; the kitchen won't receive it twice.",
+    account: "The {amount} sale to {name}'s account wasn't confirmed. Send that account sale again to find out; it won't be charged twice.",
+    moreFood: "Food added after this order stays in your cart when you send this order again.",
+    coupon: "Coupon: {code}",
+    tip: "Tip: {amount}",
+  },
   lang: { label: "Language" },
   log: {
     entity: {

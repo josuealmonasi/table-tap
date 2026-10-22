@@ -12,7 +12,7 @@ interface PosMenuProps {
   combos: Combo[];
   search: string;
   onSearch: (value: string) => void;
-  /** A sale is in flight or its ticket is up: nothing is to be tapped. */
+  /** A sale is in flight, unanswered or its ticket is up: nothing is to be tapped. */
   sending: boolean;
   currency: string;
   /** A tile tapped: added at once when there is nothing to choose, else opened. */
@@ -49,7 +49,7 @@ export default function PosMenu({
         type="button"
         key={dish.id}
         className={`tt-pos-tile ${dish.available ? "" : "tt-pos-tile-out"}`}
-        disabled={!dish.available}
+        disabled={sending || !dish.available}
         onClick={() => onOpenItem(dish)}
       >
         <span className="tt-pos-tile-name">
@@ -126,6 +126,7 @@ export default function PosMenu({
                 type="button"
                 key={combo.id}
                 className="tt-pos-tile"
+                disabled={sending}
                 onClick={() => onOpenCombo(combo)}
               >
                 <span className="tt-pos-tile-name">{combo.name}</span>

@@ -1,5 +1,7 @@
 "use client";
 
+import PendingOrder from "@/components/ui/PendingOrder";
+import type { PendingAccountSale } from "@/hooks/usePosCharge";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import CartLineRow from "@/components/customer/CartLineRow";
@@ -18,6 +20,8 @@ interface PosSalePanelProps {
   /** Nothing can be charged: a sale in flight, no menu serving, or an empty sale. */
   locked: boolean;
   canChargeAccount: boolean;
+  accountRetry?: PendingAccountSale | null;
+  onRetryAccount?: () => void;
   onChangeQty: (cartId: number, qty: number) => void;
   onEdit: (line: CartItem) => void;
   onCharge: (method: "cash" | "card") => void;
@@ -35,6 +39,8 @@ export default function PosSalePanel({
   accountAmount,
   locked,
   canChargeAccount,
+  accountRetry,
+  onRetryAccount,
   onChangeQty,
   onEdit,
   onCharge,
@@ -42,6 +48,12 @@ export default function PosSalePanel({
   onRepeat,
 }: PosSalePanelProps) {
   const t = useT();
+  if (accountRetry) return (
+    <aside className="tt-pos-cart">
+      <PendingOrder currency={accountRetry.currency} order={accountRetry} message={t("pending.account", { name: accountRetry.name, amount: formatMoney(accountRetry.amount, accountRetry.currency) })}
+        busy={locked} onSend={() => onRetryAccount?.()} />
+    </aside>
+  );
   return (
     <aside className="tt-pos-cart">
       <h3 className="tt-serif" style={{ marginTop: 0 }}>

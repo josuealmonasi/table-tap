@@ -16,7 +16,7 @@ beforeEach(() => { state.fetch.mockReset(); vi.stubGlobal("fetch", state.fetch);
 function useMenu() {
   const input = { restaurantId: "r", table: null, orderableItems: [{ itemId: "dish", qty: 1 }],
     orderNote: "First", customerName: "", tipPct: 0, tipCustom: null, coupon: null,
-    cart: { clear: vi.fn() }, onPlaced: vi.fn(), notify: vi.fn() };
+    cart: { clear: vi.fn(), removeOrdered: vi.fn() }, onPlaced: vi.fn(), notify: vi.fn() };
   return { input, ...useCheckout(input as unknown as Parameters<typeof useCheckout>[0]) };
 }
 it("K4 pay-later retries the frozen order after a lost or unreadable reply, then starts a new intent", async () => {

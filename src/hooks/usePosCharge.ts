@@ -1,5 +1,6 @@
 "use client";
 
+import type { PendingOrderDetails } from "@/components/ui/PendingOrder";
 import { rememberLastSale } from "@/lib/pos-last-sale";
 import { refusalSettles } from "@/hooks/useRetryIntent";
 import { useRef, useState } from "react";
@@ -20,6 +21,12 @@ import { offlineReceipt } from "@/lib/offline-receipt";
 import { orderCode } from "@/lib/types";
 import { useLocale } from "@/lib/i18n/context";
 import { dateLocale } from "@/lib/format";
+
+export interface PendingAccountSale extends PendingOrderDetails {
+  name: string;
+  amount: number;
+  currency: string;
+}
 
 interface PosChargeInput {
   collectorContext: string;
@@ -57,6 +64,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
   const { lines } = cart;
   const { tipPct, tipCustom } = details;
   const accountRequest = useRef<string | null>(null);
+  const accountReview = useRef<{ name: string; amount: number; currency: string } | null>(null);
   const inFlight = useRef(false);
   const [busy, setBusy] = useState(false);
   const [ticket, setTicket] = useState<PosTicket | null>(null);
@@ -164,7 +172,10 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
           noReceipt: details.noTicket || undefined,
           terminalRef: method === "card" ? details.terminalRef.trim() || undefined : undefined,
         });
-        if (method === "account") accountRequest.current ??= request;
+        if (method === "account" && !accountRequest.current) {
+          accountRequest.current = request;
+          accountReview.current = { name: account?.name ?? account?.id ?? "", amount: Math.round((pricing.total - pricing.tip) * 100) / 100, currency: restaurant.currency };
+        }
         res = await fetch("/api/pos/order", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -244,5 +255,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     }
   }
 
-  return { charge, busy, pending, setPending, ticket, setTicket };
+  const accountRetry: PendingAccountSale | null = accountRequest.current && accountReview.current
+    ? { ...JSON.parse(accountRequest.current), ...accountReview.current } : null;
+  return { charge, busy, pending, setPending, ticket, setTicket, accountRetry };
 }

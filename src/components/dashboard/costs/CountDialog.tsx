@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRetryIntent, refusalSettles } from "@/hooks/useRetryIntent";
 import { useRouter } from "next/navigation";
+import PendingAttempt from "@/components/ui/PendingAttempt";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
@@ -32,9 +33,11 @@ interface CountResult {
 export default function CountDialog({ open, onClose, ...rest }: CountDialogProps) {
   const t = useT();
   const attempt = useRetryIntent();
+  const [reviewedIngredients, setReviewedIngredients] = useState(rest.ingredients);
+  if (!attempt.pending() && reviewedIngredients !== rest.ingredients) setReviewedIngredients(rest.ingredients);
   return (
     <Modal open={open} onClose={onClose} maxWidth={520} title={t("costs.countTitle")}>
-      {open && <CountForm attempt={attempt} onClose={onClose} {...rest} />}
+      {open && <CountForm attempt={attempt} onClose={onClose} {...rest} ingredients={attempt.pending() ? reviewedIngredients : rest.ingredients} />}
     </Modal>
   );
 }
@@ -43,7 +46,15 @@ function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialog
   const t = useT();
   const router = useRouter();
   const inFlight = useRef(false);
-  const [typed, setTyped] = useState<Record<string, string>>({});
+  const frozen = attempt.frozen<{ counts: { ingredientId: string; counted: number | string }[] }>();
+  const pending = attempt.pending();
+  const [typed, setTyped] = useState<Record<string, string>>(() => Object.fromEntries(
+    (frozen?.counts ?? []).map(c => {
+      const ingredient = ingredients.find(i => i.id === c.ingredientId);
+      const value = typeof c.counted === "number" && ingredient ? inShown(c.counted, ingredient.unit).amount : c.counted;
+      return [c.ingredientId, String(value)];
+    }),
+  ));
   const [results, setResults] = useState<CountResult[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +67,7 @@ function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialog
   async function save(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     if (inFlight.current) return;
-    const counts = Object.entries(typed)
+    const counts = frozen?.counts ?? Object.entries(typed)
       .filter(([, v]) => v.trim() !== "")
       .map(([ingredientId, v]) => {
         const shown = decimal(v, 10_000_000, 3);
@@ -120,6 +131,7 @@ function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialog
   return (
     <form className="tt-prodform" onSubmit={e => void save(e)}>
       <p className="tt-muted tt-costs-hint">{t("costs.countHint")}</p>
+      {pending && <PendingAttempt message={t("pending.count")} />}
       <ul className="tt-costs-count-list">
         {ingredients.map(i => {
           const unit = inShown(0, i.unit).unit;
@@ -128,7 +140,7 @@ function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialog
               <label className="tt-costs-count-row">
                 <span>{i.name}</span>
                 <span className="tt-costs-count-input">
-                  <input className="tt-input" inputMode="decimal" value={typed[i.id] ?? ""}
+                  <input disabled={busy || pending} className="tt-input" inputMode="decimal" value={typed[i.id] ?? ""}
                     onChange={e => setTyped(v => ({ ...v, [i.id]: e.target.value }))} />
                   <span className="tt-muted">{t(`costs.unitShort.${unit}`)}</span>
                 </span>
@@ -140,7 +152,7 @@ function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialog
       {error && <p className="tt-field-error" role="alert">{error}</p>}
       <div className="tt-prodform-actions">
         <button type="submit" className="tt-btn tt-btn-primary" disabled={busy}>
-          {busy ? t("common.saving") : t("costs.countSave")}
+          {busy ? t("common.saving") : pending ? t("pending.sendAgain") : t("costs.countSave")}
         </button>
         <button type="button" className="tt-btn tt-btn-ghost" onClick={onClose}>{t("common.cancel")}</button>
       </div>

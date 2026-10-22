@@ -881,6 +881,17 @@ random UUID, becomes the order's id, and is unique per restaurant: a retry
 only ever finds this restaurant's ticket, and only once it is settled; a
 reference that belongs to any other order is refused without a word about it.
 
+An unanswered account sale keeps its original account, amount and food on
+screen, with **Send again** as its only sale action. Cash and card choices
+return after an answer settles that account attempt. The waiter's unanswered
+round locks its table, food and note. For the diner, an unanswered pay-later
+order shows its saved food and choices separately; food added later stays in
+the cart when that original round is sent again. Withdrawal, drawer close,
+purchase, shelf count and waste forms likewise show and lock their unanswered
+values, restoring them when reopened. Only success or a refusal given after
+the reference lookup releases that request; a lost reply, rate limit, timeout
+or lapsed sign-in keeps it.
+
 Because none of that money reaches Stripe there is **no per-order fee** to
 take; the subscription is what pays for the till, and it is on the paid tiers
 for that reason. Not on `carta`, even though carta is the counter tier: carta

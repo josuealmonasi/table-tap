@@ -1,6 +1,7 @@
 "use client";
 
 import { useTableMembership } from "@/hooks/useTableMembership";
+import PendingAttempt from "@/components/ui/PendingAttempt";
 import TableJoinNotice from "./table-join-notice";
 import { useT } from "@/lib/i18n/context";
 import { useEffect, useMemo, useState } from "react";
@@ -168,7 +169,7 @@ export default function OrderingApp({
     return (itemId: string) => byId.get(itemId) ?? null;
   }, [items]);
 
-  const { checkout, loading } = useCheckout({
+  const { checkout, loading, frozen } = useCheckout({
     restaurantId: restaurant.id,
     table,
     orderableItems,
@@ -182,6 +183,10 @@ export default function OrderingApp({
     markSoldOut,
     notify: setNotice,
     onPlaced: (orderId, sessionId) => {
+      setOrderNote("");
+      setCoupon(null);
+      totals.choosePct(0);
+      totals.setTipCustom(null);
       if (sessionId) orders.setSittingSessionId(sessionId);
       orders.track(orderId);
       // Back to the menu, nothing in the way. The bill is a tap away on the
@@ -228,6 +233,7 @@ export default function OrderingApp({
           // receipt question, never on top of it, and not behind the tracker,
           // which offers it itself.
           notice={<>
+            {frozen && <PendingAttempt message={t("pending.order")} />}
             {table && <TableJoinNotice restaurantId={restaurant.id} {...membership} />}
             {tableLoyalty && paidNow && !offering && !tracking ? <LoyaltyOffer offer={tableLoyalty} /> : null}
           </>}
@@ -250,11 +256,12 @@ export default function OrderingApp({
             customerName={customerName}
             onChangeName={setCustomerName}
             loading={loading}
+            pendingOrder={frozen}
             orderAtRegister={orderAtRegister}
             onEditItem={editLine}
             admissionBlocked={!canOrder}
             admissionNotice={!canOrder && table ? <TableJoinNotice restaurantId={restaurant.id} {...membership} /> : null}
-            onCheckout={canOrder ? checkout : async () => { membership.refresh(); setNotice(t("apiErr.tableJoin")); }}
+            onCheckout={canOrder || frozen ? checkout : async () => { membership.refresh(); setNotice(t("apiErr.tableJoin")); }}
             onClose={() => setScreen("menu")}
           />
         )}

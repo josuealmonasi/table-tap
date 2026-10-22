@@ -138,7 +138,7 @@ export default function PosScreen({
       tipCustom,
     ],
   );
-  const { charge, busy, pending, setPending, ticket, setTicket } = usePosCharge({
+  const { charge, busy, pending, setPending, ticket, setTicket, accountRetry } = usePosCharge({
     restaurant,
     collectorContext,
     collector,
@@ -151,11 +151,11 @@ export default function PosScreen({
   /**
    * The till is not to be typed into.
    *
-   * While the sale is in flight, and while the ticket is still up: `busy` goes
+   * While the sale is in flight, an account sale is unanswered, or the ticket is still up: `busy` goes
    * false the instant the route answers, and a dish tapped into that gap lands
    * in a sale the cashier believes they have already rung up.
    */
-  const sending = busy || ticket !== null;
+  const sending = busy || ticket !== null || accountRetry !== null;
 
   // Whether this sale is finished the moment it is charged: everything in it
   // comes off a shelf, so it goes in the customer's hand rather than to a
@@ -269,7 +269,9 @@ export default function PosScreen({
               currency={restaurant.currency}
               total={pricing.total}
               accountAmount={Math.round((pricing.total - pricing.tip) * 100) / 100}
-              locked={busy || closedNow || lines.length === 0}
+              locked={busy || (!accountRetry && (closedNow || lines.length === 0))}
+              accountRetry={accountRetry}
+              onRetryAccount={() => void charge("account")}
               canChargeAccount={canChargeAccount}
               onChangeQty={cart.changeQty}
               onEdit={setEditing}
@@ -280,7 +282,7 @@ export default function PosScreen({
           </div>
         </div>
 
-        {pending && (
+        {pending && !accountRetry && (
           <PosAsk
             details={details}
             method={pending}
@@ -306,7 +308,7 @@ export default function PosScreen({
                 extrasByProduct={extrasByProduct}
                 onBack={() => setOpenCombo(null)}
                 onAdd={line => {
-                  cart.add(line);
+                  if (!sending) cart.add(line);
                   setOpenCombo(null);
                 }}
               />
@@ -336,10 +338,10 @@ export default function PosScreen({
                 onBack={closeDish}
                 onAdd={line => {
                   if (editing) {
-                    cart.replace(editing.cartId, line);
+                    if (!sending) cart.replace(editing.cartId, line);
                     setEditing(null);
                   } else {
-                    cart.add(line);
+                    if (!sending) cart.add(line);
                     setOpenItem(null);
                   }
                 }}

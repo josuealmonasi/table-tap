@@ -3,6 +3,19 @@ import type { Messages } from "./en";
 // Spanish (Mexico) UI strings. Typed as Messages so a missing or extra key is a
 // compile error.
 export const es: Messages = {
+  pending: {
+    sendAgain: "Enviar otra vez",
+    withdrawal: "El retiro de {amount} no se confirmó. Envíalo otra vez para saberlo; no se registrará dos veces.",
+    close: "El cierre con un conteo de {amount} no se confirmó. Envía el mismo conteo otra vez; no se cerrará dos veces.",
+    purchase: "Esta compra no se confirmó. Envíala otra vez para saberlo; no se sumará dos veces.",
+    count: "Este conteo de existencias no se confirmó. Envía el mismo conteo otra vez; no se registrará dos veces.",
+    waste: "Esta merma no se confirmó. Envíala otra vez para saberlo; no se descontará dos veces.",
+    order: "Este pedido no se confirmó. Envíalo otra vez para saberlo; la cocina no lo recibirá dos veces.",
+    account: "La venta de {amount} a la cuenta de {name} no se confirmó. Envía esa venta a cuenta otra vez para saberlo; no se cobrará dos veces.",
+    moreFood: "La comida que agregues después de este pedido se queda en tu carrito al enviarlo otra vez.",
+    coupon: "Cupón: {code}",
+    tip: "Propina: {amount}",
+  },
   lang: { label: "Idioma" },
   log: {
     entity: {

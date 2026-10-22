@@ -16,6 +16,7 @@ us, and what now catches each one.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| An unresolved attempt shows and locks the request it will send again (S20b) | Reopened forms showed blank values, edited carts lost food, and cash resent a hidden account sale |
 | An account sale retries its frozen cart and reference (S20 K3) | A lost reply charged the same sale to an account twice |
 | Pay-later and waiter retries claim one order before stock (S20 K4) | Retrying an unseen ticket took another portion and sent another ticket |
 | A withdrawal retry names its original shift and movement (S20 K5) | A lost reply took the same cash out twice, sometimes from a newer shift |
@@ -3827,3 +3828,40 @@ conclusions Claude had signed off on:
 
 Each fix has a test that fails without it.
 
+
+## S20b — the request sent again and the visible form agree
+
+A saved reference and its screen had to agree. Keeping the request prevented
+another withdrawal, count or sale, but reopening its form erased its visible
+values. Editing an order after a lost reply changed the screen while sending
+the older food, and clearing the cart then erased food never sent.
+
+`useRetryIntent.frozen()` exposes a copy of that saved request and refreshes
+its owner when it changes. Withdrawal, close, purchase and count restore their
+fields on reopen; waste keeps its fields locked. Cost forms retain the original
+ingredient names and units, and drawer forms retain the reviewed currency. Each uses `PendingAttempt`
+and offers **Send again** until success or `refusalSettles` releases it. The
+waiter's pad locks its menu with disabled buttons, table scanner, lines and note while that round is
+unanswered. The diner's cart instead shows `PendingOrder`: the original food,
+choices, note, name, coupon and tip. Later additions stay in the cart, including
+extra portions of a dish already sent. Sending the same account sale again is the only POS
+action offered while it is pending: its account, original amount and food are
+shown before another cash or card choice can appear. A retry remains available
+when a menu closes or ordering pauses after the first send.
+
+`pending-forms.spec.tsx` reproduces all five forms with lost replies, remounts,
+locked edits and fresh forms after success or definite refusal.
+`pending-orders.spec.tsx` reproduces the waiter, diner and POS, including food
+added after the first send. The existing S20 transport tests still protect
+unknown replies, rate limits, settled refusals and unchanged request bodies.
+
+New keys in **both** `en.ts` and `es.ts`: `pending.sendAgain`,
+`pending.withdrawal`, `pending.close`, `pending.purchase`, `pending.count`,
+`pending.waste`, `pending.order`, `pending.account`, `pending.moreFood`,
+`pending.coupon`, `pending.tip`.
+
+Claude must run the isolated release gates, including `layout` and `dialogs`,
+and inspect these eight surfaces in both languages at 390 and 1280 pixels.
+Use a lost reply followed by close/reopen or an attempted edit, then a repeated
+send. Also check an order after ordering pauses, the diner's later additions,
+and an account retry after the account picker closes. There is no schema change.
