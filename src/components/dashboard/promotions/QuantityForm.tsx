@@ -4,7 +4,7 @@ import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
 import { useDirty } from "@/hooks/useDirty";
-import { promoCost } from "@/lib/promo-math";
+import { promoCost, typedTiers } from "@/lib/promo-math";
 import type { Category, MenuItem } from "@/lib/types";
 import type { PromotionInput } from "@/hooks/usePromotions";
 import ProductPicker from "./ProductPicker";
@@ -57,9 +57,8 @@ export default function QuantityForm({
   const firstItem = products.find(p => p.id === picked[0]?.id);
   const unit = firstItem ? Number(firstItem.price) : 0;
 
-  const parsedTiers = tiers
-    .map(row => ({ qty: Math.floor(Number(row.qty)), price: Number(row.price) }))
-    .filter(row => row.qty > 0 && Number.isFinite(row.price) && row.price >= 0);
+  // Every row must be a real break: a blank price used to save "2 for MX$0".
+  const { tiers: parsedTiers, complete: tiersComplete } = typedTiers(tiers);
 
   const buy = Math.floor(Number(buyQty));
   const pay = Math.floor(Number(payQty));
@@ -80,7 +79,7 @@ export default function QuantityForm({
     name.trim() &&
     picked.length > 0 &&
     !badTier &&
-    (kind === "bogo" ? validBogo : parsedTiers.length > 0);
+    (kind === "bogo" ? validBogo : tiersComplete);
 
   /** What the customer pays at the deal quantity, using the first product. */
   const preview = (() => {
@@ -212,9 +211,7 @@ export default function QuantityForm({
               <span className="tt-muted">→</span>
               <input
                 className="tt-input tt-promo-price"
-                type="number"
-                min="0"
-                step="0.01"
+                inputMode="decimal"
                 placeholder={currency}
                 value={row.price}
                 onChange={e =>
@@ -236,6 +233,12 @@ export default function QuantityForm({
               )}
             </div>
           ))}
+          {/* Save is off until the breaks make sense; say which part does not. */}
+          {!tiersComplete ? (
+            <span className="tt-muted" aria-live="polite">{t("promos.tierPriceNeeded")}</span>
+          ) : badTier ? (
+            <span className="tt-warn" aria-live="polite">{t("promos.noSaving")}</span>
+          ) : null}
           <button
             type="button"
             className="tt-btn tt-btn-ghost tt-btn-sm"

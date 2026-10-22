@@ -3,6 +3,7 @@ import {
   addedLineCost,
   nextPromoStep,
   promoCost,
+  typedTiers,
   type QuantityPromo,
 } from "@/lib/promo-math";
 
@@ -178,5 +179,26 @@ describe("a tier that cannot be counted", () => {
     const started = Date.now();
     expect(nextPromoStep(tiered([{ qty: 1e20, price: 1 }]), 1, 100)).toBeNull();
     expect(Date.now() - started).toBeLessThan(200);
+  });
+});
+
+describe("typedTiers (audit K, finding 8)", () => {
+  it("a blank price is not a break at MX$0", () => {
+    // The form opens with { qty: "2", price: "" }; Save used to enable on it.
+    expect(typedTiers([{ qty: "2", price: "" }])).toEqual({ tiers: [], complete: false });
+    expect(typedTiers([{ qty: "2", price: "0" }]).complete).toBe(false);
+    expect(typedTiers([{ qty: "", price: "90" }]).complete).toBe(false);
+  });
+
+  it("never drops one row and saves the rest", () => {
+    const read = typedTiers([{ qty: "2", price: "90" }, { qty: "3", price: "" }]);
+    expect(read.complete).toBe(false);
+    expect(read.tiers).toEqual([{ qty: 2, price: 90 }]);
+  });
+
+  it("reads prices the way the team types them", () => {
+    expect(typedTiers([{ qty: "2", price: "35,50" }, { qty: "3", price: "1,250.00" }]))
+      .toEqual({ tiers: [{ qty: 2, price: 35.5 }, { qty: 3, price: 1250 }], complete: true });
+    expect(typedTiers([]).complete).toBe(false);
   });
 });

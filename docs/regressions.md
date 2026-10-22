@@ -22,6 +22,8 @@ us, and what now catches each one.
 | A corte is empty only without financial activity, including returns (S12 I12) | A refund-only MX$100 cash day hid its negative drawer and print button |
 | Price breaks are whole quantities, priced by division, and the database refuses others (J4) | A tier of 1e-20 units froze the server |
 | A print job closes only on the printer's success code (J9) | A printer out of paper dropped tickets unprinted |
+| A typed amount reads a decimal comma as a decimal, and refuses a quantity it would have to guess (K7) | "12,50" saved a MX$12.50 withdrawal as MX$1,250, and a 0,5 l pack as 5 l |
+| A price break needs a real price on every row, in the form and the route (K8) | A blank price arrived as 0 and saved "2 for MX$0": the dishes went free |
 | Restaurant deletion and refund obligations share the money lock (S17 J1) | Deleting a restaurant cascaded away money still owed and completed accounting records |
 | Settled books survive restaurant deletion without blocking it (S17b) | Completed receipts blocked deletion forever; removing that guard alone would erase the books |
 | Sensitive admin actions and platform history survive the same deletion (S17 J15) | Password resets, admin logins, deletions and plan moves left no durable platform trail |
@@ -3656,3 +3658,32 @@ have no S10 manifests. Before expecting a clean modern deposit run, seed one
 unsigned sales day through `record_terminal_deposit_v1` after its receipts
 exist; older illustrative deposits need genuine pre-era dates. This task does
 not change the seed or schema.
+## A decimal comma multiplied the amount by a hundred (K7)
+
+Cash amounts (opening, withdrawal, close, bank deposit) and ingredient
+quantities (purchases, counts, waste, recipes, pack sizes) were read by two
+parsers that deleted every comma. A phone set to a decimal-comma region types
+"12,50" on its decimal keypad, and Mexican Excel writes "35,50", so MX$12.50
+became MX$1,250 and a 0,5 l pack became 5 l, silently.
+
+Both now call `typedDecimal` (`src/lib/typed-decimal.ts`), the rule
+`menu-import.ts` already used for prices. A comma followed by one or two digits
+is a decimal point, since thousands come in threes, and Mexican thousands
+("1,250.50") still read as thousands. "1,500" in a three-decimal quantity field
+could be 1.5 or 1500, so it is refused with its own message
+(`apiErr.ambiguousQuantity`) rather than guessed. `typed-decimal.spec.ts`
+covers each shape and the two callers.
+
+## A blank deal price gave the dishes away (K8)
+
+A new quantity deal opened with a price break of `{ qty: "2", price: "" }`, and
+`Number("")` is 0. The form enabled Save, and the route and database accepted
+a price of zero, so "2 for MX$0" went live. The price was also a number field,
+so a price the browser could not read ("12,50" on some phones) reported "" and
+did the same. `typedTiers` (`promo-math.ts`) now needs a real price on every
+row and never drops one row to save the rest. The price is a decimal text
+field read by `typedDecimal`, and the route refuses a price of zero. The form
+says what is missing instead of only disabling Save, and says when a price is
+not cheaper than buying separately. `promo-math.spec.ts` and the api case "a
+tier with no price" hold both places.
+

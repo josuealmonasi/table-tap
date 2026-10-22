@@ -1617,6 +1617,11 @@ export function cases(fx) {
       body: { kind: "tiered", name: `${MARK} tier`, emoji: "🎁", tiers: [{ qty: 1e-20, price: 0 }],
               items: [{ itemId: dish.id, qty: 1 }] },
       expect: [400], expectError: /cantidad entera|whole quantity/i },
+    // A blank price arrived as 0 and saved "2 for MX$0": the dishes went free.
+    { name: "POST /api/promotions (a tier with no price)", as: "manager", method: "POST", path: "/api/promotions",
+      body: { kind: "tiered", name: `${MARK} free tier`, emoji: "🎁", tiers: [{ qty: 2, price: 0 }],
+              items: [{ itemId: dish.id, qty: 1 }] },
+      expect: [400], expectError: /y un precio|and a price/i },
     { name: "POST /api/legal/accept", as: "owner", method: "POST", path: "/api/legal/accept",
       body: {}, expect: [200] },
     { name: "GET  /api/connect/status", as: "owner", method: "GET", path: "/api/connect/status",

@@ -6,7 +6,7 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { actingManager } from "@/lib/api-guard";
 import { costsBlocks, uuidOf } from "@/lib/costs/guard";
-import { MAX_RECIPE_LINES, recipeQuantity } from "@/lib/costs/input";
+import { MAX_RECIPE_LINES, quantityRefusal, recipeQuantity } from "@/lib/costs/input";
 import type { Modifier } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -47,7 +47,7 @@ export async function PUT(req: NextRequest): Promise<NextResponse> {
   for (const raw of body.lines as LineBody[]) {
     const ingredientId = uuidOf(raw?.ingredientId);
     const quantity = recipeQuantity(raw?.quantity);
-    if (!ingredientId || quantity === null) return await apiError("apiErr.recipeQuantity", 400);
+    if (!ingredientId || quantity === null) return await apiError(quantityRefusal(raw?.quantity, "apiErr.recipeQuantity"), 400);
     const label = typeof raw.modLabel === "string" && raw.modLabel ? raw.modLabel : null;
     const option = typeof raw.modOption === "string" && raw.modOption ? raw.modOption : null;
     if ((label === null) !== (option === null)) return await apiError("apiErr.recipeChoice", 400);
