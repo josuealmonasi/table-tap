@@ -28,17 +28,25 @@ export async function verifyDueCurrency(db: Db, restaurant: string, id: string, 
 /** Customer completion is durable even if returning or checking our fee fails. */
 export async function reconcileDueFee(db: Db, restaurant: string, id: string, attempt: DueAttempt, client: Stripe): Promise<boolean> {
   try {
+    const { error: pendingError } = await db.from("refunds_due").update({ fee_verification_pending: true })
+      .eq("restaurant_id", restaurant).eq("id", id).not("refunded_at", "is", null);
+    if (pendingError) throw new Error(`Could not preserve pending fee verification: ${pendingError.message}`);
     const returned = await returnOurFee(client, attempt.stripe_payment_intent, attempt.stripe_account_id,
-      Math.round(Number(attempt.amount) * 100), id, async (feeId, amount) => {
-        const { data, error } = await db.rpc("start_refund_due_fee", {
-          p_restaurant: restaurant, p_due: id, p_fee: feeId, p_amount: amount,
-        });
+      Math.round(Number(attempt.amount) * 100), id, async (feeId, amount, previous, outcome) => {
+        const { data, error } = previous && outcome ? await db.rpc("advance_refund_due_fee", {
+          p_restaurant: restaurant, p_due: id, p_previous: previous, p_target: outcome.target,
+          p_returned: outcome.returned, p_fee_total: outcome.total, p_refund: outcome.refund,
+        }) : await db.rpc("start_refund_due_fee", { p_restaurant: restaurant, p_due: id, p_fee: feeId, p_amount: amount });
         if (error || !data) throw new Error("Could not save the fee return request");
         return data;
+      }, async target => {
+        const { error } = await db.from("refunds_due").update({ fee_target_cents: target })
+          .eq("restaurant_id", restaurant).eq("id", id);
+        if (error) throw new Error(`Could not save the verified fee target: ${error.message}`);
       });
     if (!returned) return false;
     await syncReturnedFee(client, restaurant, attempt.stripe_payment_intent, attempt.stripe_account_id);
-    const { error } = await db.from("refunds_due").update({ fee_reconciled_at: new Date().toISOString() })
+    const { error } = await db.from("refunds_due").update({ fee_reconciled_at: new Date().toISOString(), fee_verification_pending: false })
       .eq("restaurant_id", restaurant).eq("id", id).not("refunded_at", "is", null);
     if (error) throw new Error(`Could not record the returned fee: ${error.message}`);
     return true;

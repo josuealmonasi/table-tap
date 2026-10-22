@@ -5524,6 +5524,9 @@ alter table refund_operations drop constraint if exists refund_operations_histor
 alter table refund_operations add constraint refund_operations_historical_log_id_fkey
   foreign key (restaurant_id, historical_log_id) references user_logs(restaurant_id, id);
 alter table refund_operations add column if not exists fee_reconciled_at timestamptz;
+-- Unknown is not zero: completion must protect a fee before Stripe can be read.
+alter table refund_operations add column if not exists fee_verification_pending boolean not null default true;
+alter table refund_operations add column if not exists fee_target_cents int check (fee_target_cents >= 0);
 create unique index if not exists refund_historical_log on refund_operations(historical_log_id) where historical_log_id is not null;
 create index if not exists refunds_tenant_status on refund_operations(restaurant_id, status, created_at);
 create table if not exists refund_allocations (
@@ -6049,6 +6052,7 @@ begin
   update refund_operations set stripe_refund_id = p_refund, provider_status = p_status,
     status = case when p_status = 'succeeded' then 'succeeded' when p_status in ('failed', 'canceled') then 'failed' else 'processing' end,
     completed_at = case when p_status = 'succeeded' then now() end,
+    fee_verification_pending = (source = 'stripe'),
     confirmed_by = p_actor,
     payout_actor = case when source = 'stripe' then null else coalesce(p_payout, original_collector) end where id = o.id;
   -- Financial readers consume typed returns. No mirrored refunded activity row
@@ -6195,12 +6199,31 @@ begin
   if p_cents < 0 then raise exception 'invalid returned fee'; end if;
   update platform_fees set refunded_cents = least(cents, greatest(refunded_cents, p_cents))
     where restaurant_id = p_restaurant and stripe_payment_intent = p_intent and status = 'taken';
-  update refund_operations set fee_reconciled_at = now() where restaurant_id = p_restaurant
-    and stripe_payment_intent = p_intent and status = 'succeeded' and source = 'stripe';
+  -- An old caller can sync the ledger, but only a verified cumulative target
+  -- can finish an operation's fee recovery (including a verified zero).
 end;
 $$;
 revoke all on function public.sync_refunded_platform_fee(uuid, text, int) from public, anon, authenticated;
 grant execute on function public.sync_refunded_platform_fee(uuid, text, int) to service_role;
+
+create or replace function public.verify_refunded_platform_fee(p_restaurant uuid, p_intent text, p_cents int, p_target int, p_refunds text[] default null)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if p_cents is null or p_target is null or p_cents < 0 or p_target < 0 then raise exception 'invalid verified fee'; end if;
+  if p_refunds is null and p_target <> 0 then raise exception 'missing fee refund evidence'; end if;
+  perform public.sync_refunded_platform_fee(p_restaurant, p_intent, p_cents);
+  -- A refund completed after the provider snapshot must wait for its own check.
+  update refund_operations set fee_target_cents = p_target,
+    fee_verification_pending = (p_cents < p_target),
+    fee_reconciled_at = case when p_cents >= p_target then now() end
+    where restaurant_id = p_restaurant and stripe_payment_intent = p_intent
+      and status = 'succeeded' and source = 'stripe'
+      and (p_refunds is null or stripe_refund_id = any(p_refunds));
+end;
+$$;
+revoke all on function public.verify_refunded_platform_fee(uuid, text, int, int, text[]) from public, anon, authenticated;
+grant execute on function public.verify_refunded_platform_fee(uuid, text, int, int, text[]) to service_role;
 
 -- A manager may attribute an ambiguous historical receipt, never change it.
 drop function if exists public.attribute_payment(uuid, uuid, text, jsonb);
@@ -6329,8 +6352,10 @@ begin
       current_setting('tabletap.importing_return', true) is distinct from 'v1') then
     raise exception 'historical evidence is immutable';
   end if;
-  if (to_jsonb(new) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','historical_log_id'])
-    is distinct from (to_jsonb(old) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','historical_log_id']) then
+  -- Fee verification changes after customer completion; the return's money
+  -- and original charge identity remain immutable throughout recovery.
+  if (to_jsonb(new) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','fee_verification_pending','fee_target_cents','historical_log_id'])
+    is distinct from (to_jsonb(old) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','fee_verification_pending','fee_target_cents','historical_log_id']) then
     raise exception 'return money is immutable';
   end if;
   return new;
@@ -7589,6 +7614,9 @@ grant select, insert, update, delete on refund_due_attempts to service_role;
 -- lookup must remain recoverable even after the diner's money is back.
 alter table refunds_due add column if not exists fee_reconciled_at timestamptz;
 alter table refunds_due add column if not exists fee_request jsonb;
+alter table refunds_due add column if not exists fee_verification_pending boolean not null default true;
+alter table refunds_due add column if not exists fee_target_cents int check (fee_target_cents >= 0);
+alter table refunds_due add column if not exists fee_request_history jsonb not null default '[]';
 alter table refunds_due add column if not exists currency text check (currency ~ '^[A-Z]{3}$');
 alter table refunds_due add column if not exists stripe_account_id text;
 
@@ -7663,6 +7691,35 @@ $$;
 revoke all on function public.start_refund_due_fee(uuid, uuid, text, int) from public, anon, authenticated;
 grant execute on function public.start_refund_due_fee(uuid, uuid, text, int) to service_role;
 
+-- Retire only the request whose outcome was checked. An old 300-cent request
+-- cannot still land once only 200 cents of the WHOLE fee remain at Stripe.
+-- A partial target alone does not prove that; an unknown request stays put.
+create or replace function public.advance_refund_due_fee(
+  p_restaurant uuid, p_due uuid, p_previous jsonb, p_target int, p_returned int, p_fee_total int, p_refund text default null
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare d refunds_due; v_no int;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into d from refunds_due where restaurant_id = p_restaurant and id = p_due for update;
+  if d.id is null or d.refunded_at is null or d.fee_request is null then return null; end if;
+  if d.fee_request is distinct from p_previous then return null; end if;
+  if p_target is null or p_returned is null or p_fee_total is null or p_target <= p_returned
+    or p_returned < 0 or p_target > p_fee_total then raise exception 'invalid fee remainder'; end if;
+  if p_refund is null and (d.fee_request->>'amount')::int <= p_fee_total - p_returned then return null; end if;
+  if p_refund is not null and (d.fee_request->>'amount')::int > p_returned then return null; end if;
+  v_no := coalesce((d.fee_request->>'attempt_no')::int, 1) + 1;
+  update refunds_due set fee_target_cents = greatest(coalesce(fee_target_cents, 0), p_target),
+    fee_request_history = fee_request_history || jsonb_build_array(d.fee_request || jsonb_build_object(
+      'provider_refund', p_refund, 'returned_cents', p_returned, 'fee_total_cents', p_fee_total,
+      'outcome', case when p_refund is null then 'cannot_fit' else 'succeeded' end)),
+    fee_request = jsonb_build_object('fee_id', d.fee_request->>'fee_id', 'amount', p_target - p_returned, 'attempt_no', v_no)
+    where id = d.id returning fee_request into d.fee_request;
+  return d.fee_request;
+end;
+$$;
+revoke all on function public.advance_refund_due_fee(uuid, uuid, jsonb, int, int, int, text) from public, anon, authenticated;
+grant execute on function public.advance_refund_due_fee(uuid, uuid, jsonb, int, int, int, text) to service_role;
+
 create or replace function public.finish_refund_due_attempt(
   p_restaurant uuid, p_due uuid, p_attempt uuid, p_actor text, p_refund text, p_status text
 ) returns boolean language plpgsql security definer set search_path = public as $$
@@ -7677,7 +7734,8 @@ begin
   update refund_due_attempts set stripe_refund_id = p_refund, provider_status = p_status, updated_at = now()
     where id = p_attempt and restaurant_id = p_restaurant;
   if p_status <> 'succeeded' then return false; end if;
-  update refunds_due set refunded_at = now(), refunded_by = p_actor, stripe_refund_id = p_refund where id = d.id;
+  update refunds_due set refunded_at = now(), refunded_by = p_actor, stripe_refund_id = p_refund,
+    fee_verification_pending = true where id = d.id;
   return true;
 end;
 $$;
@@ -8324,6 +8382,38 @@ revoke all on restaurant_accounting_records from public, authenticated, service_
 -- under the privacy notice and removal of disposable API fixtures.
 grant select, delete on restaurant_accounting_records to service_role;
 
+-- A missing fee row is not evidence of no fee. A saved checkout that asked
+-- for no application fee, or a fee returned in full, is. This also releases
+-- pre-field completed refunds without trusting today's menu or local rounding.
+create or replace function public.refund_fee_proven_clear(p_restaurant uuid, p_intent text)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from platform_fees f where f.restaurant_id = p_restaurant
+      and f.stripe_payment_intent = p_intent and f.status = 'taken' and f.refunded_cents = f.cents)
+    or (exists (select 1 from diner_checkouts c where c.restaurant_id = p_restaurant
+      and c.stripe_payment_intent = p_intent and c.status = 'paid'
+      and coalesce(c.metadata->>'fee_cents', '0') = '0'
+      and not (c.metadata ? 'fee_id')
+      and coalesce(c.stripe_params #>> '{payment_intent_data,application_fee_amount}', '0') = '0')
+    and not exists (select 1 from platform_fees f where f.restaurant_id = p_restaurant
+      and f.stripe_payment_intent = p_intent and f.status = 'taken')
+    and not exists (select 1 from refunds_due d where d.restaurant_id = p_restaurant
+      and d.stripe_payment_intent = p_intent and coalesce((d.fee_request->>'amount')::int, 0) > 0));
+$$;
+revoke all on function public.refund_fee_proven_clear(uuid, text) from public, anon, authenticated;
+grant execute on function public.refund_fee_proven_clear(uuid, text) to service_role;
+
+-- Idempotent on reapplication: never turn a verified zero back into unknown.
+-- Rows without proof stay recoverable through the ordinary fee-only retries.
+-- Only the new column is written: an existing row's fee_reconciled_at is its
+-- own record, and stamping it now() would be a change to production's data.
+update refunds_due d set fee_verification_pending = false
+  where d.refunded_at is not null and d.fee_verification_pending
+    and (d.fee_reconciled_at is not null or public.refund_fee_proven_clear(d.restaurant_id, d.stripe_payment_intent));
+update refund_operations r set fee_verification_pending = false
+  where r.status = 'succeeded' and r.fee_verification_pending
+    and (r.source <> 'stripe' or r.fee_reconciled_at is not null
+      or public.refund_fee_proven_clear(r.restaurant_id, r.stripe_payment_intent));
+
 create or replace function public.admin_delete_restaurant(p_restaurant uuid, p_check_only boolean default true)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_table text;
@@ -8350,6 +8440,16 @@ begin
   end if;
   if exists (select 1 from offline_sale_queue where restaurant_id = p_restaurant and approved_at is null) then
     return jsonb_build_object('outcome', 'offlineSale');
+  end if;
+  -- Customer completion commits before the first provider read. Unknown is
+  -- protected even when the local ten-cent share rounds to zero, in both books.
+  if exists (select 1 from refunds_due d where d.restaurant_id = p_restaurant
+      and d.refunded_at is not null and d.fee_verification_pending and d.fee_reconciled_at is null
+      and not public.refund_fee_proven_clear(p_restaurant, d.stripe_payment_intent))
+    or exists (select 1 from refund_operations r where r.restaurant_id = p_restaurant
+      and r.source = 'stripe' and r.status = 'succeeded' and r.fee_verification_pending and r.fee_reconciled_at is null
+      and not public.refund_fee_proven_clear(p_restaurant, r.stripe_payment_intent)) then
+    return jsonb_build_object('outcome', 'refundFeeVerification');
   end if;
   -- Stripe returns the cumulative rounded share, not a fee for every row.
   -- No fee, an already returned share, or a share rounding to zero owes nothing.
