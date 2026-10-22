@@ -1,11 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRetryIntent } from "@/hooks/useRetryIntent";
+import { useRetryIntent, refusalSettles } from "@/hooks/useRetryIntent";
+import PendingAttempt from "@/components/ui/PendingAttempt";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
-import { formatMoney } from "@/lib/format";
 import { useToast } from "@/components/ui/Toast";
+import { formatMoney } from "@/lib/format";
+import { typedDecimal } from "@/lib/typed-decimal";
 
 interface CloseShiftDialogProps {
   open: boolean;
@@ -31,10 +33,17 @@ interface Closed {
  * by the time they see it, so the count cannot drift toward the answer. A
  * difference is explained there and then, while they remember why.
  */
+/** A typed amount as money ("50" → MX$50.00); left as typed if it is not one. */
+function shownMoney(typed: string | undefined, currency: string): string {
+  const value = typedDecimal(typed, 2);
+  return value === null ? `${typed ?? ""} ${currency}` : formatMoney(value, currency);
+}
+
 export default function CloseShiftDialog({ open, currency, shiftId, onClose, onClosed }: CloseShiftDialogProps) {
   const t = useT();
   const attempt = useRetryIntent();
   const inFlight = useRef(false);
+  const reviewedCurrency = useRef(currency);
   const [reviewedShift, setReviewedShift] = useState(shiftId);
   const toast = useToast();
   const [counted, setCounted] = useState("");
@@ -46,13 +55,16 @@ export default function CloseShiftDialog({ open, currency, shiftId, onClose, onC
   const [wasOpen, setWasOpen] = useState(false);
   const money = (n: number) => formatMoney(n, closed?.currency ?? currency);
 
-  // Each time it opens it starts at the count.
+  const frozen = attempt.frozen<{ shiftId: string; counted: string; confirm: boolean }>();
+  const pending = attempt.pending();
+  const shownCurrency = pending ? reviewedCurrency.current : currency;
+  // Each time it opens it starts at the count, retaining any unanswered close.
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
-      setReviewedShift(shiftId);
-      setCounted("");
-      setConfirmed(false);
+      setReviewedShift(frozen?.shiftId ?? shiftId);
+      setCounted(frozen?.counted ?? "");
+      setConfirmed(frozen?.confirm ?? false);
       setClosed(null);
       setNote("");
       setError(null);
@@ -61,6 +73,7 @@ export default function CloseShiftDialog({ open, currency, shiftId, onClose, onC
 
   async function post(body: object): Promise<Record<string, unknown> | null> {
     if (inFlight.current) return null;
+    if (!attempt.pending()) reviewedCurrency.current = currency;
     inFlight.current = true;
     setBusy(true);
     setError(null);
@@ -71,7 +84,7 @@ export default function CloseShiftDialog({ open, currency, shiftId, onClose, onC
         body: "action" in body && body.action === "close" ? attempt.body(body) : JSON.stringify(body),
       });
       const data = await res.json();
-      if ((res.ok && data.ok) || (!res.ok && res.status < 500)) attempt.clear();
+      if ((res.ok && data.ok) || (!res.ok && refusalSettles(res.status))) attempt.clear();
       if (!res.ok) {
         setError(data.error ?? t("apiErr.generic"));
         return null;
@@ -123,12 +136,14 @@ export default function CloseShiftDialog({ open, currency, shiftId, onClose, onC
       {!closed ? (
         <form className="tt-prodform" onSubmit={e => void count(e)}>
           <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>{t("shift.countHint")}</p>
+          {pending && <PendingAttempt message={t("pending.close", { amount: shownMoney(frozen?.counted, shownCurrency) })} />}
           <label className="tt-field">
-            <span className="tt-mod-label">{t("shift.counted")} · {currency}</span>
+            <span className="tt-mod-label">{t("shift.counted")} · {shownCurrency}</span>
             <input
               className="tt-input"
               inputMode="decimal"
-              value={counted}
+              disabled={busy || pending}
+              value={frozen?.counted ?? counted}
               onChange={e => setCounted(e.target.value)}
               placeholder="0.00"
               autoFocus
@@ -136,13 +151,13 @@ export default function CloseShiftDialog({ open, currency, shiftId, onClose, onC
             />
           </label>
           <label className="tt-check">
-            <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />
+            <input type="checkbox" disabled={busy || pending} checked={frozen?.confirm ?? confirmed} onChange={e => setConfirmed(e.target.checked)} />
             <span>{t("shift.confirm")}</span>
           </label>
           {error && <p className="tt-field-error" role="alert">{error}</p>}
           <div className="tt-prodform-actions">
-            <button type="submit" className="tt-btn tt-btn-primary" disabled={busy || !counted.trim() || !confirmed}>
-              {busy ? t("common.saving") : t("shift.closeAction")}
+            <button type="submit" className="tt-btn tt-btn-primary" disabled={busy || !(frozen?.counted ?? counted).trim() || !(frozen?.confirm ?? confirmed)}>
+              {busy ? t("common.saving") : pending ? t("pending.sendAgain") : t("shift.closeAction")}
             </button>
             <button type="button" className="tt-btn tt-btn-ghost" onClick={onClose}>{t("menu.cancel")}</button>
           </div>

@@ -21,3 +21,15 @@ it("every field the checkout writes is in create_order_intent's insert", () => {
   const missing = Object.keys(row).filter(key => !columns.has(key));
   expect(missing, "written by the card checkout but dropped by the pay-later insert").toEqual([]);
 });
+
+it("judges a coupon's minimum spend on the subtotal before the coupon, as the route does", () => {
+  // MX$100 of goods, a MX$10 coupon with a MX$100 minimum: the route accepted
+  // it on 100, the SQL refused it on the order's 90 (audit K cross-review, 5).
+  const schema = readFileSync("supabase/schema.sql", "utf8");
+  const start = schema.lastIndexOf("create or replace function public.create_order_intent(");
+  const fn = schema.slice(start, schema.indexOf("$$;", schema.indexOf("$$", start) + 2));
+  expect(fn).toMatch(/min_subtotal > coalesce\(\(p_coupon->>'eligible_subtotal'\)::numeric/);
+  const route = readFileSync("src/app/api/checkout/route.ts", "utf8");
+  expect(route).toContain("eligible_subtotal: base.subtotal");
+  expect(route).toContain("claimCheckoutCoupon(restaurantId, couponCode, base.subtotal");
+});

@@ -10,12 +10,13 @@ vi.mock("@/lib/diner-name", () => ({ rememberDinerName: vi.fn() }));
 vi.mock("@/lib/diner-token", () => ({ dinerToken: () => "phone" }));
 const { useCheckout } = await import("@/hooks/useCheckout");
 const { useCostsSend } = await import("@/hooks/useCostsSend");
+const { refusalSettles } = await import("@/hooks/useRetryIntent");
 const bodies = () => state.fetch.mock.calls.map(call => JSON.parse(call[1].body));
 beforeEach(() => { state.fetch.mockReset(); vi.stubGlobal("fetch", state.fetch); });
 function useMenu() {
   const input = { restaurantId: "r", table: null, orderableItems: [{ itemId: "dish", qty: 1 }],
     orderNote: "First", customerName: "", tipPct: 0, tipCustom: null, coupon: null,
-    cart: { clear: vi.fn() }, onPlaced: vi.fn(), notify: vi.fn() };
+    cart: { clear: vi.fn(), removeOrdered: vi.fn() }, onPlaced: vi.fn(), notify: vi.fn() };
   return { input, ...useCheckout(input as unknown as Parameters<typeof useCheckout>[0]) };
 }
 it("K4 pay-later retries the frozen order after a lost or unreadable reply, then starts a new intent", async () => {
@@ -35,6 +36,22 @@ it("K4 a definite refusal releases the intent while a server failure keeps it", 
     .mockResolvedValueOnce(Response.json({ orderId: "one", deferred: true }));
   await cart.checkout(true); await cart.checkout(true); await cart.checkout(true);
   expect(bodies()[1].ref).toBe(bodies()[0].ref); expect(bodies()[2].ref).not.toBe(bodies()[0].ref);
+});
+it("K4 a rate limit keeps the intent: a lost order is never placed twice (cross-review 1)", async () => {
+  // The tenth checkout commits but its reply is lost; the retry hits the
+  // table's rate limit, answered before the server looks the reference up.
+  // Clearing on that 429 sent a new reference once the limit passed.
+  const cart = useMenu();
+  state.fetch.mockRejectedValueOnce(new Error("lost"))
+    .mockResolvedValueOnce(Response.json({ error: "apiErr.tooManyAttempts" }, { status: 429 }))
+    .mockResolvedValueOnce(Response.json({ error: "signed out" }, { status: 401 }))
+    .mockResolvedValueOnce(Response.json({ orderId: "one", deferred: true, repeat: true }));
+  await cart.checkout(true); await cart.checkout(true); await cart.checkout(true); await cart.checkout(true);
+  expect(new Set(bodies().map(b => b.ref)).size).toBe(1);
+});
+it("only an answer given after the lookup settles an attempt", () => {
+  for (const status of [400, 404, 409, 410, 422]) expect(refusalSettles(status), String(status)).toBe(true);
+  for (const status of [401, 403, 408, 425, 429, 500, 502, 503]) expect(refusalSettles(status), String(status)).toBe(false);
 });
 it("K4 card checkout retains its existing request shape", async () => {
   state.fetch.mockResolvedValue(Response.json({ error: "no card" }, { status: 409 }));

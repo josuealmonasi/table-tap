@@ -1,5 +1,6 @@
 "use client";
 
+import PendingAttempt from "@/components/ui/PendingAttempt";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
@@ -23,6 +24,7 @@ interface PadOrderPanelProps {
   /** The order is in flight or its confirmation is up. */
   sending: boolean;
   busy: boolean;
+  pending?: boolean;
   closedNow: boolean;
   onChangeQty: (cartId: number, qty: number) => void;
   onEdit: (line: CartItem) => void;
@@ -38,6 +40,8 @@ export default function PadOrderPanel(p: PadOrderPanelProps) {
       <h3 className="tt-serif" style={{ marginTop: 0 }}>
         {t("waiter.order")}
       </h3>
+
+      {p.pending && <PendingAttempt message={t("pending.order")} />}
 
       {/* Which table, before anything else. It is the one thing that makes
           this order findable afterwards — on the board, on the bill, and in
@@ -62,7 +66,7 @@ export default function PadOrderPanel(p: PadOrderPanelProps) {
               the app calls it. The list is still there and still works; this
               is for the ones who have not learned thirty table names yet, on
               their first week. */}
-          <QrScanner
+          {!p.sending && <QrScanner
             label={t("waiter.scan")}
             title={t("waiter.scanTitle")}
             hint={t("waiter.scanHint")}
@@ -84,14 +88,14 @@ export default function PadOrderPanel(p: PadOrderPanelProps) {
               toast(t("waiter.scanned", { label: known.label }));
               return "taken";
             }}
-          />
+          />}
         </div>
       </label>
 
       {p.lines.length === 0 ? (
         <p className="tt-muted">{t("pos.empty")}</p>
       ) : (
-        <div className="tt-pos-lines">
+        <fieldset disabled={p.sending} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} className="tt-pos-lines">
           {p.lines.map(line => (
             <CartLineRow
               key={line.cartId}
@@ -103,7 +107,7 @@ export default function PadOrderPanel(p: PadOrderPanelProps) {
               onEdit={p.onEdit}
             />
           ))}
-        </div>
+        </fieldset>
       )}
 
       <label className="tt-field">
@@ -132,10 +136,10 @@ export default function PadOrderPanel(p: PadOrderPanelProps) {
         <button
           type="button"
           className="tt-btn tt-btn-primary"
-          disabled={p.sending || p.closedNow || p.lines.length === 0 || !p.tableId}
+          disabled={p.busy || (!p.pending && (p.sending || p.closedNow || p.lines.length === 0 || !p.tableId))}
           onClick={p.onSend}
         >
-          {p.busy ? t("cart.placingOrder") : t("waiter.send")}
+          {p.busy ? t("cart.placingOrder") : p.pending ? t("pending.sendAgain") : t("waiter.send")}
         </button>
       </div>
     </aside>

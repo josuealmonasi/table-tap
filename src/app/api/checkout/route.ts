@@ -235,7 +235,11 @@ export async function POST(req: NextRequest) {
           customerName: body.customerName,
         }),
         lines: verified, inventory: Boolean(plan && can(plan.limits, "inventory")),
-        threshold: Number(restaurant.low_stock_threshold) || 0, coupon,
+        // The minimum spend is judged on the subtotal before the coupon, as
+        // claimCheckoutCoupon judged it: the order's own subtotal is after it,
+        // and a MX$10 coupon with a MX$100 minimum on MX$100 was refused.
+        threshold: Number(restaurant.low_stock_threshold) || 0,
+        coupon: coupon ? { ...coupon, eligible_subtotal: base.subtotal } : null,
       });
       if (result.conflict) return await apiError("apiErr.invalidRequest", 409);
       if (result.couponReason) return NextResponse.json({ couponReason: result.couponReason }, { status: 409 });

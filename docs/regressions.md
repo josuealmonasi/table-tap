@@ -16,6 +16,7 @@ us, and what now catches each one.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| An unresolved attempt shows and locks the request it will send again (S20b) | Reopened forms showed blank values, edited carts lost food, and cash resent a hidden account sale |
 | An account sale retries its frozen cart and reference (S20 K3) | A lost reply charged the same sale to an account twice |
 | Pay-later and waiter retries claim one order before stock (S20 K4) | Retrying an unseen ticket took another portion and sent another ticket |
 | A withdrawal retry names its original shift and movement (S20 K5) | A lost reply took the same cash out twice, sometimes from a newer shift |
@@ -55,6 +56,10 @@ us, and what now catches each one.
 | A server that hangs up or sends nothing in 60 s is retried once; a page fault never is (S8b follow-up) | On an 8 GB Mac in swap, empty responses and navigation timeouts failed whole runs with retries=0 |
 | A dialog sweep comes back to its page when a click navigated away (S8 follow-up) | «Main Menu Abrir →» left /dashboard first, so the menus' rename, copy and delete dialogs were never checked |
 | A page's pending requests start over when a new page commits (S8 follow-up) | Requests the departing menu editor fired as goto began were never reported, and /dashboard could never be ready again in that tab |
+| A retry keeps its reference until an answer given after the lookup (K cross-review 1) | A 429 cleared a lost pay-later order's reference, and the next tap created a second MX$100 debt |
+| A collection's food is sent to the cent (K cross-review 3) | 135.80 - 12.35 reached SQL as 123.45000000000002 and the MX$135.80 handed over was refused |
+| Every account refusal at the till is final, the currency one included (K cross-review 4) | Answered as held, the till resent the refused account sale even after the cashier chose cash |
+| A pay-later coupon's minimum is judged before the coupon, as checkout judges it (K cross-review 5) | MX$100 with a MX$10 coupon and a MX$100 minimum passed the route and was refused in SQL on MX$90 |
 | Browser admission and measured server memory agree (S8b) | Three workers repeatedly crossed the development server's memory threshold with no peak RSS in the summary |
 | Browser navigation and the visit verdict agree (S8) | Dialog visits whose navigation failed silently vanished from coverage |
 | Typing errors and failed checks agree (S8) | A failed page-field check became an empty fault list and printed ok |
@@ -3802,3 +3807,61 @@ says what is missing instead of only disabling Save, and says when a price is
 not cheaper than buying separately. `promo-math.spec.ts` and the api case "a
 tier with no price" hold both places.
 
+## Codex's cross-review of S20 and S21 (K cross-review)
+
+A fresh Codex session reviewed S20 and S21 as a stranger would, after Claude
+had reviewed and cleared them. It found five bugs, three of them in
+conclusions Claude had signed off on:
+
+- **A retry reference was cleared on a 429.** A rate limit, a timeout or a
+  lapsed sign-in is answered before the server looks the reference up, so it
+  says nothing about whether the first try committed. `refusalSettles` now
+  keeps the reference for 401, 403, 408, 425, 429 and any 5xx, at all seven
+  call sites.
+- **The food amount was a float.** `recordReviewed` sends `round2(amount - tip)`.
+- **The till held a refused account sale.** The POS route now treats
+  `mixed_currency` as a final account refusal.
+- **The coupon minimum was judged after the coupon.** It is now judged on the
+  route's `base.subtotal`, passed as `eligible_subtotal`.
+- **A reopened form resubmitted a hidden pending request.** This is S20b:
+  every form with an unresolved attempt shows it and locks its fields.
+
+Each fix has a test that fails without it.
+
+
+## S20b — the request sent again and the visible form agree
+
+A saved reference and its screen had to agree. Keeping the request prevented
+another withdrawal, count or sale, but reopening its form erased its visible
+values. Editing an order after a lost reply changed the screen while sending
+the older food, and clearing the cart then erased food never sent.
+
+`useRetryIntent.frozen()` exposes a copy of that saved request and refreshes
+its owner when it changes. Withdrawal, close, purchase and count restore their
+fields on reopen; waste keeps its fields locked. Cost forms retain the original
+ingredient names and units, and drawer forms retain the reviewed currency. Each uses `PendingAttempt`
+and offers **Send again** until success or `refusalSettles` releases it. The
+waiter's pad locks its menu with disabled buttons, table scanner, lines and note while that round is
+unanswered. The diner's cart instead shows `PendingOrder`: the original food,
+choices, note, name, coupon and tip. Later additions stay in the cart, including
+extra portions of a dish already sent. Sending the same account sale again is the only POS
+action offered while it is pending: its account, original amount and food are
+shown before another cash or card choice can appear. A retry remains available
+when a menu closes or ordering pauses after the first send.
+
+`pending-forms.spec.tsx` reproduces all five forms with lost replies, remounts,
+locked edits and fresh forms after success or definite refusal.
+`pending-orders.spec.tsx` reproduces the waiter, diner and POS, including food
+added after the first send. The existing S20 transport tests still protect
+unknown replies, rate limits, settled refusals and unchanged request bodies.
+
+New keys in **both** `en.ts` and `es.ts`: `pending.sendAgain`,
+`pending.withdrawal`, `pending.close`, `pending.purchase`, `pending.count`,
+`pending.waste`, `pending.order`, `pending.account`, `pending.moreFood`,
+`pending.coupon`, `pending.tip`.
+
+Claude must run the isolated release gates, including `layout` and `dialogs`,
+and inspect these eight surfaces in both languages at 390 and 1280 pixels.
+Use a lost reply followed by close/reopen or an attempted edit, then a repeated
+send. Also check an order after ordering pauses, the diner's later additions,
+and an account retry after the account picker closes. There is no schema change.

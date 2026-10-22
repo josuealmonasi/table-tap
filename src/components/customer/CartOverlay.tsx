@@ -5,6 +5,9 @@ import type { Restaurant, RestaurantTable } from "@/lib/types";
 import type { useCart } from "@/hooks/useCart";
 import type { useCartTotals } from "@/hooks/useCartTotals";
 import DetailOverlay from "./DetailOverlay";
+import PendingOrder from "@/components/ui/PendingOrder";
+import type { PendingCheckout } from "@/hooks/useCheckout";
+import { useT } from "@/lib/i18n/context";
 import CartScreen from "./CartScreen";
 
 type CartScreenProps = ComponentProps<typeof CartScreen>;
@@ -25,6 +28,7 @@ interface CartOverlayProps
     | "onCheckout"
   > {
   /** Admission blocks a new order, never an existing bill. */
+  pendingOrder?: PendingCheckout | null;
   admissionBlocked?: boolean;
   admissionNotice?: React.ReactNode;
   restaurant: Restaurant;
@@ -49,9 +53,21 @@ export default function CartOverlay({
   totals,
   onClose,
   admissionBlocked = false,
+  pendingOrder,
   admissionNotice,
   ...rest
 }: CartOverlayProps) {
+  const t = useT();
+  if (pendingOrder) return (
+    <DetailOverlay wide onClose={onClose}>
+      <div style={{ padding: 16 }}>
+        <PendingOrder currency={restaurant.currency} order={pendingOrder} message={t("pending.order")} busy={rest.loading} onSend={() => rest.onCheckout(true)}>
+          <p>{t("pending.moreFood")}</p>
+        </PendingOrder>
+        <button type="button" className="tt-btn tt-btn-ghost" onClick={onClose}>{t("cart.addMore")}</button>
+      </div>
+    </DetailOverlay>
+  );
   const { pricing, soldOut, orderableItems, tipPct, tipCustom, coupon, setCoupon } = totals;
   return (
     <DetailOverlay wide onClose={onClose}>

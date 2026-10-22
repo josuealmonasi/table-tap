@@ -8,6 +8,7 @@ import { formatMoney } from "@/lib/format";
 import { amount, fromShown, inShown } from "@/lib/costs/display";
 import { decimal, type IngredientUnit } from "@/lib/costs/input";
 import { WASTE_REASONS, type WasteReason } from "@/lib/costs/usage";
+import PendingAttempt from "@/components/ui/PendingAttempt";
 import { useCostsSend } from "@/hooks/useCostsSend";
 import { useWhen } from "@/hooks/useWhen";
 
@@ -49,13 +50,17 @@ export default function WasteRecorder({ choices, today, canSeeCost, currency, ti
   const router = useRouter();
   const send = useCostsSend(true);
   const when = useWhen(timeZone);
+  const pending = send.pending();
+  const [reviewedChoices, setReviewedChoices] = useState(choices);
+  if (!pending && reviewedChoices !== choices) setReviewedChoices(choices);
+  const formChoices = pending ? reviewedChoices : choices;
   const [picked, setPicked] = useState("");
   const [quantity, setQuantity] = useState("");
   const [reason, setReason] = useState<WasteReason | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const choice = choices.find(c => `${c.kind}:${c.id}` === picked) ?? null;
+  const choice = formChoices.find(c => `${c.kind}:${c.id}` === picked) ?? null;
   const shownUnit = choice ? (choice.kind === "product" ? "pza" : inShown(0, choice.unit).unit) : null;
   const unitOf = new Map(choices.filter(c => c.kind === "ingredient").map(c => [c.id, c.unit]));
 
@@ -90,22 +95,23 @@ export default function WasteRecorder({ choices, today, canSeeCost, currency, ti
     <>
       <section className="tt-section">
         <form className="tt-waste-form" onSubmit={e => void save(e)}>
+          {pending && <PendingAttempt message={t("pending.waste")} />}
           <label className="tt-field">
             <span className="tt-mod-label">{t("waste.what")}</span>
-            <select className="tt-input" value={picked} onChange={e => setPicked(e.target.value)} required>
+            <select disabled={busy || pending} className="tt-input" value={picked} onChange={e => setPicked(e.target.value)} required>
               <option value="">{t("waste.choose")}</option>
               <optgroup label={t("waste.ingredients")}>
-                {choices.filter(c => c.kind === "ingredient").map(c => <option key={c.id} value={`ingredient:${c.id}`}>{c.label}</option>)}
+                {formChoices.filter(c => c.kind === "ingredient").map(c => <option key={c.id} value={`ingredient:${c.id}`}>{c.label}</option>)}
               </optgroup>
               <optgroup label={t("waste.products")}>
-                {choices.filter(c => c.kind === "product").map(c => <option key={c.id} value={`product:${c.id}`}>{c.label}</option>)}
+                {formChoices.filter(c => c.kind === "product").map(c => <option key={c.id} value={`product:${c.id}`}>{c.label}</option>)}
               </optgroup>
             </select>
           </label>
           <label className="tt-field">
             <span className="tt-mod-label">{t("waste.quantity")}</span>
             <span className="tt-costs-count-input">
-              <input className="tt-input" inputMode="decimal" value={quantity} onChange={e => setQuantity(e.target.value)} required />
+              <input disabled={busy || pending} className="tt-input" inputMode="decimal" value={quantity} onChange={e => setQuantity(e.target.value)} required />
               <span className="tt-muted">{shownUnit ? t(`costs.unitShort.${shownUnit}`) : ""}</span>
             </span>
           </label>
@@ -113,7 +119,7 @@ export default function WasteRecorder({ choices, today, canSeeCost, currency, ti
             <legend className="tt-mod-label">{t("waste.why")}</legend>
             <div className="tt-station-filter" role="radiogroup" aria-label={t("waste.why")}>
               {WASTE_REASONS.map(r => (
-                <button type="button" key={r} role="radio" aria-checked={reason === r}
+                <button type="button" disabled={busy || pending} key={r} role="radio" aria-checked={reason === r}
                   className={`tt-chip${reason === r ? " tt-chip-on" : ""}`} onClick={() => setReason(r)}>
                   {t(`costs.reason.${r}`)}
                 </button>
@@ -122,13 +128,13 @@ export default function WasteRecorder({ choices, today, canSeeCost, currency, ti
           </fieldset>
           <label className="tt-field">
             <span className="tt-mod-label">{t("waste.note")} <span className="tt-muted">{t("common.optional")}</span></span>
-            <input className="tt-input" value={note} onChange={e => setNote(e.target.value)} maxLength={140} />
+            <input disabled={busy || pending} className="tt-input" value={note} onChange={e => setNote(e.target.value)} maxLength={140} />
           </label>
           <p className="tt-muted tt-costs-hint">{t("waste.stockNote")}</p>
           {error && <p className="tt-field-error" role="alert">{error}</p>}
           <div>
             <button type="submit" className="tt-btn tt-btn-primary" disabled={busy || !choice || !quantity || !reason}>
-              {busy ? t("common.saving") : t("waste.save")}
+              {busy ? t("common.saving") : pending ? t("pending.sendAgain") : t("waste.save")}
             </button>
           </div>
         </form>

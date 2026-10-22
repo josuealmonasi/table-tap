@@ -9152,7 +9152,9 @@ begin
     end if;
     if p_coupon is not null then
       select * into v_coupon from coupons where id = (p_coupon->>'id')::uuid and restaurant_id = p_restaurant for update;
-      if not found or v_coupon.staff_only or v_coupon.min_subtotal > (p_order->>'subtotal')::numeric
+      -- Judged on the subtotal before the coupon, as the route judged it.
+      if not found or v_coupon.staff_only
+        or v_coupon.min_subtotal > coalesce((p_coupon->>'eligible_subtotal')::numeric, (p_order->>'subtotal')::numeric)
         or (v_coupon.kind, v_coupon.value, v_coupon.code) is distinct from
            (p_coupon->>'kind', (p_coupon->>'value')::numeric, p_coupon->>'code')
         or public.redeem_coupon(v_coupon.id) is null then
