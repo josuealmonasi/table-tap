@@ -3931,3 +3931,20 @@ six problems. Claude fixed three in fix-s23c; Codex fixed the other three
   «Descartar cambios» after the sweep's Escape. Both of promises' waits for a
   control are now 30 s, like every other readiness wait.
 
+
+### The coupon dialog, looked at
+
+Screenshots of the edit dialog at 390 px and 1280 px, in Spanish, after the
+cross-review fixes:
+
+- **The zone note read "America/Mexico_City".** It now names the zone as
+  Settings does: «Ciudad de México (GMT-6)», through `zoneName` in
+  `timezones.ts`. A zone the list does not offer keeps its IANA name.
+  Tested in `timezones.spec.ts`.
+- **The read-only code looked typeable.** `.tt-input[readonly]` gets the
+  inset surface and a dashed border. The other read-only field, the printer
+  link in Settings, gets the same look.
+- **An edit opened on «50 · 100 · 200» with nothing saying which number was
+  which.** The placeholders were the only names, and a filled field has
+  none. Every field is now a `.tt-field` label above its input. The type
+  select grew to 160 px, because «% de descuento» was clipped at 130.

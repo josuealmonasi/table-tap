@@ -2517,6 +2517,12 @@ a.tt-btn {
   background: var(--tt-white);
   color: var(--tt-ink);
 }
+/* Shown, not typed into: a coupon's printed code, a link to copy. */
+.tt-input[readonly] {
+  background: var(--tt-surface);
+  border-style: dashed;
+  cursor: default;
+}
 .tt-stepper {
   display: flex;
   align-items: center;

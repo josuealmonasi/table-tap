@@ -46,6 +46,17 @@ export const ZONE_GROUPS: ZoneGroup[] = [
 /** Every zone the selector offers — what the settings route accepts. */
 export const ALLOWED_ZONES: string[] = ZONE_GROUPS.flatMap(g => g.zones.map(z => z.zone));
 
+/**
+ * A zone the way Settings names it, "Ciudad de México (GMT-6)", so a note that
+ * says which clock a schedule uses names the one the owner picked. A zone the
+ * list does not offer keeps its IANA name rather than reading as nothing.
+ */
+export function zoneName(zone: string, t: (key: string) => string, at: Date = new Date()): string {
+  const key = ZONE_GROUPS.flatMap(g => g.zones).find(z => z.zone === zone)?.labelKey;
+  const offset = offsetLabel(zone, at);
+  return key ? `${t(key)}${offset ? ` (${offset})` : ""}` : zone;
+}
+
 /** Only a zone we actually offer; keeps an arbitrary string out of the column. */
 export function isAllowedTimeZone(zone: string): boolean {
   return ALLOWED_ZONES.includes(zone);

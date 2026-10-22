@@ -1,6 +1,7 @@
 "use client";
 
 import { zonedInput, zonedTimestamp } from "@/lib/zoned-input";
+import { zoneName } from "@/lib/timezones";
 import { useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
@@ -150,66 +151,74 @@ export default function CouponForm({
         </div>
 
         {editing && <p className="tt-muted">{t("coupons.codeFixed")}</p>}
+        {/* Every field keeps its name once it holds a value: an edit opened on
+            "50 · 100 · 200" with the placeholders gone said nothing about which
+            number was the discount, the cap or the minimum. */}
         <div className="tt-prodform-row">
-          <select
-            className="tt-input"
-            style={{ width: 130 }}
-            value={f.kind}
-            onChange={e => set("kind", e.target.value as "percent" | "fixed")}
-          >
-            <option value="percent">{t("coupons.kindPercent")}</option>
-            <option value="fixed">{t("coupons.kindFixed")}</option>
-          </select>
-          <input
-            className="tt-input"
-            style={{ width: 100 }}
-            type="number"
-            min="1"
-            step={f.kind === "percent" ? "1" : "0.01"}
-            placeholder={f.kind === "percent" ? "%" : currency}
-            value={f.value}
-            onChange={e => set("value", e.target.value)}
-            required
-          />
-          <input
-            className="tt-input"
-            style={{ flex: 1, minWidth: 110 }}
-            type="number"
-            min="1"
-            step="1"
-            placeholder={t("coupons.maxUsesPlaceholder")}
-            value={f.maxUses}
-            onChange={e => set("maxUses", e.target.value)}
-          />
+          <label className="tt-field tt-muted" style={{ width: 160, fontSize: 13 }}>
+            {t("coupons.kindLabel")}
+            <select
+              className="tt-input"
+              value={f.kind}
+              onChange={e => set("kind", e.target.value as "percent" | "fixed")}
+            >
+              <option value="percent">{t("coupons.kindPercent")}</option>
+              <option value="fixed">{t("coupons.kindFixed")}</option>
+            </select>
+          </label>
+          <label className="tt-field tt-muted" style={{ width: 100, fontSize: 13 }}>
+            {t("coupons.valueLabel")}
+            <input
+              className="tt-input"
+              type="number"
+              min="1"
+              step={f.kind === "percent" ? "1" : "0.01"}
+              placeholder={f.kind === "percent" ? "%" : currency}
+              value={f.value}
+              onChange={e => set("value", e.target.value)}
+              required
+            />
+          </label>
+          <label className="tt-field tt-muted" style={{ flex: 1, minWidth: 110, fontSize: 13 }}>
+            {t("coupons.maxUsesLabel")}
+            <input
+              className="tt-input"
+              type="number"
+              min="1"
+              step="1"
+              placeholder={t("coupons.maxUsesPlaceholder")}
+              value={f.maxUses}
+              onChange={e => set("maxUses", e.target.value)}
+            />
+          </label>
         </div>
 
         <div className="tt-prodform-row">
-          <input
-            className="tt-input"
-            style={{ width: 190 }}
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder={t("coupons.minSubtotalPlaceholder")}
-            value={f.minSubtotal}
-            onChange={e => set("minSubtotal", e.target.value)}
-            aria-label={t("coupons.minSubtotalPlaceholder")}
-          />
-          <label className="tt-muted" style={{ fontSize: 13 }}>
-            {t("coupons.startsAt")}{" "}
+          <label className="tt-field tt-muted" style={{ width: 190, fontSize: 13 }}>
+            {t("coupons.minSubtotalLabel")}
             <input
               className="tt-input"
-              style={{ width: 175 }}
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder={t("coupons.minSubtotalPlaceholder")}
+              value={f.minSubtotal}
+              onChange={e => set("minSubtotal", e.target.value)}
+            />
+          </label>
+          <label className="tt-field tt-muted" style={{ width: 175, fontSize: 13 }}>
+            {t("coupons.startsAt")}
+            <input
+              className="tt-input"
               type="datetime-local"
               value={f.startsAt}
               onChange={e => set("startsAt", e.target.value)}
             />
           </label>
-          <label className="tt-muted" style={{ fontSize: 13 }}>
-            {t("coupons.endsAt")}{" "}
+          <label className="tt-field tt-muted" style={{ width: 175, fontSize: 13 }}>
+            {t("coupons.endsAt")}
             <input
               className="tt-input"
-              style={{ width: 175 }}
               type="datetime-local"
               value={f.endsAt}
               onChange={e => set("endsAt", e.target.value)}
@@ -237,7 +246,7 @@ export default function CouponForm({
           </span>
         </label>
 
-        <p className="tt-muted">{t("coupons.timeZone", { zone: timeZone })}</p>
+        <p className="tt-muted">{t("coupons.timeZone", { zone: zoneName(timeZone, t) })}</p>
         {error && <p className="tt-field-error" role="alert">{error}</p>}
         {f.code && !codeOk && (
           <p className="tt-field-error" style={{ margin: 0 }}>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALLOWED_ZONES, isAllowedTimeZone, offsetLabel, ZONE_GROUPS } from "@/lib/timezones";
+import { ALLOWED_ZONES, isAllowedTimeZone, offsetLabel, ZONE_GROUPS, zoneName } from "@/lib/timezones";
 import { en } from "@/lib/i18n/en";
 import { es } from "@/lib/i18n/es";
 
@@ -91,5 +91,19 @@ describe("the offset shown beside a city", () => {
 
   it("says nothing rather than throwing on a zone it cannot format", () => {
     expect(offsetLabel("Not/AZone")).toBe("");
+  });
+});
+
+describe("a zone named the way Settings names it", () => {
+  const t = (dict: unknown) => (key: string) => String(resolve(dict, key));
+  const january = new Date("2026-01-15T12:00:00Z");
+
+  it("names an offered zone by its city and offset, in both languages", () => {
+    expect(zoneName("America/Mexico_City", t(es), january)).toBe("Ciudad de México (GMT-6)");
+    expect(zoneName("America/Mexico_City", t(en), january)).toBe("Mexico City (GMT-6)");
+  });
+
+  it("keeps the IANA name for a zone the list does not offer", () => {
+    expect(zoneName("Europe/Madrid", t(es), january)).toBe("Europe/Madrid");
   });
 });
