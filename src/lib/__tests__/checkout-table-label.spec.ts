@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 
 const writes: Record<string, unknown>[] = [];
-let foundTable: { id: string; label: string } | null = { id: "t7", label: "7" };
+let foundTable: { id: string; label: string } | null = { id: "00000000-0000-4000-8000-0000000000f7", label: "7" };
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (table: string) => {
@@ -39,12 +39,12 @@ const { POST } = await import("@/app/api/checkout/route");
 const post = (tableId: string | null, tableLabel: unknown) => POST(new NextRequest("https://test/api/checkout", {
   method: "POST", body: JSON.stringify({ restaurantId: "r", tableId, tableLabel, items: [{}], payLater: true }),
 }));
-beforeEach(() => { writes.length = 0; foundTable = { id: "t7", label: "7" }; });
+beforeEach(() => { writes.length = 0; foundTable = { id: "00000000-0000-4000-8000-0000000000f7", label: "7" }; });
 
 describe("G4: the destination comes from the validated table", () => {
   it("stores table 7 even when the diner calls it table 8", async () => {
-    expect((await post("t7", "8")).status).toBe(200);
-    expect(writes[0]).toMatchObject({ table_id: "t7", table_label: "7" });
+    expect((await post("00000000-0000-4000-8000-0000000000f7", "8")).status).toBe(200);
+    expect(writes[0]).toMatchObject({ table_id: "00000000-0000-4000-8000-0000000000f7", table_label: "7" });
   });
   it("ignores a forged label on a counter order", async () => {
     expect((await post(null, { toString: "x" })).status).toBe(200);
@@ -52,7 +52,7 @@ describe("G4: the destination comes from the validated table", () => {
   });
   it("still refuses an unknown or foreign table before writing", async () => {
     foundTable = null;
-    expect((await post("other", "7")).status).toBe(404);
+    expect((await post("00000000-0000-4000-8000-0000000000f8", "7")).status).toBe(404);
     expect(writes).toEqual([]);
   });
 });

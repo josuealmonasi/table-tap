@@ -1,4 +1,4 @@
-import { DIALOGS } from "./layout-paths.mjs";
+import { DIALOGS, TILL } from "./layout-paths.mjs";
 import { look } from "./browser-audit.mjs";
 import { navigate, observe, overlay, ready, trackData } from "./browser-ready.mjs";
 
@@ -13,9 +13,9 @@ const tap = (tab, sel) =>
 const tapText = (tab, text) =>
   tab.evaluate(`(()=>{const b=[...document.querySelectorAll('button,a')].find(x=>x.textContent.includes(${JSON.stringify(text)}) && !x.disabled); if(b){b.click(); return true;} return false;})()`);
 
-const SHEET = ".tt-detail-overlay .tt-detail-panel";
+const SHEET = ".tt-detail-overlay > [role=dialog]:not(.tt-pos-ask)";
 const saleHasDish = tab =>
-  tab.evaluate(`[...document.querySelectorAll('button')].some(b => /Cobrar en efectivo/.test(b.textContent) && !b.disabled)`);
+  tab.evaluate(`[...document.querySelectorAll('button')].some(b => b.textContent.includes(${JSON.stringify(TILL.cash.label)}) && !b.disabled)`);
 
 /**
  * What a till dialog needs first. Named, not a list of clicks: the till adds a
@@ -31,7 +31,7 @@ export const PREPARE = {
       if (!(await tab.evaluate(`(()=>{const t=document.querySelectorAll('.tt-pos-tile:not(.tt-pos-tile-out)')[${n}]; if(!t) return false; t.click(); return true;})()`))) return false;
       await phase("readiness", () => ready(tab, { pending }));
       if (await tab.locator(SHEET).count()) {
-        if (!(await tapText(tab, "Agregar al carrito"))) await tab.keyboard.press("Escape");
+        if (!(await tapText(tab, TILL.add.label))) await tab.keyboard.press("Escape");
         // Never click the next tile behind a sheet that stayed open.
         if (!(await phase("readiness", () => overlay(tab, SHEET, false, 3000, false)))) return false;
       }

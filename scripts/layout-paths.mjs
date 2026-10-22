@@ -92,6 +92,12 @@ export const PUBLIC = [
   "/rewards",
 ];
 
+/** What the till's buttons say, in the Spanish the team visits run in. */
+export const TILL = {
+  add: { label: "Agregar al carrito" },
+  cash: { label: "Cobrar en efectivo" },
+};
+
 /**
  * Dialogs, which is where the unseen lives.
  *
@@ -123,8 +129,8 @@ export const DIALOGS = {
   // `required` because the demo always has dishes. Both close with Escape,
   // which the visit requires to work.
   "/dashboard/pos": [
-    { name: "the till's charge", prepare: "dishInSale", text: "Cobrar en efectivo", shows: ".tt-pos-ask", required: true },
-    { name: "a dish on the till", open: "dishSheet", shows: ".tt-detail-overlay .tt-detail-panel", required: true },
+    { name: "the till's charge", prepare: "dishInSale", text: TILL.cash.label, shows: ".tt-pos-ask", required: true },
+    { name: "a dish on the till", open: "dishSheet", shows: ".tt-detail-overlay > [role=dialog]:not(.tt-pos-ask)", required: true },
   ],
   "/dashboard/promotions": [
     { name: "new combo", text: "Nuevo combo" },

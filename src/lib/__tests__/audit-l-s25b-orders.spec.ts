@@ -49,7 +49,7 @@ const base = { restaurantId: "r", tableId: null, payLater: true, items: [dish], 
 const send = (body: object) => checkout.POST(new NextRequest("https://test/api/checkout", { method: "POST", body: JSON.stringify(body) }));
 it.each([
   { items: [{ ...dish, qty: 2 }] }, { couponCode: "DIFFERENT" }, { tipAmount: 20 },
-  { tableId: "another-table" }, { items: [{ ...dish, mods: { Milk: "Oat" } }] },
+  { tableId: "00000000-0000-4000-8000-0000000000f2" }, { items: [{ ...dish, mods: { Milk: "Oat" } }] },
 ])("L6 a counter reference refuses a different request without disclosing the first ticket: %j", async changed => {
   expect((await send(base)).status).toBe(200);
   const second = await send({ ...base, ...changed });

@@ -65,7 +65,7 @@ vi.mock("@/lib/coupon-service", () => ({
   releaseCoupon: (id: string) => releaseCoupon(id),
   toAppliedCoupon: (c: typeof coupon) => ({ code: c.code, kind: c.kind, value: c.value, minSubtotal: 0 }),
 }));
-vi.mock("@/lib/table-guard", () => ({ tableOf: async () => ({ id: "t-1" }) }));
+vi.mock("@/lib/table-guard", () => ({ tableOf: async () => ({ id: "00000000-0000-4000-8000-0000000000f1" }) }));
 vi.mock("@/lib/table-member-cookie", () => ({ memberHash: () => "hash" }));
 vi.mock("@/lib/table-membership", () => ({ requestTableMember: async () => ({
   status: admissionStatus, sessionId: await step.openSession(), diner: "member-1",
@@ -111,7 +111,7 @@ function checkout(extra: Record<string, unknown> = {}) {
       method: "POST",
       headers: { "content-type": "application/json", origin: "http://localhost" },
       body: JSON.stringify({
-        restaurantId: "r1", tableId: "t-1", tableLabel: "4", items: [taco], couponCode: "TACO10",
+        restaurantId: "r1", tableId: "00000000-0000-4000-8000-0000000000f1", tableLabel: "4", items: [taco], couponCode: "TACO10",
         ...extra,
       }),
     }),
