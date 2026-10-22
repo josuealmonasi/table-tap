@@ -39,8 +39,10 @@ export function useMenuEditor(restaurantId: string) {
   const loadId = useRef(0);
   const reload = useCallback(async () => {
     const requestId = ++loadId.current;
+    // Edits wait for the whole menu (J17), but the menu already on screen
+    // stays there while it reloads after a save. Swapping it for skeletons
+    // blanked the editor after every edit and threw the owner back to the top.
     ready.current = false;
-    setLoading(true);
     let data: Awaited<ReturnType<typeof fetchMenuData>>;
     try {
       data = await fetchMenuData(supabase, restaurantId);
@@ -49,6 +51,7 @@ export function useMenuEditor(restaurantId: string) {
       // Left loading, so nothing can be edited: an editor holding part of the
       // menu would save that part over the whole.
       console.error(err);
+      setLoading(true);
       toast(t("menu.loadFailed"), "error");
       return;
     }

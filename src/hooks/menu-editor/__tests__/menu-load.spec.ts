@@ -60,6 +60,22 @@ it("J17: an older read cannot unlock editing after the latest read fails", async
   await expect(editor.updateProduct("dish", { description: "New" })).rejects.toThrow();
   expect(state.from).not.toHaveBeenCalled();
 });
+it("a reload after a save keeps the menu on screen while edits wait for it", async () => {
+  // Every save reloads. Showing skeletons for each one blanked the editor
+  // after every edit, and the shorter page threw the owner back to the top.
+  const editor = Editor();
+  await editor.reload();
+  expect(Editor().loading).toBe(false);
+  let finish!: (data: MenuData) => void;
+  state.read.mockImplementationOnce(() => new Promise<MenuData>(resolve => { finish = resolve; }));
+  const again = editor.reload();
+  expect(Editor().loading).toBe(false);
+  await expect(editor.setProductAddons("dish", [])).rejects.toThrow("Menu has not loaded");
+  finish(menu);
+  await again;
+  expect(Editor().loading).toBe(false);
+  expect(state.from).not.toHaveBeenCalled();
+});
 it("J17: menu names and availability cannot write before the full read", async () => {
   const editor = Editor();
   await editor.renameMenu("menu", "New name");
