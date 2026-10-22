@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { cashAmount, cashNote } from "@/lib/cash-drawer";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
+import { uuidOf } from "@/lib/costs/guard";
 import { openShift } from "@/lib/cash-shift-server";
 
 export const runtime = "nodejs";
@@ -23,17 +24,21 @@ export async function POST(req: NextRequest) {
   const actor = await actingStaff();
   if (!actor || !HOLDS_THE_DRAWER(actor.role)) return await apiError("apiErr.forbidden", 403);
 
-  const body = await jsonBody<{ kind?: unknown; amount?: unknown; note?: unknown }>(req);
+  const body = await jsonBody<{ kind?: unknown; amount?: unknown; note?: unknown; ref?: unknown; shiftId?: unknown }>(req);
   if (body?.kind !== "withdrawal") return await apiError("apiErr.invalidRequest", 400);
   const amount = cashAmount(body?.amount, true);
   if (amount === null) return await apiError("apiErr.cashAmount", 400);
   const note = cashNote(body?.note);
-  const shift = await openShift(actor.restaurantId);
+  const ref = uuidOf(body.ref);
+  const reviewedShift = uuidOf(body.shiftId);
+  if (body.ref !== undefined && (!ref || !reviewedShift)) return await apiError("apiErr.invalidRequest", 400);
+  const shift = reviewedShift ? { id: reviewedShift } : await openShift(actor.restaurantId);
   if (!shift) return await apiError("apiErr.noOpenShift", 409);
 
   // Close and withdrawals share the money lock; this read alone cannot
   // promise that the shift will still be open when the withdrawal is written.
-  const { data, error } = await createAdminClient().rpc("create_cash_withdrawal", {
+  const { data, error } = await createAdminClient().rpc(ref ? "create_cash_withdrawal_once" : "create_cash_withdrawal", {
+    ...(ref ? { p_ref: ref } : {}),
     p_restaurant: actor.restaurantId, p_shift: shift.id, p_amount: amount, p_note: note, p_actor: actor.email,
   });
   if (error) return await apiError("apiErr.generic", 500);

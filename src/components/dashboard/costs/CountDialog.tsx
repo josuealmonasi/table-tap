@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useRetryIntent } from "@/hooks/useRetryIntent";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
@@ -30,16 +31,18 @@ interface CountResult {
  */
 export default function CountDialog({ open, onClose, ...rest }: CountDialogProps) {
   const t = useT();
+  const attempt = useRetryIntent();
   return (
     <Modal open={open} onClose={onClose} maxWidth={520} title={t("costs.countTitle")}>
-      {open && <CountForm onClose={onClose} {...rest} />}
+      {open && <CountForm attempt={attempt} onClose={onClose} {...rest} />}
     </Modal>
   );
 }
 
-function CountForm({ ingredients, currency, onClose }: Omit<CountDialogProps, "open">) {
+function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialogProps, "open"> & { attempt: ReturnType<typeof useRetryIntent> }) {
   const t = useT();
   const router = useRouter();
+  const inFlight = useRef(false);
   const [typed, setTyped] = useState<Record<string, string>>({});
   const [results, setResults] = useState<CountResult[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -52,26 +55,31 @@ function CountForm({ ingredients, currency, onClose }: Omit<CountDialogProps, "o
 
   async function save(e: React.FormEvent): Promise<void> {
     e.preventDefault();
+    if (inFlight.current) return;
     const counts = Object.entries(typed)
       .filter(([, v]) => v.trim() !== "")
       .map(([ingredientId, v]) => {
         const shown = decimal(v, 10_000_000, 3);
         return { ingredientId, counted: shown === null ? v : fromShown(shown, byId.get(ingredientId)!.unit) };
       });
-    if (counts.length === 0) return setError(t("costs.countNothing"));
+    if (counts.length === 0 && !attempt.pending()) return setError(t("costs.countNothing"));
+    inFlight.current = true;
     setBusy(true);
     setError(null);
     try {
       const res = await fetch("/api/costs/counts", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ counts }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: attempt.body({ counts }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json();
+      if ((res.ok && Array.isArray(data.results)) || (!res.ok && res.status < 500)) attempt.clear();
       if (!res.ok) return setError(typeof data.error === "string" ? data.error : t("apiErr.generic"));
+      if (!Array.isArray(data.results)) throw new Error("Missing count result");
       setResults(data.results);
       router.refresh();
     } catch {
       setError(t("done.networkError"));
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }

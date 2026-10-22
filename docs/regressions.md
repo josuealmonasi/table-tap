@@ -16,6 +16,12 @@ us, and what now catches each one.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| An account sale retries its frozen cart and reference (S20 K3) | A lost reply charged the same sale to an account twice |
+| Pay-later and waiter retries claim one order before stock (S20 K4) | Retrying an unseen ticket took another portion and sent another ticket |
+| A withdrawal retry names its original shift and movement (S20 K5) | A lost reply took the same cash out twice, sometimes from a newer shift |
+| Purchase, waste and count retries keep their saved movement (S20 K6) | A retry added a delivery twice or counted over a later delivery |
+| A blind close names the reviewed shift and its saved close (S20 K9) | An old count closed a newer shift after the first answer was lost |
+
 | Corte account debt and adjustments use the report currency; unverified activity is called out (S12 I8) | MX$100 and US$10 appeared as US$110 owed |
 | Cost fees use the saved charge currency, net of returned fees (S12 I10) | An old MX$10 fee created a false 10% rate on US$100 cash |
 | Product revenue and contribution share final food revenue after every discount (S12 I11/J11) | MX$100 food discounted to MX$80 still showed MX$100 revenue and MX$60 contribution |
@@ -3506,3 +3512,55 @@ the S11 schema block first, then run the complete gates, including `dialogs`.
 Look at Bills and its confirmation in both languages at 360/390px, 820px and
 1280px: a USD obligation beside an MXN menu, an unverified older amount, and
 a customer-complete refund whose fee is still pending.
+
+## S20 K3 — the account and the till agree on one sale
+
+`usePosCharge` keeps the serialized account request, including its `posRef`,
+until a definite refusal or a settled ticket returns. A network error, 5xx or
+unreadable success keeps it; editing the cart cannot change the retry.
+`ring_pos_account_v2` already deduplicates that reference before taking stock
+or approving credit. `s20-pos-retry.spec.ts` reproduces the changed-reference
+bug; `pos-atomic.spec.tsx` checks the existing server replay.
+
+## S20 K4 — the retry and the kitchen agree on one order
+
+The customer and waiter save a reference and the exact request on first submit.
+`create_order_intent` returns a previous order before reserving stock, and
+commits stock, the ticket and any coupon use together under a unique reference.
+A scoped read also recovers a ticket after the menu sells out. Card checkout
+keeps its separate Stripe session/attempt flow; this reference applies only to
+orders sent straight to the kitchen. `s20-orders-retry.spec.ts` reproduces both
+routes; `s20-client-retry.spec.ts` covers unknown answers and new intents.
+
+## S20 K5 — the withdrawal and its shift agree on one movement
+
+The form freezes the shift, amount, note and reference. The server returns its
+original movement even if that shift has since closed, before checking whether
+a new withdrawal is allowed. Its unique reference is per shift and its write
+still holds S9's money lock. `s20-writes-retry.spec.ts` checks a retry after a
+new shift opens; `s20-retry-schema.spec.ts` checks the lock and unique index.
+
+## S20 K6 — the retry and the shelf agree on one movement
+
+Purchase, waste and count forms freeze their requests. Each server transaction
+checks the saved reference before writing again. Purchases cannot restore an
+older price, waste cannot consume another portion, and a count returns its
+original expected figure and movement cutoff after a later delivery. The
+movement lock still precedes ingredient row locks; product waste keeps the
+item-before-movement order used by sales. `s20-writes-retry.spec.ts` reproduces
+each path and `s20-retry-schema.spec.ts` protects the boundaries.
+
+## S20 K9 — the reviewed drawer and the close agree on one shift
+
+The blind-close form snapshots the displayed shift id when opened and freezes
+it with the count and a close reference on first submit. The server returns the
+saved close on retry, including its original totals, and refuses a different
+close of an already closed or missing shift. An old count cannot close the
+newer drawer. The refusal is translated in both languages and asks the cashier
+to refresh and count the open drawer. `s20-writes-retry.spec.ts` reproduces both
+lost-response recovery and a stale close; the S9 race tests still pass.
+
+The eight S20 API cases in `scripts/api-retry-cases.mjs` send each request twice
+and count actual tickets, stock, debt, movement amounts and cutoffs. They also
+check a later purchase price and a newer open drawer. Each owns and removes its
+fixtures. They require Claude's live gate; Vitest mocks do not execute SQL.

@@ -47,7 +47,7 @@ export default function WasteRecorder({ choices, today, canSeeCost, currency, ti
   const t = useT();
   const toast = useToast();
   const router = useRouter();
-  const send = useCostsSend();
+  const send = useCostsSend(true);
   const when = useWhen(timeZone);
   const [picked, setPicked] = useState("");
   const [quantity, setQuantity] = useState("");

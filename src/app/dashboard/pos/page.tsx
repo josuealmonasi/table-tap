@@ -93,6 +93,7 @@ export default async function PosPage() {
       canEmailReceipt={data.receipts}
       loyalty={await loyaltyOn(membership.restaurant.id, plan.limits)}
       canChargeAccount={can(plan.limits, "openAccounts")}
+      shiftId={shift?.id}
       shiftOpen={shift !== null}
       shiftCurrency={shift?.currency}
       counterOrders={(counterRes.data as Order[] | null) ?? []}

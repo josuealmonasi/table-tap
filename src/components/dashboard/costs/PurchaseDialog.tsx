@@ -26,18 +26,18 @@ interface PurchaseDialogProps {
  */
 export default function PurchaseDialog({ open, onClose, ...rest }: PurchaseDialogProps) {
   const t = useT();
+  const send = useCostsSend(true);
   return (
     <Modal open={open} onClose={onClose} maxWidth={460} title={t("costs.purchaseTitle")}>
-      {open && <PurchaseForm onClose={onClose} {...rest} />}
+      {open && <PurchaseForm send={send} onClose={onClose} {...rest} />}
     </Modal>
   );
 }
 
-function PurchaseForm({ ingredients, currency, onClose }: Omit<PurchaseDialogProps, "open">) {
+function PurchaseForm({ ingredients, currency, onClose, send }: Omit<PurchaseDialogProps, "open"> & { send: ReturnType<typeof useCostsSend> }) {
   const t = useT();
   const toast = useToast();
   const router = useRouter();
-  const send = useCostsSend();
   const [ingredientId, setIngredientId] = useState("");
   const [packs, setPacks] = useState("");
   const [total, setTotal] = useState("");

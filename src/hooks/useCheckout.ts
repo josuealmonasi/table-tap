@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useRetryIntent } from "@/hooks/useRetryIntent";
 import type { RestaurantTable } from "@/lib/types";
 import type { AppliedCoupon } from "@/lib/pricing";
 import type { CartItem, useCart } from "@/hooks/useCart";
@@ -42,20 +43,25 @@ export function useCheckout(input: CheckoutInput): {
   loading: boolean;
 } {
   const t = useT();
+  const attempt = useRetryIntent();
+  const inFlight = useRef(false);
   const [loading, setLoading] = useState(false);
   const { restaurantId, table, orderableItems, cart } = input;
 
   async function checkout(payLater = false): Promise<void> {
-    if (orderableItems.length === 0) {
+    if (inFlight.current) return;
+    payLater ||= attempt.pending();
+    if (orderableItems.length === 0 && !attempt.pending()) {
       input.notify(t("notice.allSoldOut"));
       return;
     }
+    inFlight.current = true;
     setLoading(true);
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: (payLater ? attempt.body : JSON.stringify)({
           restaurantId,
           tableId: table?.id ?? null,
           tableLabel: table?.label ?? null,
@@ -89,6 +95,7 @@ export function useCheckout(input: CheckoutInput): {
         }),
       });
       const data = await res.json();
+      if (payLater && ((res.ok && data.deferred && data.orderId) || (!res.ok && res.status < 500))) attempt.clear();
       // Deferred: the food is already with the kitchen, so there is no Stripe
       // hop. Remember the id — it is the only thing that tells this phone's
       // share apart from the rest of the table's on the bill.
@@ -157,6 +164,8 @@ export function useCheckout(input: CheckoutInput): {
     } catch {
       input.notify(t("notice.network"));
       setLoading(false);
+    } finally {
+      inFlight.current = false;
     }
   }
 

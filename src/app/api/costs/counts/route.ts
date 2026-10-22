@@ -22,10 +22,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const blocked = await costsBlocks(actor.restaurantId);
   if (blocked) return blocked;
-  const body = await jsonBody<{ counts?: unknown }>(req);
+  const body = await jsonBody<{ counts?: unknown; ref?: unknown }>(req);
   if (!Array.isArray(body?.counts) || body.counts.length === 0 || body.counts.length > MAX_INGREDIENTS) {
     return await apiError("apiErr.countEmpty", 400);
   }
+  const ref = uuidOf(body?.ref);
+  if (body?.ref !== undefined && !ref) return await apiError("apiErr.invalidRequest", 400);
   const counted = new Map<string, number>();
   for (const raw of body.counts as { ingredientId?: unknown; counted?: unknown }[]) {
     const id = uuidOf(raw?.ingredientId);
@@ -36,18 +38,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // What the books say and where the count starts belong to one database
   // operation. A delivery between a read and an insert used to disappear.
-  const { data, error } = await createAdminClient().rpc("record_ingredient_counts", {
+  const { data, error } = await createAdminClient().rpc(ref ? "record_ingredient_counts_once" : "record_ingredient_counts", {
+    ...(ref ? { p_ref: ref } : {}),
     p_restaurant: actor.restaurantId, p_actor: actor.email,
     p_counts: [...counted].map(([ingredient_id, quantity]) => ({ ingredient_id, counted: quantity })),
   });
   if (error) return await apiError("apiErr.generic", 500);
   if (!data) return await apiError("apiErr.notFound", 404);
-  const rows = data as { ingredient_id: string; counted: number; expected: number | null }[];
+  const rows = data as { ingredient_id: string; counted: number; expected: number | null; movement_cutoff?: number }[];
   await logEvent({
     restaurantId: actor.restaurantId, actor: actor.email, entity: "costs", action: "closed",
   });
   return NextResponse.json({
     ok: true,
-    results: rows.map(r => ({ ingredientId: r.ingredient_id, counted: r.counted, expected: r.expected })),
+    results: rows.map(r => ({ ingredientId: r.ingredient_id, counted: r.counted, expected: r.expected, ...(r.movement_cutoff === undefined ? {} : { movementCutoff: r.movement_cutoff }) })),
   });
 }

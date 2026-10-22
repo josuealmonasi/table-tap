@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
+import { useRetryIntent } from "@/hooks/useRetryIntent";
 import { useT } from "@/lib/i18n/context";
 
 /**
@@ -8,20 +9,28 @@ import { useT } from "@/lib/i18n/context";
  * null when it was saved. The routes already word their refusals in the
  * owner's language; a dropped connection is worded here.
  */
-export function useCostsSend(): (path: string, method: string, body: unknown) => Promise<string | null> {
+export function useCostsSend(retry = false): (path: string, method: string, body: unknown) => Promise<string | null> {
   const t = useT();
+  const attempt = useRetryIntent();
+  const inFlight = useRef(false);
   return useCallback(async (path, method, body) => {
+    if (inFlight.current) return t("common.saving");
+    inFlight.current = true;
     try {
       const res = await fetch(path, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: retry && body && typeof body === "object" ? attempt.body(body) : JSON.stringify(body),
       });
-      if (res.ok) return null;
-      const data = await res.json().catch(() => ({}));
+      if (res.ok && !retry) return null;
+      const data = await res.json();
+      if (retry && ((res.ok && data.ok) || (!res.ok && res.status < 500))) attempt.clear();
+      if (res.ok && (!retry || data.ok)) return null;
       return typeof data.error === "string" ? data.error : t("apiErr.generic");
     } catch {
       return t("done.networkError");
+    } finally {
+      inFlight.current = false;
     }
-  }, [t]);
+  }, [t, retry, attempt]);
 }

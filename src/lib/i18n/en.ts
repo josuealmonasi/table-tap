@@ -1495,6 +1495,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     coverDays: "Write how many days to buy for, a whole number from 1 to 60.",
     cashMovementNotFound: "That withdrawal is not here any more.",
     shiftAlreadyOpen: "A shift is already open: close it before opening another.",
+    shiftChanged: "This shift has changed. Refresh the page and count the open drawer again.",
     noOpenShift: "No shift is open: open one first.",
     shiftConfirm: "Confirm that you counted the cash to close the shift.",
     shiftNote: "Write why there was a difference.",

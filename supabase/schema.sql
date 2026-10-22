@@ -9072,3 +9072,216 @@ end;
 $$;
 revoke all on function public.recount_stock(uuid, uuid, int, int, int) from public, anon, authenticated;
 grant execute on function public.recount_stock(uuid, uuid, int, int, int) to service_role;
+
+-- S20: one reference belongs to one intent. Null keeps deployed writers working.
+alter table orders add column if not exists request_ref uuid;
+alter table orders add column if not exists request_scope text;
+create unique index if not exists orders_request_once on orders(restaurant_id, request_ref) where request_ref is not null;
+alter table cash_movements add column if not exists request_ref uuid;
+create unique index if not exists cash_movements_request_once on cash_movements(shift_id, request_ref) where request_ref is not null;
+alter table ingredient_purchases add column if not exists request_ref uuid;
+create unique index if not exists ingredient_purchases_request_once on ingredient_purchases(restaurant_id, request_ref) where request_ref is not null;
+alter table waste_entries add column if not exists request_ref uuid;
+create unique index if not exists waste_entries_request_once on waste_entries(restaurant_id, request_ref) where request_ref is not null;
+alter table ingredient_counts add column if not exists request_ref uuid;
+create unique index if not exists ingredient_counts_request_once on ingredient_counts(restaurant_id, request_ref, ingredient_id) where request_ref is not null;
+alter table cash_shifts add column if not exists close_ref uuid;
+alter table cash_shifts add column if not exists close_result jsonb;
+create unique index if not exists cash_shifts_close_once on cash_shifts(restaurant_id, close_ref) where close_ref is not null;
+
+create or replace function public.order_intent_result(p_restaurant uuid, p_ref uuid, p_scope text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare o orders;
+begin
+  select * into o from orders where restaurant_id = p_restaurant and request_ref = p_ref;
+  if not found then return null; end if;
+  if o.request_scope is distinct from p_scope then return '{"conflict":true}'::jsonb; end if;
+  return jsonb_build_object('orderId', o.id, 'sessionId', o.session_id, 'table', o.table_label, 'total', o.total, 'repeat', true);
+end;
+$$;
+revoke all on function public.order_intent_result(uuid, uuid, text) from public, anon, authenticated;
+grant execute on function public.order_intent_result(uuid, uuid, text) to service_role;
+
+create or replace function public.create_order_intent(
+  p_restaurant uuid, p_ref uuid, p_scope text, p_order jsonb, p_demand jsonb,
+  p_inventory boolean, p_threshold int, p_coupon jsonb
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_result jsonb; v_stock jsonb; v_reservation uuid; v_id uuid; v_coupon coupons;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform pg_advisory_xact_lock(hashtextextended(p_restaurant::text || p_ref::text, 20));
+  v_result := public.order_intent_result(p_restaurant, p_ref, p_scope);
+  if v_result is not null then return v_result; end if;
+  if p_ref is null or nullif(p_scope, '') is null then raise exception 'missing order reference'; end if;
+  -- Stock and coupon failures roll each other back, along with the ticket.
+  begin
+    if p_inventory then
+      v_reservation := gen_random_uuid();
+      v_stock := public.reserve_stock(p_restaurant, p_demand, p_threshold, v_reservation);
+      if not (v_stock->>'ok')::boolean then return v_stock; end if;
+    end if;
+    if p_coupon is not null then
+      select * into v_coupon from coupons where id = (p_coupon->>'id')::uuid and restaurant_id = p_restaurant for update;
+      if not found or v_coupon.staff_only or v_coupon.min_subtotal > (p_order->>'subtotal')::numeric
+        or (v_coupon.kind, v_coupon.value, v_coupon.code) is distinct from
+           (p_coupon->>'kind', (p_coupon->>'value')::numeric, p_coupon->>'code')
+        or public.redeem_coupon(v_coupon.id) is null then
+        raise exception using errcode = 'PT020', message = 'coupon unavailable';
+      end if;
+    end if;
+    insert into orders(restaurant_id, request_ref, request_scope, table_id, table_label, session_id, diner,
+      stock_managed, stock_reservation_id, status, paid, subtotal, service_fee, tip, tax_pct,
+      discount, platform_fee, coupon_code, promo_detail, total, currency, items, note, customer_name)
+    values(p_restaurant, p_ref, p_scope, (p_order->>'table_id')::uuid, p_order->>'table_label',
+      (p_order->>'session_id')::uuid, p_order->>'diner', true, v_reservation, 'received', false,
+      (p_order->>'subtotal')::numeric, (p_order->>'service_fee')::numeric, (p_order->>'tip')::numeric,
+      (p_order->>'tax_pct')::numeric, (p_order->>'discount')::numeric, 0, p_order->>'coupon_code',
+      p_order->'promo_detail', (p_order->>'total')::numeric, p_order->>'currency', p_order->'items',
+      p_order->>'note', p_order->>'customer_name')
+    on conflict (restaurant_id, request_ref) where request_ref is not null do nothing returning id into v_id;
+    if v_id is null then
+      -- Roll back this attempt's reservations before returning the winner.
+      raise exception using errcode = 'PT021', message = 'order already recorded';
+    end if;
+    if p_coupon is not null then
+      insert into coupon_redemptions(restaurant_id, coupon_id, order_id, code, amount, confirmed_at)
+      values(p_restaurant, v_coupon.id, v_id, v_coupon.code, (p_order->'promo_detail'->>'coupon')::numeric, clock_timestamp());
+    end if;
+  exception when sqlstate 'PT020' then return '{"couponReason":"limitReached"}'::jsonb;
+    when sqlstate 'PT021' then return public.order_intent_result(p_restaurant, p_ref, p_scope);
+  end;
+  return (public.order_intent_result(p_restaurant, p_ref, p_scope) - 'repeat') || jsonb_build_object('low', coalesce(v_stock->'low', '[]'::jsonb));
+end;
+$$;
+revoke all on function public.create_order_intent(uuid, uuid, text, jsonb, jsonb, boolean, int, jsonb) from public, anon, authenticated;
+grant execute on function public.create_order_intent(uuid, uuid, text, jsonb, jsonb, boolean, int, jsonb) to service_role;
+
+create or replace function public.create_cash_withdrawal_once(
+  p_restaurant uuid, p_shift uuid, p_amount numeric, p_note text, p_actor text, p_ref uuid
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare s cash_shifts; m cash_movements;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into m from cash_movements where restaurant_id = p_restaurant and shift_id = p_shift and request_ref = p_ref;
+  if found then return jsonb_build_object('id', m.id, 'currency', m.currency); end if;
+  select * into s from cash_shifts where restaurant_id = p_restaurant and id = p_shift and closed_at is null for update;
+  if not found then return null; end if;
+  if p_ref is null or p_amount is null or p_amount <= 0 or p_amount > 1000000 or p_amount <> round(p_amount, 2)
+    or nullif(btrim(p_actor), '') is null then raise exception 'invalid cash withdrawal'; end if;
+  insert into cash_movements(restaurant_id, shift_id, request_ref, currency, kind, amount, note, actor_email, created_at)
+    values(p_restaurant, s.id, p_ref, s.currency, 'withdrawal', p_amount, p_note, p_actor, clock_timestamp())
+    on conflict (shift_id, request_ref) where request_ref is not null do nothing returning * into m;
+  if m.id is null then select * into m from cash_movements where shift_id = p_shift and request_ref = p_ref and restaurant_id = p_restaurant; end if;
+  return jsonb_build_object('id', m.id, 'currency', m.currency);
+end;
+$$;
+revoke all on function public.create_cash_withdrawal_once(uuid, uuid, numeric, text, text, uuid) from public, anon, authenticated;
+grant execute on function public.create_cash_withdrawal_once(uuid, uuid, numeric, text, text, uuid) to service_role;
+
+create or replace function public.record_purchase_once(
+  p_restaurant uuid, p_ingredient uuid, p_packs numeric, p_total numeric, p_actor text, p_ref uuid
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare i ingredients; v_id uuid; v_price numeric;
+begin
+  perform public.lock_ingredient_movements(p_restaurant);
+  select id into v_id from ingredient_purchases where restaurant_id = p_restaurant and request_ref = p_ref;
+  if found then return v_id; end if;
+  if p_ref is null or p_packs <= 0 then return null; end if;
+  select * into i from ingredients where id = p_ingredient and restaurant_id = p_restaurant and archived_at is null for update;
+  if not found then return null; end if;
+  insert into ingredient_purchases(restaurant_id, ingredient_id, request_ref, quantity, total, recorded_by)
+    values(p_restaurant, p_ingredient, p_ref, p_packs * i.pack_size, p_total, p_actor)
+    on conflict (restaurant_id, request_ref) where request_ref is not null do nothing returning id into v_id;
+  if v_id is null then select id into v_id from ingredient_purchases where restaurant_id = p_restaurant and request_ref = p_ref; return v_id; end if;
+  v_price := round(p_total / p_packs, 2);
+  if v_price is distinct from i.pack_price then update ingredients set pack_price = v_price, updated_by = p_actor where id = p_ingredient; end if;
+  return v_id;
+end;
+$$;
+revoke all on function public.record_purchase_once(uuid, uuid, numeric, numeric, text, uuid) from public, anon, authenticated;
+grant execute on function public.record_purchase_once(uuid, uuid, numeric, numeric, text, uuid) to service_role;
+
+create or replace function public.record_waste_once(
+  p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric,
+  p_reason text, p_note text, p_cost numeric, p_actor text, p_ref uuid
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare v_id uuid; v_name text; v_stock int;
+begin
+  -- Product waste takes its item lock before the movement lock, like sales.
+  if p_item is not null then perform 1 from menu_items where id = p_item and restaurant_id = p_restaurant for update; end if;
+  perform public.lock_ingredient_movements(p_restaurant);
+  select id into v_id from waste_entries where restaurant_id = p_restaurant and request_ref = p_ref;
+  if found then return v_id; end if;
+  if p_ref is null or (p_ingredient is null) = (p_item is null) then return null; end if;
+  if p_ingredient is not null then
+    select name into v_name from ingredients where id = p_ingredient and restaurant_id = p_restaurant and archived_at is null for update;
+  else
+    select name, stock into v_name, v_stock from menu_items where id = p_item and restaurant_id = p_restaurant;
+  end if;
+  if v_name is null then return null; end if;
+  perform set_config('tabletap.stock_movement', 'on', true);
+  insert into waste_entries(restaurant_id, ingredient_id, item_id, request_ref, name, quantity, reason, note, cost, recorded_by)
+    values(p_restaurant, p_ingredient, p_item, p_ref, v_name, p_quantity, p_reason, p_note, p_cost, p_actor)
+    on conflict (restaurant_id, request_ref) where request_ref is not null do nothing returning id into v_id;
+  if v_id is null then select id into v_id from waste_entries where restaurant_id = p_restaurant and request_ref = p_ref; return v_id; end if;
+  if v_stock is not null then
+    update menu_items set stock = greatest(v_stock - ceil(p_quantity)::int, 0),
+      available = case when v_stock - ceil(p_quantity)::int <= 0 then false else available end,
+      stock_auto_off = case when v_stock - ceil(p_quantity)::int <= 0 and available then true else stock_auto_off end where id = p_item;
+  end if;
+  return v_id;
+end;
+$$;
+revoke all on function public.record_waste_once(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid) from public, anon, authenticated;
+grant execute on function public.record_waste_once(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid) to service_role;
+
+create or replace function public.record_ingredient_counts_once(p_restaurant uuid, p_counts jsonb, p_actor text, p_ref uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_results jsonb;
+begin
+  perform public.lock_ingredient_movements(p_restaurant);
+  select jsonb_agg(jsonb_build_object('ingredient_id', ingredient_id, 'counted', counted, 'expected', expected,
+    'movement_cutoff', movement_cutoff) order by ingredient_id) into v_results from ingredient_counts
+    where restaurant_id = p_restaurant and request_ref = p_ref;
+  if v_results is not null then return v_results; end if;
+  if p_ref is null or jsonb_typeof(p_counts) is distinct from 'array' then raise exception 'invalid counts'; end if;
+  if jsonb_array_length(p_counts) not between 1 and 500 or exists (
+    select 1 from jsonb_to_recordset(p_counts) as c(ingredient_id uuid, counted numeric)
+      where ingredient_id is null or counted is null or counted < 0 or counted > 10000000
+        or counted::text in ('NaN', 'Infinity', '-Infinity') or counted <> round(counted, 3)
+  ) or (select count(distinct c->>'ingredient_id') from jsonb_array_elements(p_counts) c) <> jsonb_array_length(p_counts) then raise exception 'invalid counts'; end if;
+  if exists(select 1 from jsonb_to_recordset(p_counts) as c(ingredient_id uuid) where not exists(
+    select 1 from ingredients i where i.id = c.ingredient_id and i.restaurant_id = p_restaurant and i.archived_at is null
+  )) then return null; end if;
+  insert into ingredient_counts(restaurant_id, ingredient_id, request_ref, counted, counted_by)
+    select p_restaurant, c.ingredient_id, p_ref, c.counted, p_actor from jsonb_to_recordset(p_counts) as c(ingredient_id uuid, counted numeric)
+    on conflict (restaurant_id, request_ref, ingredient_id) where request_ref is not null do nothing;
+  select jsonb_agg(jsonb_build_object('ingredient_id', ingredient_id, 'counted', counted, 'expected', expected,
+    'movement_cutoff', movement_cutoff) order by ingredient_id) into v_results from ingredient_counts
+    where restaurant_id = p_restaurant and request_ref = p_ref;
+  return v_results;
+end;
+$$;
+revoke all on function public.record_ingredient_counts_once(uuid, jsonb, text, uuid) from public, anon, authenticated;
+grant execute on function public.record_ingredient_counts_once(uuid, jsonb, text, uuid) to service_role;
+
+create or replace function public.close_cash_shift_once(p_restaurant uuid, p_shift uuid, p_counted numeric, p_actor text, p_ref uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare s cash_shifts; v_result jsonb;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if p_ref is null then return null; end if;
+  select * into s from cash_shifts where restaurant_id = p_restaurant and close_ref = p_ref;
+  if found then
+    if s.id = p_shift then return s.close_result; end if;
+    return null;
+  end if;
+  -- The old closer still computes and signs the count under this same lock.
+  v_result := public.close_cash_shift(p_restaurant, p_shift, p_counted, p_actor);
+  if v_result is null then return null; end if;
+  update cash_shifts set close_ref = p_ref, close_result = v_result where restaurant_id = p_restaurant and id = p_shift;
+  return v_result;
+end;
+$$;
+revoke all on function public.close_cash_shift_once(uuid, uuid, numeric, text, uuid) from public, anon, authenticated;
+grant execute on function public.close_cash_shift_once(uuid, uuid, numeric, text, uuid) to service_role;

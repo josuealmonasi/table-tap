@@ -47,8 +47,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const blocked = await costsBlocks(actor.restaurantId);
   if (blocked) return blocked;
-  const body = await jsonBody<{ ingredientId?: unknown; itemId?: unknown; quantity?: unknown; reason?: unknown; note?: unknown }>(req);
+  const body = await jsonBody<{ ingredientId?: unknown; itemId?: unknown; quantity?: unknown; reason?: unknown; note?: unknown; ref?: unknown }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
+  const ref = uuidOf(body?.ref);
+  if (body?.ref !== undefined && !ref) return await apiError("apiErr.invalidRequest", 400);
   const ingredientId = uuidOf(body.ingredientId);
   const itemId = uuidOf(body.itemId);
   if (!ingredientId === !itemId) return await apiError("apiErr.wasteWhat", 400);
@@ -59,7 +61,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!reason) return await apiError("apiErr.wasteReason", 400);
 
   const cost = await costOf(actor.restaurantId, ingredientId, itemId, quantity);
-  const { data: id, error } = await createAdminClient().rpc("record_waste", {
+  const { data: id, error } = await createAdminClient().rpc(ref ? "record_waste_once" : "record_waste", {
+    ...(ref ? { p_ref: ref } : {}),
     p_restaurant: actor.restaurantId, p_ingredient: ingredientId, p_item: itemId, p_quantity: quantity,
     p_reason: reason, p_note: wasteNote(body.note), p_cost: cost, p_actor: actor.email,
   });
