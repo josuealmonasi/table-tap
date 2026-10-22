@@ -45,7 +45,7 @@ export function addonActions(ctx: EditorContext) {
 
   // ── Availability toggle (products and add-ons) — optimistic, rolls back on failure ──
   async function setAvailability(id: string, available: boolean): Promise<void> {
-    if (!ctx.ready()) return;
+    if (!(await ctx.ready())) return;
     const prevProducts = products;
     const prevAddons = addons;
     setProducts(prev => prev.map(p => (p.id === id ? { ...p, available } : p)));
@@ -63,7 +63,7 @@ export function addonActions(ctx: EditorContext) {
 
   // ── Which add-ons a product offers (replace the full set) ──
   async function setProductAddons(productId: string, addonIds: string[]): Promise<void> {
-    if (!ctx.ready()) throw new Error("Menu has not loaded");
+    if (!(await ctx.ready())) throw new Error("Menu has not loaded");
     const { error: delErr } = await supabase
       .from("item_addons")
       .delete()

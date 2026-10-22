@@ -7,7 +7,7 @@ const update = vi.fn();
 const request = vi.fn();
 const run = vi.fn(async (_key, query) => { await query; });
 const ctx = {
-  ready: () => true, restaurantId: "r", products: [{ id: "p", stock: 10, stock_epoch: 0 }], sections: [], links: {},
+  ready: async () => true, restaurantId: "r", products: [{ id: "p", stock: 10, stock_epoch: 0 }], sections: [], links: {},
   supabase: { from: () => ({ update: (input: unknown) => {
     update(input); return { eq: async () => ({ error: null }) };
   } }) },
@@ -38,7 +38,7 @@ it("surfaces a refused recount and does not continue the save", async () => {
   expect(ctx.reload).toHaveBeenCalled();
 });
 it("J17: does not edit or duplicate before the complete state is ready", async () => {
-  const loading = { ...ctx, ready: () => false };
+  const loading = { ...ctx, ready: async () => false };
   await expect(productActions(loading).updateProduct("p", { description: "New" })).rejects.toThrow("Menu has not loaded");
   expect(await productActions(loading).duplicateProduct("p")).toBeUndefined();
   expect(await menuActions(loading).duplicateMenu("m")).toBeUndefined();

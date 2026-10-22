@@ -39,7 +39,8 @@ export interface AddonInput {
 
 /** What every group of editor actions works from: the client, the state and the writer. */
 export interface EditorContext {
-  ready: () => boolean;
+  /** Resolves once the latest read finishes: true only when the whole menu is held. */
+  ready: () => Promise<boolean>;
   supabase: ReturnType<typeof createClient>;
   restaurantId: string;
   toast: ReturnType<typeof useToast>;

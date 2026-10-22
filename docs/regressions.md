@@ -37,7 +37,7 @@ us, and what now catches each one.
 | A physical recount and older reservation releases use different generations (S13 J6) | Cancelling two held portions after a count of five raised it to seven |
 | Legacy stock returns require a deduction record (S13 J7) | An old untracked sale returned portions only counted later |
 | Editing and duplication wait for every menu page (S13 J17) | A thousand-row cap or read failure silently removed dishes and extras from the editor |
-| A reload after a save keeps the menu on screen; only edits wait (J17 follow-up) | Every save swapped the editor for skeletons: 289 buttons fell to 7 and the page jumped from 2,388 px to 172 px |
+| A reload after a save keeps the menu on screen, and an edit made meanwhile waits for it (J17 follow-up) | Every save swapped the editor for skeletons: 289 buttons fell to 7 and the page jumped from 2,388 px to 172 px |
 | Waiter orders and checkout use the same alert preference (S13 J18) | Turning off stock alerts still left waiter orders filling the bell |
 | A reward handover names the displayed round, step and saved retry key (S15 J8) | Two identical requests closed one round and spent the same step in the next |
 | Browser deadlines include context teardown and the whole run (S8b) | A dead worker left layout waiting on an unbounded browser call for over three hours |
@@ -3452,9 +3452,15 @@ browser probe the save of the lowest dish dropped the page from 289 buttons to
 after the first dialog that saved, every later button was gone, and the menu's
 55 dish dialogs went unvisited while the visit still passed.
 
-A reload now keeps the menu on screen and only blocks edits until it is whole.
-A failed reload still shows the loading state, so a stale menu never looks
-editable. `menu-load.spec.ts` holds a reload open and checks both.
+A reload now keeps the menu on screen. Keeping it there made a second
+problem visible: every writer refused with a bare `if (!ready()) return;`, so a
+switch flipped during the read was dropped without a word. Every writer now
+awaits `ready()`, which resolves when the newest read finishes. It is true only
+when that read holds the whole menu, so the edit applies a moment later, or not
+at all if the read failed. A failed reload still shows the loading state, so a
+stale menu never looks editable. `menu-load.spec.ts` holds reads open and
+checks all three: the edit waits, it is never sent after a failed read, and it
+waits for the newest read rather than the one it found running.
 
 ## S13 J18 — the manager decides when the bell warns
 
