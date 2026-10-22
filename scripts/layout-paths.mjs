@@ -117,12 +117,14 @@ export const DIALOGS = {
     { name: "add table", text: "Agregar mesa" },
   ],
   // The till's sheets. «Cobrar en efectivo» does nothing on an empty sale, so
-  // the sweep that clicks what is enabled never reached the charge; `before`
-  // puts a dish in the sale first (cross-review of batch 5). Both are closed
-  // with Escape, which the visit requires to work.
+  // the sweep that clicks what is enabled never reached the charge. `prepare`
+  // and `open` name steps in layout-visits.mjs (cross-review of batch 5);
+  // `shows` is the sheet itself, so a dish sheet never passes for the charge;
+  // `required` because the demo always has dishes. Both close with Escape,
+  // which the visit requires to work.
   "/dashboard/pos": [
-    { name: "the till's charge", before: [{ click: ".tt-pos-tile:not(.tt-pos-tile-out)" }, { text: "Agregar al carrito" }], text: "Cobrar en efectivo" },
-    { name: "a dish on the till", click: ".tt-pos-tile:not(.tt-pos-tile-out)" },
+    { name: "the till's charge", prepare: "dishInSale", text: "Cobrar en efectivo", shows: ".tt-pos-ask", required: true },
+    { name: "a dish on the till", open: "dishSheet", shows: ".tt-detail-overlay .tt-detail-panel", required: true },
   ],
   "/dashboard/promotions": [
     { name: "new combo", text: "Nuevo combo" },
