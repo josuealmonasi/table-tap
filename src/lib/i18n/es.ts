@@ -224,6 +224,7 @@ export const es: Messages = {
   },
   menu: {
     reloadFailed: "No pudimos cargar todo el menú. Tus cambios siguen aquí. Vuelve a intentar antes de guardar.",
+    retrying: "Cargando menú…",
     stock: "Existencias",
     stockHint: "Vacío: lo maneja el interruptor. Con número: se descuenta y sale de la carta al llegar a cero.",
     stockLocked: "Contar existencias viene con los planes de paga.",

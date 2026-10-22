@@ -13,16 +13,23 @@ export function useDirtyClose(dirty: boolean, onClose: () => void, busy = false)
   const confirm = useConfirm();
   const t = useT();
   const pending = useRef<Promise<boolean> | null>(null);
+  const mounted = useRef(true);
   const latest = useRef({ dirty, busy });
   useLayoutEffect(() => { latest.current = { dirty, busy }; });
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   async function allowed(): Promise<boolean> {
     if (latest.current.busy) return false;
     if (!latest.current.dirty) return true;
     // Holding Escape or clicking twice must never replace an unanswered ask.
-    if (pending.current) return pending.current;
-    if (modal) modal.confirming = true;
-    pending.current = confirm({ title: t("common.discardTitle"), message: t("common.discardBody"), confirmLabel: t("common.discard"), cancelLabel: t("common.keepEditing"), danger: true });
-    try { return await pending.current; } finally { pending.current = null; if (modal) modal.confirming = false; }
+    if (!pending.current) {
+      if (modal) modal.confirming = true;
+      pending.current = confirm({ title: t("common.discardTitle"), message: t("common.discardBody"), confirmLabel: t("common.discard"), cancelLabel: t("common.keepEditing"), danger: true });
+    }
+    // A save or unmount can overtake the question; its answer cannot close it.
+    try { return await pending.current && !latest.current.busy && mounted.current; } finally { pending.current = null; if (modal) modal.confirming = false; }
   }
   useLayoutEffect(() => {
     if (!modal) return;

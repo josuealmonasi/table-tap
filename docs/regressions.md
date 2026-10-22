@@ -67,6 +67,9 @@ us, and what now catches each one.
 | A field takes no more than is kept (S23 K14, K21, K24) | An edited coupon code said updated and kept the old one; a 200-character kitchen note lost its last 50; a MX$12.34 tip was refused |
 | A coupon's hours are the restaurant's, with their offset (S23 K15) | 18:00Z showed to a Mexico City manager as 18:00, meaning 12:00 |
 | Unsaved price, recipe and deal edits ask before closing (S23 K19) | Escape or the backdrop dropped a MX$80 to MX$100 price change without a word |
+| A replacement confirmation settles the old ask and keeps focus (S23b 3 / Q3) | A second question stranded the MX$80 to MX$100 discard guard; saving during the question could still discard |
+| Retry is inside the retained menu draft's dialog (S23b 4 / Q4) | A failed reload after a 10 to 9 stock conflict covered Retry with the modal holding a recount of 5 and a 200-character description |
+| A confirmed write has affected rows behind it (S23b 5 / Q8) | An RLS-filtered MX$5 to MX$10 extra edit and table 7 to 8 rename said done after changing zero rows |
 | The Spanish screen speaks Spanish, refusals and Stripe lines included (S23 K23) | Pricing refusals, sign-in errors and the service and tip lines on the payment page were English |
 | A password reset answers the same whatever the provider says (S23 cross-review 2) | Supabase rate-limits only existing addresses, so showing its 429 told anyone which emails had accounts |
 | A coupon edit is refused when it changes the code, and a missing coupon is not found (S23 cross-review 6) | A new code answered 200 while the old one stayed; an id from elsewhere answered ok for an update that touched nothing |
@@ -3948,3 +3951,36 @@ cross-review fixes:
   which.** The placeholders were the only names, and a filled field has
   none. Every field is now a `.tt-field` label above its input. The type
   select grew to 160 px, because «% de descuento» was clipped at 130.
+
+### The discard question must finish (S23b finding 3, Q3)
+
+The confirmation provider and the dirty-close guard had to agree on when an
+ask finished. Replacing the single resolver left the first caller waiting
+forever. A newer question now cancels the older one, and provider unmount
+cancels its pending answer. The confirmation contains keyboard and programmatic
+focus, restores it on close, and sits above a menu form's portal. The guard
+checks saving and mounting again after the answer. `s23b-confirm.spec.tsx`
+exercises the real provider, including the MX$80 to MX$100 draft, replacement,
+unmount, a save overtaking discard, and Tab in both directions.
+
+### A retained draft must be able to retry (S23b finding 4, Q4)
+
+The reload notice and the active form had to agree on where recovery lived.
+Retry was outside a disabled fieldset, but behind its modal. Menu dialogs now
+keep a stable portal outside that fieldset, put the same retry notice inside
+the dialog, and disable only its form after a failed read. The portal and form
+wrapper stay mounted through failure and recovery, preserving the draft.
+`s23b-retry.spec.tsx` checks that recovery stays outside the disabled draft.
+The writer's separate J17 readiness check still refuses every mutation until
+the latest read holds the complete menu; `menu-load.spec.ts` checks that rule.
+
+### A null error does not mean a row changed (S23b finding 5, Q8)
+
+RLS and form feedback had to agree on what success meant. An update filtered
+to zero rows returned no error, so the extra form closed with MX$5 still saved
+and a table rename reported success with its old label. Menu and table writers
+now request affected rows, and `writeError` checks the returned rows or exact
+count before confirming. Reorder checks both siblings, optimistic switches
+roll back, inserts require an id, and imports and bulk deletes require the
+whole expected count. `s23b-writes.spec.ts` pairs zero rows with explicit errors
+and checks successful writes as well.

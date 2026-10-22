@@ -21,6 +21,8 @@ import SectionEditor from "./SectionEditor";
 import ImportMenuDialog from "./ImportMenuDialog";
 import EditorHeader from "./EditorHeader";
 import { OrdersIcon } from "@/components/ui/icons";
+import { ModalRecoveryContext } from "@/components/ui/ModalRecovery";
+import MenuReloadNotice from "./MenuReloadNotice";
 
 interface MenuEditorProps {
   restaurant: Restaurant;
@@ -97,16 +99,15 @@ export default function MenuEditor({
 
   const menuEmpty = menuSections.length === 0 && menuProducts.length === 0;
   const addSection = (name: string) => editor.addSection(menuId, name);
+  const recoveryNotice = editor.loadFailed ? <MenuReloadNotice reload={editor.reload} /> : null;
 
   return (
     <DietaryTagsProvider tags={dietaryTags}>
       <IconGroupsProvider groups={iconGroups}>
         <div className="tt-dash">
           <div className="container">
-            {editor.loadFailed && <div role="alert" className="tt-section">
-              <p>{t("menu.reloadFailed")}</p>
-              <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={editor.reload}>{t("fallback.retry")}</button>
-            </div>}
+            {recoveryNotice}
+            <ModalRecoveryContext.Provider value={{ blocked: editor.loadFailed, notice: recoveryNotice }}>
             <fieldset disabled={editor.loadFailed} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
             <ImportMenuDialog
               open={importing !== null}
@@ -295,6 +296,7 @@ export default function MenuEditor({
               />
             )}
             </fieldset>
+            </ModalRecoveryContext.Provider>
           </div>
         </div>
       </IconGroupsProvider>
