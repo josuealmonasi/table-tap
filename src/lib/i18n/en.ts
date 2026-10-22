@@ -1504,6 +1504,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     restaurantDeleteProvider: "A card payment or refund still needs confirmation. Check its result before deleting this restaurant.",
     restaurantDeleteOfflineSale: "Review the offline sales already collected before deleting this restaurant.",
     restaurantDeleteRefundFee: "This restaurant's share of the fee on refunded payments hasn't been returned yet. Finish returning it before deleting the restaurant.",
+    restaurantDeleteRefundFeeVerification: "We still need to check whether this restaurant is owed any fees on refunded payments. Open Bills and finish checking the refunds before deleting the restaurant.",
     retryConflict: "This was already sent before with different details, so nothing new was recorded. Check what was recorded before starting again.",
     adminAuditUnavailable: "The admin activity log is unavailable. Try again later.",
     adminActionUncertain: "This action may have completed, but its result could not be confirmed. Check the restaurant or login before trying again.",

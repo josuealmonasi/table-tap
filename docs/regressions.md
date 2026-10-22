@@ -4220,3 +4220,89 @@ Every other card in the header carries `margin-top: 12px`, and the request
 chip, which is shared with the staff bar, had none. `.tt-menu-header
 .tt-request-chip` gets it there only. Measured at 390 px: 12 px between the
 banners, and 12 px to the card.
+
+## Batch 5, second cross-review — refund fees (findings 2 and 4)
+
+| Rule | The bug it came from | What checks it |
+|---|---|---|
+| Customer completion and deletion agree that an unchecked fee is unknown | A completed MX$0.10 refund let deletion erase MX$3 owed when the first provider read failed | `batch5-fee-schema.spec.ts`, `fee-recovery.spec.ts`, `fee-verification.spec.ts` |
+| A cumulative fee target and an individual attempt are separate | A saved 300-cent request could never return the remaining 200 after someone separately returned 100 | `fee-recovery.spec.ts` in MXN and USD |
+
+### Finding 2 — an unchecked fee looked like zero
+
+Both refund books now carry `fee_verification_pending` from creation and set
+it with customer completion. Deletion checks that fact under the money lock
+before copying or deleting anything. Fee verification records the provider's
+cumulative target separately, including an explicit zero. Order refunds only
+finish fee verification for customer refund IDs seen in the provider snapshot;
+a refund completed after that snapshot waits for its own check. A short fee
+return stays pending, and customer completion still succeeds during an outage.
+
+Old completed rows with an existing reconciliation stay complete. A trusted
+saved checkout that requested no fee, or a local fee returned in full, also
+releases them through an idempotent backfill. No fee row is not proof of zero;
+unproved rows use the ordinary fee-only recovery from Bills. This deliberately
+blocks deletion until the provider is verified, while selling, collecting and
+customer refunds stay available. The new refusal is
+`apiErr.restaurantDeleteRefundFeeVerification`, in both languages.
+
+Claude can run this read-only production query **before applying the schema**
+to count existing completed rows without a fee reconciliation:
+
+```sql
+select 'refunds_due' as source, count(*) as awaiting_verification
+from refunds_due where refunded_at is not null and fee_reconciled_at is null
+union all
+select 'refund_operations' as source, count(*) as awaiting_verification
+from refund_operations
+where source = 'stripe' and status = 'succeeded' and fee_reconciled_at is null;
+```
+
+After applying it, this counts the remaining rows without proof and those
+already safe to release (the same check deletion uses):
+
+```sql
+with completed as (
+  select 'refunds_due' as source, restaurant_id, stripe_payment_intent,
+    fee_verification_pending, fee_reconciled_at
+  from refunds_due where refunded_at is not null
+  union all
+  select 'refund_operations' as source, restaurant_id, stripe_payment_intent,
+    fee_verification_pending, fee_reconciled_at
+  from refund_operations where source = 'stripe' and status = 'succeeded'
+)
+select source,
+  count(*) filter (where fee_verification_pending and fee_reconciled_at is null
+    and not public.refund_fee_proven_clear(restaurant_id, stripe_payment_intent)) as still_pending,
+  count(*) filter (where fee_reconciled_at is not null
+    or public.refund_fee_proven_clear(restaurant_id, stripe_payment_intent)) as verified_or_clear
+from completed group by source;
+```
+
+### Finding 4 — a saved request outlived the amount it could return
+
+Recovery first searches every page of the original attempt's provider evidence,
+then reads the fee again. A completed attempt can advance toward a larger target.
+An unseen attempt can advance only when its amount exceeds the entire fee still
+available at Stripe: even a delayed worker cannot apply that old request. If an
+unknown request could still land against a partial target, it stays pending.
+Each retired request and its evidence stay in `fee_request_history`; the next
+request is saved under the money lock with a comparison to the exact old request.
+The first Stripe key and metadata stay compatible; later attempts have their own
+number, key and metadata. MX$100 / US$100 with 300 cents owed and 100 separately
+returned now returns 200 exactly once, including after a lost response.
+
+Changed SQL functions: `finish_refund_operation`, `finish_refund_due_attempt`,
+`sync_refunded_platform_fee`, `guard_return_money`, `admin_delete_restaurant`.
+The immutable-money trigger permits the two new fee metadata fields while
+still protecting every amount, currency and original charge identity. New functions:
+`verify_refunded_platform_fee(uuid, text, int, int, text[])`,
+`advance_refund_due_fee(uuid, uuid, jsonb, int, int, int, text)`,
+`refund_fee_proven_clear(uuid, text)`. Existing signatures remain callable;
+the old sync only updates the fee ledger, leaving operation completion to the
+new verified-target function. New definers use the existing service-only grants
+and fixed search path; `drop.sql` includes every new function.
+
+Claude applies `schema.sql`, runs all shared-database gates, and checks both
+deletion refusals on screen. No shared database or live provider was used for
+this fix; Vitest mocks their boundaries.

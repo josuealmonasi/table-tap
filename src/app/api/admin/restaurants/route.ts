@@ -36,6 +36,7 @@ async function deleteRestaurant(req: NextRequest) {
         refund: "apiErr.restaurantDeleteRefund", refundDue: "apiErr.restaurantDeleteRefundDue",
         provider: "apiErr.restaurantDeleteProvider",
         offlineSale: "apiErr.restaurantDeleteOfflineSale", refundFee: "apiErr.restaurantDeleteRefundFee",
+        refundFeeVerification: "apiErr.restaurantDeleteRefundFeeVerification",
       };
       if (errors[data.outcome]) return await apiError(errors[data.outcome], 409);
       if (!["ready", "deleted", "gone"].includes(data.outcome)) return await apiError("apiErr.restaurantDelete", 500);
