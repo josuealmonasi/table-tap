@@ -27,6 +27,8 @@ us, and what now catches each one.
 | A promotion's terms and components commit and read together (S14 J2) | Separate writes and reads exposed a new price with old or missing dishes |
 | Frozen offers only switch off, through routes and direct writes (S14 J16) | A manager could edit or resume promotions and coupons on a frozen restaurant |
 | A menu copy keeps settings and publishes only after every row succeeds (S14 J14) | A partial, active copy lost discounts, schedules, dietary tags and preparation settings |
+
+| A printer fetch and confirmation name the same delivery generation (S16 J10) | A delayed GET fetched the next ticket, and an old confirmation closed a reprint |
 | A statement email is capped per account and per restaurant, never on the recipient (G5) | One account code could mail the same stranger ~400 times a day |
 | Coupon entitlements and card receipts agree before money moves (S5 E4) | A MX$90 discounted charge recorded MX$100 and could later reserve a MX$100 return |
 | A coupon use belongs to one checkout attempt (S5 E7) | An old expiry released the newer payment page's reservation on the same order |
@@ -3202,3 +3204,25 @@ renders the cash-return-only day and checks the return, cashier and print
 button, plus online returns, each non-collection activity and the truly empty
 day. Claude must check the screen and printed sheet in both languages at
 360/390/820/1280px, including the new currency-review sentences.
+
+## S16 / security review J10: a printer confirms only the copy it fetched
+
+The advertised token, the paper fetched and the confirmation had to agree on
+one delivery. GET ignored the token and returned the oldest pending ticket, so
+a second printer asking late for A received B but still confirmed A. Reprints
+also reused A's row id, so an old confirmation could close a new copy.
+
+Each requested copy now has a fresh `delivery_token`. GET matches that exact
+pending generation, and its claim checks the generation again so a concurrent
+reprint cannot be claimed as the old paper. DELETE has no oldest-pending
+fallback: it closes only the named, fetched generation on success. Missing,
+malformed, foreign, completed and superseded tokens cannot move another job.
+A jam leaves the same generation available to fetch again.
+
+`cloudprnt-delivery.spec.ts` reproduces the two-printer and late-confirmation
+races, repeated reprints, a reprint during GET, and claim/confirmation failures.
+`scripts/api-print-delivery.mjs` adds a real API case that fetches both the old
+and new copies, sends the old success confirmation, and checks that the new
+copy stays open until its own confirmation. It uses the gate's own order, which
+fixture teardown removes. Apply the schema and run `pnpm api` before shipping;
+check that deployed printer firmware echoes `jobToken` on GET and DELETE.
