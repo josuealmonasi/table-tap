@@ -52,6 +52,7 @@ us, and what now catches each one.
 | A coupon use belongs to one checkout attempt (S5 E7) | An old expiry released the newer payment page's reservation on the same order |
 | Financial scope and Stripe retries agree independently of fees (S5 E8) | Bills and fee-free split shares could open two payable pages |
 | Closing and changing a withdrawal share the money lock (S9 I1) | A withdrawal inserted or deleted after its shift closed rewrote the reviewed drawer |
+| The money gate independently reconciles signed shifts and terminal deposits (S19) | A correct receipt ledger hid a wrong drawer sign-off or deposit snapshot |
 | A drawer's amounts and labels keep its opening currency (S9 I2) | Changing the menu currency recalculated and relabelled an earlier shift |
 | Shift review follows closes and late receipts, as well as openings (S9 I13) | Overnight closes and next-day corrections disappeared from the handover |
 | Fee caps and remaining food principal agree (S5 E9) | Existing gratuities raised the ten-percent cap on bill and split fees |
@@ -3598,3 +3599,37 @@ deadline, so measurement cannot hang the run. Missing or remote listener data
 prints unavailable. `browser-restarts.spec.ts` checks the exact port, rejects
 unrelated process rows and preserves the peak after a lower later reading.
 Actual time and memory at one, two and three workers remain Claude's live proof.
+## S19 — the ledger, the signed drawer and the bank snapshot must agree
+
+The money gate previously compared payments with orders but never checked
+`cash_shifts.expected_cash` or `terminal_deposits.expected`. S9 and S10 could
+regress while the ledger still passed. `money-drawer.mjs` now reads every
+source through the gate's ordered pagination, independently rebuilds each
+closed shift at its close, and checks its signed expected amount and counted
+difference. Cash receipts recorded after the close, later refunds and later
+withdrawals cannot rewrite that sign-off. Imported return logs count once.
+
+Terminal snapshots are rebuilt from their receipt and return manifests using
+the saved fee rate: a same-day void reverses its fee, a later refund does not.
+Duplicate membership, omitted due returns and wrong totals name the offending
+row. The terminal ledger projection is also compared with raw receipts and
+allocations, so a missing late arrival fails even if the old deposit adds up.
+Unnamed receipts on signed days are printed individually as late adjustments;
+pending returns remain visible until a later deposit consumes them. Membership
+is the cutoff: a transaction can be dated before it waited for the money lock.
+
+The era is #527's merge time, `2026-10-22T00:44:04Z`. Every run prints how many
+older shifts and deposits it skips, plus checked counts, including zero.
+Modern rows without snapshot evidence fail. All reads, including the terminal
+projection RPC, are paginated; any read error fails the check. No writes or
+snapshot-calculation RPCs are used, including by `money:prod`.
+
+`money-drawer.spec.ts`, `money-drawer-history.spec.ts` and
+`money-terminal-returns.spec.ts` cover clean reconciliation, a MX$10 sign-off
+error, duplicate receipts/returns, missing late money, partial-page failures,
+legacy skips, later activity and return fees. Claude runs the live gates.
+The mock seed has a closed and an open shift, but its direct deposit inserts
+have no S10 manifests. Before expecting a clean modern deposit run, seed one
+unsigned sales day through `record_terminal_deposit_v1` after its receipts
+exist; older illustrative deposits need genuine pre-era dates. This task does
+not change the seed or schema.
