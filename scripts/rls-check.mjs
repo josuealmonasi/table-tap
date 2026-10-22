@@ -243,22 +243,58 @@ if (!signIn.error && theirs) {
     if (r1.status !== 200 || /"orders":\s*\[\]/.test(r1.text)) ok("table-bill of another restaurant's table is empty");
     else bad(`table-bill returned another restaurant's bill: ${r1.text.slice(0, 90)}`);
 
-    // Sent as the dialog sends it, with that table's real balance, so only the
-    // restaurant scope stands in the way. Without a balance the route asks for
-    // a refresh first, and this would pass without testing the scope at all.
-    const { data: theirOwed } = await admin.from("orders").select("total, currency")
-      .eq("table_id", theirTable).eq("paid", false);
-    const owed = Number((theirOwed ?? []).reduce((sum, o) => sum + Number(o.total), 0).toFixed(2)) || 1;
-    const payments = async () => (await admin.from("payments").select("id", { count: "exact", head: true })
-      .eq("restaurant_id", theirs.id)).count;
-    const before = await payments();
-    const r2 = await call("POST", "/api/table-payment", {
-      tableId: theirTable, settlement: "cash", expected: owed,
-      currency: theirOwed?.[0]?.currency ?? "MXN", ref: crypto.randomUUID(),
-    });
-    const after = await payments();
-    if (r2.status >= 400 && after === before) ok(`cannot settle another restaurant's table (${r2.status})`);
-    else bad(`settled another restaurant's table (${r2.status}, payments ${before} → ${after})`);
+    // A table each side owes exactly MX$200 on, with nothing collected, so
+    // the request below is one the rightful restaurant can collect. A real
+    // table's balance could already be part-paid, and a stale-balance refusal
+    // then passed here without the restaurant scope ever being tested
+    // (cross-review of batch 5). The positive control proves the request.
+    const collectable = async (restaurantId, label) => {
+      const { data: t, error: te } = await admin.from("restaurant_tables")
+        .insert({ restaurant_id: restaurantId, label }).select("id, label").single();
+      if (te || !t) throw new Error(`fixture table: ${te?.message}`);
+      const { data: sat, error: se } = await admin.from("table_sessions")
+        .insert({ restaurant_id: restaurantId, table_id: t.id }).select("id").single();
+      if (se || !sat) throw new Error(`fixture sitting: ${se?.message}`);
+      const { error: oe } = await admin.from("orders").insert({
+        restaurant_id: restaurantId, table_id: t.id, table_label: t.label, session_id: sat.id,
+        items: [], subtotal: 200, total: 200, currency: "MXN", status: "ready", paid: false, note: "rls-collect",
+      });
+      if (oe) throw new Error(`fixture order: ${oe.message}`);
+      return { table: t.id, session: sat.id };
+    };
+    const paidOn = async session => {
+      const { data, error } = await admin.from("payments").select("amount").eq("session_id", session);
+      if (error) throw new Error(`payments read: ${error.message}`);
+      return data;
+    };
+    const collect = table => call("POST", "/api/table-payment",
+      { tableId: table, settlement: "cash", expected: 200, currency: "MXN", ref: crypto.randomUUID() });
+    const since = new Date().toISOString();
+    const fixtures = [];
+    try {
+      const ours = await collectable(mine.id, `rls-collect-own-${Date.now()}`); fixtures.push(ours);
+      const next = await collectable(theirs.id, `rls-collect-next-${Date.now()}`); fixtures.push(next);
+      const control = await collect(ours.table);
+      const ownPaid = await paidOn(ours.session);
+      const own = ownPaid.reduce((sum, p) => sum + Number(p.amount), 0);
+      if (control.status === 200 && ownPaid.length === 1 && own === 200) ok("the same request collects our own MX$200 table (the control)");
+      else bad(`the control did not collect our own table (${control.status}, ${ownPaid.length} payment(s), MX$${own})`);
+      const r2 = await collect(next.table);
+      const nextPaid = await paidOn(next.session);
+      if (r2.status >= 400 && nextPaid.length === 0) ok(`cannot settle another restaurant's table (${r2.status})`);
+      else bad(`settled another restaurant's table (${r2.status}, ${nextPaid.length} payment(s))`);
+    } catch (error) {
+      bad(`the collection fixture could not run: ${error.message}`);
+    } finally {
+      for (const f of fixtures) {
+        await admin.from("payments").delete().eq("session_id", f.session);
+        await admin.from("orders").delete().eq("session_id", f.session);
+        await admin.from("table_sessions").delete().eq("id", f.session);
+        await admin.from("restaurant_tables").delete().eq("id", f.table);
+      }
+      await admin.from("user_logs").delete().eq("restaurant_id", mine.id).eq("entity", "bill").eq("action", "paid")
+        .eq("actor_email", signIn.data.user.email).gte("created_at", since);
+    }
 
     const r3 = await call("POST", "/api/bill/write-off", { tableId: theirTable, reason: "walkout" });
     if (r3.status >= 400) ok(`cannot cancel another restaurant's bill (${r3.status})`);
