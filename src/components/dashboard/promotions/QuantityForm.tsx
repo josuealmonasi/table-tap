@@ -235,9 +235,9 @@ export default function QuantityForm({
           ))}
           {/* Save is off until the breaks make sense; say which part does not. */}
           {!tiersComplete ? (
-            <span className="tt-muted" aria-live="polite">{t("promos.tierPriceNeeded")}</span>
+            <span className="tt-muted" style={{ fontSize: 13 }} aria-live="polite">{t("promos.tierPriceNeeded")}</span>
           ) : badTier ? (
-            <span className="tt-warn" aria-live="polite">{t("promos.noSaving")}</span>
+            <span className="tt-warn" style={{ fontSize: 13 }} aria-live="polite">{t("promos.noSaving")}</span>
           ) : null}
           <button
             type="button"
