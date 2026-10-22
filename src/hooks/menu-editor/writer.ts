@@ -4,6 +4,7 @@ import { reorderRows, type Reorderable, type ReorderTable } from "@/lib/menu-dat
 import { parsePlanLimit, planLimitText } from "@/lib/plan-error";
 import { planLabel } from "@/lib/plan";
 import { writeError, type WriteResult } from "@/lib/write-result";
+import type { MenuSnapshot } from "./types";
 
 interface WriterDeps {
   supabase: ReturnType<typeof createClient>;
@@ -11,10 +12,14 @@ interface WriterDeps {
   t: (key: string, vars?: Record<string, string | number>) => string;
   reload: () => Promise<void>;
   ready?: () => Promise<boolean>;
+  /** The menu the read `ready` waited for returned. */
+  latest?: { readonly current: MenuSnapshot };
 }
 
+const NO_MENU: MenuSnapshot = { menus: [], sections: [], products: [], addons: [], links: {} };
+
 /** How every write in the menu editor reports itself and refreshes. */
-export function makeWriter({ supabase, toast, t, reload, ready = async () => true }: WriterDeps) {
+export function makeWriter({ supabase, toast, t, reload, ready = async () => true, latest = { current: NO_MENU } }: WriterDeps) {
   /**
    * `key` names the action in the user's language. The raw Supabase message is
    * logged rather than shown: it is English, it leaks schema details, and it
@@ -85,17 +90,23 @@ export function makeWriter({ supabase, toast, t, reload, ready = async () => tru
     }
   }
 
-  /** Moves a row one step among its siblings, reporting any failure. */
+  /**
+   * Moves a row one step among its siblings, reporting any failure.
+   *
+   * The siblings are picked from the read `ready` waited for, not passed in:
+   * a list built when the arrow was pressed predates that read, and swapping
+   * positions it remembered wrote back an order the database no longer had.
+   */
   async function move(
     key: string,
     table: ReorderTable,
-    siblings: Reorderable[],
+    siblings: (menu: MenuSnapshot) => Reorderable[],
     id: string,
     direction: "up" | "down",
   ): Promise<boolean> {
     if (!(await ready())) return false;
     try {
-      if (!reportError(key, await reorderRows(supabase, table, siblings, id, direction))) return false;
+      if (!reportError(key, await reorderRows(supabase, table, siblings(latest.current), id, direction))) return false;
       await reload();
       return true;
     } catch {

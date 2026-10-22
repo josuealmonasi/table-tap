@@ -12,6 +12,7 @@ import { recordReviewed } from "@/lib/reviewed-collection";
 import { closeBill, summary } from "@/lib/part-payment";
 import { isDinerCurrency } from "@/lib/diner-currency";
 import { formatMoney } from "@/lib/format";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
@@ -70,12 +71,21 @@ async function collect(req: NextRequest): Promise<NextResponse> {
   // left a waiter holding the customer's cash. It collects as it always did,
   // against the live balance in the table's one currency; the stale-balance
   // check needs the figure the screen showed, so it starts at the next refresh.
+  //
+  // Only in the menu's currency, because that is the one that tab showed every
+  // figure in. A table owing only dollars at a peso restaurant would otherwise
+  // take the MX$100 the waiter typed as US$100 and clear the dollar debt
+  // (audit L, finding 2). Any other currency refreshes first.
   if (body.expected === undefined && body.currency === undefined && typeof body.tableId === "string") {
     const live = await tableOutstanding(actor.restaurantId, body.tableId);
     const owing = (live.balances ?? []).filter(b => b.owed > 0);
     if (owing.length > 1) return await apiError("apiErr.refreshToCollect", 409);
     if (owing.length === 0 && live.owed <= 0) return await apiError("apiErr.nothingToSettle", 409);
-    body.currency = owing[0]?.currency ?? live.currency ?? undefined;
+    const currency = owing[0]?.currency ?? live.currency ?? undefined;
+    const { data: menu } = await createAdminClient()
+      .from("restaurants").select("currency").eq("id", actor.restaurantId).maybeSingle();
+    if (!menu?.currency || currency !== menu.currency) return await apiError("apiErr.refreshToCollect", 409);
+    body.currency = currency;
     body.expected = owing[0]?.owed ?? live.owed;
   }
   if (!body.tableId || !["cash", "card"].includes(method ?? "") || !ref ||

@@ -3,7 +3,7 @@ import { writeError } from "@/lib/write-result";
 
 /** Extras, availability and which extras a product offers. */
 export function addonActions(ctx: EditorContext) {
-  const { supabase, restaurantId, products, addons, setProducts, setAddons, reload } =
+  const { supabase, restaurantId, addons, setProducts, setAddons, reload } =
     ctx;
   const { reportError, run, move } = ctx.w;
   // ── Add-on items ──
@@ -42,17 +42,15 @@ export function addonActions(ctx: EditorContext) {
   ) : Promise.resolve(false);
 
   async function moveAddon(id: string, direction: "up" | "down"): Promise<void> {
-    const addon = addons.find(a => a.id === id);
-    if (!addon) return;
-    const siblings = addons.filter(a => a.menu_id === addon.menu_id);
-    await move("write.reorderExtras", "menu_items", siblings, id, direction);
+    await move("write.reorderExtras", "menu_items", menu => {
+      const addon = menu.addons.find(a => a.id === id);
+      return addon ? menu.addons.filter(a => a.menu_id === addon.menu_id) : [];
+    }, id, direction);
   }
 
   // ── Availability toggle (products and add-ons) — optimistic, rolls back on failure ──
   async function setAvailability(id: string, available: boolean): Promise<void> {
     if (!(await ctx.ready())) return;
-    const prevProducts = products;
-    const prevAddons = addons;
     setProducts(prev => prev.map(p => (p.id === id ? { ...p, available } : p)));
     setAddons(prev => prev.map(a => (a.id === id ? { ...a, available } : a)));
     try {
@@ -64,8 +62,10 @@ export function addonActions(ctx: EditorContext) {
     } catch {
       reportError("write.updateAvailability", { message: "Availability did not save" });
     }
-    setProducts(prevProducts);
-    setAddons(prevAddons);
+    // Rolled back by reading what is saved. The arrays this was called with
+    // are the render before the read `ready` waited for, and putting them back
+    // undid that read too (audit L, finding 7).
+    await reload();
   }
 
   // ── Which add-ons a product offers (replace the full set) ──

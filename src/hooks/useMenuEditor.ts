@@ -11,6 +11,7 @@ import { menuActions } from "./menu-editor/menus";
 import { productActions } from "./menu-editor/products";
 import { importActions } from "./menu-editor/import";
 import { addonActions } from "./menu-editor/addons";
+import type { MenuSnapshot } from "./menu-editor/types";
 
 export type { AddonInput, ProductInput } from "./menu-editor/types";
 
@@ -38,6 +39,7 @@ export function useMenuEditor(restaurantId: string) {
   const [links, setLinks] = useState<Record<string, string[]>>({});
 
   const ready = useRef(false);
+  const latest = useRef<MenuSnapshot>({ menus: [], sections: [], products: [], addons: [], links: {} });
   const loadId = useRef(0);
   // The read in flight. The menu stays on screen while it runs, so a click
   // there waits for it instead of being dropped without a word.
@@ -62,6 +64,7 @@ export function useMenuEditor(restaurantId: string) {
       return;
     }
     if (requestId !== loadId.current) return;
+    latest.current = data;
     setMenus(data.menus);
     setSections(data.sections);
     setProducts(data.products);
@@ -100,6 +103,7 @@ export function useMenuEditor(restaurantId: string) {
 
   const ctx = {
     ready: whenReady,
+    latest,
     supabase,
     restaurantId,
     toast,
@@ -113,7 +117,7 @@ export function useMenuEditor(restaurantId: string) {
     setProducts,
     setAddons,
     reload,
-    w: makeWriter({ supabase, toast, t, reload, ready: whenReady }),
+    w: makeWriter({ supabase, toast, t, reload, ready: whenReady, latest }),
   };
 
   return {

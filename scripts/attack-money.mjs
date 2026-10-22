@@ -710,8 +710,17 @@ try {
       status: "ready", paid: false, note: MARK,
     });
 
+    // A tab from before the reviewed balance asks without saying what it saw.
+    // It used to record whatever the table owed on arrival (audit L, 1).
+    const blind = await post("/api/table-payment", { tableId: spare.id, settlement: "cash" }, who.waiter);
+    const { count: blindRows } = await admin.from("payments").select("id", { count: "exact", head: true }).eq("session_id", sat.id);
+    blind.status === 409 && blindRows === 0
+      ? ok("a table collected without the balance its screen showed records nothing (409)")
+      : bad(`an unreviewed table collection answered ${blind.status} and left ${blindRows} payment(s)`);
+
+    // Each waiter's own tap, as the dialog sends it: the MX$200 they saw.
     const shots = await Promise.all([...Array(5)].map(() =>
-      post("/api/table-payment", { tableId: spare.id, settlement: "cash" }, who.waiter)));
+      post("/api/table-payment", { tableId: spare.id, settlement: "cash", expected: 200, currency: "MXN", ref: crypto.randomUUID() }, who.waiter)));
 
     const { data: rows } = await admin.from("payments").select("amount").eq("session_id", sat.id);
     const got = Number((rows ?? []).reduce((sum, p) => sum + Number(p.amount), 0).toFixed(2));
@@ -768,7 +777,7 @@ try {
 
     // The money taken twice: cash at the table, then the card payment arrives.
     const { data: twice } = await order(150, MARK);
-    const cash = await post("/api/table-payment", { tableId: spare.id, settlement: "cash" }, who.waiter);
+    const cash = await post("/api/table-payment", { tableId: spare.id, settlement: "cash", expected: 150, currency: "MXN", ref: crypto.randomUUID() }, who.waiter);
     await card([twice.id], 150, intentFor("twice"));
     await card([twice.id], 150, intentFor("twice")); // Stripe sends it again
     const [{ data: cardRows }, { data: due }, { count: told }] = await Promise.all([

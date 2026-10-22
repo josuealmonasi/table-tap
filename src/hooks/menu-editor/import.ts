@@ -12,13 +12,16 @@ import { writeError } from "@/lib/write-result";
  * refused, the sections made for them are taken back.
  */
 export function importActions(ctx: EditorContext) {
-  const { supabase, restaurantId, sections, products, reload } = ctx;
+  const { supabase, restaurantId, reload } = ctx;
   const { reportError } = ctx.w;
 
   /** Writes the rows into a menu; returns how many products were added. */
   async function importRows(menuId: string, rows: ImportRow[]): Promise<number> {
     if (!(await ctx.ready())) return 0;
     if (rows.length === 0) return 0;
+    // The sections the read just returned: one added in that read is matched,
+    // not created a second time.
+    const { sections, products } = ctx.latest.current;
     const inMenu = sections.filter(s => s.menu_id === menuId);
     const missing = sectionsOf(rows).filter(name => !inMenu.some(s => sameSection(s.name, name)));
     let made: { id: string; name: string }[] = [];
