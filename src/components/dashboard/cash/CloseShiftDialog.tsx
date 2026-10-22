@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useRetryIntent } from "@/hooks/useRetryIntent";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
@@ -9,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 interface CloseShiftDialogProps {
   open: boolean;
   currency: string;
+  shiftId?: string;
   onClose: () => void;
   /** The shift closed (and, if it needed one, was explained). */
   onClosed: () => void;
@@ -29,8 +31,11 @@ interface Closed {
  * by the time they see it, so the count cannot drift toward the answer. A
  * difference is explained there and then, while they remember why.
  */
-export default function CloseShiftDialog({ open, currency, onClose, onClosed }: CloseShiftDialogProps) {
+export default function CloseShiftDialog({ open, currency, shiftId, onClose, onClosed }: CloseShiftDialogProps) {
   const t = useT();
+  const attempt = useRetryIntent();
+  const inFlight = useRef(false);
+  const [reviewedShift, setReviewedShift] = useState(shiftId);
   const toast = useToast();
   const [counted, setCounted] = useState("");
   const [confirmed, setConfirmed] = useState(false);
@@ -45,6 +50,7 @@ export default function CloseShiftDialog({ open, currency, onClose, onClosed }: 
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
+      setReviewedShift(shiftId);
       setCounted("");
       setConfirmed(false);
       setClosed(null);
@@ -54,15 +60,18 @@ export default function CloseShiftDialog({ open, currency, onClose, onClosed }: 
   }
 
   async function post(body: object): Promise<Record<string, unknown> | null> {
+    if (inFlight.current) return null;
+    inFlight.current = true;
     setBusy(true);
     setError(null);
     try {
       const res = await fetch("/api/cash-shift", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: "action" in body && body.action === "close" ? attempt.body(body) : JSON.stringify(body),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json();
+      if ((res.ok && data.ok) || (!res.ok && res.status < 500)) attempt.clear();
       if (!res.ok) {
         setError(data.error ?? t("apiErr.generic"));
         return null;
@@ -72,13 +81,14 @@ export default function CloseShiftDialog({ open, currency, onClose, onClosed }: 
       setError(t("done.networkError"));
       return null;
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
 
   async function count(e: React.FormEvent): Promise<void> {
     e.preventDefault();
-    const data = await post({ action: "close", counted, confirm: confirmed });
+    const data = await post({ action: "close", shiftId: reviewedShift, counted, confirm: confirmed });
     if (!data) return;
     setClosed({
       id: String(data.id),

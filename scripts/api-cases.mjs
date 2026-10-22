@@ -20,6 +20,7 @@ import { offlineCases } from "./api-offline-cases.mjs";
 import { terminalDepositRace } from "./api-terminal-deposit.mjs";
 import { twoSittingCollection } from "./api-part-collection.mjs";
 import { printReprintRace } from "./api-print-delivery.mjs";
+import { retryCases } from "./api-retry-cases.mjs";
 import { loginByEmail } from "./logins.mjs";
 
 // The pass holds a ticket id, never the diner's order lookup credential.
@@ -737,7 +738,10 @@ export function cases(fx) {
       path: "/api/cash-shift", body: { action: "close", counted: 1000 }, expect: [400],
       expectError: /contaste|counted/i },
     { name: "POST /api/cash-shift (closed on a blind count)", as: "cashier", method: "POST",
-      path: "/api/cash-shift", body: { action: "close", counted: "1000", confirm: true }, expect: [200],
+      path: "/api/cash-shift", body: async f => {
+        const { data } = await f.admin.from("cash_shifts").select("id").eq("restaurant_id", r).is("closed_at", null).single();
+        return { action: "close", shiftId: data.id, ref: crypto.randomUUID(), counted: "1000", confirm: true };
+      }, expect: [200],
       save: d => ({ cashShift: d.id }),
       check: async (d, f) => {
         // What the drawer should have held: the opening, the cash taken while
@@ -2063,5 +2067,6 @@ export function cases(fx) {
         if (r.owner_id !== user.id) return "the restaurant belongs to somebody else";
         return true;
       } },
+    ...retryCases(fx),
   ];
 }

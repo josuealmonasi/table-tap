@@ -1490,6 +1490,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     coverDays: "Escribe para cuántos días comprar, un número entero de 1 a 60.",
     cashMovementNotFound: "Ese retiro ya no está aquí.",
     shiftAlreadyOpen: "Ya hay un turno abierto: ciérralo antes de abrir otro.",
+    shiftChanged: "Este turno cambió. Actualiza la página y vuelve a contar la caja abierta.",
     noOpenShift: "No hay un turno abierto: abre uno primero.",
     shiftConfirm: "Confirma que contaste el efectivo para cerrar el turno.",
     shiftNote: "Escribe por qué hubo una diferencia.",

@@ -2026,3 +2026,28 @@ function signatures remain callable during deployment.
 The menu editor pages all menus, sections, items and links with stable ordering
 and refuses edits and copies until the whole read succeeds. Waiter orders obey
 the restaurant's low-stock alert preference, just like checkout and the till.
+
+
+### Retry identity for kitchen orders, drawer writes and ingredient movements
+
+An account POS sale, pay-later checkout, waiter order, withdrawal, ingredient
+purchase, waste entry, physical count and cash-shift close each freeze a client
+reference with their request on first submit. An unknown response keeps both;
+a definite refusal or success ends that intent. A second action gets a new
+reference. Account POS uses its existing `posRef` transaction. Card checkout
+keeps its own payment-attempt handling and receives no pay-later reference.
+
+Kitchen-order intents reserve stock, write the ticket and spend any coupon in
+one transaction; repeats return the original order before reserving anything.
+References are restaurant-scoped and retrieval also checks the ordering surface
+and, at a customer table, the server-issued member identity. Withdrawals use a
+reference unique per shift and remain under the money lock. Ingredient writers
+check their reference under the movement lock before touching an ingredient;
+a retried count returns its original expected figure and movement cutoff,
+without swallowing later deliveries or changing the shelf baseline.
+
+Closing sends the shift reviewed in the form, with the frozen blind count and
+close reference. Repeats return the saved close even if another shift is now
+open; a stale or unnamed close is refused with an instruction to refresh and
+count the open drawer. New SQL columns are nullable and indexes partial, and
+old RPC signatures remain available while deployed writers roll forward.

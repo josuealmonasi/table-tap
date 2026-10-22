@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useRetryIntent } from "@/hooks/useRetryIntent";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
 import { shortMessage } from "@/lib/stock-message";
@@ -63,6 +64,8 @@ export default function TableOrderScreen({
   /** The tables this restaurant has. A waiter picks; they never invent one. */
   tables: { id: string; label: string }[];
 }) {
+  const attempt = useRetryIntent();
+  const inFlight = useRef(false);
   const t = useT();
   const toast = useToast();
   const router = useRouter();
@@ -113,15 +116,17 @@ export default function TableOrderScreen({
 
   /** Send it to the kitchen, owing. */
   async function send(): Promise<void> {
-    if (busy || lines.length === 0 || !tableId) return;
+    if (inFlight.current || busy || (!attempt.pending() && (lines.length === 0 || !tableId))) return;
+    inFlight.current = true;
     setBusy(true);
     try {
       const res = await fetch("/api/table-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tableId, items: lines, note: note.trim() || undefined }),
+        body: attempt.body({ tableId, items: lines, note: note.trim() || undefined }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json();
+      if ((res.ok && data.orderId) || (!res.ok && res.status < 500)) attempt.clear();
       if (!res.ok) {
         if (data.code === "outOfStock") {
           // With the numbers in it. The refusal has always known how many are
@@ -133,6 +138,7 @@ export default function TableOrderScreen({
         }
         return;
       }
+      if (!data.orderId) throw new Error("Missing order result");
       setSent({ code: data.code, table: data.table });
       cart.clear();
       setNote("");
@@ -141,6 +147,7 @@ export default function TableOrderScreen({
     } catch {
       toast(t("done.networkError"), "error");
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }

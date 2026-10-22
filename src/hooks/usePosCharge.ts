@@ -1,7 +1,7 @@
 "use client";
 
 import { rememberLastSale } from "@/lib/pos-last-sale";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
@@ -55,6 +55,8 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
   const router = useRouter();
   const { lines } = cart;
   const { tipPct, tipCustom } = details;
+  const accountRequest = useRef<string | null>(null);
+  const inFlight = useRef(false);
   const [busy, setBusy] = useState(false);
   const [ticket, setTicket] = useState<PosTicket | null>(null);
   /** How the customer is paying, asked about before the sale is sent. */
@@ -112,11 +114,12 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     method: "cash" | "card" | "account",
     account?: AccountListItem,
   ): Promise<void> {
-    if (lines.length === 0 || busy) return;
+    if (inFlight.current || busy || (lines.length === 0 && !accountRequest.current)) return;
+    if (accountRequest.current) method = "account";
     setPending(null);
     // One reference per sale, made before anything is sent: a request that
     // dies on the way and is held and sent again is the same sale, rung once.
-    const posRef = crypto.randomUUID();
+    const posRef = accountRequest.current ? JSON.parse(accountRequest.current).posRef as string : crypto.randomUUID();
     const sale: HeldSale | null = method === "account" ? null : {
       posRef, collector, collectorContext, restaurantId: restaurant.id, at: new Date().toISOString(), method, items: lines,
       charge: { ...pricing }, currency: restaurant.currency, tipPct: tipCustom === null ? tipPct : undefined, tipAmount: tipCustom ?? undefined,
@@ -135,33 +138,36 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       return;
     }
     setBusy(true);
+    inFlight.current = true;
     try {
       let res: Response;
       try {
+        const request = JSON.stringify({
+          posRef,
+          collectorContext,
+          currency: restaurant.currency,
+          restaurantId: restaurant.id,
+          collected: sale ? { at: sale.at, ...sale.charge } : undefined,
+          items: lines,
+          method,
+          accountId: account?.id,
+          customerName: details.customerName.trim() || undefined,
+          note: details.note.trim() || undefined,
+          // On an account the tip waits for the day it is paid.
+          tipPct: account ? undefined : tipCustom === null ? tipPct : undefined,
+          tipAmount: account ? undefined : (tipCustom ?? undefined),
+          email:
+            canEmailReceipt && !details.noTicket
+              ? details.email.trim() || undefined
+              : undefined,
+          noReceipt: details.noTicket || undefined,
+          terminalRef: method === "card" ? details.terminalRef.trim() || undefined : undefined,
+        });
+        if (method === "account") accountRequest.current ??= request;
         res = await fetch("/api/pos/order", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            posRef,
-            collectorContext,
-            currency: restaurant.currency,
-            restaurantId: restaurant.id,
-            collected: sale ? { at: sale.at, ...sale.charge } : undefined,
-            items: lines,
-            method,
-            accountId: account?.id,
-            customerName: details.customerName.trim() || undefined,
-            note: details.note.trim() || undefined,
-            // On an account the tip waits for the day it is paid.
-            tipPct: account ? undefined : tipCustom === null ? tipPct : undefined,
-            tipAmount: account ? undefined : (tipCustom ?? undefined),
-            email:
-              canEmailReceipt && !details.noTicket
-                ? details.email.trim() || undefined
-                : undefined,
-            noReceipt: details.noTicket || undefined,
-            terminalRef: method === "card" ? details.terminalRef.trim() || undefined : undefined,
-          }),
+          body: accountRequest.current ?? request,
         });
       } catch {
         // The request never came back. If it never arrived, holding it is the
@@ -174,6 +180,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (res.status < 500 && !data.held) accountRequest.current = null;
         // A refusal is the sale not happening — out of stock, the menu closed,
         // an account at its ceiling. The held copy goes and the cart stays, so
         // the cashier fixes it or hands the money back, as before the till
@@ -199,6 +206,11 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
         toast(t("pos.saleNeedsReview"), "error");
         return;
       }
+      if (method === "account" && (!data.settled || !data.onAccount)) {
+        toast(t("done.networkError"), "error");
+        return;
+      }
+      accountRequest.current = null;
       if (data.onAccount) {
         toast(
           t("accounts.charged", {
@@ -226,6 +238,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       if (sale) showHeld(sale);
       toast(t("done.networkError"), "error");
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }

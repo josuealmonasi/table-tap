@@ -151,12 +151,14 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
 
       <CashMovementDialog
         kind={dialog === "opening" || dialog === "withdrawal" ? dialog : null}
+        shiftId={current?.shift.id}
         currency={dialog === "opening" ? currency : drawerCurrency}
         onClose={() => setDialog(null)}
         onSaved={() => router.refresh()}
       />
       <CloseShiftDialog
         open={dialog === "close"}
+        shiftId={current?.shift.id}
         currency={drawerCurrency}
         onClose={() => setDialog(null)}
         onClosed={() => router.refresh()}
