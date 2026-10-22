@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 /**
  * Is the thing we are about to check actually up?
@@ -103,13 +103,15 @@ export async function retryFetch(url, init, base) {
   }
 }
 
-/** The pids of the dev server's workers, or null against anything but localhost. */
-function devWorkers(base) {
-  if (!/^http:\/\/localhost[:/]/.test(base)) return null;
+/** The pids listening on this dev server's port, never another checkout's. */
+export function devWorkers(base, run = (file, args, options) => String(execFileSync(file, args, { ...options, timeout: 1000, killSignal: "SIGKILL" }))) {
+  const url = new URL(base);
+  if (!["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return null;
   try {
-    return execSync("pgrep -f next-server", { encoding: "utf8" }).trim().split("\n").sort().join(",") || null;
+    return [...new Set(run("lsof", ["-nP", `-iTCP:${url.port || (url.protocol === "https:" ? "443" : "80")}`, "-sTCP:LISTEN", "-t"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim().split("\n").filter(Boolean))].sort().join(",") || null;
   } catch {
-    return null; // pgrep exits 1 when nothing matches: no worker to watch
+    return null; // lsof exits 1 when this port has no listener.
   }
 }
 
@@ -133,9 +135,9 @@ export function watchDevWorker(base) {
   if (!before) return;
   process.on("exit", code => {
     const after = devWorkers(base);
-    if (!after || after === before) return;
+    if (after === before) return;
     console.log(
-      `\n  The dev server replaced its worker during this run (pid ${before} -> ${after}).\n` +
+      `\n  The dev server replaced its worker during this run (pid ${before} -> ${after ?? "no listener"}).\n` +
         (code
           ? "  A failure above may be that restart, not the code: run this gate again, alone, before debugging it.\n"
           : "  Nothing failed across it.\n"),
