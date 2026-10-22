@@ -3,6 +3,7 @@ import type { useToast } from "@/components/ui/Toast";
 import { reorderRows, type Reorderable, type ReorderTable } from "@/lib/menu-data";
 import { parsePlanLimit, planLimitText } from "@/lib/plan-error";
 import { planLabel } from "@/lib/plan";
+import { writeError, type WriteResult } from "@/lib/write-result";
 
 interface WriterDeps {
   supabase: ReturnType<typeof createClient>;
@@ -47,12 +48,13 @@ export function makeWriter({ supabase, toast, t, reload, ready = async () => tru
    */
   async function run(
     key: string,
-    write: PromiseLike<{ error: { message: string } | null }>,
+    write: PromiseLike<WriteResult>,
     done?: string,
+    expected = 1,
   ): Promise<boolean> {
     if (!(await ready())) return false;
     try {
-      const { error } = await write;
+      const error = writeError(await write, expected);
       if (!reportError(key, error)) return false;
       if (done) toast(t(done));
       await reload();
@@ -73,7 +75,7 @@ export function makeWriter({ supabase, toast, t, reload, ready = async () => tru
     if (!(await ready())) return undefined;
     try {
       const { data, error } = await supabase.from(table).insert(row).select("id").single();
-      if (!reportError(key, error)) return undefined;
+      if (!reportError(key, error ?? (data?.id ? null : { message: "The insert returned no id" }))) return undefined;
       if (done) toast(t(done));
       await reload();
       return (data as { id: string } | null)?.id;

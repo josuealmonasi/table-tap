@@ -1,4 +1,5 @@
 import type { AddonInput, EditorContext } from "./types";
+import { writeError } from "@/lib/write-result";
 
 /** Extras, availability and which extras a product offers. */
 export function addonActions(ctx: EditorContext) {
@@ -16,25 +17,29 @@ export function addonActions(ctx: EditorContext) {
         is_addon: true,
         sort_order: addons.filter(a => a.menu_id === menuId).length,
         ...input,
-      }),
+      }).select("id"),
       "done.extraAdded",
     );
   const updateAddon = (id: string, input: Partial<AddonInput>) =>
     run(
       "write.updateExtra",
-      supabase.from("menu_items").update(input).eq("id", id),
+      supabase.from("menu_items").update(input).eq("id", id).select("id"),
       "done.extraUpdated",
     );
   const deleteAddon = (id: string) =>
     run(
       "write.deleteExtra",
-      supabase.from("menu_items").delete().eq("id", id),
+      supabase.from("menu_items").delete().eq("id", id).select("id"),
       "done.extraDeleted",
     );
 
   /** Bulk delete: removes any mix of products and extras in one call. */
-  const deleteItems = (ids: string[]) =>
-    run("write.deleteSelected", supabase.from("menu_items").delete().in("id", ids));
+  const deleteItems = (ids: string[]) => ids.length ? run(
+    "write.deleteSelected",
+    supabase.from("menu_items").delete({ count: "exact" }).in("id", ids).select("id"),
+    undefined,
+    ids.length,
+  ) : Promise.resolve(false);
 
   async function moveAddon(id: string, direction: "up" | "down"): Promise<void> {
     const addon = addons.find(a => a.id === id);
@@ -50,15 +55,17 @@ export function addonActions(ctx: EditorContext) {
     const prevAddons = addons;
     setProducts(prev => prev.map(p => (p.id === id ? { ...p, available } : p)));
     setAddons(prev => prev.map(a => (a.id === id ? { ...a, available } : a)));
-    const { error } = await supabase
-      .from("menu_items")
-      .update({ available })
-      .eq("id", id);
-    if (error) {
-      setProducts(prevProducts);
-      setAddons(prevAddons);
-      reportError("write.updateAvailability", error);
+    try {
+      const error = writeError(await supabase
+        .from("menu_items")
+        .update({ available })
+        .eq("id", id).select("id"));
+      if (reportError("write.updateAvailability", error)) return;
+    } catch {
+      reportError("write.updateAvailability", { message: "Availability did not save" });
     }
+    setProducts(prevProducts);
+    setAddons(prevAddons);
   }
 
   // ── Which add-ons a product offers (replace the full set) ──

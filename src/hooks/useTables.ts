@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/lib/i18n/context";
 import { parsePlanLimit, planLimitText } from "@/lib/plan-error";
 import { planLabel } from "@/lib/plan";
+import { writeError, type WriteResult } from "@/lib/write-result";
 
 /**
  * CRUD for a restaurant's tables via the RLS-protected browser client (writes
@@ -46,35 +47,39 @@ export function useTables(restaurantId: string) {
   /** Runs a write and reports it. Returns whether it actually landed. */
   async function run(
     key: string,
-    write: PromiseLike<{ error: { message: string } | null }>,
+    write: PromiseLike<WriteResult>,
     done?: string,
   ): Promise<boolean> {
     setBusy(true);
-    const ok = reportError(key, (await write).error);
-    if (ok) {
-      if (done) toast(t(done));
-      router.refresh();
-    }
-    setBusy(false);
-    return ok;
+    try {
+      const ok = reportError(key, writeError(await write));
+      if (ok) {
+        if (done) toast(t(done));
+        router.refresh();
+      }
+      return ok;
+    } catch {
+      toast(t(key), "error");
+      return false;
+    } finally { setBusy(false); }
   }
 
   const addTable = (label: string): Promise<boolean> =>
     run(
       "write.createTable",
-      supabase.from("restaurant_tables").insert({ restaurant_id: restaurantId, label }),
+      supabase.from("restaurant_tables").insert({ restaurant_id: restaurantId, label }).select("id"),
     );
 
   const renameTable = (id: string, label: string): Promise<boolean> =>
     run(
       "write.renameTable",
-      supabase.from("restaurant_tables").update({ label }).eq("id", id),
+      supabase.from("restaurant_tables").update({ label }).eq("id", id).select("id"),
     );
 
   const deleteTable = (id: string): Promise<boolean> =>
     run(
       "write.deleteTable",
-      supabase.from("restaurant_tables").delete().eq("id", id),
+      supabase.from("restaurant_tables").delete().eq("id", id).select("id"),
       "done.tableDeleted",
     );
 

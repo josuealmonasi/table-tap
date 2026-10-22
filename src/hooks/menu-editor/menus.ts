@@ -1,6 +1,7 @@
 import type { MenuSchedule } from "@/lib/menu-schedule";
 import { duplicateMenuDeep } from "@/lib/menu-duplicate";
 import type { EditorContext } from "./types";
+import { writeError } from "@/lib/write-result";
 
 /** Menus and their sections: create, rename, delete, reorder, schedule, switch, copy. */
 export function menuActions(ctx: EditorContext) {
@@ -24,12 +25,12 @@ export function menuActions(ctx: EditorContext) {
       sort_order: menus.length,
     });
   const renameMenu = (id: string, name: string) =>
-    run("write.renameMenu", supabase.from("menus").update({ name }).eq("id", id));
+    run("write.renameMenu", supabase.from("menus").update({ name }).eq("id", id).select("id"));
   // Cascade deletes the menu's categories, products, extras and their links.
   const deleteMenu = (id: string) =>
     run(
       "write.deleteMenu",
-      supabase.from("menus").delete().eq("id", id),
+      supabase.from("menus").delete().eq("id", id).select("id"),
       "done.menuDeleted",
     );
   const moveMenu = (id: string, direction: "up" | "down") =>
@@ -47,7 +48,7 @@ export function menuActions(ctx: EditorContext) {
     const prev = menus;
     setMenus(m => m.map(x => (x.id === id ? { ...x, schedule } : x)));
     try {
-      const { error } = await supabase.from("menus").update({ schedule }).eq("id", id);
+      const error = writeError(await supabase.from("menus").update({ schedule }).eq("id", id).select("id"));
       if (reportError("write.updateMenu", error)) return true;
     } catch {
       toast(t("write.updateMenu"), "error");
@@ -60,11 +61,13 @@ export function menuActions(ctx: EditorContext) {
     if (!(await ctx.ready())) return;
     const prev = menus;
     setMenus(m => m.map(x => (x.id === id ? { ...x, active } : x)));
-    const { error } = await supabase.from("menus").update({ active }).eq("id", id);
-    if (error) {
-      setMenus(prev); // roll back the optimistic flip
-      reportError("write.updateMenu", error);
+    try {
+      const error = writeError(await supabase.from("menus").update({ active }).eq("id", id).select("id"));
+      if (reportError("write.updateMenu", error)) return;
+    } catch {
+      toast(t("write.updateMenu"), "error");
     }
+    setMenus(prev); // roll back the optimistic flip
   }
 
   /** Deep-copies a menu: its sections, products, extras, and add-on links. Returns the new menu's id. */
@@ -95,20 +98,20 @@ export function menuActions(ctx: EditorContext) {
   const setSectionStation = (id: string, station: "kitchen" | "bar") =>
     run(
       "write.sectionStation",
-      supabase.from("categories").update({ station }).eq("id", id),
+      supabase.from("categories").update({ station }).eq("id", id).select("id"),
       "done.sectionStation",
     );
   const renameSection = (id: string, name: string) =>
     run(
       "write.renameSection",
-      supabase.from("categories").update({ name }).eq("id", id),
+      supabase.from("categories").update({ name }).eq("id", id).select("id"),
       "done.sectionRenamed",
     );
   // Products in a deleted section keep existing (category_id → null via FK).
   const deleteSection = (id: string) =>
     run(
       "write.deleteSection",
-      supabase.from("categories").delete().eq("id", id),
+      supabase.from("categories").delete().eq("id", id).select("id"),
       "done.sectionDeleted",
     );
 

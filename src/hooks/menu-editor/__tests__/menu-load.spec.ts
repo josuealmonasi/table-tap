@@ -29,9 +29,9 @@ beforeEach(() => {
   state.read.mockReset().mockResolvedValue(menu);
   vi.spyOn(console, "error").mockImplementation(() => {});
   const query = {
-    update: () => query, delete: () => query, eq: () => query,
+    update: () => query, delete: () => query, eq: () => query, select: () => query,
     then: (resolve: (value: unknown) => unknown) => {
-      state.sent(); return Promise.resolve({ error: null }).then(resolve);
+      state.sent(); return Promise.resolve({ data: [{ id: "dish" }], error: null }).then(resolve);
     },
   };
   state.from.mockReturnValue(query);

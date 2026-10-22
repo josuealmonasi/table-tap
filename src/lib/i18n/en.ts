@@ -222,6 +222,7 @@ export const en = {
   },
   menu: {
     reloadFailed: "We couldn’t load the whole menu. Your drafts are still here. Try again before saving.",
+    retrying: "Loading menu…",
     stock: "Stock",
     stockHint: "Empty: the switch decides. With a number: it counts down and leaves the menu at zero.",
     stockLocked: "Counting stock comes with the paid plans.",
