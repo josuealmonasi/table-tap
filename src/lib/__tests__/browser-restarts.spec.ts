@@ -72,6 +72,12 @@ it("retries readiness only with evidence of a restart, never an audit fault", as
     await server.beforeJob();
     const epoch = server.epoch;
     expect(await server.canRetry(new Error("page state did not become ready in 30000ms"), epoch)).toBe(false);
+    // The server, not the page: it hung up, or produced nothing in time. On
+    // an 8 GB Mac deep in swap these failed whole runs with no restart seen.
+    expect(await server.canRetry(new Error("page.goto: net::ERR_EMPTY_RESPONSE at http://localhost:3000/dashboard/profile"), epoch)).toBe(true);
+    expect(await server.canRetry(new Error("page.goto: Timeout 60000ms exceeded."), epoch)).toBe(true);
+    // A control that never answers is the page's fault; it is not retried.
+    expect(await server.canRetry(new Error("locator.click: Timeout 30000ms exceeded."), epoch)).toBe(false);
     pid = "2";
     expect(await server.canRetry(new Error("page state did not become ready in 30000ms"), epoch)).toBe(true);
     expect(await server.canRetry(new Error("unexpected route /login"), epoch)).toBe(false);

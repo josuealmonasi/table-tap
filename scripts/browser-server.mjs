@@ -5,7 +5,9 @@ import { deadline } from "./browser-deadline.mjs";
 
 const exec = promisify(execFile);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-const connectionError = /(?:ERR_CONNECTION_(?:REFUSED|RESET|CLOSED|ABORTED|FAILED)|ERR_FAILED|ECONNREFUSED|ECONNRESET|EPIPE|socket hang up)/i;
+const connectionError = /(?:ERR_CONNECTION_(?:REFUSED|RESET|CLOSED|ABORTED|FAILED)|ERR_EMPTY_RESPONSE|ERR_FAILED|ECONNREFUSED|ECONNRESET|EPIPE|socket hang up)/i;
+// The server produced nothing in time. A page that hangs fails its retry too.
+const navigationTimeout = /^page\.goto: Timeout \d+ms exceeded/;
 const notReady = /page state did not become ready|readiness(?: sample)? timed out/;
 
 /** Socket timeouts do not close sockets by themselves. Always destroy the probe. */
@@ -92,7 +94,8 @@ export function monitorBrowserServer(base, {
     },
     async canRetry(error, startedEpoch) {
       await refresh();
-      return connectionError.test(error.message) || (notReady.test(error.message) && epoch !== startedEpoch);
+      return connectionError.test(error.message) || navigationTimeout.test(error.message)
+        || (notReady.test(error.message) && epoch !== startedEpoch);
     },
     stop() { stopped = true; clearInterval(timer); },
     report() {

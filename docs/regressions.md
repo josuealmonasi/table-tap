@@ -42,6 +42,7 @@ us, and what now catches each one.
 | A reward handover names the displayed round, step and saved retry key (S15 J8) | Two identical requests closed one round and spent the same step in the next |
 | Browser deadlines include context teardown and the whole run (S8b) | A dead worker left layout waiting on an unbounded browser call for over three hours |
 | Restart retries and their evidence agree (S8b) | Concurrency three overloaded next dev; dropped visits needed bounded recovery without hiding audit failures |
+| A server that hangs up or sends nothing in 60 s is retried once; a page fault never is (S8b follow-up) | On an 8 GB Mac in swap, empty responses and navigation timeouts failed whole runs with retries=0 |
 | Browser admission and measured server memory agree (S8b) | Three workers repeatedly crossed the development server's memory threshold with no peak RSS in the summary |
 | Browser navigation and the visit verdict agree (S8) | Dialog visits whose navigation failed silently vanished from coverage |
 | Typing errors and failed checks agree (S8) | A failed page-field check became an empty fault list and printed ok |
