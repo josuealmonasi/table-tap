@@ -46,6 +46,7 @@ us, and what now catches each one.
 | Restart retries and their evidence agree (S8b) | Concurrency three overloaded next dev; dropped visits needed bounded recovery without hiding audit failures |
 | A server that hangs up or sends nothing in 60 s is retried once; a page fault never is (S8b follow-up) | On an 8 GB Mac in swap, empty responses and navigation timeouts failed whole runs with retries=0 |
 | A dialog sweep comes back to its page when a click navigated away (S8 follow-up) | «Main Menu Abrir →» left /dashboard first, so the menus' rename, copy and delete dialogs were never checked |
+| A page's pending requests start over when a new page commits (S8 follow-up) | Requests the departing menu editor fired as goto began were never reported, and /dashboard could never be ready again in that tab |
 | Browser admission and measured server memory agree (S8b) | Three workers repeatedly crossed the development server's memory threshold with no peak RSS in the summary |
 | Browser navigation and the visit verdict agree (S8) | Dialog visits whose navigation failed silently vanished from coverage |
 | Typing errors and failed checks agree (S8) | A failed page-field check became an empty fault list and printed ok |
