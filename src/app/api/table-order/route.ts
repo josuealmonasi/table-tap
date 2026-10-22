@@ -63,7 +63,11 @@ export async function POST(req: NextRequest) {
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const items = Array.isArray(body.items) ? body.items : [];
-  if (!body.tableId || items.length === 0) {
+  // A table id is a UUID before anything is built from it. «T:H» passed for
+  // the table made the old scope of the request equal the new scope of a
+  // saved order, and returned that MX$100 order as the replay of a different
+  // MX$200 one (cross-review of batch 5).
+  if (!uuidOf(body.tableId) || items.length === 0) {
     return await apiError("apiErr.invalidRequest", 400);
   }
 
@@ -217,7 +221,7 @@ export async function POST(req: NextRequest) {
       threshold: Number(restaurant.low_stock_threshold) || 0,
     });
     if (result.conflict) return await apiError("apiErr.retryConflict", 409);
-    if (result.short) return NextResponse.json({ short: result.short, code: "outOfStock", retryUncommitted: true }, { status: 409 });
+    if (result.short) return NextResponse.json({ short: result.short, code: "outOfStock" }, { status: 409 });
     if (!result.repeat && restaurant.low_stock_alerts_enabled) await raiseStockNotifications(actor.restaurantId, result.low ?? []);
     if (!result.repeat) await logEvent({ restaurantId: actor.restaurantId, actor: actor.email, entity: "order", action: "created",
       detail: logDetail({ code: orderCode(result.orderId), table: String(result.table), amount: result.total.toFixed(2) }) });

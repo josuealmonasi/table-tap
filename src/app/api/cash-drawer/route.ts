@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   });
   if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
   if (error) return await apiError("apiErr.generic", 500);
-  if (!data) return await apiError("apiErr.noOpenShift", 409, undefined, { retryUncommitted: true });
+  if (!data) return await apiError("apiErr.noOpenShift", 409);
 
   await logEvent({
     restaurantId: actor.restaurantId,

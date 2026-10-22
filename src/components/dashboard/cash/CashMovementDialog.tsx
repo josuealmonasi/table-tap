@@ -67,7 +67,7 @@ export default function CashMovementDialog({ kind, currency, shiftId, onClose, o
           : attempt.body({ kind: "withdrawal", shiftId, amount, note }),
       });
       const data = await res.json();
-      if (shownKind === "withdrawal" && ((res.ok && data.id) || (!res.ok && attempt.settles(res.status, data)))) attempt.clear();
+      if (shownKind === "withdrawal" && ((res.ok && data.id) || (!res.ok && attempt.settles(res.status)))) attempt.clear();
       if (!res.ok) {
         setError(data.error ?? t("apiErr.generic"));
         return;
@@ -80,6 +80,7 @@ export default function CashMovementDialog({ kind, currency, shiftId, onClose, o
       setError(t("done.networkError"));
     } finally {
       inFlight.current = false;
+      attempt.ended();
       setBusy(false);
     }
   }
@@ -93,7 +94,7 @@ export default function CashMovementDialog({ kind, currency, shiftId, onClose, o
         <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
           {shownKind === "opening" ? t("shift.openHint") : t("corte.withdrawalHint")}
         </p>
-        {attempt.unconfirmed(busy) && <PendingAttempt message={t("pending.withdrawal", { amount: shownMoney(frozen?.amount, shownCurrency) })} busy={busy} onDiscard={() => { if (!inFlight.current) attempt.clear(); }} />}
+        {attempt.unconfirmed() && <PendingAttempt message={t("pending.withdrawal", { amount: shownMoney(frozen?.amount, shownCurrency) })} busy={busy} onDiscard={() => { if (!inFlight.current) attempt.clear(); }} />}
         <label className="tt-field">
           <span className="tt-mod-label">{shownKind === "opening" ? t("corte.opening") : t("corte.amount")} · {shownCurrency}</span>
           <input

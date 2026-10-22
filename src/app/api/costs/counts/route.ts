@@ -45,7 +45,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   });
   if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
   if (error) return await apiError("apiErr.generic", 500);
-  if (!data) return await apiError("apiErr.notFound", 404, undefined, { retryUncommitted: true });
+  if (!data) return await apiError("apiErr.notFound", 404);
   const rows = data as { ingredient_id: string; counted: number; expected: number | null; movement_cutoff?: number }[];
   await logEvent({
     restaurantId: actor.restaurantId, actor: actor.email, entity: "costs", action: "closed",

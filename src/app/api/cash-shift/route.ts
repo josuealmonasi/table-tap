@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     });
     if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
     if (error) return await apiError("apiErr.generic", 500);
-    if (!data) return await apiError("apiErr.shiftChanged", 409, undefined, { retryUncommitted: true });
+    if (!data) return await apiError("apiErr.shiftChanged", 409);
     await logEvent({
       restaurantId: actor.restaurantId, actor: actor.email, entity: "cash", action: "closed",
       detail: logDetail({ counted: counted.toFixed(2), expected: Number(data.expected).toFixed(2),

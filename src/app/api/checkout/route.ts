@@ -1,4 +1,3 @@
-import { uncommittedRefusal } from "@/lib/retry-response";
 import { orderRequestScope } from "@/lib/order-request";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -59,6 +58,9 @@ export async function POST(req: NextRequest) {
     if (!restaurantId || !items?.length) {
       return await apiError("apiErr.orderData", 400);
     }
+    // A UUID before a scope is built from it: «T:H» as a table made an old
+    // scope read as a saved order's new one (cross-review of batch 5).
+    if (tableId != null && !uuidOf(tableId)) return await apiError("apiErr.orderData", 400);
 
     const ref = uuidOf(body.ref);
     if (body.ref !== undefined && !ref) return await apiError("apiErr.invalidRequest", 400);
@@ -245,8 +247,8 @@ export async function POST(req: NextRequest) {
         coupon: coupon ? { ...coupon, eligible_subtotal: base.subtotal } : null,
       });
       if (result.conflict) return await apiError("apiErr.retryConflict", 409);
-      if (result.couponReason) return NextResponse.json({ couponReason: result.couponReason, retryUncommitted: true }, { status: 409 });
-      if (result.short) return await uncommittedRefusal(await refuseShortStock(result.short));
+      if (result.couponReason) return NextResponse.json({ couponReason: result.couponReason }, { status: 409 });
+      if (result.short) return await refuseShortStock(result.short);
       held.handOver();
       if (!result.repeat && restaurant.low_stock_alerts_enabled) await raiseStockNotifications(restaurantId, result.low ?? []);
       return NextResponse.json({ orderId: result.orderId, sessionId: result.sessionId, deferred: true });

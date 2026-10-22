@@ -10,6 +10,7 @@ export interface CostsSender {
   discard: RetryIntent["clear"];
   frozen: RetryIntent["frozen"];
   unconfirmed: RetryIntent["unconfirmed"];
+  sending: RetryIntent["sending"];
 }
 
 /**
@@ -32,14 +33,15 @@ export function useCostsSend(retry = false): CostsSender {
       });
       if (res.ok && !retry) return null;
       const data = await res.json();
-      if (retry && ((res.ok && data.ok) || (!res.ok && attempt.settles(res.status, data)))) attempt.clear();
+      if (retry && ((res.ok && data.ok) || (!res.ok && attempt.settles(res.status)))) attempt.clear();
       if (res.ok && (!retry || data.ok)) return null;
       return typeof data.error === "string" ? data.error : t("apiErr.generic");
     } catch {
       return t("done.networkError");
     } finally {
       inFlight.current = false;
+      attempt.ended();
     }
   }, [t, retry, attempt]);
-  return Object.assign(send, { pending: attempt.pending, frozen: attempt.frozen, unconfirmed: attempt.unconfirmed, discard: () => { if (!inFlight.current) attempt.clear(); } });
+  return Object.assign(send, { pending: attempt.pending, frozen: attempt.frozen, unconfirmed: attempt.unconfirmed, sending: attempt.sending, discard: () => { if (!inFlight.current) attempt.clear(); } });
 }

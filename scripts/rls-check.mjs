@@ -248,19 +248,26 @@ if (!signIn.error && theirs) {
     // table's balance could already be part-paid, and a stale-balance refusal
     // then passed here without the restaurant scope ever being tested
     // (cross-review of batch 5). The positive control proves the request.
+    // Every row is registered the moment it exists, so a failure halfway
+    // through setup still leaves nothing behind (cross-review of batch 5).
+    const made = [];
     const collectable = async (restaurantId, label) => {
+      const f = { restaurantId, table: null, session: null };
+      made.push(f);
       const { data: t, error: te } = await admin.from("restaurant_tables")
         .insert({ restaurant_id: restaurantId, label }).select("id, label").single();
       if (te || !t) throw new Error(`fixture table: ${te?.message}`);
+      f.table = t.id;
       const { data: sat, error: se } = await admin.from("table_sessions")
         .insert({ restaurant_id: restaurantId, table_id: t.id }).select("id").single();
       if (se || !sat) throw new Error(`fixture sitting: ${se?.message}`);
+      f.session = sat.id;
       const { error: oe } = await admin.from("orders").insert({
         restaurant_id: restaurantId, table_id: t.id, table_label: t.label, session_id: sat.id,
         items: [], subtotal: 200, total: 200, currency: "MXN", status: "ready", paid: false, note: "rls-collect",
       });
       if (oe) throw new Error(`fixture order: ${oe.message}`);
-      return { table: t.id, session: sat.id };
+      return f;
     };
     const paidOn = async session => {
       const { data, error } = await admin.from("payments").select("amount").eq("session_id", session);
@@ -270,10 +277,9 @@ if (!signIn.error && theirs) {
     const collect = table => call("POST", "/api/table-payment",
       { tableId: table, settlement: "cash", expected: 200, currency: "MXN", ref: crypto.randomUUID() });
     const since = new Date().toISOString();
-    const fixtures = [];
     try {
-      const ours = await collectable(mine.id, `rls-collect-own-${Date.now()}`); fixtures.push(ours);
-      const next = await collectable(theirs.id, `rls-collect-next-${Date.now()}`); fixtures.push(next);
+      const ours = await collectable(mine.id, `rls-collect-own-${Date.now()}`);
+      const next = await collectable(theirs.id, `rls-collect-next-${Date.now()}`);
       const control = await collect(ours.table);
       const ownPaid = await paidOn(ours.session);
       const own = ownPaid.reduce((sum, p) => sum + Number(p.amount), 0);
@@ -286,14 +292,28 @@ if (!signIn.error && theirs) {
     } catch (error) {
       bad(`the collection fixture could not run: ${error.message}`);
     } finally {
-      for (const f of fixtures) {
-        await admin.from("payments").delete().eq("session_id", f.session);
-        await admin.from("orders").delete().eq("session_id", f.session);
-        await admin.from("table_sessions").delete().eq("id", f.session);
-        await admin.from("restaurant_tables").delete().eq("id", f.table);
+      // Each delete is checked, and what it made is counted again afterwards:
+      // a payment that failed to delete is MX$200 left in the dev ledger.
+      const failed = [];
+      const drop = async (what, query) => { const { error } = await query; if (error) failed.push(`${what}: ${error.message}`); };
+      for (const f of made) {
+        if (f.session) {
+          await drop("payments", admin.from("payments").delete().eq("session_id", f.session));
+          await drop("orders", admin.from("orders").delete().eq("session_id", f.session));
+          await drop("sitting", admin.from("table_sessions").delete().eq("id", f.session));
+        }
+        if (f.table) await drop("table", admin.from("restaurant_tables").delete().eq("id", f.table));
       }
-      await admin.from("user_logs").delete().eq("restaurant_id", mine.id).eq("entity", "bill").eq("action", "paid")
-        .eq("actor_email", signIn.data.user.email).gte("created_at", since);
+      // Only the control's own log line: MX$200 in cash, by this login, since the fixture started.
+      await drop("log", admin.from("user_logs").delete().eq("restaurant_id", mine.id).eq("entity", "bill").eq("action", "paid")
+        .eq("actor_email", signIn.data.user.email).gte("created_at", since).like("detail", "%amount=200.00%").like("detail", "%method=cash%"));
+      const tables = made.map(f => f.table).filter(Boolean);
+      const sessions = made.map(f => f.session).filter(Boolean);
+      const left = [
+        tables.length ? (await admin.from("restaurant_tables").select("id", { count: "exact", head: true }).in("id", tables)).count : 0,
+        sessions.length ? (await admin.from("payments").select("id", { count: "exact", head: true }).in("session_id", sessions)).count : 0,
+      ];
+      if (failed.length || left.some(n => n !== 0)) bad(`the collection fixture was not fully removed: ${failed.join("; ") || `${left[0]} table(s), ${left[1]} payment(s) left`}`);
     }
 
     const r3 = await call("POST", "/api/bill/write-off", { tableId: theirTable, reason: "walkout" });

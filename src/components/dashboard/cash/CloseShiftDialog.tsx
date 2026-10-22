@@ -84,7 +84,7 @@ export default function CloseShiftDialog({ open, currency, shiftId, onClose, onC
         body: "action" in body && body.action === "close" ? attempt.body(body) : JSON.stringify(body),
       });
       const data = await res.json();
-      if ((res.ok && data.ok) || (!res.ok && attempt.settles(res.status, data))) attempt.clear();
+      if ((res.ok && data.ok) || (!res.ok && attempt.settles(res.status))) attempt.clear();
       if (!res.ok) {
         setError(data.error ?? t("apiErr.generic"));
         return null;
@@ -95,6 +95,7 @@ export default function CloseShiftDialog({ open, currency, shiftId, onClose, onC
       return null;
     } finally {
       inFlight.current = false;
+      attempt.ended();
       setBusy(false);
     }
   }
@@ -136,7 +137,7 @@ export default function CloseShiftDialog({ open, currency, shiftId, onClose, onC
       {!closed ? (
         <form className="tt-prodform" onSubmit={e => void count(e)}>
           <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>{t("shift.countHint")}</p>
-          {attempt.unconfirmed(busy) && <PendingAttempt message={t("pending.close", { amount: shownMoney(frozen?.counted, shownCurrency) })} busy={busy} onDiscard={() => { if (!inFlight.current) attempt.clear(); }} />}
+          {attempt.unconfirmed() && <PendingAttempt message={t("pending.close", { amount: shownMoney(frozen?.counted, shownCurrency) })} busy={busy} onDiscard={() => { if (!inFlight.current) attempt.clear(); }} />}
           <label className="tt-field">
             <span className="tt-mod-label">{t("shift.counted")} · {shownCurrency}</span>
             <input

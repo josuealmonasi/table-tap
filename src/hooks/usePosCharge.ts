@@ -198,9 +198,9 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // A retry needs proof from the writer, not just a 4xx status; a first
-        // send is the only request that ever carried this reference.
-        if (refusalSettles(res.status, retriedAccount, data.retryUncommitted === true) && !data.held) accountRequest.current = null;
+        // A first send is the only request that ever carried this reference,
+        // so its refusal settles it; a retry's never does (`refusalSettles`).
+        if (refusalSettles(res.status, retriedAccount) && !data.held) accountRequest.current = null;
         // A refusal is the sale not happening — out of stock, the menu closed,
         // an account at its ceiling. The held copy goes and the cart stays, so
         // the cashier fixes it or hands the money back, as before the till

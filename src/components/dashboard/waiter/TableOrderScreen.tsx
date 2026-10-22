@@ -130,7 +130,7 @@ export default function TableOrderScreen({
         body: attempt.body({ tableId, items: lines, note: note.trim() || undefined }),
       });
       const data = await res.json();
-      if ((res.ok && data.orderId) || (!res.ok && attempt.settles(res.status, data))) attempt.clear();
+      if ((res.ok && data.orderId) || (!res.ok && attempt.settles(res.status))) attempt.clear();
       if (!res.ok) {
         if (data.code === "outOfStock") {
           // With the numbers in it. The refusal has always known how many are
@@ -152,6 +152,7 @@ export default function TableOrderScreen({
       toast(t("done.networkError"), "error");
     } finally {
       inFlight.current = false;
+      attempt.ended();
       setBusy(false);
     }
   }
@@ -196,7 +197,7 @@ export default function TableOrderScreen({
               total={pending ? reviewedTotal.current : pricing.total}
               sending={sending}
               busy={busy}
-              pending={attempt.unconfirmed(busy)}
+              pending={attempt.unconfirmed()}
               onDiscard={() => { if (!inFlight.current) attempt.clear(); }}
               closedNow={closedNow}
               onChangeQty={(id, qty) => { if (!sending) cart.changeQty(id, qty); }}

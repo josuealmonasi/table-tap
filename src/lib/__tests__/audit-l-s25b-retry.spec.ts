@@ -19,8 +19,8 @@ it.each([400, 402, 404, 409, 410, 422])("L5 a pre-lookup %i cannot forget the lo
   expect(purchases.size).toBe(1);
   expect([...purchases.values()].reduce((a, b) => a + b, 0)).toBe(100);
 });
-it("L5 an explicit no-write result unlocks the request", async () => {
-  state.fetch.mockResolvedValueOnce(Response.json({ error: "missing", retryUncommitted: true }, { status: 404 }));
+it("L5 a refused first send unlocks the request", async () => {
+  state.fetch.mockResolvedValueOnce(Response.json({ error: "missing" }, { status: 404 }));
   const send = useCostsSend(true);
   await send("/api/costs/purchases", "POST", { packs: 1, total: 100 });
   expect(send.pending()).toBe(false);

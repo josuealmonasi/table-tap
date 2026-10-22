@@ -1,4 +1,3 @@
-import { uncommittedRefusal } from "@/lib/retry-response";
 import { orderRequestScope } from "@/lib/order-request";
 import { readOfflineContext, contextCoveredSale } from "@/lib/offline-authority";
 import { NextRequest, NextResponse } from "next/server";
@@ -200,14 +199,14 @@ export async function POST(req: NextRequest) {
   // The transaction owns cleanup: a lost response may already have committed.
   if (error || !ticket) return await apiError("apiErr.orderCreate", 503);
   if (ticket.outcome === "stock") {
-    return NextResponse.json({ short: parseReserveResult(ticket).short, code: "outOfStock", retryUncommitted: true }, { status: 409 });
+    return NextResponse.json({ short: parseReserveResult(ticket).short, code: "outOfStock" }, { status: 409 });
   }
   if (ticket.outcome !== "settled") {
     // Every account refusal is final, including the currency one: answered
     // as `held`, the till kept the refused account request and sent it
     // again even when the cashier then chose cash.
     if (onAccount && ["limit", "closed", "stale", "paying", "partly_paid", "mixed_currency"].includes(ticket.outcome)) {
-      return await uncommittedRefusal(await chargeRefusal(ticket as Exclude<ChargeResult, { outcome: "charged" }>, restaurant.currency));
+      return await chargeRefusal(ticket as Exclude<ChargeResult, { outcome: "charged" }>, restaurant.currency);
     }
     // A reference that belongs to another order, here or anywhere: refused,
     // and nothing about that order is said.
