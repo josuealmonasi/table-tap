@@ -57,11 +57,11 @@ describe("what the shelf should hold", () => {
   it("starts from the last count and moves only with what came after it", () => {
     const expected = expectedOnHand(
       ["milk", "coffee"], counts,
-      [{ ingredient_id: "milk", quantity: 2000, created_at: "2026-10-11T08:00:00Z" },
-        { ingredient_id: "milk", quantity: 9999, created_at: "2026-10-09T08:00:00Z" }],
-      [sold("2026-10-12T09:00:00Z", latte(3, "Entera")), sold("2026-10-09T09:00:00Z", latte(10, "Entera"))],
-      [{ ingredient_id: "milk", item_id: null, quantity: 300, created_at: "2026-10-12T20:00:00Z" }],
-      book, modifiersOf,
+      [{ id: 1, ingredient_id: "milk", quantity: 2000, kind: "purchase", created_at: "2026-10-11T08:00:00Z" },
+        { id: 2, ingredient_id: "milk", quantity: 9999, kind: "purchase", created_at: "2026-10-09T08:00:00Z" },
+        { id: 3, ingredient_id: "milk", quantity: -600, kind: "sale", created_at: "2026-10-12T09:00:00Z" },
+        { id: 4, ingredient_id: "milk", quantity: -2000, kind: "sale", created_at: "2026-10-09T09:00:00Z" },
+        { id: 5, ingredient_id: "milk", quantity: -300, kind: "waste", created_at: "2026-10-12T20:00:00Z" }],
     );
     expect(expected.get("milk")).toBe(5000 + 2000 - 600 - 300);
     expect(expected.get("coffee")).toBeNull();

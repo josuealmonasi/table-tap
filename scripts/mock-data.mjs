@@ -319,6 +319,10 @@ export async function seedMock(pg) {
     logs,
   );
 
+  // Ingredients, recipes and a supplier's rise, for the costs screen.
+  await seedCosts(pg, rid);
+  // Recipes must exist before sales freeze their ingredient consumption.
+
   // ── Orders: menu with extras + modifiers for realistic line items ──
   const { rows: products } = await pg.query(
     `select p.id, p.name, p.emoji, p.price, p.modifiers,
@@ -975,8 +979,6 @@ export async function seedMock(pg) {
   await seedLoyalty(pg, rid);
   // Customer accounts, one owing across two days. Its own file too.
   await seedAccounts(pg, rid);
-  // Ingredients, recipes and a supplier's rise, for the costs screen.
-  await seedCosts(pg, rid);
   // Deposits from the restaurant's own card terminal, and voucher numbers.
   await seedTerminal(pg, rid);
   await pg.query("select set_config('tabletap.allocation_origin', '', false)");

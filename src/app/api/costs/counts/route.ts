@@ -6,7 +6,6 @@ import { logEvent } from "@/lib/activity-log";
 import { actingManager } from "@/lib/api-guard";
 import { costsBlocks, uuidOf } from "@/lib/costs/guard";
 import { decimal, MAX_INGREDIENTS } from "@/lib/costs/input";
-import { readStock } from "@/lib/costs/stock-server";
 
 export const runtime = "nodejs";
 
@@ -35,16 +34,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     counted.set(id, quantity);
   }
 
-  // What the books say the shelf holds, an instant before the count lands.
-  const stock = await readStock(actor.restaurantId);
-  const ours = new Map(stock.ingredients.map(i => [i.id, i]));
-  if ([...counted.keys()].some(id => !ours.has(id))) return await apiError("apiErr.notFound", 404);
-  const rows = [...counted].map(([id, quantity]) => ({
-    restaurant_id: actor.restaurantId, ingredient_id: id, counted: quantity,
-    expected: stock.onHand[id] ?? null, counted_by: actor.email,
-  }));
-  const { error } = await createAdminClient().from("ingredient_counts").insert(rows);
+  // What the books say and where the count starts belong to one database
+  // operation. A delivery between a read and an insert used to disappear.
+  const { data, error } = await createAdminClient().rpc("record_ingredient_counts", {
+    p_restaurant: actor.restaurantId, p_actor: actor.email,
+    p_counts: [...counted].map(([ingredient_id, quantity]) => ({ ingredient_id, counted: quantity })),
+  });
   if (error) return await apiError("apiErr.generic", 500);
+  if (!data) return await apiError("apiErr.notFound", 404);
+  const rows = data as { ingredient_id: string; counted: number; expected: number | null }[];
   await logEvent({
     restaurantId: actor.restaurantId, actor: actor.email, entity: "costs", action: "closed",
   });

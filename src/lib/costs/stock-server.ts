@@ -1,17 +1,13 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { everyRow } from "@/lib/paged";
-import type { Modifier, OrderLineItem } from "@/lib/types";
-import { recipeBook, type Ingredient, type RecipeLine } from "./recipe-cost";
-import { ordersUsage, wasteUsage, WASTE_REASONS, type WasteEntry, type WasteReason } from "./usage";
-import { expectedOnHand, purchaseList, type LastCount, type Purchase, type Suggestion } from "./stock";
+import type { Ingredient } from "./recipe-cost";
+import { WASTE_REASONS, type WasteEntry, type WasteReason } from "./usage";
+import { expectedOnHand, purchaseList, type IngredientMovement, type LastCount, type Suggestion } from "./stock";
 
 /** How far back what a day takes is averaged. */
 export const USE_WINDOW_DAYS = 14;
 /** How far back waste and purchases are listed. */
 export const BOOK_WINDOW_DAYS = 30;
-/** The order states in which a dish was made — paid or not. */
-const MADE = ["received", "preparing", "ready", "completed"];
-
 export type StockIngredient = Ingredient & { lead_days: number };
 
 export interface CountRecord extends LastCount {
@@ -46,7 +42,8 @@ const daysAgo = (now: Date, days: number) => new Date(now.getTime() - days * 86_
  * Everything the waste, stock and purchases tabs show, for one restaurant.
  * Read with the secret key and scoped to the restaurant on every read; what
  * the shelf should hold is worked out from each ingredient's last count, so
- * the reads reach back to the oldest of those.
+ * the reads reach back to the oldest of those. Movements include every dish
+ * made, whether or not it has been paid for.
  */
 export async function readStock(restaurantId: string, now = new Date()): Promise<StockView> {
   const db = createAdminClient();
@@ -57,14 +54,15 @@ export async function readStock(restaurantId: string, now = new Date()): Promise
       return q.order(order, { ascending: order === "id" }).order("id").range(a, b) as unknown as PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
     }, what);
 
-  const [restaurant, ingredients, recipes, items, counts] = await Promise.all([
+  const [restaurant, ingredients, counts] = await Promise.all([
     db.from("restaurants").select("purchase_cover_days").eq("id", restaurantId).single(),
     everyRow<StockIngredient>((a, b) => db.from("ingredients")
       .select("id, name, unit, pack_size, pack_price, unit_cost, supplier, lead_days")
       .eq("restaurant_id", restaurantId).is("archived_at", null).order("id").range(a, b), "the ingredients"),
-    scoped<RecipeLine>("recipe_lines", "item_id, ingredient_id, quantity, mod_label, mod_option", "the recipes"),
-    scoped<{ id: string; modifiers: Modifier[] }>("menu_items", "id, modifiers", "the products"),
-    scoped<CountRecord>("ingredient_counts", "ingredient_id, counted, expected, counted_by, created_at", "the counts", undefined, "created_at"),
+    everyRow<CountRecord>((a, b) => db.from("ingredient_counts")
+      .select("ingredient_id, counted, expected, counted_by, created_at, movement_cutoff")
+      .eq("restaurant_id", restaurantId).order("movement_cutoff", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false }).order("id", { ascending: false }).range(a, b), "the counts"),
   ]);
   if (restaurant.error || !restaurant.data) throw new Error(`Could not read the restaurant: ${restaurant.error?.message}`);
 
@@ -74,25 +72,30 @@ export async function readStock(restaurantId: string, now = new Date()): Promise
   const oldestCount = [...lastCounts.values()].map(c => c.created_at).sort()[0];
   const since = [oldestCount, daysAgo(now, BOOK_WINDOW_DAYS)].filter(Boolean).sort()[0];
 
-  const [purchases, waste, orders] = await Promise.all([
+  const cutoffs = [...lastCounts.values()].map(c => BigInt(c.movement_cutoff ?? 0));
+  const oldestCutoff = cutoffs.reduce<bigint | null>((min, c) => min === null || c < min ? c : min, null);
+  const [purchases, waste, movements] = await Promise.all([
     scoped<PurchaseRecord>("ingredient_purchases", "id, ingredient_id, quantity, total, recorded_by, created_at", "the purchases", since),
     scoped<WasteEntry>("waste_entries", "id, ingredient_id, item_id, name, quantity, reason, note, cost, recorded_by, created_at", "the waste", since),
-    everyRow<{ items: OrderLineItem[]; created_at: string }>((a, b) => db.from("orders")
-      .select("items, created_at").eq("restaurant_id", restaurantId).in("status", MADE)
-      .gte("created_at", since).order("id").range(a, b), "the orders made"),
+    everyRow<IngredientMovement>((a, b) => {
+      let q = db.from("ingredient_movements").select("id, ingredient_id, quantity, kind, created_at").eq("restaurant_id", restaurantId);
+      // An older transaction can commit after a count. Its serial id, rather
+      // than its start time, decides which side of the count it belongs to.
+      q = oldestCutoff === null ? q.gte("created_at", since) : q.or(`id.gt.${oldestCutoff},created_at.gte.${since}`);
+      return q.order("id").range(a, b);
+    }, "the ingredient movements"),
   ]);
 
-  const book = recipeBook(recipes.map(l => ({ ...l, quantity: Number(l.quantity) })));
-  const modifiers = new Map(items.map(i => [i.id, i.modifiers ?? []]));
-  const modifiersOf = (id: string) => modifiers.get(id);
   const typed = ingredients.map(i => ({
     ...i, pack_size: Number(i.pack_size), pack_price: Number(i.pack_price), unit_cost: Number(i.unit_cost), lead_days: Number(i.lead_days),
   }));
-  const expected = expectedOnHand(typed.map(i => i.id), lastCounts, purchases as Purchase[], orders, waste, book, modifiersOf);
+  const expected = expectedOnHand(typed.map(i => i.id), lastCounts, movements);
 
   const recentSince = daysAgo(now, USE_WINDOW_DAYS);
-  const recent = ordersUsage(orders.filter(o => o.created_at >= recentSince), book);
-  wasteUsage(waste.filter(w => w.created_at >= recentSince), book, modifiersOf, recent);
+  const recent = new Map<string, number>();
+  for (const m of movements) if (m.kind !== "purchase" && m.created_at >= recentSince) {
+    recent.set(m.ingredient_id, (recent.get(m.ingredient_id) ?? 0) - Number(m.quantity));
+  }
   const coverDays = Number(restaurant.data.purchase_cover_days) || 7;
 
   const bookSince = daysAgo(now, BOOK_WINDOW_DAYS);

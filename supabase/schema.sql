@@ -8063,3 +8063,247 @@ do $$ begin
     alter table promotions add constraint promotions_tiers_sound check (public.tiers_sound(tiers));
   end if;
 end $$;
+
+-- S18: keep ingredient history when recipes change, and count at one cutoff.
+-- Apply this block in one transaction before deploying the new count caller.
+begin;
+lock table orders, waste_entries, ingredient_purchases, ingredient_counts in share row exclusive mode;
+
+create table if not exists ingredient_consumption (
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  source_kind text not null check (source_kind in ('sale', 'waste', 'purchase')),
+  source_id uuid not null,
+  usage jsonb not null,
+  active boolean not null,
+  primary key (source_kind, source_id)
+);
+create table if not exists ingredient_movements (
+  id bigint generated always as identity primary key,
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  ingredient_id uuid not null,
+  quantity numeric not null,
+  kind text not null check (kind in ('sale', 'waste', 'purchase')),
+  created_at timestamptz not null default clock_timestamp()
+);
+create index if not exists ingredient_movements_stock_idx on ingredient_movements(restaurant_id, ingredient_id, id);
+alter table ingredient_consumption enable row level security;
+alter table ingredient_movements enable row level security;
+revoke all on ingredient_consumption from anon;
+revoke all on ingredient_movements from anon;
+revoke all on ingredient_consumption, ingredient_movements from public, authenticated;
+grant all on ingredient_consumption, ingredient_movements to service_role;
+revoke all on sequence ingredient_movements_id_seq from public, anon, authenticated;
+grant usage, select on sequence ingredient_movements_id_seq to service_role;
+alter table ingredient_counts add column if not exists movement_cutoff bigint;
+
+-- A separate lock name keeps this out of the money and stock-reservation locks.
+create or replace function public.lock_ingredient_movements(p_restaurant uuid)
+returns void language sql set search_path = public as $$
+  select pg_advisory_xact_lock(hashtextextended('ingredient-movements:' || p_restaurant::text, 0));
+$$;
+revoke all on function public.lock_ingredient_movements(uuid) from public, anon, authenticated;
+grant execute on function public.lock_ingredient_movements(uuid) to service_role;
+
+-- Freeze quantities, including combo counts, choices and extras. No recipe
+-- version is needed: these are the grams that this particular sale used.
+create or replace function public.sale_ingredient_usage(p_restaurant uuid, p_items jsonb)
+returns jsonb language sql stable security definer set search_path = public as $$
+  with lines as (
+    select l from jsonb_array_elements(coalesce(p_items, '[]')) l
+  ), dishes as (
+    select c->>'itemId' as item_id, coalesce(c->'mods', '{}') as choices,
+      (c->>'qty')::numeric * (l->>'qty')::numeric as quantity
+      from lines cross join lateral jsonb_array_elements(coalesce(l->'components', '[]')) c
+    union all
+    select l->>'itemId', coalesce(l->'mods', '{}'), (l->>'qty')::numeric from lines
+      where jsonb_array_length(coalesce(l->'components', '[]')) = 0
+    union all
+    select e->>'id', '{}'::jsonb, (l->>'qty')::numeric
+      from lines cross join lateral jsonb_array_elements(coalesce(l->'extras', '[]')) e
+  ), used as (
+    select r.ingredient_id, -sum(r.quantity * d.quantity) as quantity
+      from dishes d join recipe_lines r on r.item_id::text = d.item_id and r.restaurant_id = p_restaurant
+      where r.mod_label is null or d.choices->r.mod_label = to_jsonb(r.mod_option)
+        or (jsonb_typeof(d.choices->r.mod_label) = 'array' and (d.choices->r.mod_label) ? r.mod_option)
+      group by r.ingredient_id
+  ) select coalesce(jsonb_object_agg(ingredient_id, quantity), '{}') from used;
+$$;
+revoke all on function public.sale_ingredient_usage(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.sale_ingredient_usage(uuid, jsonb) to service_role;
+
+create or replace function public.waste_ingredient_usage(p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select case when p_ingredient is not null then jsonb_build_object(p_ingredient, -p_quantity)
+    else public.sale_ingredient_usage(p_restaurant, jsonb_build_array(jsonb_build_object(
+      'itemId', p_item, 'qty', p_quantity, 'mods', coalesce((
+        select jsonb_object_agg(m->>'label', m->'options'->0)
+          from menu_items i cross join lateral jsonb_array_elements(coalesce(i.modifiers, '[]')) m
+          where i.id = p_item and i.restaurant_id = p_restaurant and m->>'type' = 'single'
+            and jsonb_array_length(m->'options') > 0
+      ), '{}')))) end;
+$$;
+revoke all on function public.waste_ingredient_usage(uuid, uuid, uuid, numeric) from public, anon, authenticated;
+grant execute on function public.waste_ingredient_usage(uuid, uuid, uuid, numeric) to service_role;
+
+-- Existing recipes cannot tell us what an older, already edited recipe was.
+-- Freeze the best evidence left at upgrade, once; never recalculate it later.
+with added as (
+  insert into ingredient_consumption(restaurant_id, source_kind, source_id, usage, active)
+    select restaurant_id, 'sale', id, public.sale_ingredient_usage(restaurant_id, items),
+      status in ('received', 'preparing', 'ready', 'completed') from orders
+    on conflict do nothing returning *
+) insert into ingredient_movements(restaurant_id, ingredient_id, quantity, kind, created_at)
+  select a.restaurant_id, u.key::uuid, u.value::numeric, a.source_kind, o.created_at
+    from added a join orders o on o.id = a.source_id cross join lateral jsonb_each_text(a.usage) u where a.active;
+with added as (
+  insert into ingredient_consumption(restaurant_id, source_kind, source_id, usage, active)
+    select restaurant_id, 'waste', id, public.waste_ingredient_usage(restaurant_id, ingredient_id, item_id, quantity), true from waste_entries
+    on conflict do nothing returning *
+) insert into ingredient_movements(restaurant_id, ingredient_id, quantity, kind, created_at)
+  select a.restaurant_id, u.key::uuid, u.value::numeric, a.source_kind, w.created_at
+    from added a join waste_entries w on w.id = a.source_id cross join lateral jsonb_each_text(a.usage) u;
+with added as (
+  insert into ingredient_consumption(restaurant_id, source_kind, source_id, usage, active)
+    select restaurant_id, 'purchase', id, jsonb_build_object(ingredient_id, quantity), true from ingredient_purchases
+    on conflict do nothing returning *
+) insert into ingredient_movements(restaurant_id, ingredient_id, quantity, kind, created_at)
+  select a.restaurant_id, u.key::uuid, u.value::numeric, a.source_kind, p.created_at
+    from added a join ingredient_purchases p on p.id = a.source_id cross join lateral jsonb_each_text(a.usage) u;
+
+-- Keep the old callers: every write, including waste taken back and a pending
+-- checkout becoming food, records its delta under the same count lock.
+create or replace function public.track_ingredient_movement()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_row jsonb := case when tg_op = 'DELETE' then to_jsonb(old) else to_jsonb(new) end;
+  v_restaurant uuid := (v_row->>'restaurant_id')::uuid;
+  v_kind text := case tg_table_name when 'orders' then 'sale' when 'waste_entries' then 'waste' else 'purchase' end;
+  v_previous ingredient_consumption;
+  v_usage jsonb;
+  v_active boolean := tg_op <> 'DELETE';
+  v_changed boolean := false;
+begin
+  if tg_op = 'UPDATE' and new.restaurant_id is distinct from old.restaurant_id then
+    raise exception 'ingredient history belongs to one restaurant';
+  end if;
+  -- A restaurant deletion already removes both books by cascade.
+  if not exists(select 1 from restaurants where id = v_restaurant) then return null; end if;
+  perform public.lock_ingredient_movements(v_restaurant);
+  select * into v_previous from ingredient_consumption where source_kind = v_kind and source_id = (v_row->>'id')::uuid;
+  if tg_op = 'UPDATE' then
+    if v_kind = 'sale' then v_changed := new.items is distinct from old.items;
+    elsif v_kind = 'waste' then
+      v_changed := (new.ingredient_id, new.item_id, new.quantity) is distinct from (old.ingredient_id, old.item_id, old.quantity);
+    else v_changed := (new.ingredient_id, new.quantity) is distinct from (old.ingredient_id, old.quantity); end if;
+  end if;
+  v_usage := v_previous.usage;
+  if v_usage is null or v_changed then
+    if v_kind = 'sale' then v_usage := public.sale_ingredient_usage(v_restaurant, v_row->'items');
+    elsif v_kind = 'waste' then v_usage := public.waste_ingredient_usage(v_restaurant,
+      (v_row->>'ingredient_id')::uuid, (v_row->>'item_id')::uuid, (v_row->>'quantity')::numeric);
+    else v_usage := jsonb_build_object(v_row->>'ingredient_id', (v_row->>'quantity')::numeric); end if;
+  end if;
+  if v_kind = 'sale' then v_active := v_active and v_row->>'status' in ('received', 'preparing', 'ready', 'completed'); end if;
+  insert into ingredient_movements(restaurant_id, ingredient_id, quantity, kind, created_at)
+    select v_restaurant, key::uuid, sum(quantity), v_kind,
+      case when tg_op = 'INSERT' then (v_row->>'created_at')::timestamptz else clock_timestamp() end from (
+      select key, value::numeric as quantity from jsonb_each_text(v_usage) where v_active
+      union all
+      select key, -value::numeric from jsonb_each_text(coalesce(v_previous.usage, '{}')) where coalesce(v_previous.active, false)
+    ) delta group by key having sum(quantity) <> 0;
+  insert into ingredient_consumption(restaurant_id, source_kind, source_id, usage, active)
+    values(v_restaurant, v_kind, (v_row->>'id')::uuid, v_usage, v_active)
+    on conflict (source_kind, source_id) do update set usage = excluded.usage, active = excluded.active;
+  return null;
+end;
+$$;
+revoke all on function public.track_ingredient_movement() from public, anon, authenticated;
+drop trigger if exists track_ingredient_movement on orders;
+create trigger track_ingredient_movement after insert or update or delete on orders for each row execute function public.track_ingredient_movement();
+drop trigger if exists track_ingredient_movement on waste_entries;
+create trigger track_ingredient_movement after insert or update or delete on waste_entries for each row execute function public.track_ingredient_movement();
+drop trigger if exists track_ingredient_movement on ingredient_purchases;
+create trigger track_ingredient_movement after insert or update or delete on ingredient_purchases for each row execute function public.track_ingredient_movement();
+
+-- Counts never lock an order or a menu item. Take the movement lock before
+-- the purchase's ingredient row lock too, so its FK cannot deadlock a count.
+create or replace function public.record_purchase(
+  p_restaurant uuid, p_ingredient uuid, p_packs numeric, p_total numeric, p_actor text
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_ingredient ingredients%rowtype;
+  v_pack_price numeric;
+  v_id uuid;
+begin
+  perform public.lock_ingredient_movements(p_restaurant);
+  if p_packs <= 0 then return null; end if;
+  select * into v_ingredient from ingredients
+   where id = p_ingredient and restaurant_id = p_restaurant and archived_at is null for update;
+  if v_ingredient.id is null then return null; end if;
+  v_pack_price := round(p_total / p_packs, 2);
+  if v_pack_price is distinct from v_ingredient.pack_price then
+    update ingredients set pack_price = v_pack_price, updated_by = p_actor where id = p_ingredient;
+  end if;
+  insert into ingredient_purchases (restaurant_id, ingredient_id, quantity, total, recorded_by)
+  values (p_restaurant, p_ingredient, p_packs * v_ingredient.pack_size, p_total, p_actor)
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+revoke all on function public.record_purchase(uuid, uuid, numeric, numeric, text) from public, anon, authenticated;
+grant execute on function public.record_purchase(uuid, uuid, numeric, numeric, text) to service_role;
+
+-- This also protects the deployed caller that still inserts count rows.
+create or replace function public.cutoff_ingredient_count()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_last ingredient_counts;
+begin
+  perform public.lock_ingredient_movements(new.restaurant_id);
+  select * into v_last from ingredient_counts where restaurant_id = new.restaurant_id and ingredient_id = new.ingredient_id
+    order by movement_cutoff desc nulls last, created_at desc, id desc limit 1;
+  new.movement_cutoff := nextval('public.ingredient_movements_id_seq');
+  new.created_at := clock_timestamp();
+  new.expected := null;
+  if v_last.id is not null then
+    select v_last.counted + coalesce(sum(quantity), 0) into new.expected from ingredient_movements
+      where restaurant_id = new.restaurant_id and ingredient_id = new.ingredient_id
+        and id <= new.movement_cutoff and case when v_last.movement_cutoff is null then created_at > v_last.created_at
+          else id > v_last.movement_cutoff end;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.cutoff_ingredient_count() from public, anon, authenticated;
+drop trigger if exists cutoff_ingredient_count on ingredient_counts;
+create trigger cutoff_ingredient_count before insert on ingredient_counts for each row execute function public.cutoff_ingredient_count();
+
+create or replace function public.record_ingredient_counts(p_restaurant uuid, p_counts jsonb, p_actor text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_results jsonb;
+begin
+  perform public.lock_ingredient_movements(p_restaurant);
+  if jsonb_typeof(p_counts) is distinct from 'array' then raise exception 'invalid counts'; end if;
+  if jsonb_array_length(p_counts) not between 1 and 500 or exists (
+    select 1 from jsonb_to_recordset(p_counts) as c(ingredient_id uuid, counted numeric)
+      where ingredient_id is null or counted is null or counted < 0 or counted > 10000000
+        or counted::text in ('NaN', 'Infinity', '-Infinity') or counted <> round(counted, 3)
+  ) or (select count(distinct c->>'ingredient_id') from jsonb_array_elements(p_counts) c) <> jsonb_array_length(p_counts) then
+    raise exception 'invalid counts';
+  end if;
+  if exists(select 1 from jsonb_to_recordset(p_counts) as c(ingredient_id uuid) where not exists(
+    select 1 from ingredients i where i.id = c.ingredient_id and i.restaurant_id = p_restaurant and i.archived_at is null
+  )) then return null; end if;
+  with recorded as (
+    insert into ingredient_counts(restaurant_id, ingredient_id, counted, counted_by)
+      select p_restaurant, c.ingredient_id, c.counted, p_actor
+        from jsonb_to_recordset(p_counts) as c(ingredient_id uuid, counted numeric)
+      returning ingredient_id, counted, expected
+  ) select jsonb_agg(to_jsonb(recorded)) into v_results from recorded;
+  return v_results;
+end;
+$$;
+revoke all on function public.record_ingredient_counts(uuid, jsonb, text) from public, anon, authenticated;
+grant execute on function public.record_ingredient_counts(uuid, jsonb, text) to service_role;
+revoke truncate, references, trigger on all tables in schema public from authenticated;
+revoke truncate, references, trigger on all tables in schema public from public, anon, authenticated;
+commit;
