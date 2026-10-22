@@ -39,3 +39,11 @@ it("K15: coupon times round-trip in the restaurant zone, independent of the devi
   expect(zonedTimestamp("2026-03-08T02:30", "America/New_York")).toBeNull();
   expect(zonedTimestamp("2026-11-01T01:30", "America/New_York")).toBeNull();
 });
+it("S23b: the menu's load-failed toast names the Retry button it shows, never a page reload", () => {
+  // Reloading the page throws away the drafts the notice promises to keep.
+  for (const locale of ["en", "es"] as const) {
+    const toast = translate(messagesFor(locale), "menu.loadFailed");
+    expect(toast, locale).toContain(translate(messagesFor(locale), "fallback.retry"));
+    expect(toast, locale).not.toMatch(/reload the page|recarga la página/i);
+  }
+});
