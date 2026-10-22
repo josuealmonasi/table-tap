@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { MARK } from "./api-fixtures.mjs";
 
 const MENU_FIELDS = { active: false, schedule: { enabled: true, rules: [{ days: [1], allDay: true }] } };
@@ -12,8 +13,10 @@ const EXTRA_FIELDS = {
   available: false, sort_order: 7,
 };
 
+// Compare values, not JSON text: jsonb hands keys back in its own order
+// (shorter first), so the text of a schedule the copy kept intact never matched.
 function matches(actual, expected) {
-  return Object.entries(expected).every(([key, value]) => JSON.stringify(actual?.[key]) === JSON.stringify(value));
+  return Object.entries(expected).every(([key, value]) => isDeepStrictEqual(actual?.[key], value));
 }
 
 /** A hidden source keeps the case's copies out of customers' menus. */
