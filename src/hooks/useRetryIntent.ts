@@ -20,3 +20,16 @@ export function useRetryIntent(): RetryIntent {
     pending(): boolean { return saved.current !== null; },
   };
 }
+
+/**
+ * Whether a refusal settles the attempt, so its reference may go. Only an
+ * answer given after the server looked the reference up says the first try
+ * did not commit. A rate limit (429), a timeout (408, 425) or a sign-in that
+ * lapsed (401, 403) is answered before that. Cleared on a 429, a lost MX$100
+ * pay-later order was created again under a new reference once the limit
+ * passed. Keeping a reference is always safe; dropping it early is what
+ * duplicates.
+ */
+export function refusalSettles(status: number): boolean {
+  return status >= 400 && status < 500 && ![401, 403, 408, 425, 429].includes(status);
+}

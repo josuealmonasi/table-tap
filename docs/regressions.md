@@ -55,6 +55,10 @@ us, and what now catches each one.
 | A server that hangs up or sends nothing in 60 s is retried once; a page fault never is (S8b follow-up) | On an 8 GB Mac in swap, empty responses and navigation timeouts failed whole runs with retries=0 |
 | A dialog sweep comes back to its page when a click navigated away (S8 follow-up) | «Main Menu Abrir →» left /dashboard first, so the menus' rename, copy and delete dialogs were never checked |
 | A page's pending requests start over when a new page commits (S8 follow-up) | Requests the departing menu editor fired as goto began were never reported, and /dashboard could never be ready again in that tab |
+| A retry keeps its reference until an answer given after the lookup (K cross-review 1) | A 429 cleared a lost pay-later order's reference, and the next tap created a second MX$100 debt |
+| A collection's food is sent to the cent (K cross-review 3) | 135.80 - 12.35 reached SQL as 123.45000000000002 and the MX$135.80 handed over was refused |
+| Every account refusal at the till is final, the currency one included (K cross-review 4) | Answered as held, the till resent the refused account sale even after the cashier chose cash |
+| A pay-later coupon's minimum is judged before the coupon, as checkout judges it (K cross-review 5) | MX$100 with a MX$10 coupon and a MX$100 minimum passed the route and was refused in SQL on MX$90 |
 | Browser admission and measured server memory agree (S8b) | Three workers repeatedly crossed the development server's memory threshold with no peak RSS in the summary |
 | Browser navigation and the visit verdict agree (S8) | Dialog visits whose navigation failed silently vanished from coverage |
 | Typing errors and failed checks agree (S8) | A failed page-field check became an empty fault list and printed ok |
@@ -3801,4 +3805,25 @@ field read by `typedDecimal`, and the route refuses a price of zero. The form
 says what is missing instead of only disabling Save, and says when a price is
 not cheaper than buying separately. `promo-math.spec.ts` and the api case "a
 tier with no price" hold both places.
+
+## Codex's cross-review of S20 and S21 (K cross-review)
+
+A fresh Codex session reviewed S20 and S21 as a stranger would, after Claude
+had reviewed and cleared them. It found five bugs, three of them in
+conclusions Claude had signed off on:
+
+- **A retry reference was cleared on a 429.** A rate limit, a timeout or a
+  lapsed sign-in is answered before the server looks the reference up, so it
+  says nothing about whether the first try committed. `refusalSettles` now
+  keeps the reference for 401, 403, 408, 425, 429 and any 5xx, at all seven
+  call sites.
+- **The food amount was a float.** `recordReviewed` sends `round2(amount - tip)`.
+- **The till held a refused account sale.** The POS route now treats
+  `mixed_currency` as a final account refusal.
+- **The coupon minimum was judged after the coupon.** It is now judged on the
+  route's `base.subtotal`, passed as `eligible_subtotal`.
+- **A reopened form resubmitted a hidden pending request.** This is S20b:
+  every form with an unresolved attempt shows it and locks its fields.
+
+Each fix has a test that fails without it.
 

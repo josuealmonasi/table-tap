@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRetryIntent } from "@/hooks/useRetryIntent";
+import { useRetryIntent, refusalSettles } from "@/hooks/useRetryIntent";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
@@ -71,7 +71,7 @@ export default function CloseShiftDialog({ open, currency, shiftId, onClose, onC
         body: "action" in body && body.action === "close" ? attempt.body(body) : JSON.stringify(body),
       });
       const data = await res.json();
-      if ((res.ok && data.ok) || (!res.ok && res.status < 500)) attempt.clear();
+      if ((res.ok && data.ok) || (!res.ok && refusalSettles(res.status))) attempt.clear();
       if (!res.ok) {
         setError(data.error ?? t("apiErr.generic"));
         return null;

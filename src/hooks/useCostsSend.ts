@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import { useRetryIntent } from "@/hooks/useRetryIntent";
+import { useRetryIntent, refusalSettles } from "@/hooks/useRetryIntent";
 import { useT } from "@/lib/i18n/context";
 
 /**
@@ -24,7 +24,7 @@ export function useCostsSend(retry = false): (path: string, method: string, body
       });
       if (res.ok && !retry) return null;
       const data = await res.json();
-      if (retry && ((res.ok && data.ok) || (!res.ok && res.status < 500))) attempt.clear();
+      if (retry && ((res.ok && data.ok) || (!res.ok && refusalSettles(res.status)))) attempt.clear();
       if (res.ok && (!retry || data.ok)) return null;
       return typeof data.error === "string" ? data.error : t("apiErr.generic");
     } catch {

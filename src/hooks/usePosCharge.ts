@@ -1,6 +1,7 @@
 "use client";
 
 import { rememberLastSale } from "@/lib/pos-last-sale";
+import { refusalSettles } from "@/hooks/useRetryIntent";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
@@ -180,7 +181,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (res.status < 500 && !data.held) accountRequest.current = null;
+        if ((res.ok || refusalSettles(res.status)) && !data.held) accountRequest.current = null;
         // A refusal is the sale not happening — out of stock, the menu closed,
         // an account at its ceiling. The held copy goes and the cart stays, so
         // the cashier fixes it or hands the money back, as before the till
