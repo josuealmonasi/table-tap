@@ -1,6 +1,6 @@
 import { DIALOGS } from "./layout-paths.mjs";
 import { look } from "./browser-audit.mjs";
-import { navigate, overlay, ready, trackData } from "./browser-ready.mjs";
+import { navigate, observe, overlay, ready, trackData } from "./browser-ready.mjs";
 
 /** Click from inside the page: Playwright's click waits for everything to settle. */
 const tap = (tab, sel) =>
@@ -47,7 +47,19 @@ export async function dinerVisit({ ctx, tab, phase, log }, { lang, flow, base, r
     await phase("readiness", () => ready(tab, { pending }));
   }
   await phase("readiness", () => ready(tab, { pending, expect: flow.expect?.[lang] }));
-  return { failures: await look(tab, `diner ${lang} · ${flow.name}`, phase, log), audits: 1 };
+  let failures = await look(tab, `diner ${lang} · ${flow.name}`, phase, log);
+  if (flow.escape !== undefined) {
+    // Escape answers the topmost dialog only. Before S24 the sheets ignored it,
+    // and nothing here would have said so.
+    await tab.keyboard.press("Escape");
+    const count = () => tab.evaluate(`document.querySelectorAll('[role=dialog][aria-modal=true]').length`);
+    const settled = await phase("readiness", () => observe(tab, async () => (await count()) === flow.escape, { timeout: 3000, required: false }));
+    if (!settled) {
+      log(`    BAD      diner ${lang} · ${flow.name}: Escape left ${await count()} dialog(s) open, not ${flow.escape}`);
+      failures++;
+    }
+  }
+  return { failures, audits: 1 };
 }
 
 export async function teamVisit({ tab, phase, log }, { who, path, base, width }) {
@@ -58,7 +70,15 @@ export async function teamVisit({ tab, phase, log }, { who, path, base, width })
   let audits = 1;
   const dialogs = [];
   for (const dialog of DIALOGS[path] ?? []) {
-    const press = () => dialog.text ? tapText(tab, dialog.text) : tap(tab, dialog.click);
+    // What the screen needs before the dialog can open: a dish in the sale.
+    const prepare = async () => {
+      for (const step of dialog.before ?? []) {
+        if (!(await (step.text ? tapText(tab, step.text) : tap(tab, step.click)))) return false;
+        await phase("readiness", () => ready(tab, { pending }));
+      }
+      return true;
+    };
+    const press = async () => (await prepare()) && (dialog.text ? tapText(tab, dialog.text) : tap(tab, dialog.click));
     const shows = dialog.shows ?? "[role=dialog]";
     let clicked = await press();
     // Having clicked does not mean anything opened. A silent no-op reads exactly

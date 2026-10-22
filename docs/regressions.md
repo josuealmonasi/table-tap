@@ -4150,3 +4150,39 @@ Correct those offers before applying; do not make up replacement prices.
 - **Copy in the system's words.** «Esta referencia ya se usó…» and «Dejar de
   reenviar este intento» became «Esto ya se había enviado antes con otros
   datos…» and «Ya no enviar esto».
+
+### Codex's cross-review of batch 5
+
+A fresh Codex session reviewed S24, S25a and S25b together and found seven
+problems. Codex then hit its usage limit, and Claude fixed all seven:
+
+1. **Claude's widening of `retryUncommitted` could release a reference
+   while the first request was still committing.** Request A stalls before
+   writing, and retry B meets «orders paused». Marked uncommitted, the phone
+   forgot the reference, A committed, and the next send made a second
+   MX$100 order. Route refusals no longer carry the mark. The client decides
+   instead (`refusalSettles(status, retried, uncommitted)`):
+   - the first send of a fresh reference settles on any 4xx except 408 and
+     425, because no other request carries that reference;
+   - a retry settles only on a mark the writer set under the restaurant's lock.
+2. **The old-tab currency shim could not prove what the tab showed.** A tab
+   opened in pesos showed MX$100, and after a switch to dollars the same tap
+   cleared US$100. Old tabs now refresh before collecting.
+3. **Rows saved before the deploy conflicted on their unchanged retry.** The
+   clients in production forget a reference on a 409, so that was a second
+   order, purchase or account sale.
+   - Orders fall back to the old scope, also after a write conflict.
+   - Account sales without a scope match on their account.
+   - Purchases without packs match on ingredient and money.
+4. **A saved provider fee request did not block deletion beside a fee ledger
+   row.** MX$3 owed, a local share that rounded to zero. It blocks now, unless
+   the share was returned in full.
+5. **A successful switch never read back.** A copy made next took the old
+   availability. Switches now read back either way.
+6. **`rls-check` could pass on a stale-balance refusal.** It now collects a
+   table it controls, with a positive control on our own.
+7. **The dialogs sweep never reached the till's charge**, which needs a dish
+   in the sale, and nothing pressed Escape on the diner's sheets. `layout`
+   now opens the charge and the till's dish sheet through `before` steps.
+   After measuring, Escape must close them. Each diner flow checks how many
+   dialogs Escape leaves open (`escape`).

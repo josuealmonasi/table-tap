@@ -116,6 +116,14 @@ export const DIALOGS = {
   "/dashboard/tables": [
     { name: "add table", text: "Agregar mesa" },
   ],
+  // The till's sheets. «Cobrar en efectivo» does nothing on an empty sale, so
+  // the sweep that clicks what is enabled never reached the charge; `before`
+  // puts a dish in the sale first (cross-review of batch 5). Both are closed
+  // with Escape, which the visit requires to work.
+  "/dashboard/pos": [
+    { name: "the till's charge", before: [{ click: ".tt-pos-tile:not(.tt-pos-tile-out)" }, { text: "Agregar al carrito" }], text: "Cobrar en efectivo" },
+    { name: "a dish on the till", click: ".tt-pos-tile:not(.tt-pos-tile-out)" },
+  ],
   "/dashboard/promotions": [
     { name: "new combo", text: "Nuevo combo" },
   ],
@@ -151,20 +159,25 @@ export const DINER = [
   // It happened — a dish row is a div with role="button", not a <button>, so the
   // selector found nothing and nobody noticed.
   { name: "menu", expect: { es: "Llamar al mesero", en: "Call waiter" }, steps: [] },
+  // `escape` is how many dialogs Escape must leave open: only the topmost one
+  // answers it, so the coupon closes and the cart under it stays (S24).
   {
     name: "dish detail",
     expect: { es: "Agregar al carrito", en: "Add to cart" },
     steps: [{ click: { es: "[aria-label^='Abrir ']", en: "[aria-label^='Open ']" } }],
+    escape: 0,
   },
   {
     name: "cart",
     expect: { es: "Total", en: "Total" },
     steps: [{ addToCart: true }, { click: ".tt-fab" }, { bottom: true }],
+    escape: 0,
   },
   {
     name: "coupon",
     expect: { es: "Aplicar", en: "Apply" },
     steps: [{ addToCart: true }, { click: ".tt-fab" }, { text: { es: "cupón", en: "coupon" } }],
+    escape: 1,
   },
   // The order tracker, which nothing measured until it was found scrolling a
   // 180px QR code to reach the way out. `at` starts the flow somewhere other
