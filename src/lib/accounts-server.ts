@@ -3,6 +3,7 @@ import { everyRow } from "@/lib/paged";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { byDay, linesOf, type StatementCharge, type StatementDay } from "@/lib/accounts";
 import { round2 } from "@/lib/money";
+import { currencyBalances, type CurrencyBalance } from "@/lib/currency-balances";
 
 // Customer accounts, read with the secret key: the table has no policy at all,
 // so nothing reaches one except through a route that has checked who is asking.
@@ -27,6 +28,8 @@ const ACCOUNT_COLUMNS =
 /** An account and what it owes, as the staff list shows it. */
 export interface AccountSummary extends AccountRow {
   owed: number;
+  currency?: string | null;
+  balances?: CurrencyBalance[];
   lastChargeAt: string | null;
 }
 
@@ -45,24 +48,29 @@ export async function listAccounts(restaurantId: string): Promise<AccountSummary
   const [accounts, owedRows] = await Promise.all([
     everyRow<AccountRow>((a, b) => db.from("customer_accounts").select(ACCOUNT_COLUMNS).eq("restaurant_id", restaurantId)
       .order("status").order("name").order("id").range(a, b), "the accounts"),
-    everyRow<{ account_id: string; total: number; created_at: string; charged_at: string | null }>((a, b) => db
-      .from("orders").select("account_id, total, created_at, charged_at")
+    everyRow<{ account_id: string; total: number; currency: string; created_at: string; charged_at: string | null }>((a, b) => db
+      .from("orders").select("account_id, total, currency, created_at, charged_at")
       .eq("restaurant_id", restaurantId).not("account_id", "is", null)
       .eq("paid", false).eq("written_off", false).neq("status", "cancelled")
       .order("id").range(a, b), "what the accounts owe"),
   ]);
-  const owed = new Map<string, { sum: number; last: string | null }>();
+  const owed = new Map<string, { last: string | null }>();
   for (const o of owedRows) {
     const at = o.charged_at ?? o.created_at;
-    const was = owed.get(o.account_id) ?? { sum: 0, last: null };
-    owed.set(o.account_id, { sum: was.sum + Number(o.total), last: !was.last || at > was.last ? at : was.last });
+    const was = owed.get(o.account_id) ?? { last: null };
+    owed.set(o.account_id, { last: !was.last || at > was.last ? at : was.last });
   }
-  return accounts.map(a => ({
-    ...a,
-    credit_limit: Number(a.credit_limit),
-    owed: round2(owed.get(a.id)?.sum ?? 0),
-    lastChargeAt: owed.get(a.id)?.last ?? null,
-  }));
+  return accounts.map(a => {
+    const balances = currencyBalances(owedRows.filter(o => o.account_id === a.id).map(o => ({ currency: o.currency, amount: Number(o.total) })));
+    return {
+      ...a,
+      credit_limit: Number(a.credit_limit),
+      owed: balances.length === 1 ? balances[0].amount : 0,
+      currency: balances.length === 1 ? balances[0].currency : null,
+      balances,
+      lastChargeAt: owed.get(a.id)?.last ?? null,
+    };
+  });
 }
 
 /** One account of a restaurant, or null. */
@@ -80,6 +88,7 @@ export async function accountByCode(code: string): Promise<AccountRow | null> {
 }
 
 export interface StatementPayment {
+  currency?: string;
   at: string;
   amount: number;
   tip: number;
@@ -88,6 +97,8 @@ export interface StatementPayment {
 
 /** What is owed, day by day, and what was paid before. */
 export interface Statement {
+  currency?: string | null;
+  balances?: CurrencyBalance[];
   owed: number;
   days: StatementDay[];
   payments: StatementPayment[];
@@ -97,6 +108,7 @@ export interface Statement {
 }
 
 interface StatementOrder {
+  currency: string;
   id: string;
   items: unknown;
   total: number;
@@ -110,17 +122,18 @@ interface StatementOrder {
 export async function statementOf(account: AccountRow, timeZone?: string | null): Promise<Statement> {
   const db = createAdminClient();
   const [orders, paymentsRes] = await Promise.all([
-    everyRow<StatementOrder>((a, b) => db.from("orders").select("id, items, total, table_label, created_at, charged_at, charged_by")
-      .eq("account_id", account.id).eq("paid", false).eq("written_off", false).neq("status", "cancelled")
+    everyRow<StatementOrder>((a, b) => db.from("orders").select("id, items, total, currency, table_label, created_at, charged_at, charged_by")
+      .eq("restaurant_id", account.restaurant_id).eq("account_id", account.id).eq("paid", false).eq("written_off", false).neq("status", "cancelled")
       .order("id").range(a, b), "the account's orders"),
-    db.from("payments").select("amount, tip, method, created_at")
-      .eq("account_id", account.id).order("created_at", { ascending: false }).limit(20),
+    db.from("payments").select("amount, tip, currency, method, created_at")
+      .eq("restaurant_id", account.restaurant_id).eq("account_id", account.id).order("created_at", { ascending: false }).limit(20),
   ]);
   const returns = await everyRow<{ id: string; amount: number; currency: string; status: string; created_at: string }>((a, b) => db
     .from("refund_operations").select("id, amount, currency, status, created_at, order_adjustments!inner(orders!inner(account_id))")
     .eq("restaurant_id", account.restaurant_id).eq("order_adjustments.orders.account_id", account.id)
     .order("id").range(a, b), "the account's returns");
   const charges: StatementCharge[] = orders.map(o => ({
+    currency: o.currency,
     orderId: o.id,
     at: o.charged_at ?? o.created_at,
     tableLabel: o.table_label,
@@ -128,12 +141,15 @@ export async function statementOf(account: AccountRow, timeZone?: string | null)
     total: Number(o.total),
   }));
   const payments = (unwrap(paymentsRes, "the account's payments") ?? []) as {
-    amount: number; tip: number; method: "cash" | "card"; created_at: string;
+    amount: number; tip: number; currency: string; method: "cash" | "card"; created_at: string;
   }[];
+  const balances = currencyBalances(orders.map(o => ({ currency: o.currency, amount: Number(o.total) })));
   return {
-    owed: round2(charges.reduce((sum, c) => sum + c.total, 0)),
+    currency: balances.length === 1 ? balances[0].currency : null,
+    balances,
+    owed: balances.length > 1 ? 0 : round2(charges.reduce((sum, c) => sum + c.total, 0)),
     days: byDay(charges, timeZone ?? DEFAULT_TIME_ZONE),
-    payments: payments.map(p => ({ at: p.created_at, amount: Number(p.amount), tip: Number(p.tip), method: p.method })),
+    payments: payments.map(p => ({ at: p.created_at, amount: Number(p.amount), tip: Number(p.tip), method: p.method, currency: p.currency })),
     returns: returns.map(r => ({ id: r.id, amount: Number(r.amount), currency: r.currency, status: r.status, created_at: r.created_at })),
     chargedBy: Object.fromEntries(orders.map(o => [o.id, o.charged_by])),
   };

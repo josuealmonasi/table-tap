@@ -8,7 +8,10 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { tableOutstanding } from "@/lib/table-outstanding";
 import { applyPayment } from "@/lib/table-balance";
-import { closeBill, record, sittingFor, summary } from "@/lib/part-payment";
+import { recordReviewed } from "@/lib/reviewed-collection";
+import { closeBill, summary } from "@/lib/part-payment";
+import { isDinerCurrency } from "@/lib/diner-currency";
+import { formatMoney } from "@/lib/format";
 
 export const runtime = "nodejs";
 
@@ -53,6 +56,8 @@ async function collect(req: NextRequest): Promise<NextResponse> {
     tip?: number;
     method?: "cash" | "card";
     ref?: string;
+    expected?: number;
+    currency?: string;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const method = body.method;
@@ -60,12 +65,26 @@ async function collect(req: NextRequest): Promise<NextResponse> {
   // it. Without one, a button tapped twice on a phone with a bad signal is two
   // payments, the bill reads as covered, and the difference walks out.
   const ref = typeof body.ref === "string" ? body.ref.trim().slice(0, 100) : "";
-  if (!body.tableId || !["cash", "card"].includes(method ?? "") || !ref) {
+  // A tab opened before the reviewed balance shipped sends neither the
+  // balance it showed nor its currency. Refusing it as an invalid request
+  // left a waiter holding the customer's cash. It collects as it always did,
+  // against the live balance in the table's one currency; the stale-balance
+  // check needs the figure the screen showed, so it starts at the next refresh.
+  if (body.expected === undefined && body.currency === undefined && typeof body.tableId === "string") {
+    const live = await tableOutstanding(actor.restaurantId, body.tableId);
+    const owing = (live.balances ?? []).filter(b => b.owed > 0);
+    if (owing.length > 1) return await apiError("apiErr.refreshToCollect", 409);
+    if (owing.length === 0 && live.owed <= 0) return await apiError("apiErr.nothingToSettle", 409);
+    body.currency = owing[0]?.currency ?? live.currency ?? undefined;
+    body.expected = owing[0]?.owed ?? live.owed;
+  }
+  if (!body.tableId || !["cash", "card"].includes(method ?? "") || !ref ||
+      !Number.isFinite(body.expected) || Number(body.expected) <= 0 || !isDinerCurrency(body.currency) ||
+      !Number.isFinite(body.amount) || Number(body.amount) <= 0 || !Number.isFinite(body.tip ?? 0)) {
     return await apiError("apiErr.invalidRequest", 400);
   }
 
-  const before = await tableOutstanding(actor.restaurantId, body.tableId);
-  if (before.owed <= 0) return await apiError("apiErr.nothingToSettle", 409);
+  const before = await tableOutstanding(actor.restaurantId, body.tableId, body.currency);
 
   // Both are capped, and by different things. The amount is capped at what is
   // owed, so a waiter typing 1000 for 100 does not leave a bill owing minus
@@ -76,17 +95,19 @@ async function collect(req: NextRequest): Promise<NextResponse> {
   //
   // This comment used to say the tip was not capped. It has been capped since
   // `applyPayment` was written, and the line below is the one that does it —
-  // so a diner settling the last MX$10 of a table and leaving MX$60 for the
-  // staff is recorded as tipping MX$10, and the rest belongs on the whole-table
-  // settle instead, where the ceiling is the whole bill.
-  const taken = applyPayment(before.owed, Number(body.amount), Number(body.tip));
+  // so the screen shares that calculation. An oversized gratuity is refused
+  // before collecting; silently reducing cash already offered loses money.
+  const taken = applyPayment(Number(body.expected), Number(body.amount), Number(body.tip ?? 0));
+  if (Number(body.tip ?? 0) > taken.food) return await apiError("apiErr.collectionTipLimit", 400, { max: formatMoney(taken.food, body.currency) });
+  if (Number(body.amount) > Number(body.expected)) return await apiError("apiErr.invalidRequest", 400);
   if (taken.amount <= 0) return await apiError("apiErr.invalidRequest", 400);
 
-  const sessionId = await sittingFor(actor, body.tableId, before);
-  if (!sessionId) return await apiError("apiErr.nothingToSettle", 409);
-
-  const requested = applyPayment(Number.MAX_SAFE_INTEGER, Number(body.amount), Number(body.tip)).amount;
-  const { wrote, refused, covered, landed } = await record(actor, before, sessionId, taken, method!, ref, requested);
+  // Legacy sitting attachment also belongs to the reviewed transaction.
+  const result = await recordReviewed(actor, { tableId: body.tableId, expected: Number(body.expected), currency: body.currency }, taken.amount, taken.tip, method!, ref);
+  const { wrote, refused, covered, landed } = result;
+  if (result.paying) return await apiError("apiErr.accountBillPaying", 409);
+  if (result.changed) return await apiError("apiErr.collectionBalanceChanged", 409,
+    { owed: formatMoney(result.owed ?? before.owed, body.currency) }, { owed: result.owed, currency: body.currency, code: "balance_changed" });
   // A failed batch recorded nothing. Do not close the bill or hide this error
   // behind a later read: the waiter holding the cash needs to retry this tap.
   if (!wrote && !refused && !covered) return await apiError("apiErr.collectionFailed", 500);
@@ -105,13 +126,15 @@ async function collect(req: NextRequest): Promise<NextResponse> {
   // Either way the tip and the log line are skipped, because both belong to
   // the collection that did land. A duplicate still retries closing the bill:
   // the first attempt may have been cut off before it closed it.
-  // The gratuity follows the food it thanks somebody for, so it is clamped to
-  // what actually landed rather than to what was typed: a colleague collecting
-  // the same table first leaves less room than this request read.
-  // Every sitting and its tip commit together in collect_on_sittings_v1.
+  // The gratuity follows the food it thanks somebody for. A colleague
+  // collecting first now refuses the whole attempt: the waiter must check
+  // the cash and change, rather than have a smaller receipt silently recorded.
+  // Every sitting and its tip commit together in collect_table_reviewed_v1.
 
-  const after = await tableOutstanding(actor.restaurantId, body.tableId);
-  const settled = after.owed <= 0 && (await closeBill(actor, body.tableId, method!));
+  const after = await tableOutstanding(actor.restaurantId, body.tableId, body.currency);
+  const cleared = after.owed <= 0 && (await closeBill(actor, body.tableId, method!, body.currency));
+  const remaining = cleared ? await tableOutstanding(actor.restaurantId, body.tableId) : null;
+  const settled = cleared && !(remaining?.balances?.some(b => b.owed > 0) ?? (remaining?.owed ?? 0) > 0);
 
   if (wrote) {
     await logEvent({
@@ -121,10 +144,12 @@ async function collect(req: NextRequest): Promise<NextResponse> {
       action: settled ? "paid" : "collected",
       detail: logDetail({
         table: before.orders[0]?.table_label,
-        // What went into the ledger, not what was asked for. The two differ
-        // when somebody else was collecting on the same table at the same
-        // moment, and the log is the record a cashier signs for.
+        // What went into the ledger: a retry returns its original receipt,
+        // and the log is the record a cashier signs for. A competing
+        // collection now refuses rather than quietly recording less.
         amount: landed.toFixed(2),
+        tip: result.tip.toFixed(2),
+        currency: body.currency,
         method,
         left: settled ? null : after.owed.toFixed(2),
       }),
@@ -147,6 +172,9 @@ async function collect(req: NextRequest): Promise<NextResponse> {
     ok: true,
     settled,
     duplicate: refused,
+    amount: landed,
+    tip: result.tip ?? taken.tip,
+    currency: body.currency,
     ...summary(after),
   });
 }

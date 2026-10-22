@@ -78,6 +78,16 @@ it("split refuses a later USD order beside a frozen MXN share", async () => {
   expect(state.create).not.toHaveBeenCalled();
 });
 
+it("S21 split charges the MX$55 shown for a fifty-peso share and ten-percent tip", async () => {
+  const response = await split.POST(new NextRequest("http://localhost/pay", { method: "POST", body: JSON.stringify({
+    restaurantId: "r1", tableId: "t1", sessionId: "t1", splitId: "s1", diner: "d1", ownOrderIds: ["o1"], tipPct: 10,
+  }) }));
+  expect(response.status).toBe(200);
+  expect(state.create).toHaveBeenCalledWith(expect.objectContaining({ line_items: [expect.objectContaining({
+    price_data: expect.objectContaining({ currency: "mxn", unit_amount: 5500 }),
+  })], metadata: expect.objectContaining({ settle_tip: "5" }) }),expect.anything());
+});
+
 it.each([["bill", bill.POST], ["split", split.POST], ["account", account.POST]] as const)("%s returns no payment URL when provenance cannot be saved", async (_name, post) => {
   state.record.mockRejectedValueOnce(new Error("provenance unavailable"));
   const result = await post(request());

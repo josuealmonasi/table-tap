@@ -25,17 +25,16 @@ export default function StatementDays({ days, currency, timeZone }: StatementDay
       .format(new Date(`${key}T12:00:00Z`));
   const time = (iso: string) =>
     new Intl.DateTimeFormat(dateLocale(locale), { hour: "numeric", minute: "2-digit", timeZone }).format(new Date(iso));
-  const money = (n: number) => formatMoney(n, currency);
 
   if (days.length === 0) return <p className="tt-muted">{t("account.nothingOwed")}</p>;
 
   return (
     <div className="tt-statement">
       {days.map(d => (
-        <section key={d.day} className="tt-statement-day">
+        <section key={`${d.day}-${d.currency}`} className="tt-statement-day">
           <header className="tt-statement-day-head">
             <strong>{day(d.day)}</strong>
-            <span>{money(d.total)}</span>
+            <span>{formatMoney(d.total, d.currency ?? currency)}</span>
           </header>
           {d.charges.map((c, i) => (
             <div key={`${c.at}-${i}`} className="tt-statement-charge">
@@ -45,7 +44,7 @@ export default function StatementDays({ days, currency, timeZone }: StatementDay
                   {c.tableLabel ? ` · ${c.tableLabel}` : ""}
                   {c.chargedBy ? ` · ${t("account.chargedBy", { who: c.chargedBy })}` : ""}
                 </span>
-                <span>{money(c.total)}</span>
+                <span>{formatMoney(c.total, c.currency ?? d.currency ?? currency)}</span>
               </div>
               <ul className="tt-statement-lines">
                 {c.lines.map((l, j) => (
@@ -54,7 +53,7 @@ export default function StatementDays({ days, currency, timeZone }: StatementDay
                       {l.qty}× {l.emoji ? `${l.emoji} ` : ""}{l.name}
                       {l.extras.length > 0 && <span className="tt-muted"> + {l.extras.join(", ")}</span>}
                     </span>
-                    <span className="tt-muted">{money(l.amount)}</span>
+                    <span className="tt-muted">{formatMoney(l.amount, c.currency ?? d.currency ?? currency)}</span>
                   </li>
                 ))}
               </ul>

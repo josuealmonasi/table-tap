@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
-import { canPayMineOnly, ordersToPay, type TableBill } from "@/lib/table-bill";
+import { canPayMineOnly, ordersToPay, tableBill, type TableBill } from "@/lib/table-bill";
+import { dinerCurrency } from "@/lib/diner-currency";
 import type { AppliedCoupon } from "@/lib/pricing";
 import BillTotals from "./BillTotals";
 import BillExtras from "./BillExtras";
@@ -75,7 +76,7 @@ interface BillSheetProps {
 export default function BillSheet({
   open,
   onClose,
-  bill,
+  bill: allBill,
   restaurant,
   sessionId = null,
   tableId,
@@ -86,7 +87,13 @@ export default function BillSheet({
   dividing = false,
 }: BillSheetProps) {
   const t = useT();
-  const currency = restaurant.currency;
+  const [chosenCurrency, setChosenCurrency] = useState<string | null>(null);
+  const allOrders = [...allBill.mine.orders, ...allBill.others.orders, ...allBill.paid.orders];
+  const currencies = [...new Set([...allBill.mine.orders, ...allBill.others.orders].map(o => o.currency))];
+  const paidCurrencies = [...new Set(allBill.paid.orders.map(o => o.currency))];
+  const currency = chosenCurrency && currencies.includes(chosenCurrency) ? chosenCurrency : currencies[0] ?? restaurant.currency;
+  const bill = tableBill(allOrders.filter(o => o.currency === currency), allBill.mine.orders.map(o => o.id));
+  const mixed = currencies.length > 1;
   const [scope, setScope] = useState<"all" | "mine">("all");
   const { busy, called, payShare, payOnline, payAtTable } = useBillPayment(
     restaurant.id,
@@ -170,6 +177,13 @@ export default function BillSheet({
         {t("bill.title", { label: tableLabel })}
       </h3>
 
+      {mixed && <div role="group" aria-label={t("settle.currency")}>
+        <p className="tt-muted">{t("settle.mixed")}</p>
+        {currencies.map(c => <button key={c} type="button" className="tt-tip-chip" onClick={() => { setChosenCurrency(c); setScope("all"); setCoupon(null); setTipCustom(null); setTipPct(0); }}>
+          {formatMoney(tableBill(allOrders.filter(o => o.currency === c), []).total, c)}
+        </button>)}
+      </div>}
+
       {bill.settled ? (
         <p className="tt-muted">{t("bill.empty")}</p>
       ) : (
@@ -189,16 +203,11 @@ export default function BillSheet({
           {/* What is already paid stays visible and out of the total: whoever
               paid for their dish by card needs to see it, and the rest of the
               table needs to understand why they are not being charged for it. */}
-          <BillSection
-            heading={t("bill.alreadyPaid", {
-              amount: formatMoney(bill.paid.total, currency),
-            })}
-            side={bill.paid}
-            currency={currency}
-            photoOf={photoOf}
-            settled
-            collapsible
-          />
+          {paidCurrencies.map(c => {
+            const paid = tableBill(allBill.paid.orders.filter(o => o.currency === c), []).paid;
+            return <BillSection key={c} heading={t("bill.alreadyPaid", { amount: formatMoney(paid.total,c) })}
+              side={paid} currency={c} photoOf={photoOf} settled collapsible />;
+          })}
 
           {/* Dividing it evenly is a decision about the whole bill, so it is
               asked before the smaller question of whose dishes to pay for.
@@ -208,12 +217,13 @@ export default function BillSheet({
               reader behind it: a share is charged through the same route as
               the whole bill, so dividing one twelve ways with no Stripe
               account produces twelve people who cannot pay. */}
-          {can.split && (
+          {can.split && !mixed && (
             <SplitBillCard
               split={split}
               diner={diner}
+              tipPct={tipPct}
               busy={splitBusy || busy}
-              currency={currency}
+              currency={dinerCurrency(ordersToPay(bill, "all")) ?? currency}
               outstanding={bill.total}
               party={party}
               cardsEnabled={Boolean(restaurant.cards_enabled)}
@@ -261,7 +271,7 @@ export default function BillSheet({
               through the shares, and a total with a card button under it is a
               second way to pay the same food. */}
           {!splitLocked && (
-            <BillTotals amounts={amounts} restaurant={restaurant} tipPct={tipPct} tipCustom={tipCustom} />
+            <BillTotals amounts={amounts} restaurant={{ ...restaurant, currency }} tipPct={tipPct} tipCustom={tipCustom} />
           )}
 
           <BillActions

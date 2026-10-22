@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useRetryIntent, refusalSettles } from "@/hooks/useRetryIntent";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
 import { shortMessage } from "@/lib/stock-message";
@@ -63,6 +64,9 @@ export default function TableOrderScreen({
   /** The tables this restaurant has. A waiter picks; they never invent one. */
   tables: { id: string; label: string }[];
 }) {
+  const attempt = useRetryIntent();
+  const inFlight = useRef(false);
+  const reviewedTotal = useRef(0);
   const t = useT();
   const toast = useToast();
   const router = useRouter();
@@ -83,12 +87,14 @@ export default function TableOrderScreen({
   /**
    * The pad is not to be typed into.
    *
-   * While the order is in flight, and while the confirmation is still up:
+   * While the order is in flight, unanswered, or its confirmation is still up:
    * `busy` goes false the instant the route answers, and the board behind is
    * still repainting from `router.refresh()`. A dish tapped into that gap
    * lands in a pad the waiter believes they have already sent.
    */
-  const sending = busy || sent !== null;
+  const pending = attempt.pending();
+  const frozen = attempt.frozen<{ tableId: string; items: CartItem[]; note?: string }>();
+  const sending = busy || sent !== null || pending;
 
   // The same quote the server re-runs from the database. No tip: a tip is
   // decided when somebody pays, and nobody is paying yet.
@@ -113,15 +119,18 @@ export default function TableOrderScreen({
 
   /** Send it to the kitchen, owing. */
   async function send(): Promise<void> {
-    if (busy || lines.length === 0 || !tableId) return;
+    if (inFlight.current || busy || (!attempt.pending() && (lines.length === 0 || !tableId))) return;
+    if (!attempt.pending()) reviewedTotal.current = pricing.total;
+    inFlight.current = true;
     setBusy(true);
     try {
       const res = await fetch("/api/table-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tableId, items: lines, note: note.trim() || undefined }),
+        body: attempt.body({ tableId, items: lines, note: note.trim() || undefined }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json();
+      if ((res.ok && data.orderId) || (!res.ok && refusalSettles(res.status))) attempt.clear();
       if (!res.ok) {
         if (data.code === "outOfStock") {
           // With the numbers in it. The refusal has always known how many are
@@ -133,6 +142,7 @@ export default function TableOrderScreen({
         }
         return;
       }
+      if (!data.orderId) throw new Error("Missing order result");
       setSent({ code: data.code, table: data.table });
       cart.clear();
       setNote("");
@@ -141,6 +151,7 @@ export default function TableOrderScreen({
     } catch {
       toast(t("done.networkError"), "error");
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
@@ -176,18 +187,19 @@ export default function TableOrderScreen({
               restaurantId={restaurant.id}
               currency={restaurant.currency}
               tables={tables}
-              tableId={tableId}
+              tableId={frozen?.tableId ?? tableId}
               onTable={setTableId}
-              lines={lines}
+              lines={frozen?.items ?? lines}
               items={items}
-              note={note}
+              note={frozen?.note ?? note}
               onNote={setNote}
-              total={pricing.total}
+              total={pending ? reviewedTotal.current : pricing.total}
               sending={sending}
               busy={busy}
+              pending={pending}
               closedNow={closedNow}
-              onChangeQty={cart.changeQty}
-              onEdit={setEditing}
+              onChangeQty={(id, qty) => { if (!sending) cart.changeQty(id, qty); }}
+              onEdit={line => { if (!sending) setEditing(line); }}
               onSend={() => void send()}
             />
           </div>
@@ -202,7 +214,7 @@ export default function TableOrderScreen({
                 extras={extrasFor(openItem)}
                 onBack={() => setOpenItem(null)}
                 onAdd={line => {
-                  cart.add(line);
+                  if (!sending) cart.add(line);
                   setOpenItem(null);
                 }}
               />
@@ -220,7 +232,7 @@ export default function TableOrderScreen({
                 initialLine={editing}
                 onBack={() => setEditing(null)}
                 onAdd={line => {
-                  cart.replace(editing.cartId, line);
+                  if (!sending) cart.replace(editing.cartId, line);
                   setEditing(null);
                 }}
               />
@@ -239,7 +251,7 @@ export default function TableOrderScreen({
                 extrasByProduct={extrasByProduct}
                 onBack={() => setOpenCombo(null)}
                 onAdd={line => {
-                  cart.add(line);
+                  if (!sending) cart.add(line);
                   setOpenCombo(null);
                 }}
               />

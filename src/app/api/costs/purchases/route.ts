@@ -22,7 +22,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const blocked = await costsBlocks(actor.restaurantId);
   if (blocked) return blocked;
-  const body = await jsonBody<{ ingredientId?: unknown; packs?: unknown; total?: unknown }>(req);
+  const body = await jsonBody<{ ingredientId?: unknown; packs?: unknown; total?: unknown; ref?: unknown }>(req);
+  const ref = uuidOf(body?.ref);
+  if (body?.ref !== undefined && !ref) return await apiError("apiErr.invalidRequest", 400);
   const ingredientId = uuidOf(body?.ingredientId);
   if (!body || !ingredientId) return await apiError("apiErr.invalidRequest", 400);
   const packs = decimal(body.packs, MAX_PACKS, 3);
@@ -31,7 +33,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (total === null) return await apiError("apiErr.purchaseTotal", 400);
 
   const db = createAdminClient();
-  const { data: id, error } = await db.rpc("record_purchase", {
+  const { data: id, error } = await db.rpc(ref ? "record_purchase_once" : "record_purchase", {
+    ...(ref ? { p_ref: ref } : {}),
     p_restaurant: actor.restaurantId, p_ingredient: ingredientId, p_packs: packs, p_total: total, p_actor: actor.email,
   });
   if (error) return await apiError("apiErr.generic", 500);

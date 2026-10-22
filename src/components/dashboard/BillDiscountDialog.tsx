@@ -36,11 +36,12 @@ export default function BillDiscountDialog({
   open,
   onClose,
   bill,
-  currency,
+  currency: menuCurrency,
   canApprove,
   onApplied,
 }: BillDiscountDialogProps) {
   const t = useT();
+  const currency = bill.currency ?? menuCurrency;
   const toast = useToast();
   const [code, setCode] = useState("");
   const [closing, setClosing] = useState(false);
@@ -59,8 +60,7 @@ export default function BillDiscountDialog({
         headers: { "Content-Type": "application/json" },
         // A counter bill has no table, so it names its orders instead.
         body: JSON.stringify({
-          tableId: bill.tableId ?? undefined,
-          orderIds: bill.tableId ? undefined : bill.orderIds,
+          orderIds: bill.orderIds,
           reason,
           note,
         }),
@@ -98,6 +98,7 @@ export default function BillDiscountDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tableId: bill.tableId ?? undefined,
+          currency,
           orderId: bill.tableId ? undefined : bill.orderIds[0],
           code: normalizeCoupon(code),
         }),

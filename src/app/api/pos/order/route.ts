@@ -200,7 +200,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ short: parseReserveResult(ticket).short, code: "outOfStock" }, { status: 409 });
   }
   if (ticket.outcome !== "settled") {
-    if (onAccount && ["limit", "closed", "stale", "paying", "partly_paid"].includes(ticket.outcome)) {
+    // Every account refusal is final, including the currency one: answered
+    // as `held`, the till kept the refused account request and sent it
+    // again even when the cashier then chose cash.
+    if (onAccount && ["limit", "closed", "stale", "paying", "partly_paid", "mixed_currency"].includes(ticket.outcome)) {
       return await chargeRefusal(ticket as Exclude<ChargeResult, { outcome: "charged" }>, restaurant.currency);
     }
     // A reference that belongs to another order, here or anywhere: refused,

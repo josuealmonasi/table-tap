@@ -10,13 +10,16 @@ import { capNote } from "@/lib/notes";
 import { priceCart } from "@/lib/pricing";
 import { cartReferences, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
 import { promotionsOnSale } from "@/lib/promotions-on-sale";
-import { tierIncludes } from "@/lib/plan-server";
+import { getPlan, tierIncludes } from "@/lib/plan-server";
 import { toCartPromos } from "@/lib/promotions";
 import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
 import { raiseStockNotifications, releaseStock, reserveStock } from "@/lib/stock-service";
 import { openSession } from "@/lib/table-session";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
+import { can } from "@/lib/plan";
+import { uuidOf } from "@/lib/costs/guard";
+import { readOrderIntent, writeOrderIntent } from "@/lib/order-intent";
 import { orderCode, type OrderLineItem } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -55,11 +58,21 @@ export async function POST(req: NextRequest) {
     tableId?: string;
     items?: OrderLineItem[];
     note?: string;
+    ref?: string;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const items = Array.isArray(body.items) ? body.items : [];
   if (!body.tableId || items.length === 0) {
     return await apiError("apiErr.invalidRequest", 400);
+  }
+
+  const ref = uuidOf(body.ref);
+  if (body.ref !== undefined && !ref) return await apiError("apiErr.invalidRequest", 400);
+  const intent = ref ? { restaurantId: actor.restaurantId, ref, scope: `table-order:${body.tableId}` } : null;
+  if (intent) {
+    const previous = await readOrderIntent(intent);
+    if (previous?.conflict) return await apiError("apiErr.invalidRequest", 409);
+    if (previous) return NextResponse.json({ ...previous, code: orderCode(previous.orderId) });
   }
 
   const db = createAdminClient();
@@ -145,7 +158,7 @@ export async function POST(req: NextRequest) {
     promos: toCartPromos(promotions),
   });
 
-  const reservation = await reserveStock(
+  const reservation = intent ? { ok: true, low: [], reservationId: null, short: [] } : await reserveStock(
     actor.restaurantId,
     verified,
     Number(restaurant.low_stock_threshold) || 0,
@@ -168,37 +181,50 @@ export async function POST(req: NextRequest) {
     throw error;
   }
 
+  const orderRow = {
+    restaurant_id: actor.restaurantId,
+    table_id: table.id,
+    table_label: table.label,
+    session_id: sessionId,
+    // Straight to the pass, and owing. The kitchen starts cooking; the money
+    // is asked for at the end.
+    status: "received",
+    paid: false,
+    pay_method: null,
+    subtotal: pricing.subtotal,
+    service_fee: pricing.serviceFee,
+    tip: 0,
+    tax_pct: Number(restaurant.tax_pct) || 0,
+    discount: pricing.discount,
+    // Nothing reaches Stripe until somebody settles, so there is no
+    // application fee to take here.
+    platform_fee: 0,
+    promo_detail:
+      pricing.discount > 0
+        ? { item: pricing.itemDiscount, promos: pricing.promoDiscount, coupon: 0 }
+        : null,
+    total: pricing.total,
+    currency: restaurant.currency,
+    items: verified,
+    note: capNote(body.note) ?? null,
+  };
+  if (intent) {
+    const plan = await getPlan(actor.restaurantId);
+    const result = await writeOrderIntent(intent, {
+      order: orderRow, lines: verified, inventory: Boolean(plan && can(plan.limits, "inventory")),
+      threshold: Number(restaurant.low_stock_threshold) || 0,
+    });
+    if (result.conflict) return await apiError("apiErr.invalidRequest", 409);
+    if (result.short) return NextResponse.json({ short: result.short, code: "outOfStock" }, { status: 409 });
+    if (!result.repeat && restaurant.low_stock_alerts_enabled) await raiseStockNotifications(actor.restaurantId, result.low ?? []);
+    if (!result.repeat) await logEvent({ restaurantId: actor.restaurantId, actor: actor.email, entity: "order", action: "created",
+      detail: logDetail({ code: orderCode(result.orderId), table: String(result.table), amount: result.total.toFixed(2) }) });
+    return NextResponse.json({ ...result, code: orderCode(result.orderId) });
+  }
+
   const { data: order, error } = await db
     .from("orders")
-    .insert({
-      stock_managed: true,
-      stock_reservation_id: reservation.reservationId,
-      restaurant_id: actor.restaurantId,
-      table_id: table.id,
-      table_label: table.label,
-      session_id: sessionId,
-      // Straight to the pass, and owing. The kitchen starts cooking; the money
-      // is asked for at the end.
-      status: "received",
-      paid: false,
-      pay_method: null,
-      subtotal: pricing.subtotal,
-      service_fee: pricing.serviceFee,
-      tip: 0,
-      tax_pct: Number(restaurant.tax_pct) || 0,
-      discount: pricing.discount,
-      // Nothing reaches Stripe until somebody settles, so there is no
-      // application fee to take here.
-      platform_fee: 0,
-      promo_detail:
-        pricing.discount > 0
-          ? { item: pricing.itemDiscount, promos: pricing.promoDiscount, coupon: 0 }
-          : null,
-      total: pricing.total,
-      currency: restaurant.currency,
-      items: verified,
-      note: capNote(body.note) ?? null,
-    })
+    .insert({ stock_managed: true, stock_reservation_id: reservation.reservationId, ...orderRow })
     .select("id")
     .single();
 

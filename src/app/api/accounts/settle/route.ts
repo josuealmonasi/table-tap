@@ -9,6 +9,7 @@ import { applyPayment } from "@/lib/table-balance";
 import { accountById } from "@/lib/accounts-server";
 import { currencyOf } from "@/lib/account-charge";
 import { formatMoney } from "@/lib/format";
+import { isDinerCurrency } from "@/lib/diner-currency";
 
 export const runtime = "nodejs";
 
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
   const body = await jsonBody<{
-    accountId?: unknown; expected?: unknown; tip?: unknown; method?: unknown; ref?: unknown;
+    accountId?: unknown; expected?: unknown; tip?: unknown; method?: unknown; ref?: unknown; currency?: unknown;
   }>(req);
   const expected = Number(body?.expected);
   if (!body || typeof body.accountId !== "string" || !Number.isFinite(expected) || expected <= 0 ||
@@ -38,8 +39,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // The same ceiling on a gratuity as a table's: never more than the food.
   const { tip } = applyPayment(expected, expected, Number(body.tip ?? 0));
+  if (Number(body.tip ?? 0) > expected || !Number.isFinite(Number(body.tip ?? 0))) return await apiError("apiErr.invalidRequest", 400);
+  if (body.currency !== undefined && !isDinerCurrency(body.currency)) return await apiError("apiErr.invalidRequest", 400);
 
-  const { data, error } = await createAdminClient().rpc("account_settle_v2", {
+  const { data, error } = await createAdminClient().rpc(body.currency ? "account_settle_currency_v1" : "account_settle_v2", {
     p_restaurant: actor.restaurantId,
     p_account: account.id,
     p_expected: expected,
@@ -47,19 +50,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     p_method: body.method,
     p_actor: actor.email,
     p_ref: typeof body.ref === "string" ? `account:${body.ref}` : null,
+    ...(body.currency ? { p_currency: body.currency } : {}),
   });
   if (error) {
     console.error("account settle failed:", error.message);
     return await apiError("apiErr.generic", 500);
   }
   const r = data as { outcome: string; amount?: number; tip?: number; owed?: number };
-  if (r.outcome === "duplicate") return NextResponse.json({ ok: true, duplicate: true });
+  if (r.outcome === "duplicate") return NextResponse.json({ ok: true, duplicate: true, amount: r.amount, tip: r.tip, currency: body.currency });
   if (r.outcome === "missing") return await apiError("apiErr.notFound", 404);
   if (r.outcome === "nothing") return await apiError("apiErr.accountNothingOwed", 409);
   if (r.outcome === "paying") return await apiError("apiErr.accountPayingOnline", 409);
   if (r.outcome === "changed") {
     return await apiError("apiErr.accountBalanceChanged", 409, {
-      owed: formatMoney(Number(r.owed), await currencyOf(actor.restaurantId)),
+      owed: formatMoney(Number(r.owed), typeof body.currency === "string" ? body.currency : await currencyOf(actor.restaurantId)),
     });
   }
 
@@ -70,7 +74,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     action: "paid",
     detail: logDetail({
       name: account.name, amount: Number(r.amount).toFixed(2), tip: Number(r.tip).toFixed(2), method: body.method,
+      currency: typeof body.currency === "string" ? body.currency : null,
     }),
   });
-  return NextResponse.json({ ok: true, amount: r.amount, tip: r.tip });
+  return NextResponse.json({ ok: true, amount: r.amount, tip: r.tip, currency: body.currency });
 }

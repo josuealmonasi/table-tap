@@ -6,7 +6,7 @@ import { HOLDS_THE_DRAWER, MANAGES } from "@/lib/membership";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cashAmount } from "@/lib/cash-drawer";
 import { shiftNote } from "@/lib/cash-shift";
-import { openShift } from "@/lib/cash-shift-server";
+import { uuidOf } from "@/lib/costs/guard";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 
@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 // POST /api/cash-shift — the cash drawer's shifts.
 //
 // { action: "open", amount }                 a shift starts with this cash
-// { action: "close", counted, confirm: true } the closer counted the drawer
+// { action: "close", shiftId, ref, counted, confirm: true } the closer counted this drawer
 // { action: "explain", id, note }            why a closed shift's count differed
 //
 // The people who run the drawer: owner, manager, cashier. Closing is a blind
@@ -25,7 +25,7 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   const actor = await actingStaff();
   if (!actor || !HOLDS_THE_DRAWER(actor.role)) return await apiError("apiErr.forbidden", 403);
-  const body = await jsonBody<{ action?: unknown; amount?: unknown; counted?: unknown; confirm?: unknown; id?: unknown; note?: unknown }>(req);
+  const body = await jsonBody<{ action?: unknown; amount?: unknown; counted?: unknown; confirm?: unknown; id?: unknown; note?: unknown; ref?: unknown; shiftId?: unknown }>(req);
   const db = createAdminClient();
 
   if (body?.action === "open") {
@@ -49,16 +49,18 @@ export async function POST(req: NextRequest) {
     if (body.confirm !== true) return await apiError("apiErr.shiftConfirm", 400);
     const counted = cashAmount(body.counted, false);
     if (counted === null) return await apiError("apiErr.cashAmount", 400);
-    const shift = await openShift(actor.restaurantId);
-    if (!shift) return await apiError("apiErr.noOpenShift", 409);
+    const shiftId = uuidOf(body.shiftId);
+    const ref = uuidOf(body.ref);
+    if (!shiftId || !ref) return await apiError("apiErr.shiftChanged", 409);
     // Only the shift still open: two people closing at once close it once.
     // The sum and the signature belong to one transaction, after every earlier
     // money writer and before another withdrawal can change the drawer.
-    const { data, error } = await db.rpc("close_cash_shift", {
-      p_restaurant: actor.restaurantId, p_shift: shift.id, p_counted: counted, p_actor: actor.email,
+    const { data, error } = await db.rpc("close_cash_shift_once", {
+      p_ref: ref,
+      p_restaurant: actor.restaurantId, p_shift: shiftId, p_counted: counted, p_actor: actor.email,
     });
     if (error) return await apiError("apiErr.generic", 500);
-    if (!data) return await apiError("apiErr.noOpenShift", 409);
+    if (!data) return await apiError("apiErr.shiftChanged", 409);
     await logEvent({
       restaurantId: actor.restaurantId, actor: actor.email, entity: "cash", action: "closed",
       detail: logDetail({ counted: counted.toFixed(2), expected: Number(data.expected).toFixed(2),

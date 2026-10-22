@@ -22,6 +22,7 @@ export async function claimCheckoutCoupon(
   couponCode: unknown,
   /** What the minimum-spend rule is judged against: the subtotal without the coupon. */
   subtotal: number,
+  reserve = true,
 ): Promise<{ coupon: CouponRow | null } | { refused: NextResponse }> {
   if (!(typeof couponCode === "string" && couponCode.trim())) return { coupon: null };
   // A failed lookup keeps the coupon in the cart (a `couponReason` drops it):
@@ -35,11 +36,12 @@ export async function claimCheckoutCoupon(
   // customer can spend, however they got hold of it.
   if (found.staff_only) return { refused: await apiError("apiErr.couponNotFound", 400) };
 
-  const problem = couponProblem(found, subtotal);
+  // A deferred intent claims under its own transaction after checking for a retry.
+  const problem = couponProblem(reserve ? found : { ...found, max_uses: null }, subtotal);
   if (problem)
     return { refused: NextResponse.json({ couponReason: problem }, { status: 409 }) };
   // Reserve the use now.
-  if (!(await claimCoupon(found.id))) {
+  if (reserve && !(await claimCoupon(found.id))) {
     return {
       refused: NextResponse.json({ couponReason: "limitReached" }, { status: 409 }),
     };

@@ -5,7 +5,7 @@ const state = vi.hoisted(() => ({
   closed: false, movements: [{ id: "00000000-0000-4000-8000-000000000001", amount: 20, note: null }],
   race: true, expected: 80, reads: 0, rpcs: [] as string[],
 }));
-const shift = { id: "shift", opening_amount: 100, currency: "MXN", opened_at: "2026-10-20T12:00:00Z", closed_at: null };
+const shift = { id: "00000000-0000-4000-8000-000000000005", opening_amount: 100, currency: "MXN", opened_at: "2026-10-20T12:00:00Z", closed_at: null };
 vi.mock("@/lib/api-guard", () => ({
   actingStaff: async () => ({ restaurantId: "r", email: "cashier", role: "cashier" }),
   actingManager: async () => ({ restaurantId: "r", email: "manager", role: "manager" }),
@@ -27,7 +27,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
     state.rpcs.push(name);
     if (state.race) state.closed = true;
     if (state.closed) return { data: null, error: null };
-    if (name === "close_cash_shift") {
+    if (name === "close_cash_shift_once") {
       state.closed = true;
       state.expected = 100 - state.movements.reduce((n, m) => n + m.amount, 0);
       return { data: { id: shift.id, currency: "MXN", opening: 100, cashSales: 0, withdrawn: 100 - state.expected,
@@ -82,22 +82,22 @@ it("I1 refuses deleting a withdrawal when close wins after the open-shift read",
 });
 it("I1 closes and computes the signed snapshot in one database call", async () => {
   state.race = false;
-  const response = await shifts.POST(request({ action: "close", counted: 80, confirm: true }));
+  const response = await shifts.POST(request({ action: "close", shiftId: shift.id, ref: crypto.randomUUID(), counted: 80, confirm: true }));
   expect(response.status).toBe(200);
-  expect(state.rpcs).toEqual(["close_cash_shift"]);
+  expect(state.rpcs).toEqual(["close_cash_shift_once"]);
   expect(await response.json()).toMatchObject({ expected: 80, difference: 0 });
 });
 it("I1 includes a withdrawal that wins the lock before close, and refuses a second close", async () => {
   state.race = false;
   expect((await drawer.POST(request({ kind: "withdrawal", amount: 10 }))).status).toBe(200);
-  const response = await shifts.POST(request({ action: "close", counted: 80, confirm: true }));
+  const response = await shifts.POST(request({ action: "close", shiftId: shift.id, ref: crypto.randomUUID(), counted: 80, confirm: true }));
   expect(await response.json()).toMatchObject({ expected: 70, difference: 10, currency: "MXN" });
-  expect((await shifts.POST(request({ action: "close", counted: 80, confirm: true }))).status).toBe(409);
+  expect((await shifts.POST(request({ action: "close", shiftId: shift.id, ref: crypto.randomUUID(), counted: 80, confirm: true }))).status).toBe(409);
   expect(state.expected).toBe(70);
 });
 it("I1 excludes a mistaken withdrawal deleted before close", async () => {
   state.race = false;
   expect((await drawer.DELETE(request({ id: state.movements[0].id }))).status).toBe(200);
-  const response = await shifts.POST(request({ action: "close", counted: 80, confirm: true }));
+  const response = await shifts.POST(request({ action: "close", shiftId: shift.id, ref: crypto.randomUUID(), counted: 80, confirm: true }));
   expect(await response.json()).toMatchObject({ expected: 100, difference: -20 });
 });

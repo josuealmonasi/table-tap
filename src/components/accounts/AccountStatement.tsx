@@ -10,14 +10,17 @@ import TipPicker from "@/components/customer/TipPicker";
 import StatementDays from "./StatementDays";
 import StatementSkeleton from "./StatementSkeleton";
 import type { StatementDay } from "@/lib/accounts";
+import { balancesLabel, type CurrencyBalance } from "@/lib/currency-balances";
 
 interface Statement {
   restaurant: { id: string; name: string; logo: string | null; logo_url: string | null; currency: string };
   name: string;
   status: "open" | "closed";
   owed: number;
+  currency?: string | null;
+  balances?: CurrencyBalance[];
   days: StatementDay[];
-  payments: { at: string; amount: number; tip: number; method: "cash" | "card" }[];
+  payments: { at: string; amount: number; tip: number; currency?: string; method: "cash" | "card" }[];
   returns?: { id: string; amount: number; currency: string; status: string; created_at: string }[];
   cardsEnabled: boolean;
   payingOnline: boolean;
@@ -43,6 +46,12 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
   const [notice, setNotice] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [svg, setSvg] = useState<string | null>(null);
+  const [chosenCurrency, setChosenCurrency] = useState<string | null>(null);
+  const balances = data?.balances ?? (data ? [{ currency: data.currency ?? data.restaurant.currency, amount: data.owed }] : []);
+  const selected = balances.find(b => b.currency === chosenCurrency) ?? balances[0];
+  const owed = selected?.amount ?? 0;
+  const currency = selected?.currency ?? data?.currency ?? data?.restaurant.currency ?? "MXN";
+  const hasDebt = balances.some(b => b.amount > 0);
 
   const load = useCallback(async () => {
     setError(null);
@@ -63,10 +72,10 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
   // Back from Stripe: the webhook records the payment a moment later, so ask
   // again until the balance says so rather than claiming it already has.
   useEffect(() => {
-    if (!paid || !data || data.owed === 0) return;
+    if (!paid || !data || !hasDebt) return;
     const id = setTimeout(() => void load(), 2500);
     return () => clearTimeout(id);
-  }, [paid, data, load]);
+  }, [paid, data, hasDebt, load]);
 
   useEffect(() => {
     if (mode !== "till") return;
@@ -87,8 +96,8 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
   }
   if (!data) return <StatementSkeleton />;
 
-  const money = (n: number) => formatMoney(n, data.restaurant.currency);
-  const tip = Math.min(Math.max(0, tipCustom ?? Math.round(data.owed * tipPct) / 100), data.owed);
+  const money = (n: number) => formatMoney(n, currency);
+  const tip = Math.min(Math.max(0, tipCustom ?? Math.round(owed * tipPct) / 100), owed);
 
   async function payOnline(): Promise<void> {
     setBusy(true);
@@ -97,7 +106,7 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
       const res = await fetch("/api/account/pay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ c: code, expected: data!.owed, tipAmount: tip }),
+        body: JSON.stringify({ c: code, expected: owed, currency, tipAmount: tip }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.url) {
@@ -143,11 +152,11 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
         <p className="tt-muted" style={{ margin: 0 }}>{data.restaurant.name}</p>
         <h1 className="tt-serif" style={{ margin: "4px 0 8px" }}>{t("account.title", { name: data.name })}</h1>
 
-        {paid && data.owed > 0 && <p className="tt-rewards-notice" role="status">{t("account.confirming")}</p>}
-        {paid && data.owed === 0 && <p className="tt-rewards-notice" role="status">{t("account.paidThanks")}</p>}
+        {paid && hasDebt && <p className="tt-rewards-notice" role="status">{t("account.confirming")}</p>}
+        {paid && !hasDebt && <p className="tt-rewards-notice" role="status">{t("account.paidThanks")}</p>}
 
         <p className="tt-statement-owed">
-          {data.owed > 0 ? t("account.owed", { amount: money(data.owed) }) : t("account.nothingOwed")}
+          {hasDebt ? t("account.owed", { amount: balancesLabel(balances) }) : t("account.nothingOwed")}
         </p>
 
         <StatementDays days={data.days} currency={data.restaurant.currency} timeZone={data.timeZone ?? undefined} />
@@ -159,7 +168,7 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
               {data.payments.map((p, i) => (
                 <li key={i}>
                   {new Intl.DateTimeFormat(dateLocale(locale), { dateStyle: "medium" }).format(new Date(p.at))} ·{" "}
-                  {money(p.amount)} · {t(p.method === "cash" ? "account.byCash" : "account.byCard")}
+                  {p.currency ? formatMoney(p.amount, p.currency) : `${Number(p.amount).toFixed(2)} · ${t("attribution.currencyUnknown")}`} · {t(p.method === "cash" ? "account.byCash" : "account.byCard")}
                 </li>
               ))}
             </ul>
@@ -173,20 +182,24 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
 
         {notice && <p className="tt-field-error" role="status">{notice}</p>}
 
-        {data.owed > 0 && data.payingOnline && mode !== "online" && (
+        {hasDebt && data.payingOnline && mode !== "online" && (
           <p className="tt-muted" role="status">{t("account.payingOnlineNow")}</p>
         )}
 
-        {data.owed > 0 && (
+        {hasDebt && balances.length > 1 && <div role="group" aria-label={t("settle.currency")}>
+          <p className="tt-muted">{t("settle.mixed")}</p>
+          {balances.map(b => <button key={b.currency} className="tt-tip-chip" disabled={busy} onClick={() => { setChosenCurrency(b.currency); setTipPct(0); setTipCustom(null); }}>{formatMoney(b.amount, b.currency)}</button>)}
+        </div>}
+        {hasDebt && (
           <div className="tt-statement-actions tt-no-print">
             {mode === "online" ? (
               <>
                 <div className="tt-pos-tip">
                   <TipPicker
-                    currency={data.restaurant.currency}
+                    currency={currency}
                     tipPct={tipCustom !== null ? 0 : tipPct}
                     tipCustom={tipCustom}
-                    maxTip={data.owed}
+                    maxTip={owed}
                     onPresetTip={pct => {
                       setTipCustom(null);
                       setTipPct(pct);
@@ -198,7 +211,7 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
                   />
                 </div>
                 <button type="button" className="tt-btn tt-btn-primary tt-btn-lg" disabled={busy} onClick={() => void payOnline()}>
-                  {t("account.payTotal", { amount: money(data.owed + tip) })}
+                  {t("account.payTotal", { amount: money(owed + tip) })}
                 </button>
               </>
             ) : mode === "till" ? (

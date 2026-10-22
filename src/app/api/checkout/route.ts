@@ -26,6 +26,8 @@ import { payLaterAllowed } from "@/lib/checkout/pay-later";
 import { checkoutFee } from "@/lib/checkout/app-fee";
 import { NO_FEE, releaseFee, stripeRefusedOutright, type FeeHold } from "@/lib/platform-fee";
 import { checkoutHold } from "@/lib/checkout/hold";
+import { uuidOf } from "@/lib/costs/guard";
+import { readOrderIntent, writeOrderIntent } from "@/lib/order-intent";
 import { siteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
@@ -55,6 +57,15 @@ export async function POST(req: NextRequest) {
       return await apiError("apiErr.orderData", 400);
     }
 
+    const ref = uuidOf(body.ref);
+    if (body.ref !== undefined && !ref) return await apiError("apiErr.invalidRequest", 400);
+    const hash = memberHash(req);
+    const intent = payLater && ref ? { restaurantId, ref, scope: `checkout:${tableId ?? ""}:${hash ?? ""}` } : null;
+    if (intent) {
+      const previous = await readOrderIntent(intent);
+      if (previous?.conflict) return await apiError("apiErr.invalidRequest", 409);
+      if (previous) return NextResponse.json({ ...previous, deferred: true });
+    }
     const supabase = createAdminClient();
 
     // Re-fetch the restaurant to get the authoritative service % and currency.
@@ -107,7 +118,6 @@ export async function POST(req: NextRequest) {
     // Check an occupied table before reserving anything. Empty-table races
     // are decided under the table lock below, with any claims returned if
     // another phone opened the sitting while this cart was being checked.
-    const hash = memberHash(req);
     if (tableId && !hash) return await apiError("apiErr.tableJoin", 403);
 
     const waiting = tableId && hash ? await requestTableMember(restaurantId, tableId, hash) : null;
@@ -171,7 +181,7 @@ export async function POST(req: NextRequest) {
 
     // The code is re-checked here from the DB, and its use reserved
     // (`claimCheckoutCoupon`); a refusal is answered as it is.
-    const claim = await claimCheckoutCoupon(restaurantId, couponCode, base.subtotal);
+    const claim = await claimCheckoutCoupon(restaurantId, couponCode, base.subtotal, !intent);
     if ("refused" in claim) return claim.refused;
     const coupon = claim.coupon;
 
@@ -186,7 +196,7 @@ export async function POST(req: NextRequest) {
 
     /** Give back what this checkout reserved when it doesn't complete. */
     const undoClaim = async () => {
-      if (coupon) await releaseCoupon(coupon.id);
+      if (coupon && !intent) await releaseCoupon(coupon.id);
       if (stockReservationId) await releaseStock(restaurantId, stockReservationId);
       if (!keepFee) await releaseFee(fee.id);
     };
@@ -205,6 +215,37 @@ export async function POST(req: NextRequest) {
     if (tableId && !sessionId) {
       await held.giveBack();
       return await apiError("apiErr.sessionGone", 409);
+    }
+
+    if (intent) {
+      const result = await writeOrderIntent(intent, {
+        order: checkoutOrderRow({
+          restaurantId,
+          table,
+          sessionId,
+          diner: admission?.diner ?? body.diner,
+          deferred,
+          pricing,
+          taxPct: Number(restaurant.tax_pct) || 0,
+          couponCode: coupon?.code ?? null,
+          currency: restaurant.currency,
+          verified,
+          note: body.note,
+          customerName: body.customerName,
+        }),
+        lines: verified, inventory: Boolean(plan && can(plan.limits, "inventory")),
+        // The minimum spend is judged on the subtotal before the coupon, as
+        // claimCheckoutCoupon judged it: the order's own subtotal is after it,
+        // and a MX$10 coupon with a MX$100 minimum on MX$100 was refused.
+        threshold: Number(restaurant.low_stock_threshold) || 0,
+        coupon: coupon ? { ...coupon, eligible_subtotal: base.subtotal } : null,
+      });
+      if (result.conflict) return await apiError("apiErr.invalidRequest", 409);
+      if (result.couponReason) return NextResponse.json({ couponReason: result.couponReason }, { status: 409 });
+      if (result.short) return await refuseShortStock(result.short);
+      held.handOver();
+      if (!result.repeat && restaurant.low_stock_alerts_enabled) await raiseStockNotifications(restaurantId, result.low ?? []);
+      return NextResponse.json({ orderId: result.orderId, sessionId: result.sessionId, deferred: true });
     }
 
     // Take the stock this order needs before asking anyone for money.

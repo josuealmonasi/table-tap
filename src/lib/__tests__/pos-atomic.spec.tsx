@@ -156,6 +156,16 @@ it("an atomic account refusal never causes a second cleanup request", async () =
   expect(state.calls.map(c => c.name)).toEqual(["ring_pos_account_v2"]);
 });
 
+it("an account owing in another currency is a final refusal, not a held sale (cross-review 4)", async () => {
+  // Answered as `held`, the till kept the refused account request and sent it
+  // again even after the cashier chose cash instead.
+  state.reply = { outcome: "mixed_currency" };
+  const { offline: _, ...online } = body(); void _;
+  const res = await POST(new NextRequest("http://localhost/api/pos/order", { method: "POST", body: JSON.stringify({ ...online, method: "account", accountId: id }) }));
+  expect(res.status).toBe(409);
+  expect((await res.json().catch(() => ({}))).held).not.toBe(true);
+});
+
 it("a lost online response replays as the same settled offline identity", async () => {
   state.lost = true;
   const { offline: collected, ...online } = body();

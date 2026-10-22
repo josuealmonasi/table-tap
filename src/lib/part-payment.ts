@@ -127,7 +127,7 @@ export async function record(
 
 /** What the calculator needs back: the numbers, not the rows or the sittings. */
 export function summary(now: Outstanding): Omit<Outstanding, "orders" | "sittings"> {
-  return { ordered: now.ordered, owed: now.owed, collected: now.collected, tips: now.tips };
+  return { ordered: now.ordered, owed: now.owed, collected: now.collected, tips: now.tips, currency: now.currency, balances: now.balances };
 }
 
 /**
@@ -179,9 +179,10 @@ export async function closeBill(
   actor: Actor,
   tableId: string,
   method: "cash" | "card",
+  currency?: string,
 ): Promise<boolean> {
   const db = createAdminClient();
-  const { data: owed, error: readError } = await db
+  let query = db
     .from("orders")
     .select("id, session_id")
     .eq("restaurant_id", actor.restaurantId)
@@ -191,6 +192,8 @@ export async function closeBill(
     .eq("written_off", false)
     .neq("status", "pending_payment")
     .neq("status", "cancelled");
+  if (currency) query = query.eq("currency", currency);
+  const { data: owed, error: readError } = await query;
   if (readError) {
     console.error("closing a bill paid in parts: could not read it:", readError.message);
     return false;
@@ -212,7 +215,13 @@ export async function closeBill(
 
   await closeSessionsFor(owed, "settled");
 
-  // Settled, so any open ask to come and settle it is answered.
+  // Another currency may still be owed on this table. Keep its request for
+  // help open until every debt is closed.
+  const { data: remaining, error: remainingError } = await db.from("orders").select("id")
+    .eq("restaurant_id", actor.restaurantId).eq("table_id", tableId).eq("paid", false)
+    .is("account_id", null).eq("written_off", false).neq("status", "pending_payment").neq("status", "cancelled").limit(1);
+  if (remainingError || remaining?.length) return true;
+  // Settled in every currency, so any open ask to settle it is answered.
   await db
     .from("service_requests")
     .update({ status: "done" })

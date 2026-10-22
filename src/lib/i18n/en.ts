@@ -1,6 +1,19 @@
 // English UI strings for the customer-facing screens. This is the source of
 // truth for the message keys; es.ts must mirror its shape (enforced by types).
 export const en = {
+  pending: {
+    sendAgain: "Send again",
+    withdrawal: "The withdrawal of {amount} wasn't confirmed. Send it again to find out; it won't be recorded twice.",
+    close: "The drawer close counted at {amount} wasn't confirmed. Send the same count again; it won't close twice.",
+    purchase: "This delivery wasn't confirmed. Send it again to find out; it won't be added twice.",
+    count: "This shelf count wasn't confirmed. Send the same count again; it won't be recorded twice.",
+    waste: "This waste wasn't confirmed. Send it again to find out; it won't be taken from stock twice.",
+    order: "This order wasn't confirmed. Send it again to find out; the kitchen won't receive it twice.",
+    account: "The {amount} sale to {name}'s account wasn't confirmed. Send that account sale again to find out; it won't be charged twice.",
+    moreFood: "Food added after this order stays in your cart when you send this order again.",
+    coupon: "Coupon: {code}",
+    tip: "Tip: {amount}",
+  },
   lang: { label: "Language" },
   log: {
     entity: {
@@ -528,6 +541,10 @@ myBill: "View my bill",
     notHere: "That code is not for a bill open here.",
   },
   settle: {
+    recorded: "{amount} collected, including {tip} in tips.",
+    collectedRecorded: "{amount} collected, including {tip} in tips · {left} to go",
+    currency: "Choose a currency",
+    mixed: "These amounts use different currencies. Pay each one separately.",
     showLines: "show all {n}",
     hideLines: "hide",
     alreadyPaid: "Already paid at this table · {amount}",
@@ -737,6 +754,7 @@ myBill: "View my bill",
     addDeal: "+ Add deal",
   },
   tip: {
+    tooLarge: "The tip can be up to {max}. Change the amount to continue.",
     prompt: "Add a tip? 💛",
     none: "No tip",
     other: "Other",
@@ -1312,6 +1330,10 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     failed: "Could not check this phone. Try again in a moment.",
   },
   apiErr: {
+    accountCurrency: "This account owes in another currency. Collect that balance first, or pay for this order by cash or card.",
+    collectionTipLimit: "This payment can carry a tip of up to {max}. Check the tip before taking the money.",
+    collectionBalanceChanged: "The bill changed. It now owes {owed}. Check the money with the customer and return any change.",
+    refreshToCollect: "This screen is out of date. Refresh the page to collect this table.",
     tableJoin: "Wait for someone at the table or a waiter to let this phone in.",
     badCurrency: "Choose MXN or USD for your currency.",
     mixedCurrencies: "These orders use different currencies. Please ask your waiter to help you pay each currency separately.",
@@ -1497,6 +1519,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     coverDays: "Write how many days to buy for, a whole number from 1 to 60.",
     cashMovementNotFound: "That withdrawal is not here any more.",
     shiftAlreadyOpen: "A shift is already open: close it before opening another.",
+    shiftChanged: "This shift has changed. Refresh the page and count the open drawer again.",
     noOpenShift: "No shift is open: open one first.",
     shiftConfirm: "Confirm that you counted the cash to close the shift.",
     shiftNote: "Write why there was a difference.",

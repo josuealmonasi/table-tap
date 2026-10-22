@@ -38,14 +38,15 @@ export default function TipPicker({
 
   function confirmCustom(e: React.FormEvent): void {
     e.preventDefault();
-    // Clamped here as well as in priceCart. The engine is what protects the
-    // charge; this is what keeps the screen honest about it.
+    // Checked here as well as in priceCart. The engine protects the charge;
+    // keeping an oversized entry open lets the diner correct it first.
     //
     // Deliberately not a `max` on the input: that blocks submission with the
     // browser's own message, which follows the browser's language rather than
     // the one the diner chose here. The limit is stated above the field in
-    // our copy instead, and anything larger folds down to it.
-    const amount = Math.min(+(Number(draft) || 0).toFixed(2), maxTip);
+    // our copy instead. A larger tip stays here for the diner to correct.
+    const amount = +(Number(draft) || 0).toFixed(2);
+    if (!Number.isFinite(amount) || amount > maxTip) return;
     onCustomTip(amount > 0 ? amount : null);
     setAsking(false);
   }
@@ -117,6 +118,7 @@ export default function TipPicker({
             autoFocus
             required
           />
+          {Number(draft) > maxTip && <p className="tt-field-error" role="alert">{t("tip.tooLarge", { max: formatMoney(maxTip, currency) })}</p>}
           <div
             style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}
           >

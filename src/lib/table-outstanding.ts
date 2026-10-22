@@ -5,6 +5,7 @@ import { unpaidOrders } from "@/lib/table-bill";
 import { billTotal, type Owes } from "@/lib/table-balance";
 import { round2 } from "@/lib/money";
 import type { Order } from "@/lib/types";
+import { dinerCurrency } from "@/lib/diner-currency";
 
 /**
  * What a table owes right now, with what has already been collected on it
@@ -23,6 +24,8 @@ import type { Order } from "@/lib/types";
 
 /** The unpaid orders, and what has been taken against them so far. */
 export interface Outstanding {
+  currency?: string | null;
+  balances?: { currency: string; ordered: number; collected: number; tips: number; owed: number }[];
   /** Every order still owed for, oldest first. */
   orders: OwedOrder[];
   /** What those orders come to, gratuities included. */
@@ -44,6 +47,7 @@ export interface Outstanding {
 }
 
 export interface OwedOrder {
+  currency: string;
   id: string;
   total: number;
   tip: number;
@@ -51,7 +55,7 @@ export interface OwedOrder {
   table_label: string | null;
 }
 
-const FIELDS = "id, total, tip, session_id, table_label, paid, written_off, status";
+const FIELDS = "id, total, tip, currency, session_id, table_label, paid, written_off, status";
 
 /** What the query above hands back, before the cancelled ones are dropped. */
 type OwedRow = OwedOrder & Pick<Order, "paid" | "written_off" | "status">;
@@ -102,15 +106,24 @@ export function creditFor(
 export async function tableOutstanding(
   restaurantId: string,
   tableId: string,
+  currency?: string,
 ): Promise<Outstanding> {
   const db = createAdminClient();
   const rows = await everyRow<OwedRow>((a, b) => db.from("orders").select(FIELDS)
     .eq("restaurant_id", restaurantId).eq("table_id", tableId)
     .eq("paid", false).is("account_id", null).eq("written_off", false)
     .neq("status", "pending_payment").order("created_at").order("id").range(a, b), "the open table orders");
-  const orders = unpaidOrders(rows);
+  const all = unpaidOrders(rows);
+  const orders = currency ? all.filter(o => o.currency === currency) : all;
   const coverage = await paymentCoverageDetails(restaurantId, orders);
-  const ordered = billTotal(orders);
+  const currencies = [...new Set(orders.map(o => o.currency))];
+  const grouped = currencies.map(currency => {
+    const own = orders.filter(o => o.currency === currency);
+    const ordered = billTotal(own);
+    const collected = round2(own.reduce((s, o) => s + (coverage.get(o.id)?.amount ?? 0), 0));
+    return { currency, ordered, collected, tips: round2(own.reduce((s, o) => s + (coverage.get(o.id)?.tip ?? 0), 0)), owed: round2(ordered - collected) };
+  });
+  const ordered = grouped.length > 1 ? 0 : billTotal(orders);
   const balances = new Map<string, number>();
   let collected = 0;
   for (const o of orders) {
@@ -119,8 +132,9 @@ export async function tableOutstanding(
     if (o.session_id) balances.set(o.session_id, round2((balances.get(o.session_id) ?? 0) + Number(o.total) - paid));
   }
   return {
-    orders, ordered, collected, tips: round2([...coverage.values()].reduce((s, a) => s + a.tip, 0)),
-    owed: round2(ordered - collected),
+    orders, ordered, collected: grouped.length > 1 ? 0 : collected, tips: grouped.length > 1 ? 0 : round2([...coverage.values()].reduce((s, a) => s + a.tip, 0)),
+    currency: currency ?? dinerCurrency(orders), balances: grouped,
+    owed: grouped.length > 1 ? 0 : round2(ordered - collected),
     sittings: [...balances].map(([id, owed]) => ({ id, owed: Math.max(0, owed) })),
   };
 }

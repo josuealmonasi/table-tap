@@ -1,5 +1,6 @@
 import { unpaidOrders } from "@/lib/table-bill";
 import type { Order } from "@/lib/types";
+import { currencyBalances, type CurrencyBalance } from "@/lib/currency-balances";
 
 /**
  * Whether a table is free for the next party.
@@ -19,6 +20,7 @@ import type { Order } from "@/lib/types";
  * party from being charged for it, not a number hidden from staff.
  */
 export interface TableStatus {
+  balances?: CurrencyBalance[];
   /** Nobody owes anything: safe to seat. */
   free: boolean;
   /** What is still outstanding, when it isn't. */
@@ -33,7 +35,10 @@ export function tableStatuses(orders: Order[]): Map<string, TableStatus> {
   for (const order of unpaidOrders(orders)) {
     if (!order.table_id) continue;
     const found = byTable.get(order.table_id) ?? { free: false, owed: 0, orders: 0 };
-    found.owed = Math.round((found.owed + Number(order.total)) * 100) / 100;
+    if (order.currency) {
+      found.balances = currencyBalances([...(found.balances ?? []), { currency: order.currency, amount: Number(order.total) - Number(order.collected ?? 0) }]);
+      found.owed = found.balances.length === 1 ? found.balances[0].amount : 0;
+    } else found.owed = Math.round((found.owed + Number(order.total)) * 100) / 100;
     found.orders += 1;
     byTable.set(order.table_id, found);
   }

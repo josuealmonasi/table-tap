@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
 
 export interface DiscountRequest {
+  currency?: string | null;
   id: string;
   table_label: string | null;
   code: string;
@@ -17,6 +18,7 @@ export interface DiscountRequest {
 
 /** A waiter asking to cancel what a table owes. */
 export interface WriteOffRequest {
+  currency?: string | null;
   id: string;
   table_label: string | null;
   amount: number;
@@ -98,7 +100,7 @@ export default function BillApprovals({
               {t("writeOff.approvalAsk", {
                 who: r.requested_by,
                 reason: t(`writeOff.reasons.${r.reason}`),
-                amount: formatMoney(r.amount, currency),
+                amount: r.currency === null ? t("attribution.currencyUnknown") : formatMoney(r.amount, r.currency ?? currency),
               })}
             </span>
             {r.note && (
@@ -110,7 +112,7 @@ export default function BillApprovals({
           <div className="tt-bill-actions-row">
             <button
               className="tt-btn tt-btn-danger tt-btn-sm"
-              disabled={busy === r.id}
+              disabled={busy === r.id || r.currency === null}
               onClick={() => decideWriteOff(r.id, true, Number(r.amount))}
             >
               {t("writeOff.approve")}
@@ -133,14 +135,14 @@ export default function BillApprovals({
               {t("dash.approvalAsk", {
                 who: r.requested_by,
                 code: r.code,
-                amount: formatMoney(r.amount, currency),
+                amount: r.currency === null ? t("attribution.currencyUnknown") : formatMoney(r.amount, r.currency ?? currency),
               })}
             </span>
           </div>
           <div className="tt-bill-actions-row">
             <button
               className="tt-btn tt-btn-primary tt-btn-sm"
-              disabled={busy === r.id}
+              disabled={busy === r.id || r.currency === null}
               onClick={() => decide(r.id, true, Number(r.amount))}
             >
               {t("dash.approve")}

@@ -130,12 +130,13 @@ export function paidOrders<T extends OrderState>(orders: T[]): T[] {
 }
 
 function side(orders: Order[]): BillSide {
+  const mixed = new Set(orders.map(o => o.currency)).size > 1;
   return {
     orders,
     items: orders.flatMap(o => o.items ?? []),
     // Rounded once at the end: summing pre-rounded totals is what makes a bill
     // disagree with the sum of its parts by a cent.
-    total: round2(orders.reduce((sum, o) => sum + Number(o.total) - Number(o.collected ?? 0), 0)),
+    total: mixed ? 0 : round2(orders.reduce((sum, o) => sum + Number(o.total) - Number(o.collected ?? 0), 0)),
     ...(orders.some(o => Number(o.collected) > 0) ? { collected: round2(orders.reduce((sum, o) => sum + Number(o.collected ?? 0), 0)) } : {}),
     discount: round2(orders.reduce((sum, o) => sum + Number(o.discount ?? 0), 0)),
     service: round2(orders.reduce((sum, o) => sum + Number(o.service_fee ?? 0), 0)),
@@ -149,6 +150,7 @@ function side(orders: Order[]): BillSide {
  */
 export function tableBill(orders: Order[], myOrderIds: string[]): TableBill {
   const owed = unpaidOrders(orders);
+  const mixed = new Set(owed.map(o => o.currency)).size > 1;
   const mineSet = new Set(myOrderIds);
   const mine = side(owed.filter(o => mineSet.has(o.id)));
   const others = side(owed.filter(o => !mineSet.has(o.id)));
@@ -156,10 +158,10 @@ export function tableBill(orders: Order[], myOrderIds: string[]): TableBill {
     mine,
     others,
     paid: side(paidOrders(orders)),
-    total: round2(mine.total + others.total),
-    discount: round2(mine.discount + others.discount),
-    service: round2(mine.service + others.service),
-    tip: round2(mine.tip + others.tip),
+    total: mixed ? 0 : round2(mine.total + others.total),
+    discount: mixed ? 0 : round2(mine.discount + others.discount),
+    service: mixed ? 0 : round2(mine.service + others.service),
+    tip: mixed ? 0 : round2(mine.tip + others.tip),
     settled: owed.length === 0,
   };
 }

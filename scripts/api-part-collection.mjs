@@ -14,9 +14,10 @@ export function twoSittingCollection() {
     return data;
   };
   return {
+    tableId,
     name: "POST /api/table-payment/part (two sittings, the whole collection reaches the ledger)",
     as: "waiter", method: "POST", path: "/api/table-payment/part",
-    body: { tableId, amount: 200, tip: 10, method: "cash", ref },
+    body: f => ({ tableId, expected: 200, currency: f.restaurant.currency, amount: 200, tip: 10, method: "cash", ref }),
     expect: [200],
     arrange: async f => {
       const db = f.admin;

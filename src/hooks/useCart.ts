@@ -128,6 +128,16 @@ export function useCart(restaurantId: string) {
     setItems(prev => trimCartToStock(prev, limits));
   }
 
+  /** Remove only the round that came back; food added after a lost reply stays. */
+  function removeOrdered(ordered: CartItem[]): void {
+    setItems(prev => prev.flatMap(line => {
+      const sent = ordered.find(o => o.cartId === line.cartId && sameChoice(o, line)
+        && JSON.stringify(o.components) === JSON.stringify(line.components));
+      if (!sent) return [line];
+      return line.qty > sent.qty ? [{ ...line, qty: line.qty - sent.qty }] : [];
+    }));
+  }
+
   function clear() {
     setItems([]);
   }
@@ -143,6 +153,7 @@ export function useCart(restaurantId: string) {
     removeExtras,
     trimToStock,
     clear,
+    removeOrdered,
     count,
   };
 }

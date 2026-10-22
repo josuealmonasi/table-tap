@@ -3,6 +3,19 @@ import type { Messages } from "./en";
 // Spanish (Mexico) UI strings. Typed as Messages so a missing or extra key is a
 // compile error.
 export const es: Messages = {
+  pending: {
+    sendAgain: "Enviar otra vez",
+    withdrawal: "El retiro de {amount} no se confirmó. Envíalo otra vez para saberlo; no se registrará dos veces.",
+    close: "El cierre con un conteo de {amount} no se confirmó. Envía el mismo conteo otra vez; no se cerrará dos veces.",
+    purchase: "Esta compra no se confirmó. Envíala otra vez para saberlo; no se sumará dos veces.",
+    count: "Este conteo de existencias no se confirmó. Envía el mismo conteo otra vez; no se registrará dos veces.",
+    waste: "Esta merma no se confirmó. Envíala otra vez para saberlo; no se descontará dos veces.",
+    order: "Este pedido no se confirmó. Envíalo otra vez para saberlo; la cocina no lo recibirá dos veces.",
+    account: "La venta de {amount} a la cuenta de {name} no se confirmó. Envía esa venta a cuenta otra vez para saberlo; no se cobrará dos veces.",
+    moreFood: "La comida que agregues después de este pedido se queda en tu carrito al enviarlo otra vez.",
+    coupon: "Cupón: {code}",
+    tip: "Propina: {amount}",
+  },
   lang: { label: "Idioma" },
   log: {
     entity: {
@@ -523,6 +536,10 @@ myBill: "Ver mi cuenta",
     notHere: "Ese código no es de una cuenta abierta aquí.",
   },
   settle: {
+    recorded: "Cobraste {amount}, incluidos {tip} de propina.",
+    collectedRecorded: "Cobraste {amount}, incluidos {tip} de propina · Faltan {left}",
+    currency: "Elige una moneda",
+    mixed: "Estos importes están en monedas distintas. Paga cada uno por separado.",
     showLines: "ver los {n}",
     hideLines: "ocultar",
     alreadyPaid: "Ya pagado en esta mesa · {amount}",
@@ -734,6 +751,7 @@ myBill: "Ver mi cuenta",
     addDeal: "+ Agregar oferta",
   },
   tip: {
+    tooLarge: "La propina puede ser de hasta {max}. Cambia el importe para continuar.",
     prompt: "¿Agregar propina? 💛",
     none: "Sin propina",
     other: "Otro",
@@ -1306,6 +1324,10 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     failed: "No se pudo revisar este teléfono. Intenta de nuevo en un momento.",
   },
   apiErr: {
+    accountCurrency: "Esta cuenta debe en otra moneda. Cobra primero ese saldo o paga este pedido en efectivo o con tarjeta.",
+    collectionTipLimit: "Este abono admite una propina de hasta {max}. Revisa la propina antes de recibir el dinero.",
+    collectionBalanceChanged: "La cuenta cambió. Ahora faltan {owed}. Revisa el dinero con el cliente y entrega el cambio que corresponda.",
+    refreshToCollect: "Esta pantalla está desactualizada. Actualiza la página para cobrar esta mesa.",
     tableJoin: "Espera a que alguien de la mesa o un mesero deje entrar a este teléfono.",
     badCurrency: "Elige MXN o USD como moneda.",
     mixedCurrencies: "Estos pedidos están en monedas distintas. Pide ayuda a tu mesero para pagar cada moneda por separado.",
@@ -1492,6 +1514,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     coverDays: "Escribe para cuántos días comprar, un número entero de 1 a 60.",
     cashMovementNotFound: "Ese retiro ya no está aquí.",
     shiftAlreadyOpen: "Ya hay un turno abierto: ciérralo antes de abrir otro.",
+    shiftChanged: "Este turno cambió. Actualiza la página y vuelve a contar la caja abierta.",
     noOpenShift: "No hay un turno abierto: abre uno primero.",
     shiftConfirm: "Confirma que contaste el efectivo para cerrar el turno.",
     shiftNote: "Escribe por qué hubo una diferencia.",

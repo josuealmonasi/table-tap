@@ -6,12 +6,13 @@ import { round2 } from "@/lib/money";
  * A bill the floor can still act on: a table that hasn't settled, or a to-go
  * order that hasn't been paid for.
  *
- * Grouped the way the floor thinks about them — one row per table, because a
+ * Grouped by table and saved currency — one row per debt, because a
  * table is what a manager is asked about ("the four by the window want their
  * discount"), and one row per to-go order, because those have nobody sitting
  * anywhere. Oldest first: the longest wait is the one being asked about.
  */
 export interface OpenBill {
+  currency?: string;
   key: string;
   tableId: string | null;
   tableLabel: string | null;
@@ -90,8 +91,9 @@ export function openBills(orders: Order[]): OpenBill[] {
   const bills = new Map<string, OpenBill>();
 
   for (const order of unpaidOrders(orders)) {
-    // A table's orders are one bill; a to-go order is its own.
-    const key = order.table_id ?? `order:${order.id}`;
+    // Each currency is its own debt; a to-go order is its own bill.
+    const identity = order.table_id ?? `order:${order.id}`;
+    const key = order.currency ? `${identity}:${order.currency}` : identity;
     const found = bills.get(key);
     if (found) {
       found.orderIds.push(order.id);
@@ -104,6 +106,7 @@ export function openBills(orders: Order[]): OpenBill[] {
     }
     bills.set(key, {
       key,
+      currency: order.currency,
       tableId: order.table_id,
       tableLabel: order.table_label,
       code: order.table_id ? null : orderCode(order.id),
@@ -133,4 +136,3 @@ export function matchesBill(bill: OpenBill, query: string): boolean {
     bill.items.some(i => i.name.toLowerCase().includes(q))
   );
 }
-

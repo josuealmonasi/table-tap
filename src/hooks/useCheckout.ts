@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useRetryIntent, refusalSettles } from "@/hooks/useRetryIntent";
 import type { RestaurantTable } from "@/lib/types";
 import type { AppliedCoupon } from "@/lib/pricing";
 import type { CartItem, useCart } from "@/hooks/useCart";
+import type { PendingOrderDetails } from "@/components/ui/PendingOrder";
 import { useT } from "@/lib/i18n/context";
 import { rememberUsual } from "@/lib/usual";
 import { rememberMyOrder } from "@/lib/my-orders";
@@ -12,6 +14,8 @@ import { rememberRecentOrder } from "@/lib/recent-order";
 import { rememberDinerName } from "@/lib/diner-name";
 import { rememberSitting } from "@/lib/table-binding";
 import { dinerToken } from "@/lib/diner-token";
+
+export interface PendingCheckout extends PendingOrderDetails { tableId: string | null }
 
 export interface CheckoutInput {
   restaurantId: string;
@@ -40,22 +44,30 @@ export interface CheckoutInput {
 export function useCheckout(input: CheckoutInput): {
   checkout: (payLater?: boolean) => Promise<void>;
   loading: boolean;
+  frozen: PendingCheckout | null;
 } {
   const t = useT();
+  const attempt = useRetryIntent();
+  const inFlight = useRef(false);
+  const sentLines = useRef<CartItem[]>([]);
   const [loading, setLoading] = useState(false);
   const { restaurantId, table, orderableItems, cart } = input;
 
   async function checkout(payLater = false): Promise<void> {
-    if (orderableItems.length === 0) {
+    if (inFlight.current) return;
+    payLater ||= attempt.pending();
+    if (orderableItems.length === 0 && !attempt.pending()) {
       input.notify(t("notice.allSoldOut"));
       return;
     }
+    if (payLater && !attempt.pending()) sentLines.current = structuredClone(orderableItems);
+    inFlight.current = true;
     setLoading(true);
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: (payLater ? attempt.body : JSON.stringify)({
           restaurantId,
           tableId: table?.id ?? null,
           tableLabel: table?.label ?? null,
@@ -89,6 +101,8 @@ export function useCheckout(input: CheckoutInput): {
         }),
       });
       const data = await res.json();
+      const frozen = payLater ? attempt.frozen<PendingCheckout>() : null;
+      if (payLater && ((res.ok && data.deferred && data.orderId) || (!res.ok && refusalSettles(res.status)))) attempt.clear();
       // Deferred: the food is already with the kitchen, so there is no Stripe
       // hop. Remember the id — it is the only thing that tells this phone's
       // share apart from the rest of the table's on the bill.
@@ -97,16 +111,16 @@ export function useCheckout(input: CheckoutInput): {
         // drives the "track your order" link and the rating prompt. A dine-in
         // order used to reach only the first.
         rememberMyOrder(restaurantId, data.orderId);
-        rememberRecentOrder(restaurantId, data.orderId, table?.id);
-        rememberUsual(restaurantId, orderableItems);
-        if (input.customerName.trim())
-          rememberDinerName(restaurantId, input.customerName);
+        rememberRecentOrder(restaurantId, data.orderId, frozen?.tableId ?? table?.id);
+        rememberUsual(restaurantId, frozen?.items ?? orderableItems);
+        const name = frozen?.customerName ?? input.customerName;
+        if (name.trim()) rememberDinerName(restaurantId, name);
         // This phone is now sitting at this table, and stays bound to it until
         // the bill is cleared.
         const sitting = data.sessionId && table?.id ? (data.sessionId as string) : null;
         if (sitting && table?.id) rememberSitting(restaurantId, sitting, table.id);
         clearUpsell(restaurantId);
-        cart.clear();
+        cart.removeOrdered(sentLines.current);
         input.onPlaced(data.orderId, sitting);
         setLoading(false);
         return;
@@ -157,8 +171,10 @@ export function useCheckout(input: CheckoutInput): {
     } catch {
       input.notify(t("notice.network"));
       setLoading(false);
+    } finally {
+      inFlight.current = false;
     }
   }
 
-  return { checkout, loading };
+  return { checkout, loading, frozen: attempt.frozen<PendingCheckout>() };
 }

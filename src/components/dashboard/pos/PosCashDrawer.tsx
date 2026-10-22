@@ -12,6 +12,7 @@ interface PosCashDrawerProps {
   shiftOpen: boolean;
   currency: string;
   shiftCurrency?: string;
+  shiftId?: string;
   /** Sales this device rang offline and has not sent yet. */
   heldSales?: number;
 }
@@ -23,7 +24,7 @@ interface PosCashDrawerProps {
  * should hold until they have counted it — the register close, which they do
  * not open, is where that sum lives.
  */
-export default function PosCashDrawer({ shiftOpen, currency, shiftCurrency = currency, heldSales = 0 }: PosCashDrawerProps) {
+export default function PosCashDrawer({ shiftOpen, currency, shiftCurrency = currency, shiftId, heldSales = 0 }: PosCashDrawerProps) {
   const t = useT();
   const toast = useToast();
   const router = useRouter();
@@ -52,12 +53,14 @@ export default function PosCashDrawer({ shiftOpen, currency, shiftCurrency = cur
         </button>
       )}
       <CashMovementDialog
+        shiftId={shiftId}
         kind={dialog === "opening" || dialog === "withdrawal" ? dialog : null}
         onClose={() => setDialog(null)}
         currency={dialog === "opening" ? currency : shiftCurrency}
         onSaved={() => router.refresh()}
       />
       <CloseShiftDialog
+        shiftId={shiftId}
         open={dialog === "close"}
         currency={shiftCurrency}
         onClose={() => setDialog(null)}

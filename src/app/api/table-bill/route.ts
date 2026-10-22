@@ -6,6 +6,8 @@ import { fetchCounterBill, fetchTableBill } from "@/lib/bill-data";
 import { tableOutstanding } from "@/lib/table-outstanding";
 import { unpaidOrders } from "@/lib/table-bill";
 import { billTotal } from "@/lib/table-balance";
+import { summary } from "@/lib/part-payment";
+import { dinerCurrency } from "@/lib/diner-currency";
 
 export const dynamic = "force-dynamic";
 
@@ -48,12 +50,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       // screen wants; only the arithmetic goes back a second time.
       return NextResponse.json({
         orders,
-        outstanding: {
-          ordered: outstanding.ordered,
-          collected: outstanding.collected,
-          tips: outstanding.tips,
-          owed: outstanding.owed,
-        },
+        outstanding: summary(outstanding),
       });
     }
 
@@ -63,7 +60,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const ordered = billTotal(unpaidOrders(orders));
     return NextResponse.json({
       orders,
-      outstanding: { ordered, collected: 0, tips: 0, owed: ordered },
+      outstanding: { ordered, collected: 0, tips: 0, owed: ordered, currency: dinerCurrency(orders) },
     });
   } catch (error) {
     if (error instanceof PaymentAttributionRequired) return await apiError("apiErr.attributionRequired", 409);

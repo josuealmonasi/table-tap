@@ -270,3 +270,14 @@ drop function if exists public.lock_ingredient_movements(uuid);
 
 drop function if exists public.start_refund_due_fee(uuid, uuid, text, int);
 drop function if exists public.stamp_refund_due_charge() cascade;
+drop function if exists public.order_intent_result(uuid, uuid, text);
+drop function if exists public.create_order_intent(uuid, uuid, text, jsonb, jsonb, boolean, int, jsonb);
+drop function if exists public.create_cash_withdrawal_once(uuid, uuid, numeric, text, text, uuid);
+drop function if exists public.record_purchase_once(uuid, uuid, numeric, numeric, text, uuid);
+drop function if exists public.record_waste_once(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid);
+drop function if exists public.record_ingredient_counts_once(uuid, jsonb, text, uuid);
+drop function if exists public.close_cash_shift_once(uuid, uuid, numeric, text, uuid);
+
+drop function if exists public.account_checkout_currency_v1(uuid, uuid, numeric, numeric, numeric, text) cascade;
+drop function if exists public.account_settle_currency_v1(uuid, uuid, numeric, numeric, text, text, text, text) cascade;
+drop function if exists public.collect_table_reviewed_v1(uuid,uuid,numeric,text,numeric,numeric,text,text,text) cascade;
