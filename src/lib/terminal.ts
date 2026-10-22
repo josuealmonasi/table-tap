@@ -1,3 +1,4 @@
+import { terminalReturns, returnDeposit, carriedReturn, waitingDay } from "./terminal-returns";
 import { round2 } from "@/lib/money";
 
 /**
@@ -12,8 +13,11 @@ import { round2 } from "@/lib/money";
  */
 
 export interface TerminalPayment {
+  id?: string;
+  /** The original receipt, reached through the return allocation. */
+  payment_id?: string;
   amount: number;
-  /** A confirmed partial terminal return, booked at its own time. */
+  /** A confirmed partial terminal return, booked at its own time; created_at stays the original payment date. */
   returned_at?: string;
   /** The tip inside `amount`. */
   tip: number;
@@ -25,6 +29,11 @@ export interface TerminalPayment {
 }
 
 export interface DepositRecord {
+  /** Exact membership at the money-lock cutoff; null only on pre-snapshot marks. */
+  payment_ids?: string[] | null;
+  return_ids?: string[] | null;
+  snapshot_at?: string | null;
+  fee_pct?: number | null;
   /** Null on older deposits until their bank receipt verifies the currency. */
   currency?: string | null;
   sales_day: string;
@@ -102,7 +111,7 @@ function statusOf(expected: number, expectedOn: string, deposit: DepositRecord |
  * A cancelled sale was voided on the terminal by a person, as the cancel
  * dialog asks. Voided the day it was taken, the bank never pays it, so it
  * counts nowhere. Voided on a later day, the bank paid it and takes it back
- * out of a deposit to come: the first day's from the void on that has sales
+ * out of a deposit to come: the first unsigned day's from the void on that has sales
  * of its own — the same day the corte takes it out of the drawer, when that
  * day had sales. Sales before `firstDay` are not listed; their voids still are.
  */
@@ -121,46 +130,59 @@ export function depositDays(
     byDay.set(day, row);
     return row;
   };
-  const markedAt = new Map(deposits.map(d => [d.sales_day, d.created_at]));
-  const voidedLater: { day: string; amount: number }[] = [];
+  const marked = new Map(deposits.map(d => [d.sales_day, d]));
+  const returns = terminalReturns(payments, timeZone);
   for (const p of payments) {
-    if (p.returned_at) {
-      voidedLater.push({ day: localDay(p.returned_at, timeZone), amount: Number(p.amount) });
-      continue;
-    }
+    if (p.returned_at) continue;
     const day = localDay(p.created_at, timeZone);
-    const voidDay = p.voided_at ? localDay(p.voided_at, timeZone) : null;
-    if (voidDay === day) continue;
-    if (day >= firstDay) {
-      const row = rowOf(day);
-      row.count += 1;
-      row.takings += Number(p.amount);
-      row.tips += Number(p.tip) || 0;
-      // Recorded after its day was marked deposited: the bank paid it with
-      // that day, and the figure reconciled then could not include it. Only
-      // an arrival counts here — a later void is booked to a later day.
-      const marked = markedAt.get(day);
-      if (marked && p.recorded_at && p.recorded_at > marked) row.late += Number(p.amount);
-    }
-    if (voidDay) voidedLater.push({ day: voidDay, amount: Number(p.amount) });
+    const deposit = marked.get(day);
+    const sameDay = returns.filter(r => p.id && r.paymentId === p.id && r.day === day
+      && (!deposit || deposit.return_ids?.includes(r.id) || (deposit.return_ids == null && r.at <= deposit.created_at)));
+    // A legacy void has no allocation; its entire receipt is reversed.
+    if (p.voided_at && localDay(p.voided_at, timeZone) === day
+      && (!deposit || sameDay.length > 0)) continue;
+    const amount = round2(Number(p.amount) - sameDay.reduce((n, r) => n + r.amount, 0));
+    if (amount <= 0) continue;
+    const row = rowOf(day);
+    row.count += 1;
+    row.takings += amount;
+    row.tips += Number(p.tip) - sameDay.reduce((n, r) => n + r.tip, 0);
+    // Recorded after its day was marked deposited: the bank paid it with
+    // that day, and the figure reconciled then could not include it. Only
+    // an arrival counts here — a later void is booked to a later day.
+    // A manifest also catches transactions whose timestamp predates the lock.
+    const late = deposit?.payment_ids != null ? !deposit.payment_ids.includes(p.id ?? "")
+      : deposit && p.recorded_at && p.recorded_at > deposit.created_at;
+    if (late) row.late += amount;
   }
   const salesDays = [...byDay.entries()].filter(([, row]) => row.count > 0).map(([day]) => day).sort();
-  for (const v of voidedLater) rowOf(salesDays.find(day => day >= v.day) ?? v.day).givenBack += v.amount;
-  const marked = new Map(deposits.map(d => [d.sales_day, d]));
+  for (const r of returns) {
+    const reconciled = returnDeposit(r, deposits, salesDays);
+    if (reconciled) {
+      // Same-day reversals are already absent from takings and fees.
+      if (r.saleDay !== r.day || reconciled.sales_day !== r.day) rowOf(reconciled.sales_day).givenBack += carriedReturn(r, reconciled.fee_pct ?? feePct);
+      continue;
+    }
+    if (r.saleDay === r.day && !marked.has(r.saleDay)) continue;
+    const target = salesDays.find(day => day >= r.day && !marked.has(day)) ?? waitingDay(r.day, marked);
+    rowOf(target).givenBack += carriedReturn(r, marked.get(r.saleDay)?.fee_pct ?? feePct);
+  }
   for (const day of marked.keys()) rowOf(day);
 
   return [...byDay.entries()]
     .map(([day, row]) => {
       const deposit = marked.get(day) ?? null;
-      const fee = round2(row.takings * (feePct / 100));
+      const pct = deposit?.fee_pct ?? feePct;
+      const fee = round2(row.takings * (pct / 100));
       const givenBack = round2(row.givenBack);
       const expected = deposit ? Number(deposit.expected) : round2(row.takings - fee - givenBack);
-      const late = deposit ? round2(row.late - row.late * (feePct / 100)) : 0;
+      const late = deposit ? round2(row.late - row.late * (pct / 100)) : 0;
       const expectedOn = addBusinessDays(day, settleDays);
       return {
         day, count: row.count, takings: round2(row.takings), tips: round2(row.tips), fee, givenBack, expected, late, expectedOn,
         deposit, status: statusOf(round2(expected + late), expectedOn, deposit, today, row.count),
       };
     })
+    .filter(d => d.day >= firstDay || d.late !== 0)
     .sort((a, b) => b.day.localeCompare(a.day));
 }

@@ -11,6 +11,8 @@ export interface Outcome {
   code: string;
   /** Its rewards included: the next one is `standing.next`. */
   standing: Standing;
+  /** The round shown with this standing; null when the card could not be read. */
+  round: number | null;
   /** Stamp: false when the card already had today's visit. */
   stamped?: boolean;
   /** Redeem: the reward as it read when it was spent. */

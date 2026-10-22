@@ -58,6 +58,9 @@ export default function ProductForm({
   const [stock, setStock] = useState(
     initial?.stock === null || initial?.stock === undefined ? "" : String(initial.stock),
   );
+  // Keep the opening count even if a live menu refresh changes the row.
+  const [openedStock] = useState(initial?.stock ?? null);
+  const [openedEpoch] = useState(initial?.stock_epoch ?? 0);
   const [picked, setPicked] = useState<string[]>(selectedAddonIds);
   const [saving, setSaving] = useState(false);
 
@@ -92,29 +95,38 @@ export default function ProductForm({
     );
   }
 
+  const countedStock = stock.trim() === "" ? null : Math.max(0, Math.floor(Number(stock) || 0));
+  const stockInput = !initial
+    ? { stock: inventoryAllowed ? countedStock : null }
+    : inventoryAllowed && countedStock !== openedStock
+      ? { stock: countedStock, expectedStock: openedStock, expectedEpoch: openedEpoch }
+      : {};
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    await onSubmit(
-      {
-        name: name.trim(),
-        description: description.trim(),
-        price: Number(price) || 0,
-        image_url: imageUrl.trim() || null,
-        emoji,
-        popular,
-        skips_kitchen: skipsKitchen,
-        modifiers: cleanModifiers(modifiers),
-        dietary,
-        discount_pct: pct,
-        stock:
-          !inventoryAllowed || stock.trim() === ""
-            ? null
-            : Math.max(0, Math.floor(Number(stock) || 0)),
-      },
-      picked,
-    );
-    setSaving(false);
+    try {
+      await onSubmit(
+        {
+          name: name.trim(),
+          description: description.trim(),
+          price: Number(price) || 0,
+          image_url: imageUrl.trim() || null,
+          emoji,
+          popular,
+          skips_kitchen: skipsKitchen,
+          modifiers: cleanModifiers(modifiers),
+          dietary,
+          discount_pct: pct,
+          ...stockInput,
+        },
+        picked,
+      );
+    } catch {
+      // The action already explained the refusal; keep the form open.
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (

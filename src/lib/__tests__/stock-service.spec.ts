@@ -45,9 +45,8 @@ describe("durable stock reservations", () => {
     expect(await legacyStockDemand("restaurant", { stock_managed: true, items: lines })).toEqual([]);
     expect(getPlan).not.toHaveBeenCalled();
   });
-  it("keeps the former calculation only for orders from an older deployment", async () => {
-    expect(await legacyStockDemand("restaurant", { stock_managed: false, items: lines })).toEqual([
-      { item_id: "dish", qty: 2 }, { item_id: "extra", qty: 2 },
-    ]);
+  it("J7: never guesses legacy deductions from today's plan", async () => {
+    expect(await legacyStockDemand("restaurant", { stock_managed: false, items: lines })).toEqual([]);
+    expect(getPlan).not.toHaveBeenCalled();
   });
 });

@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 interface CashMovementDialogProps {
   /** A shift opened with its cash, or cash taken out; null when shut. */
   kind: "opening" | "withdrawal" | null;
+  currency: string;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -17,7 +18,7 @@ interface CashMovementDialogProps {
  * taken out of it. One form for both: an amount, and for a withdrawal what it
  * was for.
  */
-export default function CashMovementDialog({ kind, onClose, onSaved }: CashMovementDialogProps) {
+export default function CashMovementDialog({ kind, currency, onClose, onSaved }: CashMovementDialogProps) {
   const t = useT();
   const toast = useToast();
   const [amount, setAmount] = useState("");
@@ -70,7 +71,7 @@ export default function CashMovementDialog({ kind, onClose, onSaved }: CashMovem
           {kind === "opening" ? t("shift.openHint") : t("corte.withdrawalHint")}
         </p>
         <label className="tt-field">
-          <span className="tt-mod-label">{kind === "opening" ? t("corte.opening") : t("corte.amount")}</span>
+          <span className="tt-mod-label">{kind === "opening" ? t("corte.opening") : t("corte.amount")} · {currency}</span>
           <input
             className="tt-input"
             inputMode="decimal"

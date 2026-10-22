@@ -11,6 +11,7 @@ interface PosCashDrawerProps {
   /** Whether a shift is open at the drawer now. */
   shiftOpen: boolean;
   currency: string;
+  shiftCurrency?: string;
   /** Sales this device rang offline and has not sent yet. */
   heldSales?: number;
 }
@@ -22,13 +23,16 @@ interface PosCashDrawerProps {
  * should hold until they have counted it — the register close, which they do
  * not open, is where that sum lives.
  */
-export default function PosCashDrawer({ shiftOpen, currency, heldSales = 0 }: PosCashDrawerProps) {
+export default function PosCashDrawer({ shiftOpen, currency, shiftCurrency = currency, heldSales = 0 }: PosCashDrawerProps) {
   const t = useT();
   const toast = useToast();
   const router = useRouter();
   const [dialog, setDialog] = useState<"opening" | "withdrawal" | "close" | null>(null);
   return (
     <>
+      {shiftOpen && shiftCurrency !== currency && (
+        <p className="tt-muted">{t("shift.currencyChanged", { currency: shiftCurrency, current: currency })}</p>
+      )}
       {shiftOpen ? (
         <>
           <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => setDialog("withdrawal")}>
@@ -50,11 +54,12 @@ export default function PosCashDrawer({ shiftOpen, currency, heldSales = 0 }: Po
       <CashMovementDialog
         kind={dialog === "opening" || dialog === "withdrawal" ? dialog : null}
         onClose={() => setDialog(null)}
+        currency={dialog === "opening" ? currency : shiftCurrency}
         onSaved={() => router.refresh()}
       />
       <CloseShiftDialog
         open={dialog === "close"}
-        currency={currency}
+        currency={shiftCurrency}
         onClose={() => setDialog(null)}
         onClosed={() => router.refresh()}
       />

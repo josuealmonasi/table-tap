@@ -382,7 +382,15 @@ dishes on a bill the restaurant has just cancelled.
   asked first so a row is never marked for a refund that does not exist; a
   retry finds the refund Stripe already made by its `refund_due` tag instead
   of making a second. One already refunded by hand in Stripe is marked done
-  and our fee on it returned. Its log line carries no `method`, because the
+  and our fee on it returned. Customer completion stays independent of fee
+  completion: a failed fee return or lookup leaves `fee_reconciled_at` empty,
+  keeps the row visible with a fee-only retry, and is recovered after a Bills
+  response. Its exact fee request is saved before Stripe is called and provider
+  metadata recovers lost responses after idempotency expires. The obligation
+  keeps the verified charge's currency and account from its frozen checkout;
+  older rows are verified from checkout or Stripe evidence where possible and
+  otherwise displayed as unverified. Display, approval, activity and the money
+  report never substitute the menu's current currency. Its log line carries no `method`, because the
   corte takes `refunded` rows with one out of the day's takings and this money
   was never in them. The bell's notice opens Cuentas abiertas.
 - **The month's fee ceiling lives in its own ledger.** Each plan caps our
@@ -458,18 +466,33 @@ dishes on a bill the restaurant has just cancelled.
   **blind count**: the person closing enters what they counted and confirms
   it is theirs, the shift closes on that number, and only then are they told
   what it should have held — so the count cannot drift toward the answer, and
-  it is final. What it should hold is worked out on the server at the close
+  it is final. What it should hold is worked out in the database at the close
   and stored: the opening, plus the cash taken while it was open (net of cash
   handed back, as the corte counts it), minus its withdrawals
-  (`src/lib/cash-shift.ts`). A difference ("Sobrante" / "Faltante") is
+  (`cash_shift_totals`, also used by the later review). Closing, withdrawal
+  creation and withdrawal deletion share the restaurant money lock and check
+  the exact open shift inside the transaction that writes the change. A
+  difference ("Sobrante" / "Faltante") is
   explained once, by the closer or a manager. Withdrawals (`cash_movements`)
   go only into the open shift, and a manager can strike one off only while it
-  is still open. Each closed shift shows its count, difference and why, a
+  is still open. Every shift freezes its currency at opening, and each
+  movement keeps that shift's currency. Receipts and completed cash returns
+  are summed only in that currency; labels and printed handovers use it too.
+  Old shifts whose opening currency cannot be proven use the restaurant's
+  currency at backfill, linked movements use their shift, and unlinked
+  movements use the restaurant's currency at backfill. A menu currency change
+  leaves the open shift in its old currency: the cashier is told to separate
+  the new currency's cash and count this shift only in its stored currency.
+  Selling and closing remain available; the next opening uses the new
+  currency. Each closed shift shows its count, difference and why, a
   trail of what happened to the money in it (withdrawals, refunds, discounts,
   cancellations, write-offs — the activity log's own wording), and prints as
   a handover sheet with two signatures. Cash dated inside a closed shift that
   arrived after its count (a sale the till held offline) is shown under the
-  sign-off, with the verdict as it stands now; the sign-off itself is kept. Owners and managers run it from the
+  sign-off, with the verdict as it stands now; the sign-off itself is kept.
+  Today's review includes shifts opened or closed today, still-open shifts,
+  and older shifts with late matching cash receipts recorded today. Dates
+  identify overnight shifts and older corrections. Owners and managers run it from the
   corte; the cashier opens, withdraws and closes from the till's header,
   never seeing the expected amount before counting. `/api/cash-shift` and
   `/api/cash-drawer`, for owner, manager and cashier. Card and online money
@@ -921,7 +944,7 @@ to know what should reach the bank and when.
   dialog asks; `cancel_order` stamps `orders.cancelled_at`. Voided the day it
   was taken, the bank never pays it: it counts in no day, and its payment is
   listed as voided. Voided on a later day, the bank paid it and takes it back
-  out of a deposit to come: the first day from the void on with sales of its
+  out of a deposit to come: the first unsigned day from the void on with sales of its
   own shows it as voided from earlier days and expects that much less; with no
   such day yet, the void waits on its own day as coming. A sale from before
   the 14 days voided inside them is still taken back. Orders cancelled before
@@ -932,10 +955,20 @@ to know what should reach the bank and when.
   day. Within MX$0.50 it is received; otherwise it came in short or over, and
   the difference is shown. A day marked wrong is taken back and marked again.
   Unmarked, a day is coming, due today, or late. A card sale from a marked
-  day that reached the server after it was marked (`payments.recorded_at`
-  later than the mark — a sale the till held offline) is shown beside it, and
-  the deposit is judged against what was marked plus that sale; the figure
-  that was reconciled is kept.
+  day that is outside its saved receipt IDs is shown beside it, and the
+  deposit is judged against what was marked plus that sale; the figure that
+  was reconciled is kept. Calculation and insertion share the restaurant
+  money lock with settlement. New marks save exact payment and return IDs,
+  the cutoff time and fee rate; old marks retain their timestamp rule.
+  Returns after sign-off carry to the next unsigned day with sales, or stay
+  visible waiting for it. Taking back a mark uses the same money lock.
+- **Whole days and recovered sales:** the recent window starts at local
+  midnight fourteen calendar days back. Older unsigned sales days and signed
+  days with late receipts remain visible, with each day's complete contents.
+  Confirmed typed terminal returns follow allocations to the original payment.
+  A same-day void reverses its amount and fee; a later refund reverses the
+  gross amount. A same-day void after sign-off carries the net return using
+  that mark's fee rate without rewriting its original expected amount.
 
 Sending the amount to the terminal itself waits for a provider choice.
 
@@ -1371,12 +1404,16 @@ email or phone.
   `saved_at`) asks for the picture to be saved again. The page links back to
   the menu the diner came from (`back`, accepted only as `/r/…`) or to the
   card's restaurant, and shows the card's shape while it looks it up.
-- **A reward is spent once**, under the same lock, by `loyalty_redeem()`. The
-  button names the reward it spends (`step`, its visits), and the function
-  refuses unless that is still the next one — on a ladder with every reward
-  ready, a second tap would otherwise spend the reward after it; it answers
-  "already redeemed" instead. A reward already earned is honoured after the
-  program is switched off or the plan changes — the diner did their part.
+- **A reward is spent once**, under the same card lock, by
+  `loyalty_redeem_once()`. Both staff screens send the displayed `round` and
+  `step` with a retry key saved on the device before sending. A repeat returns
+  the original answer saved on the redemption; another key for an old round
+  asks staff to look up the card again. This also protects the final step when
+  banked visits have already earned the next round's reward. A step already
+  redeemed in the current round answers "already redeemed". The original
+  `loyalty_redeem()` stays available during rollout. Stamp undo still uses the
+  same lock and redemption history. A reward already earned is honoured after
+  the program is switched off or the plan changes — the diner did their part.
 - **Server only.** The four tables and the functions are revoked from every
   browser key; staff and diners reach them through routes that check who is
   asking.
@@ -1870,3 +1907,24 @@ no snapshot use current remaining principal conservatively. Every pooled
 attempt also saves its explicit principal. Bill display and payment read the
 same validated sitting, including a phone's valid sitting older than eight
 hours. A stale selection requests review and never reports the debt as paid.
+
+
+### Stock recounts and older orders
+
+A product's description and price edits do not write its opening stock count.
+A changed count is a separate manager operation at `POST /api/products`, with
+both the expected count and `stock_epoch`; a concurrent sale or recount refuses
+it so the manager can reopen the dish and check the shelf. Ordinary product
+edits use `PATCH /api/products` and keep RLS and frozen-dashboard guards.
+
+A recount is the new authoritative available count. It advances the generation
+and supersedes prior holds for that dish; those holds remain recorded, but
+cannot later add portions to the new count. Sales, waste and valid returns keep
+their generation. Older orders without proof of a deduction never receive a
+stock credit on cancellation or expiry; activity asks the manager to check the
+count, and cancellation and its money handling continue normally. Existing SQL
+function signatures remain callable during deployment.
+
+The menu editor pages all menus, sections, items and links with stable ordering
+and refuses edits and copies until the whole read succeeds. Waiter orders obey
+the restaurant's low-stock alert preference, just like checkout and the till.

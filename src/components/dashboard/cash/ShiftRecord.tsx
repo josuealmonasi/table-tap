@@ -11,7 +11,6 @@ import ShiftTrail from "./ShiftTrail";
 
 interface ShiftRecordProps {
   view: ShiftView;
-  currency: string;
   timeZone: string;
   restaurantName: string;
 }
@@ -21,7 +20,7 @@ interface ShiftRecordProps {
  * the count, the difference and why, and the trail of what happened to the
  * money — printable as the sheet two people sign at a handover.
  */
-export default function ShiftRecord({ view, currency, timeZone, restaurantName }: ShiftRecordProps) {
+export default function ShiftRecord({ view, timeZone, restaurantName }: ShiftRecordProps) {
   const t = useT();
   const { locale } = useLocale();
   const router = useRouter();
@@ -31,9 +30,9 @@ export default function ShiftRecord({ view, currency, timeZone, restaurantName }
   const [explaining, setExplaining] = useState(false);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const money = (n: number) => formatMoney(n, currency);
+  const money = (n: number) => formatMoney(n, shift.currency);
   const time = (iso: string | null) =>
-    iso ? new Date(iso).toLocaleTimeString(dateLocale(locale), { timeZone, hour: "2-digit", minute: "2-digit" }) : "";
+    iso ? new Date(iso).toLocaleString(dateLocale(locale), { timeZone, dateStyle: "short", timeStyle: "short" }) : "";
   const difference = Number(shift.difference ?? 0);
   const off = Math.abs(difference) >= 0.01;
   const verdict = !off ? t("shift.exact") : difference > 0 ? t("shift.over") : t("shift.short");
@@ -189,7 +188,7 @@ export default function ShiftRecord({ view, currency, timeZone, restaurantName }
           </div>
         </form>
       )}
-      {showTrail && <ShiftTrail trail={trail} currency={currency} timeZone={timeZone} />}
+      {showTrail && <ShiftTrail trail={trail} currency={shift.currency} timeZone={timeZone} />}
     </div>
   );
 }

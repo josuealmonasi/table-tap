@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { tableJoinScenario } from "./table-join-scenario.mjs";
 import { checkTableJoin } from "./check-table-join.mjs";
 // ============================================================================
@@ -13,6 +14,7 @@ import { checkTableJoin } from "./check-table-join.mjs";
 // ============================================================================
 import { MARK, PART_AMOUNT, PART_TIP } from "./api-fixtures.mjs";
 import { offlineCases } from "./api-offline-cases.mjs";
+import { terminalDepositRace } from "./api-terminal-deposit.mjs";
 import { twoSittingCollection } from "./api-part-collection.mjs";
 import { loginByEmail } from "./logins.mjs";
 
@@ -117,6 +119,31 @@ export function cases(fx) {
         try { return await checkTableJoin(f.joinScenario, f.who); }
         catch (error) { return error.message; }
       } },
+    { name: "PATCH /api/products (J5: an unrelated edit preserves stock)",
+      as: "manager", method: "PATCH", path: "/api/products",
+      arrange: async f => {
+        const { data: item, error } = await f.admin.from("menu_items").select("description, stock")
+          .eq("id", f.dish.id).single();
+        if (error || !item) throw new Error("Could not read the product before editing");
+        f.productBeforeEdit = item;
+        return async () => {
+          const { error: restoreError } = await f.admin.from("menu_items")
+            .update({ description: item.description }).eq("id", f.dish.id);
+          if (restoreError) throw new Error(restoreError.message);
+        };
+      },
+      body: f => ({ id: f.dish.id, changes: { description: `${MARK} description`,
+        stock: (f.productBeforeEdit.stock ?? 0) + 3 } }), expect: [200],
+      check: async (_data, f) => {
+        const { data: item, error } = await f.admin.from("menu_items").select("description, stock")
+          .eq("id", f.dish.id).single();
+        if (error || !item) return "could not verify the saved product";
+        if (item.stock !== f.productBeforeEdit.stock) return "an unrelated edit changed stock";
+        if (item.description !== `${MARK} description`) return "the description was not saved";
+        return true;
+      } },
+    { name: "POST /api/products (a recount requires the opening count)", as: "manager", method: "POST",
+      path: "/api/products", body: { id: dish.id, stock: 5 }, expect: [400] },
     { name: "POST /api/pos/upload (new money is refused)", as: "cashier", method: "POST", path: "/api/pos/upload", body: {}, expect: [400] },
     { name: "POST /api/terminal/deposits/verify (missing bank confirmation)", as: "manager", method: "POST", path: "/api/terminal/deposits/verify", body: {}, expect: [400] },
     { name: "POST /api/pos/recover (missing attestation)", as: "owner", method: "POST", path: "/api/pos/recover", body: {}, expect: [400] },
@@ -244,20 +271,20 @@ export function cases(fx) {
       path: "/api/loyalty/stamp", arrange: f => f.withLoyaltyOff(), body: { code: fx.stampableCode ?? "" },
       expect: [409], expectError: /apagada|switched off/i },
     { name: "POST /api/loyalty/redeem (not ready yet)", as: "waiter", method: "POST",
-      path: "/api/loyalty/redeem", body: { code: fx.stampableCode ?? "" },
+      path: "/api/loyalty/redeem", body: { code: fx.stampableCode ?? "", step: fx.stampableStep, round: fx.stampableRound, requestKey: randomUUID() },
       expect: [409], expectError: /faltan visitas|hasn't reached/i },
     // The reward the waiter pressed is named, so the same tap twice spends it
     // once — on a ladder, a second tap would otherwise spend the NEXT reward.
     { name: "POST /api/loyalty/redeem (a ready card)", as: "cashier", method: "POST",
-      path: "/api/loyalty/redeem", body: { code: fx.readyCode ?? "no-ready-card-in-the-seed", step: fx.readyStep }, expect: [200],
+      path: "/api/loyalty/redeem", body: { code: fx.readyCode ?? "no-ready-card-in-the-seed", step: fx.readyStep, round: fx.readyRound, requestKey: randomUUID() }, expect: [200],
       check: d => {
         if (typeof d.spent !== "string" || d.standing?.ready !== false) return `answered ${JSON.stringify(d)}`;
         const step = (d.standing.steps ?? []).find(s => s.visits === fx.readyStep);
         return !step || step.done || d.standing.goal === fx.readyStep || "the reward spent is not marked redeemed";
       } },
     { name: "POST /api/loyalty/redeem (the same reward twice)", as: "waiter", method: "POST",
-      path: "/api/loyalty/redeem", body: { code: fx.readyCode ?? "", step: fx.readyStep },
-      expect: [409], expectError: /ya se canjeó|already redeemed/i },
+      path: "/api/loyalty/redeem", body: { code: fx.readyCode ?? "", step: fx.readyStep, round: fx.readyRound, requestKey: randomUUID() },
+      expect: [409], expectError: /ya se canjeó|already redeemed|otra ronda|another round/i },
     { name: "POST /api/loyalty/redeem (a step that is not a number)", as: "waiter", method: "POST",
       path: "/api/loyalty/redeem", body: { code: fx.readyCode ?? "", step: "8" }, expect: [400] },
     // A reward already earned is honoured after the program is paused: the
@@ -279,7 +306,7 @@ export function cases(fx) {
           await f.admin.from("loyalty_cards").delete().eq("id", card.id);
         };
       },
-      body: { code: "PAVSEDXTEST0" }, expect: [200],
+      body: { code: "PAVSEDXTEST0", step: 2, round: 0, requestKey: randomUUID() }, expect: [200],
       check: async (_d, f) => {
         const { count } = await f.admin.from("loyalty_redemptions").select("id", { count: "exact", head: true }).eq("card_id", f.pausedCard);
         return count === 1 || `the earned reward was spent ${count} times`;
@@ -966,12 +993,45 @@ export function cases(fx) {
           ? true
           : `a refund Stripe never made was marked done (${data?.refunded_at ?? "row gone"})`;
       } },
+    // Customer completion must not turn an outstanding fee retry into 409.
+    // The demo account cannot answer Stripe: the fee stays pending and the
+    // customer's original completion evidence must survive both requests.
+    { name: "POST /api/refunds-due (completed customer refund retries its outstanding fee)", as: "manager",
+      method: "POST", path: "/api/refunds-due",
+      arrange: async f => {
+        const restore = await f.withCardReader();
+        const { data, error } = await f.admin.from("refunds_due").insert({
+          restaurant_id: r, stripe_payment_intent: `pi_${MARK}_${crypto.randomUUID()}`,
+          amount: 12.5, currency: "USD", table_label: MARK,
+          refunded_at: "2026-10-01T12:00:00Z", stripe_refund_id: "re_api_customer_completed",
+        }).select("id").single();
+        if (error) { await restore(); throw new Error(error.message); }
+        f.feeRetryId = data.id;
+        return async () => {
+          await f.admin.from("refunds_due").delete().eq("id", f.feeRetryId);
+          await restore();
+        };
+      },
+      body: f => ({ id: f.feeRetryId }), expect: [200],
+      check: async (answer, f) => {
+        const retry = await fetch(`${f.base}/api/refunds-due`, {
+          method: "POST", headers: { "Content-Type": "application/json", Cookie: f.who.manager },
+          body: JSON.stringify({ id: f.feeRetryId }),
+        });
+        const second = await retry.json();
+        const { data } = await f.admin.from("refunds_due")
+          .select("refunded_at, stripe_refund_id, fee_reconciled_at").eq("id", f.feeRetryId).single();
+        return answer.feePending === true && retry.status === 200 && second.feePending === true
+          && data?.stripe_refund_id === "re_api_customer_completed"
+          && new Date(data.refunded_at).toISOString() === "2026-10-01T12:00:00.000Z"
+          && data.fee_reconciled_at === null || `fee retry lost its pending state or customer evidence: ${JSON.stringify({ answer, second, data })}`;
+      } },
     { name: "POST /api/refunds-due (one already given back)", as: "manager",
       method: "POST", path: "/api/refunds-due",
       arrange: async f => {
         const { data } = await f.admin.from("refunds_due").insert({
           restaurant_id: r, stripe_payment_intent: `pi_${MARK}_${crypto.randomUUID()}`,
-          amount: 12.5, table_label: MARK, refunded_at: new Date().toISOString(),
+          amount: 12.5, table_label: MARK, refunded_at: new Date().toISOString(), fee_reconciled_at: new Date().toISOString(),
         }).select("id").single();
         f.refundedId = data?.id ?? "";
         return async () => { await f.admin.from("refunds_due").delete().eq("id", f.refundedId); };
@@ -1320,6 +1380,7 @@ export function cases(fx) {
         return data?.length === 1 && data[0].method === "card" && data[0].terminal_ref === "AUTH 482913"
           && data[0].stripe_payment_intent === null || `recorded ${JSON.stringify(data)}`;
       } },
+    terminalDepositRace(),
     // The terminal's deposits, on a day the demo took cards on its terminal.
     { name: "POST /api/terminal/deposits (a day's deposit arrived short)", as: "manager", method: "POST",
       path: "/api/terminal/deposits",

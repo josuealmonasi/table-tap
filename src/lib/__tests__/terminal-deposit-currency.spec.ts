@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => { const from = (table: string) => {
   const filters: Record<string, unknown> = {};
   let earlier = false;
   let offset = 0;
@@ -18,7 +18,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (tabl
   q.single = async () => result();
   q.then = (resolve: (value: unknown) => unknown) => Promise.resolve(result()).then(resolve);
   return q;
-} }) }));
+}; return { from, rpc: (_name: string, args: { p_currency: string }) => { const q = from("payments"); (q.eq as (key: string, value: string) => unknown)("currency", args.p_currency); return q; } }; } }));
 const { readTerminal } = await import("@/lib/terminal-server");
 it("never combines a peso deposit with a later dollar receipt on the same day", async () => {
   const view = await readTerminal("r", "UTC", new Date("2026-10-20T18:00:00Z"));

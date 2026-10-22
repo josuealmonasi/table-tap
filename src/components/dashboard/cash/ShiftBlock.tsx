@@ -36,15 +36,16 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
   const confirm = useConfirm();
   const [dialog, setDialog] = useState<"opening" | "withdrawal" | "close" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const money = (n: number) => formatMoney(n, currency);
+  const current = shifts.find(v => v.shift.closed_at === null) ?? null;
+  const drawerCurrency = current?.shift.currency ?? currency;
+  const money = (n: number) => formatMoney(n, drawerCurrency);
   const time = (iso: string) =>
     new Date(iso).toLocaleTimeString(dateLocale(locale), { timeZone, hour: "2-digit", minute: "2-digit" });
-  const current = shifts.find(v => v.shift.closed_at === null) ?? null;
   const closed = shifts.filter(v => v.shift.closed_at !== null).reverse();
 
   async function strike(w: CashMovement): Promise<void> {
     const ok = await confirm({
-      title: t("corte.removeWithdrawalTitle", { amount: money(w.amount) }),
+      title: t("corte.removeWithdrawalTitle", { amount: formatMoney(w.amount, w.currency) }),
       message: t("corte.removeWithdrawalMsg"),
       confirmLabel: t("corte.removeWithdrawal"),
     });
@@ -96,6 +97,7 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
           <p className="tt-muted tt-cashbox-note">
             {t("shift.openNow", { who: current.shift.opened_by, time: time(current.shift.opened_at) })}
           </p>
+          {drawerCurrency !== currency && <p className="tt-muted tt-cashbox-note">{t("shift.currencyChanged", { currency: drawerCurrency, current: currency })}</p>}
           <div className="tt-cashbox-sum" role="table" aria-label={t("corte.drawer")}>
             <div className="tt-cashbox-line" role="row">
               <span role="cell">{t("corte.opening")}</span>
@@ -119,7 +121,7 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
               {current.withdrawals.map(w => (
                 <li key={w.id} className="tt-cashbox-item">
                   <span className="tt-cashbox-what">
-                    <strong>{money(w.amount)}</strong>
+                    <strong>{formatMoney(w.amount, w.currency)}</strong>
                     <span className="tt-muted">
                       {time(w.created_at)} · {w.actor_email}
                       {w.note ? ` · ${w.note}` : ""}
@@ -141,7 +143,7 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
         <div className="tt-shift-list">
           <strong className="tt-shift-list-title">{t("shift.today")}</strong>
           {closed.map(v => (
-            <ShiftRecord key={v.shift.id} view={v} currency={currency} timeZone={timeZone} restaurantName={restaurantName} />
+            <ShiftRecord key={v.shift.id} view={v} timeZone={timeZone} restaurantName={restaurantName} />
           ))}
         </div>
       )}
@@ -149,12 +151,13 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
 
       <CashMovementDialog
         kind={dialog === "opening" || dialog === "withdrawal" ? dialog : null}
+        currency={dialog === "opening" ? currency : drawerCurrency}
         onClose={() => setDialog(null)}
         onSaved={() => router.refresh()}
       />
       <CloseShiftDialog
         open={dialog === "close"}
-        currency={currency}
+        currency={drawerCurrency}
         onClose={() => setDialog(null)}
         onClosed={() => router.refresh()}
       />

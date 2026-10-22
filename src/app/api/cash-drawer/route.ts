@@ -31,19 +31,20 @@ export async function POST(req: NextRequest) {
   const shift = await openShift(actor.restaurantId);
   if (!shift) return await apiError("apiErr.noOpenShift", 409);
 
-  const { data, error } = await createAdminClient()
-    .from("cash_movements")
-    .insert({ restaurant_id: actor.restaurantId, kind: "withdrawal", amount, note, actor_email: actor.email, shift_id: shift.id })
-    .select("id")
-    .single();
-  if (error || !data) return await apiError("apiErr.generic", 500);
+  // Close and withdrawals share the money lock; this read alone cannot
+  // promise that the shift will still be open when the withdrawal is written.
+  const { data, error } = await createAdminClient().rpc("create_cash_withdrawal", {
+    p_restaurant: actor.restaurantId, p_shift: shift.id, p_amount: amount, p_note: note, p_actor: actor.email,
+  });
+  if (error) return await apiError("apiErr.generic", 500);
+  if (!data) return await apiError("apiErr.noOpenShift", 409);
 
   await logEvent({
     restaurantId: actor.restaurantId,
     actor: actor.email,
     entity: "cash",
     action: "created",
-    detail: logDetail({ withdrawal: amount.toFixed(2), note }),
+    detail: logDetail({ withdrawal: amount.toFixed(2), note, currency: data.currency }),
   });
   return NextResponse.json({ ok: true, id: data.id });
 }
@@ -63,23 +64,18 @@ export async function DELETE(req: NextRequest) {
 
   const shift = await openShift(actor.restaurantId);
   if (!shift) return await apiError("apiErr.cashMovementNotFound", 404);
-  const { data, error } = await createAdminClient()
-    .from("cash_movements")
-    .delete()
-    .eq("id", id)
-    .eq("restaurant_id", actor.restaurantId)
-    .eq("kind", "withdrawal")
-    .eq("shift_id", shift.id)
-    .select("amount, note");
+  const { data, error } = await createAdminClient().rpc("delete_cash_withdrawal", {
+    p_restaurant: actor.restaurantId, p_shift: shift.id, p_movement: id,
+  });
   if (error) return await apiError("apiErr.generic", 500);
-  if (!data?.length) return await apiError("apiErr.cashMovementNotFound", 404);
+  if (!data) return await apiError("apiErr.cashMovementNotFound", 404);
 
   await logEvent({
     restaurantId: actor.restaurantId,
     actor: actor.email,
     entity: "cash",
     action: "deleted",
-    detail: logDetail({ withdrawal: Number(data[0].amount).toFixed(2), note: data[0].note }),
+    detail: logDetail({ withdrawal: Number(data.amount).toFixed(2), note: data.note, currency: data.currency }),
   });
   return NextResponse.json({ ok: true });
 }

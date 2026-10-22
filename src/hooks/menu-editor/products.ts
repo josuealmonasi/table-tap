@@ -1,3 +1,4 @@
+import { saveProduct } from "./product-save";
 import type { MenuItem } from "@/lib/types";
 import type { EditorContext, ProductInput } from "./types";
 
@@ -30,6 +31,7 @@ export function productActions(ctx: EditorContext) {
    * so nobody serves the wrong one while it is being edited.
    */
   async function duplicateProduct(id: string): Promise<string | undefined> {
+    if (!ctx.ready()) return undefined;
     const source = products.find(p => p.id === id);
     if (!source) return undefined;
 
@@ -89,12 +91,7 @@ export function productActions(ctx: EditorContext) {
   const updateProduct = (
     id: string,
     input: Partial<ProductInput & { category_id: string | null }>,
-  ) =>
-    run(
-      "write.updateProduct",
-      supabase.from("menu_items").update(input).eq("id", id),
-      "done.productUpdated",
-    );
+  ) => saveProduct(ctx, id, input);
   const deleteProduct = (id: string) =>
     run(
       "write.deleteProduct",

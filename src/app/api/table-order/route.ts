@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
   // to price from the row rather than from what a screen last showed.
   const { data: restaurant } = await db
     .from("restaurants")
-    .select("id, currency, service_pct, service_enabled, tax_pct, timezone, low_stock_threshold")
+    .select("id, currency, service_pct, service_enabled, tax_pct, timezone, low_stock_threshold, low_stock_alerts_enabled")
     .eq("id", actor.restaurantId)
     .maybeSingle();
   if (!restaurant) return await apiError("apiErr.restaurantNotFound", 404);
@@ -208,7 +208,9 @@ export async function POST(req: NextRequest) {
     return await apiError("apiErr.orderCreate", 500);
   }
 
-  await raiseStockNotifications(actor.restaurantId, reservation.low);
+  if (restaurant.low_stock_alerts_enabled) {
+    await raiseStockNotifications(actor.restaurantId, reservation.low);
+  }
 
   await logEvent({
     restaurantId: actor.restaurantId,
