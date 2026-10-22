@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
+import { useDirtyClose } from "@/hooks/useDirtyClose";
 import { useDirty } from "@/hooks/useDirty";
 import { promoCost, typedTiers } from "@/lib/promo-math";
 import type { Category, MenuItem } from "@/lib/types";
@@ -30,7 +31,7 @@ export default function QuantityForm({
   categories: Category[];
   currency: string;
   saving: boolean;
-  onSubmit: (input: PromotionInput) => void;
+  onSubmit: (input: PromotionInput) => Promise<boolean>;
   /** Present when editing an existing deal rather than creating one. */
   initial?: PromotionWithItems;
   onCancel?: () => void;
@@ -53,6 +54,8 @@ export default function QuantityForm({
   );
 
   const dirty = useDirty([kind, name, description, buyQty, payQty, tiers, picked]);
+
+  const close = useDirtyClose(dirty, onCancel ?? (() => {}), saving);
 
   const firstItem = products.find(p => p.id === picked[0]?.id);
   const unit = firstItem ? Number(firstItem.price) : 0;
@@ -102,9 +105,9 @@ export default function QuantityForm({
   return (
     <form
       className="tt-promo-form"
-      onSubmit={e => {
+      onSubmit={async e => {
         e.preventDefault();
-        onSubmit({
+        await onSubmit({
           kind,
           name: name.trim(),
           emoji: kind === "bogo" ? "🏷️" : "🔖",
@@ -114,11 +117,8 @@ export default function QuantityForm({
           tiers: kind === "tiered" ? parsedTiers : null,
           items: picked.map(p => ({ itemId: p.id, qty: 1 })),
         });
-        if (initial) return; // editing keeps its values; the list replaces the form
-        setName("");
-        setDescription("");
-        setPicked([]);
-        setTiers([{ qty: "2", price: "" }]);
+        // The parent replaces the form only after a successful save.
+        // Until then every field stays here, including after a refusal.
       }}
     >
       <div className="tt-promo-toprow">
@@ -287,7 +287,7 @@ export default function QuantityForm({
           <button
             type="button"
             className="tt-btn tt-btn-ghost tt-btn-sm"
-            onClick={onCancel}
+            onClick={close}
           >
             {t("menu.cancel")}
           </button>

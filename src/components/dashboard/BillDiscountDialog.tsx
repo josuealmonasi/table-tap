@@ -53,6 +53,7 @@ export default function BillDiscountDialog({
    * manager's is the decision.
    */
   async function writeOff(reason: WriteOffReason, note: string): Promise<void> {
+    setError(null);
     setBusy(true);
     try {
       const res = await fetch("/api/bill/write-off", {
@@ -67,7 +68,7 @@ export default function BillDiscountDialog({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error ?? null);
+        setError(data.error ?? t("apiErr.generic"));
         return;
       }
       badgesChanged();
@@ -75,6 +76,8 @@ export default function BillDiscountDialog({
       setClosing(false);
       onApplied();
       onClose();
+    } catch {
+      setError(t("done.networkError"));
     } finally {
       setBusy(false);
     }
@@ -163,7 +166,7 @@ export default function BillDiscountDialog({
               <button
                 type="button"
                 className="tt-btn tt-btn-ghost tt-btn-sm tt-bill-close"
-                onClick={() => setClosing(true)}
+                onClick={() => { setError(null); setClosing(true); }}
               >
                 {canApprove ? t("writeOff.title") : t("writeOff.request")}
               </button>
@@ -192,6 +195,7 @@ export default function BillDiscountDialog({
         currency={currency}
         canApprove={canApprove}
         busy={busy}
+        error={error}
         onSubmit={writeOff}
       />
     </>

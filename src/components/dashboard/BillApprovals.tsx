@@ -59,6 +59,8 @@ export default function BillApprovals({
         badgesChanged();
         router.refresh();
       }
+    } catch {
+      toast(t("done.networkError"), "error");
     } finally {
       setBusy(null);
     }
@@ -72,10 +74,14 @@ export default function BillApprovals({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requestId, approve, reviewedAmount }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       toast(res.ok ? t(approve ? "dash.approved" : "dash.rejected") : (data.error ?? t("done.networkError")), res.ok ? undefined : "error");
-      if (res.ok) badgesChanged();
-      router.refresh();
+      if (res.ok) {
+        badgesChanged();
+        router.refresh();
+      }
+    } catch {
+      toast(t("done.networkError"), "error");
     } finally {
       setBusy(null);
     }

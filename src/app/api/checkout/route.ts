@@ -28,6 +28,7 @@ import { NO_FEE, releaseFee, stripeRefusedOutright, type FeeHold } from "@/lib/p
 import { checkoutHold } from "@/lib/checkout/hold";
 import { uuidOf } from "@/lib/costs/guard";
 import { readOrderIntent, writeOrderIntent } from "@/lib/order-intent";
+import { getLocale } from "@/lib/i18n/server";
 import { siteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
@@ -334,7 +335,8 @@ export async function POST(req: NextRequest) {
           serviceFee: pricing.serviceFee,
           servicePct: restaurant.service_enabled ? restaurant.service_pct : 0,
           tip: pricing.tip,
-          tipLabel: tipAmount !== null ? "Tip" : `Tip (${tipPct}%)`,
+          locale: await getLocale(),
+          tipPct: tipAmount !== null ? 0 : tipPct,
         }),
         amountCents: Math.round(pricing.total * 100),
         amountOffCents: Math.round((pricing.couponDiscount + pricing.promoDiscount) * 100),

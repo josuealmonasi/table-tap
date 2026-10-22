@@ -42,17 +42,25 @@ export function useCoupons(restaurantId: string) {
   const t = useT();
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const reload = useCallback(async () => {
-    const { data } = await createClient()
-      .from("coupons")
-      .select(
-        "id, code, kind, value, max_uses, uses_count, min_subtotal, active, starts_at, ends_at, staff_only, created_at",
-      )
-      .eq("restaurant_id", restaurantId)
-      .order("created_at", { ascending: false });
-    setCoupons((data as Coupon[] | null) ?? []);
-    setLoading(false);
+    try {
+      const { data, error } = await createClient()
+        .from("coupons")
+        .select(
+          "id, code, kind, value, max_uses, uses_count, min_subtotal, active, starts_at, ends_at, staff_only, created_at",
+        )
+        .eq("restaurant_id", restaurantId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setCoupons((data as Coupon[] | null) ?? []);
+      setLoadFailed(false);
+    } catch {
+      setLoadFailed(true);
+    } finally {
+      setLoading(false);
+    }
   }, [restaurantId]);
 
   useEffect(() => {
@@ -86,6 +94,8 @@ export function useCoupons(restaurantId: string) {
   return {
     coupons,
     loading,
+    loadFailed,
+    reload,
     create: (input: CouponInput) => send("POST", input),
     update: (id: string, input: CouponInput) => send("PATCH", { id, ...input }),
     setActive: (id: string, active: boolean) => send("PATCH", { id, active }),

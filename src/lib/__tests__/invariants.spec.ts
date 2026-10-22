@@ -2170,7 +2170,6 @@ describe("a polled route is sized for the room that polls it", () => {
 describe("a request whose answer nobody reads", () => {
   // Only where losing it costs nothing AND nothing on screen says it landed.
   const MAY_DISCARD: Record<string, string> = {
-    "src/components/customer/RateDishesSheet.tsx": "a lost opinion claims nothing: the sheet only closes",
   };
 
   it("reads the answer of every request that tells somebody it worked", () => {

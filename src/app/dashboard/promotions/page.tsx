@@ -27,6 +27,7 @@ export default async function PromotionsPage() {
       <PromotionsPanel
         restaurantId={membership.restaurant.id}
         currency={membership.restaurant.currency}
+        timeZone={membership.restaurant.timezone ?? "America/Mexico_City"}
         couponsAllowed={couponsAllowed}
         promosAllowed={promosAllowed}
         promosUnlockWith={cheapestWith(catalog, "promotions", plan?.limits)?.plan ?? "servicio"}

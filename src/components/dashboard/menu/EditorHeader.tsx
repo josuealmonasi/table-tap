@@ -10,7 +10,7 @@ interface EditorHeaderProps {
   menus: Menu[];
   menuId: string;
   menuName: string;
-  onRenameMenu: (id: string, name: string) => Promise<void>;
+  onRenameMenu: (id: string, name: string) => Promise<boolean>;
   nameTaken: (name: string, exceptId?: string) => boolean;
   /** Hidden while the editor is loading or the menu is empty. */
   showTools: boolean;

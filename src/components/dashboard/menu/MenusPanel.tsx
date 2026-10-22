@@ -15,16 +15,16 @@ interface MenusPanelProps {
   menus: Menu[];
   onOpen: (menu: Menu) => void;
   onAdd: (name: string) => Promise<string | undefined>;
-  onRename: (id: string, name: string) => Promise<void>;
-  onSetSchedule: (id: string, schedule: MenuSchedule | null) => Promise<void>;
+  onRename: (id: string, name: string) => Promise<boolean>;
+  onSetSchedule: (id: string, schedule: MenuSchedule | null) => Promise<boolean>;
   /** The restaurant's zone — the rows say whether a menu is live right now. */
   timeZone: string;
   /** Whether this tier carries schedules (decided on the server). */
   schedules: ScheduleAccess;
-  onDelete: (id: string) => Promise<void>;
+  onDelete: (id: string) => Promise<boolean>;
   onToggleActive: (id: string, active: boolean) => Promise<void>;
   onDuplicate: (id: string) => Promise<string | undefined>;
-  onMove: (id: string, direction: "up" | "down") => Promise<void>;
+  onMove: (id: string, direction: "up" | "down") => Promise<boolean>;
 }
 
 /**
@@ -130,6 +130,7 @@ export default function MenusPanel({
             return;
           }
           const id = await onAdd(name);
+          if (!id) return;
           toast(t("done.menuAdded"));
           setNewName("");
           setAddError(null);

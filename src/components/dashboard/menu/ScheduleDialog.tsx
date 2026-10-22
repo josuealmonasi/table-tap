@@ -27,7 +27,7 @@ interface ScheduleDialogProps {
   menuName: string;
   schedule?: MenuSchedule | null;
   onClose: () => void;
-  onSave: (schedule: MenuSchedule | null) => Promise<void>;
+  onSave: (schedule: MenuSchedule | null) => Promise<boolean>;
   /**
    * Set on a tier without menu schedules. The editor is not offered — the
    * database refuses a new schedule there, and the owner was only told "No se
@@ -91,17 +91,25 @@ export default function ScheduleDialog({
     const bad = scheduleError({ enabled, rules });
     if (bad) return setError(t(bad));
     setSaving(true);
-    await onSave(candidate);
-    setSaving(false);
-    onClose();
+    try {
+      if (await onSave(candidate)) onClose();
+    } catch {
+      setError(t("write.updateMenu"));
+    } finally {
+      setSaving(false);
+    }
   }
 
   /** Clears the hours entirely — the menu goes back to its switch alone. */
   async function remove() {
     setSaving(true);
-    await onSave(null);
-    setSaving(false);
-    onClose();
+    try {
+      if (await onSave(null)) onClose();
+    } catch {
+      setError(t("write.updateMenu"));
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (locked) {
@@ -109,6 +117,7 @@ export default function ScheduleDialog({
       <Modal open={open} onClose={onClose} maxWidth={520} title={t("sched.title", { name: menuName })}>
         <PlanLock feature="menuSchedules" unlocksWith={locked.unlocksWith} isOwner={locked.isOwner} />
         {schedule && <p className="tt-muted" style={{ fontSize: 13 }}>{t("sched.notApplied")}</p>}
+        {error && <p className="tt-field-error" role="alert">{error}</p>}
         <div className="tt-prodform-actions">
           {schedule && (
             <button

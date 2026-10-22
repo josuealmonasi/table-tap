@@ -64,20 +64,15 @@ export function addonActions(ctx: EditorContext) {
   // ── Which add-ons a product offers (replace the full set) ──
   async function setProductAddons(productId: string, addonIds: string[]): Promise<void> {
     if (!(await ctx.ready())) throw new Error("Menu has not loaded");
-    const { error: delErr } = await supabase
-      .from("item_addons")
-      .delete()
-      .eq("product_id", productId);
-    if (!reportError("write.updateProductExtras", delErr)) return;
-    if (addonIds.length) {
-      const { error } = await supabase.from("item_addons").insert(
-        addonIds.map((addon_id, i) => ({
-          product_id: productId,
-          addon_id,
-          sort_order: i,
-        })),
-      );
-      reportError("write.updateProductExtras", error);
+    try {
+      const res = await fetch("/api/products", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: productId, addonIds }),
+      });
+      if (!res.ok) throw new Error("Extras refused");
+    } catch {
+      reportError("write.updateProductExtras", { message: "Extras did not save" });
+      throw new Error("Extras did not save");
     }
     await reload();
   }

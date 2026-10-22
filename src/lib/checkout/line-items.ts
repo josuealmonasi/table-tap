@@ -1,3 +1,4 @@
+import { messagesFor, translate, type Locale } from "@/lib/i18n";
 import type Stripe from "stripe";
 import { itemSalePrice } from "@/lib/pricing";
 import { stripeProductName } from "@/lib/stripe-limits";
@@ -12,7 +13,9 @@ export interface LineItemsInput {
   servicePct: number;
   tip: number;
   /** How the tip was given: an exact amount, or a percentage of the food. */
-  tipLabel: string;
+  tipLabel?: string;
+  locale?: Locale;
+  tipPct?: number;
 }
 
 /**
@@ -28,6 +31,7 @@ export function checkoutLineItems(
   input: LineItemsInput,
 ): Stripe.Checkout.SessionCreateParams.LineItem[] {
   const cur = input.currency;
+  const t = (key: string, vars?: Record<string, string | number>) => translate(messagesFor(input.locale ?? "en"), key, vars);
   const lines: Stripe.Checkout.SessionCreateParams.LineItem[] = input.verified.map(v => {
     const modText = Object.entries(v.mods ?? {})
       .map(([k, val]) => `${k}: ${Array.isArray(val) ? val.join(", ") : val}`)
@@ -58,7 +62,7 @@ export function checkoutLineItems(
       price_data: {
         currency: cur,
         unit_amount: Math.round(input.serviceFee * 100),
-        product_data: { name: `Service charge (${input.servicePct}%)` },
+        product_data: { name: t("totals.serviceCharge", { pct: input.servicePct }) },
       },
     });
   }
@@ -69,7 +73,7 @@ export function checkoutLineItems(
       price_data: {
         currency: cur,
         unit_amount: Math.round(input.tip * 100),
-        product_data: { name: input.tipLabel },
+        product_data: { name: input.tipLabel ?? (input.tipPct ? t("totals.tipPct", { pct: input.tipPct }) : t("totals.tip")) },
       },
     });
   }

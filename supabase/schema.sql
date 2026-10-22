@@ -9520,3 +9520,83 @@ end;
 $$;
 revoke all on function public.account_checkout_currency_v1(uuid, uuid, numeric, numeric, numeric, text) from public, anon, authenticated;
 grant execute on function public.account_checkout_currency_v1(uuid, uuid, numeric, numeric, numeric, text) to service_role;
+
+-- S23 K11: the dish and its extras save together. A refused link insert must
+-- roll back the replacement, rather than leave the dish with no choices.
+create or replace function public.save_product_addons_v1(
+  p_restaurant uuid, p_product uuid, p_addons uuid[], p_changes jsonb,
+  p_menu uuid default null, p_category uuid default null
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_product menu_items%rowtype;
+  v_next menu_items%rowtype;
+begin
+  -- Keep a concurrent plan freeze on the same side of this write. The secret
+  -- key skips browser-only triggers, so this transaction checks it itself.
+  perform 1 from restaurants where id = p_restaurant
+    and plan_status is distinct from 'locked' for no key update;
+  if not found then raise exception 'tt_plan_frozen'; end if;
+  if p_addons is null or p_changes is null or jsonb_typeof(p_changes) <> 'object' then
+    raise exception 'Invalid product edit';
+  end if;
+  -- The route only sends editable fields; keep the same boundary here too.
+  if exists (select 1 from jsonb_object_keys(p_changes) as k(key)
+    where key not in ('name','description','price','image_url','emoji','popular',
+      'modifiers','dietary','discount_pct','skips_kitchen','category_id')
+      and not (p_product is null and key = 'stock')) then
+    raise exception 'Invalid product field';
+  end if;
+  if p_product is null then
+    perform 1 from menus where id = p_menu and restaurant_id = p_restaurant for key share;
+    if not found then return null; end if;
+    if p_category is not null and not exists (select 1 from categories
+      where id = p_category and restaurant_id = p_restaurant and menu_id = p_menu) then
+      raise exception 'Invalid product section';
+    end if;
+    v_next := jsonb_populate_record(null::menu_items, p_changes);
+    if v_next.stock is not null and not exists (select 1 from plan_limits
+      where plan = public.effective_restaurant_plan(p_restaurant) and allows_inventory) then
+      raise exception 'tt_plan_feature allows_inventory';
+    end if;
+    insert into menu_items(restaurant_id, menu_id, category_id, is_addon, name,
+      description, price, image_url, emoji, popular, modifiers, dietary,
+      discount_pct, skips_kitchen, stock, sort_order)
+    values(p_restaurant, p_menu, p_category, false, v_next.name,
+      coalesce(v_next.description, ''), v_next.price, v_next.image_url,
+      coalesce(v_next.emoji, ''), coalesce(v_next.popular, false),
+      coalesce(v_next.modifiers, '[]'::jsonb), coalesce(v_next.dietary, '{}'::text[]),
+      coalesce(v_next.discount_pct, 0), coalesce(v_next.skips_kitchen, false), v_next.stock,
+      (select coalesce(max(sort_order), -1) + 1 from menu_items where menu_id = p_menu))
+    returning * into v_product;
+  else
+    select * into v_product from menu_items
+      where id = p_product and restaurant_id = p_restaurant and not is_addon for update;
+    if not found then return null; end if;
+  end if;
+  perform 1 from menu_items where id = any(p_addons) order by id for key share;
+  if (select count(*) from menu_items where id = any(p_addons)
+      and restaurant_id = p_restaurant and menu_id is not distinct from v_product.menu_id and is_addon)
+      <> cardinality(p_addons) then
+    raise exception 'Invalid product extras';
+  end if;
+  if p_product is not null and p_changes <> '{}'::jsonb then
+    v_next := jsonb_populate_record(v_product, p_changes);
+    if v_next.category_id is not null and not exists (select 1 from categories
+      where id = v_next.category_id and restaurant_id = p_restaurant and menu_id = v_product.menu_id) then
+      raise exception 'Invalid product section';
+    end if;
+    update menu_items set name = v_next.name, description = v_next.description,
+      price = v_next.price, image_url = v_next.image_url, emoji = v_next.emoji,
+      popular = v_next.popular, modifiers = v_next.modifiers, dietary = v_next.dietary,
+      discount_pct = v_next.discount_pct, skips_kitchen = v_next.skips_kitchen,
+      category_id = v_next.category_id where id = p_product;
+  end if;
+  delete from item_addons where product_id = v_product.id;
+  insert into item_addons(product_id, addon_id, sort_order)
+    select v_product.id, a.id, (a.position - 1)::integer
+      from unnest(p_addons) with ordinality as a(id, position);
+  return v_product.id;
+end;
+$$;
+revoke all on function public.save_product_addons_v1(uuid, uuid, uuid[], jsonb, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.save_product_addons_v1(uuid, uuid, uuid[], jsonb, uuid, uuid) to service_role;

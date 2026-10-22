@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useT } from "@/lib/i18n/context";
 import { SPLIT_POLL_MS } from "@/lib/poll";
 
 /** What the table is doing about its bill, from this phone's point of view. */
@@ -35,14 +36,17 @@ export function useSplit(
   split: SplitState | null;
   diner: string;
   busy: boolean;
+  error: string | null;
   propose: (shares: number) => Promise<void>;
   join: () => Promise<void>;
   cancel: () => Promise<void>;
   refresh: () => Promise<void>;
 } {
+  const t = useT();
   const [split, setSplit] = useState<SplitState | null>(null);
   const [busy, setBusy] = useState(false);
   const [diner, setDiner] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const read = useCallback(async () => {
     if (!tableId || !sessionId) return;
@@ -73,26 +77,31 @@ export function useSplit(
     async (path: string, method: string, body: Record<string, unknown>) => {
       if (!tableId || !sessionId) return;
       setBusy(true);
+      setError(null);
       try {
         const res = await fetch(path, {
           method,
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ sessionId, diner, restaurantId, tableId, ...body }),
         });
-        const data = (await res.json().catch(() => ({}))) as { split?: SplitState | null };
-        if (res.ok && "split" in data) setSplit(data.split ?? null);
+        const data = (await res.json().catch(() => ({}))) as { split?: SplitState | null; error?: string };
+        if (!res.ok) { setError(data.error ?? t("apiErr.generic")); return; }
+        if ("split" in data) setSplit(data.split ?? null);
         else await read();
+      } catch {
+        setError(t("done.networkError"));
       } finally {
         setBusy(false);
       }
     },
-    [restaurantId, tableId, sessionId, diner, read],
+    [restaurantId, tableId, sessionId, diner, read, t],
   );
 
   return {
     split,
     diner,
     busy,
+    error,
     propose: (shares: number) => send("/api/split", "POST", { shares }),
     join: () => send("/api/split/join", "POST", { splitId: split?.id }),
     cancel: () => send("/api/split", "DELETE", { splitId: split?.id }),

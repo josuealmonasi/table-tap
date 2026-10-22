@@ -44,7 +44,8 @@ it("J17: a failed reload cannot let a pending save replace extras", async () => 
   await editor.reload();
   await expect(editor.setProductAddons("dish", [])).rejects.toThrow("Menu has not loaded");
   expect(state.from).not.toHaveBeenCalled();
-  expect(Editor().loading).toBe(true);
+  expect(Editor().loading).toBe(false);
+  expect(Editor().loadFailed).toBe(true);
   expect(state.toast).toHaveBeenCalledWith("menu.loadFailed", "error");
 });
 it("J17: an older read cannot unlock editing after the latest read fails", async () => {
@@ -56,7 +57,8 @@ it("J17: an older read cannot unlock editing after the latest read fails", async
   await editor.reload();
   finish(menu);
   await oldRead;
-  expect(Editor().loading).toBe(true);
+  expect(Editor().loading).toBe(false);
+  expect(Editor().loadFailed).toBe(true);
   await expect(editor.updateProduct("dish", { description: "New" })).rejects.toThrow();
   expect(state.from).not.toHaveBeenCalled();
 });
@@ -90,7 +92,8 @@ it("J17: an edit waiting on a read that fails is never sent", async () => {
   fail(new Error("read failed"));
   await Promise.all([again, edit]);
   expect(state.sent).not.toHaveBeenCalled();
-  expect(Editor().loading).toBe(true);
+  expect(Editor().loading).toBe(false);
+  expect(Editor().loadFailed).toBe(true);
 });
 it("J17: an edit waits for the newest read, not the one it found running", async () => {
   const editor = Editor();

@@ -25,6 +25,7 @@ export default function WriteOffDialog({
   currency,
   canApprove,
   busy,
+  error,
   onSubmit,
 }: {
   open: boolean;
@@ -35,6 +36,7 @@ export default function WriteOffDialog({
   /** Owner or manager: their word is final. A waiter is asking. */
   canApprove: boolean;
   busy: boolean;
+  error?: string | null;
   onSubmit: (reason: WriteOffReason, note: string) => void;
 }) {
   const t = useT();
@@ -87,6 +89,7 @@ export default function WriteOffDialog({
         onChange={e => setNote(e.target.value)}
       />
 
+      {error && <p className="tt-field-error" role="alert">{error}</p>}
       <div className="tt-bill-actions">
         <button
           className="tt-btn tt-btn-danger tt-btn-lg"

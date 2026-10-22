@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
+import { useDirtyClose } from "@/hooks/useDirtyClose";
 import { useDirty } from "@/hooks/useDirty";
 import type { Category, MenuItem } from "@/lib/types";
 import type { PromotionInput } from "@/hooks/usePromotions";
@@ -28,7 +29,7 @@ export default function ComboForm({
   categories: Category[];
   currency: string;
   saving: boolean;
-  onSubmit: (input: PromotionInput) => void;
+  onSubmit: (input: PromotionInput) => Promise<boolean>;
   /** Present when editing an existing deal rather than creating one. */
   initial?: PromotionWithItems;
   onCancel?: () => void;
@@ -45,6 +46,8 @@ export default function ComboForm({
   );
 
   const dirty = useDirty([name, emoji, description, price, picked]);
+
+  const close = useDirtyClose(dirty, onCancel ?? (() => {}), saving);
 
   const regular = picked.reduce((sum, p) => {
     const item = products.find(i => i.id === p.id);
@@ -68,9 +71,9 @@ export default function ComboForm({
   return (
     <form
       className="tt-promo-form"
-      onSubmit={e => {
+      onSubmit={async e => {
         e.preventDefault();
-        onSubmit({
+        await onSubmit({
           kind: "combo",
           name: name.trim(),
           emoji,
@@ -78,12 +81,8 @@ export default function ComboForm({
           comboPrice,
           items: picked.map(p => ({ itemId: p.id, qty: p.qty })),
         });
-        // Editing keeps its values — the form is replaced by the list on save.
-        if (initial) return;
-        setName("");
-        setDescription("");
-        setPrice("");
-        setPicked([]);
+        // The parent replaces the form only after a successful save.
+        // Until then every field stays here, including after a refusal.
       }}
     >
       {/* Name, price, the comparison and submit all on one line. */}
@@ -184,7 +183,7 @@ export default function ComboForm({
           <button
             type="button"
             className="tt-btn tt-btn-ghost tt-btn-sm"
-            onClick={onCancel}
+            onClick={close}
           >
             {t("menu.cancel")}
           </button>

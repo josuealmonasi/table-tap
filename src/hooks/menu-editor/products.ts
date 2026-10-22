@@ -7,20 +7,26 @@ export function productActions(ctx: EditorContext) {
   const { supabase, restaurantId, sections, products, links, reload } = ctx;
   const { reportError, run, insertReturningId, move } = ctx.w;
   // ── Products ──
-  const addProduct = (menuId: string, categoryId: string | null, input: ProductInput) =>
-    insertReturningId(
-      "write.createProduct",
-      "menu_items",
-      {
-        restaurant_id: restaurantId,
-        menu_id: menuId,
-        category_id: categoryId,
-        is_addon: false,
-        sort_order: products.filter(p => p.menu_id === menuId).length,
-        ...input,
-      },
-      "done.productAdded",
-    );
+  async function addProduct(menuId: string, categoryId: string | null, input: ProductInput, addonIds: string[] = []): Promise<string | undefined> {
+    if (!(await ctx.ready())) return undefined;
+    try {
+      const res = await fetch("/api/products", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ menuId, categoryId, changes: input, addonIds }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.id) {
+        ctx.toast(data.error ?? ctx.t("write.createProduct"), "error");
+        return undefined;
+      }
+      ctx.toast(ctx.t("done.productAdded"));
+      await reload();
+      return data.id;
+    } catch {
+      ctx.toast(ctx.t("write.createProduct"), "error");
+      return undefined;
+    }
+  }
   /**
    * Copies a product, its options and its add-on links, into the same section.
    *
@@ -91,7 +97,8 @@ export function productActions(ctx: EditorContext) {
   const updateProduct = (
     id: string,
     input: Partial<ProductInput & { category_id: string | null }>,
-  ) => saveProduct(ctx, id, input);
+    addonIds?: string[],
+  ) => saveProduct(ctx, id, input, addonIds);
   const deleteProduct = (id: string) =>
     run(
       "write.deleteProduct",

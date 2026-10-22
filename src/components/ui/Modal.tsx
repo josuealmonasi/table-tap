@@ -1,5 +1,6 @@
 "use client";
 
+import { DirtyCloseContext, type CloseGuard } from "@/hooks/useDirtyClose";
 import { useEffect, useLayoutEffect, useRef } from "react";
 
 const FOCUSABLE =
@@ -41,6 +42,17 @@ export function Modal({
   variant?: "center" | "sheet";
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const guard: CloseGuard = useRef<CloseGuard["current"]>(null);
+  const closing = useRef(false);
+  async function requestClose(): Promise<void> {
+    if (closing.current) return;
+    closing.current = true;
+    try {
+      if (!guard.current || await guard.current()) onCloseRef.current();
+    } finally { closing.current = false; }
+  }
+  const requestCloseRef = useRef(requestClose);
+  useLayoutEffect(() => { requestCloseRef.current = requestClose; });
   // The latest onClose, read when a key is pressed. It used to be a dependency
   // of the effect below, and callers pass a new arrow on every render — so
   // every keystroke in a form inside the dialog re-ran the effect, which moved
@@ -61,8 +73,9 @@ export function Modal({
     (first ?? dialog)?.focus();
 
     function onKey(e: KeyboardEvent) {
+      if (closing.current || guard.confirming || e.defaultPrevented) return;
       if (e.key === "Escape") {
-        onCloseRef.current();
+        void requestCloseRef.current();
         return;
       }
       if (e.key !== "Tab" || !dialog) return;
@@ -94,7 +107,7 @@ export function Modal({
   return (
     <div
       className={`tt-dialog-overlay ${variant === "sheet" ? "tt-overlay-sheet" : ""}`}
-      onClick={onClose}
+      onClick={() => void requestClose()}
     >
       <div
         ref={dialogRef}
@@ -107,7 +120,7 @@ export function Modal({
         onClick={e => e.stopPropagation()}
       >
         {title && <h3 className="tt-modal-title">{title}</h3>}
-        {children}
+        <DirtyCloseContext.Provider value={guard}>{children}</DirtyCloseContext.Provider>
       </div>
     </div>
   );

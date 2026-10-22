@@ -42,15 +42,18 @@ export function menuActions(ctx: EditorContext) {
   async function setMenuSchedule(
     id: string,
     schedule: MenuSchedule | null,
-  ): Promise<void> {
-    if (!(await ctx.ready())) return;
+  ): Promise<boolean> {
+    if (!(await ctx.ready())) return false;
     const prev = menus;
     setMenus(m => m.map(x => (x.id === id ? { ...x, schedule } : x)));
-    const { error } = await supabase.from("menus").update({ schedule }).eq("id", id);
-    if (error) {
-      setMenus(prev);
-      reportError("write.updateMenu", error);
+    try {
+      const { error } = await supabase.from("menus").update({ schedule }).eq("id", id);
+      if (reportError("write.updateMenu", error)) return true;
+    } catch {
+      toast(t("write.updateMenu"), "error");
     }
+    setMenus(prev);
+    return false;
   }
 
   async function setMenuActive(id: string, active: boolean): Promise<void> {

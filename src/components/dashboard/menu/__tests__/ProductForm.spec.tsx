@@ -11,6 +11,7 @@ vi.mock("react", async original => ({
     return [hooks.values[slot], (next: unknown) => { hooks.values[slot] = next; }];
   },
 }));
+vi.mock("@/hooks/useDirtyClose", () => ({ useDirtyClose: (_dirty: boolean, close: () => void) => close }));
 vi.mock("@/hooks/useDirty", () => ({ useDirty: () => true }));
 vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string) => key }));
 const { default: ProductForm } = await import("../ProductForm");

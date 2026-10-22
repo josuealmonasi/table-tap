@@ -21,14 +21,14 @@ interface MenuRowProps {
   canMoveUp: boolean;
   canMoveDown: boolean;
   onOpen: (menu: Menu) => void;
-  onRename: (id: string, name: string) => Promise<void>;
-  onSetSchedule: (id: string, schedule: MenuSchedule | null) => Promise<void>;
+  onRename: (id: string, name: string) => Promise<boolean>;
+  onSetSchedule: (id: string, schedule: MenuSchedule | null) => Promise<boolean>;
   timeZone: string;
   schedules: ScheduleAccess;
   onToggle: (menu: Menu, next: boolean) => Promise<void>;
   onDuplicate: (menu: Menu) => Promise<void>;
   onDelete: (menu: Menu) => Promise<void>;
-  onMove: (id: string, direction: "up" | "down") => Promise<void>;
+  onMove: (id: string, direction: "up" | "down") => Promise<boolean>;
   /** True when `name` would collide with another menu's URL slug. */
   nameTaken: (name: string, exceptId?: string) => boolean;
 }
@@ -112,7 +112,7 @@ export default function MenuRow({
               setError(t("menu.nameTaken", { name }));
               return;
             }
-            await onRename(menu.id, name);
+            if (!(await onRename(menu.id, name))) return;
             toast(t("done.menuRenamed"));
             setRenaming(false);
           }}

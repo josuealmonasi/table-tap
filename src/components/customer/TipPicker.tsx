@@ -111,7 +111,7 @@ export default function TipPicker({
             type="number"
             inputMode="decimal"
             min="0"
-            step="0.5"
+            step="0.01"
             placeholder="0.00"
             value={draft}
             onChange={e => setDraft(e.target.value)}

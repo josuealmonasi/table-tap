@@ -45,6 +45,7 @@ export default function RewardsLookup({ initialCode = "", back = null }: Rewards
       danger: true,
     });
     if (!ok) return;
+    setError(null);
     try {
       const res = await fetch(`/api/rewards?c=${normal}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
@@ -120,6 +121,7 @@ export default function RewardsLookup({ initialCode = "", back = null }: Rewards
         ) : card ? (
           <div className="tt-login-card">
             <RewardsCard card={card} locale={locale} />
+            {error && <p className="tt-field-error" role="alert">{error}</p>}
             {saveAgain ? (
               <div style={{ marginTop: 16 }}>
                 <CardDownload face={card.face} qr={card.qr} />

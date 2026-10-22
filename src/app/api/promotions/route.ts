@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
     body as PromoShape,
     new Map((owned as PricedProduct[]).map(p => [p.id, p])),
   );
-  if (pricingError) return NextResponse.json({ error: pricingError }, { status: 400 });
+  if (pricingError) return await apiError(pricingError.key, 400, pricingError.vars);
 
   // Don't leave a promotion with no products — it would price as nothing.
   // The parent and its links now commit together, including on creation.
@@ -155,7 +155,7 @@ export async function PATCH(req: NextRequest) {
     body as PromoShape,
     new Map((owned as PricedProduct[]).map(p => [p.id, p])),
   );
-  if (pricingError) return NextResponse.json({ error: pricingError }, { status: 400 });
+  if (pricingError) return await apiError(pricingError.key, 400, pricingError.vars);
 
   // A promotion belonging to another restaurant matches no row, and Postgres
   // does not call an empty update an error. The transaction proves ownership

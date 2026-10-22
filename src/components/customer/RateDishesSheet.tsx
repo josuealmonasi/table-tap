@@ -28,6 +28,7 @@ export default function RateDishesSheet({
   const t = useT();
   const [scores, setScores] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const key = (d: RateableDish) => `${d.orderId}:${d.itemId}`;
   const scored = dishes.filter(d => scores[key(d)]);
@@ -35,8 +36,9 @@ export default function RateDishesSheet({
   async function submit() {
     if (scored.length === 0) return onClose();
     setSaving(true);
+    setError(null);
     try {
-      await fetch("/api/ratings", {
+      const res = await fetch("/api/ratings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -48,13 +50,17 @@ export default function RateDishesSheet({
           })),
         }),
       });
+      if (!res.ok) {
+        setError(t("rating.saveFailed"));
+        return;
+      }
+      onClose();
     } catch {
-      // A rating is not worth an error screen at the end of a meal. The bill
-      // was already requested; losing an opinion to a flaky connection is the
-      // cheapest possible failure here.
+      // The bill was already requested; keep the scores for a retry or Skip.
+      setError(t("rating.saveFailed"));
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    onClose();
   }
 
   return (
@@ -82,6 +88,7 @@ export default function RateDishesSheet({
         ))}
       </div>
 
+      {error && <p className="tt-field-error" role="alert">{error}</p>}
       <div className="tt-rate-actions">
         <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={onClose}>
           {t("rating.skip")}
