@@ -979,11 +979,14 @@ export async function seedMock(pg) {
   await seedLoyalty(pg, rid);
   // Customer accounts, one owing across two days. Its own file too.
   await seedAccounts(pg, rid);
-  // Deposits from the restaurant's own card terminal, and voucher numbers.
-  await seedTerminal(pg, rid);
   await pg.query("select set_config('tabletap.allocation_origin', '', false)");
   await seedAllocations(pg, rid);
   await seedOffline(pg, rid);
+  // Deposits from the restaurant's own card terminal, and voucher numbers.
+  // Marked last, once the books are whole: the allocation backfill turns old
+  // cancelled sales from voids into adjustments, and a deposit signed before
+  // it named voids that `pnpm money` then found nowhere in the ledger.
+  await seedTerminal(pg, rid);
   // Our fee on every order the demo was paid for online, in the ledger the
   // month's ceiling reads — what the schema's backfill does once for real
   // restaurants. Taken, in the month each was paid.
