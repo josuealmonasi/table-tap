@@ -8172,3 +8172,175 @@ revoke all on function public.admin_delete_restaurant(uuid, boolean) from public
 grant execute on function public.admin_delete_restaurant(uuid, boolean) to service_role;
 
 revoke truncate, references, trigger on all tables in schema public from authenticated;
+-- S14: an offer's terms and products commit together. Additive for old callers.
+create or replace function public.save_promotion_v1(
+  p_restaurant uuid, p_id uuid, p_fields jsonb, p_items jsonb
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_id uuid;
+  v_status text;
+begin
+  -- Serialize with plan changes before checking the freeze or replacing links.
+  select plan_status into v_status from restaurants where id = p_restaurant for no key update;
+  if not found then raise exception 'tt_restaurant_missing'; end if;
+  if v_status = 'locked' then raise exception 'tt_plan_frozen' using errcode = 'check_violation'; end if;
+
+  if p_id is not null then
+    select id into v_id from promotions where id = p_id and restaurant_id = p_restaurant for update;
+    if not found then return null; end if;
+  end if;
+  if jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) = 0 then
+    raise exception 'tt_promotion_items_required' using errcode = 'check_violation';
+  end if;
+  -- Lock dishes in order so a concurrent move or delete cannot invalidate
+  -- ownership between checking it and writing the foreign keys.
+  perform 1 from menu_items where restaurant_id = p_restaurant
+    and id in (select x.item_id from jsonb_to_recordset(p_items) as x(item_id uuid, qty int))
+    order by id for share;
+  -- Recheck ownership inside the write: a preflight read is not a boundary.
+  if exists (
+    select 1 from jsonb_to_recordset(p_items) as x(item_id uuid, qty int)
+    left join menu_items i on i.id = x.item_id and i.restaurant_id = p_restaurant
+    where i.id is null or x.qty is null or x.qty < 1
+  ) then raise exception 'tt_promotion_unknown_item' using errcode = 'check_violation'; end if;
+
+  if p_id is null then
+    insert into promotions (restaurant_id, kind, name, emoji, description, combo_price, buy_qty, pay_qty, tiers)
+    values (p_restaurant, p_fields->>'kind', p_fields->>'name', p_fields->>'emoji', p_fields->>'description',
+      (p_fields->>'combo_price')::numeric, (p_fields->>'buy_qty')::int, (p_fields->>'pay_qty')::int,
+      nullif(p_fields->'tiers', 'null'::jsonb)) returning id into v_id;
+  else
+    update promotions set kind = p_fields->>'kind', name = p_fields->>'name', emoji = p_fields->>'emoji',
+      description = p_fields->>'description', combo_price = (p_fields->>'combo_price')::numeric,
+      buy_qty = (p_fields->>'buy_qty')::int, pay_qty = (p_fields->>'pay_qty')::int,
+      tiers = nullif(p_fields->'tiers', 'null'::jsonb)
+    where id = v_id and restaurant_id = p_restaurant;
+  end if;
+  delete from promotion_items where promotion_id = v_id;
+  insert into promotion_items (promotion_id, item_id, qty)
+    select v_id, x.item_id, x.qty from jsonb_to_recordset(p_items) as x(item_id uuid, qty int);
+  return v_id;
+end $$;
+revoke all on function public.save_promotion_v1(uuid, uuid, jsonb, jsonb) from public, anon, authenticated;
+grant execute on function public.save_promotion_v1(uuid, uuid, jsonb, jsonb) to service_role;
+
+-- Browser writes obey the same freeze as the routes. Coupon claims by the
+-- server must still work: a billing freeze never prevents a diner from paying.
+create or replace function public.enforce_offer_write()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_restaurant uuid;
+  v_next uuid;
+  v_frozen boolean;
+begin
+  if auth.uid() is null then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+  if tg_table_name = 'promotion_items' then
+    if tg_op <> 'INSERT' then
+      select restaurant_id into v_restaurant from promotions where id = old.promotion_id;
+    end if;
+    if tg_op <> 'DELETE' then
+      select restaurant_id into v_next from promotions where id = new.promotion_id;
+    end if;
+  else
+    if tg_op <> 'INSERT' then v_restaurant := old.restaurant_id; end if;
+    if tg_op <> 'DELETE' then v_next := new.restaurant_id; end if;
+  end if;
+  select exists (select 1 from restaurants where id in (v_restaurant, v_next) and plan_status = 'locked') into v_frozen;
+  if v_frozen then
+    -- Nothing besides active may change, including ownership and usage counts.
+    if tg_table_name <> 'promotion_items' and tg_op = 'UPDATE' then
+      if new.active = false and (to_jsonb(new) - 'active') = (to_jsonb(old) - 'active') then return new; end if;
+    end if;
+    raise exception 'tt_plan_frozen' using errcode = 'check_violation';
+  end if;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end $$;
+revoke all on function public.enforce_offer_write() from public, anon, authenticated;
+grant execute on function public.enforce_offer_write() to service_role;
+drop trigger if exists promotions_dashboard_write on promotions;
+create trigger promotions_dashboard_write before insert or update or delete on promotions
+  for each row execute function public.enforce_offer_write();
+drop trigger if exists promotion_items_dashboard_write on promotion_items;
+create trigger promotion_items_dashboard_write before insert or update or delete on promotion_items
+  for each row execute function public.enforce_offer_write();
+drop trigger if exists coupons_dashboard_write on coupons;
+create trigger coupons_dashboard_write before insert or update or delete on coupons
+  for each row execute function public.enforce_offer_write();
+
+-- The entire copy is invisible until commit; any failed insert rolls it back.
+create or replace function public.duplicate_menu_v1(p_restaurant uuid, p_source uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_status text;
+  v_snapshot jsonb;
+  v_source menus%rowtype;
+  v_section categories%rowtype;
+  v_item menu_items%rowtype;
+  v_menu uuid;
+  v_id uuid;
+  v_name text;
+  v_n int := 2;
+  v_sections jsonb := '{}'::jsonb;
+  v_items jsonb := '{}'::jsonb;
+begin
+  -- The menu ceiling trigger uses this same lock; competing copies also need
+  -- one name each. Read all source rows in one snapshot after taking it.
+  select plan_status into v_status from restaurants where id = p_restaurant for no key update;
+  if not found then raise exception 'tt_restaurant_missing'; end if;
+  if v_status = 'locked' then raise exception 'tt_plan_frozen' using errcode = 'check_violation'; end if;
+  select jsonb_build_object(
+    'menu', to_jsonb(m),
+    'sections', coalesce((select jsonb_agg(c) from categories c where c.menu_id = m.id and c.restaurant_id = p_restaurant), '[]'::jsonb),
+    'items', coalesce((select jsonb_agg(i) from menu_items i where i.menu_id = m.id and i.restaurant_id = p_restaurant), '[]'::jsonb),
+    'links', coalesce((select jsonb_agg(a) from item_addons a join menu_items i on i.id = a.product_id
+      where i.menu_id = m.id and i.restaurant_id = p_restaurant), '[]'::jsonb)
+  ) into v_snapshot from menus m where m.id = p_source and m.restaurant_id = p_restaurant;
+  if not found then return null; end if;
+  v_source := jsonb_populate_record(null::menus, v_snapshot->'menu');
+  -- A copied schedule is a newly set schedule, so the browser's feature check
+  -- still applies even though this write uses the server key.
+  if v_source.schedule is not null and not coalesce((select l.allows_menu_schedules from plan_limits l
+      where l.plan = public.effective_restaurant_plan(p_restaurant)), false) then
+    raise exception 'tt_plan_feature allows_menu_schedules' using errcode = 'check_violation';
+  end if;
+  -- Find a free "{name} copy" / "{name} copy 2" ... name.
+  v_name := v_source.name || ' copy';
+  while exists (select 1 from menus where restaurant_id = p_restaurant and lower(btrim(name)) = lower(btrim(v_name))) loop
+    v_name := v_source.name || ' copy ' || v_n;
+    v_n := v_n + 1;
+  end loop;
+  insert into menus (restaurant_id, name, active, schedule, sort_order)
+  values (p_restaurant, v_name, false, v_source.schedule,
+    (select coalesce(max(sort_order), -1) + 1 from menus where restaurant_id = p_restaurant)) returning id into v_menu;
+  -- Sections. Every foreign key is remapped onto a freshly inserted row.
+  for v_section in select * from jsonb_populate_recordset(null::categories, v_snapshot->'sections') loop
+    insert into categories (restaurant_id, menu_id, name, sort_order, station)
+    values (p_restaurant, v_menu, v_section.name, v_section.sort_order, v_section.station) returning id into v_id;
+    v_sections := v_sections || jsonb_build_object(v_section.id::text, v_id);
+  end loop;
+  -- Extras and products use the same explicit fields so neither loses settings.
+  -- Physical stock belongs to the original dish: the copy starts uncounted.
+  for v_item in select * from jsonb_populate_recordset(null::menu_items, v_snapshot->'items') loop
+    insert into menu_items (restaurant_id, menu_id, category_id, name, description, price, emoji, image_url,
+      popular, available, is_addon, modifiers, dietary, discount_pct, sort_order, skips_kitchen, stock, stock_auto_off)
+    values (p_restaurant, v_menu, (v_sections->>v_item.category_id::text)::uuid, v_item.name, v_item.description,
+      v_item.price, v_item.emoji, v_item.image_url, v_item.popular, v_item.available, v_item.is_addon,
+      v_item.modifiers, v_item.dietary, v_item.discount_pct, v_item.sort_order, v_item.skips_kitchen, null, false)
+    returning id into v_id;
+    v_items := v_items || jsonb_build_object(v_item.id::text, v_id);
+  end loop;
+  -- Products, plus their add-on links. Both sides must belong to this copy.
+  insert into item_addons (product_id, addon_id, sort_order)
+    select (v_items->>a.product_id::text)::uuid, (v_items->>a.addon_id::text)::uuid, a.sort_order
+    from jsonb_populate_recordset(null::item_addons, v_snapshot->'links') a
+    where v_items ? a.product_id::text and v_items ? a.addon_id::text;
+  -- Publishing is the last write. Nothing is exposed if any earlier step fails.
+  update menus set active = v_source.active where id = v_menu;
+  return jsonb_build_object('newMenuId', v_menu, 'copyName', v_name);
+end $$;
+revoke all on function public.duplicate_menu_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.duplicate_menu_v1(uuid, uuid) to service_role;

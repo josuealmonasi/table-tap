@@ -11,9 +11,6 @@ export function menuActions(ctx: EditorContext) {
     t,
     menus,
     sections,
-    products,
-    addons,
-    links,
     setMenus,
     reload,
   } = ctx;
@@ -67,15 +64,10 @@ export function menuActions(ctx: EditorContext) {
 
   /** Deep-copies a menu: its sections, products, extras, and add-on links. Returns the new menu's id. */
   async function duplicateMenu(id: string): Promise<string | undefined> {
-    const result = await duplicateMenuDeep(supabase, {
-      restaurantId,
+    const result = await duplicateMenuDeep({
       sourceId: id,
-      menus,
-      sections,
-      products,
-      addons,
-      links,
       reportError,
+      onError: message => toast(message, "error"),
     });
     if (!result) return undefined;
     await reload();

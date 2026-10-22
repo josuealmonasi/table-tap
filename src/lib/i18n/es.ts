@@ -179,6 +179,7 @@ export const es: Messages = {
     cafeCsv: "categoria,nombre,precio,descripcion,emoji\nCafés,Americano,35,,☕\nCafés,Espresso,30,,☕\nCafés,Capuchino,45,,☕\nCafés,Latte,48,,☕\nCafés,Moka,52,,☕\nCafés,Café de olla,38,Con canela y piloncillo,☕\nBebidas frías,Frappé de café,58,,🧋\nBebidas frías,Té helado,38,,🧊\nOtras bebidas,Chocolate caliente,45,,🍫\nOtras bebidas,Té,32,,🍵\nPanadería,Croissant,38,,🥐\nPanadería,Concha,22,,🍞\nPanadería,Muffin,35,,🧁\nPara comer,Sándwich de jamón y queso,75,,🥪\nPara comer,Chilaquiles,95,Verdes o rojos,🍳",
   },
   write: {
+    duplicateMenu: "No pudimos duplicar el menú. Actualiza la lista de menús antes de intentarlo de nuevo.",
     sectionStation: "No se pudo guardar dónde se prepara la sección",
     createTable: "No se pudo agregar la mesa",
     renameTable: "No se pudo renombrar la mesa",
@@ -310,7 +311,7 @@ myBill: "Ver mi cuenta",
       "Todas sus secciones, productos y extras se eliminarán permanentemente. Esto no se puede deshacer.",
     duplicateConfirm: "¿Duplicar “{name}”?",
     duplicateMsg:
-      "Crea una copia con todas sus secciones, productos y extras. Puedes renombrarla después.",
+      "Se copian las secciones, productos, extras, precios, descuentos y horarios. Las existencias se quedan con los platos originales. Puedes cambiar el nombre de la copia después.",
     selected: "seleccionados",
     deleteSelectedConfirm: "¿Eliminar los elementos seleccionados?",
     deleteSelectedMsg:

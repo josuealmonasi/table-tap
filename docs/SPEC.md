@@ -1899,3 +1899,20 @@ no snapshot use current remaining principal conservatively. Every pooled
 attempt also saves its explicit principal. Bill display and payment read the
 same validated sitting, including a phone's valid sitting older than eight
 hours. A stale selection requests review and never reports the debt as paid.
+
+
+## Promotion edits, freezes and menu copies (S14)
+
+Promotion creation and full edits save terms and product links in one private
+server transaction. Complete promotions are loaded with one nested query.
+Frozen restaurants may only switch an existing promotion or coupon off; they
+cannot create, edit, resume or delete offers, including through authenticated
+direct database writes. Server coupon redemption remains available to diners.
+
+Menu duplication uses a private manager route and a single transaction. It
+reads saved settings in one snapshot and copies schedules, categories with
+preparation stations, products, extras, modifiers, prices, discounts, dietary
+tags, kitchen settings and add-on links. The copy becomes visible only after
+all writes succeed and retains the source active switch and schedule. Copying
+a schedule requires the menu-schedule feature. Availability is preserved;
+stock counts are not copied or shared, and stock tracking starts fresh.

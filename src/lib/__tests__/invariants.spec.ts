@@ -2379,11 +2379,11 @@ describe("a gate can run against production's CSP", () => {
 
 describe("a list replaced wholesale is put back when the new one fails", () => {
   // Editing a promotion or an icon group deletes the old list and inserts the
-  // new one. Neither delete was checked, and a failed insert (a dish another
+  // new one. Promotions now use a transaction (offers-schema.spec.ts). Neither
+  // delete was checked, and a failed insert (a dish another
   // manager deleted mid-edit is a foreign-key refusal) left a promotion active
   // with no products, and an icon group empty under "saved".
   const REPLACERS: [string, string, RegExp][] = [
-    ["src/app/api/promotions/route.ts", "promotion_items", /insert\(before\.map\(/],
     ["src/app/api/icon-groups/route.ts", "icon_group_items", /insert\(before\.map\(/],
   ];
 

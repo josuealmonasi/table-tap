@@ -9,7 +9,8 @@ import {
   type PricedProduct,
   type PromoShape,
 } from "@/lib/promo-guard";
-import type { PromotionKind } from "@/lib/promotions";
+import type { Body } from "@/lib/promotion-input";
+import { savePromotion } from "@/lib/promotion-save";
 
 /** Beyond any real price break; a stored tier is what checkout prices. */
 const MAX_TIER_QTY = 1000;
@@ -20,18 +21,6 @@ export const runtime = "nodejs";
 // Promotion management for owners and managers: combo bundles and quantity
 // deals. Same shape as /api/coupons — role check, then write with the secret
 // key, always scoped to the caller's restaurant.
-
-interface Body {
-  kind?: PromotionKind;
-  name?: string;
-  emoji?: string;
-  description?: string | null;
-  comboPrice?: number | null;
-  buyQty?: number | null;
-  payQty?: number | null;
-  tiers?: { qty: number; price: number }[] | null;
-  items?: { itemId: string; qty: number }[];
-}
 
 /** Checks the fields that matter for each kind, so a broken deal can't be saved. */
 function validate(body: Body): { key: string } | null {
@@ -74,8 +63,8 @@ export async function POST(req: NextRequest) {
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const restaurantId = actor.restaurantId;
 
-  // Creating is gated, editing is not: a restaurant that drops a tier keeps
-  // the promotions it already runs and must still be able to end them.
+  // Creating needs the feature; a downgrade keeps saved promotions. A freeze
+  // allows only switching one off, so its terms cannot change underneath diners.
   const frozen = await frozenBlocks(restaurantId);
   if (frozen) return frozen;
 
@@ -109,39 +98,9 @@ export async function POST(req: NextRequest) {
   );
   if (pricingError) return NextResponse.json({ error: pricingError }, { status: 400 });
 
-  const { data: created, error } = await db
-    .from("promotions")
-    .insert({
-      restaurant_id: restaurantId,
-      kind: body.kind,
-      name: body.name!.trim(),
-      emoji: body.emoji || "🎁",
-      description: body.description?.trim() || null,
-      combo_price: body.kind === "combo" ? Number(body.comboPrice) : null,
-      buy_qty: body.kind === "bogo" ? Math.floor(Number(body.buyQty)) : null,
-      pay_qty: body.kind === "bogo" ? Math.floor(Number(body.payQty)) : null,
-      tiers: body.kind === "tiered" ? body.tiers : null,
-    })
-    .select("id")
-    .single();
-  if (error || !created) {
-    return await apiError("apiErr.promoCreate", 500);
-  }
-
-  const { error: linkErr } = await db.from("promotion_items").insert(
-    body.items!.map(i => ({
-      promotion_id: created.id,
-      item_id: i.itemId,
-      qty: Math.max(1, Math.floor(i.qty || 1)),
-    })),
-  );
-  if (linkErr) {
-    // Don't leave a promotion with no products — it would price as nothing.
-    await db.from("promotions").delete().eq("id", created.id);
-    return await apiError("apiErr.promoAttach", 500);
-  }
-
-  return NextResponse.json({ ok: true });
+  // Don't leave a promotion with no products — it would price as nothing.
+  // The parent and its links now commit together, including on creation.
+  return savePromotion(db, restaurantId, null, body);
 }
 
 // PATCH /api/promotions — pause or resume.
@@ -154,10 +113,15 @@ export async function PATCH(req: NextRequest) {
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   if (!body.id) return await apiError("apiErr.invalidRequest", 400);
 
+  const offOnly = body.active === false && Object.keys(body).length === 2;
+  if (!offOnly) {
+    const frozen = await frozenBlocks(restaurantId);
+    if (frozen) return frozen;
+  }
   const db = createAdminClient();
 
   // Pause/resume: a lone `active` flag, and nothing else moves.
-  if (typeof body.active === "boolean" && !body.name) {
+  if (typeof body.active === "boolean" && Object.keys(body).length === 2) {
     const { error } = await db
       .from("promotions")
       .update({ active: body.active })
@@ -191,57 +155,16 @@ export async function PATCH(req: NextRequest) {
   );
   if (pricingError) return NextResponse.json({ error: pricingError }, { status: 400 });
 
-  const { data: updated, error } = await db
-    .from("promotions")
-    .update({
-      kind: body.kind,
-      name: body.name!.trim(),
-      emoji: body.emoji || "🎁",
-      description: body.description?.trim() || null,
-      combo_price: body.kind === "combo" ? Number(body.comboPrice) : null,
-      buy_qty: body.kind === "bogo" ? Math.floor(Number(body.buyQty)) : null,
-      pay_qty: body.kind === "bogo" ? Math.floor(Number(body.payQty)) : null,
-      tiers: body.kind === "tiered" ? body.tiers : null,
-    })
-    .eq("id", body.id)
-    .eq("restaurant_id", restaurantId)
-    .select("id");
-  if (error) return await apiError("apiErr.promoUpdate", 500);
-  // A promotion belonging to another restaurant matches no row here, and
-  // Postgres does not call an empty update an error. Without this check the
-  // code below would go on to delete and rewrite that restaurant's components
-  // — the id is the only thing scoping them.
-  if (!updated?.length) {
-    return await apiError("apiErr.notFound", 404);
-  }
-
+  // A promotion belonging to another restaurant matches no row, and Postgres
+  // does not call an empty update an error. The transaction proves ownership
+  // before touching components and returns null for a missing promotion.
   // Replace the product list wholesale. Diffing it would be more code for the
-  // same result, and the rows carry nothing worth preserving. Safe to scope by
-  // promotion_id alone now that ownership is proven above.
+  // same result, and the rows carry nothing worth preserving.
   //
-  // The old list is read first and put back if the new one does not land: it
-  // was deleted unchecked and the insert could fail — a dish deleted by another
-  // manager mid-edit is a foreign-key refusal — which left the promotion active
-  // with no products at all, the state the create path above refuses to leave.
-  const { data: before, error: readErr } = await db
-    .from("promotion_items").select("item_id, qty").eq("promotion_id", body.id);
-  if (readErr) return await apiError("apiErr.promoAttach", 500);
-  const { error: clearErr } = await db.from("promotion_items").delete().eq("promotion_id", body.id);
-  if (clearErr) return await apiError("apiErr.promoAttach", 500);
-  const { error: linkErr } = await db.from("promotion_items").insert(
-    body.items!.map(i => ({
-      promotion_id: body.id,
-      item_id: i.itemId,
-      qty: Math.max(1, Math.floor(i.qty || 1)),
-    })),
-  );
-  if (linkErr) {
-    if (before?.length) {
-      await db.from("promotion_items").insert(before.map(row => ({ promotion_id: body.id, ...row })));
-    }
-    return await apiError("apiErr.promoAttach", 500);
-  }
-  return NextResponse.json({ ok: true });
+  // The old delete/insert could fail on a dish deleted mid-edit and leave an
+  // active promotion empty. Restoring only the old links also kept the new
+  // price. A failed replacement now rolls back both terms and components.
+  return savePromotion(db, restaurantId, body.id, body);
 }
 
 // DELETE /api/promotions — remove it (promotion_items cascades).
@@ -249,6 +172,9 @@ export async function DELETE(req: NextRequest) {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const restaurantId = actor.restaurantId;
+
+  const frozen = await frozenBlocks(restaurantId);
+  if (frozen) return frozen;
 
   const body = await jsonBody<Record<string, unknown>>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
