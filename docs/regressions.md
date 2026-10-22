@@ -13,6 +13,8 @@ us, and what now catches each one.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
+| A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
 | Corte account debt and adjustments use the report currency; unverified activity is called out (S12 I8) | MX$100 and US$10 appeared as US$110 owed |
 | Cost fees use the saved charge currency, net of returned fees (S12 I10) | An old MX$10 fee created a false 10% rate on US$100 cash |
@@ -29,10 +31,26 @@ us, and what now catches each one.
 | A menu copy keeps settings and publishes only after every row succeeds (S14 J14) | A partial, active copy lost discounts, schedules, dietary tags and preparation settings |
 
 | A printer fetch and confirmation name the same delivery generation (S16 J10) | A delayed GET fetched the next ticket, and an old confirmation closed a reprint |
+
+| A terminal deposit names its receipt cutoff (S10 I3) | MX$50 arriving between the MX$100 read and insert was missing from both expected and late money |
+| A terminal return belongs to one signed manifest or the next unsigned deposit (S10 I4) | A MX$100 return after Tuesday's sign-off reduced neither Tuesday nor Wednesday |
+| A terminal day is read whole, including older recovery (S10 I6) | A 15:00 cutoff counted only MX$100 of the oldest day's MX$200 and hid a twenty-day recovery |
+| A terminal return retains its original payment day (S10 I7) | A same-day MX$100 typed void left an expected −MX$3.50 at a 3.5% fee |
+
+| Product edits and the opening stock count are separate (S13 J5) | Saving a description restored portions sold while the editor was open |
+| A physical recount and older reservation releases use different generations (S13 J6) | Cancelling two held portions after a count of five raised it to seven |
+| Legacy stock returns require a deduction record (S13 J7) | An old untracked sale returned portions only counted later |
+| Editing and duplication wait for every menu page (S13 J17) | A thousand-row cap or read failure silently removed dishes and extras from the editor |
+| Waiter orders and checkout use the same alert preference (S13 J18) | Turning off stock alerts still left waiter orders filling the bell |
+
+| A reward handover names the displayed round, step and saved retry key (S15 J8) | Two identical requests closed one round and spent the same step in the next |
 | A statement email is capped per account and per restaurant, never on the recipient (G5) | One account code could mail the same stranger ~400 times a day |
 | Coupon entitlements and card receipts agree before money moves (S5 E4) | A MX$90 discounted charge recorded MX$100 and could later reserve a MX$100 return |
 | A coupon use belongs to one checkout attempt (S5 E7) | An old expiry released the newer payment page's reservation on the same order |
 | Financial scope and Stripe retries agree independently of fees (S5 E8) | Bills and fee-free split shares could open two payable pages |
+| Closing and changing a withdrawal share the money lock (S9 I1) | A withdrawal inserted or deleted after its shift closed rewrote the reviewed drawer |
+| A drawer's amounts and labels keep its opening currency (S9 I2) | Changing the menu currency recalculated and relabelled an earlier shift |
+| Shift review follows closes and late receipts, as well as openings (S9 I13) | Overnight closes and next-day corrections disappeared from the handover |
 | Fee caps and remaining food principal agree (S5 E9) | Existing gratuities raised the ten-percent cap on bill and split fees |
 | Displayed and payable sitting scopes agree (S5 E11) | A valid sitting older than eight hours showed debt that payment called paid |
 
@@ -2318,6 +2336,7 @@ with a probe that made the order, ran the gate as it was (BAD) and as it is
 
 | Rule | The bug it came from |
 |---|---|
+| A reward handover names the displayed round, step and saved retry key (S15 J8) | Two identical requests closed one round and spent the same step in the next |
 | Cashier recovery access and upload authority agree (PR2 review) | Losing POS hid the only upload surface while sign-out still protected held money |
 | Deposit identity and display use the same original currency (PR2 review) | A peso deposit was reconciled against a later dollar sale |
 | Saved and verified carts compare line multisets (PR2 review) | Verification moved combos first and falsely flagged unchanged mixed carts |
@@ -3262,3 +3281,228 @@ a mocked database. `costs-history.spec.ts` checks sequence order against an old
 transaction timestamp. `costs-history-sql.spec.ts` checks the shared lock and
 trigger coverage. Claude must verify the actual two-connection race and the
 additive upgrade against PostgreSQL in the isolated release gate.
+
+## S9 I1 — a withdrawal and its shift's count share one transaction
+
+The route checked the open shift and then wrote separately. A close between
+those requests left a new withdrawal on a closed shift, or erased one that
+its signed count still included. Creation, deletion and close now take
+`lock_restaurant_money` before checking that exact shift. Close computes and
+stores its snapshot inside that transaction. Both the signed and reviewed
+figures stay unchanged when close wins; a withdrawal that wins first is
+included in the count. Existing function signatures remain intact.
+
+`cash-shift-race.spec.ts` reproduces both losing interleavings and checks both
+winning withdrawals and a repeated close. `cash-shift-schema.spec.ts` checks
+lock order, scoping and server-only grants. `scripts/attack-cash-shift.mjs`,
+registered in `pnpm attack`, uses two real database connections to queue each
+withdrawal behind close and judges its effect on rows and both totals. That
+case is written for the release runner; it was not run in this worktree.
+
+## S9 I2 — the drawer keeps the currency it opened in
+
+The opening float and withdrawals had no currency, while the sum and screen
+used the restaurant's current setting. A peso drawer became a dollar drawer
+without anybody exchanging its cash. Shifts now freeze the restaurant currency
+at insert; movements inherit their shift's stored currency. Insert triggers
+accept the old deployed routes before the new code ships. Neither currency nor
+restaurant can be changed afterwards. Existing shifts have no proven currency
+for their opening float, so their backfill uses today's setting; linked
+movements use the shift, and unlinked movements use today's setting too.
+
+The close and review share `cash_shift_totals`, including only matching cash
+receipts and completed cash returns, with imported historical returns counted
+once. Legacy handbacks use an explicit currency or their uniquely named order's
+currency where known, otherwise the shift's historical fallback. Screens,
+withdrawal and count inputs, and printed handovers use the stored currency.
+After a menu currency change, the cashier is told to keep the new currency's
+cash separate and count only the shift currency. Selling and closing remain
+available; the next shift uses the new menu currency.
+
+`cash-shift-review.spec.ts`, `cash-shift-schema.spec.ts` and
+`cash-shift-ui.spec.tsx` cover the currency switch, calculation contract and
+rendered labels in the till and manager view. Check Spanish and English on
+screen at 360px, 390px, 820px and 1280px, including the close dialog and print
+sheet; browser and database gates are left to the release runner.
+
+## S9 I13 — the handover includes overnight closes and late corrections
+
+The review selected shifts by their opening date alone. A shift opened last
+night and closed this morning disappeared, and an older shift corrected by
+cash received today never returned. `cash_shifts_for_day` selects shifts
+opened or closed since the reporting day began, still-open shifts, and closed
+shifts with matching cash dated inside them but recorded today after close.
+The server pages the complete result with a unique order; an `exists` check
+keeps multiple late receipts from duplicating a shift. The saved sign-off is
+preserved while the review shows its updated meaning. Dates on screen and on
+the handover sheet distinguish an older shift from today's shifts.
+
+`cash-shift-review.spec.ts` reproduces the overnight close and next-day late
+receipt, and excludes unrelated windows and currencies. SQL contract tests
+keep both predicates scoped to the restaurant and original currency. The list
+heading says closed or updated today in both languages.
+
+
+## S10 I3 — the receipt and the signed cutoff had to agree
+
+`record_terminal_deposit_v1` calculates and inserts under the settlement money
+lock. The saved `payment_ids`, `return_ids`, `snapshot_at` and `fee_pct` name the
+exact contents and rate. A receipt outside that list is late even when its
+transaction timestamp predates the lock. `terminal-snapshot.spec.ts` first
+reproduced the missing MX$50 beside a MX$100 mark, then verifies MX$150 received.
+`terminal-snapshot-schema.spec.ts` guards the lock, manifest and service-only
+grants. Taking back a deposit takes the same lock, since it releases returns.
+
+`scripts/api-terminal-deposit.mjs` holds a MX$50 receipt uncommitted, sends the
+HTTP mark, observes it waiting for the money lock, commits, then checks the
+stored amount and both receipt IDs by effect. It removes its orders, receipts,
+allocations, deposit, print jobs and activity. Written here; not run here.
+
+## S10 I4 — the return and the deposit that used it had to agree
+
+A return allocation (or an older void's payment ID) is saved in the manifest
+that reconciled it. Later returns go to the first unsigned day with sales;
+with none yet, they remain visible as coming out of the next deposit. Tuesday's
+MX$300 sign-off stays MX$300; its later MX$100 return reduces Wednesday's MX$200
+to MX$100, exactly once. `terminal-snapshot.spec.ts` first failed on that case
+and also checks the return waiting when all sales days are signed. Existing
+marks with null manifests retain their old timestamp interpretation; historical
+membership is not invented or backfilled.
+
+## S10 I6 — the day offered and the day read had to agree
+
+The recent window starts at restaurant-local midnight fourteen calendar days
+back. The paged ledger includes complete older unsigned days and signed days
+with late receipts. Filtering happens after arithmetic, so a recovered sale
+brings all the other receipts of its day with it. The transactional writer
+reads the complete ledger independently of the displayed window.
+`terminal-window.spec.ts` first reproduced MX$100 instead of MX$200 at 15:00
+and a missing twenty-day recovery. It also checks an older marked day and
+refusal of an incomplete later page. Reports currently page the restaurant's
+terminal history; no server row cap is accepted as a complete day.
+
+## S10 I7 — the return date and the original payment date had to agree
+
+The ledger joins each succeeded terminal return through `refund_allocations`
+and `payment_allocations` to its original receipt, preserving tenant and
+currency scope. Same-day returns reduce takings and their fee; later refunds
+subtract the gross return while retaining the original fee. A same-day return
+after sign-off carries its net amount to the next unsigned deposit using the
+signed rate. `terminal-snapshot.spec.ts` first reproduced −MX$3.50 for a fully
+voided MX$100 sale and checks zero, partial returns, later gross refunds and
+returns already in a manifest. English and Spanish explain returns waiting on
+the next deposit. Claude must apply the additive SQL, run all live gates,
+and inspect these rows at phone, tablet and desktop widths; none ran here.
+
+
+## S13 J5 — a description never resets the count
+
+The form and the product writer used to agree on a stale opening count while
+checkout had already deducted portions. Unchanged stock is omitted; ordinary
+`PATCH /api/products` edits strip stock even from stale callers. A deliberate
+recount uses `POST /api/products`, checking the count and generation the manager
+saw under the dish lock. A refusal explains in both languages to reopen and
+check the count. `products.spec.ts` and the products route's `stock.spec.ts`
+cover stale edits and recount refusals; the API gate has an effect-based J5 case.
+
+## S13 J6 — a new physical count replaces earlier holds
+
+A recount of five means five available portions. Earlier holds stay recorded
+for recovery, but their dish generation is superseded, so cancellation or expiry
+cannot add them to that count. Other dishes in a mixed reservation still return.
+Sales, waste and returns retain their generation through function-scoped settings
+that restore on exit. The SQL contracts in `stock-recount.spec.ts` guard these
+rules; the route tests also reject a matching count from an older generation.
+Claude must verify the recount/release race against the database before shipping.
+
+## S13 J7 — do not put guessed portions back
+
+An older order's lines and today's inventory plan cannot prove that stock was
+taken. With no historical deduction record, cancellation and abandoned-checkout
+deletion return nothing for those legacy lines. Their order trigger writes
+`stock=unproven` to activity, rendered in the reader's language with a request to
+check the count. It leaves money handling alone and a failed activity write
+cannot block cancellation. `stock-service.spec.ts` covers the legacy guess;
+`stock-recount.spec.ts` checks every legacy cancellation/expiry SQL entry point.
+
+## S13 J17 — the full menu before edits and copies
+
+Menus, sections and items page to an empty page, ordered by position and unique
+id. All read failures throw; links still page and batch their product ids.
+Reload marks the editor unready before reading, and product edits and product
+or menu copies refuse incomplete state. `menu-data.spec.ts` covers more than a
+thousand tied-position items and each failed table read; `products.spec.ts`
+checks the write and copy guard while loading.
+`menu-load.spec.ts` also keeps an older read from unlocking a failed reload,
+and refuses the extras replacement after that failure.
+
+## S13 J18 — the manager decides when the bell warns
+
+A waiter's order now reads and checks the same `low_stock_alerts_enabled`
+preference as checkout and the till. Stock still gets deducted with alerts off.
+`stock-alerts.spec.ts` exercises both preference values through the waiter route.
+
+## One handover consumed two rewards (S15 J8)
+
+The round on the staff screen and the round under the card lock had to agree.
+A step alone repeated in the next round, so banked visits let two identical
+requests consume two MX$50 rewards. Both staff screens now save a retry key
+before sending the displayed round and step. `loyalty_redeem_once` checks that
+identity under the same lock as stamping and undo, saves the answer on the
+redemption, and returns it on retry even after later rounds. A fresh key from
+an old round asks staff to look up the card again, in either language.
+
+`loyalty-redeem.spec.ts` reproduced two rewards consumed before the fix and
+checks concurrent retries, the saved answer, stale rounds and validation.
+`loyalty-redeem-request.spec.ts` checks saved keys and failed saves.
+`loyalty-redeem-invariants.spec.ts` joins both screens, the private RPC,
+the saved answer and the unchanged undo lock. The attack case banks enough
+visits for two rounds and checks redemption rows, visits spent and round number;
+it is written for the release runner and was not run here. The old RPC stays
+available while the deployed route still uses it; apply the additive SQL first.
+
+Check both staff screens in English and Spanish: repeat a handover after a
+lost response, then use an old screen after another device closed its round.
+Check today's unused stamp can still be undone and a stamp used for a reward
+cannot. Run the API, RLS, attack and complete release gates in isolation.
+
+
+## A duplicate refund and the fee still owed (S11 I5)
+
+`refunded_at` proves that the diner was paid back; `fee_reconciled_at` proves
+that TableTap's fee was returned and verified in the fee ledger. A provider
+failure between them used to hide the fee forever: Bills removed the row and
+a retry answered already refunded. Bills now keeps the fee visible, offers a
+fee-only retry, and schedules recovery after its response. The saved fee
+request fixes its amount before Stripe is called; retries reuse that request
+and check provider metadata even after an idempotency key expires. A lost
+response never creates another customer refund. An unverifiable fee remains
+pending and keeps consuming the month's fee ceiling.
+
+`refund-due.spec.ts` checks the failed-lookup retry and single customer log;
+`refund-due-recovery.spec.ts` checks fee failure, restart, lost response,
+provider evidence and the original connected account. `refund-due-list.spec.ts`
+checks recovery without blocking Bills or refunding an unapproved payment.
+`refund-due-api.spec.ts` checks the pending-fee response and manager guard.
+The `api` case **completed customer refund retries its outstanding fee** is
+written for the release runner and was not run here.
+
+## A duplicate refund and the currency it was charged in (S11 I9)
+
+A menu setting and an existing charge are two different facts. An insert
+trigger copies currency and account from the verified frozen checkout onto
+the obligation. The additive backfill uses that same evidence; background
+recovery can verify older rows directly with Stripe. Without evidence the
+currency stays unknown. Bills, the confirmation, activity and the money report
+show the original currency or an explicit unverified amount, never today's
+menu currency. The refund log still omits `method`: this money never entered
+the corte and must not be deducted from it.
+
+`refunds-due.spec.tsx` checks original-currency display and confirmation,
+unverified legacy rows and activity, and the fee retry button.
+`refund-due.spec.ts` checks the logged currency; `refund-due-recovery.spec.ts`
+checks verified backfill and unavailable evidence. Release checks must apply
+the S11 schema block first, then run the complete gates, including `dialogs`.
+Look at Bills and its confirmation in both languages at 360/390px, 820px and
+1280px: a USD obligation beside an MXN menu, an unverified older amount, and
+a customer-complete refund whose fee is still pending.

@@ -29,6 +29,7 @@ export async function returnOurFee(
   stripeAccount: string,
   refundedCents: number,
   id: string,
+  prepare: (feeId: string, amount: number) => Promise<{ fee_id: string; amount: number }>,
 ): Promise<boolean> {
   const intent = await client.paymentIntents.retrieve(
     paymentIntent,
@@ -43,19 +44,27 @@ export async function returnOurFee(
   for await (const refund of client.refunds.list({ payment_intent: paymentIntent, limit: 100 }, { stripeAccount })) {
     if (refund.status === "succeeded") confirmed += refund.amount;
   }
-  if (confirmed < charge.amount) return false;
+  if (confirmed < refundedCents) return false;
   if (!feeId) return true;
   const fee = await client.applicationFees.retrieve(feeId);
-  const share = Math.round((fee.amount * Math.min(refundedCents, charge.amount)) / charge.amount);
-  const left = fee.amount - fee.amount_refunded;
-  const back = Math.min(share, left);
+  // Stripe may already have returned part of this fee with a customer refund.
+  // Work toward the cumulative target, never return the same share again.
+  const share = Math.round((fee.amount * Math.min(confirmed, charge.amount)) / charge.amount);
+  const back = share - fee.amount_refunded;
   if (back <= 0) return true;
+  const request = await prepare(feeId, back);
+  // Keys expire at Stripe. A lost response still has durable provider evidence.
+  for await (const made of client.applicationFees.listRefunds(request.fee_id, { limit: 100 })) {
+    if (made.metadata?.refund_due === id) return false;
+  }
+  if (request.fee_id !== feeId || request.amount > back) return false;
   await client.applicationFees.createRefund(
-    feeId,
-    { amount: back, metadata: { refund_due: id } },
+    request.fee_id,
+    { amount: request.amount, metadata: { refund_due: id } },
     { idempotencyKey: `refund-due-fee-${id}` },
   );
-  return true;
+  const returned = await client.applicationFees.retrieve(feeId);
+  return returned.amount_refunded >= share;
 }
 
 /** Provider success proves the customer's outcome independently of our fee. */

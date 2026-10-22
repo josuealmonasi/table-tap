@@ -43,6 +43,7 @@ export function menuActions(ctx: EditorContext) {
     id: string,
     schedule: MenuSchedule | null,
   ): Promise<void> {
+    if (!ctx.ready()) return;
     const prev = menus;
     setMenus(m => m.map(x => (x.id === id ? { ...x, schedule } : x)));
     const { error } = await supabase.from("menus").update({ schedule }).eq("id", id);
@@ -53,6 +54,7 @@ export function menuActions(ctx: EditorContext) {
   }
 
   async function setMenuActive(id: string, active: boolean): Promise<void> {
+    if (!ctx.ready()) return;
     const prev = menus;
     setMenus(m => m.map(x => (x.id === id ? { ...x, active } : x)));
     const { error } = await supabase.from("menus").update({ active }).eq("id", id);
@@ -64,6 +66,9 @@ export function menuActions(ctx: EditorContext) {
 
   /** Deep-copies a menu: its sections, products, extras, and add-on links. Returns the new menu's id. */
   async function duplicateMenu(id: string): Promise<string | undefined> {
+    // Only a fully loaded menu may be copied (J17); the copy itself is the
+    // server's, in one transaction (J2/J14).
+    if (!ctx.ready()) return undefined;
     const result = await duplicateMenuDeep({
       sourceId: id,
       reportError,

@@ -56,7 +56,9 @@ describe("S18 ingredient SQL contracts", () => {
     expect(sql.match(/on conflict do nothing returning \*/g)).toHaveLength(3);
     expect(sql).toContain("add column if not exists movement_cutoff bigint");
     expect(sql).not.toContain("update ingredient_counts");
-    expect(sql.trim()).toMatch(/commit;$/);
+    // Not a transaction of its own: a begin/commit inside schema.sql split
+    // db:create's single run. The release delta wraps it in one.
+    expect(sql).not.toMatch(/^(begin|commit);$/m);
   });
 
   it("seeds recipes before orders freeze them, and preserves historical demo count dates", () => {

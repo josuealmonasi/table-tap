@@ -12,6 +12,7 @@ export const MAX_CASH_AMOUNT = 1_000_000;
 /** A row of `cash_movements`. */
 export interface CashMovement {
   id: string;
+  currency: string;
   kind: "opening" | "withdrawal";
   amount: number;
   note: string | null;

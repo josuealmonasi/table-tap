@@ -10,6 +10,10 @@ export interface Row {
   refunded_at: string | null;
   refunded_by?: string | null;
   stripe_refund_id?: string | null;
+  currency?: string | null;
+  stripe_account_id?: string | null;
+  fee_reconciled_at?: string | null;
+  fee_request?: { fee_id: string; amount: number } | null;
 }
 
 /** Just enough of the admin client for the two tables this touches. */
@@ -19,13 +23,18 @@ export function fakeDb(rows: Row[], stripeAccount: string | null = "acct_1") {
     rpc: async (name: string, args: Record<string, string>) => {
       const row = rows.find(r => r.id === args.p_due && r.restaurant_id === args.p_restaurant);
       if (!row) return { data: null, error: null };
+      if (name === "start_refund_due_fee") {
+        row.fee_request ??= { fee_id: args.p_fee, amount: Number(args.p_amount) };
+        return { data: row.fee_request, error: null };
+      }
       if (name === "start_refund_due_attempt") {
-        if (!stripeAccount) return { data: null, error: null };
+        if (!stripeAccount && !row.stripe_account_id && !attempt) return { data: null, error: null };
         if (!attempt || ["failed", "canceled"].includes(attempt.provider_status ?? "")) {
           const no = (attempt?.attempt_no ?? 0) + 1;
+          row.stripe_account_id ??= stripeAccount;
           attempt = { id: `due-attempt-${no}`, attempt_no: no, idempotency_key: `refund-due-${row.id}${no === 1 ? "" : `-${no}`}` };
         }
-        return { data: { ...attempt, amount: row.amount, stripe_account_id: stripeAccount,
+        return { data: { ...attempt, amount: row.amount, stripe_account_id: row.stripe_account_id,
           stripe_payment_intent: row.stripe_payment_intent }, error: null };
       }
       if (attempt?.id !== args.p_attempt) return { data: false, error: null };
@@ -37,24 +46,37 @@ export function fakeDb(rows: Row[], stripeAccount: string | null = "acct_1") {
     from(table: string) {
       const where: Record<string, unknown> = {};
       let nullCol: string | null = null;
+      let notNullCol: string | null = null;
       let patch: Partial<Row> | null = null;
+      let from = 0; let to = Infinity;
+      let either: (row: Row) => boolean = () => true;
       const matches = () =>
         rows.filter(
           r =>
             Object.entries(where).every(([k, v]) => (r as unknown as Record<string, unknown>)[k] === v) &&
-            (!nullCol || (r as unknown as Record<string, unknown>)[nullCol] == null),
-        );
+            (!nullCol || (r as unknown as Record<string, unknown>)[nullCol] == null) &&
+            (!notNullCol || (r as unknown as Record<string, unknown>)[notNullCol] != null) && either(r),
+        ).slice(from, to + 1);
       const q = {
         select: () => q,
+        order: () => q,
+        range: (a: number, b: number) => ((from = a), (to = b), q),
+        or: (filter: string) => {
+          either = filter.startsWith("currency")
+            ? r => !r.currency || Boolean(r.refunded_at && !r.fee_reconciled_at)
+            : r => !r.refunded_at || !r.fee_reconciled_at;
+          return q;
+        },
         update: (p: Partial<Row>) => ((patch = p), q),
         eq: (k: string, v: unknown) => ((where[k] = v), q),
         is: (k: string) => ((nullCol = k), q),
+        not: (k: string) => ((notNullCol = k), q),
         single: async () => ({ data: table === "restaurants" ? { stripe_account_id: stripeAccount } : null, error: null }),
         maybeSingle: async () => ({ data: matches()[0] ?? null, error: null }),
         then: (resolve: (v: unknown) => void) => {
           const hit = matches();
           if (patch) for (const r of hit) Object.assign(r, patch);
-          resolve({ data: hit.map(r => ({ id: r.id })), error: null });
+          resolve({ data: hit.map(r => ({ ...r })), error: null });
         },
       };
       return q;
@@ -73,26 +95,42 @@ export const due = (over: Partial<Row> = {}): Row => ({
 });
 
 export function fakeStripe(over: { create?: () => Promise<unknown>; made?: Stripe.Refund[]; retrieve?: () => Promise<unknown> } = {}) {
+  const created: Stripe.Refund[] = [];
+  const made = over.made?.map(r => ({ ...r, amount: r.amount ?? 12550 }));
+  const feeRefunds: { metadata: { refund_due: string } }[] = [];
+  let returnedFee = 0;
   const calls = {
-    create: vi.fn(over.create ?? (async () => ({ id: "re_1", status: "succeeded" }))),
+    create: vi.fn(async (params: Stripe.RefundCreateParams) => {
+      const result = await (over.create?.() ?? Promise.resolve({ id: "re_1", status: "succeeded" }));
+      const refund = { amount: params.amount, metadata: params.metadata, ...result as object } as Stripe.Refund;
+      created.push(refund);
+      if (refund.status === "succeeded") returnedFee += Math.round(500 * (params.amount ?? 0) / 25100);
+      return result;
+    }),
     retrieve: vi.fn(over.retrieve),
-    list: vi.fn(() => Object.assign(Promise.resolve({ data: over.made ?? [] }), {
-      async *[Symbol.asyncIterator]() { yield* over.made ?? []; },
+    list: vi.fn(() => Object.assign(Promise.resolve({ data: [...made ?? [], ...created] }), {
+      async *[Symbol.asyncIterator]() { yield* [...made ?? [], ...created]; },
     })),
-    feeRefund: vi.fn(async () => ({ id: "fr_1" })),
+    feeRefund: vi.fn(async (_id: string, params: { amount: number }) => {
+      returnedFee += params.amount;
+      feeRefunds.push({ metadata: { refund_due: "d1" } });
+      return { id: "fr_1" };
+    }),
+    feeList: vi.fn(() => ({ async *[Symbol.asyncIterator]() { yield* feeRefunds; } })),
+    intent: vi.fn(async () => ({ currency: "usd", latest_charge: { amount: 25100, application_fee: "fee_1" } })),
   };
   const client = {
     refunds: { create: calls.create, list: calls.list, retrieve: calls.retrieve },
     paymentIntents: {
-      retrieve: async () => ({ latest_charge: { amount: 25100, application_fee: "fee_1" } }),
+      retrieve: calls.intent,
     },
     applicationFees: {
-      retrieve: async () => ({ amount: 500, amount_refunded: 0 }),
+      retrieve: async () => ({ amount: 500, amount_refunded: returnedFee }),
       createRefund: calls.feeRefund,
+      listRefunds: calls.feeList,
     },
   } as unknown as Stripe;
   return { client, calls };
 }
 
 export const stripeError = (code: string) => Object.assign(new Error(code), { code });
-

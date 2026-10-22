@@ -9,7 +9,18 @@ vi.mock("@/lib/activity-log", () => ({ logEvent: async (event: unknown) => { sta
 vi.mock("@/lib/terminal-server", () => ({ readTerminal: async (_r: string, _tz: string, _now: Date, currency: string) => {
   state.priced(currency); return { days: [{ day: "2026-10-20", count: 1, expected: currency === "MXN" ? 1000 : 100 }] };
 } }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: async (name: string, args: Record<string, unknown>) => {
+  if (name === "delete_terminal_deposit_v1") {
+    const before = state.rows.length;
+    state.rows = state.rows.filter(r => !(r.restaurant_id === args.p_restaurant && r.sales_day === args.p_day && r.currency === args.p_currency));
+    return { data: state.rows.length < before, error: null };
+  }
+  state.priced(args.p_currency);
+  if (state.rows.some(r => r.restaurant_id === args.p_restaurant && r.sales_day === args.p_day && r.currency === args.p_currency)) return { data: { error: "marked" }, error: null };
+  const expected = args.p_currency === "MXN" ? 1000 : 100;
+  state.rows.push({ id: String(state.rows.length), restaurant_id: String(args.p_restaurant), sales_day: String(args.p_day), currency: String(args.p_currency), expected, received: Number(args.p_received) });
+  return { data: { expected }, error: null };
+}, from: (table: string) => {
   const filters: Record<string, unknown> = {};
   let action = "read";
   let patch: Partial<Deposit> = {};

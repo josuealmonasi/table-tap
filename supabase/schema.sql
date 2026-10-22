@@ -2165,6 +2165,8 @@ declare
   v_low   jsonb := '[]'::jsonb;
   v_row   record;
 begin
+  -- A trusted stock movement: it keeps the dish's count generation.
+  perform set_config('tabletap.stock_movement', 'on', true);
   -- Lock every tracked row this cart touches, in a deterministic order.
   for v_row in
     select m.id, m.name, m.stock, m.available, (d.qty)::int as want
@@ -2228,6 +2230,8 @@ security definer
 set search_path = public
 as $$
 begin
+  -- A trusted stock movement: it keeps the dish's count generation.
+  perform set_config('tabletap.stock_movement', 'on', true);
   update menu_items m
      set stock          = m.stock + d.qty,
          available      = case when m.stock = 0 and m.stock_auto_off then true  else m.available end,
@@ -3587,6 +3591,79 @@ $$;
 revoke all on function public.loyalty_redeem(uuid, text, text, int) from public, anon, authenticated;
 grant execute on function public.loyalty_redeem(uuid, text, text, int) to service_role;
 
+-- A handover belongs to the displayed round and step. Save its answer on the
+-- redemption itself so a lost response can be retried even after later rounds.
+alter table loyalty_redemptions add column if not exists request_key uuid;
+alter table loyalty_redemptions add column if not exists request_result jsonb;
+create unique index if not exists loyalty_redemptions_request_idx
+  on loyalty_redemptions(card_id, request_key) where request_key is not null;
+
+-- Keep loyalty_redeem's old signature for the deployed route during rollout.
+-- A separate name also avoids ambiguous RPC overloads for the old caller.
+create or replace function public.loyalty_redeem_once(
+  p_restaurant uuid, p_code text, p_actor text, p_step int, p_round int, p_request_key uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_card loyalty_cards%rowtype;
+  v_prior loyalty_redemptions%rowtype;
+  v_spent record;
+  v_result jsonb;
+  v_steps jsonb;
+  v_reward text;
+begin
+  if p_step is null or p_step not between 2 and 50
+     or p_round is null or p_round < 0 or p_request_key is null then
+    return jsonb_build_object('error', 'invalidRequest');
+  end if;
+  select * into v_card from loyalty_cards c
+   where c.code = p_code and c.restaurant_id = p_restaurant for update;
+  if not found then return jsonb_build_object('error', 'notHere'); end if;
+
+  -- Check replay before the current round: the original tap may have closed it.
+  select * into v_prior from loyalty_redemptions r
+   where r.card_id = v_card.id and r.request_key = p_request_key;
+  if found then
+    if v_prior.round_no <> p_round or v_prior.step <> p_step then
+      return jsonb_build_object('error', 'invalidRequest');
+    end if;
+    return v_prior.request_result;
+  end if;
+  if v_card.round_no <> p_round then
+    return jsonb_build_object('error', 'roundChanged');
+  end if;
+
+  -- Stamp, undo and both redemption callers all take this same card lock.
+  select * into v_spent from public.loyalty_redeem(p_restaurant, p_code, p_actor, p_step);
+  if not found then
+    if exists (select 1 from loyalty_redemptions r
+                where r.card_id = v_card.id and r.round_no = p_round and r.step = p_step) then
+      return jsonb_build_object('error', 'alreadyRedeemed');
+    end if;
+    return jsonb_build_object('error', 'notReady');
+  end if;
+
+  select * into v_card from loyalty_cards c where c.id = v_card.id;
+  select p.reward into v_reward from loyalty_programs p where p.restaurant_id = p_restaurant;
+  v_steps := coalesce(v_card.steps, jsonb_build_array(jsonb_build_object(
+    'visits', v_card.goal, 'reward', coalesce(v_reward, ''))));
+  v_result := jsonb_build_object(
+    'progress', v_spent.progress, 'goal', v_spent.goal, 'reward', v_spent.reward,
+    'round_no', v_card.round_no, 'steps', v_steps,
+    'done', coalesce((select jsonb_agg(r.step) from loyalty_redemptions r
+                      where r.card_id = v_card.id and r.round_no = v_card.round_no), '[]'::jsonb));
+  update loyalty_redemptions r set request_key = p_request_key, request_result = v_result
+   where r.card_id = v_card.id and r.round_no = p_round and r.step = p_step;
+  return v_result;
+end;
+$$;
+revoke all on function public.loyalty_redeem_once(uuid, text, text, int, int, uuid) from public, anon, authenticated;
+grant execute on function public.loyalty_redeem_once(uuid, text, text, int, int, uuid) to service_role;
+
 -- ── Customer accounts ("cuenta abierta") ───────────────────────────────────
 -- A customer the restaurant trusts to pay later: food goes out now and is paid
 -- for in one go, any day, online or at the till. It is credit the restaurant
@@ -4160,11 +4237,19 @@ create unique index if not exists orders_stock_reservation_idx
 
 -- Starting tracking again is a new count. An older reservation must not add
 -- portions to a new physical count after tracking was switched off and on.
+-- Numeric recounts do the same; only trusted sale, waste and return functions
+-- keep the generation. Browser callers cannot give themselves that exemption.
 alter table menu_items add column if not exists stock_epoch int not null default 0;
 create or replace function public.stock_tracking_epoch()
 returns trigger language plpgsql set search_path = public as $$
 begin
-  if (old.stock is null) <> (new.stock is null) then
+  if current_setting('tabletap.stock_movement', true) = 'on'
+     and current_user not in ('anon', 'authenticated') then
+    new.stock_epoch := old.stock_epoch;
+  elsif new.stock is distinct from old.stock
+     or (new.stock_epoch = old.stock_epoch + 1
+       and current_setting('tabletap.stock_recount', true) = 'on'
+       and current_user not in ('anon', 'authenticated')) then
     new.stock_epoch := old.stock_epoch + 1;
   else
     new.stock_epoch := old.stock_epoch;
@@ -4223,6 +4308,8 @@ declare
   v_res stock_reservations%rowtype;
   v_item record;
 begin
+  -- A trusted stock movement: it keeps the dish's count generation.
+  perform set_config('tabletap.stock_movement', 'on', true);
   select * into v_res from stock_reservations
    where id = p_reservation and restaurant_id = p_restaurant for update;
   if not found or v_res.released_at is not null then return; end if;
@@ -4260,6 +4347,18 @@ begin
       end if;
     end if;
     return new;
+  end if;
+  if not old.stock_managed and old.stock_reservation_id is null
+     and old.status <> 'cancelled'
+     and (tg_op = 'DELETE' or new.status = 'cancelled') then
+    begin
+      insert into user_logs(restaurant_id, actor_email, entity, action, detail)
+        values(old.restaurant_id, coalesce(auth.jwt()->>'email', 'staff'), 'order', 'updated',
+          'order=' || left(old.id::text, 8) || ' stock=unproven');
+    exception when others then
+      -- A missing activity row must not block a cancellation or change its money.
+      raise warning 'Could not log unproven stock for order %', old.id;
+    end;
   end if;
   if tg_op = 'DELETE' then
     perform release_stock_reservation(old.restaurant_id, old.stock_reservation_id);
@@ -4301,9 +4400,7 @@ begin
     if v_coupon.coupon_id is not null then perform release_coupon(v_coupon.coupon_id); end if;
   end loop;
   if p_delete_order then
-    if not v_order.stock_managed and v_order.stock_reservation_id is null then
-      perform release_stock(v_order.restaurant_id, p_legacy_demand);
-    end if;
+    -- No deduction record exists for legacy lines; deletion must not invent stock.
     delete from orders where id = p_order;
   end if;
 end;
@@ -4588,6 +4685,8 @@ declare
   v_stock int;
   v_id uuid;
 begin
+  -- A trusted stock movement: it keeps the dish's count generation.
+  perform set_config('tabletap.stock_movement', 'on', true);
   if (p_ingredient is null) = (p_item is null) then return null; end if;
   if p_ingredient is not null then
     select name into v_name from ingredients
@@ -4753,6 +4852,8 @@ returns void language plpgsql security definer set search_path = public as $$
 declare
   v_row record;
 begin
+  -- A trusted stock movement: it keeps the dish's count generation.
+  perform set_config('tabletap.stock_movement', 'on', true);
   for v_row in
     select m.id, m.stock, m.available, (d.qty)::int as want
       from jsonb_to_recordset(p_demand) as d(item_id uuid, qty int)
@@ -4780,8 +4881,9 @@ revoke truncate, references, trigger on all tables in schema public from authent
 -- for orders cancelled before it was kept.
 alter table orders add column if not exists cancelled_at timestamptz;
 
--- The status guard and legacy handback share one transaction. New orders are
--- returned by the trigger using their exact reservation, regardless of plan.
+-- The status guard and proven stock handback share one transaction. New orders
+-- are returned by the trigger using their exact reservation, regardless of plan.
+-- Legacy lines alone cannot prove what was deducted, so they return nothing.
 drop function if exists public.cancel_order(uuid, uuid, text, jsonb);
 create or replace function public.cancel_order(
   p_restaurant uuid, p_order uuid, p_refund text, p_legacy_demand jsonb,
@@ -4810,9 +4912,7 @@ begin
     where id = p_order and restaurant_id = p_restaurant and status in ('received', 'preparing')
     returning * into v_order;
   if not found then return false; end if;
-  if not v_order.stock_managed and v_order.stock_reservation_id is null then
-    perform release_stock(p_restaurant, p_legacy_demand);
-  end if;
+  -- The order trigger returns proven reservations and logs unknown legacy stock.
   return true;
 end;
 $$;
@@ -7216,9 +7316,7 @@ begin
     where id = p_order and restaurant_id = p_restaurant and status in ('received', 'preparing')
     returning * into v_order;
   if not found then return false; end if;
-  if not v_order.stock_managed and v_order.stock_reservation_id is null then
-    perform release_stock(p_restaurant, p_legacy_demand);
-  end if;
+  -- The order trigger returns proven reservations and logs unknown legacy stock.
   return true;
 end;
 $$;
@@ -7442,28 +7540,83 @@ revoke all on refund_due_attempts from anon, authenticated;
 revoke all on refund_due_attempts from public;
 grant select, insert, update, delete on refund_due_attempts to service_role;
 
+-- Customer completion and our fee completion are separate facts. A failed fee
+-- lookup must remain recoverable even after the diner's money is back.
+alter table refunds_due add column if not exists fee_reconciled_at timestamptz;
+alter table refunds_due add column if not exists fee_request jsonb;
+alter table refunds_due add column if not exists currency text check (currency ~ '^[A-Z]{3}$');
+alter table refunds_due add column if not exists stripe_account_id text;
+
+-- The verified checkout exists before settlement inserts an obligation. Use
+-- its frozen currency/account, never today's menu or the order's display price.
+create or replace function public.stamp_refund_due_charge()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare c diner_checkouts;
+begin
+  select * into c from diner_checkouts
+    where restaurant_id = new.restaurant_id and stripe_payment_intent = new.stripe_payment_intent;
+  if c.id is not null then
+    new.currency := c.currency;
+    new.stripe_account_id := c.stripe_account_id;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.stamp_refund_due_charge() from public, anon, authenticated;
+grant execute on function public.stamp_refund_due_charge() to service_role;
+drop trigger if exists refund_due_charge on refunds_due;
+create trigger refund_due_charge before insert on refunds_due
+  for each row execute function public.stamp_refund_due_charge();
+
+-- Older rows with no charge evidence stay unverified. Do not infer currency
+-- from the restaurant, its orders, or a notification written from menu settings.
+update refunds_due d set currency = c.currency, stripe_account_id = coalesce(d.stripe_account_id, c.stripe_account_id)
+  from diner_checkouts c where d.restaurant_id = c.restaurant_id
+    and d.stripe_payment_intent = c.stripe_payment_intent and d.currency is null;
+
 create or replace function public.start_refund_due_attempt(p_restaurant uuid, p_due uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare d refunds_due; a refund_due_attempts; v_account text; v_no int;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   select * into d from refunds_due where id = p_due and restaurant_id = p_restaurant for update;
-  if d.id is null or d.refunded_at is not null then return null; end if;
+  if d.id is null then return null; end if;
   select * into a from refund_due_attempts where due_id = d.id order by attempt_no desc limit 1;
-  if a.id is null or a.provider_status in ('failed', 'canceled') then
+  if a.id is null or (d.refunded_at is null and a.provider_status in ('failed', 'canceled')) then
     v_no := coalesce(a.attempt_no, 0) + 1;
-    v_account := a.stripe_account_id;
+    v_account := coalesce(a.stripe_account_id, d.stripe_account_id);
     if v_account is null then select stripe_account_id into v_account from restaurants where id = p_restaurant; end if;
     if v_account is null then return null; end if;
-    insert into refund_due_attempts(restaurant_id, due_id, attempt_no, idempotency_key, amount, stripe_account_id, stripe_payment_intent)
+    insert into refund_due_attempts(restaurant_id, due_id, attempt_no, idempotency_key, amount, stripe_account_id, stripe_payment_intent, stripe_refund_id, provider_status)
       values(p_restaurant, d.id, v_no, 'refund-due-' || d.id || case when v_no = 1 then '' else '-' || v_no end,
-        coalesce(a.amount, d.amount), v_account, coalesce(a.stripe_payment_intent, d.stripe_payment_intent)) returning * into a;
+        coalesce(a.amount, d.amount), v_account, coalesce(a.stripe_payment_intent, d.stripe_payment_intent),
+        d.stripe_refund_id, case when d.refunded_at is not null then 'succeeded' end) returning * into a;
   end if;
+  update refunds_due set stripe_account_id = a.stripe_account_id where id = d.id and stripe_account_id is null;
   return to_jsonb(a);
 end;
 $$;
 revoke all on function public.start_refund_due_attempt(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.start_refund_due_attempt(uuid, uuid) to service_role;
+
+-- Persist the exact fee request before calling Stripe. Concurrent retries and
+-- a lost response must reuse its amount even if another refund changes the fee.
+create or replace function public.start_refund_due_fee(p_restaurant uuid, p_due uuid, p_fee text, p_amount int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare d refunds_due;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into d from refunds_due where restaurant_id = p_restaurant and id = p_due for update;
+  if d.id is null or d.refunded_at is null then return null; end if;
+  if d.fee_request is not null then return d.fee_request; end if;
+  if p_fee is null or p_amount is null or p_amount <= 0 then raise exception 'invalid fee return'; end if;
+  update refunds_due set fee_request = jsonb_build_object('fee_id', p_fee, 'amount', p_amount)
+    where id = d.id returning fee_request into d.fee_request;
+  return d.fee_request;
+end;
+$$;
+revoke all on function public.start_refund_due_fee(uuid, uuid, text, int) from public, anon, authenticated;
+grant execute on function public.start_refund_due_fee(uuid, uuid, text, int) to service_role;
 
 create or replace function public.finish_refund_due_attempt(
   p_restaurant uuid, p_due uuid, p_attempt uuid, p_actor text, p_refund text, p_status text
@@ -8352,8 +8505,8 @@ revoke all on function public.duplicate_menu_v1(uuid, uuid) from public, anon, a
 grant execute on function public.duplicate_menu_v1(uuid, uuid) to service_role;
 
 -- S18: keep ingredient history when recipes change, and count at one cutoff.
--- Apply this block in one transaction before deploying the new count caller.
-begin;
+-- The release delta runs this in one transaction, before the new count caller
+-- deploys; no begin/commit here, which would split db:create's single run.
 lock table orders, waste_entries, ingredient_purchases, ingredient_counts in share row exclusive mode;
 
 create table if not exists ingredient_consumption (
@@ -8593,4 +8746,316 @@ revoke all on function public.record_ingredient_counts(uuid, jsonb, text) from p
 grant execute on function public.record_ingredient_counts(uuid, jsonb, text) to service_role;
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 revoke truncate, references, trigger on all tables in schema public from public, anon, authenticated;
-commit;
+
+-- S9: the drawer keeps the currency it opened in. Old rows have no evidence
+-- of the float's original currency; receipts alone cannot prove it. Use the
+-- restaurant's currency today for those rows, rather than invent a history.
+alter table cash_shifts add column if not exists currency text;
+update cash_shifts s set currency = r.currency from restaurants r
+  where r.id = s.restaurant_id and s.currency is null;
+alter table cash_shifts alter column currency set not null;
+alter table cash_movements add column if not exists currency text;
+update cash_movements m set currency = s.currency from cash_shifts s
+  where s.id = m.shift_id and s.restaurant_id = m.restaurant_id and m.currency is null;
+update cash_movements m set currency = r.currency from restaurants r
+  where r.id = m.restaurant_id and m.currency is null;
+alter table cash_movements alter column currency set not null;
+
+-- Fill omitted currencies so the deployed routes still work before the new
+-- routes ship. A menu currency change never relabels an existing drawer.
+create or replace function public.freeze_cash_currency()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'UPDATE' then
+    if new.currency is distinct from old.currency or new.restaurant_id is distinct from old.restaurant_id then
+      raise exception 'drawer currency is immutable';
+    end if;
+    if tg_table_name = 'cash_movements' then
+      if new.shift_id is distinct from old.shift_id then raise exception 'withdrawal shift is immutable'; end if;
+    end if;
+    return new;
+  end if;
+  if tg_table_name = 'cash_movements' then
+    if new.shift_id is not null then
+      select currency into new.currency from cash_shifts
+        where id = new.shift_id and restaurant_id = new.restaurant_id;
+      if not found then raise exception 'withdrawal shift not found'; end if;
+      return new;
+    end if;
+  end if;
+  select currency into new.currency from restaurants where id = new.restaurant_id;
+  return new;
+end;
+$$;
+revoke all on function public.freeze_cash_currency() from public, anon, authenticated;
+grant execute on function public.freeze_cash_currency() to service_role;
+drop trigger if exists freeze_cash_currency on cash_shifts;
+create trigger freeze_cash_currency before insert or update on cash_shifts
+  for each row execute function public.freeze_cash_currency();
+drop trigger if exists freeze_cash_currency on cash_movements;
+create trigger freeze_cash_currency before insert or update on cash_movements
+  for each row execute function public.freeze_cash_currency();
+
+-- One calculation for both the signed close and the later review. Aggregate
+-- inside Postgres: PostgREST's row cap must never cut a busy shift short.
+create or replace function public.cash_shift_totals(p_restaurant uuid, p_shift uuid, p_until timestamptz)
+returns jsonb language sql stable security definer set search_path = public as $$
+  with s as (
+    select *, least(coalesce(closed_at, p_until), p_until) until_at
+      from cash_shifts where id = p_shift and restaurant_id = p_restaurant
+  ), receipts as (
+    select coalesce(sum(p.amount), 0) amount from payments p, s
+      where p.restaurant_id = p_restaurant and p.currency = s.currency
+        and p.method = 'cash' and nullif(p.actor_email, '') is not null
+        and p.created_at between s.opened_at and s.until_at
+  ), returns as (
+    select coalesce(sum(f.amount), 0) amount from refund_operations f, s
+      where f.restaurant_id = p_restaurant and f.currency = s.currency
+        and f.status = 'succeeded' and f.source = 'cash' and nullif(f.payout_actor, '') is not null
+        and f.completed_at between s.opened_at and s.until_at
+  ), old_returns as (
+    -- Imported returns are counted above once. Older logs without a currency
+    -- use their uniquely named order's currency, or the drawer's fallback.
+    select coalesce(sum(substring(l.detail from '(?:^| )amount=([0-9]+(?:[.][0-9]+)?)(?: |$)')::numeric), 0) amount
+      from user_logs l cross join s
+      where l.restaurant_id = p_restaurant and l.action = 'refunded'
+        and l.created_at between s.opened_at and s.until_at
+        and substring(l.detail from '(?:^| )method=([^ ]+)') = 'cash'
+        and nullif(substring(l.detail from '(?:^| )collector=([^ ]+)'), '') is not null
+        and not exists(select 1 from refund_operations f where f.restaurant_id = p_restaurant and f.historical_log_id = l.id)
+        and coalesce(substring(l.detail from '(?:^| )currency=([^ ]+)'),
+          (select case when count(*) = 1 then min(o.currency) end from orders o
+            where o.restaurant_id = p_restaurant
+              and left(o.id::text, 8) = substring(l.detail from '(?:^| )order=([^ ]+)')), s.currency) = s.currency
+  ), withdrawals as (
+    select coalesce(sum(m.amount), 0) amount from cash_movements m, s
+      where m.restaurant_id = p_restaurant and m.shift_id = s.id
+        and m.kind = 'withdrawal' and m.currency = s.currency
+  )
+  select jsonb_build_object('opening', round(s.opening_amount, 2),
+    'cashSales', round(r.amount - f.amount - h.amount, 2), 'withdrawn', round(w.amount, 2),
+    'expected', round(s.opening_amount + r.amount - f.amount - h.amount - w.amount, 2))
+    from s cross join receipts r cross join returns f cross join old_returns h cross join withdrawals w;
+$$;
+revoke all on function public.cash_shift_totals(uuid, uuid, timestamptz) from public, anon, authenticated;
+grant execute on function public.cash_shift_totals(uuid, uuid, timestamptz) to service_role;
+
+create or replace function public.close_cash_shift(p_restaurant uuid, p_shift uuid, p_counted numeric, p_actor text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare s cash_shifts; v_at timestamptz; v_sum jsonb; v_difference numeric;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into s from cash_shifts where restaurant_id = p_restaurant and id = p_shift and closed_at is null for update;
+  if not found then return null; end if;
+  if p_counted is null or p_counted < 0 or p_counted > 1000000 or p_counted <> round(p_counted, 2)
+    or nullif(btrim(p_actor), '') is null then raise exception 'invalid cash count'; end if;
+  -- now() is the transaction's start, possibly before waiting for the lock.
+  -- The count includes every earlier writer, so date it after that wait.
+  v_at := clock_timestamp();
+  v_sum := public.cash_shift_totals(p_restaurant, p_shift, v_at);
+  v_difference := round(p_counted - (v_sum->>'expected')::numeric, 2);
+  update cash_shifts set closed_at = v_at, closed_by = p_actor, counted_cash = p_counted,
+    expected_cash = (v_sum->>'expected')::numeric, difference = v_difference where id = s.id;
+  return v_sum || jsonb_build_object('id', s.id, 'currency', s.currency, 'counted', p_counted, 'difference', v_difference);
+end;
+$$;
+revoke all on function public.close_cash_shift(uuid, uuid, numeric, text) from public, anon, authenticated;
+grant execute on function public.close_cash_shift(uuid, uuid, numeric, text) to service_role;
+
+create or replace function public.create_cash_withdrawal(p_restaurant uuid, p_shift uuid, p_amount numeric, p_note text, p_actor text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare s cash_shifts; v_id uuid;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into s from cash_shifts where restaurant_id = p_restaurant and id = p_shift and closed_at is null for update;
+  if not found then return null; end if;
+  if p_amount is null or p_amount <= 0 or p_amount > 1000000 or p_amount <> round(p_amount, 2)
+    or nullif(btrim(p_actor), '') is null then raise exception 'invalid cash withdrawal'; end if;
+  insert into cash_movements(restaurant_id, shift_id, currency, kind, amount, note, actor_email, created_at)
+    values(p_restaurant, s.id, s.currency, 'withdrawal', p_amount, p_note, p_actor, clock_timestamp()) returning id into v_id;
+  return jsonb_build_object('id', v_id, 'currency', s.currency);
+end;
+$$;
+revoke all on function public.create_cash_withdrawal(uuid, uuid, numeric, text, text) from public, anon, authenticated;
+grant execute on function public.create_cash_withdrawal(uuid, uuid, numeric, text, text) to service_role;
+
+create or replace function public.delete_cash_withdrawal(p_restaurant uuid, p_shift uuid, p_movement uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare s cash_shifts; m cash_movements;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into s from cash_shifts where restaurant_id = p_restaurant and id = p_shift and closed_at is null for update;
+  if not found then return null; end if;
+  delete from cash_movements where restaurant_id = p_restaurant and shift_id = s.id and id = p_movement and kind = 'withdrawal'
+    returning * into m;
+  if not found then return null; end if;
+  return jsonb_build_object('amount', m.amount, 'note', m.note, 'currency', m.currency);
+end;
+$$;
+revoke all on function public.delete_cash_withdrawal(uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.delete_cash_withdrawal(uuid, uuid, uuid) to service_role;
+
+-- A shift can belong to today's handover even if it opened yesterday, or its
+-- count was corrected by a receipt that arrived today with an earlier date.
+create or replace function public.cash_shifts_for_day(p_restaurant uuid, p_day_start timestamptz)
+returns setof public.cash_shifts language sql stable security definer set search_path = public as $$
+  select s.* from cash_shifts s where s.restaurant_id = p_restaurant and (
+    s.opened_at >= p_day_start or s.closed_at >= p_day_start or s.closed_at is null
+    or exists(select 1 from payments p where p.restaurant_id = p_restaurant and p.currency = s.currency
+      and p.method = 'cash' and nullif(p.actor_email, '') is not null
+      and p.recorded_at >= p_day_start and p.recorded_at > s.closed_at
+      and p.created_at between s.opened_at and s.closed_at)
+  ) order by s.opened_at, s.id;
+$$;
+revoke all on function public.cash_shifts_for_day(uuid, timestamptz) from public, anon, authenticated;
+grant execute on function public.cash_shifts_for_day(uuid, timestamptz) to service_role;
+create index if not exists cash_shifts_closed_idx on cash_shifts(restaurant_id, closed_at) where closed_at is not null;
+create index if not exists payments_cash_recorded_idx on payments(restaurant_id, recorded_at, created_at)
+  where method = 'cash' and actor_email is not null;
+
+-- Exact membership is the cutoff: transaction timestamps can predate a waited lock.
+-- Old marks keep null manifests and their deployed timestamp interpretation.
+alter table public.terminal_deposits add column if not exists snapshot_at timestamptz;
+alter table public.terminal_deposits add column if not exists payment_ids uuid[];
+alter table public.terminal_deposits add column if not exists return_ids text[];
+alter table public.terminal_deposits add column if not exists fee_pct numeric;
+
+-- Allocation dates distinguish a same-day void (fee reversed) from a later refund.
+create or replace function public.terminal_deposit_ledger_v1(p_restaurant uuid, p_currency text)
+returns table(id text, payment_id uuid, amount numeric, tip numeric, created_at timestamptz,
+  recorded_at timestamptz, voided_at timestamptz, returned_at timestamptz, order_id uuid, terminal_ref text)
+language sql stable security definer set search_path = public as $$
+  select p.id::text, p.id, p.amount,
+    case when p.tip > 0 then p.tip when abs(o.total - p.amount) < 0.005 then coalesce(o.tip, 0) else 0 end,
+    p.created_at, p.recorded_at,
+    case when p.allocation_origin = 'legacy' and o.status = 'cancelled'
+      and not exists(select 1 from order_adjustments a where a.restaurant_id = p_restaurant and a.order_id = p.order_id)
+      then coalesce(o.cancelled_at, p.created_at) end,
+    null::timestamptz, p.order_id, p.terminal_ref
+  from payments p left join orders o on o.id = p.order_id and o.restaurant_id = p_restaurant
+  where p.restaurant_id = p_restaurant and p.currency = p_currency and p.method = 'card' and p.stripe_payment_intent is null
+  union all
+  select 'return:' || ra.id, p.id, ra.amount, ra.tip, p.created_at, r.completed_at,
+    null::timestamptz, r.completed_at, p.order_id, p.terminal_ref
+  from refund_operations r
+  join refund_allocations ra on ra.operation_id = r.id and ra.restaurant_id = p_restaurant
+  join payment_allocations pa on pa.id = ra.allocation_id and pa.restaurant_id = p_restaurant
+  join payments p on p.id = pa.payment_id and p.restaurant_id = p_restaurant
+  where r.restaurant_id = p_restaurant and r.currency = p_currency and r.source = 'terminal'
+    and r.status = 'succeeded' and r.completed_at is not null
+    and p.currency = p_currency and p.method = 'card' and p.stripe_payment_intent is null;
+$$;
+revoke all on function public.terminal_deposit_ledger_v1(uuid, text) from public, anon, authenticated;
+grant execute on function public.terminal_deposit_ledger_v1(uuid, text) to service_role;
+
+create or replace function public.record_terminal_deposit_v1(
+  p_restaurant uuid, p_day date, p_currency text, p_received numeric, p_note text, p_actor text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_zone text; v_fee numeric; v_expected numeric; v_payments uuid[]; v_returns text[]; v_has_sales boolean;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select coalesce(timezone, 'America/Mexico_City'), terminal_fee_pct into v_zone, v_fee
+    from restaurants where id = p_restaurant for share;
+  if not found or p_day is null or p_currency not in ('MXN', 'USD') or p_received is null
+    or p_received < 0 or p_received <> round(p_received, 2) then raise exception 'invalid deposit'; end if;
+  if exists(select 1 from terminal_deposits where restaurant_id = p_restaurant and sales_day = p_day and currency = p_currency) then
+    return jsonb_build_object('error', 'marked');
+  end if;
+  with ledger as materialized (
+    select *, (created_at at time zone v_zone)::date sale_day
+    from public.terminal_deposit_ledger_v1(p_restaurant, p_currency)
+  ), marks as materialized (
+    select * from terminal_deposits where restaurant_id = p_restaurant and currency = p_currency
+  ), returns as (
+    select id, payment_id, amount, sale_day, returned_at at_time, (returned_at at time zone v_zone)::date as day
+      from ledger where returned_at is not null
+    union all
+    select 'void:' || id, payment_id, amount, sale_day, voided_at, (voided_at at time zone v_zone)::date
+      from ledger where returned_at is null and voided_at is not null
+  ), receipts as (
+    select l.*, l.amount - coalesce((select sum(r.amount) from returns r
+      where r.payment_id = l.payment_id and r.day = l.sale_day
+        and not exists(select 1 from marks d where d.sales_day = l.sale_day)), 0) net
+    from ledger l where l.returned_at is null
+  ), sales as (
+    select distinct sale_day as day from receipts where net > 0
+  ), assigned as (
+    select r.*,
+      r.sale_day = r.day and not exists(select 1 from marks d where d.sales_day = r.sale_day) same_day,
+      (select d.sales_day from marks d where r.id = any(d.return_ids)
+        or (d.return_ids is null and r.at_time <= d.created_at
+          and d.sales_day = (select min(s.day) from sales s where s.day >= r.day)) order by (d.return_ids is not null) desc limit 1) consumed,
+      (select min(s.day) from sales s where s.day >= r.day and not exists(select 1 from marks d where d.sales_day = s.day)) target,
+      case when r.sale_day = r.day then r.amount - round(r.amount * coalesce(
+        (select d.fee_pct from marks d where d.sales_day = r.sale_day), v_fee) / 100, 2) else r.amount end debit
+    from returns r
+  )
+  select coalesce((select sum(net) - round(sum(net) * v_fee / 100, 2) from receipts where sale_day = p_day), 0)
+      - coalesce((select sum(debit) from assigned where not same_day and consumed is null and target = p_day), 0),
+    coalesce((select array_agg(payment_id order by payment_id) from receipts where sale_day = p_day), '{}'::uuid[]),
+    coalesce((select array_agg(id order by id) from assigned where consumed is null
+      and ((same_day and sale_day = p_day) or (not same_day and target = p_day))), '{}'::text[]),
+    exists(select 1 from receipts where sale_day = p_day and net > 0)
+  into v_expected, v_payments, v_returns, v_has_sales;
+  if not v_has_sales then return jsonb_build_object('error', 'no_sales'); end if;
+  -- Calculate and insert before releasing the settlement lock. A later receipt
+  -- is outside payment_ids even if its recorded_at was set before it waited.
+  insert into terminal_deposits(restaurant_id, sales_day, currency, expected, received, note, recorded_by,
+    snapshot_at, payment_ids, return_ids, fee_pct)
+  values(p_restaurant, p_day, p_currency, v_expected, p_received, p_note, p_actor,
+    clock_timestamp(), v_payments, v_returns, v_fee);
+  return jsonb_build_object('expected', v_expected);
+end;
+$$;
+revoke all on function public.record_terminal_deposit_v1(uuid, date, text, numeric, text, text) from public, anon, authenticated;
+grant execute on function public.record_terminal_deposit_v1(uuid, date, text, numeric, text, text) to service_role;
+
+-- Taking back a mark releases its returns to another deposit under the same lock.
+create or replace function public.delete_terminal_deposit_v1(p_restaurant uuid, p_day date, p_currency text)
+returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  delete from terminal_deposits where restaurant_id = p_restaurant and sales_day = p_day and currency = p_currency;
+  return found;
+end;
+$$;
+revoke all on function public.delete_terminal_deposit_v1(uuid, date, text) from public, anon, authenticated;
+grant execute on function public.delete_terminal_deposit_v1(uuid, date, text) to service_role;
+
+-- Stock movements keep their generation; a new physical count supersedes it.
+-- Each trusted function sets tabletap.stock_movement itself (set_config, for
+-- its transaction): Supabase refuses a custom setting attached with ALTER
+-- FUNCTION ... SET.
+
+-- The count is authoritative. Holds from before it remain recorded, but their
+-- dish generation no longer matches: neither expiry nor cancellation can add
+-- them to this new count. Other dishes in the same reservation still return.
+create or replace function public.recount_stock(
+  p_restaurant uuid, p_item uuid, p_stock int, p_expected_stock int, p_expected_epoch int
+) returns text language plpgsql security definer set search_path = public as $$
+declare v_item menu_items%rowtype;
+begin
+  -- A recount starts a new generation (set for its transaction: Supabase
+  -- refuses a custom setting attached with ALTER FUNCTION ... SET).
+  perform set_config('tabletap.stock_recount', 'on', true);
+  if p_stock < 0 or p_expected_epoch is null or p_expected_epoch < 0 then
+    raise exception 'Invalid stock count';
+  end if;
+  select * into v_item from menu_items
+    where id = p_item and restaurant_id = p_restaurant and not is_addon for update;
+  if not found then return 'missing'; end if;
+  if v_item.stock is distinct from p_expected_stock
+     or v_item.stock_epoch is distinct from p_expected_epoch then
+    return 'changed';
+  end if;
+  update menu_items set stock = p_stock, stock_epoch = stock_epoch + 1,
+    available = case when p_stock = 0 then false
+      when stock_auto_off then true else available end,
+    stock_auto_off = case when p_stock = 0 then available or stock_auto_off else false end
+    where id = p_item and restaurant_id = p_restaurant;
+  return 'counted';
+end;
+$$;
+revoke all on function public.recount_stock(uuid, uuid, int, int, int) from public, anon, authenticated;
+grant execute on function public.recount_stock(uuid, uuid, int, int, int) to service_role;

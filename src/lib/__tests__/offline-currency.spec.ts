@@ -1,8 +1,7 @@
 import { expect, it, vi } from "vitest";
-import type { CashShift } from "@/lib/cash-shift";
 
 vi.mock("@/lib/report-fees", () => ({ feesKeptSince: async () => ({ kept: 0, unverified: 0 }) }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => { const from = (table: string) => {
   let currency: unknown;
   let method: unknown;
   let offset = 0;
@@ -35,16 +34,13 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (tabl
   q.single = async () => result();
   q.then = (resolve: (value: unknown) => unknown) => Promise.resolve(result()).then(resolve);
   return q;
-} }) }));
+}; return { from, rpc: (_name: string, args: { p_currency: string }) => { const q = from("payments"); const eq = q.eq as (key: string, value: string) => unknown; eq("currency", args.p_currency); eq("method", "card"); return q; } }; } }));
 
-const { shiftSumOf } = await import("@/lib/cash-shift-server");
 const { readCosts } = await import("@/lib/costs/server");
 const { readTerminal } = await import("@/lib/terminal-server");
 
-it("keeps original-currency receipts and returns out of a current-currency drawer count", async () => {
-  const sum = await shiftSumOf("r", { id: "shift", opening_amount: 20, opened_at: "2026-10-20T00:00:00Z", closed_at: null } as CashShift);
-  expect(sum).toMatchObject({ cashSales: 90, expected: 110 });
-});
+// Drawer currency coverage now lives in cash-shift-review.spec.ts and
+// cash-shift-schema.spec.ts: the signed close and review share one SQL sum.
 it("does not add foreign-currency receipts to current menu margins or fee totals", async () => {
   const costs = await readCosts("r", new Date("2026-10-20T18:00:00Z"));
   expect(costs.period.uncosted).toBe(100);

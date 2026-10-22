@@ -44,6 +44,7 @@ export type MenuItem = {
    * leaves `available` exactly as it was: a switch somebody flips by hand.
    */
   stock?: number | null;
+  stock_epoch?: number;
   /**
    * Set when the count — not a person — took the dish off the menu, so that
    * giving the stock back can put it on again without overriding a decision

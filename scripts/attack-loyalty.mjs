@@ -16,6 +16,8 @@
 // Everything planted here is removed again, whatever happens in between.
 // ============================================================================
 
+import { randomUUID } from "node:crypto";
+
 const CARD = "ATKXTEST0000"; // valid, and nobody could be handed it
 const NEIGHBOUR_CARD = "ATKXTEST0001";
 const LADDER_CARD = "ATKXTEST0002";
@@ -30,7 +32,7 @@ export async function attackLoyalty({ admin, post, who, home, ok, bad }) {
   await admin.from("loyalty_programs").delete().eq("reward", "attack");
 
   const { data: program } = await admin
-    .from("loyalty_programs").select("active").eq("restaurant_id", home.id).maybeSingle();
+    .from("loyalty_programs").select("active, goal").eq("restaurant_id", home.id).maybeSingle();
   if (!program?.active) {
     bad("the demo's visit card program is not on — the loyalty attacks cannot run");
     return;
@@ -60,7 +62,7 @@ export async function attackLoyalty({ admin, post, who, home, ok, bad }) {
   const planted = [];
   try {
     const { data: ours } = await admin
-      .from("loyalty_cards").insert({ restaurant_id: home.id, code: CARD, goal: 2 })
+      .from("loyalty_cards").insert({ restaurant_id: home.id, code: CARD, goal: 2, steps: [{ visits: 2, reward: "MX$50" }] })
       .select("id").single();
     const { data: theirs } = await admin
       .from("loyalty_cards").insert({ restaurant_id: neighbour.id, code: NEIGHBOUR_CARD, goal: 2 })
@@ -89,16 +91,36 @@ export async function attackLoyalty({ admin, post, who, home, ok, bad }) {
     else bad(`three scans at once recorded ${visits} visits`);
 
     // Ready it with a past day, then two people spend it at once.
-    await admin.from("loyalty_visits").insert({
-      card_id: ours.id, restaurant_id: home.id, visit_day: "2026-01-01", actor_email: "attack@tabletap.dev",
-    });
+    // Bank enough visits for the NEXT round too: otherwise a second redemption
+    // is refused for insufficient visits and the missing round check hides.
+    const seeded = await admin.from("loyalty_visits").insert(Array.from({ length: 1 + program.goal }, (_, i) => ({
+      card_id: ours.id, restaurant_id: home.id,
+      visit_day: new Date(Date.UTC(2025, 0, i + 1)).toISOString().slice(0, 10), actor_email: "attack@tabletap.dev",
+    })));
+    if (seeded.error) throw seeded.error;
+    const handover = { code: CARD, step: 2, round: 0, requestKey: randomUUID() };
     await Promise.all([
-      post("/api/loyalty/redeem", { code: CARD }, who.waiter),
-      post("/api/loyalty/redeem", { code: CARD }, who.waiter),
+      post("/api/loyalty/redeem", handover, who.waiter),
+      post("/api/loyalty/redeem", handover, who.waiter),
     ]);
     const spent = await count("loyalty_redemptions", ours.id);
     if (spent === 1) ok("a ready reward spent twice at once is spent once");
     else bad(`a ready reward was spent ${spent} times`);
+
+    const { data: receipts, error: receiptError } = await admin.from("loyalty_redemptions")
+      .select("visits_used, reward").eq("card_id", ours.id);
+    const { data: after, error: cardError } = await admin.from("loyalty_cards").select("round_no").eq("id", ours.id).single();
+    if (!receiptError && !cardError && receipts?.length === 1 && receipts[0].visits_used === 2 &&
+        receipts[0].reward === "MX$50" && after?.round_no === 1) ok("S15 concurrent retry uses one MX$50 reward and closes one round");
+    else bad(`S15 concurrent retry changed the wrong reward or round: ${JSON.stringify({ receipts, after, receiptError, cardError })}`);
+    // Another device can have its own key for the same displayed handover.
+    // A retry and a fresh key on that old round must both leave the ledger alone.
+    await Promise.all([
+      post("/api/loyalty/redeem", handover, who.waiter),
+      post("/api/loyalty/redeem", { ...handover, requestKey: randomUUID() }, who.waiter),
+    ]);
+    if (await count("loyalty_redemptions", ours.id) === 1) ok("S15 replay and stale round cannot spend the next reward");
+    else bad("S15 a replay or stale screen spent the next round's reward");
 
     // A ladder with both rewards ready. The button names the reward it spends,
     // so two taps on "coffee" spend the coffee once — without that, the second
@@ -114,13 +136,13 @@ export async function attackLoyalty({ admin, post, who, home, ok, bad }) {
     await admin.from("loyalty_visits").insert(["2026-01-01", "2026-01-02", "2026-01-03"].map(visit_day => ({
       card_id: ladder.id, restaurant_id: home.id, visit_day, actor_email: "attack@tabletap.dev",
     })));
-    await post("/api/loyalty/redeem", { code: LADDER_CARD, step: 3 }, who.waiter);
+    await post("/api/loyalty/redeem", { code: LADDER_CARD, step: 3, round: 0, requestKey: randomUUID() }, who.waiter);
     const outOfOrder = await count("loyalty_redemptions", ladder.id);
     if (outOfOrder === 0) ok("a later reward pressed before the one due is not spent");
     else bad(`a later reward was spent out of order (${outOfOrder} redemption(s))`);
     await Promise.all([
-      post("/api/loyalty/redeem", { code: LADDER_CARD, step: 2 }, who.waiter),
-      post("/api/loyalty/redeem", { code: LADDER_CARD, step: 2 }, who.waiter),
+      post("/api/loyalty/redeem", { code: LADDER_CARD, step: 2, round: 0, requestKey: randomUUID() }, who.waiter),
+      post("/api/loyalty/redeem", { code: LADDER_CARD, step: 2, round: 0, requestKey: randomUUID() }, who.waiter),
     ]);
     const onLadder = await count("loyalty_redemptions", ladder.id);
     if (onLadder === 1) ok("one reward on a ladder, pressed twice at once, spends that reward once and not the next");

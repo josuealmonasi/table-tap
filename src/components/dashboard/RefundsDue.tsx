@@ -10,7 +10,6 @@ import type { RefundDueRow } from "@/lib/refund-due";
 
 interface RefundsDueProps {
   refunds: RefundDueRow[];
-  currency: string;
   /** A connected Stripe account, which is where the refund is made. */
   canRefund: boolean;
 }
@@ -23,12 +22,12 @@ interface RefundsDueProps {
  * money is real and is the diner's. It used to be a line in the bell telling
  * the owner to refund it in Stripe, which nothing here could see done, and a
  * refund made there kept our fee. Refunding from here returns the fee too,
- * and the row goes once Stripe has made the refund.
+ * and the row stays until the customer and our fee have both been paid back.
  *
  * Owner and manager only — the page passes none to anybody else, and the route
  * refuses them.
  */
-export default function RefundsDue({ refunds, currency, canRefund }: RefundsDueProps) {
+export default function RefundsDue({ refunds, canRefund }: RefundsDueProps) {
   const t = useT();
   const { locale } = useLocale();
   const toast = useToast();
@@ -38,12 +37,17 @@ export default function RefundsDue({ refunds, currency, canRefund }: RefundsDueP
 
   if (refunds.length === 0) return null;
 
+  function originalAmount(row: RefundDueRow): string {
+    return row.currency ? `${formatMoney(Number(row.amount), row.currency)} · ${row.currency}`
+      : `${Number(row.amount).toFixed(2)} · ${t("refunds.currencyUnknown")}`;
+  }
+
   async function refund(row: RefundDueRow): Promise<void> {
-    const amount = formatMoney(Number(row.amount), currency);
+    const amount = originalAmount(row);
     const ok = await confirm({
-      title: t("refunds.confirmTitle", { amount }),
-      message: t("refunds.confirmBody"),
-      confirmLabel: t("refunds.refund"),
+      title: t(row.refunded_at ? "refunds.retryFee" : "refunds.confirmTitle", { amount }),
+      message: t(row.refunded_at ? "refunds.feePending" : "refunds.confirmBody"),
+      confirmLabel: t(row.refunded_at ? "refunds.retryFee" : "refunds.refund"),
     });
     if (!ok) return;
     setBusy(row.id);
@@ -57,7 +61,7 @@ export default function RefundsDue({ refunds, currency, canRefund }: RefundsDueP
       if (!res.ok) {
         toast(data.error ?? t("done.networkError"), "error");
       } else {
-        toast(data.alreadyInStripe ? t("refunds.doneInStripe") : t("refunds.done", { amount }));
+        toast(data.feePending ? t("refunds.feePending") : data.alreadyInStripe ? t("refunds.doneInStripe") : t("refunds.done", { amount }));
       }
       router.refresh();
     } catch {
@@ -80,8 +84,9 @@ export default function RefundsDue({ refunds, currency, canRefund }: RefundsDueP
       {refunds.map(r => (
         <div key={r.id} className="tt-bill-row tt-bill-approval">
           <div className="tt-bill-main">
-            <strong className="tt-bill-name">{formatMoney(Number(r.amount), currency)}</strong>
+            <strong className="tt-bill-name">{originalAmount(r)}</strong>
             <span className="tt-muted tt-bill-sub">
+              {r.refunded_at && <>{t("refunds.feePending")}{" · "}</>}
               {r.account_name
                 ? t("refunds.account", { name: r.account_name })
                 : r.table_label ? t("refunds.table", { label: r.table_label }) : t("refunds.counter")}
@@ -95,14 +100,14 @@ export default function RefundsDue({ refunds, currency, canRefund }: RefundsDueP
             </span>
           </div>
           <div className="tt-bill-actions-row">
-            {canRefund ? (
+            {(canRefund || r.refunded_at) ? (
               <button
                 type="button"
                 className="tt-btn tt-btn-primary tt-btn-sm"
                 disabled={busy === r.id}
                 onClick={() => void refund(r)}
               >
-                {t("refunds.refund")}
+                {t(r.refunded_at ? "refunds.retryFee" : "refunds.refund")}
               </button>
             ) : (
               <span className="tt-muted tt-bill-sub">{t("refunds.needsStripe")}</span>
