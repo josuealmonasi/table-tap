@@ -37,7 +37,7 @@ export async function attackStock({ admin, ok, bad }) {
     const first = await reserve(), pending = await order(first);
     await db.query("insert into coupon_redemptions(restaurant_id,coupon_id,order_id,code,amount) values($1,$2,$3,'RECOVERY',1)", [restaurant, coupon, pending]);
     await Promise.all([db, peer].map(c => c.query("select abandon_checkout($1,true)", [pending])));
-    assert.equal(await count(), 10);
+    assert.equal(await count(), 10, "stock count at line 40");
     assert.equal((await db.query("select uses_count from coupons where id=$1", [coupon])).rows[0].uses_count, 0);
     ok("concurrent expiry returns stock and coupon once");
 
@@ -57,7 +57,7 @@ export async function attackStock({ admin, ok, bad }) {
     await assert.rejects(release(second), /live order/);
     await db.query("update orders set status='cancelled' where id=$1", [placed]);
     await db.query("update orders set status='cancelled' where id=$1", [placed]);
-    assert.equal(await count(), 10);
+    assert.equal(await count(), 10, "stock count at line 60");
     assert.equal((await db.query("select stock from menu_items where id=$1", [untracked])).rows[0].stock, 30);
     ok("downgrade does not block return; newly tracked items are not credited");
 
@@ -65,7 +65,7 @@ export async function attackStock({ admin, ok, bad }) {
     await db.query("update menu_items set stock=null where id=$1", [item]);
     await db.query("update menu_items set stock=7 where id=$1", [item]);
     await release(third); await release(third);
-    assert.equal(await count(), 7);
+    assert.equal(await count(), 7, "stock count at line 68");
     ok("a tracking restart does not receive an old reservation");
 
     const fourth = await reserve([{ item_id: item, qty: 2 }]), held = await order(fourth);
@@ -88,7 +88,7 @@ export async function attackStock({ admin, ok, bad }) {
     await db.query("rollback");
     await db.query("select abandon_checkout($1,true)", [held]);
     assert.equal((await db.query("select uses_count from coupons where id=$1", [coupon])).rows[0].uses_count, 0);
-    assert.equal(await count(), 7);
+    assert.equal(await count(), 7, "stock count at line 91");
     ok("failed stock return rolls back deletion and can be retried");
 
     const orphan = await reserve([{ item_id: item, qty: 2 }]);
@@ -97,27 +97,28 @@ export async function attackStock({ admin, ok, bad }) {
     await checkStockReturns(admin, { ok: () => {}, bad: message => warnings.push(message) });
     assert.ok(warnings.some(message => message.includes(orphan)));
     await db.query("select recover_stock_reservations($1)", [restaurant]);
-    assert.equal(await count(), 7);
+    assert.equal(await count(), 7, "stock count at line 100");
     await assert.rejects(order(orphan), /Invalid stock reservation/);
     const live = await reserve([{ item_id: item, qty: 2 }]);
     await order(live);
     await db.query("update stock_reservations set created_at=now()-interval '2 hours' where id=$1", [live]);
     await db.query("select recover_stock_reservations($1)", [restaurant]);
-    assert.equal(await count(), 5);
+    assert.equal(await count(), 5, "stock count at line 106");
     ok("recovery returns old orphans, rejects late binding, preserves live orders");
 
-    // Old workers can finish during rollout. Their legacy quantities return
-    // inside the same guarded transaction; new untracked orders never use them.
+    // A legacy order with no proof it ever took stock returns none when it is
+    // cancelled (J7): reconstructed demand once credited portions nobody
+    // deducted. The cancellation itself still happens, once, under the lock.
     const legacy = (await db.query("insert into orders(restaurant_id,status) values($1,'received') returning id", [restaurant])).rows[0].id;
     const oldDemand = JSON.stringify([{ item_id: item, qty: 2 }]);
     const outcomes = await Promise.all([db, peer].map(c => c.query(
       "select cancel_order($1,$2,null,$3,false,null,null,null) as moved", [restaurant, legacy, oldDemand])));
     assert.equal(outcomes.filter(r => r.rows[0].moved).length, 1);
-    assert.equal(await count(), 7);
+    assert.equal(await count(), 5, "stock count at line 117");
     const managed = (await db.query("insert into orders(restaurant_id,status,stock_managed) values($1,'received',true) returning id", [restaurant])).rows[0].id;
     await db.query("select cancel_order($1,$2,null,$3,false,null,null,null)", [restaurant, managed, oldDemand]);
-    assert.equal(await count(), 7);
-    ok("legacy cancellation is atomic; new untracked orders cannot invent stock");
+    assert.equal(await count(), 5, "stock count at line 120");
+    ok("legacy cancellation is atomic, and no order without proof of a deduction invents stock");
 
     const stalled = await reserve([{ item_id: item, qty: 1 }]);
     await order(stalled);
