@@ -28,6 +28,7 @@ import { seedCosts } from "./mock-costs.mjs";
 import { seedOffline } from "./mock-offline.mjs";
 import { seedAllocations } from "./mock-allocations.mjs";
 import { seedTerminal } from "./mock-terminal.mjs";
+import { legacyTerminalTimes } from "./mock-terminal-times.mjs";
 import { finalizeMockCashShift } from "./mock-cash-shift.mjs";
 import { bulkInsert, randInt, sample } from "./menu-catalog.mjs";
 
@@ -582,19 +583,20 @@ export async function seedMock(pg) {
   // left the menu and could not be compared. With none seeded, no gate ever
   // rendered that card. The third matches the menu and is dated inside the
   // closed shift seeded below, after its count — the late arrival the shift
-  // record has to show. A fourth, by card on the restaurant's own terminal
-  // three days ago, arrived after that day's deposit was marked (seeded just
+  // record has to show. A fourth, by card in the terminal's legacy history,
+  // arrived after that day's deposit was marked (seeded just
   // below) — the late sale the deposit has to show. Each names the cashier who
   // took it, in the ledger and in the log — money nobody took, or a log that
   // disagrees with the ledger, is what `pnpm money` refuses. Arrived now, so
   // their `recorded_at` is now, later than the moment each happened.
   let lateCard = null;
+  const legacyTerminal = legacyTerminalTimes();
   for (const [minutesAgo, drift, method] of [[30 * 60, 2.5, "cash"], [54 * 60, null, "cash"], [45, 0, "cash"], [72 * 60, 0, "card"]]) {
     const lines = buildLines(products);
     const subtotal = round2(
       lines.reduce((sum, l) => sum + (l.price + l.extras.reduce((x, e) => x + e.price, 0)) * l.qty, 0),
     );
-    const at = new Date(Date.now() - minutesAgo * 60000).toISOString();
+    const at = method === "card" ? legacyTerminal.saleAt : new Date(Date.now() - minutesAgo * 60000).toISOString();
     const {
       rows: [sale],
     } = await pg.query(
@@ -617,9 +619,10 @@ export async function seedMock(pg) {
       [rid, `code=ORD-${sale.id.replace(/-/g, "").slice(0, 4).toUpperCase()} amount=${subtotal.toFixed(2)} method=${method}`, at],
     );
   }
-  // That card sale's day, marked deposited the evening after — before the
-  // sale arrived. Received is what the bank paid: what was expected when it
-  // was marked, plus the late sale net of the 3.5% terminal fee.
+  // An unsigned legacy mark, before manifests existed, with its late card
+  // sale. Pin both historical dates before that era: a rolling deposit date
+  // eventually crossed the cutoff and made a new seed claim modern evidence
+  // it never held. Modern examples below use the real signed writer.
   {
     const day = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(new Date(lateCard.at));
     const expected = 500;
@@ -628,7 +631,7 @@ export async function seedMock(pg) {
       `insert into terminal_deposits (restaurant_id, sales_day, currency, expected, received, recorded_by, created_at)
        values ($1, $2, 'MXN', $3, $4, 'demo-manager@tabletap.dev', $5)
        on conflict (restaurant_id, sales_day, currency) where currency is not null do nothing`,
-      [rid, day, expected, round2(expected + lateNet), new Date(Date.parse(lateCard.at) + 30 * 3600000).toISOString()],
+      [rid, day, expected, round2(expected + lateNet), legacyTerminal.depositAt],
     );
   }
 
