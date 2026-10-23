@@ -7,15 +7,21 @@ import type { PendingPhone } from "@/lib/table-member-requests";
 import { MEMBER_POLL_MS } from "@/lib/poll";
 import { rememberSitting } from "@/lib/table-binding";
 
+interface MembershipRead {
+  scope: string;
+  state: PhoneMembership | null;
+  pending: PendingPhone[];
+  error: boolean;
+  pendingError: boolean;
+}
+const emptyRead = (scope: string): MembershipRead => ({ scope, state: null, pending: [], error: false, pendingError: false });
+
 /** Anonymous phones poll: opening membership rows to realtime would expose credentials. */
 export function useTableMembership(restaurantId: string, tableId: string | null) {
-  const [state, setState] = useState<PhoneMembership | null>(null);
-  const [pending, setPending] = useState<PendingPhone[]>([]);
-  const [error, setError] = useState(false);
+  const scope = `${restaurantId}:${tableId ?? ""}`;
+  const [result, setResult] = useState(() => emptyRead(scope));
   const [revision, setRevision] = useState(0);
   const refresh = useCallback(() => setRevision(n => n + 1), []);
-
-  useEffect(() => { setState(null); setPending([]); setError(false); }, [restaurantId, tableId]);
 
   useEffect(() => {
     const targetTable = tableId;
@@ -28,18 +34,16 @@ export function useTableMembership(restaurantId: string, tableId: string | null)
       try {
         const next = await requestPhoneMembership(restaurantId, targetTable);
         if (!active) return;
-        setError(false);
-        setState(next);
-        if (next.status === "approved" && next.sessionId && tableId) {
-          rememberSitting(restaurantId, next.sessionId, tableId);
-          const requests = await fetch(`/api/table-membership?restaurantId=${restaurantId}&tableId=${tableId}`);
-          if (requests.ok) {
-            const data = await requests.json();
-            if (active) setPending(data.pending ?? []);
-          }
-        } else setPending([]);
+        const approved = next.status === "approved" && next.sessionId !== null;
+        if (approved && next.sessionId) rememberSitting(restaurantId, next.sessionId, targetTable);
+        setResult(previous => ({
+          scope, state: next, error: false, pendingError: approved && next.pending == null,
+          pending: approved ? next.pending ?? (
+            previous.scope === scope && previous.state?.sessionId === next.sessionId ? previous.pending : []
+          ) : [],
+        }));
       } catch {
-        if (active) setError(true);
+        if (active) setResult(previous => ({ ...(previous.scope === scope ? previous : emptyRead(scope)), error: true }));
       } finally { running = false; }
     };
     read();
@@ -51,7 +55,9 @@ export function useTableMembership(restaurantId: string, tableId: string | null)
       clearInterval(timer);
       document.removeEventListener("visibilitychange", visible);
     };
-  }, [restaurantId, tableId, revision]);
+  }, [restaurantId, tableId, scope, revision]);
 
-  return { state, pending, error, refresh };
+  // A changed table cannot render the old sitting while its first poll waits.
+  const current = result.scope === scope ? result : emptyRead(scope);
+  return { state: current.state, pending: current.pending, error: current.error, pendingError: current.pendingError, refresh };
 }

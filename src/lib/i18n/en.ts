@@ -1347,6 +1347,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     approve: "Let in",
     reject: "Decline",
     failed: "Could not check this phone. Try again in a moment.",
+    requestsFailed: "Could not check for other phones waiting to join. We’ll check again in a few seconds.",
   },
   apiErr: {
     comboNotCheaper: "The combo must cost less than buying the dishes separately ({regular}).",

@@ -101,6 +101,20 @@ at `MEMBER_POLL_MS` (five seconds); credentials are never opened to realtime
 readers. A rejection lasts for that credential and sitting; a decision cannot
 revoke a phone that is already approved or has ordered.
 
+Each diner poll is one serialized POST returning admission, the visit pass,
+and the approved sitting's public pending-phone projection. Pending, rejected
+and empty-table phones receive no other requests. Staff retain their scoped
+GET list. This halves an approved phone's steady admission traffic from 24 to
+12 requests per minute without changing the five-second interval or approval
+rules. Credential creation stays serialized across page calls and Web Locks;
+it is not placed under a generic cache's automatic mutation retries.
+
+If admission succeeds but listing pending phones fails, the POST still keeps
+the credential and admission and returns `pending: null`. The client retains
+the last good list only for that same restaurant, table and sitting, shows a
+specific retry warning, and reconciles on the next poll. A changed table or
+restaurant hides the old view immediately, and late replies cannot restore it.
+
 Staff-opened bills keep their existing collection rules. A diner joining one
 is pending too. Approval needs no plan entitlement, so a downgrade cannot
 prevent the floor from helping someone pay. Table orders and split seats use

@@ -1341,6 +1341,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     approve: "Dejar entrar",
     reject: "No dejar entrar",
     failed: "No se pudo revisar este teléfono. Intenta de nuevo en un momento.",
+    requestsFailed: "No pudimos revisar si hay otros teléfonos esperando entrar. Lo intentaremos de nuevo en unos segundos.",
   },
   apiErr: {
     comboNotCheaper: "El combo debe costar menos que comprar los platillos por separado ({regular}).",

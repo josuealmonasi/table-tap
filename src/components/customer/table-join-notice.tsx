@@ -10,10 +10,11 @@ interface TableJoinNoticeProps {
   state: PhoneMembership | null;
   pending: PendingPhone[];
   error: boolean;
+  pendingError?: boolean;
   refresh: () => void;
 }
 
-export default function TableJoinNotice({ restaurantId, state, pending, error, refresh }: TableJoinNoticeProps) {
+export default function TableJoinNotice({ restaurantId, state, pending, error, pendingError = false, refresh }: TableJoinNoticeProps) {
   const t = useT();
   const waiting = !state || state.status === "pending" || state.status === "rejected";
   return <>
@@ -28,6 +29,7 @@ export default function TableJoinNotice({ restaurantId, state, pending, error, r
       </div>
     )}
     {error && <p role="status">{t("join.failed")}</p>}
+    {!error && pendingError && <p role="status">{t("join.requestsFailed")}</p>}
     {pending.map(phone => <PhoneRequest key={phone.id} restaurantId={restaurantId} phone={phone} onDecided={refresh} />)}
   </>;
 }

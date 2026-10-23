@@ -5,6 +5,17 @@ export async function checkTableJoin(s, who) {
   const billPath = `/api/bill?restaurantId=${body.restaurantId}&tableId=${table.id}`;
   const decide = (phone, approve, cookie) => send("/api/table-membership", "PATCH", { ...body, memberId: phone.body.diner, approve }, cookie);
   if (second.body.status !== "pending" || third.body.status !== "pending") fail("A new phone was not pending");
+  if (second.body.pending?.length || third.body.pending?.length) fail("A pending phone received other admission requests");
+  const joined = await send("/api/table-membership", "POST", body, first.cookie);
+  if (joined.body.status !== "approved" || !Array.isArray(joined.body.pending)
+    || joined.body.pending.length !== 2 || ![second.body.diner, third.body.diner].every(id => joined.body.pending.some(p => p.id === id))) {
+    fail("The admitted phone did not receive its sitting's requests in one reply");
+  }
+  for (const phone of joined.body.pending) {
+    if (Object.keys(phone).sort().join(",") !== "createdAt,id,tableId,tableLabel" || phone.tableId !== table.id) {
+      fail("The admission reply exposed fields beyond its public pending-phone projection");
+    }
+  }
   for (const cookie of ["", second.cookie, third.cookie, `tt-table-member=${approved.diner}`]) {
     const bill = await send(billPath, "GET", null, cookie);
     if (bill.status !== 403 || bill.body.orders) fail("An unapproved phone read the bill");
@@ -40,6 +51,8 @@ export async function checkTableJoin(s, who) {
   // A rejected phone cannot change its own row and ask again under the same credential.
   const { data: before } = await admin.from("table_session_members").select("status").eq("id", third.body.diner).single();
   if (before.status !== "rejected") fail("Rejection was not recorded");
+  const leftWaiting = await send("/api/table-membership", "POST", body);
+  if (leftWaiting.body.status !== "pending") fail("The previous-party pending control was not created");
   await admin.from("table_sessions").update({ closed_at: new Date().toISOString(), close_reason: "expired" }).eq("id", approved.sessionId);
   const fresh = await send("/api/table-membership", "POST", body);
   const next = await s.open(fresh.cookie);
@@ -47,6 +60,12 @@ export async function checkTableJoin(s, who) {
   if ((await send(billPath, "GET", null, first.cookie)).status !== 403) fail("Earlier party read the new bill");
   const oldJoins = await send("/api/table-membership", "POST", body, first.cookie);
   if (oldJoins.body.status !== "pending") fail("Earlier party inherited admission");
+  if (!Array.isArray(oldJoins.body.pending) || oldJoins.body.pending.length) fail("The old party received the new sitting's requests");
+  const currentParty = await send("/api/table-membership", "POST", body, fresh.cookie);
+  if (currentParty.body.status !== "approved" || !Array.isArray(currentParty.body.pending)
+    || currentParty.body.pending.length !== 1 || currentParty.body.pending[0].id !== oldJoins.body.diner) {
+    fail("The new party's admission list included a previous sitting or missed its current request");
+  }
   const own = await send(`${billPath}&sessionId=${approved.sessionId}`, "GET", null, first.cookie);
   if (own.status !== 200 || !own.body.orders.some(o => o.id === orderId) || own.body.orders.some(o => o.id === nextOrder)) fail("Old own food was hidden or mixed with the next party");
   const { data: restaurant, error: restaurantError } = await admin.from("restaurants")
