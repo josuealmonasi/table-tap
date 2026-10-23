@@ -22,7 +22,9 @@ import { attackCashShift } from "./attack-cash-shift.mjs";
 //
 // Nothing it creates is left behind.
 // ============================================================================
+import { spawnSync } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
+import { trackCollectionLogs, clearCollectionLogs } from "./attack-collection-logs.mjs";
 import { attackLoyalty } from "./attack-loyalty.mjs";
 import { attackAccounts } from "./attack-accounts.mjs";
 import { attackStock } from "./attack-stock.mjs";
@@ -129,6 +131,7 @@ const who = {
 // time — and an attack that alters a table the floor is using is an attack on
 // the restaurant rather than on the routes.
 const MARK = "attack-money";
+const collectionLogs = new Set();
 
 /**
  * Everything this gate plants, found by its marker rather than remembered.
@@ -173,6 +176,7 @@ async function sweep() {
   // account is never the demo's own, so it comes off here, whatever happened.
   await admin.from("restaurants").update({ stripe_account_id: null, stripe_charges_enabled: false })
     .eq("stripe_account_id", "acct_attack");
+  await clearCollectionLogs(admin, home.id, collectionLogs);
 }
 await sweep();
 
@@ -719,8 +723,10 @@ try {
       : bad(`an unreviewed table collection answered ${blind.status} and left ${blindRows} payment(s)`);
 
     // Each waiter's own tap, as the dialog sends it: the MX$200 they saw.
-    const shots = await Promise.all([...Array(5)].map(() =>
-      post("/api/table-payment", { tableId: spare.id, settlement: "cash", expected: 200, currency: "MXN", ref: crypto.randomUUID() }, who.waiter)));
+    const shots = await trackCollectionLogs(admin,
+      { restaurantId: home.id, actor: "demo-waiter@tabletap.dev", amount: 200 }, collectionLogs,
+      () => Promise.all([...Array(5)].map(() =>
+        post("/api/table-payment", { tableId: spare.id, settlement: "cash", expected: 200, currency: "MXN", ref: crypto.randomUUID() }, who.waiter))));
 
     const { data: rows } = await admin.from("payments").select("amount").eq("session_id", sat.id);
     const got = Number((rows ?? []).reduce((sum, p) => sum + Number(p.amount), 0).toFixed(2));
@@ -741,6 +747,7 @@ try {
     await admin.from("user_logs").delete()
       .eq("restaurant_id", home.id).eq("entity", "bill")
       .like("detail", `table=${MARK}-settle%`);
+    await clearCollectionLogs(admin, home.id, collectionLogs);
   }
 
   // ── A card payment that lands on a bill already paid in cash ────────────
@@ -777,7 +784,9 @@ try {
 
     // The money taken twice: cash at the table, then the card payment arrives.
     const { data: twice } = await order(150, MARK);
-    const cash = await post("/api/table-payment", { tableId: spare.id, settlement: "cash", expected: 150, currency: "MXN", ref: crypto.randomUUID() }, who.waiter);
+    const cash = await trackCollectionLogs(admin,
+      { restaurantId: home.id, actor: "demo-waiter@tabletap.dev", amount: 150 }, collectionLogs,
+      () => post("/api/table-payment", { tableId: spare.id, settlement: "cash", expected: 150, currency: "MXN", ref: crypto.randomUUID() }, who.waiter));
     await card([twice.id], 150, intentFor("twice"));
     await card([twice.id], 150, intentFor("twice")); // Stripe sends it again
     const [{ data: cardRows }, { data: due }, { count: told }] = await Promise.all([
@@ -801,6 +810,7 @@ try {
     await admin.from("user_logs").delete()
       .eq("restaurant_id", home.id).eq("entity", "bill")
       .like("detail", `table=${MARK}-twice%`);
+    await clearCollectionLogs(admin, home.id, collectionLogs);
   }
 
   // ── A bill the waiter opened is not payable online ──────────────────────
@@ -858,16 +868,26 @@ try {
   console.log("\n  The month's fee ceiling\n");
   await attackFeeCeiling({ admin, home, ok, bad });
 } finally {
-  await phoneMembers.cleanup();
-  await sweep();
-  if (raced) {
-    await admin.from("menu_items").update({
-      stock: raced.stock, available: raced.available, stock_auto_off: false,
-    }).eq("id", raced.id);
-    await admin.from("notifications")
-      .delete().eq("restaurant_id", home.id).eq("kind", "out_of_stock");
+  try { await phoneMembers.cleanup(); }
+  finally {
+    try { await sweep(); }
+    finally {
+      if (raced) {
+        await admin.from("menu_items").update({
+          stock: raced.stock, available: raced.available, stock_auto_off: false,
+        }).eq("id", raced.id);
+        await admin.from("notifications")
+          .delete().eq("restaurant_id", home.id).eq("kind", "out_of_stock");
+      }
+    }
   }
 }
+
+// The effect checks must leave the same accounting they started with. A
+// cleanup that deleted a test receipt but missed its activity once passed.
+const reconciliation = spawnSync(process.execPath, ["scripts/money-check.mjs"], { stdio: "inherit", timeout: 120000 });
+if (reconciliation.error || reconciliation.status !== 0) bad("the ledger does not reconcile after attack cleanup");
+else ok("the ledger still reconciles after attack cleanup");
 
 console.log(
   failed === 0

@@ -813,6 +813,12 @@ The gate, all of which must pass before anything ships:
 | `pnpm dialogs` | every dialog, found by opening it rather than by listing it — with every write held back in the browser, and the demo data compared before and after |
 | `pnpm money` | the ledger and the orders tell the same story |
 
+Whole-table attack controls capture the exact paid-activity IDs they create,
+scoped by restaurant, collector and amount. Cleanup removes only those IDs
+after removing the test payments, and refuses ambiguous or failed reads.
+`pnpm attack` also runs structural money reconciliation after teardown, so an
+attack cannot pass while leaving a receipt or its activity behind.
+
 The layout and dialog sweeps use one browser with isolated contexts per complete
 role/path/viewport or diner-flow visit. `GATE_BROWSER_CONCURRENCY` defaults to 2
 and accepts integers 1–4; 1 runs the same visits serially. Actions inside each
@@ -1264,7 +1270,8 @@ use SWR, scoped to the verified user, auth session, restaurant and role. They
 poll every 30 seconds while visible and online, refresh on return/reconnect,
 and retain their last successful answer on transient failures, with retry
 backoff. Failed badge/notification database queries return 503 rather than
-publishing empty or partial counts. Badge-changing actions invalidate the shared read immediately.
+publishing empty or partial counts. Badge-changing actions invalidate the shared
+read immediately.
 Notification read markers update optimistically and reconcile on the next
 poll; their POSTs are not retried automatically. A forbidden badge read clears
 its counts and stops polling. Sign-out or a new identity retires the cache,

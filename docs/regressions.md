@@ -4340,3 +4340,20 @@ Partial balances become actionable again; fully paid rows leave the list.
 `collection-progress.react-component.spec.tsx` reproduces both bugs and checks
 request retention, server-confirmed removal, both disabled row actions and the
 remaining balance after a partial collection.
+
+## Attack fixtures must leave the drawer consistent
+
+The attack suite deleted its MX$200 and MX$150 full-collection test payments,
+but its cleanup still searched activity details for the table label. The newer
+reviewed collection writes amount, tip, currency and method without that label,
+so two test activity rows remained and the next money check found a false
+MX$350 surplus in the waiter's corte. The gate's earlier money check had run
+before those attacks and could not catch their teardown.
+
+`attack-collection-logs.mjs` captures only the newly created activity IDs around
+those two operations, scoped to the fixture restaurant, collector and exact
+detail. It remembers a landed write even when its response is lost, refuses
+ambiguous/failed reads, and checks exact-ID deletion. `attack-logs.react-component.spec.tsx`
+checks those boundaries. The attack gate now reconciles money after cleanup,
+so leftover test records fail that same run. Production accounting and the
+application's collection writer are unchanged.
