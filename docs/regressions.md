@@ -3662,6 +3662,15 @@ unrelated process rows and preserves the peak after a lower later reading.
 Actual time and memory at one, two and three workers remain Claude's live proof.
 ## S19 — the ledger, the signed drawer and the bank snapshot must agree
 
+The historical demo shift is finalized after its receipts are seeded. A
+random cash receipt could land in its ten-minute window while the fixture
+still claimed only the opening 200 was expected. `mock-cash-shift.mjs` now
+includes those receipts and excludes offline receipts recorded after the
+count, preserving the deliberate 20 shortage. The unchanged `pnpm money`
+rebuilds that expectation independently. A transactional development probe
+also forced an 83.40 timely receipt and a 45 late receipt: the old expectation
+failed, the finalized shift passed, and all probe changes were rolled back.
+
 The money gate previously compared payments with orders but never checked
 `cash_shifts.expected_cash` or `terminal_deposits.expected`. S9 and S10 could
 regress while the ledger still passed. `money-drawer.mjs` now reads every
