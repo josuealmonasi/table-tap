@@ -95,7 +95,7 @@ export default function WasteRecorder({ choices, today, canSeeCost, currency, ti
     <>
       <section className="tt-section">
         <form className="tt-waste-form" onSubmit={e => void save(e)}>
-          {pending && <PendingAttempt message={t("pending.waste")} />}
+          {send.unconfirmed() && <PendingAttempt message={t("pending.waste")} busy={busy} onDiscard={send.discard} />}
           <label className="tt-field">
             <span className="tt-mod-label">{t("waste.what")}</span>
             <select disabled={busy || pending} className="tt-input" value={picked} onChange={e => setPicked(e.target.value)} required>

@@ -1,3 +1,4 @@
+import { orderRequestScope } from "@/lib/order-request";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -57,14 +58,18 @@ export async function POST(req: NextRequest) {
     if (!restaurantId || !items?.length) {
       return await apiError("apiErr.orderData", 400);
     }
+    // A UUID before a scope is built from it: «T:H» as a table made an old
+    // scope read as a saved order's new one (cross-review of batch 5).
+    if (tableId != null && !uuidOf(tableId)) return await apiError("apiErr.orderData", 400);
 
     const ref = uuidOf(body.ref);
     if (body.ref !== undefined && !ref) return await apiError("apiErr.invalidRequest", 400);
     const hash = memberHash(req);
-    const intent = payLater && ref ? { restaurantId, ref, scope: `checkout:${tableId ?? ""}:${hash ?? ""}` } : null;
+    const surface = `checkout:${tableId ?? ""}:${hash ?? ""}`;
+    const intent = payLater && ref ? { restaurantId, ref, scope: orderRequestScope(surface, body), legacyScope: surface } : null;
     if (intent) {
       const previous = await readOrderIntent(intent);
-      if (previous?.conflict) return await apiError("apiErr.invalidRequest", 409);
+      if (previous?.conflict) return await apiError("apiErr.retryConflict", 409);
       if (previous) return NextResponse.json({ ...previous, deferred: true });
     }
     const supabase = createAdminClient();
@@ -241,7 +246,7 @@ export async function POST(req: NextRequest) {
         threshold: Number(restaurant.low_stock_threshold) || 0,
         coupon: coupon ? { ...coupon, eligible_subtotal: base.subtotal } : null,
       });
-      if (result.conflict) return await apiError("apiErr.invalidRequest", 409);
+      if (result.conflict) return await apiError("apiErr.retryConflict", 409);
       if (result.couponReason) return NextResponse.json({ couponReason: result.couponReason }, { status: 409 });
       if (result.short) return await refuseShortStock(result.short);
       held.handOver();

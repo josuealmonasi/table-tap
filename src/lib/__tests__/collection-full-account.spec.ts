@@ -41,3 +41,15 @@ it("S21 still closes a fully collected table after a failed close without record
   expect(mocks.record).not.toHaveBeenCalled();
   expect(mocks.close).toHaveBeenCalledWith(expect.anything(),"t","cash","USD");
 });
+
+it("L1: a table collected without the balance its screen showed records nothing and asks for a refresh", async () => {
+  // A tab from before the reviewed balance sends { tableId, settlement }. It
+  // used to record whatever the table owed on arrival: MX$150 for MX$100 seen.
+  const result = await table.POST(request({ tableId: "t", settlement: "cash" }));
+  expect(result.status).toBe(409);
+  expect(await result.json()).toMatchObject({ error: "apiErr.refreshToCollect" });
+  expect(mocks.record).not.toHaveBeenCalled();
+  expect(mocks.rpc).not.toHaveBeenCalled();
+  expect(mocks.close).not.toHaveBeenCalled();
+  expect(mocks.log).not.toHaveBeenCalled();
+});

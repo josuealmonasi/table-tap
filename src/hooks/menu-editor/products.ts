@@ -5,7 +5,7 @@ import { writeError } from "@/lib/write-result";
 
 /** Products: add, copy, edit, delete, reorder within their section. */
 export function productActions(ctx: EditorContext) {
-  const { supabase, restaurantId, sections, products, links, reload } = ctx;
+  const { supabase, restaurantId, reload } = ctx;
   const { reportError, run, insertReturningId, move } = ctx.w;
   // ── Products ──
   async function addProduct(menuId: string, categoryId: string | null, input: ProductInput, addonIds: string[] = []): Promise<string | undefined> {
@@ -39,6 +39,10 @@ export function productActions(ctx: EditorContext) {
    */
   async function duplicateProduct(id: string): Promise<string | undefined> {
     if (!(await ctx.ready())) return undefined;
+    // What the read just returned, not what was on screen when the button was
+    // pressed: a price changed to MX$150 in that read was copied at MX$100,
+    // with the old extras (audit L, finding 7).
+    const { products, links } = ctx.latest.current;
     const source = products.find(p => p.id === id);
     if (!source) return undefined;
 
@@ -112,21 +116,17 @@ export function productActions(ctx: EditorContext) {
 
   /** Moves a product up/down among its siblings (same menu + same section, including "uncategorized"). */
   async function moveProduct(id: string, direction: "up" | "down"): Promise<void> {
-    const product = products.find(p => p.id === id);
-    if (!product) return;
-    const sectionIds = new Set(sections.map(s => s.id));
-    const inSameGroup = (p: MenuItem) =>
-      p.menu_id === product.menu_id &&
-      (product.category_id && sectionIds.has(product.category_id)
-        ? p.category_id === product.category_id
-        : !p.category_id || !sectionIds.has(p.category_id));
-    await move(
-      "write.reorderProducts",
-      "menu_items",
-      products.filter(inSameGroup),
-      id,
-      direction,
-    );
+    await move("write.reorderProducts", "menu_items", menu => {
+      const product = menu.products.find(p => p.id === id);
+      if (!product) return [];
+      const sectionIds = new Set(menu.sections.map(s => s.id));
+      const inSameGroup = (p: MenuItem) =>
+        p.menu_id === product.menu_id &&
+        (product.category_id && sectionIds.has(product.category_id)
+          ? p.category_id === product.category_id
+          : !p.category_id || !sectionIds.has(p.category_id));
+      return menu.products.filter(inSameGroup);
+    }, id, direction);
   }
 
   return { addProduct, duplicateProduct, updateProduct, deleteProduct, moveProduct };

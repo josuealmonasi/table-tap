@@ -87,12 +87,15 @@ it("S20b POS names the frozen account and amount before any cash or card choice"
     till = usePosCharge({ restaurant, collector: "C", collectorContext: "signed", cart: state.cart, details, pricing, canEmailReceipt: false,
       offline: { hold: vi.fn(), acknowledge: vi.fn(), discard: vi.fn(), setOnline: vi.fn() } } as unknown as Parameters<typeof usePosCharge>[0]);
     return <PosSalePanel lines={state.cart.lines} items={[]} currency="MXN" total={pricing.total} accountAmount={50} locked={till.busy} canChargeAccount
-      accountRetry={till.accountRetry} onRetryAccount={() => till.charge("account")} onChangeQty={state.cart.changeQty} onEdit={vi.fn()} onCharge={till.setPending} onChargeAccount={a => till.charge("account", a)} />;
+      accountRetry={till.accountRetry} onRetryAccount={() => till.charge("account")} onDiscardAccount={till.discardAccount} onChangeQty={state.cart.changeQty} onEdit={vi.fn()} onCharge={till.setPending} onChargeAccount={a => till.charge("account", a)} />;
   }
   state.ui.render(() => <Subject />); await till.charge("account", { id: "a", name: "Ana's tab" } as AccountListItem); state.ui.render();
   expect(state.ui.text()).toContain("Ana's tab"); expect(state.ui.text()).toContain("MX$50"); expect(state.ui.text()).toContain("Soup");
   expect(state.ui.text()).not.toContain("pos.chargeCash"); expect(state.ui.text()).not.toContain("pos.chargeCard"); expect(state.ui.text()).not.toContain("Pick account");
   expect(state.ui.all("input")).toHaveLength(0); expect(state.ui.all("select")).toHaveLength(0);
+  // A refused retry keeps the sale: the first request may still be charged.
   state.fetch.mockResolvedValueOnce(Response.json({ error: "refused" }, { status: 409 })); await click("pending.sendAgain");
-  expect(bodies()[1]).toEqual(bodies()[0]); expect(till.accountRetry).toBeNull(); expect(state.ui.text()).toContain("pos.chargeCash");
+  expect(bodies()[1]).toEqual(bodies()[0]); expect(state.ui.text()).toContain("Ana's tab");
+  await click("pending.discard"); await click("pending.discardConfirm");
+  expect(state.ui.text()).toContain("pos.chargeCash");
 });

@@ -47,11 +47,20 @@ const waiter = await import("@/app/api/table-order/route");
 beforeEach(() => { state.orders = []; state.stock = 10; state.reservations = 0; });
 it.each([
   ["checkout", checkout.POST, { restaurantId: "r", tableId: null, payLater: true, items: [dish], ref }],
-  ["table-order", waiter.POST, { tableId: "table", items: [dish], ref }],
+  ["table-order", waiter.POST, { tableId: "00000000-0000-4000-8000-0000000000aa", items: [dish], ref }],
 ] as const)("K4 %s reuses one order before reserving a second portion", async (path, post, body) => {
   const request = () => new NextRequest(`https://test/api/${path}`, { method: "POST", body: JSON.stringify(body) });
   const first = await post(request()); expect(first.status).toBe(200);
   const second = await post(request()); expect(second.status).toBe(200);
   expect((await second.json()).orderId).toBe((await first.json()).orderId);
   expect(state.orders).toHaveLength(1); expect(state.stock).toBe(9); expect(state.reservations).toBe(1);
+});
+
+it("batch 5 cross-review 3: a table id that is not a UUID is refused before any scope is built", async () => {
+  // «T:H» as the table made the request's old scope equal a saved order's
+  // new one, and the MX$100 order answered a MX$200 request as its replay.
+  const forged = "00000000-0000-4000-8000-0000000000aa:" + "a".repeat(64);
+  const response = await waiter.POST(new NextRequest("https://test/api/table-order", { method: "POST",
+    body: JSON.stringify({ tableId: forged, items: [{ ...dish, qty: 2 }], ref }) }));
+  expect(response.status).toBe(400);
 });

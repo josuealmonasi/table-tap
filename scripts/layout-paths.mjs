@@ -92,6 +92,12 @@ export const PUBLIC = [
   "/rewards",
 ];
 
+/** What the till's buttons say, in the Spanish the team visits run in. */
+export const TILL = {
+  add: { label: "Agregar al carrito" },
+  cash: { label: "Cobrar en efectivo" },
+};
+
 /**
  * Dialogs, which is where the unseen lives.
  *
@@ -115,6 +121,16 @@ export const DIALOGS = {
   ],
   "/dashboard/tables": [
     { name: "add table", text: "Agregar mesa" },
+  ],
+  // The till's sheets. «Cobrar en efectivo» does nothing on an empty sale, so
+  // the sweep that clicks what is enabled never reached the charge. `prepare`
+  // and `open` name steps in layout-visits.mjs (cross-review of batch 5);
+  // `shows` is the sheet itself, so a dish sheet never passes for the charge;
+  // `required` because the demo always has dishes. Both close with Escape,
+  // which the visit requires to work.
+  "/dashboard/pos": [
+    { name: "the till's charge", prepare: "dishInSale", text: TILL.cash.label, shows: ".tt-pos-ask", required: true },
+    { name: "a dish on the till", open: "dishSheet", shows: ".tt-detail-overlay > [role=dialog]:not(.tt-pos-ask)", required: true },
   ],
   "/dashboard/promotions": [
     { name: "new combo", text: "Nuevo combo" },
@@ -151,20 +167,25 @@ export const DINER = [
   // It happened — a dish row is a div with role="button", not a <button>, so the
   // selector found nothing and nobody noticed.
   { name: "menu", expect: { es: "Llamar al mesero", en: "Call waiter" }, steps: [] },
+  // `escape` is how many dialogs Escape must leave open: only the topmost one
+  // answers it, so the coupon closes and the cart under it stays (S24).
   {
     name: "dish detail",
     expect: { es: "Agregar al carrito", en: "Add to cart" },
     steps: [{ click: { es: "[aria-label^='Abrir ']", en: "[aria-label^='Open ']" } }],
+    escape: 0,
   },
   {
     name: "cart",
     expect: { es: "Total", en: "Total" },
     steps: [{ addToCart: true }, { click: ".tt-fab" }, { bottom: true }],
+    escape: 0,
   },
   {
     name: "coupon",
     expect: { es: "Aplicar", en: "Apply" },
     steps: [{ addToCart: true }, { click: ".tt-fab" }, { text: { es: "cupón", en: "coupon" } }],
+    escape: 1,
   },
   // The order tracker, which nothing measured until it was found scrolling a
   // 180px QR code to reach the way out. `at` starts the flow somewhere other

@@ -7,8 +7,6 @@ import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
-import { tableOutstanding } from "@/lib/table-outstanding";
-import { shareOut } from "@/lib/table-balance";
 import { settleReviewedTable } from "@/lib/settle-reviewed-table";
 
 export const runtime = "nodejs";
@@ -17,7 +15,8 @@ export const runtime = "nodejs";
 type Settlement = "cash" | "card";
 
 // POST /api/table-payment
-// Body: { tableId, settlement }
+// Body: { tableId, settlement, expected, currency, ref } for a table, or
+// { orderId, settlement, currency } for a counter order.
 //
 // The waiter settles a table in person: cash, or a card on their own terminal.
 //
@@ -59,17 +58,20 @@ async function collect(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.invalidRequest", 400);
   }
 
+  // A table is collected only against the balance its screen showed. Without
+  // that figure (a tab opened before the reviewed balance shipped) this used
+  // to record whatever the table owed when the request landed: a waiter
+  // holding MX$100 while another added MX$50 cleared a MX$150 bill, and MX$50
+  // of recorded cash never arrived (audit L, finding 1). Refusing records
+  // nothing and says how to collect; the refreshed screen sends the figure.
+  if (tableId && body.expected === undefined) return await apiError("apiErr.refreshToCollect", 409);
+  if (tableId) return settleReviewedTable(actor, tableId, body, settlement!);
+
+  // From here on it is a counter order, collected whole: nothing can be added
+  // to it between the screen and this request, so its total is what was seen.
   const db = createAdminClient();
-  if (tableId && body.expected !== undefined) return settleReviewedTable(actor, tableId, body, settlement!);
 
-  // What this table has already handed over in parts, read before anything is
-  // marked paid. A bill the waiter collected MX$100 of ten minutes ago is
-  // MX$100 lighter than the orders on it say, and recording those orders at
-  // their full totals would put money in the day's takings that arrived once
-  // and was counted twice.
-  const already = tableId ? await tableOutstanding(actor.restaurantId, tableId) : null;
-
-  // Scoped by the actor's restaurant, so a table id from elsewhere matches
+  // Scoped by the actor's restaurant, so an order id from elsewhere matches
   // nothing. Only what is genuinely outstanding is read: an order already
   // paid must not be quietly rewritten.
   const scoped = db
@@ -80,7 +82,7 @@ async function collect(req: NextRequest): Promise<NextResponse> {
   // A general-QR order is collected on its own, and only if it has no table:
   // without that, this id could settle one loose order from a table and leave
   // the bill half done with nobody seeing it.
-  const base = (tableId ? scoped.eq("table_id", tableId) : scoped.eq("id", orderId!).is("table_id", null))
+  const base = scoped.eq("id", orderId!).is("table_id", null)
     .eq("paid", false)
     .is("account_id", null)
     .eq("written_off", false)
@@ -91,21 +93,10 @@ async function collect(req: NextRequest): Promise<NextResponse> {
   if (error) return await apiError("apiErr.orderData", 500);
   if (!updated?.length) return await apiError("apiErr.nothingToSettle", 409);
 
-  // Nothing collected in parts, which is the ordinary case: each order is
-  // recorded for what it came to. Otherwise only the remainder is, against the
-  // sitting — `owed` is what the table still owes for its food, and every
-  // centavo before it is already in the ledger under its own collection.
-  //
-  // Across the sittings it pays for, oldest first. A table can owe on more
-  // than one — an old sitting expires with something still on it and the next
-  // party opens another — and recording the lot against one leaves that
-  // sitting holding money it did not owe and the other marked paid with
-  // nothing behind it.
-  const partly = (already?.collected ?? 0) > 0;
-  const collectedNow = partly ? already!.owed : total(updated);
-  const sittings = partly
-    ? shareOut(collectedNow, already!.sittings).map(s => ({ session_id: s.id, amount: s.amount }))
-    : null;
+  // A counter order is never collected in parts, so it is recorded for what
+  // it came to. Part payments and sittings belong to tables, which went
+  // through the reviewed path above.
+  const collectedNow = total(updated);
 
   // The orders and the ledger in one write (`settle_orders`): both, or
   // neither. They were two, and a failed second write left a bill marked paid
@@ -115,7 +106,7 @@ async function collect(req: NextRequest): Promise<NextResponse> {
     p_orders: updated.map(o => o.id),
     p_method: settlement,
     p_actor: actor.email,
-    p_sittings: sittings,
+    p_sittings: null,
   });
   if (settleError?.message === "not_owed") return await apiError("apiErr.billChanged", 409);
   if (settleError) {
@@ -137,18 +128,8 @@ async function collect(req: NextRequest): Promise<NextResponse> {
     }),
   });
 
-  // Nothing owed on the sitting means the table is clear, and whoever was
-  // bound to it is free to sit somewhere else.
+  // Nothing owed on the sitting means whoever was bound to it is free to go.
   await closeSessionsFor(updated ?? [], "settled");
-
-  // The table is settled, so any open request to settle it is answered.
-  await db
-    .from("service_requests")
-    .update({ status: "done" })
-    .eq("restaurant_id", actor.restaurantId)
-    .eq("table_id", tableId)
-    .eq("kind", "pay")
-    .eq("status", "open");
 
   return NextResponse.json({ ok: true, orders: updated.length });
 }

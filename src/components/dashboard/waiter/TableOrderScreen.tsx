@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { useRetryIntent, refusalSettles } from "@/hooks/useRetryIntent";
+import { useRetryIntent } from "@/hooks/useRetryIntent";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
 import { shortMessage } from "@/lib/stock-message";
@@ -130,7 +130,7 @@ export default function TableOrderScreen({
         body: attempt.body({ tableId, items: lines, note: note.trim() || undefined }),
       });
       const data = await res.json();
-      if ((res.ok && data.orderId) || (!res.ok && refusalSettles(res.status))) attempt.clear();
+      if ((res.ok && data.orderId) || (!res.ok && attempt.settles(res.status))) attempt.clear();
       if (!res.ok) {
         if (data.code === "outOfStock") {
           // With the numbers in it. The refusal has always known how many are
@@ -152,6 +152,7 @@ export default function TableOrderScreen({
       toast(t("done.networkError"), "error");
     } finally {
       inFlight.current = false;
+      attempt.ended();
       setBusy(false);
     }
   }
@@ -196,7 +197,8 @@ export default function TableOrderScreen({
               total={pending ? reviewedTotal.current : pricing.total}
               sending={sending}
               busy={busy}
-              pending={pending}
+              pending={attempt.unconfirmed()}
+              onDiscard={() => { if (!inFlight.current) attempt.clear(); }}
               closedNow={closedNow}
               onChangeQty={(id, qty) => { if (!sending) cart.changeQty(id, qty); }}
               onEdit={line => { if (!sending) setEditing(line); }}
@@ -206,7 +208,7 @@ export default function TableOrderScreen({
         </div>
 
         {openItem && (
-          <DetailOverlay onClose={() => setOpenItem(null)}>
+          <DetailOverlay label={openItem.name} onClose={() => setOpenItem(null)}>
             <DietaryTagsProvider tags={dietaryTags}>
               <ItemDetailScreen
                 item={openItem}
@@ -223,7 +225,7 @@ export default function TableOrderScreen({
         )}
 
         {editing && edited && (
-          <DetailOverlay onClose={() => setEditing(null)}>
+          <DetailOverlay label={edited.name} onClose={() => setEditing(null)}>
             <DietaryTagsProvider tags={dietaryTags}>
               <ItemDetailScreen
                 item={edited}
@@ -241,7 +243,7 @@ export default function TableOrderScreen({
         )}
 
         {openCombo && (
-          <DetailOverlay onClose={() => setOpenCombo(null)}>
+          <DetailOverlay label={openCombo.name} onClose={() => setOpenCombo(null)}>
             <DietaryTagsProvider tags={dietaryTags}>
               <ComboDetailScreen
                 combo={openCombo}

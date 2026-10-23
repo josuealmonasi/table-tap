@@ -11,6 +11,7 @@ import RateDishesSheet from "./RateDishesSheet";
 import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
 import TrackerBody from "./TrackerBody";
+import DetailOverlay from "./DetailOverlay";
 import TrackerSkeleton from "./TrackerSkeleton";
 import { TRACKER_POLL_MS } from "@/lib/poll";
 
@@ -166,11 +167,9 @@ export default function TrackerOverlay({
   return (
     <>
       {rateable.length === 0 && (
-        <div className="tt-detail-overlay" onClick={onClose}>
-          <div className="tt-detail-panel" onClick={e => e.stopPropagation()}>
-            {content}
-          </div>
-        </div>
+        <DetailOverlay label={t("tracker.title")} onClose={onClose}>
+          {content}
+        </DetailOverlay>
       )}
       {rating}
     </>

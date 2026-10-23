@@ -33,16 +33,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (total === null) return await apiError("apiErr.purchaseTotal", 400);
 
   const db = createAdminClient();
-  const { data: id, error } = await db.rpc(ref ? "record_purchase_once" : "record_purchase", {
+  const { data: id, error } = await db.rpc(ref ? "record_purchase_once_v2" : "record_purchase", {
     ...(ref ? { p_ref: ref } : {}),
     p_restaurant: actor.restaurantId, p_ingredient: ingredientId, p_packs: packs, p_total: total, p_actor: actor.email,
   });
+  if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
   if (error) return await apiError("apiErr.generic", 500);
   if (!id) return await apiError("apiErr.notFound", 404);
-  const { data: ingredient } = await db.from("ingredients").select("name").eq("id", ingredientId).maybeSingle();
-  await logEvent({
-    restaurantId: actor.restaurantId, actor: actor.email, entity: "costs", action: "paid",
-    detail: logDetail({ note: `${ingredient?.name ?? ""} × ${packs}`, amount: total.toFixed(2) }),
-  });
+  if (!ref) {
+    const { data: ingredient } = await db.from("ingredients").select("name").eq("id", ingredientId).eq("restaurant_id", actor.restaurantId).maybeSingle();
+    await logEvent({
+      restaurantId: actor.restaurantId, actor: actor.email, entity: "costs", action: "paid",
+      detail: logDetail({ note: `${ingredient?.name ?? ""} × ${packs}`, amount: total.toFixed(2) }),
+    });
+  }
   return NextResponse.json({ ok: true, id });
 }

@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
     ...(ref ? { p_ref: ref } : {}),
     p_restaurant: actor.restaurantId, p_shift: shift.id, p_amount: amount, p_note: note, p_actor: actor.email,
   });
+  if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
   if (error) return await apiError("apiErr.generic", 500);
   if (!data) return await apiError("apiErr.noOpenShift", 409);
 

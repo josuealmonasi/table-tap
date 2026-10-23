@@ -47,3 +47,21 @@ describe("each diner flow is its own phone", () => {
     expect(a.order).toEqual(["page stopped", "context closed"]);
   });
 });
+
+describe("a login that cannot be made is a failure, not a skip (audit L, 9)", () => {
+  it("fails the admin's visits when its password is missing, unless the run leaves the role out on purpose", async () => {
+    const { crewCookies } = await import("../../../scripts/browser-fixtures.mjs");
+    const crew = [{ role: "admin", email: "admin@example.com", passwordEnv: "TT_TEST_MISSING_PASSWORD" }];
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://abc.supabase.co");
+    vi.stubEnv("TT_TEST_MISSING_PASSWORD", "");
+    vi.stubEnv("GATE_SKIP_ROLES", "");
+    const phase = async (_: string, work: () => Promise<unknown>) => work();
+    const missing = (await crewCookies(crew, "http://localhost:3000", phase)).get("admin");
+    expect(missing.skip).toBeUndefined();
+    expect(String(missing.error)).toMatch(/TT_TEST_MISSING_PASSWORD is not set, so no admin screen can be checked/);
+    vi.stubEnv("GATE_SKIP_ROLES", "kitchen, admin");
+    const chosen = (await crewCookies(crew, "http://localhost:3000", phase)).get("admin");
+    expect(chosen).toEqual({ skip: "TT_TEST_MISSING_PASSWORD is not set — skipped (GATE_SKIP_ROLES)" });
+    vi.unstubAllEnvs();
+  });
+});

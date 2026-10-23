@@ -28,6 +28,7 @@ import { seedCosts } from "./mock-costs.mjs";
 import { seedOffline } from "./mock-offline.mjs";
 import { seedAllocations } from "./mock-allocations.mjs";
 import { seedTerminal } from "./mock-terminal.mjs";
+import { finalizeMockCashShift } from "./mock-cash-shift.mjs";
 import { bulkInsert, randInt, sample } from "./menu-catalog.mjs";
 
 export const DEMO_RESTAURANT = "Demo Bistro";
@@ -916,12 +917,12 @@ export async function seedMock(pg) {
   // now, which started with 250 and had 120 taken out for a supplier. So the
   // register close shows both kinds of shift, the till offers to close one,
   // and every gate measures them full.
-  await pg.query(
+  const { rows: [closedShift] } = await pg.query(
     `insert into cash_shifts (restaurant_id, opened_by, opened_at, opening_amount, closed_by, closed_at,
                               counted_cash, expected_cash, difference, difference_note, explained_by)
      values ($1, 'demo-cashier@tabletap.dev', now() - interval '50 minutes', 200,
              'demo-cashier@tabletap.dev', now() - interval '40 minutes', 180, 200, -20,
-             'Di cambio de más a la mesa 4', 'demo-cashier@tabletap.dev')`,
+             'Di cambio de más a la mesa 4', 'demo-cashier@tabletap.dev') returning id`,
     [rid],
   );
   const { rows: [openShift] } = await pg.query(
@@ -987,6 +988,9 @@ export async function seedMock(pg) {
   // cancelled sales from voids into adjustments, and a deposit signed before
   // it named voids that `pnpm money` then found nowhere in the ledger.
   await seedTerminal(pg, rid);
+  // Random historical cash receipts can overlap the closed shift. Its signed
+  // expectation must include them, while retaining the deliberate 20 short.
+  await finalizeMockCashShift(pg, rid, closedShift.id);
   // Our fee on every order the demo was paid for online, in the ledger the
   // month's ceiling reads — what the schema's backfill does once for real
   // restaurants. Taken, in the month each was paid.

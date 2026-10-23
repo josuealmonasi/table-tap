@@ -34,7 +34,7 @@ export function menuActions(ctx: EditorContext) {
       "done.menuDeleted",
     );
   const moveMenu = (id: string, direction: "up" | "down") =>
-    move("write.reorderMenus", "menus", menus, id, direction);
+    move("write.reorderMenus", "menus", menu => menu.menus, id, direction);
 
   /**
    * Opening hours for one menu. Null clears them, which returns the menu to
@@ -45,29 +45,36 @@ export function menuActions(ctx: EditorContext) {
     schedule: MenuSchedule | null,
   ): Promise<boolean> {
     if (!(await ctx.ready())) return false;
-    const prev = menus;
     setMenus(m => m.map(x => (x.id === id ? { ...x, schedule } : x)));
+    let saved = false;
     try {
       const error = writeError(await supabase.from("menus").update({ schedule }).eq("id", id).select("id"));
-      if (reportError("write.updateMenu", error)) return true;
+      saved = reportError("write.updateMenu", error);
     } catch {
       toast(t("write.updateMenu"), "error");
     }
-    setMenus(prev);
-    return false;
+    // Read back what is saved, whether it saved or not. A failure rolls back
+    // that way, never by restoring the arrays this was called with: they are
+    // the render before the read `ready` waited for (audit L, finding 7). A
+    // success reads too, so the editor's latest read holds the new value (a
+    // copy made next copied the old one) and a reload another switch's
+    // failure started cannot leave this one showing what it was before. The
+    // later read wins; the loader drops the earlier (cross-review of batch 5).
+    await reload();
+    return saved;
   }
 
   async function setMenuActive(id: string, active: boolean): Promise<void> {
     if (!(await ctx.ready())) return;
-    const prev = menus;
     setMenus(m => m.map(x => (x.id === id ? { ...x, active } : x)));
     try {
       const error = writeError(await supabase.from("menus").update({ active }).eq("id", id).select("id"));
-      if (reportError("write.updateMenu", error)) return;
+      reportError("write.updateMenu", error);
     } catch {
       toast(t("write.updateMenu"), "error");
     }
-    setMenus(prev); // roll back the optimistic flip
+    // Read back either way, as the availability switch does.
+    await reload();
   }
 
   /** Deep-copies a menu: its sections, products, extras, and add-on links. Returns the new menu's id. */
@@ -116,10 +123,10 @@ export function menuActions(ctx: EditorContext) {
     );
 
   async function moveSection(id: string, direction: "up" | "down"): Promise<void> {
-    const section = sections.find(s => s.id === id);
-    if (!section) return;
-    const siblings = sections.filter(s => s.menu_id === section.menu_id);
-    await move("write.reorderSections", "categories", siblings, id, direction);
+    await move("write.reorderSections", "categories", menu => {
+      const section = menu.sections.find(s => s.id === id);
+      return section ? menu.sections.filter(s => s.menu_id === section.menu_id) : [];
+    }, id, direction);
   }
 
   return {

@@ -11,6 +11,7 @@ interface OpenBillRowProps {
   /** The time, once the page has mounted; null before, so the server and the browser agree. */
   now: number | null;
   canSettle: boolean;
+  updating?: boolean;
   onOpen: (bill: OpenBill) => void;
   onCollect: (bill: OpenBill) => void;
 }
@@ -21,17 +22,18 @@ export default function OpenBillRow({
   currency: menuCurrency,
   now,
   canSettle,
+  updating = false,
   onOpen,
   onCollect,
 }: OpenBillRowProps) {
   const t = useT();
   const currency = bill.currency ?? menuCurrency;
   return (
-    <div className="tt-bill-row tt-bill-open">
+    <div className="tt-bill-row tt-bill-open" aria-busy={updating}>
       {/* The row opens the promotion or the close; collecting is its own
           action, because it is the thing done most often and should not hide
           behind another dialog. */}
-      <button type="button" className="tt-bill-open-main" onClick={() => onOpen(bill)}>
+      <button type="button" className="tt-bill-open-main" disabled={updating} onClick={() => onOpen(bill)}>
         <span className="tt-bill-glyph" aria-hidden>
           {bill.tableLabel ? (
             <TableIcon size={16} weight="bold" />
@@ -98,9 +100,10 @@ export default function OpenBillRow({
         <button
           type="button"
           className="tt-btn tt-btn-primary tt-btn-sm tt-bill-collect"
+          disabled={updating}
           onClick={() => onCollect(bill)}
         >
-          {t("dash.collect")}
+          {t(updating ? "settle.updatingBalance" : "dash.collect")}
         </button>
       )}
     </div>

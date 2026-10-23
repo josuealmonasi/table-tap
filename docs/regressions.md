@@ -16,6 +16,12 @@ us, and what now catches each one.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Deletion preserves collected offline receipts and unfinished fee returns (Audit L3, S25b) | Deleting a restaurant erased unapproved cash and the fee still owed after a refund |
+| A saved reference names the same subject and request (Audit L4, S25b) | A milk purchase reference returned another ingredient's purchase, and a replay logged paid twice |
+| A retry key is cleared only on success or an explicit no-write result (Audit L5, S25b) | A frozen retry forgot the lost MX$100 purchase and added it again after unfreezing |
+| A counter reference names the first requested meal (Audit L6, S25b) | A different phone could reuse the reference with another cart and receive the first order |
+| Ingredient movements lock before ingredient rows and foreign keys (Audit L8, S25b) | Legacy waste could hold the ingredient FK while waiting for a purchase's movement lock |
+| Tier prices stay positive in SQL as well as forms (Audit L, S25b) | Direct writes could save zero-price tiers despite the form refusing them |
 | An unresolved attempt shows and locks the request it will send again (S20b) | Reopened forms showed blank values, edited carts lost food, and cash resent a hidden account sale |
 | An account sale retries its frozen cart and reference (S20 K3) | A lost reply charged the same sale to an account twice |
 | Pay-later and waiter retries claim one order before stock (S20 K4) | Retrying an unseen ticket took another portion and sent another ticket |
@@ -3656,6 +3662,15 @@ unrelated process rows and preserves the peak after a lower later reading.
 Actual time and memory at one, two and three workers remain Claude's live proof.
 ## S19 — the ledger, the signed drawer and the bank snapshot must agree
 
+The historical demo shift is finalized after its receipts are seeded. A
+random cash receipt could land in its ten-minute window while the fixture
+still claimed only the opening 200 was expected. `mock-cash-shift.mjs` now
+includes those receipts and excludes offline receipts recorded after the
+count, preserving the deliberate 20 shortage. The unchanged `pnpm money`
+rebuilds that expectation independently. A transactional development probe
+also forced an 83.40 timely receipt and a 45 late receipt: the old expectation
+failed, the finalized shift passed, and all probe changes were rolled back.
+
 The money gate previously compared payments with orders but never checked
 `cash_shifts.expected_cash` or `terminal_deposits.expected`. S9 and S10 could
 regress while the ledger still passed. `money-drawer.mjs` now reads every
@@ -3984,3 +3999,332 @@ count before confirming. Reorder checks both siblings, optimistic switches
 roll back, inserts require an id, and imports and bulk deletes require the
 whole expected count. `s23b-writes.spec.ts` pairs zero rows with explicit errors
 and checks successful writes as well.
+
+## S24: a full-screen sheet is a dialog, and the till's charge has a way back
+
+Found while checking S23's POS counters in a browser, at 390 px and 1280 px.
+
+- **The till's charge had no way back below 1025 px.** «Cobrar en efectivo»
+  opens a sheet that fills a phone or an iPad. Its only exit was "click
+  outside", an empty strip under the form that nobody would think to tap. A
+  cashier who pressed cash for a card sale could only send the order. The
+  sheet now has «Volver a la venta» beside the send button. It changes
+  nothing, and the name and note stay.
+- **No sheet said it was a dialog.** `DetailOverlay` (the dish, the cart, a
+  combo, the order tracker, the till's charge) had no `role="dialog"`, no
+  label, no Escape and no focus handling. A screen reader read the menu behind
+  it, and Tab walked into that menu. The dialogs sweep looks for
+  `[role=dialog]`, so it never measured these sheets, and it left each one
+  open over its next click. `useOverlayDialog` now moves focus in (the first
+  button, so a phone doesn't raise its keyboard, or a field that asked for
+  focus), traps Tab, gives focus back on close, and answers Escape only when
+  it is the topmost dialog. The coupon dialog over the cart therefore closes
+  alone.
+- **Two places that must agree:** the till's charge and the tracker built the
+  overlay by hand. `useOverlayDialog.spec.ts` fails if any component spells
+  `className="tt-detail-overlay"` outside `DetailOverlay`, and the `label`
+  prop is required.
+
+## Audit L (S25a): collections, the editor's latest read, and gates that pass unchecked
+
+Codex audited everything shipped on 2026-10-21 and 22 (audit L). Claude
+verified each finding in code and fixed these four. Codex fixed 3, 4, 5, 6
+and 8 in S25b.
+
+| Bug | The two places that had to agree | What catches it now |
+|---|---|---|
+| A table collected without the balance its screen showed recorded what it owed on arrival: MX$150 cleared for MX$100 seen | `SettleTableDialog`'s reviewed figure and `/api/table-payment`'s old-tab branch | `collection-full-account.spec.ts` (L1); `attack-money` checks the unreviewed shape records nothing |
+| An old tab's part payment took the debt's currency: MX$100 typed cleared US$100 | The menu currency the old calculator showed and the shim's inferred currency | `part-payment-route.spec.ts` (L2) |
+| A copy made during a reload copied the old price and extras; reorders and failed toggles used the menu from before the read | The arrays an action was called with and the read `ready` waited for | `s23b-writes.spec.ts` (L7) |
+| A role whose password was missing was "skipped", and skipped counted as passed; a dialog that opened after a read was never measured | `crewCookies`' skip and `manifestFailures`; the 700 ms look and the read the click started | `browser-fixtures.spec.ts`, `dialog-probe.spec.ts` |
+
+- **Finding 1.** Today's dialog always sends the reviewed figure. Its
+  buttons appear only once the bill has loaded. The unreviewed branch
+  served tabs opened before #531, and it collected whatever the table owed
+  when the request landed. It now answers «Esta pantalla está
+  desactualizada…» (409) and records nothing. The table-only code that sat in
+  the counter-order path afterwards is gone. `rls-check` and `attack-money`
+  send tables the reviewed shape, with the table's real balance. Without
+  it, the other-restaurant check would pass on the refresh answer and never
+  test the scope.
+- **Finding 2.** The old calculator showed every figure in the menu's
+  currency. The shim now infers a currency only when the debt is in that
+  one, and refreshes otherwise.
+- **Finding 7.** `ctx.latest` holds what the latest complete read returned.
+  The duplicate and the import read it after waiting. `move` picks the
+  siblings from it. A failed switch or schedule reloads, rather than
+  restoring arrays from before that read.
+- **Finding 9.** A missing password fails that role's visits (dialogs,
+  layout) and is a GAP in promises, unless the run names the role in
+  `GATE_SKIP_ROLES` on purpose. The dialogs sweep waits for a read the click
+  started before deciding that nothing opened.
+
+
+## Audit L (S25b)
+
+### L3 — deletion and unresolved money
+
+`admin_delete_restaurant` refuses unapproved `offline_sale_queue` receipts and
+completed refunds whose cumulative rounded fee share is still owed. No fee,
+a share rounding to zero, and a share already returned do not block deletion.
+A provider-verified `fee_request` also protects older charges without a fee
+ledger amount. Approved queue rows are archived by `pos_ref`, outside the
+restaurant cascade. The new admin refusals are translated in both languages.
+`audit-l-s25b-sql.spec.ts` checks the guards precede deletion and the queue copy.
+Claude must execute the SQL scenarios with and without outstanding fees.
+
+### L4 — references and the first request
+
+Purchase retries compare the ingredient, original pack count and total before
+returning their saved id. Packs are saved because today's pack size cannot
+prove yesterday's request. Waste compares subject, quantity, reason and note;
+counts compare the whole sorted set; withdrawals compare shift, amount and
+note; closes compare shift and counted cash. Account sales compare account and
+canonical request in both the early read and locked writer. Conflicts return
+409 with `apiErr.retryConflict`, without the earlier result. A referenced
+purchase uses the additive `record_purchase_once_v2` writer to save its one
+paid log inside the same transaction, and every
+service-key ingredient-name read is restaurant-scoped.
+The old purchase RPC remains available for old routes that log separately;
+apply this SQL before deploying the new route.
+`audit-l-s25b-purchases.spec.ts`, `audit-l-s25b-account.spec.ts` and
+`audit-l-s25b-sql.spec.ts` cover the routes and SQL contracts.
+
+### L5 — a refusal is not evidence that an earlier send failed
+
+Clients keep their frozen reference on every unmarked refusal, including 402,
+paused ordering, plan changes and validation. Only a serialized SQL outcome
+that committed none of the requested action carries `retryUncommitted: true`.
+A success ends the attempt too. Every pending screen offers an explicit stop
+retrying action with a second confirmation: check the records first; stopping
+a retry neither cancels a committed action nor returns its money. Existing
+retry fixtures now mark their definite no-write answers; they no longer teach
+clients to trust a bare status. `audit-l-s25b-retry.spec.ts` proves that a lost
+MX$100 purchase, a refusal while frozen, and an unfrozen retry record once.
+`audit-l-s25b-discard.spec.tsx` exercises the deliberate discard confirmation.
+
+### L6 — the counter request is part of its identity
+
+Diner and waiter scopes include a SHA-256 digest of canonical items, choices,
+extras, combo components, table (or none), coupon, tip, note and customer name.
+Display prices and names are excluded because the server prices the meal.
+A counter diner needs no new browser credential: the random reference plus the
+same request recovers the saved order, even with browser storage unavailable.
+A changed request returns only a conflict. Older scopes cannot prove a match
+and are refused for review instead of being answered or recorded again.
+`audit-l-s25b-orders.spec.ts` verifies changed requests and exact replays with
+no member cookie; `audit-l-s25b-account.spec.ts` checks display-only changes.
+
+### L8 — the legacy waste/purchase cycle is real
+
+A legacy waste insert can acquire an ingredient FK key-share lock before its
+AFTER movement trigger waits for the restaurant movement lock. A purchase can
+hold that movement lock and wait for `ingredients FOR UPDATE`, which conflicts
+with the waste's key-share lock. Legacy waste now explicitly locks movement
+before reading an ingredient or inserting a foreign key. Product waste keeps
+the shared sales order: menu item, movement, ingredient. Both old and referenced
+purchase, waste and count RPCs obey that ingredient order.
+`audit-l-s25b-sql.spec.ts` checks these boundaries. Claude must run a concurrent
+legacy-waste/purchase exercise; no live database was used here.
+
+### Tier prices — CHECK and form agree
+
+`tiers_sound` now refuses prices <= 0. The existing
+`promotions_tiers_sound` CHECK is recreated and validated so older rows cannot
+silently keep the weaker rule. Before applying SQL, count violating rows:
+
+```sql
+select count(*) as violating_rows
+from public.promotions
+where jsonb_path_exists(tiers, '$[*] ? (@.price <= 0)');
+```
+
+Correct those offers before applying; do not make up replacement prices.
+`audit-l-s25b-sql.spec.ts` checks the stricter rule and CHECK wiring.
+
+### Claude's review of S25b
+
+- **Too strict about what settles a reference.** As written, only the
+  transaction's own refusals (short stock, a coupon) released a reference.
+  Every other refusal after the lookup left the diner, waiter or cashier on
+  «Enviar otra vez» with a cart that could never go: a dish taken off the
+  menu, a closed kitchen, «not accepting orders». Before S25b all of those
+  returned to the cart. Once the lookup has found nothing saved, a refusal
+  settles the attempt, and so does a refusal of what was typed, wherever it
+  falls, since the same request can never succeed. The frozen plan, plan
+  checks, a lapsed sign-in and «no open shift» come before the lookup or
+  depend on state, so they keep the reference, which was the point of
+  finding 5. `audit-l-s25b-lookup.spec.ts` fails on a refusal after the
+  lookup without the mark, and on a frozen-plan check moved after it.
+- **Copy in the system's words.** «Esta referencia ya se usó…» and «Dejar de
+  reenviar este intento» became «Esto ya se había enviado antes con otros
+  datos…» and «Ya no enviar esto».
+
+### Codex's cross-review of batch 5
+
+A fresh Codex session reviewed S24, S25a and S25b together and found seven
+problems. Codex then hit its usage limit, and Claude fixed all seven:
+
+1. **Claude's widening of `retryUncommitted` could release a reference
+   while the first request was still committing.** Request A stalls before
+   writing, and retry B meets «orders paused». Marked uncommitted, the phone
+   forgot the reference, A committed, and the next send made a second
+   MX$100 order. Route refusals no longer carry the mark. The client decides
+   instead (`refusalSettles(status, retried, uncommitted)`):
+   - the first send of a fresh reference settles on any 4xx except 408 and
+     425, because no other request carries that reference;
+   - a retry settles only on a mark the writer set under the restaurant's lock.
+2. **The old-tab currency shim could not prove what the tab showed.** A tab
+   opened in pesos showed MX$100, and after a switch to dollars the same tap
+   cleared US$100. Old tabs now refresh before collecting.
+3. **Rows saved before the deploy conflicted on their unchanged retry.** The
+   clients in production forget a reference on a 409, so that was a second
+   order, purchase or account sale.
+   - Orders fall back to the old scope, also after a write conflict.
+   - Account sales without a scope match on their account.
+   - Purchases without packs match on ingredient and money.
+4. **A saved provider fee request did not block deletion beside a fee ledger
+   row.** MX$3 owed, a local share that rounded to zero. It blocks now, unless
+   the share was returned in full.
+5. **A successful switch never read back.** A copy made next took the old
+   availability. Switches now read back either way.
+6. **`rls-check` could pass on a stale-balance refusal.** It now collects a
+   table it controls, with a positive control on our own.
+7. **The dialogs sweep never reached the till's charge**, which needs a dish
+   in the sale, and nothing pressed Escape on the diner's sheets. `layout`
+   now opens the charge and the till's dish sheet through `before` steps.
+   After measuring, Escape must close them. Each diner flow checks how many
+   dialogs Escape leaves open (`escape`).
+
+### «Este pedido no se confirmó» while it was being placed (production, 2026-10-22)
+
+A diner on production saw «Este pedido no se confirmó. Envíalo otra vez…»
+over a «Guardando…» button, while the order was still on its way. It read as
+an order that had failed.
+
+- **Why.** Every retry banner was shown whenever a retry key existed. A key
+  exists from the moment a request goes out, so the banner showed during
+  every first send. That affected the diner's order, the waiter's pad, the
+  POS account sale, the withdrawal, the drawer close, purchases, counts and
+  waste.
+- **Now.** `useRetryIntent.unconfirmed(sending)` is true only once a send has
+  ended without an answer, and through the retries after it. The first send
+  shows the screen's own loading state: «Enviando a la cocina…».
+- **The words.** Each message now says what is known: «No recibimos la
+  confirmación… Puede que ya haya llegado a la cocina: envíalo otra vez para
+  saberlo, no se repetirá». The retry button says «Enviando…», not
+  «Guardando…».
+- **One message at a time.** A lost order no longer opens «Atención: Error de
+  red» over its own retry screen. A refusal still shows, because it says
+  something the screen does not.
+- **The screen itself.** The banner's paragraphs had their default margins,
+  and its discard answers borrowed the sticky form footer, which drew a white
+  block across it at 1280 px. Both now have their own classes.
+- **Tests:** `useRetryIntent.spec.ts` and `s20-client-retry.spec.ts`.
+
+### The diner's header, spaced as one stack
+
+The «¿Dejar entrar a otro teléfono?» card sat flush under «Sigue tu pedido».
+Every other card in the header carries `margin-top: 12px`, and the request
+chip, which is shared with the staff bar, had none. `.tt-menu-header
+.tt-request-chip` gets it there only. Measured at 390 px: 12 px between the
+banners, and 12 px to the card.
+
+## Batch 5, second cross-review — refund fees (findings 2 and 4)
+
+| Rule | The bug it came from | What checks it |
+|---|---|---|
+| Customer completion and deletion agree that an unchecked fee is unknown | A completed MX$0.10 refund let deletion erase MX$3 owed when the first provider read failed | `batch5-fee-schema.spec.ts`, `fee-recovery.spec.ts`, `fee-verification.spec.ts` |
+| A cumulative fee target and an individual attempt are separate | A saved 300-cent request could never return the remaining 200 after someone separately returned 100 | `fee-recovery.spec.ts` in MXN and USD |
+
+### Finding 2 — an unchecked fee looked like zero
+
+Both refund books now carry `fee_verification_pending` from creation and set
+it with customer completion. Deletion checks that fact under the money lock
+before copying or deleting anything. Fee verification records the provider's
+cumulative target separately, including an explicit zero. Order refunds only
+finish fee verification for customer refund IDs seen in the provider snapshot;
+a refund completed after that snapshot waits for its own check. A short fee
+return stays pending, and customer completion still succeeds during an outage.
+
+Old completed rows with an existing reconciliation stay complete. A trusted
+saved checkout that requested no fee, or a local fee returned in full, also
+releases them through an idempotent backfill. No fee row is not proof of zero;
+unproved rows use the ordinary fee-only recovery from Bills. This deliberately
+blocks deletion until the provider is verified, while selling, collecting and
+customer refunds stay available. The new refusal is
+`apiErr.restaurantDeleteRefundFeeVerification`, in both languages.
+
+Claude can run this read-only production query **before applying the schema**
+to count existing completed rows without a fee reconciliation:
+
+```sql
+select 'refunds_due' as source, count(*) as awaiting_verification
+from refunds_due where refunded_at is not null and fee_reconciled_at is null
+union all
+select 'refund_operations' as source, count(*) as awaiting_verification
+from refund_operations
+where source = 'stripe' and status = 'succeeded' and fee_reconciled_at is null;
+```
+
+After applying it, this counts the remaining rows without proof and those
+already safe to release (the same check deletion uses):
+
+```sql
+with completed as (
+  select 'refunds_due' as source, restaurant_id, stripe_payment_intent,
+    fee_verification_pending, fee_reconciled_at
+  from refunds_due where refunded_at is not null
+  union all
+  select 'refund_operations' as source, restaurant_id, stripe_payment_intent,
+    fee_verification_pending, fee_reconciled_at
+  from refund_operations where source = 'stripe' and status = 'succeeded'
+)
+select source,
+  count(*) filter (where fee_verification_pending and fee_reconciled_at is null
+    and not public.refund_fee_proven_clear(restaurant_id, stripe_payment_intent)) as still_pending,
+  count(*) filter (where fee_reconciled_at is not null
+    or public.refund_fee_proven_clear(restaurant_id, stripe_payment_intent)) as verified_or_clear
+from completed group by source;
+```
+
+### Finding 4 — a saved request outlived the amount it could return
+
+Recovery first searches every page of the original attempt's provider evidence,
+then reads the fee again. A completed attempt can advance toward a larger target.
+An unseen attempt can advance only when its amount exceeds the entire fee still
+available at Stripe: even a delayed worker cannot apply that old request. If an
+unknown request could still land against a partial target, it stays pending.
+Each retired request and its evidence stay in `fee_request_history`; the next
+request is saved under the money lock with a comparison to the exact old request.
+The first Stripe key and metadata stay compatible; later attempts have their own
+number, key and metadata. MX$100 / US$100 with 300 cents owed and 100 separately
+returned now returns 200 exactly once, including after a lost response.
+
+Changed SQL functions: `finish_refund_operation`, `finish_refund_due_attempt`,
+`sync_refunded_platform_fee`, `guard_return_money`, `admin_delete_restaurant`.
+The immutable-money trigger permits the two new fee metadata fields while
+still protecting every amount, currency and original charge identity. New functions:
+`verify_refunded_platform_fee(uuid, text, int, int, text[])`,
+`advance_refund_due_fee(uuid, uuid, jsonb, int, int, int, text)`,
+`refund_fee_proven_clear(uuid, text)`. Existing signatures remain callable;
+the old sync only updates the fee ledger, leaving operation completion to the
+new verified-target function. New definers use the existing service-only grants
+and fixed search path; `drop.sql` includes every new function.
+
+Claude applies `schema.sql`, runs all shared-database gates, and checks both
+deletion refusals on screen. No shared database or live provider was used for
+this fix; Vitest mocks their boundaries.
+
+## Collection feedback: partial payments and refreshing open bills
+
+Pedidos marked a payment request done after the first part, hiding its Collect
+button while the table still owed money. The server already closes that request
+when all debt is settled; the screen now refreshes that result without marking
+the request done itself. Open bills also disable both row actions and show an
+updating state between a confirmed collection and the refreshed server list.
+Partial balances become actionable again; fully paid rows leave the list.
+
+`collection-progress.react-component.spec.tsx` reproduces both bugs and checks
+request retention, server-confirmed removal, both disabled row actions and the
+remaining balance after a partial collection.

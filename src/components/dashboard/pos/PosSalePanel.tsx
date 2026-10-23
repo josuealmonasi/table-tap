@@ -22,6 +22,7 @@ interface PosSalePanelProps {
   canChargeAccount: boolean;
   accountRetry?: PendingAccountSale | null;
   onRetryAccount?: () => void;
+  onDiscardAccount?: () => void;
   onChangeQty: (cartId: number, qty: number) => void;
   onEdit: (line: CartItem) => void;
   onCharge: (method: "cash" | "card") => void;
@@ -41,6 +42,7 @@ export default function PosSalePanel({
   canChargeAccount,
   accountRetry,
   onRetryAccount,
+  onDiscardAccount,
   onChangeQty,
   onEdit,
   onCharge,
@@ -51,7 +53,7 @@ export default function PosSalePanel({
   if (accountRetry) return (
     <aside className="tt-pos-cart">
       <PendingOrder currency={accountRetry.currency} order={accountRetry} message={t("pending.account", { name: accountRetry.name, amount: formatMoney(accountRetry.amount, accountRetry.currency) })}
-        busy={locked} onSend={() => onRetryAccount?.()} />
+        busy={locked} onDiscard={onDiscardAccount} onSend={() => onRetryAccount?.()} />
     </aside>
   );
   return (

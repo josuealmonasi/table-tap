@@ -70,31 +70,20 @@ it("S21 refuses a reviewed MX$100 balance now owing MX$50 before recording", asy
 // A tab or cached till from before the reviewed balance shipped sends neither
 // `expected` nor `currency`. Refused as invalid, the waiter was left holding
 // the customer's cash with nothing to record it against.
-it("collects from a tab opened before the deploy against the live balance", async () => {
-  outstanding.mockResolvedValue({ orders: [], sittings: [], ordered: 200, owed: 200, collected: 0, tips: 0,
-    currency: "MXN", balances: [{ currency: "MXN", ordered: 200, collected: 0, tips: 0, owed: 200 }] });
-  record.mockResolvedValue({ wrote: true, refused: false, covered: false, landed: 100, tip: 0 });
-  const response = await POST(new NextRequest("http://localhost/api/table-payment/part", {
-    method: "POST", body: JSON.stringify({ tableId: "t1", amount: 100, method: "cash", ref: "old-tab" }),
-  }));
-  expect(response.status).toBe(200);
-  expect(record.mock.calls[0][1]).toEqual({ tableId: "t1", expected: 200, currency: "MXN" });
-  expect(record.mock.calls[0][2]).toBe(100);
-});
-
-it("asks an old tab to refresh when the table owes in two currencies, and says when nothing is owed", async () => {
-  outstanding.mockResolvedValue({ orders: [], sittings: [], ordered: 300, owed: 300, collected: 0, tips: 0,
-    balances: [{ currency: "MXN", ordered: 200, collected: 0, tips: 0, owed: 200 }, { currency: "USD", ordered: 100, collected: 0, tips: 0, owed: 100 }] });
-  let response = await POST(new NextRequest("http://localhost/api/table-payment/part", {
-    method: "POST", body: JSON.stringify({ tableId: "t1", amount: 100, method: "cash", ref: "old-mixed" }),
-  }));
-  expect(response.status).toBe(409);
-  expect(await response.json()).toEqual({ error: "apiErr.refreshToCollect" });
-  outstanding.mockResolvedValue({ orders: [], sittings: [], ordered: 0, owed: 0, collected: 0, tips: 0, balances: [] });
-  response = await POST(new NextRequest("http://localhost/api/table-payment/part", {
-    method: "POST", body: JSON.stringify({ tableId: "t1", amount: 100, method: "cash", ref: "old-none" }),
-  }));
-  expect(response.status).toBe(409);
-  expect(await response.json()).toEqual({ error: "apiErr.nothingToSettle" });
+it("L2: a tab from before the reviewed balance is asked to refresh, whatever the table owes", async () => {
+  // Nothing proves what it showed: MX$100 typed could clear US$100 after the
+  // restaurant switched currencies, or a balance that grew meanwhile.
+  for (const balances of [
+    [{ currency: "MXN", ordered: 200, collected: 0, tips: 0, owed: 200 }],
+    [{ currency: "USD", ordered: 100, collected: 0, tips: 0, owed: 100 }],
+    [{ currency: "MXN", ordered: 200, collected: 0, tips: 0, owed: 200 }, { currency: "USD", ordered: 100, collected: 0, tips: 0, owed: 100 }],
+  ]) {
+    outstanding.mockResolvedValue({ orders: [], sittings: [], ordered: 300, owed: 300, collected: 0, tips: 0, balances });
+    const response = await POST(new NextRequest("http://localhost/api/table-payment/part", {
+      method: "POST", body: JSON.stringify({ tableId: "t1", amount: 100, method: "cash", ref: "old-tab" }),
+    }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "apiErr.refreshToCollect" });
+  }
   expect(record).not.toHaveBeenCalled();
 });

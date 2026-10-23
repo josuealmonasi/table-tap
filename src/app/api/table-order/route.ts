@@ -1,3 +1,4 @@
+import { orderRequestScope } from "@/lib/order-request";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { rejectionMessage } from "@/lib/cart-rejection";
@@ -62,16 +63,21 @@ export async function POST(req: NextRequest) {
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const items = Array.isArray(body.items) ? body.items : [];
-  if (!body.tableId || items.length === 0) {
+  // A table id is a UUID before anything is built from it. «T:H» passed for
+  // the table made the old scope of the request equal the new scope of a
+  // saved order, and returned that MX$100 order as the replay of a different
+  // MX$200 one (cross-review of batch 5).
+  if (!uuidOf(body.tableId) || items.length === 0) {
     return await apiError("apiErr.invalidRequest", 400);
   }
 
   const ref = uuidOf(body.ref);
   if (body.ref !== undefined && !ref) return await apiError("apiErr.invalidRequest", 400);
-  const intent = ref ? { restaurantId: actor.restaurantId, ref, scope: `table-order:${body.tableId}` } : null;
+  const surface = `table-order:${body.tableId}`;
+  const intent = ref ? { restaurantId: actor.restaurantId, ref, scope: orderRequestScope(surface, body), legacyScope: surface } : null;
   if (intent) {
     const previous = await readOrderIntent(intent);
-    if (previous?.conflict) return await apiError("apiErr.invalidRequest", 409);
+    if (previous?.conflict) return await apiError("apiErr.retryConflict", 409);
     if (previous) return NextResponse.json({ ...previous, code: orderCode(previous.orderId) });
   }
 
@@ -164,7 +170,7 @@ export async function POST(req: NextRequest) {
     Number(restaurant.low_stock_threshold) || 0,
   );
   if (!reservation.ok) {
-    return NextResponse.json({ short: reservation.short, code: "outOfStock" }, { status: 409 });
+    return await NextResponse.json({ short: reservation.short, code: "outOfStock" }, { status: 409 });
   }
 
   // Joins the sitting already open at this table, or opens one. Two waiters
@@ -214,7 +220,7 @@ export async function POST(req: NextRequest) {
       order: orderRow, lines: verified, inventory: Boolean(plan && can(plan.limits, "inventory")),
       threshold: Number(restaurant.low_stock_threshold) || 0,
     });
-    if (result.conflict) return await apiError("apiErr.invalidRequest", 409);
+    if (result.conflict) return await apiError("apiErr.retryConflict", 409);
     if (result.short) return NextResponse.json({ short: result.short, code: "outOfStock" }, { status: 409 });
     if (!result.repeat && restaurant.low_stock_alerts_enabled) await raiseStockNotifications(actor.restaurantId, result.low ?? []);
     if (!result.repeat) await logEvent({ restaurantId: actor.restaurantId, actor: actor.email, entity: "order", action: "created",

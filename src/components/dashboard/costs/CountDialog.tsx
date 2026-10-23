@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRetryIntent, refusalSettles } from "@/hooks/useRetryIntent";
+import { useRetryIntent } from "@/hooks/useRetryIntent";
 import { useRouter } from "next/navigation";
 import PendingAttempt from "@/components/ui/PendingAttempt";
 import { Modal } from "@/components/ui/Modal";
@@ -66,7 +66,7 @@ function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialog
 
   async function save(e: React.FormEvent): Promise<void> {
     e.preventDefault();
-    if (inFlight.current) return;
+    if (inFlight.current || attempt.sending()) return;
     const counts = frozen?.counts ?? Object.entries(typed)
       .filter(([, v]) => v.trim() !== "")
       .map(([ingredientId, v]) => {
@@ -82,7 +82,7 @@ function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialog
         method: "POST", headers: { "Content-Type": "application/json" }, body: attempt.body({ counts }),
       });
       const data = await res.json();
-      if ((res.ok && Array.isArray(data.results)) || (!res.ok && refusalSettles(res.status))) attempt.clear();
+      if ((res.ok && Array.isArray(data.results)) || (!res.ok && attempt.settles(res.status))) attempt.clear();
       if (!res.ok) return setError(typeof data.error === "string" ? data.error : t("apiErr.generic"));
       if (!Array.isArray(data.results)) throw new Error("Missing count result");
       setResults(data.results);
@@ -91,6 +91,7 @@ function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialog
       setError(t("done.networkError"));
     } finally {
       inFlight.current = false;
+      attempt.ended();
       setBusy(false);
     }
   }
@@ -131,7 +132,7 @@ function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialog
   return (
     <form className="tt-prodform" onSubmit={e => void save(e)}>
       <p className="tt-muted tt-costs-hint">{t("costs.countHint")}</p>
-      {pending && <PendingAttempt message={t("pending.count")} />}
+      {attempt.unconfirmed() && <PendingAttempt message={t("pending.count")} busy={busy} onDiscard={() => { if (!inFlight.current) attempt.clear(); }} />}
       <ul className="tt-costs-count-list">
         {ingredients.map(i => {
           const unit = inShown(0, i.unit).unit;

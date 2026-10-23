@@ -1,5 +1,8 @@
 import type Stripe from "stripe";
 
+export interface FeeRequest { fee_id: string; amount: number; attempt_no?: number }
+export interface FeeOutcome { target: number; returned: number; total: number; refund: string | null }
+
 /** A refund Stripe already made for this row, found by the tag it carries. */
 export async function refundMadeFor(
   client: Stripe,
@@ -29,7 +32,8 @@ export async function returnOurFee(
   stripeAccount: string,
   refundedCents: number,
   id: string,
-  prepare: (feeId: string, amount: number) => Promise<{ fee_id: string; amount: number }>,
+  prepare: (feeId: string, amount: number, previous?: FeeRequest, outcome?: FeeOutcome) => Promise<FeeRequest>,
+  recordTarget: (target: number) => Promise<void> = async () => {},
 ): Promise<boolean> {
   const intent = await client.paymentIntents.retrieve(
     paymentIntent,
@@ -45,23 +49,46 @@ export async function returnOurFee(
     if (refund.status === "succeeded") confirmed += refund.amount;
   }
   if (confirmed < refundedCents) return false;
-  if (!feeId) return true;
+  if (!feeId) { await recordTarget(0); return true; }
   const fee = await client.applicationFees.retrieve(feeId);
   // Stripe may already have returned part of this fee with a customer refund.
   // Work toward the cumulative target, never return the same share again.
   const share = Math.round((fee.amount * Math.min(confirmed, charge.amount)) / charge.amount);
+  await recordTarget(share);
   const back = share - fee.amount_refunded;
   if (back <= 0) return true;
-  const request = await prepare(feeId, back);
+  let request = await prepare(feeId, back);
+  if (request.fee_id !== feeId) return false;
   // Keys expire at Stripe. A lost response still has durable provider evidence.
+  let prior: Stripe.FeeRefund | null = null;
   for await (const made of client.applicationFees.listRefunds(request.fee_id, { limit: 100 })) {
-    if (made.metadata?.refund_due === id) return false;
+    if (made.metadata?.refund_due === id && (made.metadata.refund_due_fee_attempt === String(request.attempt_no ?? 1)
+      || ((request.attempt_no ?? 1) === 1 && !made.metadata.refund_due_fee_attempt))) { prior = made; break; }
   }
-  if (request.fee_id !== feeId || request.amount > back) return false;
+  // Read again after searching: an older request or a separate return may
+  // have landed while the first fee snapshot was on its way to us.
+  const current = await client.applicationFees.retrieve(feeId);
+  const remaining = share - current.amount_refunded;
+  if (remaining <= 0) return true;
+  if (prior || request.amount > remaining) {
+    // Absence alone cannot retire an unknown request. It must either have
+    // matching provider evidence, or exceed ALL of the fee still available:
+    // Stripe then cannot apply it, even if an old worker wakes up later.
+    if (prior ? prior.amount !== request.amount || !prior.id
+      : request.amount <= current.amount - current.amount_refunded) return false;
+    const nextNo = (request.attempt_no ?? 1) + 1;
+    request = await prepare(feeId, remaining, request, {
+      target: share, returned: current.amount_refunded, total: current.amount, refund: prior?.id ?? null,
+    });
+    // A concurrent worker may have advanced it first. Never send its request
+    // with our earlier snapshot; the next retry verifies its evidence first.
+    if (request.fee_id !== feeId || request.amount !== remaining || request.attempt_no !== nextNo) return false;
+  }
+  const no = request.attempt_no ?? 1;
   await client.applicationFees.createRefund(
     request.fee_id,
-    { amount: request.amount, metadata: { refund_due: id } },
-    { idempotencyKey: `refund-due-fee-${id}` },
+    { amount: request.amount, metadata: { refund_due: id, ...(no > 1 && { refund_due_fee_attempt: String(no) }) } },
+    { idempotencyKey: `refund-due-fee-${id}${no > 1 ? `-${no}` : ""}` },
   );
   const returned = await client.applicationFees.retrieve(feeId);
   return returned.amount_refunded >= share;

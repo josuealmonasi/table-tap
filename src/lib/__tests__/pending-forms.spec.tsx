@@ -27,6 +27,15 @@ function locked() {
   expect(state.ui.text()).toContain("pending.sendAgain");
   expect([...state.ui.all("input"), ...state.ui.all("select")].every(n => n.disabled)).toBe(true);
 }
+// A refused retry keeps its request: the first may still commit. The person
+// lets it go on purpose, through the banner's question.
+async function discard() {
+  for (const label of ["pending.discard", "pending.discardConfirm"]) {
+    const button = state.ui.all("button").find(n => n.text === label)!;
+    expect(button, label).toBeDefined();
+    await button.props.onClick!(); state.ui.render();
+  }
+}
 it("S20b withdrawal reopens showing the frozen amount and note, retries, then opens fresh", async () => {
   let kind: "withdrawal" | null = "withdrawal", currency = "MXN";
   const render = () => <CashMovementDialog kind={kind} currency={currency} shiftId="s" onClose={() => { kind = null; }} onSaved={vi.fn()} />;
@@ -44,7 +53,8 @@ it("S20b shift close reopens with the original blind count and confirmation", as
   open = false; state.ui.render(); open = true; state.ui.render();
   expect(state.ui.all("input")[0].props.value).toBe("125"); expect(state.ui.all("input")[1].props.checked).toBe(true); locked();
   state.fetch.mockResolvedValueOnce(Response.json({ error: "stale" }, { status: 409 })); await state.ui.submit();
-  expect(bodies()[1]).toEqual(bodies()[0]); expect(state.ui.all("input")[0].disabled).toBe(false);
+  expect(bodies()[1]).toEqual(bodies()[0]); locked();
+  await discard(); expect(state.ui.all("input")[0].disabled).toBe(false);
   open = false; state.ui.render(); open = true; state.ui.render(); expect(state.ui.all("input")[0].props.value).toBe("");
 });
 it("S20b purchase restores its remounted fields from the parent sender", async () => {
@@ -56,13 +66,14 @@ it("S20b purchase restores its remounted fields from the parent sender", async (
   state.fetch.mockResolvedValueOnce(Response.json({ ok: true })); await state.ui.submit(); expect(bodies()[1]).toEqual(bodies()[0]);
   open = true; state.ui.render(); expect(state.ui.all("input")[0].props.value).toBe("");
 });
-it("S20b shelf count restores display units on reopen and releases them after refusal", async () => {
+it("S20b shelf count restores display units on reopen, and a refused retry is let go on purpose", async () => {
   let open = true, available = ingredients;
   state.ui.render(() => <CountDialog open={open} currency="MXN" ingredients={available} onClose={vi.fn()} />);
   state.ui.change(state.ui.all("input")[0], "1.5"); await state.ui.submit(); open = false; state.ui.render(); available = [{ ...ingredients[0], name: "Changed", unit: "pza" }]; open = true; state.ui.render();
   expect(state.ui.all("input")[0].props.value).toBe("1.5"); locked(); expect(state.ui.text()).toContain("Milk"); expect(state.ui.text()).toContain("costs.unitShort.l");
   state.fetch.mockResolvedValueOnce(Response.json({ error: "refused" }, { status: 422 })); await state.ui.submit();
-  expect(bodies()[1]).toEqual(bodies()[0]); expect(bodies()[0].counts[0].counted).toBe(1500); expect(state.ui.all("input")[0].disabled).toBe(false);
+  expect(bodies()[1]).toEqual(bodies()[0]); expect(bodies()[0].counts[0].counted).toBe(1500); locked();
+  await discard(); expect(state.ui.all("input")[0].disabled).toBe(false);
 });
 it("S20b waste locks the visible choice, quantity, reason and note until resolved", async () => {
   let choices = [{ kind: "ingredient", id: "milk", label: "Milk", unit: "ml" }] as WasteChoice[];
@@ -82,6 +93,7 @@ it.each([401, 403, 408, 425, 429, 503])("S20b purchase stays visible and locked 
   state.fetch.mockResolvedValueOnce(Response.json({ error: "try later" }, { status })); await state.ui.submit(); locked();
   expect(state.ui.all("input").map(n => n.props.value)).toEqual(["2", "40"]); expect(bodies()[1]).toEqual(bodies()[0]);
   state.fetch.mockResolvedValueOnce(Response.json({ error: "refused" }, { status: 422 })); await state.ui.submit();
+  locked(); await discard();
   expect(state.ui.all("input")[0].disabled).toBe(false); state.ui.change(state.ui.all("input")[1], "60");
   state.fetch.mockResolvedValueOnce(Response.json({ ok: true })); await state.ui.submit();
   expect(bodies()[3].ref).not.toBe(bodies()[0].ref); expect(bodies()[3].total).toBe("60");
@@ -94,4 +106,16 @@ it("S20b a saved shelf count shows its result and the next count opens empty", a
   expect(bodies()[1]).toEqual(bodies()[0]); expect(state.ui.text()).toContain("costs.countResults");
   open = false; state.ui.render(); open = true; state.ui.render();
   expect(state.ui.all("input")[0].props.value).toBe(""); expect(state.ui.all("input")[0].disabled).toBe(false);
+});
+it("a purchase reopened while its first send is out says nothing until the reply is lost (cross-review of batch 5)", async () => {
+  let open = true;
+  let lose!: (error: Error) => void;
+  state.fetch.mockReset().mockImplementationOnce(() => new Promise((_, reject) => { lose = reject; }));
+  state.ui.render(() => <PurchaseDialog open={open} currency="MXN" ingredients={ingredients} onClose={() => { open = false; }} />);
+  state.ui.change(state.ui.all("select")[0], "milk"); state.ui.change(state.ui.all("input")[0], "2"); state.ui.change(state.ui.all("input")[1], "40");
+  const sending = state.ui.submit();
+  open = false; state.ui.render(); open = true; state.ui.render();
+  expect(state.ui.text()).not.toContain("pending.purchase");
+  lose(new Error("lost reply")); await sending; state.ui.render();
+  expect(state.ui.text()).toContain("pending.purchase");
 });

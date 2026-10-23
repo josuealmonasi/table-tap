@@ -4688,6 +4688,9 @@ begin
   -- A trusted stock movement: it keeps the dish's count generation.
   perform set_config('tabletap.stock_movement', 'on', true);
   if (p_ingredient is null) = (p_item is null) then return null; end if;
+  -- Product locks still precede movement locks, as they do for a sale.
+  if p_item is not null then perform 1 from menu_items where id = p_item and restaurant_id = p_restaurant for update; end if;
+  perform public.lock_ingredient_movements(p_restaurant);
   if p_ingredient is not null then
     select name into v_name from ingredients
      where id = p_ingredient and restaurant_id = p_restaurant and archived_at is null;
@@ -5521,6 +5524,9 @@ alter table refund_operations drop constraint if exists refund_operations_histor
 alter table refund_operations add constraint refund_operations_historical_log_id_fkey
   foreign key (restaurant_id, historical_log_id) references user_logs(restaurant_id, id);
 alter table refund_operations add column if not exists fee_reconciled_at timestamptz;
+-- Unknown is not zero: completion must protect a fee before Stripe can be read.
+alter table refund_operations add column if not exists fee_verification_pending boolean not null default true;
+alter table refund_operations add column if not exists fee_target_cents int check (fee_target_cents >= 0);
 create unique index if not exists refund_historical_log on refund_operations(historical_log_id) where historical_log_id is not null;
 create index if not exists refunds_tenant_status on refund_operations(restaurant_id, status, created_at);
 create table if not exists refund_allocations (
@@ -6046,6 +6052,7 @@ begin
   update refund_operations set stripe_refund_id = p_refund, provider_status = p_status,
     status = case when p_status = 'succeeded' then 'succeeded' when p_status in ('failed', 'canceled') then 'failed' else 'processing' end,
     completed_at = case when p_status = 'succeeded' then now() end,
+    fee_verification_pending = (source = 'stripe'),
     confirmed_by = p_actor,
     payout_actor = case when source = 'stripe' then null else coalesce(p_payout, original_collector) end where id = o.id;
   -- Financial readers consume typed returns. No mirrored refunded activity row
@@ -6192,12 +6199,31 @@ begin
   if p_cents < 0 then raise exception 'invalid returned fee'; end if;
   update platform_fees set refunded_cents = least(cents, greatest(refunded_cents, p_cents))
     where restaurant_id = p_restaurant and stripe_payment_intent = p_intent and status = 'taken';
-  update refund_operations set fee_reconciled_at = now() where restaurant_id = p_restaurant
-    and stripe_payment_intent = p_intent and status = 'succeeded' and source = 'stripe';
+  -- An old caller can sync the ledger, but only a verified cumulative target
+  -- can finish an operation's fee recovery (including a verified zero).
 end;
 $$;
 revoke all on function public.sync_refunded_platform_fee(uuid, text, int) from public, anon, authenticated;
 grant execute on function public.sync_refunded_platform_fee(uuid, text, int) to service_role;
+
+create or replace function public.verify_refunded_platform_fee(p_restaurant uuid, p_intent text, p_cents int, p_target int, p_refunds text[] default null)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if p_cents is null or p_target is null or p_cents < 0 or p_target < 0 then raise exception 'invalid verified fee'; end if;
+  if p_refunds is null and p_target <> 0 then raise exception 'missing fee refund evidence'; end if;
+  perform public.sync_refunded_platform_fee(p_restaurant, p_intent, p_cents);
+  -- A refund completed after the provider snapshot must wait for its own check.
+  update refund_operations set fee_target_cents = p_target,
+    fee_verification_pending = (p_cents < p_target),
+    fee_reconciled_at = case when p_cents >= p_target then now() end
+    where restaurant_id = p_restaurant and stripe_payment_intent = p_intent
+      and status = 'succeeded' and source = 'stripe'
+      and (p_refunds is null or stripe_refund_id = any(p_refunds));
+end;
+$$;
+revoke all on function public.verify_refunded_platform_fee(uuid, text, int, int, text[]) from public, anon, authenticated;
+grant execute on function public.verify_refunded_platform_fee(uuid, text, int, int, text[]) to service_role;
 
 -- A manager may attribute an ambiguous historical receipt, never change it.
 drop function if exists public.attribute_payment(uuid, uuid, text, jsonb);
@@ -6326,8 +6352,10 @@ begin
       current_setting('tabletap.importing_return', true) is distinct from 'v1') then
     raise exception 'historical evidence is immutable';
   end if;
-  if (to_jsonb(new) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','historical_log_id'])
-    is distinct from (to_jsonb(old) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','historical_log_id']) then
+  -- Fee verification changes after customer completion; the return's money
+  -- and original charge identity remain immutable throughout recovery.
+  if (to_jsonb(new) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','fee_verification_pending','fee_target_cents','historical_log_id'])
+    is distinct from (to_jsonb(old) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','fee_verification_pending','fee_target_cents','historical_log_id']) then
     raise exception 'return money is immutable';
   end if;
   return new;
@@ -7414,6 +7442,7 @@ declare
   v_stock jsonb := '{"ok":true,"low":[]}'::jsonb;
   v_reservation uuid;
   v_name text;
+  o orders;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   perform set_config('tabletap.allocation_writer', 'v1', true);
@@ -7421,7 +7450,17 @@ begin
   perform set_config('tabletap.allocation_scope', '', true);
   if p_status not in ('received', 'completed') then raise exception 'Invalid till status'; end if;
   v_ticket := public.pos_ticket(p_restaurant, p_ref);
-  if v_ticket is not null then return v_ticket; end if;
+  if v_ticket is not null then
+    select * into o from orders where restaurant_id = p_restaurant and pos_ref = p_ref;
+    -- A sale rung before its request was saved has no scope. It is matched
+    -- on its account, as it always was: the clients in production forget a
+    -- reference on a 409, so refusing its retry rang it a second time.
+    if o.account_id is distinct from p_account
+      or (o.request_scope is not null and o.request_scope is distinct from p_order->>'request_scope') then
+      return jsonb_build_object('outcome', 'conflict');
+    end if;
+    return v_ticket;
+  end if;
   -- Lock the account before stock, as every credit decision must see its latest debt.
   select name into v_name from customer_accounts
    where id = p_account and restaurant_id = p_restaurant for update;
@@ -7435,6 +7474,7 @@ begin
       end if;
     end if;
     perform public.pos_insert_order(p_restaurant, p_ref, p_order, p_status, null, v_reservation);
+    update orders set request_scope = p_order->>'request_scope' where restaurant_id = p_restaurant and pos_ref = p_ref;
     v_charge := public.account_charge_v2(p_restaurant, p_account, array[p_ref], (p_order->>'total')::numeric, p_actor);
     if v_charge->>'outcome' <> 'charged' then
       raise exception using errcode = 'PT001', message = 'Account refused the sale';
@@ -7574,6 +7614,9 @@ grant select, insert, update, delete on refund_due_attempts to service_role;
 -- lookup must remain recoverable even after the diner's money is back.
 alter table refunds_due add column if not exists fee_reconciled_at timestamptz;
 alter table refunds_due add column if not exists fee_request jsonb;
+alter table refunds_due add column if not exists fee_verification_pending boolean not null default true;
+alter table refunds_due add column if not exists fee_target_cents int check (fee_target_cents >= 0);
+alter table refunds_due add column if not exists fee_request_history jsonb not null default '[]';
 alter table refunds_due add column if not exists currency text check (currency ~ '^[A-Z]{3}$');
 alter table refunds_due add column if not exists stripe_account_id text;
 
@@ -7648,6 +7691,35 @@ $$;
 revoke all on function public.start_refund_due_fee(uuid, uuid, text, int) from public, anon, authenticated;
 grant execute on function public.start_refund_due_fee(uuid, uuid, text, int) to service_role;
 
+-- Retire only the request whose outcome was checked. An old 300-cent request
+-- cannot still land once only 200 cents of the WHOLE fee remain at Stripe.
+-- A partial target alone does not prove that; an unknown request stays put.
+create or replace function public.advance_refund_due_fee(
+  p_restaurant uuid, p_due uuid, p_previous jsonb, p_target int, p_returned int, p_fee_total int, p_refund text default null
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare d refunds_due; v_no int;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into d from refunds_due where restaurant_id = p_restaurant and id = p_due for update;
+  if d.id is null or d.refunded_at is null or d.fee_request is null then return null; end if;
+  if d.fee_request is distinct from p_previous then return null; end if;
+  if p_target is null or p_returned is null or p_fee_total is null or p_target <= p_returned
+    or p_returned < 0 or p_target > p_fee_total then raise exception 'invalid fee remainder'; end if;
+  if p_refund is null and (d.fee_request->>'amount')::int <= p_fee_total - p_returned then return null; end if;
+  if p_refund is not null and (d.fee_request->>'amount')::int > p_returned then return null; end if;
+  v_no := coalesce((d.fee_request->>'attempt_no')::int, 1) + 1;
+  update refunds_due set fee_target_cents = greatest(coalesce(fee_target_cents, 0), p_target),
+    fee_request_history = fee_request_history || jsonb_build_array(d.fee_request || jsonb_build_object(
+      'provider_refund', p_refund, 'returned_cents', p_returned, 'fee_total_cents', p_fee_total,
+      'outcome', case when p_refund is null then 'cannot_fit' else 'succeeded' end)),
+    fee_request = jsonb_build_object('fee_id', d.fee_request->>'fee_id', 'amount', p_target - p_returned, 'attempt_no', v_no)
+    where id = d.id returning fee_request into d.fee_request;
+  return d.fee_request;
+end;
+$$;
+revoke all on function public.advance_refund_due_fee(uuid, uuid, jsonb, int, int, int, text) from public, anon, authenticated;
+grant execute on function public.advance_refund_due_fee(uuid, uuid, jsonb, int, int, int, text) to service_role;
+
 create or replace function public.finish_refund_due_attempt(
   p_restaurant uuid, p_due uuid, p_attempt uuid, p_actor text, p_refund text, p_status text
 ) returns boolean language plpgsql security definer set search_path = public as $$
@@ -7662,7 +7734,8 @@ begin
   update refund_due_attempts set stripe_refund_id = p_refund, provider_status = p_status, updated_at = now()
     where id = p_attempt and restaurant_id = p_restaurant;
   if p_status <> 'succeeded' then return false; end if;
-  update refunds_due set refunded_at = now(), refunded_by = p_actor, stripe_refund_id = p_refund where id = d.id;
+  update refunds_due set refunded_at = now(), refunded_by = p_actor, stripe_refund_id = p_refund,
+    fee_verification_pending = true where id = d.id;
   return true;
 end;
 $$;
@@ -8238,7 +8311,7 @@ returns boolean language sql immutable set search_path = public as $$
     and not exists (select 1 from jsonb_array_elements(p_tiers) t
       where jsonb_typeof(t->'qty') <> 'number' or jsonb_typeof(t->'price') <> 'number'
          or (t->>'qty')::numeric < 1 or (t->>'qty')::numeric > 1000
-         or (t->>'qty')::numeric <> floor((t->>'qty')::numeric) or (t->>'price')::numeric < 0));
+         or (t->>'qty')::numeric <> floor((t->>'qty')::numeric) or (t->>'price')::numeric <= 0));
 $$;
 revoke all on function public.tiers_sound(jsonb) from public, anon, authenticated;
 do $$ begin
@@ -8252,6 +8325,11 @@ do $$ begin
     alter table promotions add constraint promotions_tiers_sound check (public.tiers_sound(tiers));
   end if;
 end $$;
+
+-- Changing a CHECK's helper does not recheck existing rows. Re-add it so a
+-- zero-price tier must be corrected before this schema can be applied.
+alter table promotions drop constraint if exists promotions_tiers_sound;
+alter table promotions add constraint promotions_tiers_sound check (public.tiers_sound(tiers));
 
 -- S17: a restaurant's deletion cannot erase money it still owes or its books.
 -- No foreign keys on the audit: actor and target must survive their deletion.
@@ -8304,6 +8382,38 @@ revoke all on restaurant_accounting_records from public, authenticated, service_
 -- under the privacy notice and removal of disposable API fixtures.
 grant select, delete on restaurant_accounting_records to service_role;
 
+-- A missing fee row is not evidence of no fee. A saved checkout that asked
+-- for no application fee, or a fee returned in full, is. This also releases
+-- pre-field completed refunds without trusting today's menu or local rounding.
+create or replace function public.refund_fee_proven_clear(p_restaurant uuid, p_intent text)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from platform_fees f where f.restaurant_id = p_restaurant
+      and f.stripe_payment_intent = p_intent and f.status = 'taken' and f.refunded_cents = f.cents)
+    or (exists (select 1 from diner_checkouts c where c.restaurant_id = p_restaurant
+      and c.stripe_payment_intent = p_intent and c.status = 'paid'
+      and coalesce(c.metadata->>'fee_cents', '0') = '0'
+      and not (c.metadata ? 'fee_id')
+      and coalesce(c.stripe_params #>> '{payment_intent_data,application_fee_amount}', '0') = '0')
+    and not exists (select 1 from platform_fees f where f.restaurant_id = p_restaurant
+      and f.stripe_payment_intent = p_intent and f.status = 'taken')
+    and not exists (select 1 from refunds_due d where d.restaurant_id = p_restaurant
+      and d.stripe_payment_intent = p_intent and coalesce((d.fee_request->>'amount')::int, 0) > 0));
+$$;
+revoke all on function public.refund_fee_proven_clear(uuid, text) from public, anon, authenticated;
+grant execute on function public.refund_fee_proven_clear(uuid, text) to service_role;
+
+-- Idempotent on reapplication: never turn a verified zero back into unknown.
+-- Rows without proof stay recoverable through the ordinary fee-only retries.
+-- Only the new column is written: an existing row's fee_reconciled_at is its
+-- own record, and stamping it now() would be a change to production's data.
+update refunds_due d set fee_verification_pending = false
+  where d.refunded_at is not null and d.fee_verification_pending
+    and (d.fee_reconciled_at is not null or public.refund_fee_proven_clear(d.restaurant_id, d.stripe_payment_intent));
+update refund_operations r set fee_verification_pending = false
+  where r.status = 'succeeded' and r.fee_verification_pending
+    and (r.source <> 'stripe' or r.fee_reconciled_at is not null
+      or public.refund_fee_proven_clear(r.restaurant_id, r.stripe_payment_intent));
+
 create or replace function public.admin_delete_restaurant(p_restaurant uuid, p_check_only boolean default true)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_table text;
@@ -8328,6 +8438,47 @@ begin
     or exists (select 1 from platform_fees where restaurant_id = p_restaurant and status = 'open') then
     return jsonb_build_object('outcome', 'provider');
   end if;
+  if exists (select 1 from offline_sale_queue where restaurant_id = p_restaurant and approved_at is null) then
+    return jsonb_build_object('outcome', 'offlineSale');
+  end if;
+  -- Customer completion commits before the first provider read. Unknown is
+  -- protected even when the local ten-cent share rounds to zero, in both books.
+  if exists (select 1 from refunds_due d where d.restaurant_id = p_restaurant
+      and d.refunded_at is not null and d.fee_verification_pending and d.fee_reconciled_at is null
+      and not public.refund_fee_proven_clear(p_restaurant, d.stripe_payment_intent))
+    or exists (select 1 from refund_operations r where r.restaurant_id = p_restaurant
+      and r.source = 'stripe' and r.status = 'succeeded' and r.fee_verification_pending and r.fee_reconciled_at is null
+      and not public.refund_fee_proven_clear(p_restaurant, r.stripe_payment_intent)) then
+    return jsonb_build_object('outcome', 'refundFeeVerification');
+  end if;
+  -- Stripe returns the cumulative rounded share, not a fee for every row.
+  -- No fee, an already returned share, or a share rounding to zero owes nothing.
+  if exists (
+    select 1 from platform_fees f where f.restaurant_id = p_restaurant and f.status = 'taken'
+      and f.charge_cents > 0 and f.refunded_cents < round(f.cents::numeric * least(f.charge_cents, 100 * (
+        coalesce((select sum(d.amount) from refunds_due d where d.restaurant_id = p_restaurant
+          and d.stripe_payment_intent = f.stripe_payment_intent and d.refunded_at is not null), 0)
+        + coalesce((select sum(r.amount) from refund_operations r where r.restaurant_id = p_restaurant
+          and r.stripe_payment_intent = f.stripe_payment_intent and r.source = 'stripe' and r.status = 'succeeded'), 0)
+      )) / f.charge_cents)
+      and (exists (select 1 from refunds_due d where d.restaurant_id = p_restaurant
+        and d.stripe_payment_intent = f.stripe_payment_intent and d.refunded_at is not null and d.fee_reconciled_at is null)
+      or exists (select 1 from refund_operations r where r.restaurant_id = p_restaurant
+        and r.stripe_payment_intent = f.stripe_payment_intent and r.source = 'stripe'
+        and r.status = 'succeeded' and r.fee_reconciled_at is null))
+  ) or exists (
+    -- A provider-verified fee request is evidence of its own, ledger row or
+    -- not. The arithmetic above sees only the refunds this app recorded: a
+    -- charge refunded in full outside it left MX$3 of fee to return while the
+    -- local share rounded to zero, and the restaurant could be deleted owed
+    -- that (cross-review of batch 5). Only a share already returned in full
+    -- lets it go.
+    select 1 from refunds_due d where d.restaurant_id = p_restaurant and d.refunded_at is not null
+      and d.fee_reconciled_at is null and coalesce((d.fee_request->>'amount')::numeric, 0) > 0
+      and not exists (select 1 from platform_fees f where f.restaurant_id = p_restaurant
+        and f.stripe_payment_intent = d.stripe_payment_intent and f.status = 'taken'
+        and f.refunded_cents = f.cents)
+  ) then return jsonb_build_object('outcome', 'refundFee'); end if;
   -- Retain completed refunds too. Closing a real business does not make its
   -- receipts disposable, but completed books must not prevent its deletion.
   if p_check_only is distinct from false then return jsonb_build_object('outcome', 'ready'); end if;
@@ -8347,6 +8498,10 @@ begin
        from (select * from public.%I where restaurant_id = $1 for update) t', v_table, v_table)
       using p_restaurant, case when v_table = 'customer_accounts' then array['email', 'code'] else array[]::text[] end;
   end loop;
+  -- The queue uses pos_ref as its identity, not the id the other books use.
+  insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
+    select p_restaurant, 'offline_sale_queue', q.pos_ref, to_jsonb(q)
+    from (select * from offline_sale_queue where restaurant_id = p_restaurant for update) q;
   -- The privacy notice keeps admission decisions with the visit and orders.
   -- Members have no restaurant_id; reach them only through this restaurant's visits.
   insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
@@ -9110,6 +9265,7 @@ create unique index if not exists orders_request_once on orders(restaurant_id, r
 alter table cash_movements add column if not exists request_ref uuid;
 create unique index if not exists cash_movements_request_once on cash_movements(shift_id, request_ref) where request_ref is not null;
 alter table ingredient_purchases add column if not exists request_ref uuid;
+alter table ingredient_purchases add column if not exists request_packs numeric;
 create unique index if not exists ingredient_purchases_request_once on ingredient_purchases(restaurant_id, request_ref) where request_ref is not null;
 alter table waste_entries add column if not exists request_ref uuid;
 create unique index if not exists waste_entries_request_once on waste_entries(restaurant_id, request_ref) where request_ref is not null;
@@ -9196,8 +9352,13 @@ create or replace function public.create_cash_withdrawal_once(
 declare s cash_shifts; m cash_movements;
 begin
   perform public.lock_restaurant_money(p_restaurant);
-  select * into m from cash_movements where restaurant_id = p_restaurant and shift_id = p_shift and request_ref = p_ref;
-  if found then return jsonb_build_object('id', m.id, 'currency', m.currency); end if;
+  select * into m from cash_movements where restaurant_id = p_restaurant and request_ref = p_ref;
+  if found then
+    if (m.shift_id, m.amount, m.note) is distinct from (p_shift, p_amount, p_note) then
+      raise exception 'reference belongs to another withdrawal' using errcode = 'PT409';
+    end if;
+    return jsonb_build_object('id', m.id, 'currency', m.currency);
+  end if;
   select * into s from cash_shifts where restaurant_id = p_restaurant and id = p_shift and closed_at is null for update;
   if not found then return null; end if;
   if p_ref is null or p_amount is null or p_amount <= 0 or p_amount > 1000000 or p_amount <> round(p_amount, 2)
@@ -9205,7 +9366,7 @@ begin
   insert into cash_movements(restaurant_id, shift_id, request_ref, currency, kind, amount, note, actor_email, created_at)
     values(p_restaurant, s.id, p_ref, s.currency, 'withdrawal', p_amount, p_note, p_actor, clock_timestamp())
     on conflict (shift_id, request_ref) where request_ref is not null do nothing returning * into m;
-  if m.id is null then select * into m from cash_movements where shift_id = p_shift and request_ref = p_ref and restaurant_id = p_restaurant; end if;
+  if m.id is null then raise exception 'withdrawal reference changed' using errcode = 'PT409'; end if;
   return jsonb_build_object('id', m.id, 'currency', m.currency);
 end;
 $$;
@@ -9215,18 +9376,26 @@ grant execute on function public.create_cash_withdrawal_once(uuid, uuid, numeric
 create or replace function public.record_purchase_once(
   p_restaurant uuid, p_ingredient uuid, p_packs numeric, p_total numeric, p_actor text, p_ref uuid
 ) returns uuid language plpgsql security definer set search_path = public as $$
-declare i ingredients; v_id uuid; v_price numeric;
+declare i ingredients; p ingredient_purchases; v_id uuid; v_price numeric;
 begin
   perform public.lock_ingredient_movements(p_restaurant);
-  select id into v_id from ingredient_purchases where restaurant_id = p_restaurant and request_ref = p_ref;
-  if found then return v_id; end if;
+  select * into p from ingredient_purchases where restaurant_id = p_restaurant and request_ref = p_ref;
+  -- Old receipts did not save packs, so those match on ingredient and money.
+  -- Never on packs times today's pack size, which may have changed; and never
+  -- refused outright, because the clients in production forget a reference
+  -- on a 409 and the next send recorded the MX$100 a second time.
+  if found and (p.ingredient_id is distinct from p_ingredient or p.total is distinct from p_total
+    or (p.request_packs is not null and p.request_packs is distinct from p_packs)) then
+    raise exception 'reference belongs to another purchase' using errcode = 'PT409';
+  end if;
+  if found then return p.id; end if;
   if p_ref is null or p_packs <= 0 then return null; end if;
   select * into i from ingredients where id = p_ingredient and restaurant_id = p_restaurant and archived_at is null for update;
   if not found then return null; end if;
-  insert into ingredient_purchases(restaurant_id, ingredient_id, request_ref, quantity, total, recorded_by)
-    values(p_restaurant, p_ingredient, p_ref, p_packs * i.pack_size, p_total, p_actor)
+  insert into ingredient_purchases(restaurant_id, ingredient_id, request_ref, request_packs, quantity, total, recorded_by)
+    values(p_restaurant, p_ingredient, p_ref, p_packs, p_packs * i.pack_size, p_total, p_actor)
     on conflict (restaurant_id, request_ref) where request_ref is not null do nothing returning id into v_id;
-  if v_id is null then select id into v_id from ingredient_purchases where restaurant_id = p_restaurant and request_ref = p_ref; return v_id; end if;
+  if v_id is null then raise exception 'purchase reference changed' using errcode = 'PT409'; end if;
   v_price := round(p_total / p_packs, 2);
   if v_price is distinct from i.pack_price then update ingredients set pack_price = v_price, updated_by = p_actor where id = p_ingredient; end if;
   return v_id;
@@ -9235,17 +9404,47 @@ $$;
 revoke all on function public.record_purchase_once(uuid, uuid, numeric, numeric, text, uuid) from public, anon, authenticated;
 grant execute on function public.record_purchase_once(uuid, uuid, numeric, numeric, text, uuid) to service_role;
 
+-- Additive for rollout: old routes still log after calling the old RPC.
+-- New routes use this writer so a lost reply cannot lose or duplicate its log.
+create or replace function public.record_purchase_once_v2(
+  p_restaurant uuid, p_ingredient uuid, p_packs numeric, p_total numeric, p_actor text, p_ref uuid
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare v_previous uuid; v_id uuid; v_name text;
+begin
+  perform public.lock_ingredient_movements(p_restaurant);
+  select id into v_previous from ingredient_purchases where restaurant_id = p_restaurant and request_ref = p_ref;
+  -- The old writer verifies the complete saved request, including on replay.
+  v_id := public.record_purchase_once(p_restaurant, p_ingredient, p_packs, p_total, p_actor, p_ref);
+  if v_id is not null and v_previous is null then
+    select i.name into v_name from ingredients i where i.restaurant_id = p_restaurant and i.id = p_ingredient;
+    -- The saved purchase and its one paid log commit together. A replay exits
+    -- without a second paid entry, even when the HTTP reply was lost.
+    insert into user_logs(restaurant_id, actor_email, entity, action, detail)
+      values(p_restaurant, p_actor, 'costs', 'paid',
+        'note=' || replace(v_name || ' × ' || p_packs::text, ' ', '_') || ' amount=' || to_char(p_total, 'FM999999999990.00'));
+  end if;
+  return v_id;
+end;
+$$;
+revoke all on function public.record_purchase_once_v2(uuid, uuid, numeric, numeric, text, uuid) from public, anon, authenticated;
+grant execute on function public.record_purchase_once_v2(uuid, uuid, numeric, numeric, text, uuid) to service_role;
+
 create or replace function public.record_waste_once(
   p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric,
   p_reason text, p_note text, p_cost numeric, p_actor text, p_ref uuid
 ) returns uuid language plpgsql security definer set search_path = public as $$
-declare v_id uuid; v_name text; v_stock int;
+declare w waste_entries; v_id uuid; v_name text; v_stock int;
 begin
   -- Product waste takes its item lock before the movement lock, like sales.
   if p_item is not null then perform 1 from menu_items where id = p_item and restaurant_id = p_restaurant for update; end if;
   perform public.lock_ingredient_movements(p_restaurant);
-  select id into v_id from waste_entries where restaurant_id = p_restaurant and request_ref = p_ref;
-  if found then return v_id; end if;
+  select * into w from waste_entries where restaurant_id = p_restaurant and request_ref = p_ref;
+  -- Cost is calculated by the server and may change after a delivery.
+  if found and (w.ingredient_id, w.item_id, w.quantity, w.reason, w.note) is distinct from
+     (p_ingredient, p_item, p_quantity, p_reason, p_note) then
+    raise exception 'reference belongs to another waste entry' using errcode = 'PT409';
+  end if;
+  if found then return w.id; end if;
   if p_ref is null or (p_ingredient is null) = (p_item is null) then return null; end if;
   if p_ingredient is not null then
     select name into v_name from ingredients where id = p_ingredient and restaurant_id = p_restaurant and archived_at is null for update;
@@ -9257,7 +9456,7 @@ begin
   insert into waste_entries(restaurant_id, ingredient_id, item_id, request_ref, name, quantity, reason, note, cost, recorded_by)
     values(p_restaurant, p_ingredient, p_item, p_ref, v_name, p_quantity, p_reason, p_note, p_cost, p_actor)
     on conflict (restaurant_id, request_ref) where request_ref is not null do nothing returning id into v_id;
-  if v_id is null then select id into v_id from waste_entries where restaurant_id = p_restaurant and request_ref = p_ref; return v_id; end if;
+  if v_id is null then raise exception 'waste reference changed' using errcode = 'PT409'; end if;
   if v_stock is not null then
     update menu_items set stock = greatest(v_stock - ceil(p_quantity)::int, 0),
       available = case when v_stock - ceil(p_quantity)::int <= 0 then false else available end,
@@ -9277,6 +9476,14 @@ begin
   select jsonb_agg(jsonb_build_object('ingredient_id', ingredient_id, 'counted', counted, 'expected', expected,
     'movement_cutoff', movement_cutoff) order by ingredient_id) into v_results from ingredient_counts
     where restaurant_id = p_restaurant and request_ref = p_ref;
+  if v_results is not null then
+    if (select jsonb_agg(jsonb_build_object('ingredient_id', c.ingredient_id, 'counted', c.counted) order by c.ingredient_id)
+        from jsonb_to_recordset(p_counts) as c(ingredient_id uuid, counted numeric)) is distinct from
+       (select jsonb_agg(jsonb_build_object('ingredient_id', c.ingredient_id, 'counted', c.counted) order by c.ingredient_id)
+        from ingredient_counts c where c.restaurant_id = p_restaurant and c.request_ref = p_ref) then
+      raise exception 'reference belongs to another count' using errcode = 'PT409';
+    end if;
+  end if;
   if v_results is not null then return v_results; end if;
   if p_ref is null or jsonb_typeof(p_counts) is distinct from 'array' then raise exception 'invalid counts'; end if;
   if jsonb_array_length(p_counts) not between 1 and 500 or exists (
@@ -9307,6 +9514,9 @@ begin
   if p_ref is null then return null; end if;
   select * into s from cash_shifts where restaurant_id = p_restaurant and close_ref = p_ref;
   if found then
+    if s.id is distinct from p_shift or (s.close_result->>'counted')::numeric is distinct from p_counted then
+      raise exception 'reference belongs to another close' using errcode = 'PT409';
+    end if;
     if s.id = p_shift then return s.close_result; end if;
     return null;
   end if;

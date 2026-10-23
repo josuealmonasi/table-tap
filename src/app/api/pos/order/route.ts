@@ -1,3 +1,4 @@
+import { orderRequestScope } from "@/lib/order-request";
 import { readOfflineContext, contextCoveredSale } from "@/lib/offline-authority";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -179,6 +180,7 @@ export async function POST(req: NextRequest) {
     p_inventory: Boolean(plan && can(plan.limits, "inventory")),
     p_demand: toDemandPayload(stockDemand(verified)),
     p_order: {
+      ...(onAccount ? { request_scope: orderRequestScope("pos-account", body) } : {}),
       subtotal: pricing.subtotal, service_fee: pricing.serviceFee, tip: pricing.tip,
       tax_pct: Number(restaurant.tax_pct) || 0, discount: pricing.discount, total: pricing.total,
       promo_detail: pricing.discount > 0 ? { item: pricing.itemDiscount, promos: pricing.promoDiscount, coupon: 0 } : null,
@@ -208,7 +210,7 @@ export async function POST(req: NextRequest) {
     }
     // A reference that belongs to another order, here or anywhere: refused,
     // and nothing about that order is said.
-    if (ticket.outcome === "conflict") return await apiError("apiErr.invalidRequest", 409);
+    if (ticket.outcome === "conflict") return await apiError("apiErr.retryConflict", 409);
     // A ticket that exists but is not settled yet: not a refusal of the sale —
     // the device keeps it and sends it again (`held`).
     return await apiError("apiErr.posUnsettled", 409, undefined, { held: true });

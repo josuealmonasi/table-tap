@@ -25,6 +25,7 @@ interface PadOrderPanelProps {
   sending: boolean;
   busy: boolean;
   pending?: boolean;
+  onDiscard?: () => void;
   closedNow: boolean;
   onChangeQty: (cartId: number, qty: number) => void;
   onEdit: (line: CartItem) => void;
@@ -41,7 +42,7 @@ export default function PadOrderPanel(p: PadOrderPanelProps) {
         {t("waiter.order")}
       </h3>
 
-      {p.pending && <PendingAttempt message={t("pending.order")} />}
+      {p.pending && <PendingAttempt message={t("pending.order")} busy={p.busy} onDiscard={p.onDiscard} />}
 
       {/* Which table, before anything else. It is the one thing that makes
           this order findable afterwards — on the board, on the bill, and in

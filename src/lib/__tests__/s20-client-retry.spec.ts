@@ -29,13 +29,17 @@ it("K4 pay-later retries the frozen order after a lost or unreadable reply, then
   expect(bodies()[1]).toEqual(bodies()[0]); expect(bodies()[2]).toEqual(bodies()[0]);
   expect(bodies()[3].ref).not.toBe(bodies()[0].ref); expect(bodies()[3].note).toBe("Changed");
 });
-it("K4 a definite refusal releases the intent while a server failure keeps it", async () => {
+it("K4 a server failure keeps the intent, and so does a refusal of its retry", async () => {
+  // The retry's refusal can come while the first request is still on its way
+  // to the writer, so it never lets the reference go on its own.
   const cart = useMenu();
   state.fetch.mockResolvedValueOnce(Response.json({ error: "unknown" }, { status: 503 }))
     .mockResolvedValueOnce(Response.json({ error: "closed" }, { status: 409 }))
-    .mockResolvedValueOnce(Response.json({ orderId: "one", deferred: true }));
-  await cart.checkout(true); await cart.checkout(true); await cart.checkout(true);
-  expect(bodies()[1].ref).toBe(bodies()[0].ref); expect(bodies()[2].ref).not.toBe(bodies()[0].ref);
+    .mockResolvedValueOnce(Response.json({ orderId: "one", deferred: true }))
+    .mockResolvedValueOnce(Response.json({ orderId: "two", deferred: true }));
+  await cart.checkout(true); await cart.checkout(true); await cart.checkout(true); await cart.checkout(true);
+  expect(bodies()[1].ref).toBe(bodies()[0].ref); expect(bodies()[2].ref).toBe(bodies()[0].ref);
+  expect(bodies()[3].ref).not.toBe(bodies()[0].ref);
 });
 it("K4 a rate limit keeps the intent: a lost order is never placed twice (cross-review 1)", async () => {
   // The tenth checkout commits but its reply is lost; the retry hits the
@@ -49,9 +53,16 @@ it("K4 a rate limit keeps the intent: a lost order is never placed twice (cross-
   await cart.checkout(true); await cart.checkout(true); await cart.checkout(true); await cart.checkout(true);
   expect(new Set(bodies().map(b => b.ref)).size).toBe(1);
 });
-it("only an answer given after the lookup settles an attempt", () => {
-  for (const status of [400, 404, 409, 410, 422]) expect(refusalSettles(status), String(status)).toBe(true);
-  for (const status of [401, 403, 408, 425, 429, 500, 502, 503]) expect(refusalSettles(status), String(status)).toBe(false);
+it("a first send settles on any refusal; a retry never does on its own", () => {
+  // The first send is the only request that ever carried its reference.
+  for (const status of [400, 401, 402, 403, 404, 409, 410, 422, 429]) expect(refusalSettles(status), String(status)).toBe(true);
+  // A timeout or a server error can arrive while the work goes on.
+  for (const status of [408, 425, 500, 502, 503]) expect(refusalSettles(status), String(status)).toBe(false);
+  // A retry follows a lost reply: the first request may have committed, or
+  // may still commit after this refusal, even one the writer gave.
+  for (const status of [400, 401, 402, 403, 404, 408, 409, 410, 422, 425, 429, 503]) {
+    expect(refusalSettles(status, true), `retry ${status}`).toBe(false);
+  }
 });
 it("K4 card checkout retains its existing request shape", async () => {
   state.fetch.mockResolvedValue(Response.json({ error: "no card" }, { status: 409 }));
@@ -64,4 +75,24 @@ it.each(["purchases", "waste"])("K6 %s keeps its frozen request through a networ
   for (const quantity of [1, 2, 3, 4]) await send(`/api/costs/${path}`, "POST", { quantity });
   expect(bodies()[1]).toEqual(bodies()[0]); expect(bodies()[2]).toEqual(bodies()[0]);
   expect(bodies()[3].quantity).toBe(4); expect(bodies()[3].ref).not.toBe(bodies()[0].ref);
+});
+it("a lost order shows its retry screen alone, never a modal saying it failed (production, 2026-10-22)", async () => {
+  // «Atención: Error de red» over a screen saying the order may already be
+  // with the kitchen read as an order that had failed.
+  const cart = useMenu();
+  state.fetch.mockRejectedValueOnce(new Error("lost"))
+    .mockResolvedValueOnce(Response.json({ error: "No pudimos crear tu pedido" }, { status: 503 }))
+    .mockResolvedValueOnce(Response.json({ error: "Esto ya se había enviado antes con otros datos" }, { status: 409 }));
+  await cart.checkout(true);
+  await cart.checkout(true);
+  expect(cart.input.notify).not.toHaveBeenCalled();
+  // A refusal says something the retry screen does not, so it still shows.
+  await cart.checkout(true);
+  expect(cart.input.notify).toHaveBeenCalledWith("Esto ya se había enviado antes con otros datos");
+});
+it("a refused first order still says why", async () => {
+  const cart = useMenu();
+  state.fetch.mockResolvedValueOnce(Response.json({ error: "La cocina está cerrada" }, { status: 409 }));
+  await cart.checkout(true);
+  expect(cart.input.notify).toHaveBeenCalledWith("La cocina está cerrada");
 });

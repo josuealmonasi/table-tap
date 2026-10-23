@@ -29,6 +29,7 @@ interface CartOverlayProps
   > {
   /** Admission blocks a new order, never an existing bill. */
   pendingOrder?: PendingCheckout | null;
+  onDiscardOrder?: () => void;
   admissionBlocked?: boolean;
   admissionNotice?: React.ReactNode;
   restaurant: Restaurant;
@@ -54,14 +55,15 @@ export default function CartOverlay({
   onClose,
   admissionBlocked = false,
   pendingOrder,
+  onDiscardOrder,
   admissionNotice,
   ...rest
 }: CartOverlayProps) {
   const t = useT();
   if (pendingOrder) return (
-    <DetailOverlay wide onClose={onClose}>
+    <DetailOverlay wide label={t("cart.title")} onClose={onClose}>
       <div style={{ padding: 16 }}>
-        <PendingOrder currency={restaurant.currency} order={pendingOrder} message={t("pending.order")} busy={rest.loading} onSend={() => rest.onCheckout(true)}>
+        <PendingOrder currency={restaurant.currency} order={pendingOrder} message={t("pending.order")} busy={rest.loading} onSend={() => rest.onCheckout(true)} onDiscard={onDiscardOrder}>
           <p>{t("pending.moreFood")}</p>
         </PendingOrder>
         <button type="button" className="tt-btn tt-btn-ghost" onClick={onClose}>{t("cart.addMore")}</button>
@@ -70,7 +72,7 @@ export default function CartOverlay({
   );
   const { pricing, soldOut, orderableItems, tipPct, tipCustom, coupon, setCoupon } = totals;
   return (
-    <DetailOverlay wide onClose={onClose}>
+    <DetailOverlay wide label={t("cart.title")} onClose={onClose}>
       {admissionNotice}
       <CartScreen
         {...rest}

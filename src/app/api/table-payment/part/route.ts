@@ -66,18 +66,13 @@ async function collect(req: NextRequest): Promise<NextResponse> {
   // payments, the bill reads as covered, and the difference walks out.
   const ref = typeof body.ref === "string" ? body.ref.trim().slice(0, 100) : "";
   // A tab opened before the reviewed balance shipped sends neither the
-  // balance it showed nor its currency. Refusing it as an invalid request
-  // left a waiter holding the customer's cash. It collects as it always did,
-  // against the live balance in the table's one currency; the stale-balance
-  // check needs the figure the screen showed, so it starts at the next refresh.
-  if (body.expected === undefined && body.currency === undefined && typeof body.tableId === "string") {
-    const live = await tableOutstanding(actor.restaurantId, body.tableId);
-    const owing = (live.balances ?? []).filter(b => b.owed > 0);
-    if (owing.length > 1) return await apiError("apiErr.refreshToCollect", 409);
-    if (owing.length === 0 && live.owed <= 0) return await apiError("apiErr.nothingToSettle", 409);
-    body.currency = owing[0]?.currency ?? live.currency ?? undefined;
-    body.expected = owing[0]?.owed ?? live.owed;
-  }
+  // balance it showed nor its currency. It used to collect against the live
+  // balance in whatever currency the table owed, and nothing proves what that
+  // tab displayed: opened while the restaurant was in pesos, it showed MX$100,
+  // and after a switch to dollars the same tap cleared a US$100 debt (audit L,
+  // finding 2, and the cross-review of batch 5). Refusing records nothing and
+  // says how to collect; the refreshed screen sends both.
+  if (body.expected === undefined && body.currency === undefined) return await apiError("apiErr.refreshToCollect", 409);
   if (!body.tableId || !["cash", "card"].includes(method ?? "") || !ref ||
       !Number.isFinite(body.expected) || Number(body.expected) <= 0 || !isDinerCurrency(body.currency) ||
       !Number.isFinite(body.amount) || Number(body.amount) <= 0 || !Number.isFinite(body.tip ?? 0)) {

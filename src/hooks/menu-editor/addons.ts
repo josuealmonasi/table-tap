@@ -3,7 +3,7 @@ import { writeError } from "@/lib/write-result";
 
 /** Extras, availability and which extras a product offers. */
 export function addonActions(ctx: EditorContext) {
-  const { supabase, restaurantId, products, addons, setProducts, setAddons, reload } =
+  const { supabase, restaurantId, addons, setProducts, setAddons, reload } =
     ctx;
   const { reportError, run, move } = ctx.w;
   // ── Add-on items ──
@@ -42,17 +42,15 @@ export function addonActions(ctx: EditorContext) {
   ) : Promise.resolve(false);
 
   async function moveAddon(id: string, direction: "up" | "down"): Promise<void> {
-    const addon = addons.find(a => a.id === id);
-    if (!addon) return;
-    const siblings = addons.filter(a => a.menu_id === addon.menu_id);
-    await move("write.reorderExtras", "menu_items", siblings, id, direction);
+    await move("write.reorderExtras", "menu_items", menu => {
+      const addon = menu.addons.find(a => a.id === id);
+      return addon ? menu.addons.filter(a => a.menu_id === addon.menu_id) : [];
+    }, id, direction);
   }
 
-  // ── Availability toggle (products and add-ons) — optimistic, rolls back on failure ──
+  // ── Availability toggle (products and add-ons) — optimistic, then read back ──
   async function setAvailability(id: string, available: boolean): Promise<void> {
     if (!(await ctx.ready())) return;
-    const prevProducts = products;
-    const prevAddons = addons;
     setProducts(prev => prev.map(p => (p.id === id ? { ...p, available } : p)));
     setAddons(prev => prev.map(a => (a.id === id ? { ...a, available } : a)));
     try {
@@ -60,12 +58,18 @@ export function addonActions(ctx: EditorContext) {
         .from("menu_items")
         .update({ available })
         .eq("id", id).select("id"));
-      if (reportError("write.updateAvailability", error)) return;
+      reportError("write.updateAvailability", error);
     } catch {
       reportError("write.updateAvailability", { message: "Availability did not save" });
     }
-    setProducts(prevProducts);
-    setAddons(prevAddons);
+    // Read back what is saved, whether it saved or not. A failure rolls back
+    // that way, never by restoring the arrays this was called with: they are
+    // the render before the read `ready` waited for (audit L, finding 7). A
+    // success reads too, so the editor's latest read holds the new value (a
+    // copy made next copied the old one) and a reload another switch's
+    // failure started cannot leave this one showing what it was before. The
+    // later read wins; the loader drops the earlier (cross-review of batch 5).
+    await reload();
   }
 
   // ── Which add-ons a product offers (replace the full set) ──

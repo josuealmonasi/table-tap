@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import { useT } from "@/lib/i18n/context";
@@ -75,6 +75,11 @@ export default function BillsPanel({
   const [chosen, setChosen] = useState<OpenBill | null>(null);
   // The table being collected on, if any.
   const [settling, setSettling] = useState<OpenBill | null>(null);
+  const [refreshing, startRefresh] = useTransition();
+  const [refreshingBills, setRefreshingBills] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!refreshing) setRefreshingBills(new Set());
+  }, [refreshing]);
 
   // Arriving from a scanned code: /dashboard/bills?order=<id> opens that bill
   // ready to collect. The diner holds the code up, whoever is charging them
@@ -140,6 +145,7 @@ export default function BillsPanel({
       currency={currency}
       now={now}
       canSettle={canSettle}
+      updating={refreshing && refreshingBills.has(bill.tableId ?? bill.key)}
       onOpen={setChosen}
       onCollect={setSettling}
     />
@@ -233,7 +239,10 @@ export default function BillsPanel({
           canDiscount={canDiscount}
           canChargeAccount={canChargeAccount}
           onClose={() => setSettling(null)}
-          onSettled={() => router.refresh()}
+          onSettled={() => {
+            setRefreshingBills(prev => new Set(prev).add(settling.tableId ?? settling.key));
+            startRefresh(() => router.refresh());
+          }}
           // The same promotion dialog the row opens, reached without leaving
           // the table: one dialog at a time, so collecting steps aside for it.
           onDiscount={() => {

@@ -66,6 +66,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     p_restaurant: actor.restaurantId, p_ingredient: ingredientId, p_item: itemId, p_quantity: quantity,
     p_reason: reason, p_note: wasteNote(body.note), p_cost: cost, p_actor: actor.email,
   });
+  if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
   if (error) return await apiError("apiErr.generic", 500);
   if (!id) return await apiError("apiErr.notFound", 404);
   const { data: entry } = await createAdminClient().from("waste_entries").select("name").eq("id", id).maybeSingle();

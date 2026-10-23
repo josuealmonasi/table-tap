@@ -43,6 +43,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     p_restaurant: actor.restaurantId, p_actor: actor.email,
     p_counts: [...counted].map(([ingredient_id, quantity]) => ({ ingredient_id, counted: quantity })),
   });
+  if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
   if (error) return await apiError("apiErr.generic", 500);
   if (!data) return await apiError("apiErr.notFound", 404);
   const rows = data as { ingredient_id: string; counted: number; expected: number | null; movement_cutoff?: number }[];

@@ -1,13 +1,16 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import { useRetryIntent, refusalSettles, type RetryIntent } from "@/hooks/useRetryIntent";
+import { useRetryIntent, type RetryIntent } from "@/hooks/useRetryIntent";
 import { useT } from "@/lib/i18n/context";
 
 export interface CostsSender {
   (path: string, method: string, body: unknown): Promise<string | null>;
   pending: RetryIntent["pending"];
+  discard: RetryIntent["clear"];
   frozen: RetryIntent["frozen"];
+  unconfirmed: RetryIntent["unconfirmed"];
+  sending: RetryIntent["sending"];
 }
 
 /**
@@ -30,14 +33,15 @@ export function useCostsSend(retry = false): CostsSender {
       });
       if (res.ok && !retry) return null;
       const data = await res.json();
-      if (retry && ((res.ok && data.ok) || (!res.ok && refusalSettles(res.status)))) attempt.clear();
+      if (retry && ((res.ok && data.ok) || (!res.ok && attempt.settles(res.status)))) attempt.clear();
       if (res.ok && (!retry || data.ok)) return null;
       return typeof data.error === "string" ? data.error : t("apiErr.generic");
     } catch {
       return t("done.networkError");
     } finally {
       inFlight.current = false;
+      attempt.ended();
     }
   }, [t, retry, attempt]);
-  return Object.assign(send, { pending: attempt.pending, frozen: attempt.frozen });
+  return Object.assign(send, { pending: attempt.pending, frozen: attempt.frozen, unconfirmed: attempt.unconfirmed, sending: attempt.sending, discard: () => { if (!inFlight.current) attempt.clear(); } });
 }
