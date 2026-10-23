@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { SWRConfig, useSWRConfig } from "swr";
 import { createClient } from "@/lib/supabase/client";
 import { privateCacheIdentity } from "@/lib/private-cache-identity";
@@ -22,14 +22,17 @@ export default function DashboardCache({ identity, children }: CacheProps): Reac
 
 function SessionCache({ identity, children }: CacheProps): React.ReactNode {
   const [active, setActive] = useState(identity !== null);
+  const retired = useRef(false);
 
   useEffect(() => {
-    const { data: { subscription } } = createClient().auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = createClient().auth.onAuthStateChange((event, session) => {
       const parts = identity?.split(":");
       const current = parts ? privateCacheIdentity(session, parts[2], parts[3]) : null;
       // A new sign-in needs a fresh server membership check. The old layout
       // cannot assign its restaurant or role to the next person at the till.
-      setActive(current !== null && current.split(":").slice(0, 4).join(":") === identity);
+      const matches = current !== null && current.split(":").slice(0, 4).join(":") === identity;
+      if (event === "SIGNED_OUT" || (current !== null && !matches)) retired.current = true;
+      setActive(!retired.current && matches);
     });
     return () => subscription.unsubscribe();
   }, [identity]);

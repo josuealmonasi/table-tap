@@ -37,6 +37,15 @@ it("clears on sign-out and requires server proof for the next sign-in", async ()
   expect(latest[0].bell.unread).toBe(3);
 });
 
+it("does not reopen a retired server identity after a late matching auth event", async () => {
+  await render();
+  await emit("SIGNED_OUT");
+  await emit("TOKEN_REFRESHED");
+  await advance(60_001);
+  expect(calls).toHaveBeenCalledTimes(2);
+  expect(latest[0].bell.notifications).toEqual([]);
+});
+
 it("rejects late reads from a retired session", async () => {
   let finish!: (response: Response) => void;
   calls.mockImplementation(url => String(url).includes("notifications")
@@ -63,6 +72,8 @@ it("shares optimistic read markers, avoids duplicate decrements and reconciles f
   await act(async () => latest[0].bell.markAllRead());
   expect(latest.map(p => p.bell.unread)).toEqual([0, 0]);
   expect(calls.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(3);
+  expect(calls.mock.calls.filter(([, init]) => init?.method === "POST")
+    .map(([, init]) => JSON.parse(String(init?.body)).restaurantId)).toEqual(["restaurant", "restaurant", "restaurant"]);
   expect(calls.mock.calls.filter(([, init]) => init?.method !== "POST")).toHaveLength(2);
   answer();
   await advance(30_001);
@@ -81,4 +92,14 @@ it("does not let an older poll undo a read marker", async () => {
   await act(async () => finish(new Response(JSON.stringify({ notifications: [notice], unread: 2 }))));
   expect(latest[0].bell.unread).toBe(1);
   expect(latest[0].bell.notifications[0].read_at).not.toBeNull();
+});
+
+it("ignores marker callbacks after their cache is retired", async () => {
+  await render();
+  const oldMarkAll = latest[0].bell.markAllRead;
+  await emit("SIGNED_OUT");
+  await render("next:next-session:other:owner:9999999999");
+  await act(async () => oldMarkAll());
+  expect(calls.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
+  expect(latest[0].bell.unread).toBe(2);
 });

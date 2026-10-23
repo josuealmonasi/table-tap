@@ -1191,6 +1191,10 @@ refresh, sign-out, identity changes and late responses from a retired cache.
 The APIs must tell it when a read failed: `navigation-reads.react-component.spec.tsx`
 injects failures into every badge metadata/count query and both bell queries.
 They return 503, never successful empty or partial answers.
+Marker requests also carry the restaurant the bell showed; a changed active
+restaurant is refused before any update. Retired callbacks do nothing, so they
+cannot mutate a disposed SWR provider or send a stale write. Tests cover those
+callbacks and both new and legacy authorized requests.
 
 The server had its own copy. `staffOpenedBill` refuses a card payment while a
 waiter collects the same food, and `splitInProgress` refuses the whole bill

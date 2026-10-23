@@ -1273,8 +1273,10 @@ backoff. Failed badge/notification database queries return 503 rather than
 publishing empty or partial counts. Badge-changing actions invalidate the shared
 read immediately.
 Notification read markers update optimistically and reconcile on the next
-poll; their POSTs are not retried automatically. A forbidden badge read clears
-its counts and stops polling. Sign-out or a new identity retires the cache,
+poll; their POSTs are not retried automatically. Markers carry the restaurant
+shown in the bell, and the server refuses a different active restaurant.
+Legacy requests still use the authorized actor's restaurant. A forbidden badge
+read clears its counts and stops polling. Sign-out or a new identity retires the cache,
 including late responses. Token refresh keeps the same cache; a different
 sign-in needs fresh server membership proof. None of this cache is persisted
 to disk or used for money writes.

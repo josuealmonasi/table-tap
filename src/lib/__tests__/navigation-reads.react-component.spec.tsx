@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const from = vi.fn();
 const actor = vi.fn();
@@ -7,7 +7,7 @@ vi.mock("@/lib/api-guard", () => ({ actingStaff: () => actor(), actingManager: (
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from }) }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => NextResponse.json({ error }, { status }) }));
 import { GET as badges } from "@/app/api/badges/route";
-import { GET as notifications } from "@/app/api/notifications/route";
+import { GET as notifications, POST as markNotifications } from "@/app/api/notifications/route";
 
 interface ReadResult {
   data?: unknown;
@@ -20,7 +20,7 @@ function queue(results: ReadResult[]): void {
   for (const result of results) from.mockReturnValueOnce(Object.assign(Promise.resolve(result), {
     select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), in: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(), is: vi.fn().mockReturnThis(),
-    maybeSingle: vi.fn().mockResolvedValue(result),
+    maybeSingle: vi.fn().mockResolvedValue(result), update: vi.fn().mockReturnThis(),
   }));
 }
 
@@ -77,5 +77,28 @@ it("keeps the notification list and its full unread count", async () => {
 it.each([["badges", badges], ["notifications", notifications]] as const)("keeps authorization before %s reads", async (_name, read) => {
   actor.mockResolvedValue(null);
   expect((await read()).status).toBe(403);
+  expect(from).not.toHaveBeenCalled();
+});
+
+const markAll = (restaurantId?: string) => markNotifications(new NextRequest("https://test/api/notifications", {
+  method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ all: true, restaurantId }),
+}));
+
+it("refuses read markers from a bell belonging to a different restaurant", async () => {
+  expect((await markAll("other-restaurant")).status).toBe(403);
+  expect(from).not.toHaveBeenCalled();
+});
+
+it.each([{ name: "current", restaurantId: "r1" }, { name: "legacy", restaurantId: undefined }])("keeps $name marker requests scoped to the authorized restaurant", async ({ restaurantId }) => {
+  queue([{ error: null }]);
+  expect((await markAll(restaurantId)).status).toBe(200);
+  const query = from.mock.results[0].value;
+  expect(query.eq).toHaveBeenCalledWith("restaurant_id", "r1");
+});
+
+it("refuses marker writes without management authorization", async () => {
+  actor.mockResolvedValue(null);
+  expect((await markAll("r1")).status).toBe(403);
   expect(from).not.toHaveBeenCalled();
 });
