@@ -18,11 +18,12 @@ export async function GET(): Promise<NextResponse> {
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
   const db = createAdminClient();
-  const { data: restaurant } = await db
+  const { data: restaurant, error: restaurantError } = await db
     .from("restaurants")
     .select("badges_enabled")
     .eq("id", actor.restaurantId)
     .maybeSingle();
+  if (restaurantError) return await apiError("apiErr.generic", 503);
 
   // Switched off for the restaurant means switched off for everyone in it.
   if (restaurant && (restaurant as { badges_enabled: boolean }).badges_enabled === false) {
@@ -53,6 +54,9 @@ export async function GET(): Promise<NextResponse> {
       .eq("restaurant_id", actor.restaurantId)
       .eq("status", "pending"),
   ]);
+  if ([cooking, ready, discounts, writeOffs].some(result => result.error)) {
+    return await apiError("apiErr.generic", 503);
+  }
 
   return NextResponse.json({
     badges: badgesFor(actor.role, {

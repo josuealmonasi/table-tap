@@ -1263,7 +1263,8 @@ what is waiting to go out, and whoever covers both jobs on both.
 use SWR, scoped to the verified user, auth session, restaurant and role. They
 poll every 30 seconds while visible and online, refresh on return/reconnect,
 and retain their last successful answer on transient failures, with retry
-backoff. Badge-changing actions invalidate the shared read immediately.
+backoff. Failed badge/notification database queries return 503 rather than
+publishing empty or partial counts. Badge-changing actions invalidate the shared read immediately.
 Notification read markers update optimistically and reconcile on the next
 poll; their POSTs are not retried automatically. A forbidden badge read clears
 its counts and stops polling. Sign-out or a new identity retires the cache,

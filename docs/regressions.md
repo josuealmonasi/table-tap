@@ -1188,6 +1188,9 @@ in `dashboard-reads.react-component.spec.tsx` and
 hidden/offline polling, action invalidation, transient failures, forbidden
 badges, optimistic markers, an older poll arriving after a marker, token
 refresh, sign-out, identity changes and late responses from a retired cache.
+The APIs must tell it when a read failed: `navigation-reads.react-component.spec.tsx`
+injects failures into every badge metadata/count query and both bell queries.
+They return 503, never successful empty or partial answers.
 
 The server had its own copy. `staffOpenedBill` refuses a card payment while a
 waiter collects the same food, and `splitInProgress` refuses the whole bill

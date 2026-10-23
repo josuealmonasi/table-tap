@@ -36,6 +36,7 @@ export async function GET(): Promise<NextResponse> {
       .eq("restaurant_id", actor.restaurantId)
       .is("read_at", null),
   ]);
+  if (listed.error || unread.error) return await apiError("apiErr.generic", 503);
 
   return NextResponse.json({
     notifications: listed.data ?? [],
