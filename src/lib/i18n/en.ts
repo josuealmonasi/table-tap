@@ -547,6 +547,7 @@ myBill: "View my bill",
     notHere: "That code is not for a bill open here.",
   },
   settle: {
+    updatingBalance: "Updating balance…",
     recorded: "{amount} collected, including {tip} in tips.",
     collectedRecorded: "{amount} collected, including {tip} in tips · {left} to go",
     currency: "Choose a currency",

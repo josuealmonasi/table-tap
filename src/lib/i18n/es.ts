@@ -542,6 +542,7 @@ myBill: "Ver mi cuenta",
     notHere: "Ese código no es de una cuenta abierta aquí.",
   },
   settle: {
+    updatingBalance: "Actualizando saldo…",
     recorded: "Cobraste {amount}, incluidos {tip} de propina.",
     collectedRecorded: "Cobraste {amount}, incluidos {tip} de propina · Faltan {left}",
     currency: "Elige una moneda",

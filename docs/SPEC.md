@@ -2060,13 +2060,24 @@ and refuses edits and copies until the whole read succeeds. Waiter orders obey
 the restaurant's low-stock alert preference, just like checkout and the till.
 
 
+### Collection feedback on Pedidos and open bills
+
+A payment request on Pedidos remains actionable after each part payment.
+The server closes it only once the table owes nothing across all currencies;
+the client never marks the request answered just because one collection landed.
+While the confirmed collection refreshes the server-rendered bill list, both
+actions on the affected table's rows are disabled and show an updating state.
+The refreshed list removes fully paid rows and re-enables any remaining debt.
+
 ### Retry identity for kitchen orders, drawer writes and ingredient movements
 
 An account POS sale, pay-later checkout, waiter order, withdrawal, ingredient
 purchase, waste entry, physical count and cash-shift close each freeze a client
-reference with their request on first submit. An unknown response keeps both;
-a success or an explicit `retryUncommitted: true` refusal from the serialized
-writer ends that intent. An unmarked refusal, including a freeze, keeps it.
+reference with their request on first submit. An unknown response keeps both.
+A first-send 4xx refusal ends that intent except for 408 and 425. After an
+unanswered send, every refusal keeps the reference, including one from the
+serialized writer: an earlier request may still reach that writer later.
+A confirmed success ends the intent.
 Every pending screen offers a deliberate stop-retrying action after a warning
 to check the records; this neither cancels an action nor returns its money. A second action gets a new
 reference. Account POS uses its existing `posRef` transaction. Card checkout

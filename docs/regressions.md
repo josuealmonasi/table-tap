@@ -4306,3 +4306,16 @@ and fixed search path; `drop.sql` includes every new function.
 Claude applies `schema.sql`, runs all shared-database gates, and checks both
 deletion refusals on screen. No shared database or live provider was used for
 this fix; Vitest mocks their boundaries.
+
+## Collection feedback: partial payments and refreshing open bills
+
+Pedidos marked a payment request done after the first part, hiding its Collect
+button while the table still owed money. The server already closes that request
+when all debt is settled; the screen now refreshes that result without marking
+the request done itself. Open bills also disable both row actions and show an
+updating state between a confirmed collection and the refreshed server list.
+Partial balances become actionable again; fully paid rows leave the list.
+
+`collection-progress.react-component.spec.tsx` reproduces both bugs and checks
+request retention, server-confirmed removal, both disabled row actions and the
+remaining balance after a partial collection.

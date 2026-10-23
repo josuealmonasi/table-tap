@@ -7,7 +7,7 @@ import type { BoardRequest } from "@/lib/kitchen-ticket";
 import { useT } from "@/lib/i18n/context";
 import { BillIcon, CallWaiterIcon, StatusReadyIcon } from "@/components/ui/icons";
 import type { ReadyTable } from "@/lib/ready-tables";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import SettleTableDialog from "./SettleTableDialog";
 
 interface ServiceRequestsBarProps {
@@ -49,6 +49,7 @@ export default function ServiceRequestsBar({
   const { requests, markDone } = useServiceRequests(restaurantId, initialRequests, kitchen);
   // The table whose bill the waiter is collecting, if any.
   const [settling, setSettling] = useState<BoardRequest | null>(null);
+  const [refreshing, startRefresh] = useTransition();
 
   // Measured after mount, not during render: the server says "5m ago" and the
   // browser hydrating a moment later says "6m", which React reports as a
@@ -127,9 +128,10 @@ export default function ServiceRequestsBar({
           {r.kind === "pay" && r.table_id && canSettle ? (
             <button
               className="tt-btn tt-btn-primary tt-btn-sm"
+              disabled={refreshing}
               onClick={() => setSettling(r)}
             >
-              {t("settle.open")}
+              {t(refreshing ? "settle.updatingBalance" : "settle.open")}
             </button>
           ) : (
             <button
@@ -152,11 +154,10 @@ export default function ServiceRequestsBar({
           currency={currency}
           canApprove={canApprove}
           onSettled={() => {
-            // Drop the chip here as well as relying on the realtime update:
-            // the waiter is standing at the table and the request is answered,
-            // so it must not still be asking on their own screen.
-            markDone(settling.id);
-            onSettled?.();
+            // A collection may be only one part, or one currency. The server
+            // closes the request once every debt is paid; refresh its answer
+            // without marking a still-owed table done from this screen.
+            startRefresh(() => onSettled?.());
           }}
         />
       )}
