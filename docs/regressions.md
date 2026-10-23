@@ -1180,6 +1180,15 @@ promoción coincide" (no promotion matches) when the list had not loaded at all.
 An invariant now forbids a made-up answer anywhere in `src`, whether a
 `r.ok ? r.json() : {…}` fallback or a `catch` that empties the state.
 
+The badge/bell SWR pilot keeps that rule: an error retains the last successful
+answer, with automatic recovery. Its cache lives only in memory and belongs
+to a verified user, auth session, restaurant and role. Actual React/SWR tests
+in `dashboard-reads.react-component.spec.tsx` and
+`dashboard-session.react-component.spec.tsx` cover shared request counts,
+hidden/offline polling, action invalidation, transient failures, forbidden
+badges, optimistic markers, an older poll arriving after a marker, token
+refresh, sign-out, identity changes and late responses from a retired cache.
+
 The server had its own copy. `staffOpenedBill` refuses a card payment while a
 waiter collects the same food, and `splitInProgress` refuses the whole bill
 while its shares are being collected. Both dropped the error of their reads, so

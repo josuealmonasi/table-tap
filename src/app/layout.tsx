@@ -21,6 +21,7 @@ import ServiceWorkerRegistrar from "@/components/pwa/ServiceWorkerRegistrar";
 import { createClient } from "@/lib/supabase/server";
 import { currentUser } from "@/lib/current-user";
 import { privateCacheIdentity } from "@/lib/private-cache-identity";
+import DashboardCache from "@/components/layout/DashboardCache.react-component";
 
 // One family, weight carries the hierarchy. next/font self-hosts the files at
 // build time, so there's no request to a font CDN at runtime and no swap flash.
@@ -71,23 +72,27 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <ServiceWorkerRegistrar identity={cacheIdentity} />
         <LocaleProvider locale={locale}>
           <ToastProvider>
-            {admin && (
-              <Navbar restaurantName="TableTap Admin" restaurantLogo="🛡️" role="admin" />
+            {(membership || admin) && (
+              <DashboardCache identity={cacheIdentity}>
+                {admin && (
+                  <Navbar restaurantName="TableTap Admin" restaurantLogo="🛡️" role="admin" />
+                )}
+                {membership && (
+                  <Navbar
+                    restaurantName={membership.restaurant.name}
+                    restaurantLogo={membership.restaurant.logo}
+                    restaurantLogoUrl={membership.restaurant.logo_url}
+                    role={membership.role}
+                    plan={membership.restaurant.plan}
+                    features={features}
+                  />
+                )}
+                {membership && (
+                  <SectionNav role={membership.role} features={features} />
+                )}
+                {admin && <SectionNav role="admin" />}
+              </DashboardCache>
             )}
-            {membership && (
-              <Navbar
-                restaurantName={membership.restaurant.name}
-                restaurantLogo={membership.restaurant.logo}
-                restaurantLogoUrl={membership.restaurant.logo_url}
-                role={membership.role}
-                plan={membership.restaurant.plan}
-                features={features}
-              />
-            )}
-            {membership && (
-              <SectionNav role={membership.role} features={features} />
-            )}
-            {admin && <SectionNav role="admin" />}
             {/* Only the team is offered the installable app. The manifest is
                 linked here rather than through Next's metadata route because
                 that one goes on every page — including a diner's menu, where an

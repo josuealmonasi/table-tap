@@ -1,6 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
+import useSWR from "swr";
+import { useDashboardScope } from "@/components/layout/DashboardCache.react-component";
+import { readDashboardJson } from "@/lib/dashboard-read";
 
 /** One row from the bell, as the API returns it. */
 export interface Notification {
@@ -19,6 +22,11 @@ interface NotificationsState {
   markAllRead: () => void;
 }
 
+interface NotificationData {
+  notifications: Notification[];
+  unread: number;
+}
+
 /**
  * What the bell knows, kept roughly current.
  *
@@ -33,43 +41,20 @@ interface NotificationsState {
  * after you click it and teaches people to click it twice.
  */
 export function useNotifications(enabled: boolean): NotificationsState {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unread, setUnread] = useState(0);
-
-  const read = useCallback(() => {
-    if (!enabled) return;
-    fetch("/api/notifications")
-      // A refusal keeps what the bell last knew, as the catch below already
-      // promised: an empty list in its place emptied the bell.
-      .then(r => (r.ok ? r.json() : null))
-      .then((d: { notifications?: Notification[]; unread?: number } | null) => {
-        if (!d) return;
-        setNotifications(d.notifications ?? []);
-        setUnread(d.unread ?? 0);
-      })
-      .catch(() => {
-        // A bell we could not fetch simply shows what it last knew.
-      });
-  }, [enabled]);
-
-  useEffect(() => {
-    if (!enabled) return;
-    const timer = setInterval(read, 30_000);
-    read();
-    const onFocus = () => read();
-    window.addEventListener("focus", onFocus);
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [enabled, read]);
+  const scope = useDashboardScope();
+  const key = enabled && scope ? ["/api/notifications", scope] as const : null;
+  const { data, mutate } = useSWR(key, readDashboardJson<NotificationData>);
 
   const markRead = useCallback((id: string) => {
+    if (!enabled || !scope) return;
     const now = new Date().toISOString();
-    setNotifications(list =>
-      list.map(n => (n.id === id && !n.read_at ? { ...n, read_at: now } : n)),
-    );
-    setUnread(n => Math.max(0, n - 1));
+    void mutate(current => {
+      if (!current || !current.notifications.some(n => n.id === id && !n.read_at)) return current;
+      return {
+        notifications: current.notifications.map(n => n.id === id && !n.read_at ? { ...n, read_at: now } : n),
+        unread: Math.max(0, current.unread - 1),
+      };
+    }, { revalidate: false });
     fetch("/api/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -77,12 +62,15 @@ export function useNotifications(enabled: boolean): NotificationsState {
     }).catch(() => {
       // Left as read on screen; the next poll corrects it if the write failed.
     });
-  }, []);
+  }, [enabled, scope, mutate]);
 
   const markAllRead = useCallback(() => {
+    if (!enabled || !scope) return;
     const now = new Date().toISOString();
-    setNotifications(list => list.map(n => (n.read_at ? n : { ...n, read_at: now })));
-    setUnread(0);
+    void mutate(current => current ? {
+      notifications: current.notifications.map(n => n.read_at ? n : { ...n, read_at: now }),
+      unread: 0,
+    } : current, { revalidate: false });
     fetch("/api/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -90,7 +78,7 @@ export function useNotifications(enabled: boolean): NotificationsState {
     }).catch(() => {
       // Same as above.
     });
-  }, []);
+  }, [enabled, scope, mutate]);
 
-  return { notifications, unread, markRead, markAllRead };
+  return { notifications: data?.notifications ?? [], unread: data?.unread ?? 0, markRead, markAllRead };
 }
