@@ -1180,6 +1180,22 @@ promoción coincide" (no promotion matches) when the list had not loaded at all.
 An invariant now forbids a made-up answer anywhere in `src`, whether a
 `r.ok ? r.json() : {…}` fallback or a `catch` that empties the state.
 
+The badge/bell SWR pilot keeps that rule: an error retains the last successful
+answer, with automatic recovery. Its cache lives only in memory and belongs
+to a verified user, auth session, restaurant and role. Actual React/SWR tests
+in `dashboard-reads.react-component.spec.tsx` and
+`dashboard-session.react-component.spec.tsx` cover shared request counts,
+hidden/offline polling, action invalidation, transient failures, forbidden
+badges, optimistic markers, an older poll arriving after a marker, token
+refresh, sign-out, identity changes and late responses from a retired cache.
+The APIs must tell it when a read failed: `navigation-reads.react-component.spec.tsx`
+injects failures into every badge metadata/count query and both bell queries.
+They return 503, never successful empty or partial answers.
+Marker requests also carry the restaurant the bell showed; a changed active
+restaurant is refused before any update. Retired callbacks do nothing, so they
+cannot mutate a disposed SWR provider or send a stale write. Tests cover those
+callbacks and both new and legacy authorized requests.
+
 The server had its own copy. `staffOpenedBill` refuses a card payment while a
 waiter collects the same food, and `splitInProgress` refuses the whole bill
 while its shares are being collected. Both dropped the error of their reads, so
@@ -4328,3 +4344,20 @@ Partial balances become actionable again; fully paid rows leave the list.
 `collection-progress.react-component.spec.tsx` reproduces both bugs and checks
 request retention, server-confirmed removal, both disabled row actions and the
 remaining balance after a partial collection.
+
+## Attack fixtures must leave the drawer consistent
+
+The attack suite deleted its MX$200 and MX$150 full-collection test payments,
+but its cleanup still searched activity details for the table label. The newer
+reviewed collection writes amount, tip, currency and method without that label,
+so two test activity rows remained and the next money check found a false
+MX$350 surplus in the waiter's corte. The gate's earlier money check had run
+before those attacks and could not catch their teardown.
+
+`attack-collection-logs.mjs` captures only the newly created activity IDs around
+those two operations, scoped to the fixture restaurant, collector and exact
+detail. It remembers a landed write even when its response is lost, refuses
+ambiguous/failed reads, and checks exact-ID deletion. `attack-logs.react-component.spec.tsx`
+checks those boundaries. The attack gate now reconciles money after cleanup,
+so leftover test records fail that same run. Production accounting and the
+application's collection writer are unchanged.

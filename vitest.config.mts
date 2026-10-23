@@ -1,8 +1,8 @@
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
-// Unit tests run in a plain Node environment against pure functions — no jsdom,
-// no DB, no network. The `@/` alias mirrors tsconfig so imports resolve.
+// Node by default; cache hook tests opt into jsdom to exercise React and SWR.
+// No DB or real network. The `@/` alias mirrors tsconfig so imports resolve.
 export default defineConfig({
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },

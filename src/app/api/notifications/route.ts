@@ -36,6 +36,7 @@ export async function GET(): Promise<NextResponse> {
       .eq("restaurant_id", actor.restaurantId)
       .is("read_at", null),
   ]);
+  if (listed.error || unread.error) return await apiError("apiErr.generic", 503);
 
   return NextResponse.json({
     notifications: listed.data ?? [],
@@ -58,8 +59,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const body = await jsonBody<{
     id?: string;
     all?: boolean;
+    restaurantId?: string;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
+  // A cached bell may outlive an account switch on a shared tablet. The
+  // expected restaurant only restricts the actor; it never chooses the scope.
+  if (body.restaurantId !== undefined && body.restaurantId !== actor.restaurantId) {
+    return await apiError("apiErr.forbidden", 403);
+  }
   const { id, all } = body;
   if (!id && all !== true) return await apiError("apiErr.badRequest", 400);
 
