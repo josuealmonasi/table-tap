@@ -1393,6 +1393,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
     billingUnavailable: "No pudimos confirmar tu última solicitud de cobro. Si tienes abierta una página de pago, termina ahí. Si no, vuelve a intentar en 15 minutos o contacta a soporte para que te ayude a pagar.",
     billingPaymentFailed: "No se pudo cobrar el cambio de plan. Actualiza tu método de pago en facturación e intenta de nuevo. Tu plan actual sigue igual.",
     noBilling: "Este restaurante todavía no tiene suscripción.",
+    orderInactive: "Este pedido ya no está activo. Se retiró del tablero de preparación.",
     orderMoveChanged: "Este pedido ya cambió de etapa. Actualiza el tablero para ver dónde está.",
     notYourStage: "Solo la cocina puede mover un pedido entre etapas.",
     closedNow:

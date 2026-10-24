@@ -47,7 +47,7 @@ it("keeps the whole path after a dropped connection", async () => {
   expect(JSON.parse(saved!)).toEqual(queue);
 });
 it("drops stale steps and still tries the step that starts at the current stage", async () => {
-  const send = vi.fn().mockResolvedValueOnce({ ok: false, status: 409 }).mockResolvedValueOnce({ ok: false, status: 409 }).mockResolvedValueOnce({ ok: true, status: 200 });
+  const send = vi.fn().mockResolvedValueOnce({ ok: false, status: 409, json: async () => ({}) }).mockResolvedValueOnce({ ok: false, status: 409, json: async () => ({}) }).mockResolvedValueOnce({ ok: true, status: 200 });
   vi.stubGlobal("fetch", send);
   useRestaurantOrders("r1", []);
   await callbacks[0]();

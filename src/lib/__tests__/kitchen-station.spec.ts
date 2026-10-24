@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 const ticket = "10000000-0000-4000-8000-000000000001";
 const order = "20000000-0000-4000-8000-000000000002";
-const state = vi.hoisted(() => ({ role: "kitchen", tenant: "r1", failed: false, moves: vi.fn() }));
+const state = vi.hoisted(() => ({ role: "kitchen", tenant: "r1", failed: false, outcome: "ok", status: "ready", moves: vi.fn() }));
 vi.mock("@/lib/api-guard", () => ({ actingStaff: async () => ({ role: state.role, restaurantId: "r1" }) }));
 vi.mock("@/lib/membership", () => ({ MOVES_ORDERS: (role: string) => !["waiter", "cashier"].includes(role) }));
-vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => NextResponse.json({ error }, { status }) }));
+vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number, _vars: unknown, extra: unknown) => NextResponse.json({ ...extra as object, error }, { status }) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   from: () => {
     const filters: [string, unknown][] = [];
@@ -18,13 +18,25 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
       } };
     return q;
   },
-  rpc: (...args: unknown[]) => { state.moves(...args); return { data: { outcome: "ok", status: "ready", stations_ready: ["bar"] } }; },
+  rpc: (...args: unknown[]) => { state.moves(...args); return { data: { outcome: state.outcome, status: state.status, stations_ready: ["bar"] } }; },
 }) }));
 const { POST } = await import("@/app/api/orders/station/route");
 const send = (id = ticket) => POST(new NextRequest("http://localhost/api/orders/station", {
   method: "POST", body: JSON.stringify({ id, station: "bar" }),
 }));
-beforeEach(() => { Object.assign(state, { role: "kitchen", tenant: "r1", failed: false }); state.moves.mockClear(); });
+beforeEach(() => { Object.assign(state, { role: "kitchen", tenant: "r1", failed: false, outcome: "ok", status: "ready" }); state.moves.mockClear(); });
+it("retires an inactive station ticket without returning the order credential or write-off details", async () => {
+  state.outcome = "inactive";
+  const response = await send();
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ error: "apiErr.orderInactive", inactive: true });
+});
+it("keeps a ready station conflict on the board for delivery", async () => {
+  state.outcome = "moved";
+  const response = await send();
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ error: "apiErr.orderMovedOn" });
+});
 it("finishes a kitchen station by its separate ticket without returning the order credential", async () => {
   const res = await send();
   expect(res.status).toBe(200);

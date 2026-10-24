@@ -4379,3 +4379,19 @@ ambiguous/failed reads, and checks exact-ID deletion. `attack-logs.react-compone
 checks those boundaries. The attack gate now reconciles money after cleanup,
 so leftover test records fail that same run. Production accounting and the
 application's collection writer are unchanged.
+
+## Written-off orders must leave preparation
+
+Three historical orders kept `received` after being written off. The initial
+board, realtime rendering and badge counts treated that source status as active,
+but the API correctly refused the buttons it offered. Kitchen tickets also copied
+the live status. A station tap reached the final-state database trigger and errored.
+
+The floor feed and counts exclude write-offs; the private projection emits an
+inactive status. Station completion refuses write-offs under the same order lock.
+Stale stage/station refusals retire only the preparation card, preserving source
+orders and revenue. `inactive-orders.react-component.spec.tsx` exercises actual
+React state, realtime removal, stale taps, normal stages and retained takings;
+`inactive-order-moves.react-component.spec.tsx`, kitchen query tests and
+`api-inactive-orders.mjs` cover role/tenant guards, private tickets and no-write
+refusals against the live development database.

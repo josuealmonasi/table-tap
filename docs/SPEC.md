@@ -169,6 +169,12 @@ status, restaurant and write-off flag. Cancelled, written-off, completed and
 pending-payment tickets cannot move through it. Offline work keeps each step;
 older collapsed queues expand into the same permitted forward steps.
 
+Written-off orders also stay out of the initial/live preparation feed and its
+badges, even when a historical source row still has a live status. The private
+kitchen projection marks them inactive (`cancelled`) without disclosing money
+or changing the original order. Both stage and station actions refuse them;
+an authoritative inactive response removes a stale card without erasing takings.
+
 An order paid for while it is `ready` ("Listos") moves to `completed` by
 itself, whichever way the money came (card, cash, the till, a split's last
 share, a customer account): the trigger `orders_complete_when_paid` does it

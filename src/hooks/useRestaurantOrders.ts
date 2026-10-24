@@ -8,7 +8,7 @@ import { enqueue, readQueue, writeQueue, type QueuedMove } from "@/lib/offline-q
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import type { OrderStatus } from "@/lib/types";
-import type { BoardOrder } from "@/lib/kitchen-ticket";
+import { isPreparationOrder, type BoardOrder } from "@/lib/kitchen-ticket";
 import type { CancelSummary } from "@/lib/cancel-plan";
 
 /** Short, gentle ping so kitchen staff notice a new order without looking. */
@@ -39,6 +39,12 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
   const [orders, setOrders] = useState<BoardOrder[]>(initialOrders);
   const { online, markOffline } = useOnline();
   const [pending, setPending] = useState<QueuedMove[]>([]);
+  // A refused stale tap can retire a card even when its realtime event was missed.
+  // Keep the order itself: paid rows still contribute to today's takings.
+  const [inactiveOrderIds, setInactiveOrderIds] = useState<Set<string>>(new Set());
+  function hideInactive(id: string): void {
+    setInactiveOrderIds(ids => new Set(ids).add(id));
+  }
 
   // Work from a previous session on this device, still unsent.
   useEffect(() => setPending(readQueue()), []);
@@ -54,7 +60,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
         const exists = prev.find(o => o.id === row.id);
         return exists ? prev.map(o => (o.id === row.id ? row : o)) : [row, ...prev];
       });
-      if (eventType === "INSERT" || (eventType === "UPDATE" && row.status === "received"))
+      if (isPreparationOrder(row) && (eventType === "INSERT" || (eventType === "UPDATE" && row.status === "received")))
         playPing();
     }
 
@@ -119,7 +125,11 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
         if (res.status >= 500) {
           stuck.push(move);
           blocked.add(move.id);
-        } else if (!res.ok) refused++;
+        } else if (!res.ok) {
+          refused++;
+          const data = await res.json().catch(() => ({}));
+          if (data.inactive === true) setInactiveOrderIds(ids => new Set(ids).add(move.id));
+        }
       } catch {
         stuck.push(move); // still no connection: keep it for next time
         blocked.add(move.id);
@@ -168,7 +178,8 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
     // back to where it was, with the server's reason.
     if (!res.ok) {
       if (was) setOrders(prev => prev.map(o => (o.id === id ? { ...o, status: was } : o)));
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as { error?: string; inactive?: boolean };
+      if (data.inactive === true) hideInactive(id);
       toast(data.error ?? t("orders.moveRefused"), "error");
     }
 
@@ -217,5 +228,5 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
     }
   }
 
-  return { orders, updateStatus, cancelOrder, cancelPlanFor, online, pending: pending.length };
+  return { orders, inactiveOrderIds, hideInactive, updateStatus, cancelOrder, cancelPlanFor, online, pending: pending.length };
 }

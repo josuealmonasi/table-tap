@@ -4186,6 +4186,7 @@ begin
   if p_station not in ('kitchen', 'bar') then return jsonb_build_object('outcome', 'invalid'); end if;
   select * into v_order from orders where id = p_order and restaurant_id = p_restaurant for update;
   if v_order.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if v_order.written_off then return jsonb_build_object('outcome', 'inactive'); end if;
   if v_order.status not in ('received', 'preparing') then
     return jsonb_build_object('outcome', 'moved', 'status', v_order.status);
   end if;
@@ -7958,7 +7959,8 @@ begin
     insert into kitchen_tickets (id, restaurant_id, code, table_label, customer_name,
       status, stations_ready, items, note, created_at)
     values (new.kitchen_ticket_id, new.restaurant_id, left(replace(new.id::text, '-', ''), 4),
-      new.table_label, new.customer_name, new.status, new.stations_ready,
+      new.table_label, new.customer_name,
+      case when new.written_off then 'cancelled' else new.status end, new.stations_ready,
       kitchen_items(new.items), new.note, new.created_at)
     on conflict (id) do update set restaurant_id = excluded.restaurant_id,
       code = excluded.code, table_label = excluded.table_label, customer_name = excluded.customer_name,
@@ -7980,7 +7982,8 @@ do $$ begin
   insert into kitchen_tickets (id, restaurant_id, code, table_label, customer_name,
     status, stations_ready, items, note, created_at)
   select kitchen_ticket_id, restaurant_id, left(replace(id::text, '-', ''), 4),
-    table_label, customer_name, status, stations_ready, kitchen_items(items), note, created_at
+    table_label, customer_name, case when written_off then 'cancelled' else status end,
+    stations_ready, kitchen_items(items), note, created_at
   from orders where status in ('received', 'preparing', 'ready')
   on conflict (id) do update set restaurant_id = excluded.restaurant_id,
     code = excluded.code, table_label = excluded.table_label, customer_name = excluded.customer_name,

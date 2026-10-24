@@ -1399,6 +1399,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     billingUnavailable: "We could not confirm your last billing request. If you have a payment page open, finish there. Otherwise, try again in 15 minutes or contact support for help paying.",
     billingPaymentFailed: "The plan change could not be paid. Update your payment method in billing and try again. Your current plan is unchanged.",
     noBilling: "This restaurant has no subscription yet.",
+    orderInactive: "This order is no longer active. It has been removed from the preparation board.",
     orderMoveChanged: "This order has moved on since. Refresh the board to see where it is.",
     notYourStage: "Only the kitchen can move an order between stages.",
     closedNow:

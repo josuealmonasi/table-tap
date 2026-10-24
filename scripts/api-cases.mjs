@@ -24,6 +24,7 @@ import { twoSittingCollection } from "./api-part-collection.mjs";
 import { printReprintRace } from "./api-print-delivery.mjs";
 import { retryCases } from "./api-retry-cases.mjs";
 import { loginByEmail } from "./logins.mjs";
+import { inactiveOrderCases } from "./api-inactive-orders.mjs";
 
 // The pass holds a ticket id, never the diner's order lookup credential.
 async function kitchenTicketId(f, orderId) {
@@ -1197,6 +1198,7 @@ export function cases(fx) {
       check: d => d.orders?.length === 1 || "did not find the counter order" },
     { name: "GET  /api/bill/discount/options", as: "manager", method: "GET",
       path: `/api/bill/discount/options?tableId=${table.id}`, expect: [200] },
+    ...inactiveOrderCases(),
     // ── Stations: the bar and the kitchen each finish their part ─────────
     // One order with a drink and a plate. The bar finishing does not make it
     // ready; the kitchen finishing after it does. The floor cannot press it,
