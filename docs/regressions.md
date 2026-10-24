@@ -10,6 +10,24 @@ us, and what now catches each one.
 
 ## What runs on its own
 
+The deliberately unsigned legacy terminal example uses
+`mock-terminal-times.mjs` to keep its sale and deposit before `DRAWER_ERA`.
+A rolling three-day sale plus a thirty-hour deposit offset crossed that fixed
+cutoff as the clock advanced, causing an otherwise fresh demo to claim modern
+snapshot evidence it never had. `mock-terminal-times.react-component.spec.tsx`
+checks dates on both sides of the boundary and years later. Modern demo
+deposits continue through `record_terminal_deposit_v1`; reconciliation still
+rejects every modern deposit missing its signed manifest.
+
+Admission consolidation is covered by `table-member-poll.react-component.spec.tsx`,
+`table-membership-poll.react-component.spec.tsx` and
+`table-join-notice.react-component.spec.tsx`. They verify one serialized POST
+per five-second interval, approved-sitting scope, cookie preservation after a
+secondary read failure, last-good list retention, changed sitting/table/restaurant
+isolation, late replies, teardown and distinct English/Spanish failure copy.
+The live `check-table-join.mjs` scenario verifies the returned public projection
+and that a new party cannot see the previous party's waiting phones.
+
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |

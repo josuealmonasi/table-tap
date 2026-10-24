@@ -1,8 +1,13 @@
 "use client";
 
 import type { JoinState } from "@/lib/table-membership";
+import type { PendingPhone } from "@/lib/table-member-requests";
 
-export interface PhoneMembership extends JoinState { pass: string }
+export interface PhoneMembership extends JoinState {
+  pass: string;
+  /** Null is a failed secondary read; older replies may omit this field. */
+  pending?: PendingPhone[] | null;
+}
 let reading: Promise<void> = Promise.resolve();
 
 /**

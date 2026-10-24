@@ -5,7 +5,7 @@ import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { memberHash, memberToken, newMemberToken, hashMemberToken, keepMemberToken } from "@/lib/table-member-cookie";
 import { requestTableMember, tableMember } from "@/lib/table-membership";
-import { pendingPhones } from "@/lib/table-member-requests";
+import { pendingPhones, type PendingPhone } from "@/lib/table-member-requests";
 import { tableOf } from "@/lib/table-guard";
 import { clientKey, forTheRoom, isRateLimited, isRoomLimited, isTableLimited } from "@/lib/rate-limit";
 import { MEMBER_POLL_MS, perMinute } from "@/lib/poll";
@@ -39,7 +39,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const state = await requestTableMember(restaurantId, tableId, hashMemberToken(token));
     const pass = state.status === "approved" && state.sessionId
       ? issueVisitPass(restaurantId, { table: tableId, session: state.sessionId }) : "";
-    return keepMemberToken(NextResponse.json({ ...state, pass }), token);
+    let pending: PendingPhone[] | null = [];
+    if (state.status === "approved" && state.sessionId) {
+      try { pending = await pendingPhones(restaurantId, state.sessionId); }
+      catch {
+        // Admission already succeeded. Keep its credential even when the
+        // secondary read fails; null must not pretend that no phones wait.
+        pending = null;
+      }
+    }
+    return keepMemberToken(NextResponse.json({ ...state, pass, pending }), token);
   } catch {
     return await apiError("apiErr.ordersLoad", 503);
   }
