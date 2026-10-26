@@ -2034,7 +2034,13 @@ key; and a share reopened by the same diner opened a fee-free second session
 — the earlier one is expired at Stripe first. The cutover is closed by fact,
 not code: no production restaurant has a Stripe account, so no session from
 before the ledger can be open, and the migration refuses to apply while one
-does. Each fix has a test in `platform-fee.spec.ts` that fails with it undone.
+does. Current fee recording and refusal checks are in `platform-fee.spec.ts`.
+The earlier share-session retirement helper was superseded by the durable
+attempt flow in `diner-attempt.ts`; its unused definition and four direct
+tests were removed. `diner-attempt.spec.ts` checks persisted idempotency,
+lost replies, reuse of the open session and verified expiry. Split joining
+freezes shares inside `join_bill_split_v2`, not the removed `writeShares`
+helper; `join.spec.tsx` checks that route's transaction boundary.
 
 A fourth review (Codex) closed the 409, failed-read and cutover findings and
 found one more that was diner money, older than the ledger: two checkouts for

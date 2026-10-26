@@ -1,7 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchTableBill } from "@/lib/bill-data";
 import { tableBill } from "@/lib/table-bill";
-import { sharesFor } from "@/lib/split";
 import type { TableMember } from "@/lib/table-membership";
 import { round2 } from "@/lib/money";
 
@@ -179,27 +178,4 @@ function ownOrdersSince(
       .filter(o => mine.has(o.id) && !o.paid && Date.parse(o.created_at) > froze)
       .reduce((sum, o) => sum + Number(o.total), 0),
   );
-}
-
-/**
- * Freeze the amounts once everybody is in.
- *
- * The share list comes from the pure module, so the odd cent lands on the
- * proposer — seat zero, which is theirs by construction.
- */
-export async function writeShares(splitId: string, amount: number, shares: number): Promise<void> {
-  const db = createAdminClient();
-  const amounts = sharesFor(amount, shares);
-  const { data: claims } = await db
-    .from("bill_split_claims")
-    .select("share_no")
-    .eq("split_id", splitId);
-
-  for (const claim of claims ?? []) {
-    await db
-      .from("bill_split_claims")
-      .update({ amount: amounts[claim.share_no] ?? 0 })
-      .eq("split_id", splitId)
-      .eq("share_no", claim.share_no);
-  }
 }
