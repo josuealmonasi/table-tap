@@ -48,6 +48,8 @@ it("keeps successful role-scoped badge totals", async () => {
   const response = await badges();
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ badges: { "/dashboard/orders": 5, "/dashboard/bills": 9 } });
+  for (const index of [1, 2]) expect(from.mock.results[index].value.eq).toHaveBeenCalledWith("written_off", false);
+  for (const index of [3, 4]) expect(from.mock.results[index].value.eq).not.toHaveBeenCalledWith("written_off", false);
 });
 
 it("keeps an explicit disabled setting empty without counting work", async () => {

@@ -1,3 +1,4 @@
+import { LIVE_FLOW } from "@/lib/order-flow";
 import { orderCode, type Order, type OrderStatus, type ServiceRequest } from "@/lib/types";
 
 /** Only preparation facts cross the kitchen boundary, including nested extras. */
@@ -33,3 +34,7 @@ export interface KitchenRequest extends Omit<ServiceRequest, "table_id"> { table
 export type BoardRequest = ServiceRequest | KitchenRequest;
 export const hasOrderMoney = (order: BoardOrder): order is Order => "total" in order;
 export const boardOrderCode = (order: BoardOrder): string => orderCode("code" in order ? order.code : order.id);
+
+/** A write-off ends preparation without rewriting the original order status. */
+export const isPreparationOrder = (order: BoardOrder): boolean =>
+  LIVE_FLOW.includes(order.status) && !("written_off" in order && order.written_off);

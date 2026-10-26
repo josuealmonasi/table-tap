@@ -41,6 +41,10 @@ export async function POST(req: NextRequest) {
   if (error) return await apiError("apiErr.orderData", 500);
   const result = data as { outcome: string; status?: string; stations_ready?: string[] };
   if (result.outcome === "missing") return await apiError("apiErr.orderNotFound", 404);
+  if (result.outcome === "inactive" || (result.outcome === "moved" &&
+      ["cancelled", "completed", "pending_payment"].includes(result.status ?? ""))) {
+    return await apiError("apiErr.orderInactive", 409, undefined, { inactive: true });
+  }
   if (result.outcome === "moved") return await apiError("apiErr.orderMovedOn", 409);
   if (result.outcome === "notHere") return await apiError("apiErr.stationNotInOrder", 409);
   if (result.outcome !== "ok") return await apiError("apiErr.invalidRequest", 400);

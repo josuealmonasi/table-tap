@@ -37,11 +37,13 @@ export async function GET(): Promise<NextResponse> {
       .from("orders")
       .select("id", { count: "exact", head: true })
       .eq("restaurant_id", actor.restaurantId)
+      .eq("written_off", false)
       .in("status", ["received", "preparing"]),
     db
       .from("orders")
       .select("id", { count: "exact", head: true })
       .eq("restaurant_id", actor.restaurantId)
+      .eq("written_off", false)
       .eq("status", "ready"),
     db
       .from("discount_requests")

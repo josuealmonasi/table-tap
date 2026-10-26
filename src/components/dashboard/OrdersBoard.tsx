@@ -17,7 +17,7 @@ import { EmptyIcon } from "@/components/ui/icons";
 import { cancelWording } from "@/lib/cancel-wording";
 import { inStation, viewStatus, type Station } from "@/lib/stations";
 import { useBoardStation } from "@/hooks/useBoardStation";
-import { boardOrderCode, hasOrderMoney, type BoardOrder, type BoardRequest } from "@/lib/kitchen-ticket";
+import { boardOrderCode, hasOrderMoney, isPreparationOrder, type BoardOrder, type BoardRequest } from "@/lib/kitchen-ticket";
 import StationFilter from "./StationFilter";
 
 interface OrdersBoardProps {
@@ -53,8 +53,6 @@ interface OrdersBoardProps {
 }
 
 
-const LIVE_STATUSES = new Set(["received", "preparing", "ready"]);
-
 /**
  * Kitchen dashboard: the live order grid.
  *
@@ -81,7 +79,7 @@ export default function OrdersBoard({
 }: OrdersBoardProps) {
   const router = useRouter();
   const t = useT();
-  const { orders, updateStatus, cancelOrder, cancelPlanFor, online, pending } = useRestaurantOrders(
+  const { orders, inactiveOrderIds, hideInactive, updateStatus, cancelOrder, cancelPlanFor, online, pending } = useRestaurantOrders(
     restaurant.id,
     initialOrders,
     kitchen,
@@ -92,7 +90,7 @@ export default function OrdersBoard({
   const [station, setStation] = useBoardStation(restaurant.id, hasStations);
   // This screen's station sees only orders it makes something in, each in
   // the column its own part has reached.
-  const live = orders.filter(o => LIVE_STATUSES.has(o.status) && inStation(o, station));
+  const live = orders.filter(o => isPreparationOrder(o) && !inactiveOrderIds.has(o.id) && inStation(o, station));
   const byId = new Map(live.map(o => [o.id, o]));
   const viewed = live.map(o => ({ ...o, status: viewStatus(o, station) }));
 
@@ -105,7 +103,10 @@ export default function OrdersBoard({
         body: JSON.stringify({ id, station: done }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) toast(data.error ?? t("orders.moveRefused"), "error");
+      if (!res.ok) {
+        if (data.inactive === true) hideInactive(id);
+        toast(data.error ?? t("orders.moveRefused"), "error");
+      }
     } catch {
       toast(t("done.networkError"), "error");
     }

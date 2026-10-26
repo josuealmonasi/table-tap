@@ -82,18 +82,21 @@ export default async function OrdersPage() {
   // restaurant id and its midnight, which we already have. In a row they were
   // three round trips with the kitchen waiting in front of the screen.
   // The day's till figure is still skipped when the viewer cannot see it.
+  let liveOrders = supabase
+    .from(kitchen ? "kitchen_tickets" : "orders")
+    .select("*")
+    .eq("restaurant_id", r.id)
+    .in("status", LIVE_FLOW)
+    .order("created_at", { ascending: false });
+  if (!kitchen) liveOrders = liveOrders.eq("written_off", false);
+
   const [ordersRes, requestsRes, todayRes, barRes] = await Promise.all([
     // Every order still on the board, however many came after it. This was
     // the newest 100 of ANY status, filtered to the live ones afterwards — so
     // after a busy stretch an order the kitchen had not started was simply not
     // loaded, while the Pedidos badge, which counts by status, went on
     // counting it. History pages through the rest on its own.
-    supabase
-      .from(kitchen ? "kitchen_tickets" : "orders")
-      .select("*")
-      .eq("restaurant_id", r.id)
-      .in("status", LIVE_FLOW)
-      .order("created_at", { ascending: false }),
+    liveOrders,
     supabase
       .from(kitchen ? "kitchen_requests" : "service_requests")
       .select("*")

@@ -36,16 +36,20 @@ export async function PATCH(req: NextRequest) {
   // The kitchen cannot SELECT orders. Resolve its separate ticket id on the
   // server, confined to the actor's restaurant. Seeing a ticket is not enough
   // to move it — the move must be one the board itself would offer.
-  const { data: order, error: readError } = await createAdminClient()
+  const readOrder = () => createAdminClient()
     .from("orders")
     .select("id, status, written_off")
     .eq(actor.role === "kitchen" ? "kitchen_ticket_id" : "id", id)
     .eq("restaurant_id", actor.restaurantId)
     .maybeSingle();
+  const { data: order, error: readError } = await readOrder();
   if (readError) return await apiError("apiErr.orderData", 500);
   if (!order) return await apiError("apiErr.forbidden", 403);
 
-  if (order.written_off || (from !== undefined && from !== order.status) ||
+  if (order.written_off || ["cancelled", "completed", "pending_payment"].includes(order.status)) {
+    return await apiError("apiErr.orderInactive", 409, undefined, { inactive: true });
+  }
+  if ((from !== undefined && from !== order.status) ||
       !canMoveOrder(order.status, status, MOVES_ORDERS(actor.role))) {
     return await apiError("apiErr.orderMoveChanged", 409);
   }
@@ -64,6 +68,15 @@ export async function PATCH(req: NextRequest) {
     .eq("status", order.status).eq("written_off", false)
     .select("id");
   if (error) return await apiError("apiErr.orderData", 500);
-  if (moved?.length !== 1) return await apiError("apiErr.orderMoveChanged", 409);
+  if (moved?.length !== 1) {
+    // A write-off can win after the read. Retire the stale card without
+    // changing its original status, even if its realtime event was missed.
+    const { data: current, error: currentError } = await readOrder();
+    if (currentError) return await apiError("apiErr.orderData", 500);
+    if (current && (current.written_off || ["cancelled", "completed", "pending_payment"].includes(current.status))) {
+      return await apiError("apiErr.orderInactive", 409, undefined, { inactive: true });
+    }
+    return await apiError("apiErr.orderMoveChanged", 409);
+  }
   return NextResponse.json({ ok: true });
 }

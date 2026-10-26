@@ -7,7 +7,7 @@ const confirm = vi.fn();
 const toast = vi.fn();
 const order = { id: "o1", status: "received", created_at: "2026-10-01", items: [] } as unknown as Order;
 vi.mock("@/hooks/useRestaurantOrders", () => ({ useRestaurantOrders: () => ({
-  orders: [order], cancelPlanFor, cancelOrder, online: true, pending: 0,
+  orders: [order], inactiveOrderIds: new Set(), hideInactive: vi.fn(), cancelPlanFor, cancelOrder, online: true, pending: 0,
 }) }));
 vi.mock("@/hooks/useBoardStation", () => ({ useBoardStation: () => [null, vi.fn()] }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
