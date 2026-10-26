@@ -31,7 +31,7 @@ function context() {
     setMenus: vi.fn(), setProducts: vi.fn(), setAddons: vi.fn(),
   };
   const latest = { current: { menus: base.menus, sections: base.sections, products: base.products, addons: base.addons, links: base.links } };
-  return { ...base, latest, w: makeWriter({ ...base, latest } as unknown as EditorContext) } as unknown as EditorContext;
+  return { ...base, latest, availability: { pending: new Map(), current: () => true, revision: () => 0, patch: () => false }, w: makeWriter({ ...base, latest } as unknown as EditorContext) } as unknown as EditorContext;
 }
 beforeEach(() => { vi.clearAllMocks(); vi.spyOn(console, "error").mockImplementation(() => {}); });
 const failures: Result[] = [{ data: [], error: null, count: 0 }, { data: null, error: { message: "refused" } }];

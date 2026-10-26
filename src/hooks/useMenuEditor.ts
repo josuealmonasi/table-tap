@@ -12,6 +12,8 @@ import { productActions } from "./menu-editor/products";
 import { importActions } from "./menu-editor/import";
 import { addonActions } from "./menu-editor/addons";
 import type { MenuSnapshot } from "./menu-editor/types";
+import type { AvailabilityRequest } from "./menu-editor/availability";
+import { patchSavedItem } from "./menu-editor/saved-item";
 
 export type { AddonInput, ProductInput } from "./menu-editor/types";
 
@@ -44,6 +46,13 @@ export function useMenuEditor(restaurantId: string) {
   // The read in flight. The menu stays on screen while it runs, so a click
   // there waits for it instead of being dropped without a word.
   const settled = useRef<Promise<void>>(Promise.resolve());
+  const scope = useRef({ restaurantId, active: true, pending: new Map<string, AvailabilityRequest>() });
+  if (scope.current.restaurantId !== restaurantId) {
+    scope.current.active = false;
+    scope.current = { restaurantId, active: true, pending: new Map() };
+  }
+  const currentScope = scope.current;
+  const isCurrent = () => scope.current === currentScope && currentScope.active;
   const load = useCallback(async () => {
     const requestId = ++loadId.current;
     // Edits wait for the whole menu (J17), but the menu already on screen
@@ -97,13 +106,27 @@ export function useMenuEditor(restaurantId: string) {
   }, []);
 
   useEffect(() => {
+    currentScope.active = true;
     reload();
-    return cancelReload;
-  }, [reload, cancelReload]);
+    return () => { currentScope.active = false; cancelReload(); };
+  }, [reload, cancelReload, currentScope]);
 
   const ctx = {
     ready: whenReady,
     latest,
+    availability: {
+      pending: currentScope.pending, current: isCurrent, revision: () => ready.current ? loadId.current : null,
+      patch: (row: MenuItem | undefined, revision: number, keepOptimistic: boolean) => {
+        if (!isCurrent() || !ready.current || revision !== loadId.current) return false;
+        const saved = patchSavedItem(latest.current, row, restaurantId);
+        if (!saved || !row) return false;
+        latest.current = saved;
+        const replace = (items: MenuItem[]) => items.map(item => item.id !== row.id ? item
+          : keepOptimistic ? { ...row, available: item.available } : row);
+        setProducts(replace); setAddons(replace);
+        return true;
+      },
+    },
     supabase,
     restaurantId,
     toast,

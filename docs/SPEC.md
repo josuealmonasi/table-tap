@@ -2101,6 +2101,14 @@ The menu editor pages all menus, sections, items and links with stable ordering
 and refuses edits and copies until the whole read succeeds. Waiter orders obey
 the restaurant's low-stock alert preference, just like checkout and the till.
 
+Availability switches return the saved item and patch both the visible row and
+the snapshot used by copies, including database-adjusted availability and stock.
+Clicks on one item save in order across renders; other items save independently.
+A failed/ambiguous save, changed structural membership or overlapping full read
+reconciles with a fresh complete read. Late results and queued work cannot update
+another restaurant's editor or an unmounted editor. Other mutations keep their
+existing full-read behavior.
+
 
 ### Collection feedback on Pedidos and open bills
 
