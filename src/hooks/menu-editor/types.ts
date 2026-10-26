@@ -3,6 +3,7 @@ import type { createClient } from "@/lib/supabase/client";
 import type { Category, Menu, MenuItem, Modifier } from "@/lib/types";
 import type { useToast } from "@/components/ui/Toast";
 import type { Writer } from "./writer";
+import type { AvailabilityContext } from "./availability";
 
 /** Editable fields for a product (a non-add-on menu item). */
 export interface ProductInput {
@@ -57,6 +58,7 @@ export interface EditorContext {
    * it waited for, and a copy made from them was a copy of the old price.
    */
   latest: { readonly current: MenuSnapshot };
+  availability: AvailabilityContext;
   supabase: ReturnType<typeof createClient>;
   restaurantId: string;
   toast: ReturnType<typeof useToast>;

@@ -4395,3 +4395,23 @@ React state, realtime removal, stale taps, normal stages and retained takings;
 `inactive-order-moves.react-component.spec.tsx`, kitchen query tests and
 `api-inactive-orders.mjs` cover role/tenant guards, private tickets and no-write
 refusals against the live development database.
+
+## Availability saves must preserve confirmed rows and click order
+
+Every availability switch reloaded the complete menu to protect the latest
+snapshot and concurrent reads. Successful ordinary switches now return and patch
+the complete saved item, including stock and the actual available flag. Both
+rendered state and the copy/reorder snapshot agree before the save resolves.
+
+Per-item queues survive renders and preserve the latest visible intent while
+saving each click in order. Different items remain independent. A full read
+started during the write, changed grouping or a failed/ambiguous response still
+uses a complete reconciliation; older reads cannot undo the confirmed result.
+Changing restaurant or unmounting retires queued work and late responses. RLS,
+restaurant filtering and zero-row refusal checks remain on every save.
+
+`availability.react-component.spec.tsx` and `availability-races.react-component.spec.tsx`
+exercise the actual React hook: products/extras, returned stock, immediate copy,
+click ordering, cross-item saves, overlapping reads, failures, retry readiness and
+editor lifetime. Against the original availability action 11 cases failed; all
+22 cases pass with the row patch and queue.
