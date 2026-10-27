@@ -4527,3 +4527,18 @@ removing a part's index import each failed that invariant, then passed restored.
 - **Finding 2** (a legacy `charge_already_refunded` row with no refund id
   pending for ever) needs no change: today's path refuses without an id, and
   production has none (counted 2026-10-27).
+
+### Audit N (Codex): "today" on the orders board missed money; a refresh dropped live orders
+
+- **Finding 4.** The board's "today" added up paid orders created today. A
+  MX$50 collection on a MX$100 order, a paid split share and yesterday's
+  account order settled today are all money in the drawer, and all read as
+  MX$0. It now reads `collectedToday`, which is the corte's own figure (the
+  ledger since the restaurant's midnight, net of completed returns), so the
+  two screens cannot disagree. `collected-today.spec.ts`, MX$ and US$.
+- **Finding 3.** #542 replaced the live list with every server snapshot to
+  keep the old order-sum from counting twice. A snapshot is read before it
+  renders, so an order or a move realtime delivered in between disappeared.
+  With takings off the list, the list is seeded once again and realtime keeps
+  it current. `orders-takings.react-component.spec.tsx` fails with the
+  replacement put back, and also pins audit M's MX$200-for-MX$100.

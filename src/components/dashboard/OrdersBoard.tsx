@@ -17,6 +17,7 @@ import { EmptyIcon } from "@/components/ui/icons";
 import { cancelWording } from "@/lib/cancel-wording";
 import { inStation, viewStatus, type Station } from "@/lib/stations";
 import { useBoardStation } from "@/hooks/useBoardStation";
+import { useRefreshWhenPaid } from "@/hooks/useRefreshWhenPaid";
 import { boardOrderCode, hasOrderMoney, isPreparationOrder, type BoardOrder, type BoardRequest } from "@/lib/kitchen-ticket";
 import StationFilter from "./StationFilter";
 
@@ -44,10 +45,8 @@ interface OrdersBoardProps {
   canApprove: boolean;
   /** Kitchen doesn't get the daily takings stat. */
   showRevenue: boolean;
-  /** Today's takings from orders NOT in the loaded set (server-computed). */
-  revenueBase: number;
-  /** Start of today (ms) — the shared day boundary for the revenue stat. */
-  todayStartMs: number;
+  /** Collected since the restaurant's midnight, net of returns: the corte's figure. */
+  collectedToday: number;
   /** The menu has a section made at the bar, so the board offers stations. */
   hasStations?: boolean;
 }
@@ -72,8 +71,7 @@ export default function OrdersBoard({
   isWaiter,
   canApprove,
   showRevenue,
-  revenueBase,
-  todayStartMs,
+  collectedToday,
   hasStations = false,
   kitchen = false,
 }: OrdersBoardProps) {
@@ -86,6 +84,7 @@ export default function OrdersBoard({
   );
   const confirm = useConfirm();
   const toast = useToast();
+  useRefreshWhenPaid(orders, showRevenue);
 
   const [station, setStation] = useBoardStation(restaurant.id, hasStations);
   // This screen's station sees only orders it makes something in, each in
@@ -115,20 +114,6 @@ export default function OrdersBoard({
   const activeCount = live.filter(
     o => o.status === "received" || o.status === "preparing",
   ).length;
-  // Today's takings = the server base (orders beyond the loaded set) plus the
-  // live slice we can see, so it stays accurate AND updates in realtime.
-  const liveToday = orders.reduce(
-    (sum, o) =>
-      sum +
-      (hasOrderMoney(o) && o.paid &&
-      o.currency === restaurant.currency &&
-      o.status !== "cancelled" &&
-      new Date(o.created_at).getTime() >= todayStartMs
-        ? o.total
-        : 0),
-    0,
-  );
-  const revenue = +(revenueBase + liveToday).toFixed(2);
 
   async function handleCancel(order: Order): Promise<void> {
     // Worded from what the server says the cancel will do, never from
@@ -178,7 +163,7 @@ export default function OrdersBoard({
             {showRevenue && (
               <div className="tt-stat">
                 <strong style={{ color: "var(--tt-success)" }}>
-                  {formatMoney(revenue, restaurant.currency)}
+                  {formatMoney(collectedToday, restaurant.currency)}
                 </strong>
                 <span>{t("orders.today")}</span>
               </div>

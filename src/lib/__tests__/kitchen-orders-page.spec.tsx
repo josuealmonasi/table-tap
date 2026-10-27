@@ -11,6 +11,7 @@ vi.mock("@/lib/membership", () => ({
 }));
 vi.mock("@/lib/current-user", () => ({ currentUser: async () => ({ id: "u1" }) }));
 vi.mock("@/lib/plan-server", () => ({ getPlan: async () => null }));
+vi.mock("@/lib/collected-today", () => ({ collectedToday: async () => 0 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: (table: string) => {
   state.reads.push(table);
   const q = { select: () => q, eq: (...args: unknown[]) => { state.filters.push([table, ...args]); return q; }, in: () => q, neq: () => q, gte: () => q,
