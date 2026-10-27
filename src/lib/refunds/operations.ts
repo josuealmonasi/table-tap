@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import { syncReturnedFee } from "./fee";
+import { recoverQueuedFees } from "./fee-queue";
 import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -96,5 +97,6 @@ export async function recoverOrderRefundFees(restaurantId: string, actor: string
   const pending = await everyRow<{ id: string }>((a, b) => db.from("refund_operations").select("id")
     .eq("restaurant_id", restaurantId).eq("source", "stripe").eq("status", "succeeded")
     .is("fee_reconciled_at", null).order("id").range(a, b), "the returned fees awaiting verification");
+  await recoverQueuedFees(db, stripe, restaurantId);
   for (const operation of pending) await executeOrderRefund(restaurantId, operation.id, actor);
 }
