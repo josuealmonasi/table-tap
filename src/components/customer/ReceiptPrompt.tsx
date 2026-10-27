@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
 import { EMAIL_MAX, isValidEmail } from "@/lib/email";
+import ReceiptPrint from "./ReceiptPrint";
 
 /**
- * Offers a receipt by email, once, after paying.
+ * Offers a receipt by email or print/save, once, after paying.
  *
  * Easy to leave: the backdrop closes it, Escape closes it, and there is a
  * plain "no thanks" — somebody who has just paid is on their way out, and a
@@ -72,6 +73,7 @@ export default function ReceiptPrompt({
           <p className="tt-muted" style={{ fontSize: 14 }}>
             {t("receipt.sentBody", { email })}
           </p>
+          <ReceiptPrint orderIds={orderIds} disabled={false} />
           <button
             className="tt-btn tt-btn-primary"
             style={{ width: "100%", marginTop: 16 }}
@@ -126,6 +128,7 @@ export default function ReceiptPrompt({
           >
             {busy ? t("receipt.sending") : t("receipt.send")}
           </button>
+          <ReceiptPrint orderIds={orderIds} disabled={busy} />
           <button
             type="button"
             className="tt-btn tt-btn-ghost"

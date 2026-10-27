@@ -10,6 +10,7 @@ import { buildReceipt } from "@/lib/receipt";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidEmail, normalizeEmail } from "@/lib/email";
 import { dateLocale } from "@/lib/format";
+import { printableReceipt } from "@/lib/print-document";
 
 export const runtime = "nodejs";
 
@@ -46,9 +47,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     orderId?: string;
     orderIds?: string[];
     email?: string;
+    delivery?: "print";
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { orderId, orderIds, email } = body;
+  const printing = body.delivery === "print";
   // One ticket, or every ticket a table settled together. Capped: a table
   // settles a handful of orders, and an uncapped list is a way to make one
   // request read the whole table and build an enormous email.
@@ -58,7 +61,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .filter((v): v is string => typeof v === "string" && v.length > 0)
     .slice(0, 40);
   const address = normalizeEmail(String(email ?? ""));
-  if (ids.length === 0 || !isValidEmail(address)) {
+  if (ids.length === 0 || (!printing && !isValidEmail(address))) {
     return await apiError("receipt.badEmail", 400);
   }
 
@@ -69,7 +72,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // reputation blocked. A real diner asks for a receipt once, and mistypes the
   // address at most a couple of times.
   for (const id of ids) {
-    if (await isRateLimited(`receipt-order:${id}`, RESENDS_PER_ORDER, 86_400)) {
+    if (await isRateLimited(`${printing ? "receipt-print" : "receipt-order"}:${id}`, printing ? 20 : RESENDS_PER_ORDER, 86_400)) {
       return await apiError("apiErr.tooManyRequests", 429);
     }
   }
@@ -91,6 +94,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const orders = (found ?? []).filter(o => o.restaurant_id === first?.restaurant_id);
   if (orders.length === 0) return await apiError("apiErr.notFound", 404);
   const order = orders[0];
+  // Paper confirms a complete paid bill. A partial read or mixed currency
+  // cannot become a plausible-looking total on a saved receipt.
+  if (printing && (orders.length !== new Set(ids).size || (Array.isArray(orderIds) && orderIds.length > 40)
+    || orders.some(o => !o.paid || o.currency !== order.currency || o.table_id !== order.table_id))) {
+    return await apiError("apiErr.notFound", 404);
+  }
   // The table is known only now; the room was counted before anything was read.
   if (await isTableLimited(req, "receipt", order.table_id, 5)) {
     return await apiError("apiErr.tooManyRequests", 429);
@@ -116,6 +125,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     },
     t,
   );
+  // The print/save path uses the same renderer as POS and email, without
+  // sending mail or recording an email timestamp.
+  if (printing) return NextResponse.json({ html: printableReceipt(receipt.html, receipt.subject) });
   const result = await sendMail({
     to: address,
     subject: receipt.subject,

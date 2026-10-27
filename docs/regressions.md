@@ -4822,3 +4822,63 @@ modals), unused exports and tests that exercised only retired helpers. The
 live `sharesFor` tests still check that every cent adds back to the bill.
 `EMPTY_CORTE` remains in each consuming test as a fixture. `nextPlan` and its
 existing tests/documentation remain because `plan.ts` belongs to other work.
+
+## Approved features round 1 — search, pending sales and diner paper receipts
+
+| Rule | The bug it prevents | What checks it |
+|---|---|---|
+| Shelf searches retain typed counts and prioritise unknown/negative stock | A filter hid an unfinished count or changed the count submitted after a lost reply | `stock-count-search.spec.tsx`, existing `pending-forms.spec.tsx` and `costs-counts.spec.ts` |
+| Coupon filters share the server's exact date boundaries | A code refused at its end time still appeared active, or a future code vanished from expired | `coupon-search-filters.spec.tsx`, existing coupon service tests |
+| Pending sales and approved history have separate reads and caches | History buried unapproved money, inflated the pending badge or reloaded every 30 seconds | `held-sales-history-route.spec.ts`, `held-sales-pending.spec.tsx`, existing offline recovery/upload tests |
+| Print/save uses the same receipt renderer as email and POS | A saved document changed the currency/discount/tip or falsely recorded an email as sent | `receipt-print-route.spec.ts`, `receipt-print-prompt.spec.tsx`, existing receipt/print/POS tests |
+
+### Stock and count search
+
+Owner/manager stock and CountDialog search names without changing the underlying
+ingredient list. Unknown and negative stock sort first, then names. Counts stay
+blind: expected figures appear only after saving. A nonempty typed row stays
+visible through a search, and retry requests retain their original reference,
+units and counts. Ingredient editing, purchases, waste, stock valuation and
+server write/plan guards use their existing paths.
+
+### Coupon search and filters
+
+Owner/manager coupons search case-insensitive codes. Paused has its own view;
+otherwise the server's date guards decide expired: start later than now or end
+at/before now. Future starts are explained in both languages, and open screens
+update at the next date boundary. Usage limits/minimum spend remain separate
+refusal reasons; spent badges, create/edit/pause/delete, diner checkout and
+staff discounts retain their existing pricing and authority paths.
+
+### Saved sales pending first
+
+The manager-only recovery GET defaults to all unapproved rows, scoped on every
+read to the acting restaurant. Approved history orders by approval time and a
+unique reference, reads 20 rows plus a next-page sentinel, and refuses invalid
+page numbers. SWR keys separate restaurant, view and page. Pending alone polls
+every 30 seconds and supplies the pending badge even while history is open;
+local device-held receipts remain separately labelled. Approval POST, original
+amount/currency/collector checks, cashier upload and offline drawer guards stay
+on their existing paths. Failed reads never masquerade as an empty queue.
+
+### Print or save the diner's receipt
+
+The existing receipt POST accepts print delivery without an email. It uses the
+same buildReceipt HTML and printableReceipt stylesheet as POS, plus the existing
+printWhenReady policy-safe window handling. Printing gets its own per-order
+quota and neither sends email nor writes receipt_sent_at. It requires the full
+requested paid bill from one restaurant/table/currency. The window opens during
+the click so phones can allow it; failed/aborted reads close the blank window,
+and blocked popups get an explanation. Email remains available after failure.
+
+Claude owns the live checks: API (including new GET history and POST print
+modes), roles/RLS, promises (freeze/downgrade and failed reads), money/attack,
+smoke, layout and dialogs, serially against the integrated checkout. At 360,
+390, 820 and 1280 px inspect both languages: stock search/no match and priority
+order; CountDialog with a typed row retained while filtering and after a lost
+reply; coupon search/status controls and all date states; pending/history badge,
+pagination, cashier upload and manager approval; diner email/print before and
+after email success. Print-preview/save PDF on mobile Safari and desktop with a
+single order and whole paid table, MXN/USD, discounts, service and tips. Compare
+the same receipt's POS print and email. This worker runs no servers or live
+gates and makes no schema changes.

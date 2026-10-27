@@ -10,6 +10,7 @@ import { formatMoney } from "@/lib/format";
 import { amount, fromShown, inShown } from "@/lib/costs/display";
 import { decimal } from "@/lib/costs/input";
 import type { StockIngredient } from "@/lib/costs/stock-server";
+import { matchesIngredient } from "./stock-search";
 
 interface CountDialogProps {
   open: boolean;
@@ -58,6 +59,9 @@ function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialog
   const [results, setResults] = useState<CountResult[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  // A typed count stays in sight and in the payload when the search changes.
+  const visible = ingredients.filter(i => matchesIngredient(i, search) || (typed[i.id] ?? "") !== "");
   const byId = new Map(ingredients.map(i => [i.id, i]));
   const label = (n: number, unit: StockIngredient["unit"]) => {
     const shown = inShown(n, unit);
@@ -133,8 +137,12 @@ function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialog
     <form className="tt-prodform" onSubmit={e => void save(e)}>
       <p className="tt-muted tt-costs-hint">{t("costs.countHint")}</p>
       {attempt.unconfirmed() && <PendingAttempt message={t("pending.count")} busy={busy} onDiscard={() => { if (!inFlight.current) attempt.clear(); }} />}
+      {ingredients.length > 1 && <input type="search" className="tt-input" disabled={busy || pending}
+        aria-label={t("stockSearch.search")} placeholder={t("stockSearch.search")}
+        value={search} onChange={e => setSearch(e.target.value)} />}
+      {visible.length === 0 && <p className="tt-muted">{t("stockSearch.empty")}</p>}
       <ul className="tt-costs-count-list">
-        {ingredients.map(i => {
+        {visible.map(i => {
           const unit = inShown(0, i.unit).unit;
           return (
             <li key={i.id}>

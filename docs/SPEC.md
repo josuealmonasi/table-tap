@@ -2224,3 +2224,8 @@ the complete original request too. Legacy references without enough evidence
 are refused for review. Ingredient movement writers lock movement before any
 ingredient row lock or foreign-key insert; product locks still come first as
 in sales. The SQL promotion CHECK requires strictly positive tier prices.
+
+- Stock and physical counts search ingredient names, prioritise unknown/negative stock, retain typed counts through filtering and preserve blind-count retries.
+- Coupons search codes and filter active, expired or paused; expired follows the server's start/end boundaries, including codes that have not started.
+- Saved sales open awaiting approval with a pending-only count and 30-second refresh; approved history reads stable pages of 20 while preserving manager approval and cashier upload.
+- Diner receipts offer email or print/save through the existing receipt renderer and print stylesheet; browser printing can save PDF without sending email or writing a receipt timestamp.

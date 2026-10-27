@@ -2541,6 +2541,36 @@ votes: "Votes",
     privacy: "Privacy",
     rights: "All rights reserved.",
   },
+  stockSearch: {
+    search: "Search ingredients",
+    empty: "No ingredients match your search.",
+  },
+  couponSearch: {
+    search: "Search by code",
+    status: "Coupon status",
+    all: "All coupons",
+    active: "Active",
+    expired: "Expired",
+    paused: "Paused",
+    expiredHint: "Outside their dates: includes codes that have not started yet.",
+    empty: "No coupons match your search and filter.",
+  },
+  heldSalesView: {
+    views: "Saved sales views",
+    pending: "Awaiting approval ({count})",
+    history: "History",
+    emptyHistory: "No approved sales on this page.",
+    previous: "Previous",
+    next: "Next",
+    page: "Page {page}",
+  },
+  receiptPrint: {
+    action: "Print or save receipt",
+    hint: "Choose a printer or Save as PDF in the print dialog.",
+    loading: "Preparing receipt…",
+    blocked: "Allow pop-ups to print or save your receipt.",
+    failed: "We couldn't open your receipt. Try again.",
+  },
 };
 
 export type Messages = typeof en;

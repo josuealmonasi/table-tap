@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -9,6 +9,7 @@ import { ListSkeleton } from "@/components/ui/Skeleton";
 import { useRowMemory } from "@/hooks/useRowMemory";
 import CouponForm from "./CouponForm";
 import CouponRow from "./CouponRow";
+import { couponStatus, type CouponFilter } from "./coupon-filter";
 
 /** Coupon codes an owner or manager hands out, with their usage so far. */
 export default function CouponsPanel({
@@ -28,6 +29,20 @@ export default function CouponsPanel({
   const rows = useRowMemory("coupons", 3, loading ? undefined : coupons.length);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Coupon | null>(null);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<CouponFilter>("all");
+  const [clockTick, setClockTick] = useState(0);
+  const now = Date.now();
+  useEffect(() => {
+    const current = Date.now();
+    const next = Math.min(...coupons.flatMap(c => [c.starts_at, c.ends_at])
+      .filter((date): date is string => Boolean(date)).map(date => new Date(date).getTime()).filter(date => date > current));
+    if (!Number.isFinite(next)) return;
+    const timer = setTimeout(() => setClockTick(n => n + 1), Math.min(next - current, 2_147_483_647));
+    return () => clearTimeout(timer);
+  }, [coupons, clockTick]);
+  const visible = coupons.filter(c => c.code.toLowerCase().includes(search.trim().toLowerCase())
+    && (filter === "all" || couponStatus(c, now) === filter));
 
   function startEdit(c: Coupon): void {
     setEditing(c);
@@ -69,6 +84,16 @@ export default function CouponsPanel({
       <p className="tt-muted" style={{ marginTop: 0, fontSize: 13 }}>
         {t("coupons.hint")}
       </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        <input type="search" className="tt-input" style={{ flex: "1 1 180px", minWidth: 0 }}
+          aria-label={t("couponSearch.search")} placeholder={t("couponSearch.search")}
+          value={search} onChange={e => setSearch(e.target.value)} />
+        <select className="tt-input" aria-label={t("couponSearch.status")} value={filter}
+          onChange={e => setFilter(e.target.value as CouponFilter)}>
+          {(["all", "active", "expired", "paused"] as const).map(value => <option key={value} value={value}>{t(`couponSearch.${value}`)}</option>)}
+        </select>
+      </div>
+      {filter === "expired" && <p className="tt-muted">{t("couponSearch.expiredHint")}</p>}
 
       {/* Creating happens in a dialog, the same as products and promotions —
           an always-open form put an empty create step above the codes that
@@ -100,7 +125,8 @@ export default function CouponsPanel({
         <p className="tt-muted">{t("coupons.empty")}</p>
       ) : (
         <div className="tt-coupon-list">
-          {coupons.map(c => (
+          {!loadFailed && visible.length === 0 && <p className="tt-muted">{t("couponSearch.empty")}</p>}
+          {visible.map(c => (
             <CouponRow
               key={c.id}
               coupon={c}
