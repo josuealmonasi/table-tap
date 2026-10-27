@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { due, fakeDb, fakeStripe, feeVerification } from "./refund-due-fixtures";
+import { due, fakeDb, fakeStripe, fakeLedger, feeVerification } from "./refund-due-fixtures";
 import type Stripe from "stripe";
 import { syncReturnedFee } from "@/lib/refunds/fee";
 
@@ -12,6 +12,7 @@ vi.mock("@/lib/refunds/fee", async importOriginal => {
   return { syncReturnedFee: vi.fn(actual.syncReturnedFee) };
 });
 vi.mock("@/lib/stripe", () => ({ stripe: {} }));
+import { recoverQueuedFees } from "@/lib/refunds/fee-queue";
 import { recoverRefundDues, refundsDue } from "@/lib/refunds/due-list";
 
 beforeEach(() => { state.tasks.length = 0; state.db = null; vi.clearAllMocks(); });
@@ -41,4 +42,45 @@ it("verifies older charge currency in the background without giving back money b
   expect(rows[0].refunded_at).toBeNull();
   expect(calls.create).not.toHaveBeenCalled();
   expect(calls.feeRefund).not.toHaveBeenCalled();
+});
+
+it("leaves a stale recovery pending when an enqueue moves its revision during the provider read", async () => {
+  const rows = [due({ currency: "USD", refunded_at: "2026-10-01", stripe_refund_id: "re_old" })];
+  const db = fakeDb(rows);
+  const charge = { p_restaurant: "r1", p_intent: "pi_1" };
+  await db.rpc("enqueue_fee_reconcile", charge);
+  const { client, calls } = fakeStripe({ made: [{ id: "re_old", amount: 12550, status: "succeeded" } as Stripe.Refund] });
+  const read = calls.intent.getMockImplementation()!;
+  calls.intent.mockImplementationOnce(async () => { await db.rpc("enqueue_fee_reconcile", charge); return read(); });
+  await recoverRefundDues("r1", db, client);
+  expect(rows[0]).toMatchObject({ fee_verification_pending: true });
+  expect(rows[0].fee_reconciled_at).toBeUndefined();
+  expect(fakeLedger(rows).returns).toHaveLength(0);
+  expect(fakeLedger(rows).queue).toEqual([{ restaurant_id: "r1", stripe_payment_intent: "pi_1", generation: 2 }]);
+  expect(calls.feeRefund).not.toHaveBeenCalled();
+  await recoverRefundDues("r1", fakeDb(rows), client);
+  expect(rows[0].fee_reconciled_at).toEqual(expect.any(String));
+  expect(fakeLedger(rows).queue).toHaveLength(0);
+});
+
+it("keeps a newer enqueue through duplicate recovery and lets charge recovery acknowledge it", async () => {
+  const rows = [due({ currency: "USD", refunded_at: "2026-10-01", stripe_refund_id: "re_old" })];
+  const db = fakeDb(rows);
+  const charge = { p_restaurant: "r1", p_intent: "pi_1" };
+  await db.rpc("enqueue_fee_reconcile", charge);
+  const { client, calls } = fakeStripe({ made: [{ id: "re_old", amount: 12550, status: "succeeded" } as Stripe.Refund] });
+  const send = calls.feeRefund.getMockImplementation()!;
+  let newer: number | undefined;
+  calls.feeRefund.mockImplementationOnce(async (...args) => {
+    const made = await send(...args);
+    newer = (await db.rpc("enqueue_fee_reconcile", charge)).data;
+    return made;
+  });
+  await recoverRefundDues("r1", db, client);
+  expect(rows[0].fee_reconciled_at).toEqual(expect.any(String));
+  expect(fakeLedger(rows).queue).toEqual([{ restaurant_id: "r1", stripe_payment_intent: "pi_1", generation: newer }]);
+  await recoverQueuedFees(fakeDb(rows), client, "r1");
+  expect(fakeLedger(rows).queue).toHaveLength(0);
+  expect(calls.feeRefund).toHaveBeenCalledTimes(1);
+  expect(calls.create).not.toHaveBeenCalled();
 });

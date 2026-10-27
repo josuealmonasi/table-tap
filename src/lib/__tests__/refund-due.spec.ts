@@ -16,7 +16,7 @@ vi.mock("@/lib/stripe", () => ({ stripe: {} }));
 import { corteFrom } from "@/lib/corte";
 import { refundDue, refundDueLogDetail } from "@/lib/refund-due";
 
-import { due, fakeDb, fakeStripe, feeVerification, stripeError } from "./refund-due-fixtures";
+import { due, fakeDb, fakeStripe, fakeLedger, feeVerification, stripeError } from "./refund-due-fixtures";
 
 beforeEach(() => {
   logged.length = 0;
@@ -30,7 +30,7 @@ describe("refunding a payment taken twice", () => {
     const answer = await refundDue(fakeDb(rows), "r1", "d1", "ana@x.dev", client);
     expect(answer).toEqual({ ok: true, amount: 125.5, alreadyInStripe: false });
     expect(calls.create).toHaveBeenCalledWith(
-      { payment_intent: "pi_1", amount: 12550, refund_application_fee: true, metadata: { refund_due: "d1", refund_due_attempt: "due-attempt-1" } },
+      { payment_intent: "pi_1", amount: 12550, refund_application_fee: true, metadata: { refund_due: "d1", refund_due_attempt: "due-d1-attempt-1" } },
       { idempotencyKey: "refund-due-d1", stripeAccount: "acct_1" },
     );
     expect(rows[0]).toMatchObject({ refunded_by: "ana@x.dev", stripe_refund_id: "re_1" });
@@ -40,12 +40,12 @@ describe("refunding a payment taken twice", () => {
 
   it("audit Q 2: a stale success the database refused, because Stripe since failed it, is never reported as refunded", async () => {
     const rows = [due()];
-    const db = fakeDb(rows) as unknown as { rpc: (name: string, args: Record<string, unknown>) => Promise<unknown> };
-    const rpc = db.rpc.bind(db);
-    // finish_refund_due_attempt records the known failure and returns false.
-    db.rpc = async (name, args) => name === "finish_refund_due_attempt" ? { data: false, error: null } : rpc(name, args);
+    const db = fakeDb(rows);
+    // The v2 finish stores known-failed coverage inactive and reports it owed.
+    fakeLedger(rows).failures.add(JSON.stringify(["r1", "re_1"]));
     const { client } = fakeStripe();
-    expect(await refundDue(db as never, "r1", "d1", "manager", client)).toMatchObject({ ok: false, error: "apiErr.refundPending", status: 409 });
+    expect(await refundDue(db, "r1", "d1", "manager", client)).toMatchObject({ ok: false, error: "apiErr.refundPending", status: 409 });
+    expect(fakeLedger(rows).coverage.get("d1")?.get("re_1")).toEqual({ amount_cents: 12550, active: false });
     expect(rows[0].refunded_at).toBeNull();
     expect(logged).toHaveLength(0);
   });
@@ -67,7 +67,7 @@ describe("refunding a payment taken twice", () => {
     expect(calls.create).toHaveBeenCalledTimes(2);
     expect(calls.create.mock.calls[0]).not.toEqual(calls.create.mock.calls[1]);
     expect(calls.create.mock.calls[1]).toEqual([expect.objectContaining({ metadata: {
-      refund_due: "d1", refund_due_attempt: "due-attempt-2" } }), expect.objectContaining({ idempotencyKey: "refund-due-d1-2" })]);
+      refund_due: "d1", refund_due_attempt: "due-d1-attempt-2" } }), expect.objectContaining({ idempotencyKey: "refund-due-d1-2" })]);
   });
 
   it("records customer success before a failed fee lookup", async () => {
@@ -128,6 +128,24 @@ describe("refunding a payment taken twice", () => {
     expect(rows[0].stripe_refund_id).toBe("re_old");
   });
 
+  it("keeps partial customer coverage owed and refunds only the remainder on retry", async () => {
+    const rows = [due()]; const db = fakeDb(rows);
+    const { client, calls } = fakeStripe({ made: [{ id: "re_partial", amount: 4000, status: "succeeded",
+      metadata: { refund_due: "d1" } } as unknown as Stripe.Refund] });
+    expect(await refundDue(db, "r1", "d1", "manager", client)).toMatchObject({ error: "apiErr.refundPending" });
+    expect(rows[0].refunded_at).toBeNull();
+    expect(logged).toHaveLength(0);
+    expect(calls.create).not.toHaveBeenCalled();
+    expect(await refundDue(fakeDb(rows), "r1", "d1", "manager", client)).toMatchObject({ ok: true, amount: 85.5 });
+    expect(calls.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ amount: 8550 }),
+      expect.objectContaining({ idempotencyKey: "refund-due-d1-2" }));
+    expect([...fakeLedger(rows).coverage.get("d1")!.values()]).toEqual([
+      { amount_cents: 4000, active: true }, { amount_cents: 8550, active: true },
+    ]);
+    expect(rows[0].refunded_at).toEqual(expect.any(String));
+    expect(logged).toHaveLength(1);
+  });
+
   it("returns our fee when the diner was already refunded by hand in Stripe", async () => {
     const rows = [due({ amount: 251 })];
     const { client, calls } = fakeStripe({ create: async () => Promise.reject(stripeError("charge_already_refunded")),
@@ -137,8 +155,8 @@ describe("refunding a payment taken twice", () => {
     // The whole charge was taken twice, so the whole fee goes back.
     expect(calls.feeRefund).toHaveBeenCalledWith(
       "fee_1",
-      { amount: 500, metadata: { refund_due: "d1" } },
-      { idempotencyKey: "refund-due-fee-d1" },
+      { amount: 500, metadata: { fee_return: "fee-return-1" } },
+      { idempotencyKey: "fee-return-r1-pi_1-1" },
     );
     expect(rows[0].refunded_at).toBeTruthy();
   });
