@@ -30,7 +30,7 @@ function recovery(currency: string) {
   const read = vi.fn(async (): Promise<{ data: object | null; error: { message: string } | null }> => ({ data: { ...row }, error: null }));
   const db = { rpc, from: () => {
     const query = { update: (patch: object) => { Object.assign(row, patch); return query; },
-      select: () => query, eq: () => query, not: () => query, maybeSingle: read,
+      select: () => query, eq: () => query, not: () => query, or: () => query, maybeSingle: read,
       then: (resolve: (result: object) => void) => resolve({ error: null }) };
     return query;
   } } as unknown as ReturnType<typeof createAdminClient>;
@@ -111,9 +111,15 @@ it("M1: due fee completion uses the final verified amounts under the money lock"
   const update = body.slice(body.indexOf("update refunds_due"));
   expect(body).toContain("update refunds_due");
   expect(body.indexOf("lock_restaurant_money(p_restaurant)")).toBeLessThan(body.indexOf("update refunds_due"));
-  expect(update).toContain("fee_target_cents = p_target");
-  expect(update).toContain("fee_verification_pending = (p_cents < p_target)");
-  expect(update).toContain("fee_reconciled_at = case when p_cents >= p_target then now() end");
+  // Audit N 1: a stale snapshot can neither lower the target nor finish early.
+  expect(body.indexOf("max(refunded_cents)")).toBeLessThan(body.indexOf("update refund_operations"));
+  for (const table of ["update refund_operations", "update refunds_due"]) {
+    const set = body.slice(body.indexOf(table)).split("where")[0];
+    expect(set).toContain("fee_target_cents = greatest(coalesce(fee_target_cents, 0), p_target)");
+    expect(set).toContain("fee_verification_pending = (v_returned < greatest(coalesce(fee_target_cents, 0), p_target))");
+    expect(set).toContain("then coalesce(fee_reconciled_at, now()) end");
+    expect(set).not.toMatch(/fee_target_cents = p_target|p_cents [<>]=? p_target/);
+  }
   expect(update).toContain("restaurant_id = p_restaurant and stripe_payment_intent = p_intent");
   expect(update).toContain("refunded_at is not null");
   expect(update).toContain("stripe_refund_id = any(p_refunds)");

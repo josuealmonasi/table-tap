@@ -40,8 +40,10 @@ export async function reconcileDueFee(db: Db, restaurant: string, id: string, at
         if (error || !data) throw new Error("Could not save the fee return request");
         return data;
       }, async target => {
+        // Only ever raised: a slower recovery's older snapshot must not lower
+        // a target another one already saved (audit N finding 1).
         const { error } = await db.from("refunds_due").update({ fee_target_cents: target })
-          .eq("restaurant_id", restaurant).eq("id", id);
+          .eq("restaurant_id", restaurant).eq("id", id).or(`fee_target_cents.is.null,fee_target_cents.lt.${Math.trunc(target)}`);
         if (error) throw new Error(`Could not save the verified fee target: ${error.message}`);
       });
     if (!returned) return false;

@@ -4510,3 +4510,20 @@ order, retaining the fixture-taking interface and shared collection retry state.
 The route inventory reads imported parts; an extra part cannot silently cover a
 missing case. Removing the `/api/session` case, adding an unimported part and
 removing a part's index import each failed that invariant, then passed restored.
+
+### Audit N (Codex): a stale fee check could finish what a newer one left owed; a late camera stayed on
+
+- **Finding 1.** Two fee verifications read Stripe in one order and took the
+  money lock in the other. The older one wrote its smaller target over the
+  newer one's and marked the row done: MX$2.70 of our fee owed with nothing
+  left to say so. `verify_refunded_platform_fee` now keeps the target and the
+  amount returned as high-water marks, the way `advance_refund_due_fee`
+  already did, and the TypeScript save of a target only ever raises it.
+  Pinned in `fee-recovery-target.spec.ts`; replayed on real Postgres in dev,
+  rolled back, MX$ and US$.
+- **Finding 5.** Closing the scanner while the browser was still granting the
+  camera ran cleanup before there was a stream, and the stream that arrived
+  afterwards was never stopped. `qr-camera-late-stream.spec.ts`.
+- **Finding 2** (a legacy `charge_already_refunded` row with no refund id
+  pending for ever) needs no change: today's path refuses without an id, and
+  production has none (counted 2026-10-27).

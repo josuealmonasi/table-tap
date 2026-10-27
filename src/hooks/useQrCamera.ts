@@ -63,7 +63,12 @@ export function useQrCamera(
         return;
       }
       const video = videoRef.current;
-      if (!video || stopped) return;
+      // Closed while the camera was still being granted: cleanup already ran
+      // and saw no stream, so this one is ours to stop or the light stays on.
+      if (!video || stopped) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
       video.srcObject = stream;
       await video.play().catch(() => undefined);
 

@@ -43,7 +43,7 @@ it("legacy rows need saved no-fee checkout evidence or a fee returned in full, n
 it("order fee verification keeps a short return pending and excludes refunds completed after its provider snapshot", () => {
   const verify = fn("verify_refunded_platform_fee");
   expect(verify).toContain("lock_restaurant_money(p_restaurant)");
-  expect(verify).toContain("fee_verification_pending = (p_cents < p_target)");
+  expect(verify).toContain("fee_verification_pending = (v_returned < greatest(coalesce(fee_target_cents, 0), p_target))");
   expect(verify).toContain("stripe_refund_id = any(p_refunds)");
   expect(fn("sync_refunded_platform_fee")).not.toContain("update refund_operations");
 });
