@@ -9,6 +9,7 @@ import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
 import { isOwnStorageUrl } from "@/lib/images";
 import { isDinerCurrency } from "@/lib/diner-currency";
 import { repriceOpenService } from "@/lib/service-reprice";
+import { clampTicketTimes, DEFAULT_TICKET_LATE_MINUTES, DEFAULT_TICKET_WARN_MINUTES } from "@/lib/ticket-wait";
 
 export const runtime = "nodejs";
 
@@ -35,6 +36,8 @@ const OWNER_FIELDS = new Set([
   "low_stock_alerts_enabled",
   "low_stock_threshold",
   "auto_print_kitchen",
+  "ticket_warn_minutes",
+  "ticket_late_minutes",
 ]);
 // A manager runs the floor, so they decide whether the floor is being told
 // about work waiting — the same reasoning that gives them the kill switch.
@@ -51,6 +54,9 @@ const MANAGER_FIELDS = new Set([
   "split_enabled",
   // A manager runs the floor, and the kitchen printer is floor equipment.
   "auto_print_kitchen",
+  // And knows how long the kitchen should take on a busy night.
+  "ticket_warn_minutes",
+  "ticket_late_minutes",
 ]);
 
 // POST /api/settings — owner or manager updates restaurant settings, with the
@@ -119,6 +125,12 @@ export async function POST(req: NextRequest) {
   }
   // Same range the column's constraint allows, so a fat-fingered number comes
   // back as a clamped setting rather than a 500 from Postgres.
+  // Saved as a pair, so "late" always stays after "warn".
+  if ("ticket_warn_minutes" in update || "ticket_late_minutes" in update) {
+    const times = clampTicketTimes(update.ticket_warn_minutes ?? DEFAULT_TICKET_WARN_MINUTES, update.ticket_late_minutes ?? DEFAULT_TICKET_LATE_MINUTES);
+    update.ticket_warn_minutes = times.warn;
+    update.ticket_late_minutes = times.late;
+  }
   if ("low_stock_threshold" in update) {
     update.low_stock_threshold = Math.min(
       999,

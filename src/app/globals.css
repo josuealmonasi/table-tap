@@ -3045,6 +3045,28 @@ a.tt-btn {
   color: var(--tt-sale-ink);
   background: var(--tt-sale);
 }
+/* How long a ticket has waited (TicketWait): plain, then amber, then red
+   against the restaurant's own thresholds. Text plus a wash, never colour
+   alone, so it still reads on the kitchen's dimmed tablet. */
+.tt-ticket-wait {
+  font-size: 12px;
+  color: var(--tt-muted);
+  white-space: nowrap;
+}
+.tt-ticket-wait-warn,
+.tt-ticket-wait-late {
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.tt-ticket-wait-warn {
+  color: var(--tt-warning);
+  background: var(--tt-warning-wash);
+}
+.tt-ticket-wait-late {
+  color: var(--tt-danger);
+  background: color-mix(in srgb, var(--tt-danger) 12%, transparent);
+}
 .tt-order-items {
   border-top: 1px solid var(--tt-cream);
   padding-top: 10px;

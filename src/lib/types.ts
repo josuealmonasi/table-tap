@@ -135,6 +135,9 @@ export type Restaurant = {
   low_stock_alerts_enabled?: boolean;
   /** The count at or below which that warning is raised. */
   low_stock_threshold?: number;
+  /** Board: amber past this many minutes waiting, red past the late one. */
+  ticket_warn_minutes?: number;
+  ticket_late_minutes?: number;
   badges_enabled?: boolean;
   /** The menu's combos and offers tab. On by default. */
   deals_tab_enabled?: boolean;

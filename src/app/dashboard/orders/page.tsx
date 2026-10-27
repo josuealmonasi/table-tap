@@ -120,7 +120,7 @@ export default async function OrdersPage() {
   return (
     <ConfirmProvider>
       <OrdersBoard
-        restaurant={{ id: r.id, currency: r.currency }}
+        restaurant={{ id: r.id, currency: r.currency, ticket_warn_minutes: r.ticket_warn_minutes, ticket_late_minutes: r.ticket_late_minutes }}
         initialOrders={(orders as BoardOrder[]) ?? []}
         snapshotReadAt={ordersRes.error ? undefined : snapshotReadAt}
         kitchen={kitchen}

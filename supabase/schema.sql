@@ -2077,6 +2077,15 @@ alter table restaurants drop constraint if exists restaurants_low_stock_threshol
 alter table restaurants add constraint restaurants_low_stock_threshold_check
   check (low_stock_threshold >= 0 and low_stock_threshold <= 999);
 
+-- When a ticket on the board has waited too long: amber past the first,
+-- red past the second (src/lib/ticket-wait.ts clamps to the same range).
+alter table restaurants add column if not exists ticket_warn_minutes int not null default 10;
+alter table restaurants add column if not exists ticket_late_minutes int not null default 20;
+alter table restaurants drop constraint if exists restaurants_ticket_minutes_check;
+alter table restaurants add constraint restaurants_ticket_minutes_check
+  check (ticket_warn_minutes between 1 and 239 and ticket_late_minutes between 2 and 240
+    and ticket_late_minutes > ticket_warn_minutes);
+
 -- ── Notifications ───────────────────────────────────────────────────────────
 -- What the bell in the nav shows.
 --

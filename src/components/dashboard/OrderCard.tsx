@@ -7,6 +7,8 @@ import { MoveToIcon } from "@/components/ui/icons";
 import { type Order, type OrderStatus } from "@/lib/types";
 import { boardOrderCode, hasOrderMoney, type BoardOrder } from "@/lib/kitchen-ticket";
 import OrderDetailDialog from "./OrderDetailDialog";
+import TicketWait from "./TicketWait";
+import { DEFAULT_TICKET_LATE_MINUTES, DEFAULT_TICKET_WARN_MINUTES } from "@/lib/ticket-wait";
 import { STATUS_META, statusMeta } from "@/lib/order-status";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { linesAt, stationDone, stationsOf, type Station } from "@/lib/stations";
@@ -42,6 +44,9 @@ interface OrderCardProps {
   station?: Station | null;
   /** This station has finished its part. */
   onStationReady?: (id: string, station: Station) => void;
+  /** The restaurant's thresholds for a ticket that has waited too long. */
+  warnMinutes?: number;
+  lateMinutes?: number;
 }
 
 /** One board ticket: preparation facts, an advance button, and money for the floor. */
@@ -53,6 +58,8 @@ export default function OrderCard({
   canMove = true,
   station = null,
   onStationReady,
+  warnMinutes = DEFAULT_TICKET_WARN_MINUTES,
+  lateMinutes = DEFAULT_TICKET_LATE_MINUTES,
 }: OrderCardProps) {
   const t = useT();
   const money = hasOrderMoney(order) ? order : null;
@@ -133,9 +140,7 @@ export default function OrderCard({
           <span className="tt-order-code">{boardOrderCode(order)}</span>
         </div>
         <div className="tt-row">
-          <span className="tt-muted" style={{ fontSize: 12 }}>
-            {placedAt}
-          </span>
+          <TicketWait createdAt={order.created_at} placedAt={placedAt} warnMinutes={warnMinutes} lateMinutes={lateMinutes} />
           <span className="tt-order-flags">
             {/* Whoever hands the order over has to see that it is unpaid before
                 letting go of it. A general-QR order that chose to pay at the
