@@ -18,6 +18,11 @@ function recovery(currency: string) {
   let customerReturned = 1000;
   const made: { id: string; amount: number; metadata: Record<string, string> }[] = [];
   const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
+    if (name === "refund_fee_epoch") return { data: 0, error: null };
+    if (name === "save_refund_due_fee_target") {
+      row.fee_target_cents = Math.max(Number(row.fee_target_cents ?? 0), Number(args.p_target));
+      return { data: true, error: null };
+    }
     if (name === "start_refund_due_fee") row.fee_request ??= { fee_id: String(args.p_fee), amount: Number(args.p_amount) };
     if (name === "advance_refund_due_fee") {
       if (JSON.stringify(row.fee_request) !== JSON.stringify(args.p_previous)) return { data: null, error: null };
@@ -108,7 +113,7 @@ it.each(["missing", "failed"])("M1: an unreadable %s saved outcome cannot report
 
 it("M1: due fee completion uses the final verified amounts under the money lock", () => {
   const sql = readFileSync("supabase/schema.sql", "utf8");
-  const body = sql.slice(sql.lastIndexOf("create or replace function public.verify_refunded_platform_fee(")).split("$$;")[0];
+  const body = sql.slice(sql.lastIndexOf("create or replace function public.apply_verified_platform_fee(")).split("$$;")[0];
   const update = body.slice(body.indexOf("update refunds_due"));
   expect(body).toContain("update refunds_due");
   expect(body.indexOf("lock_restaurant_money(p_restaurant)")).toBeLessThan(body.indexOf("update refunds_due"));

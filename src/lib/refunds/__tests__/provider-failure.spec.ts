@@ -78,13 +78,40 @@ it("audit P 1: only the latest attempt's refund reopens a row; an old attempt's 
   expect(reverse).toContain("if v_latest = v_attempt and o.status in ('succeeded', 'processing') then");
   expect(reverse).toContain("if v_latest = v_attempt and d.refunded_at is not null then");
 });
-it("audit P 1: a success read after its own failure is refused, in both books", () => {
+it("audit P 1 / Q 2: a success read after its own failure records the failure on the attempt and never completes", () => {
   for (const fn of ["finish_refund_operation", "finish_refund_due_attempt"]) {
     const finish = body(fn);
-    const refused = finish.indexOf("from refund_failures where restaurant_id = p_restaurant and stripe_refund_id = p_refund");
-    expect(refused, fn).toBeGreaterThan(0);
-    expect(refused, fn).toBeLessThan(finish.indexOf("update refund"));
+    const known = finish.indexOf("from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = p_refund");
+    expect(known, fn).toBeGreaterThan(0);
+    expect(known, fn).toBeLessThan(finish.indexOf("update refund"));
+    expect(finish, fn).toContain("if v_failed is not null then p_status := v_failed; end if;");
   }
+  // Recorded, but not completed: the caller must not read it as done.
+  expect(body("finish_refund_operation")).toContain("return v_failed is null;");
+  expect(body("finish_refund_due_attempt")).toContain("if p_status <> 'succeeded' then return false; end if;");
+});
+it("audit Q 1: a row completed before attempts existed is matched by its own refund id", () => {
+  const reverse = body("reverse_failed_refund_v2");
+  expect(reverse).toContain("not exists (select 1 from refund_attempts a where a.operation_id = r.id)");
+  expect(reverse).toContain("not exists (select 1 from refund_due_attempts a where a.due_id = r.id)");
+});
+it("audit Q 3: the kept unversioned verifier refuses once a charge has seen a failure; the write itself is granted to no one", () => {
+  const legacy = body("verify_refunded_platform_fee");
+  expect(legacy.indexOf("lock_restaurant_money(p_restaurant)")).toBeLessThan(legacy.indexOf("refund_fee_epoch("));
+  expect(legacy).toContain("if public.refund_fee_epoch(p_restaurant, p_intent) > 0 then return; end if;");
+  expect(body("verify_refunded_platform_fee_v2")).toContain("perform public.apply_verified_platform_fee(");
+  expect(sql).toContain("revoke all on function public.apply_verified_platform_fee(uuid, text, int, int, text[]) from public, anon, authenticated;");
+  expect(sql).not.toMatch(/grant execute on function public\.apply_verified_platform_fee/);
+});
+it("audit Q 4: a provisional duplicate-charge fee target is saved only under the current epoch, and only raised", () => {
+  const save = body("save_refund_due_fee_target");
+  expect(save.indexOf("lock_restaurant_money(p_restaurant)")).toBeLessThan(save.indexOf("update refunds_due"));
+  expect(save).toContain("if p_epoch is null or p_epoch <> public.refund_fee_epoch(p_restaurant, d.stripe_payment_intent) then return false; end if;");
+  expect(save).toContain("fee_target_cents = greatest(coalesce(fee_target_cents, 0), p_target)");
+  expect(sql).toContain("grant execute on function public.save_refund_due_fee_target(uuid, uuid, int, int) to service_role;");
+  const recovery = readFileSync("src/lib/refunds/due-recovery.ts", "utf8");
+  expect(recovery.indexOf('rpc("refund_fee_epoch"')).toBeLessThan(recovery.indexOf("returnOurFee("));
+  expect(recovery).not.toContain('.update({ fee_target_cents');
 });
 it("audit P 2: a failure moves the charge's fee epoch on, and a verification read under an older one is refused", () => {
   expect(body("reverse_failed_refund_v2")).toContain("do update set epoch = refund_fee_epochs.epoch + 1");
@@ -103,5 +130,7 @@ it("drops everything it adds", () => {
   for (const line of ["drop function if exists public.reverse_failed_refund_v2(uuid, text, text, text, int, text);",
     "drop function if exists public.verify_refunded_platform_fee_v2(uuid, text, int, int, text[], int);",
     "drop function if exists public.refund_fee_epoch(uuid, text);",
+    "drop function if exists public.apply_verified_platform_fee(uuid, text, int, int, text[]);",
+    "drop function if exists public.save_refund_due_fee_target(uuid, uuid, int, int);",
     "drop table if exists refund_failures cascade;", "drop table if exists refund_fee_epochs cascade;"]) expect(drop).toContain(line);
 });

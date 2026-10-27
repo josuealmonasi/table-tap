@@ -466,6 +466,12 @@ dishes on a bill the restaurant has just cancelled.
   (`refund_fee_epochs`): a failure moves it on, and `syncReturnedFee` reads it
   before asking Stripe, so a verification that read Stripe before the failure is
   refused and retried. The owner's log line is written in the same transaction.
+  A known failure is recorded on the attempt even if a stale success read
+  arrives, so the retry opens a new attempt; rows completed before attempts
+  existed are matched by their refund id. Fee writes go through
+  `apply_verified_platform_fee` only via the epoch-checked entry points
+  (`verify_refunded_platform_fee_v2`, `save_refund_due_fee_target`). The kept
+  #548 verifier refuses once a charge has an epoch.
   Its exact fee request
   is saved before Stripe is called and provider
   metadata recovers lost responses after idempotency expires. The obligation

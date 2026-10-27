@@ -129,6 +129,14 @@ export async function refundDue(
     p_refund: refundId, p_status: "succeeded",
   });
   if (writeError) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
+  // Refused because Stripe has since told us this refund failed (audit Q 2):
+  // the diner is still owed, whatever the stale read said.
+  if (!marked) {
+    const { data: row, error: readError } = await db.from("refunds_due").select("refunded_at")
+      .eq("restaurant_id", restaurantId).eq("id", id).maybeSingle();
+    if (readError) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
+    if (!row?.refunded_at) return { ok: false, error: "apiErr.refundPending", status: 409 };
+  }
 
   // The share of our fee that went back with it. A charge refunded by hand
   // in Stripe stays counted until verified: the safe way round for the month's ceiling.

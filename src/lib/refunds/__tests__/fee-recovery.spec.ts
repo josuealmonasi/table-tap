@@ -14,6 +14,10 @@ function recovery(currency = "MXN") {
     fee_verification_pending: false, fee_target_cents: null as number | null, fee_reconciled_at: null as string | null };
   const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
     if (name === "refund_fee_epoch") return { data: 0, error: null };
+    if (name === "save_refund_due_fee_target") {
+      row.fee_target_cents = Math.max(Number(row.fee_target_cents ?? 0), Number(args.p_target));
+      return { data: true, error: null };
+    }
       if (name === "verify_refunded_platform_fee_v2") {
       row.fee_target_cents = Number(args.p_target);
       row.fee_verification_pending = Number(args.p_cents) < Number(args.p_target);

@@ -26,6 +26,11 @@ export function fakeDb(rows: Row[], stripeAccount: string | null = "acct_1") {
   const db = {
     rpc: async (name: string, args: Record<string, unknown>) => {
       if (name === "refund_fee_epoch") return { data: 0, error: null };
+      if (name === "save_refund_due_fee_target") {
+        const row = rows.find(r => r.id === args.p_due && r.restaurant_id === args.p_restaurant);
+        if (row) row.fee_target_cents = Math.max(Number(row.fee_target_cents ?? 0), Number(args.p_target));
+        return { data: Boolean(row), error: null };
+      }
       if (name === "verify_refunded_platform_fee_v2") {
         const refunds = args.p_refunds;
         for (const row of rows) if (row.restaurant_id === args.p_restaurant && row.stripe_payment_intent === args.p_intent
