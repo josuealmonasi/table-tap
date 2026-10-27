@@ -4,7 +4,10 @@ import type { OrderStatus } from "@/lib/types";
 export function orderChanges() {
   const seen = new Map<string, number>();
   const active = new Map<string, number>();
-  const remember = (id: string, at = Date.now()): void => { seen.set(id, at); };
+  const remember = (id: string, at = Date.now()): void => {
+    // A delayed HTTP reply must not erase a newer realtime commit time.
+    seen.set(id, Math.max(seen.get(id) ?? -Infinity, at));
+  };
   return { seen, active, readAt: 0, remember,
     protect: (id: string): ((at?: number) => void) => {
       active.set(id, (active.get(id) ?? 0) + 1);

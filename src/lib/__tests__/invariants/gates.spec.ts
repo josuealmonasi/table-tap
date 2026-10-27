@@ -3,6 +3,9 @@ import fs from "node:fs";
 import ts from "typescript";
 import { walkAll, read, listed, apiCaseFiles, apiCaseRegistrationErrors } from "./helpers";
 
+const malformedApiPaths = (paths: unknown[]): unknown[] =>
+  paths.filter(path => typeof path !== "string" || !path.startsWith("/api/"));
+
 /**
  * The harness only ever checks what is on its lists.
  *
@@ -18,6 +21,12 @@ describe("the checks know about every route and screen", () => {
     expect(apiCaseRegistrationErrors()).toEqual([]);
   });
 
+  it.each([undefined, null, "undefined?token=undefined&code=OK", "/orders", "/api", "https://example.com/api/orders"])(
+    "rejects malformed API inventory path %s", path => {
+      expect(malformedApiPaths(["/api/orders", path])).toEqual([path]);
+    },
+  );
+
   it("has an api case for every API route", async () => {
     expect(apiCaseFiles().filter(file => file !== "scripts/api-cases.mjs").sort(),
       "API case parts the index does not import").toEqual(
@@ -32,6 +41,11 @@ describe("the checks know about every route and screen", () => {
     const requested = await Promise.all(inventory.map(entry =>
       typeof entry.path === "function" ? entry.path(fixture) : entry.path,
     ));
+    // A dropped group is caught by the registration check above; a count here
+    // would only fail every time somebody adds a case.
+    expect(inventory.length).toBeGreaterThan(0);
+    expect(malformedApiPaths(requested),
+      "Every API case must resolve to /api/ without arrange").toEqual([]);
     const routes = walkAll("src/app/api")
       .filter(f => f.endsWith("route.ts"))
       .map(f => f.replace(/^src\/app/, "").replace(/\/route\.ts$/, ""));

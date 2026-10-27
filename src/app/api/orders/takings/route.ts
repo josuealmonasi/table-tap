@@ -18,5 +18,5 @@ export async function GET() {
   const r = membership.restaurant;
   const dayStart = startOfLocalDay(new Date(), r.timezone ?? DEFAULT_TIME_ZONE);
   const collected = await collectedToday(actor.restaurantId, r.currency, dayStart);
-  return NextResponse.json({ collectedToday: collected }, { headers: { "Cache-Control": "private, no-store" } });
+  return NextResponse.json({ restaurantId: r.id, currency: r.currency, collectedToday: collected }, { headers: { "Cache-Control": "private, no-store" } });
 }

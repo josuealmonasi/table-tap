@@ -19,7 +19,7 @@ export function printReprintRace() {
   return {
     name: "DELETE /api/print/cloudprnt (an old copy cannot close a fetched reprint)",
     as: "diner", method: "DELETE", expect: [200],
-    path: () => `${url}?token=${oldToken}&code=OK`,
+    path: async f => `/api/print/cloudprnt/${await f.printToken()}?token=${oldToken}&code=OK`,
     arrange: async f => {
       url = `/api/print/cloudprnt/${await f.printToken()}`;
       const before = await checked(f.admin.from("print_jobs").select("delivery_token")

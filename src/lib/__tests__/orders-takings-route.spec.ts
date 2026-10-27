@@ -33,7 +33,7 @@ it.each(["owner", "manager"] as const)("scopes %s to membership, ignoring suppli
     "http://localhost/api/orders/takings?restaurantId=other&currency=MXN&dayStart=2000-01-01",
   )]);
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ collectedToday: 123.45 });
+  expect(await response.json()).toEqual({ restaurantId: "own", currency: "USD", collectedToday: 123.45 });
   expect(state.collected).toHaveBeenCalledExactlyOnceWith("own", "USD", new Date("2026-10-26T15:00:00Z"));
   expect(response.headers.get("Cache-Control")).toBe("private, no-store");
 });
