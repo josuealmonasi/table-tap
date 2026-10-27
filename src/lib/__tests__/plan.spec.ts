@@ -126,10 +126,15 @@ describe("the platform's cut", () => {
     expect(orderFeeCents(casa, table)).toBe(75);
   });
 
-  it("never takes more than a tenth of a small order", () => {
+  it("never takes more than a twentieth of a small order", () => {
     // MX$3 off a MX$20 coffee is a share of the coffee, not a fee.
-    expect(orderFeeCents(carta, 2000)).toBe(200);
-    expect(orderFeeCents(carta, 500)).toBe(50);
+    expect(orderFeeCents(carta, 2000)).toBe(100);
+    expect(orderFeeCents(carta, 500)).toBe(25);
+    // The full fee from MX$60 on Carta, MX$30 on Servicio, MX$15 on Casa.
+    expect(orderFeeCents(carta, 6000)).toBe(300);
+    expect(orderFeeCents(carta, 5999)).toBe(299);
+    expect(orderFeeCents(servicio, 3000)).toBe(150);
+    expect(orderFeeCents(casa, 1500)).toBe(75);
   });
 
   it("is capped on the food, so a tip can't raise what we take", () => {
@@ -137,8 +142,8 @@ describe("the platform's cut", () => {
     // amount charged instead of the food is what let the cap drift.
     const food = 500;
     const withTip = 2500;
-    expect(orderFeeCents(carta, food)).toBe(50);
-    expect(orderFeeCents(carta, withTip)).toBe(250);
+    expect(orderFeeCents(carta, food)).toBe(25);
+    expect(orderFeeCents(carta, withTip)).toBe(125);
   });
 
   it("charges nothing when the tier includes it, or when there is nothing to charge", () => {

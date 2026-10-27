@@ -12,6 +12,11 @@ export async function checkoutPrice(limits: PlanLimits, taken: number): Promise<
     if (price.currency !== BILLING_CURRENCY || price.recurring?.interval !== "month" || price.recurring.interval_count !== 1 || !price.active) {
       throw new Error("Billing price must be an active monthly MXN price");
     }
+    // The plan screen shows currentPrice: a configured Price for any other
+    // amount would charge what nobody was shown.
+    if (price.unit_amount !== Math.round(currentPrice(limits, taken) * 100)) {
+      throw new Error("Billing price does not match the price shown on the plan screen");
+    }
     await registerSubscriptionPrice(price.id, limits.plan);
     return { price: price.id, quantity: 1 };
   }

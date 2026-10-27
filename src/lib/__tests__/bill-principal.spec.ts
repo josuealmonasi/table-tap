@@ -19,9 +19,9 @@ it("E4 coupon-free bill, account and split own orders retain every remaining cen
   expect(billEntitlements([{ id: "a", total: 100, tip: 10, collected: 30, collected_tip: 3 }], 0))
     .toEqual({ entitlements: { a: 70 }, discounts: { a: 0 } });
 });
-it("E9 existing and collected tips never raise the ten-percent fee cap", () => {
+it("E9 existing and collected tips never raise the five-percent fee cap", () => {
   expect(remainingPrincipal([{ id: "a", total: 8, tip: 4 }])).toBe(4);
-  expect(orderFeeCents({ order_fee: 0.75 } as PlanLimits, 100 * remainingPrincipal([{ id: "a", total: 8, tip: 4 }]))).toBe(40);
+  expect(orderFeeCents({ order_fee: 0.75 } as PlanLimits, 100 * remainingPrincipal([{ id: "a", total: 8, tip: 4 }]))).toBe(20);
   expect(remainingPrincipal([{ id: "a", total: 8, tip: 4, collected: 3, collected_tip: 1 }])).toBe(2);
 });
 it("E4 coupon preview and the server freeze agree when the bill already has tips", () => {

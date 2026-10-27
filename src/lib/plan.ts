@@ -156,12 +156,14 @@ export function dashboardFrozen(status: PlanStatus): boolean {
  * fee. A flat amount, not a percentage: what this costs to run, and what it is
  * worth, barely change with the price of the wine.
  *
- * Capped at a tenth of the order, because flat and small stop being the same
- * thing on a small ticket — MX$3 off a MX$20 coffee is not a fee, it is a
- * share of the coffee. Stripe also refuses an application fee larger than the
- * charge, and a cap is a better answer than a failed payment.
+ * Capped at a twentieth of the order, because flat and small stop being the
+ * same thing on a small ticket — MX$3 off a MX$20 coffee is not a fee, it is a
+ * share of the coffee. It was a tenth until 2026-10-27; the owner halved it so
+ * a café's MX$20 order pays MX$1, and the full fee starts at MX$60 on Carta.
+ * Stripe also refuses an application fee larger than the charge, and a cap is
+ * a better answer than a failed payment.
  */
-export const FEE_CAP_FRACTION = 0.1;
+export const FEE_CAP_FRACTION = 0.05;
 
 export function orderFeeCents(
   limits: PlanLimits,

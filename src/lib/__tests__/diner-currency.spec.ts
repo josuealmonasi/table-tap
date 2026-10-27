@@ -105,7 +105,8 @@ it("E9 a split's fee slices use frozen food principal, excluding the existing ti
   state.principal = 4;
   state.orders = [{ ...state.orders[0], total: 8, tip: 4 }];
   expect((await split.POST(request())).status).toBe(200);
-  expect(state.reserve).toHaveBeenLastCalledWith("r1", expect.anything(), 20, "split");
+  // MX$4 of food at the five-percent cap: 20 cents for the bill, 10 for this share.
+  expect(state.reserve).toHaveBeenLastCalledWith("r1", expect.anything(), 10, "split");
 });
 it("E11 a valid older sitting's displayed debt remains payable", async () => {
   state.orders = [{ ...state.orders[0], created_at: "2026-10-18T10:00:00Z" }];
