@@ -4497,3 +4497,16 @@ arriving at 2.5 seconds; now every visit waits and reports the missing message.
 All original case lists, visits and verdict assertions are preserved: 54
 planned sweep visits and 54 development state cases, plus dynamically found
 dashboard links. Production continues to omit the writing state cases.
+
+## Roadmap #13 — splitting checks must preserve their inventories
+
+| Rule | The bug it prevents | What checks it |
+|---|---|---|
+| API route coverage follows the case index and rejects unimported parts | Moving cases out of one source file could leave a route unchecked while the suite stays green | `invariants/gates.spec.ts`: `has an api case for every API route` |
+
+The subject suites in `src/lib/__tests__/invariants/` share their file readers
+and walkers. `scripts/api-cases.mjs` assembles the area modules in the original
+order, retaining the fixture-taking interface and shared collection retry state.
+The route inventory reads imported parts; an extra part cannot silently cover a
+missing case. Removing the `/api/session` case, adding an unimported part and
+removing a part's index import each failed that invariant, then passed restored.

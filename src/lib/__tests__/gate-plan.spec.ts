@@ -4,6 +4,7 @@ import path from "node:path";
 import { urlPattern } from "../../../scripts/gate-plan.mjs";
 import { reach } from "../../../scripts/gate-graph.mjs";
 import { changedClasses, classUsers } from "../../../scripts/gate-css.mjs";
+import { listed as listedSource } from "./invariants/helpers";
 
 /**
  * `pnpm gate` checks only what a change can reach. Every way that can go
@@ -48,7 +49,7 @@ describe("the gate's scope", () => {
     const unmatched = listed.filter(p => !pages.some(page => new RegExp(urlPattern(page, "page")).test(p)));
     expect(unmatched, "listed screens no page pattern matches — a scoped run would never open them").toEqual([]);
     // And every API case's path, with its `${...}` filled in.
-    const requested = [...fs.readFileSync("scripts/api-cases.mjs", "utf8").matchAll(/path:\s*[`"']([^`"']+)/g)]
+    const requested = [...listedSource("api-cases.mjs").matchAll(/path:\s*[`"']([^`"']+)/g)]
       .map(m => m[1].replace(/\$\{[^}]*\}/g, "x").split("?")[0]);
     const unrouted = requested.filter(p => !routes.some(r => new RegExp(urlPattern(r, "page")).test(p)));
     expect(unrouted, "api cases no route pattern matches").toEqual([]);
