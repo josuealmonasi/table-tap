@@ -1505,6 +1505,7 @@ foundingLeftBody: "Subscribe now and keep this price for good. After that the li
     signupFields: "Restaurant name, email and a 6+ character password are required.",
     restaurantDelete: "Could not delete the restaurant.",
     restaurantDeleteRefund: "This restaurant still has refunds to finish. Complete them before deleting it.",
+    restaurantDeleteRefundWindow: "Stripe can still report a recent refund as failed. Wait 30 days after the latest refund before deleting this restaurant. You can try again from {date}, once no payments or refunds are pending.",
     restaurantDeleteRefundDue: "This restaurant still owes customers money from duplicate payments. Return it before deleting the restaurant.",
     restaurantDeleteProvider: "A card payment or refund still needs confirmation. Check its result before deleting this restaurant.",
     restaurantDeleteOfflineSale: "Review the offline sales already collected before deleting this restaurant.",

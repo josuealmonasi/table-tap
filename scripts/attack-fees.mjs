@@ -6,7 +6,7 @@
 // like the rest of `pnpm attack`: the rows are read back with the secret key.
 //
 //   - twelve checkouts reserving at once with room for two: exactly two fit
-//   - a refund retried: the fee it gave back is counted once
+//   - the retired incremental fee refund: no permission and no ledger change
 //   - a fee that was taken: Stripe's late expiry cannot release it
 //   - a divided bill opened by two diners at once: one fee, not two
 //
@@ -45,15 +45,19 @@ export async function attackFeeCeiling({ admin, home, ok, bad }) {
       bad(`twelve checkouts at once with room for two: ${granted.length} reserved MX$${(total / 100).toFixed(2)} against MX$6.00 of room`);
     }
 
-    // Taken on a MX$100 charge, then refunded half — and the same refund again.
+    // Taken on a MX$100 charge. The old half-refund writer must be refused:
+    // it inferred returned fees without Stripe evidence or an epoch check.
     const [taken] = granted;
     await admin.rpc("take_platform_fee", { p_fee: taken.fee_id, p_intent: `pi_${MARK}`, p_charge_cents: 10000 });
-    for (const id of [`re_${MARK}_1`, `re_${MARK}_1`]) {
-      await admin.rpc("refund_platform_fee", { p_restaurant: home.id, p_intent: `pi_${MARK}`, p_refund_cents: 5000, p_refund_id: id });
+    const { error: retiredError } = await admin.rpc("refund_platform_fee", {
+      p_restaurant: home.id, p_intent: `pi_${MARK}`, p_refund_cents: 5000, p_refund_id: `re_${MARK}_1`,
+    });
+    const { data: refunded, error: readError } = await admin.from("platform_fees").select("refunded_cents").eq("id", taken.fee_id).single();
+    if (retiredError?.code === "42501" && !readError && refunded?.refunded_cents === 0) {
+      ok("the retired incremental fee refund cannot be called or change the ledger");
+    } else {
+      bad(`the retired fee refund: ${retiredError?.code ?? "call allowed"}, returned cents ${refunded?.refunded_cents ?? "unreadable"}`);
     }
-    const { data: refunded } = await admin.from("platform_fees").select("refunded_cents").eq("id", taken.fee_id).single();
-    if (refunded?.refunded_cents === 150) ok("a refund retried gives back its share of the fee once");
-    else bad(`a refund retried: MX$${((refunded?.refunded_cents ?? 0) / 100).toFixed(2)} counted as given back, not MX$1.50`);
 
     await admin.rpc("release_platform_fee", { p_fee: taken.fee_id });
     const { data: still } = await admin.from("platform_fees").select("status").eq("id", taken.fee_id).single();

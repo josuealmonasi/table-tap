@@ -40,7 +40,7 @@ log, and one still billed by a live Stripe subscription is refused, since the
 next billing event would write Stripe's plan back over it.
 
 Permanent deletion is refused only while a refund, duplicate-payment return or
-provider operation is unfinished. `admin_delete_restaurant` takes
+provider operation is unfinished, or until 30 days after the latest successful Stripe refund evidence (operations, duplicate-payment returns and attempts); refusals return the unlock time. `admin_delete_restaurant` takes
 `lock_restaurant_money` and the restaurant row lock, then copies completed books
 to `restaurant_accounting_records` before cascading the live restaurant away.
 Each copy keeps its source table, original row ID and contents under the

@@ -1500,6 +1500,7 @@ foundingLeftBody: "Quien contrata ahora se queda con este precio para siempre. D
       "Se requiere nombre del restaurante, correo y una contraseña de 6+ caracteres.",
     restaurantDelete: "No se pudo eliminar el restaurante.",
     restaurantDeleteRefund: "Este restaurante todavía tiene devoluciones por terminar. Complétalas antes de eliminarlo.",
+    restaurantDeleteRefundWindow: "Stripe todavía puede avisar que un reembolso reciente falló. Espera 30 días desde el último reembolso antes de eliminar este restaurante. Puedes volver a intentarlo a partir del {date}, cuando ya no haya pagos ni reembolsos pendientes.",
     restaurantDeleteRefundDue: "Este restaurante todavía debe dinero a clientes por pagos duplicados. Devuélvelo antes de eliminar el restaurante.",
     restaurantDeleteProvider: "Un pago con tarjeta o una devolución todavía necesita confirmación. Revisa su resultado antes de eliminar este restaurante.",
     restaurantDeleteOfflineSale: "Revisa las ventas sin conexión que ya se cobraron antes de eliminar este restaurante.",

@@ -5075,8 +5075,9 @@ begin
   return found;
 end;
 $$;
-revoke all on function public.refund_platform_fee(uuid, text, integer, text) from public, anon, authenticated;
-grant execute on function public.refund_platform_fee(uuid, text, integer, text) to service_role;
+-- Retired: inferred increments can invent returned fees and bypass the fee
+-- epoch. Only provider-verified cumulative evidence may update this ledger.
+revoke all on function public.refund_platform_fee(uuid, text, integer, text) from public, anon, authenticated, service_role;
 
 -- Fees from before the ledger, from `orders.platform_fee` — which nothing
 -- writes any more, so this set is frozen and the insert is safe to run again:
@@ -8673,13 +8674,35 @@ update refund_operations r set fee_verification_pending = false
 
 create or replace function public.admin_delete_restaurant(p_restaurant uuid, p_check_only boolean default true)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare v_table text;
+declare
+  v_table text;
+  v_refund_unlock_at timestamptz;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   -- FK inserts take a key-share lock here. Once held, no new receipt or
   -- obligation can arrive between these checks and the cascading deletion.
   perform 1 from restaurants where id = p_restaurant for update;
   if not found then return jsonb_build_object('outcome', 'gone'); end if;
+  -- Stripe can fail a refund after first reporting success. Keep the live
+  -- restaurant and its recovery path for 30 days after the latest evidence.
+  -- Attempts count too: another finish may have refreshed their success.
+  select max(refunded_at) + interval '30 days' into v_refund_unlock_at
+  from (
+    select completed_at as refunded_at from refund_operations
+      where restaurant_id = p_restaurant and source = 'stripe' and status = 'succeeded'
+    union all
+    select refunded_at from refunds_due
+      where restaurant_id = p_restaurant and refunded_at is not null
+    union all
+    select updated_at as refunded_at from refund_attempts
+      where restaurant_id = p_restaurant and provider_status = 'succeeded'
+    union all
+    select updated_at as refunded_at from refund_due_attempts
+      where restaurant_id = p_restaurant and provider_status = 'succeeded'
+  ) refunds;
+  if v_refund_unlock_at > now() then
+    return jsonb_build_object('outcome', 'refundWindow', 'unlock_at', v_refund_unlock_at);
+  end if;
   if exists (select 1 from refund_operations where restaurant_id = p_restaurant and status <> 'succeeded') then
     return jsonb_build_object('outcome', 'refund');
   end if;
@@ -8737,7 +8760,8 @@ begin
         and f.refunded_cents = f.cents)
   ) then return jsonb_build_object('outcome', 'refundFee'); end if;
   -- Retain completed refunds too. Closing a real business does not make its
-  -- receipts disposable, but completed books must not prevent its deletion.
+  -- receipts disposable, but completed books past the refund window must not
+  -- prevent its deletion.
   if p_check_only is distinct from false then return jsonb_build_object('outcome', 'ready'); end if;
   foreach v_table in array array[
     'orders', 'payments', 'payment_allocations', 'refund_operations',

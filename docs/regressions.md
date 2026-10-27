@@ -4700,3 +4700,47 @@ reprint checks stay intact. The runnable inventory remains 307 cases.
   and US$: the legacy refund reopens after recovery; a stale start, the old
   entry point and a stale advance are all refused; only the current-epoch
   amount is requested.
+
+## Audit S finding 2 — keep refund recovery available for 30 days
+
+| Rule | The bug it prevents | What checks it |
+|---|---|---|
+| Deletion waits 30 days after the latest successful Stripe refund evidence | A refund failed after deletion, but its restaurant and live recovery path were already gone | `restaurant-delete-refund-window.spec.ts` |
+
+`admin_delete_restaurant` now returns `refundWindow` and `unlock_at` under
+the existing money and restaurant locks, before either readiness or archive
+writes. It uses the latest successful Stripe operation's `completed_at`,
+duplicate-payment return's `refunded_at`, or successful attempt's `updated_at`
+in either refund book. At exactly 30 days the window ends; the existing checks
+for unfinished money still apply. Cash and terminal operations do not open
+this window. English and Spanish refusals explain why and show the UTC unlock
+time; both the first route check and the final atomic check map it to HTTP 409.
+
+The failing-first spec pins all four tenant-scoped SQL sources, the maximum
+timestamp, strict 30-day comparison and lock/write order. Mocked RPC cases cover
+a 29-day refusal and 31-day clearance in MXN and USD, bilingual copy and a new
+hold appearing at the final deletion check. These are source and route checks,
+not a Postgres replay. Claude applies the unchanged-signature function and
+replays 29, exactly 30 and 31 days for each source, latest-of-several evidence,
+another restaurant and non-Stripe operations, then runs the serial release
+gates and checks both messages on the admin screen.
+
+## Audit S finding 4 — retire the incremental fee refund writer
+
+| Rule | The bug it prevents | What checks it |
+|---|---|---|
+| The legacy incremental writer has no service or client execute permission | Inferred returned fees could bypass provider evidence and the failure epoch | `retired-refund-platform-fee.spec.ts`; the replacement case in `attack-fees.mjs` |
+
+`refund_platform_fee` stays defined with its original explanation, but its
+execute privilege is revoked from `service_role`, PUBLIC, anon and
+authenticated. Reapplication removes the old service grant too. No application
+caller needs it; retaining the function avoids a drop while making the retired
+entry point unusable to the service. `drop.sql` already lists its signature.
+
+The fee-ceiling attack now requires permission denial (`42501`) and a readable,
+unchanged returned-fee balance. A successful call, unrelated error or changed
+ledger fails. The group still emits four verdicts: one old retry verdict is
+replaced by one retirement verdict. Its mocked execution and grant assertions
+failed before the fix and pass after it. Claude applies the revoke and runs
+the real attack with the other shared-database gates; this worker made no
+database or provider calls.
