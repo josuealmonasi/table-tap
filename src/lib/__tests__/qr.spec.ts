@@ -90,3 +90,14 @@ describe("the SVG a restaurant prints", () => {
     expect(a).not.toBe(b);
   });
 });
+
+describe("the scanner's fallback decoder loads only when it is needed", () => {
+  it("is never imported at the top of the camera hook", async () => {
+    // Imported statically, jsQR rode along on every diner's menu whether or
+    // not anybody opened the scanner (codebase review, item 12).
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync("src/hooks/useQrCamera.ts", "utf8");
+    expect(source).not.toMatch(/^import[^;]*from "jsqr"/m);
+    expect(source).toContain('await import("jsqr")');
+  });
+});
