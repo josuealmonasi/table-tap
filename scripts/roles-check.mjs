@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { requireServer, retryFetch } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
 import { apiInScope, pageInScope, reportScope } from "./gate-scope.mjs";
+import { sessionCookieHeader } from "./session-cookie.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -23,7 +24,6 @@ await requireServer(BASE, prod);
 
 const { createClient } = await import("@supabase/supabase-js");
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
-const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0];
 
 const ROLES = [
   { email: "demo@tabletap.dev", password: "demo123", role: "owner" },
@@ -187,7 +187,7 @@ for (const who of ROLES) {
   const auth = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
   const { data, error } = await auth.auth.signInWithPassword({ email: who.email, password: who.password });
   if (error) { console.log(`  ${who.role}: could not sign in (${error.message})`); failed++; continue; }
-  const cookie = `sb-${ref}-auth-token=base64-${Buffer.from(JSON.stringify(data.session)).toString("base64")}`;
+  const cookie = sessionCookieHeader(data.session, process.env.NEXT_PUBLIC_SUPABASE_URL);
   console.log(`  ${who.role} (${who.email})`);
 
   for (const [path, { allow, marker }] of Object.entries(PAGES)) {
@@ -249,7 +249,7 @@ if (pageInScope("/dashboard/admin")) {
     const { data, error } = await auth.auth.signInWithPassword({ email, password });
     if (error) bad(`could not sign in to check the console's marker (${error.message})`);
     else {
-      const cookie = `sb-${ref}-auth-token=base64-${Buffer.from(JSON.stringify(data.session)).toString("base64")}`;
+      const cookie = sessionCookieHeader(data.session, process.env.NEXT_PUBLIC_SUPABASE_URL);
       const res = await retryFetch(BASE + "/dashboard/admin", { headers: { cookie, "accept-language": "es-MX" } }, BASE);
       const html = res.status === 200 ? await res.text() : "";
       if (html.includes(PAGES["/dashboard/admin"].marker)) ok("opens /dashboard/admin, and sees its marker");

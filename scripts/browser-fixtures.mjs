@@ -2,6 +2,7 @@ import { deadline } from "./browser-deadline.mjs";
 import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { forgetBrowserMember } from "./table-member-fixture.mjs";
+import { sessionCookie } from "./session-cookie.mjs";
 
 /** A role this run leaves out on purpose: `GATE_SKIP_ROLES=admin,…`. */
 export function skippedOnPurpose(role) {
@@ -12,7 +13,6 @@ export function skippedOnPurpose(role) {
 // for every page the role was meant to see — which reads as ok, every time.
 export async function crewCookies(crew, base, phase) {
   const cookies = new Map();
-  const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0];
   for (const who of crew) {
     const password = who.passwordEnv ? process.env[who.passwordEnv] : "demo123";
     if (!password) {
@@ -31,8 +31,7 @@ export async function crewCookies(crew, base, phase) {
           { auth: { persistSession: false, autoRefreshToken: false } });
         const { data, error } = await auth.auth.signInWithPassword({ email: who.email, password });
         if (error || !data?.session) throw new Error(`could not sign in as ${who.email}: ${error?.message ?? "no session"}`);
-        return { name: `sb-${ref}-auth-token`,
-          value: `base64-${Buffer.from(JSON.stringify(data.session)).toString("base64")}`, url: base };
+        return { ...sessionCookie(data.session, process.env.NEXT_PUBLIC_SUPABASE_URL), url: base };
       });
       cookies.set(who.role, { cookie });
     } catch (error) { cookies.set(who.role, { error }); }

@@ -30,13 +30,14 @@ import { holdWrites } from "./hold-writes.mjs";
 import { DEV_URL } from "./dev-url.mjs";
 import { pageInScope, reportScope } from "./gate-scope.mjs";
 import { skippedOnPurpose } from "./browser-fixtures.mjs";
+import { sessionCookie } from "./session-cookie.mjs";
+import { ready, trackData } from "./browser-ready.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
 const BASE = prod
   ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
   : DEV_URL;
-const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0];
 
 await requireServer(BASE);
 
@@ -57,7 +58,7 @@ const cookieFor = async (email, password = "demo123") => {
   const auth = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
   const { data, error } = await auth.auth.signInWithPassword({ email, password });
   if (error || !data?.session) throw new Error(`could not sign in as ${email}: ${error?.message ?? "no session"}`);
-  return { name: `sb-${ref}-auth-token`, value: `base64-${Buffer.from(JSON.stringify(data.session)).toString("base64")}`, url: BASE };
+  return { ...sessionCookie(data.session, process.env.NEXT_PUBLIC_SUPABASE_URL), url: BASE };
 };
 
 const { data: restaurant } = await admin
@@ -123,10 +124,12 @@ for (const who of CREW) {
   for (const path of who.pages) {
     if (!pageInScope(path)) continue;
     const tab = await ctx.newPage();
+    const pending = trackData(tab);
     try {
       await tab.goto(BASE + path, { waitUntil: "networkidle" });
       // Modules that read from the browser take a moment longer than the page.
-      await tab.waitForTimeout(1800);
+      // Wait for their data and layout, so a slow read cannot pass as empty.
+      await ready(tab, { pending });
       // A page that sent this role elsewhere was being judged as the page it
       // landed on, and printed ok under the name of one nobody saw.
       const landed = new URL(tab.url()).pathname;
@@ -179,8 +182,9 @@ for (const [name, path] of [
 ]) {
   if (!pageInScope(path)) continue;
   const tab = await guest.newPage();
+  const pending = trackData(tab);
   await tab.goto(BASE + path, { waitUntil: "networkidle" });
-  await tab.waitForTimeout(1800);
+  await ready(tab, { pending });
   const holes = await tab.evaluate(AUDIT);
   if (holes.length === 0) ok(name);
   else for (const h of holes) bad(`${name} · «${h.title}» offers search or sort with nothing to search`);
