@@ -87,6 +87,8 @@ export default async function OrdersPage() {
     .order("created_at", { ascending: false });
   if (!kitchen) liveOrders = liveOrders.eq("written_off", false);
 
+  // Stamp before executing the read: realtime arriving during it must win.
+  const snapshotReadAt = Date.now();
   const [ordersRes, requestsRes, collected, barRes] = await Promise.all([
     // Every order still on the board, however many came after it. This was
     // the newest 100 of ANY status, filtered to the live ones afterwards — so
@@ -120,6 +122,7 @@ export default async function OrdersPage() {
       <OrdersBoard
         restaurant={{ id: r.id, currency: r.currency }}
         initialOrders={(orders as BoardOrder[]) ?? []}
+        snapshotReadAt={ordersRes.error ? undefined : snapshotReadAt}
         kitchen={kitchen}
         initialRequests={(requests as BoardRequest[]) ?? []}
         canCancel={MANAGES(membership.role)}

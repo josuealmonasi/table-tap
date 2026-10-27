@@ -85,10 +85,15 @@ it("a refresh's older snapshot keeps a move realtime confirmed meanwhile", async
 });
 it("asks the server for the day's figure again when realtime shows an order paid", async () => {
   vi.useFakeTimers();
+  const asked = vi.fn();
+  window.addEventListener("tt-orders-takings-changed", asked);
   await render([order("a")], 0);
+  await act(async () => state.receive!({ eventType: "UPDATE", new: order("a", "preparing") as BoardOrder }));
   await act(async () => { vi.advanceTimersByTime(PAID_REFRESH_MS * 2); });
-  expect(refresh).not.toHaveBeenCalled();
-  await act(async () => state.receive!({ eventType: "UPDATE", new: order("a", "received", true) as BoardOrder }));
+  expect(asked).not.toHaveBeenCalled(); // a kitchen move is not money
+  await act(async () => state.receive!({ eventType: "UPDATE", new: order("a", "preparing", true) as BoardOrder }));
   await act(async () => { vi.advanceTimersByTime(PAID_REFRESH_MS); });
-  expect(refresh).toHaveBeenCalledTimes(1);
+  expect(asked).toHaveBeenCalledTimes(1);
+  expect(refresh).not.toHaveBeenCalled(); // its own read, never the whole page
+  window.removeEventListener("tt-orders-takings-changed", asked);
 });

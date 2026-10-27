@@ -5,6 +5,15 @@ import { kitchenTicketId } from "./helpers.mjs";
 export function orderBoardCases(fx) {
   const { table, unpaidOrder } = fx;
   return [
+    { name: "GET  /api/orders/takings (manager's own restaurant)", as: "manager", method: "GET",
+      path: "/api/orders/takings", expect: [200],
+      check: d => typeof d.collectedToday === "number" && Number.isFinite(d.collectedToday) || "missing today's takings" },
+    { name: "GET  /api/orders/takings (kitchen refused)", as: "kitchen", method: "GET",
+      path: "/api/orders/takings", expect: [403], expectError: /sin permiso|forbidden/i },
+    { name: "GET  /api/orders/takings (waiter refused)", as: "waiter", method: "GET",
+      path: "/api/orders/takings", expect: [403], expectError: /sin permiso|forbidden/i },
+    { name: "GET  /api/orders/takings (cashier refused)", as: "cashier", method: "GET",
+      path: "/api/orders/takings", expect: [403], expectError: /sin permiso|forbidden/i },
     { name: "GET  /api/table-bill (table)", as: "waiter", method: "GET",
       path: `/api/table-bill?tableId=${table.id}`, expect: [200] },
     { name: "GET  /api/table-bill (counter)", as: "cashier", method: "GET",

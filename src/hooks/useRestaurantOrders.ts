@@ -6,6 +6,7 @@ import { badgesChanged } from "@/hooks/useBadges";
 import { useOnline } from "@/hooks/useOnline";
 import { enqueue, readQueue, writeQueue, type QueuedMove } from "@/lib/offline-queue";
 import { useT } from "@/lib/i18n/context";
+import { orderChanges, orderReplyTime, reconcileOrders } from "@/components/dashboard/orders-snapshot";
 import { useToast } from "@/components/ui/Toast";
 import type { OrderStatus } from "@/lib/types";
 import { isPreparationOrder, type BoardOrder } from "@/lib/kitchen-ticket";
@@ -33,16 +34,17 @@ function playPing() {
  * them in sync via realtime (pinging on new ones), and exposes a status updater
  * with optimistic UI.
  */
-export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOrder[], kitchen = false) {
+export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOrder[], kitchen = false, snapshotReadAt = 0) {
   const t = useT();
   const toast = useToast();
   const [orders, setOrders] = useState<BoardOrder[]>(initialOrders);
-  // Seeded once; realtime keeps it current. A refresh's snapshot was read
-  // before it rendered, so replacing the list with it dropped orders and moves
-  // that arrived in between (audit N, finding 3). Today's takings no longer
-  // come from this list, so nothing needs it to match a snapshot.
   const { online, markOffline } = useOnline();
   const [pending, setPending] = useState<QueuedMove[]>([]);
+  // Reconcile missed events, keeping rows and moves received after the read
+  // began. Replacing the whole list dropped those rows (audit N, finding 3).
+  // Today's takings come from the ledger, independently of this live list.
+  const [changes] = useState(orderChanges());
+  const { remember, protect } = changes;
   // A refused stale tap can retire a card even when its realtime event was missed.
   const [inactiveOrderIds, setInactiveOrderIds] = useState<Set<string>>(new Set());
   function hideInactive(id: string): void {
@@ -57,8 +59,12 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
     let channel: ReturnType<typeof supabase.channel> | null = null;
     let cancelled = false;
 
-    function handleChange(row: BoardOrder | undefined, eventType: string) {
+    function handleChange(row: BoardOrder | undefined, eventType: string, committedAt?: string) {
       if (!row || row.status === "pending_payment") return;
+      // Database commit time and the server read share UTC. The tablet's
+      // own clock can be wrong and must not decide which live row is newer.
+      const at = committedAt ? Date.parse(committedAt) : NaN;
+      remember(row.id, Number.isFinite(at) ? at : undefined);
       setOrders(prev => {
         const exists = prev.find(o => o.id === row.id);
         return exists ? prev.map(o => (o.id === row.id ? row : o)) : [row, ...prev];
@@ -86,7 +92,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
             table: kitchen ? "kitchen_tickets" : "orders",
             filter: `restaurant_id=eq.${restaurantId}`,
           },
-          payload => handleChange(payload.new as BoardOrder, payload.eventType),
+          payload => handleChange(payload.new as BoardOrder, payload.eventType, payload.commit_timestamp),
         )
         .subscribe();
     })();
@@ -95,7 +101,11 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
       cancelled = true;
       if (channel) supabase.removeChannel(channel);
     };
-  }, [restaurantId, kitchen]);
+  }, [restaurantId, kitchen, remember]);
+
+  useEffect(() => {
+    setOrders(previous => reconcileOrders(previous, initialOrders, snapshotReadAt, pending, changes));
+  }, [initialOrders, snapshotReadAt, pending, changes]);
 
   /**
    * Sends what has been waiting, oldest first.
@@ -116,12 +126,15 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
     for (const move of queue) {
       // A later step cannot overtake one that still needs to be sent.
       if (blocked.has(move.id)) { stuck.push(move); continue; }
+      const finish = protect(move.id);
+      let answeredAt: number | undefined;
       try {
         const res = await fetch("/api/orders", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: move.id, status: move.to, from: move.from }),
         });
+        answeredAt = orderReplyTime(res);
         // A server that is failing may answer differently later; one that
         // refused has answered. Kept, a refused move was retried on every
         // reconnect and the board said "saved, will be sent" for ever.
@@ -136,13 +149,15 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
       } catch {
         stuck.push(move); // still no connection: keep it for next time
         blocked.add(move.id);
+      } finally {
+        finish(answeredAt);
       }
     }
     writeQueue(stuck);
     setPending(stuck);
     if (refused > 0) toast(t("orders.queuedRefused", { n: refused }), "error");
     badgesChanged();
-  }, [t, toast]);
+  }, [t, toast, protect]);
 
   // Coming back is the moment to send, and the board reloads itself after so
   // what everyone else did while we were away lands too.
@@ -151,6 +166,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
   }, [online, flush]);
 
   async function updateStatus(id: string, status: OrderStatus) {
+    const finish = protect(id);
     const was = orders.find(o => o.id === id)?.status;
     setOrders(prev => prev.map(o => (o.id === id ? { ...o, status } : o))); // optimistic
 
@@ -172,6 +188,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
       }
       markOffline();
       badgesChanged();
+      finish();
       return;
     }
 
@@ -186,6 +203,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
       toast(data.error ?? t("orders.moveRefused"), "error");
     }
 
+    finish(orderReplyTime(res));
     // The board's own count changed, so the tab's should too.
     badgesChanged();
   }
@@ -221,6 +239,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
       const data = await res.json();
       if (!res.ok) return { error: data.error ?? t("apiErr.orderCancel"), stale: res.status === 409 };
       badgesChanged();
+      remember(id, orderReplyTime(res));
       setOrders(prev => prev.map(o => (o.id === id ? { ...o, status: "cancelled" } : o)));
       return null;
     } catch {

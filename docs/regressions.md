@@ -4576,3 +4576,36 @@ shared helpers. Cash routes overlap other groups, so route coverage alone cannot
 prove those 16 cases still run. Removing a spread, removing an import (even with
 its spread), or adding an unused part export now fails; restoring them passes.
 The runnable inventory remains 303 cases with identical names and order.
+
+## Audit O findings 3 and 4 — live takings and refreshed tickets must catch up
+
+| Rule | The bug it came from | What checks it |
+|---|---|---|
+| Restaurant takings refresh independently of paid order ids | Another till's partial collection, a split share or a return left today's figure unchanged | `orders-live-takings.spec.tsx`, `orders-money-actions.spec.tsx`, `orders-takings-route.spec.ts`; manager success and three `expectError` refusals in `api-cases/orders.mjs` |
+| Snapshots repair missed events without discarding newer work | A missed ticket or station move stayed missing after refresh; replacing the list instead erased intervening realtime events | `orders-snapshot-recovery.spec.tsx`; audit N's existing `orders-takings.react-component.spec.tsx` |
+
+### Finding 3: the board and the ledger need an independent refresh
+
+The paid-id fingerprint could not see partial collections, split shares or a
+refund of an already-paid order. A manager-only, membership-scoped takings read
+now reuses `collectedToday` unchanged. SWR retains the page's initial figure,
+polls every 30 seconds while visible, and revalidates on focus and reconnect.
+Live paid, cancelled and total changes invalidate it, as do the board's own
+successful collect and cancel actions. Read failures retain the last figure.
+Kitchen, waiter and cashier never mount this read; the route refuses them
+before accessing money. Tenant, currency and midnight come from membership.
+
+### Finding 4: refresh must merge both preparation feeds
+
+Neither orders nor kitchen tickets has a usable updated-at column. The page
+stamps the start of its snapshot read. Reconciliation compares realtime commit times and HTTP reply dates against that
+server read, so a tablet's incorrect clock cannot erase newer work. It adds missed tickets,
+repairs stages and station readiness, and removes missed completions while
+keeping realtime rows received during that read. Older refresh responses cannot
+undo newer ones. In-flight optimistic moves stay protected until their requests
+finish; saved offline paths keep their final visible step. No per-order reads
+are added. A failed snapshot query cannot erase the current list.
+
+Both findings failed first in `orders-live-takings.spec.tsx` and
+`orders-snapshot-recovery.spec.tsx` (12 failures). Claude owns shared database
+gates and integration; this worker uses only local mocked/unit checks.
