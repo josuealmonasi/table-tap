@@ -159,37 +159,6 @@ export async function feeRefOpen(restaurantId: string, ref: string): Promise<boo
   return (data ?? []).length > 0;
 }
 
-/**
- * Before a share opens a new session carrying its slice of the fee: the one
- * it opened before is expired at Stripe and its reservation released, so a
- * share never has two payable sessions — one of them fee-free. Answers
- * "paid" when that session was already paid, and throws when Stripe's answer
- * is unknown, so no second fee-bearing session is made.
- */
-export async function retirePriorShareSession(
-  restaurantId: string,
-  ref: string,
-  expire: (sessionId: string) => Promise<{ status: string | null }>,
-  retrieve: (sessionId: string) => Promise<{ status: string | null }>,
-): Promise<"none" | "retired" | "paid"> {
-  const db = createAdminClient();
-  const { data: prior, error } = await db.from("platform_fees").select("id, stripe_session_id")
-    .eq("restaurant_id", restaurantId).eq("ref", ref).eq("status", "open").maybeSingle();
-  if (error) throw new Error(`Could not read the share's fee: ${error.message}`);
-  if (!prior?.stripe_session_id) return "none";
-  let status: string | null;
-  try {
-    status = (await expire(prior.stripe_session_id)).status;
-  } catch {
-    // Not open any more — read what it became instead.
-    status = (await retrieve(prior.stripe_session_id)).status;
-  }
-  if (status === "complete") return "paid";
-  if (status !== "expired") throw new Error(`The share's earlier session is ${status}`);
-  await releaseFee(prior.id);
-  return "retired";
-}
-
 /** Which Stripe session a reservation's fee rides on, so a reopened share can retire it. */
 export async function attachFeeSession(hold: FeeHold, sessionId: string): Promise<void> {
   if (!hold.id) return;

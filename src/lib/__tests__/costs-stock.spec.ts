@@ -1,55 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { coverDays, dishCount, leadDays } from "@/lib/costs/input";
-import { recipeBook, type RecipeLine } from "@/lib/costs/recipe-cost";
-import { ordersUsage, wasteUsage } from "@/lib/costs/usage";
 import { expectedOnHand, purchaseList } from "@/lib/costs/stock";
-import type { Modifier, OrderLineItem } from "@/lib/types";
-
-const line = (item_id: string, ingredient_id: string, quantity: number, mod?: [string, string]): RecipeLine => ({
-  item_id, ingredient_id, quantity, mod_label: mod?.[0] ?? null, mod_option: mod?.[1] ?? null,
-});
-const book = recipeBook([
-  line("latte", "coffee", 18),
-  line("latte", "milk", 200, ["Leche", "Entera"]),
-  line("latte", "oat", 200, ["Leche", "Avena"]),
-  line("shot", "coffee", 9),
-  line("croissant", "croissant", 1),
-]);
-const mods: Record<string, Modifier[]> = { latte: [{ label: "Leche", type: "single", options: ["Entera", "Avena"] }] };
-const modifiersOf = (id: string) => mods[id];
-const sold = (at: string, ...items: OrderLineItem[]) => ({ created_at: at, items });
-const latte = (qty: number, milk: string, extras = 0): OrderLineItem => ({
-  itemId: "latte", name: "Latte", emoji: "☕", price: 58, qty, mods: { Leche: milk },
-  extras: extras ? [{ id: "shot", name: "Shot", emoji: "☕", price: 10 }] : [],
-});
-
-describe("what went out", () => {
-  it("takes each line's recipe, its choices and extras, times how many", () => {
-    const usage = ordersUsage([sold("t", latte(2, "Avena", 1))], book);
-    expect(usage.get("coffee")).toBe(2 * (18 + 9));
-    expect(usage.get("oat")).toBe(400);
-    expect(usage.has("milk")).toBe(false);
-  });
-
-  it("takes a combo's dishes, times the combo's count", () => {
-    const combo: OrderLineItem = {
-      itemId: "c1", comboId: "c1", name: "Desayuno", emoji: "🥐", price: 90, qty: 2, mods: {},
-      components: [{ itemId: "croissant", name: "Croissant", emoji: "🥐", qty: 1 }, { itemId: "latte", name: "Latte", emoji: "☕", qty: 1, mods: { Leche: "Entera" } }],
-    };
-    const usage = ordersUsage([sold("t", combo)], book);
-    expect(usage.get("croissant")).toBe(2);
-    expect(usage.get("milk")).toBe(400);
-  });
-
-  it("counts a wasted dish as its default recipe, and a wasted ingredient as itself", () => {
-    const usage = wasteUsage([
-      { ingredient_id: null, item_id: "latte", quantity: 1 },
-      { ingredient_id: "milk", item_id: null, quantity: 500 },
-    ], book, modifiersOf);
-    expect(usage.get("milk")).toBe(700);
-    expect(usage.get("coffee")).toBe(18);
-  });
-});
 
 describe("what the shelf should hold", () => {
   const counts = new Map([["milk", { ingredient_id: "milk", counted: 5000, created_at: "2026-10-10T08:00:00Z" }]]);

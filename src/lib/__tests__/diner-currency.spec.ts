@@ -17,7 +17,7 @@ vi.mock("@/lib/rate-limit", () => ({ isRoomLimited: async () => false, isTableLi
 vi.mock("@/lib/table-session", () => ({ staffOpenedBill: async () => false }));
 vi.mock("@/lib/split-service", () => ({ splitInProgress: async () => false }));
 vi.mock("@/lib/plan-server", () => ({ getPlan: async () => ({ limits: { order_fee: state.orderFee } }) }));
-vi.mock("@/lib/platform-fee", () => ({ NO_FEE: { id: null, cents: 0 }, reserveFee: state.reserve, reserveFeeCents: state.reserve, feeMetadata: () => ({}), releaseFee: async () => {}, stripeRefusedOutright: () => false, attachFeeSession: async () => {}, feeRefOpen: async () => false, retirePriorShareSession: async () => "none" }));
+vi.mock("@/lib/platform-fee", () => ({ NO_FEE: { id: null, cents: 0 }, reserveFee: state.reserve, reserveFeeCents: state.reserve, feeMetadata: () => ({}), releaseFee: async () => {}, stripeRefusedOutright: () => false, attachFeeSession: async () => {}, feeRefOpen: async () => false }));
 vi.mock("@/lib/payment-coverage", () => ({ PaymentAttributionRequired: class extends Error {}, paymentCoverage: async () => new Map(), paymentCoverageDetails: async () => new Map() }));
 vi.mock("@/lib/bill-data", () => ({ fetchTableBill: async () => state.orders }));
 vi.mock("@/lib/table-bill", () => ({ billWindowStart: () => new Date("2026-10-20T04:00:00Z"), MAX_BILL_ORDERS: 200, tableBill: () => ({ total: 100 }) }));

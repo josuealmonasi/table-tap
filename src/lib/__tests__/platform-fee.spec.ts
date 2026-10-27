@@ -1,18 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-/** A database that answers each table's read with what the test planted, and records rpc calls. */
-const answers: Record<string, { data: unknown; error: { message: string } | null }> = {};
 const rpcs: { fn: string; args: Record<string, unknown> }[] = [];
-const chain = (table: string): unknown => {
-  const q: Record<string, unknown> = {};
-  for (const m of ["select", "eq", "neq", "in", "order", "limit", "update"]) q[m] = () => q;
-  q.maybeSingle = async () => answers[table] ?? { data: null, error: null };
-  q.then = (ok: (v: unknown) => unknown) => Promise.resolve(answers[table] ?? { data: null, error: null }).then(ok);
-  return q;
-};
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
-    from: (table: string) => chain(table),
     rpc: async (fn: string, args: Record<string, unknown>) => {
       rpcs.push({ fn, args });
       return { data: fn === "take_platform_fee" ? false : true, error: null };
@@ -20,10 +10,9 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }));
 
-import { feeMetadata, retirePriorShareSession, stripeRefusedOutright, takeFee } from "@/lib/platform-fee";
+import { feeMetadata, stripeRefusedOutright, takeFee } from "@/lib/platform-fee";
 
 beforeEach(() => {
-  for (const k of Object.keys(answers)) delete answers[k];
   rpcs.length = 0;
 });
 
@@ -69,32 +58,5 @@ describe("a fee recorded from the session when there is no reservation to take",
   it("records nothing for a session that carries no fee — a plan without one, or a ceiling reached", async () => {
     await takeFee(session({ order_id: "o-1" }), {});
     expect(rpcs.some(r => r.fn === "record_session_fee")).toBe(false);
-  });
-});
-
-describe("a share reopened while its earlier session is still open", () => {
-  const ok = (status: string) => async () => ({ status });
-
-  it("does nothing when the share has no open fee", async () => {
-    expect(await retirePriorShareSession("r-1", "split:s:1", ok("expired"), ok("open"))).toBe("none");
-  });
-
-  it("expires the earlier session and releases its fee before the new one takes it", async () => {
-    answers.platform_fees = { data: { id: "fee-1", stripe_session_id: "cs_old" }, error: null };
-    expect(await retirePriorShareSession("r-1", "split:s:1", ok("expired"), ok("open"))).toBe("retired");
-    expect(rpcs.at(-1)).toMatchObject({ fn: "release_platform_fee", args: { p_fee: "fee-1" } });
-  });
-
-  it("says the share is paid when the earlier session already completed", async () => {
-    answers.platform_fees = { data: { id: "fee-1", stripe_session_id: "cs_old" }, error: null };
-    const refuse = async () => { throw new Error("not open"); };
-    expect(await retirePriorShareSession("r-1", "split:s:1", refuse, ok("complete"))).toBe("paid");
-    expect(rpcs.some(r => r.fn === "release_platform_fee")).toBe(false);
-  });
-
-  it("refuses when the earlier session's state is unknown, rather than open a second fee-bearing one", async () => {
-    answers.platform_fees = { data: { id: "fee-1", stripe_session_id: "cs_old" }, error: null };
-    const refuse = async () => { throw new Error("not open"); };
-    await expect(retirePriorShareSession("r-1", "split:s:1", refuse, ok("open"))).rejects.toThrow(/open/);
   });
 });

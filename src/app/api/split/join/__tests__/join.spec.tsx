@@ -7,7 +7,7 @@ const { rpc, bill } = vi.hoisted(() => ({ rpc: vi.fn(), bill: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ isRoomLimited: async () => false, isTableLimited: async () => false }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => NextResponse.json({ error }, { status }) }));
 vi.mock("@/lib/bill-data", () => ({ fetchTableBill: bill }));
-vi.mock("@/lib/split-service", () => ({ currentSplit: async () => null, writeShares: async () => {} }));
+vi.mock("@/lib/split-service", () => ({ currentSplit: async () => null }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   rpc,
   from: () => { const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: null }) }; return q; },
