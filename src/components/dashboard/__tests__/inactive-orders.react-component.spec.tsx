@@ -48,7 +48,7 @@ async function render(orders: BoardOrder[], kitchen = false): Promise<void> {
   await act(async () => root.render(<OrdersBoard restaurant={{ id: "r1", currency: "MXN" }}
     initialOrders={orders} initialRequests={[]} kitchen={kitchen} canCancel={false}
     canMove canSettle={false} isWaiter={false} canApprove={false} showRevenue={!kitchen}
-    revenueBase={20} todayStartMs={0} />));
+    collectedToday={120} />));
 }
 const card = (id = "active") => container.querySelector(`[data-order="${id}"]`);
 const takings = () => container.querySelectorAll(".tt-stat strong")[1]?.textContent;

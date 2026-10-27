@@ -175,6 +175,15 @@ kitchen projection marks them inactive (`cancelled`) without disclosing money
 or changing the original order. Both stage and station actions refuse them;
 an authoritative inactive response removes a stale card without erasing takings.
 
+The board's "today" figure (owner and manager only) is what the payments
+ledger received since the restaurant's midnight, net of completed returns:
+the same number the corte signs for (`collectedToday`, built from `corteFrom`).
+It is never summed from the board's order list, so partial collections, split
+shares and old account debt settled today all count, and a refresh can't count
+an order twice. The browser can't read `payments`, so the board asks the server
+again when realtime shows an order becoming paid. The live list is seeded once
+and kept current by realtime; a refresh never replaces it.
+
 An order paid for while it is `ready` ("Listos") moves to `completed` by
 itself, whichever way the money came (card, cash, the till, a split's last
 share, a customer account): the trigger `orders_complete_when_paid` does it

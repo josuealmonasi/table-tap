@@ -10,6 +10,7 @@ vi.mock("@/hooks/useRestaurantOrders", () => ({ useRestaurantOrders: () => ({
   orders: [order], inactiveOrderIds: new Set(), hideInactive: vi.fn(), cancelPlanFor, cancelOrder, online: true, pending: 0,
 }) }));
 vi.mock("@/hooks/useBoardStation", () => ({ useBoardStation: () => [null, vi.fn()] }));
+vi.mock("@/hooks/useRefreshWhenPaid", () => ({ useRefreshWhenPaid: () => undefined }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string) => key }));
 vi.mock("@/components/ui/ConfirmDialog", () => ({ useConfirm: () => confirm }));
@@ -33,7 +34,7 @@ describe("the board re-reads a stale cancellation offer", () => {
     confirm.mockResolvedValue(true);
     const tree = OrdersBoard({ restaurant: { id: "r1", currency: "MXN" }, initialOrders: [order],
       initialRequests: [], canCancel: true, canMove: false, canSettle: false,
-      isWaiter: false, canApprove: true, showRevenue: false, revenueBase: 0, todayStartMs: 0,
+      isWaiter: false, canApprove: true, showRevenue: false, collectedToday: 0,
     } as never);
     const cancel = findCancel(tree);
     expect(cancel).toBeDefined();
