@@ -45,6 +45,9 @@ const NOT_DEMO_DATA = new Set([
   "refunds_due", // money taken twice; only the webhook finds one, and a demo with one teaches that it happens
   "refund_failures", // Stripe failing a refund it reported succeeded; only its webhook writes one
   "refund_fee_epochs", // a counter the failure moves on; nothing to show without a failure
+  "fee_returns", // our fee given back through Stripe; only a real refund creates one
+  "fee_reconcile_queue", // charges a Stripe refund event asks to reconcile
+  "refund_due_coverage", // the refunds that paid a duplicate charge back; only a real refund
 ]);
 
 describe("the demo shows the whole app", () => {

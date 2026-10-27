@@ -14,6 +14,14 @@ drop function if exists public.start_refund_due_fee_apply(uuid, uuid, text, int)
 drop function if exists public.start_refund_due_fee_v2(uuid, uuid, text, int, int);
 drop function if exists public.advance_refund_due_fee_apply(uuid, uuid, jsonb, int, int, int, text);
 drop function if exists public.advance_refund_due_fee_v2(uuid, uuid, jsonb, int, int, int, text, int);
+drop function if exists public.bump_fee_revision(uuid, text);
+drop function if exists public.prepare_fee_return(uuid, text, text, text, text, int, int, int);
+drop function if exists public.claim_fee_return(uuid, uuid, int, int);
+drop function if exists public.record_fee_return(uuid, uuid, text);
+drop function if exists public.enqueue_fee_reconcile(uuid, text);
+drop function if exists public.ack_fee_reconcile(uuid, text, int);
+drop function if exists public.finish_refund_due_attempt_v2(uuid, uuid, uuid, text, jsonb, text);
+drop function if exists public.guard_fee_return() cascade;
 drop function if exists public.refund_fee_proven_clear(uuid, text);
 drop table if exists table_session_members cascade;
 drop function if exists public.recount_stock(uuid, uuid, int, int, int) cascade;
@@ -22,6 +30,9 @@ drop function if exists public.decide_table_member(uuid, uuid, uuid, boolean, te
 drop table if exists refund_due_attempts cascade;
 drop table if exists refund_failures cascade;
 drop table if exists refund_fee_epochs cascade;
+drop table if exists fee_returns cascade;
+drop table if exists fee_reconcile_queue cascade;
+drop table if exists refund_due_coverage cascade;
 drop table if exists refund_attempts cascade;
 drop table if exists refund_allocations cascade;
 drop table if exists refund_operations cascade;
