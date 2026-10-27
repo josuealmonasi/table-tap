@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import { useT } from "@/lib/i18n/context";
@@ -107,7 +107,11 @@ export default function BillsPanel({
     [bills, toast, t],
   );
 
+  const consumedScan = useRef<string | null>(null);
   useEffect(() => {
+    // A server refresh changes bills, not the cashier's decision to close.
+    if (scanned === consumedScan.current) return;
+    consumedScan.current = scanned;
     if (scanned) openScanned(scanned);
   }, [scanned, openScanned]);
 

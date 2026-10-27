@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/table-session", () => ({
-  currentSessionId: async () => "next-party",
-  sessionAtTable: async () => null,
 }));
 vi.mock("@/lib/payment-coverage", () => ({ paymentCoverageDetails: async () => new Map() }));
 vi.mock("@/lib/supabase/admin", () => ({

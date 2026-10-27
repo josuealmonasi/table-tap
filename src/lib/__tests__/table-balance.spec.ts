@@ -3,7 +3,6 @@ import { round2 } from "@/lib/money";
 import {
   applyPayment,
   billTotal,
-  isSettled,
   shareOut,
   stillOwed,
   suggestEqual,
@@ -23,7 +22,6 @@ describe("what a table still owes", () => {
   });
 
   it("is not settled while a centavo is missing", () => {
-    expect(isSettled([{ total: 100 }], [{ amount: 99.99, tip: 0 }])).toBe(false);
     expect(stillOwed([{ total: 100 }], [{ amount: 99.99, tip: 0 }])).toBe(0.01);
   });
 
@@ -94,7 +92,6 @@ describe("a gratuity lands on the order without moving the balance", () => {
 
     // The numbers the spec asked for: 200 for the food, 15 + 5 + 5 of tips.
     expect(stillOwed([order], paid)).toBe(0);
-    expect(isSettled([order], paid)).toBe(true);
     expect(order.tip).toBe(25);
     expect(round2(paid.reduce((sum, p) => sum + p.amount, 0))).toBe(225);
   });

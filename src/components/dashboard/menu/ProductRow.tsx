@@ -25,8 +25,6 @@ interface ProductRowProps {
   /** Copies the dish, its options and its extras into the same section. */
   onDuplicate?: (id: string) => Promise<string | undefined>;
   onToggleAvailable: (id: string, available: boolean) => void;
-  /** Open the edit form in a focused modal instead of expanding inline. Defaults to on. */
-  modalForms?: boolean;
   /** When provided (uncategorized products only), shows a "move to section" action. */
   categories?: Category[];
   onMove?: (productId: string, categoryId: string) => Promise<void>;
@@ -52,7 +50,6 @@ export default function ProductRow({
   onDuplicate,
   onToggleAvailable,
   inventoryAllowed = false,
-  modalForms = true,
   categories,
   onMove,
   onCreateCategory,
@@ -87,11 +84,6 @@ export default function ProductRow({
       }}
     />
   );
-
-  // Inline mode: editing replaces the row entirely with the form.
-  if (!modalForms && editing) {
-    return <div className="tt-prod tt-prod-editing">{editForm}</div>;
-  }
 
   return (
     <>
@@ -231,16 +223,14 @@ export default function ProductRow({
           </div>
         </div>
       </div>
-      {modalForms && (
-        <Modal
-          open={editing}
-          onClose={() => setEditing(false)}
-          maxWidth={720}
-          title={t("common.editingNamed", { name: product.name })}
-        >
-          {editForm}
-        </Modal>
-      )}
+      <Modal
+        open={editing}
+        onClose={() => setEditing(false)}
+        maxWidth={720}
+        title={t("common.editingNamed", { name: product.name })}
+      >
+        {editForm}
+      </Modal>
       {canMove && (
         <Modal
           open={moving}

@@ -1,5 +1,3 @@
-import { round2 } from "@/lib/money";
-import { corteFrom, type CorteAdjustment, type CortePayment } from "@/lib/corte";
 import type { CashMovement } from "@/lib/cash-drawer";
 
 /**
@@ -57,30 +55,6 @@ export interface ShiftSum {
   cashSales: number;
   withdrawn: number;
   expected: number;
-}
-
-/** The shift's sum from the rows inside its window. */
-export function shiftSum(
-  opening: number,
-  payments: CortePayment[],
-  adjustments: CorteAdjustment[],
-  withdrawals: Pick<CashMovement, "amount">[],
-): ShiftSum {
-  const cashSales = corteFrom(payments, adjustments).totals.cash;
-  const withdrawn = round2(withdrawals.reduce((sum, w) => sum + Number(w.amount), 0));
-  const open = round2(Number(opening));
-  return { opening: open, cashSales, withdrawn, expected: round2(open + cashSales - withdrawn) };
-}
-
-/**
- * Counted minus expected: positive is cash over, negative is cash short.
- * A cent either way is still a difference; rounding to it keeps 0.1 + 0.2
- * from reading as a shortfall.
- */
-export function shiftDifference(counted: number, expected: number): number {
-  const difference = round2(counted - expected);
-  // -0 is a count that matched, and must never print as "−MX$0.00".
-  return difference === 0 ? 0 : difference;
 }
 
 /** Whether a closed shift still owes an explanation for its difference. */

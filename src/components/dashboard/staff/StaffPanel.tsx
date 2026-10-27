@@ -50,9 +50,9 @@ const ROLE_ICON = {
 export default function StaffPanel({ restaurantId, children, roles = [...ALL_ROLES] }: StaffPanelProps) {
   const t = useT();
   const toast = useToast();
-  const { members, loading, busy, addMember, updateRole, removeMember } =
+  const { members, loading, error, refresh, busy, addMember, updateRole, removeMember } =
     useStaff(restaurantId);
-  const staffRows = useRowMemory("staff", 3, loading ? undefined : members.length);
+  const staffRows = useRowMemory("staff", 3, loading || error ? undefined : members.length);
   const [email, setEmail] = useState("");
   // The first role on offer: a cook where there is a kitchen board, a cashier on Caja.
   const firstRole = roles[0] ?? "cashier";
@@ -93,8 +93,16 @@ export default function StaffPanel({ restaurantId, children, roles = [...ALL_ROL
               </span>
             </div>
 
+            {error && (
+              <div role="alert">
+                <p>{t("done.networkError")}</p>
+                <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={refresh}>
+                  {t("settle.retry")}
+                </button>
+              </div>
+            )}
             {loading && <StaffTableSkeleton rows={staffRows} />}
-            {!loading && members.length === 0 && (
+            {!loading && !error && members.length === 0 && (
               <p className="tt-muted" style={{ fontSize: 13 }}>
                 {t("dash.noStaff")}
               </p>

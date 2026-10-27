@@ -26,8 +26,6 @@ export const TERMS_VERSION = "2026-10-21";
  */
 export const TERMS_PATH = "/legal/terminos.pdf";
 export const PRIVACY_PATH = "/legal/aviso-de-privacidad.pdf";
-export const TERMS_PAGE = "/terminos";
-export const PRIVACY_PAGE = "/privacidad";
 
 /**
  * Whether this restaurant still owes us an acceptance.

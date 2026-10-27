@@ -28,8 +28,6 @@ interface MenuEditorProps {
   restaurant: Restaurant;
   menuId: string;
   menuName: string;
-  /** Open add/edit forms in a focused modal instead of expanding inline. Defaults to on. */
-  modalForms?: boolean;
   /** The restaurant's own icon-picker groups, from the server. */
   iconGroups?: StoredIconGroup[];
   /** The restaurant's dietary / allergen tags, from the server. */
@@ -46,7 +44,6 @@ export default function MenuEditor({
   restaurant,
   menuId,
   menuName,
-  modalForms = true,
   iconGroups = [],
   dietaryTags = [],
   inventoryAllowed = false,
@@ -210,7 +207,6 @@ export default function MenuEditor({
                       onDeleteProduct={editor.deleteProduct}
                       onDuplicateProduct={editor.duplicateProduct}
                       onToggleAvailable={editor.setAvailability}
-                      modalForms={modalForms}
                       categories={menuSections}
                       onMoveProduct={(productId, categoryId) =>
                         editor.updateProduct(productId, { category_id: categoryId })
@@ -240,7 +236,6 @@ export default function MenuEditor({
                       onDeleteProduct={editor.deleteProduct}
                       onDuplicateProduct={editor.duplicateProduct}
                       onToggleAvailable={editor.setAvailability}
-                      modalForms={modalForms}
                       categories={menuSections}
                       onMoveProduct={(productId, categoryId) =>
                         editor.updateProduct(productId, { category_id: categoryId })
@@ -278,7 +273,6 @@ export default function MenuEditor({
                     onDelete={editor.deleteAddon}
                     onToggleAvailable={editor.setAvailability}
                     onMove={editor.moveAddon}
-                    modalForms={modalForms}
                   />
                   <IconGroupsPanel groups={iconGroups} />
                   <DietaryPanel tags={dietaryTags} />

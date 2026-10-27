@@ -52,10 +52,3 @@ function guessSeparator(text: string): "," | ";" {
   const count = (ch: string) => first.split(ch).length - 1;
   return count(";") > count(",") ? ";" : ",";
 }
-
-/** Rows of cells as CSV text: the reverse, for a template to download. */
-export function toCsv(rows: string[][]): string {
-  return rows
-    .map(r => r.map(c => (/[",\n\r;]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(","))
-    .join("\n");
-}

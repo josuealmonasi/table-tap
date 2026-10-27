@@ -4776,3 +4776,49 @@ The contract regressions fail against the baseline TypeScript and pass with
 mocked RPCs following the agreed contract. Claude owns SQL integration, the
 Postgres concurrency/coverage replays, Connect event subscriptions and serial
 release gates. These local tests do not apply or validate the deployed schema.
+
+## Sections round 1 — refreshes must preserve the person's state
+
+| Rule | The bug it came from | What checks it |
+|---|---|---|
+| A scanned URL opens collection once, independently of later bill snapshots | A bill refresh reopened the collection the cashier had dismissed | `bills-scan.spec.tsx` |
+| Failed history reads retain the last rows and offer retry | A failed page read replaced successful sales with an empty list | `sections-read-errors.spec.tsx` |
+| Staff and profile read failures remain errors, with the previous team retained | A failed staff read looked like an empty team; a failed profile read erased names | `sections-read-errors.spec.tsx` |
+
+### A scanned collection and a refreshed bill list have separate lifetimes
+
+Bills consumes each arriving `order` query value once. Live server snapshots
+still update the bill list, but cannot reopen a dismissed collection or repeat
+a missing-code warning. Scanning again with the camera still opens collection;
+navigating away from the query and back can consume a new arrival. Matching
+continues to use only the server's restaurant-scoped bills. Collection routes,
+amounts and role/plan guards are unchanged. Claude checks Bills for collecting
+roles with the dialog, layout, role and money gates during integration.
+
+### History and Staff can have useful rows and a read error together
+
+Both readers reject Supabase errors and let SWR retain successful data while
+reporting failure. Retry revalidates the failed read. History keeps its rows
+and count if a page fails; the successful response's restaurant identity
+prevents previous rows crossing restaurants. Staff publishes a list only after
+both staff and profile reads succeed, so unknown names do not look like blank
+profiles. An empty successful staff read skips profiles. Invitations remain
+successful if only the following list refresh fails, avoiding duplicate invites.
+Role edits and removals update the same cache. Existing bilingual network-error
+and retry copy is reused; no translation keys change. Claude checks analytics
+pagination, Staff invitations/roles and error/retry layout at integration.
+
+### Correction to the historical `creditFor` reference above
+
+The earlier "Money on a sitting, spent twice" section describes the helper
+used at that time. The live reader now uses `paymentCoverageDetails` and sums
+coverage for the unpaid orders; it no longer calls `creditFor`. Sections round
+1 removes that unused helper and its own tests. Allocation and outstanding
+currency tests continue to cover the live reader. The earlier history remains
+as written. No balance calculation or payment writer changes in this cleanup.
+
+The cleanup also removes unreachable inline menu forms (every caller used
+modals), unused exports and tests that exercised only retired helpers. The
+live `sharesFor` tests still check that every cent adds back to the bill.
+`EMPTY_CORTE` remains in each consuming test as a fixture. `nextPlan` and its
+existing tests/documentation remain because `plan.ts` belongs to other work.

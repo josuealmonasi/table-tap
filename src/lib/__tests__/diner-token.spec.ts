@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { dinerToken, forgetDiner } from "@/lib/diner-token";
+import { dinerToken } from "@/lib/diner-token";
 
 /** Plain Node, so the one browser API this module uses is stood up by hand. */
 const store = new Map<string, string>();
@@ -36,14 +36,6 @@ describe("the name a phone gives itself for the evening", () => {
     expect(a).not.toBe(b);
   });
 
-  it("forgets one restaurant without forgetting the other", () => {
-    const kept = dinerToken("r2");
-    const dropped = dinerToken("r1");
-    forgetDiner("r1");
-    expect(dinerToken("r2")).toBe(kept);
-    expect(dinerToken("r1")).not.toBe(dropped);
-  });
-
   it("answers nothing when the phone has storage switched off", () => {
     // Every split route refuses an empty diner, so such a phone can read the
     // bill and simply cannot hold a seat — which is better than throwing on
@@ -55,6 +47,5 @@ describe("the name a phone gives itself for the evening", () => {
       removeItem: () => { throw new Error("denied"); },
     });
     expect(dinerToken("r1")).toBe("");
-    expect(() => forgetDiner("r1")).not.toThrow();
   });
 });

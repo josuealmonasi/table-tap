@@ -52,11 +52,6 @@ export function stillOwed(orders: Owing[], collected: Collected[]): number {
   return Math.max(0, round2(billTotal(orders) - paidSoFar(collected)));
 }
 
-/** Nothing left to collect, to the centavo. */
-export function isSettled(orders: Owing[], collected: Collected[]): boolean {
-  return stillOwed(orders, collected) < 0.005;
-}
-
 /**
  * What this payment may actually take.
  *

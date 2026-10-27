@@ -44,10 +44,3 @@ export function trimCartToStock(items: CartLine[], limits: StockLimit[]): CartLi
   }
   return kept;
 }
-
-/** Whether trimming would actually change anything the customer can see. */
-export function trimChangesCart(items: CartLine[], limits: StockLimit[]): boolean {
-  const trimmed = trimCartToStock(items, limits);
-  if (trimmed.length !== items.length) return true;
-  return trimmed.some((line, i) => line.qty !== items[i].qty);
-}

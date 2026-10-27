@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCsv, toCsv } from "@/lib/csv";
+import { parseCsv } from "@/lib/csv";
 import { planImport, readPrice, sectionsOf } from "@/lib/menu-import";
 
 /**
@@ -22,10 +22,6 @@ describe("a CSV file", () => {
     expect(parseCsv("nombre;precio\nCapuchino;48,50")).toEqual([["nombre", "precio"], ["Capuchino", "48,50"]]);
   });
 
-  it("writes back what it reads", () => {
-    const rows = [["nombre", "precio"], ["Latte, grande", "55"], ['Té "chai"', "40"]];
-    expect(parseCsv(toCsv(rows))).toEqual(rows);
-  });
 });
 
 describe("a price as people type it", () => {

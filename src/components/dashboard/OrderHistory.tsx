@@ -34,7 +34,7 @@ export default function OrderHistory({
 }) {
   const t = useT();
   const { locale } = useLocale();
-  const { orders, loading, page, pages, total, setPage, query, setQuery } =
+  const { orders, loading, error, retry, page, pages, total, setPage, query, setQuery } =
     useOrderHistory(restaurantId);
   const [open, setOpen] = useState<Order | null>(null);
 
@@ -44,10 +44,10 @@ export default function OrderHistory({
         <h3 className="tt-serif" style={{ margin: 0 }}>
           {t("orders.history")}
         </h3>
-        <span className="tt-muted" style={{ fontSize: 12 }}>
+        {(!error || orders.length > 0) && <span className="tt-muted" style={{ fontSize: 12 }}>
           {/* "1 pedidos" is the kind of thing that makes an app feel unfinished. */}
           {total === 1 ? t("orders.historyCountOne") : t("orders.historyCount", { total })}
-        </span>
+        </span>}
       </div>
 
       <div className="tt-bill-search">
@@ -61,9 +61,17 @@ export default function OrderHistory({
         />
       </div>
 
+      {error && (
+        <div role="alert">
+          <p>{t("done.networkError")}</p>
+          <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={retry}>
+            {t("settle.retry")}
+          </button>
+        </div>
+      )}
       {loading && <LogRowsSkeleton rows={6} />}
 
-      {!loading && orders.length === 0 && (
+      {!loading && !error && orders.length === 0 && (
         <p className="tt-muted" style={{ fontSize: 13, margin: "12px 0 0" }}>
           {query ? t("orders.historyNoMatch", { query }) : t("orders.noPast")}
         </p>
@@ -119,7 +127,7 @@ export default function OrderHistory({
         <div className="tt-log-pager">
           <button
             className="tt-btn tt-btn-ghost tt-btn-sm"
-            disabled={page <= 1}
+            disabled={loading || page <= 1}
             onClick={() => setPage(page - 1)}
           >
             {t("dash.newer")}
@@ -129,7 +137,7 @@ export default function OrderHistory({
           </span>
           <button
             className="tt-btn tt-btn-ghost tt-btn-sm"
-            disabled={page >= pages}
+            disabled={loading || page >= pages}
             onClick={() => setPage(page + 1)}
           >
             {t("dash.older")}

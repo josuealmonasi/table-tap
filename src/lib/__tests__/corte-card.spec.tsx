@@ -1,8 +1,9 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { corteFrom, EMPTY_CORTE, type Corte } from "@/lib/corte";
+import { corteFrom, type Corte } from "@/lib/corte";
 import CorteCard from "@/components/dashboard/analytics/CorteCard";
+import { EMPTY_TILL } from "@/lib/till";
 
 vi.mock("@/components/dashboard/cash/ShiftBlock", () => ({ default: () => null }));
 beforeEach(() => { vi.stubGlobal("React", React); });
@@ -34,3 +35,15 @@ it("shows negative online money on a card-return-only day", () => {
   expect(corte.online).toBe(-100);
   expect(render(corte)).toContain("corte.online");
 });
+
+const EMPTY_CORTE: Corte = {
+  people: [],
+  totals: EMPTY_TILL,
+  online: 0,
+  writtenOff: 0,
+  discounted: 0,
+  refunded: 0,
+  onAccount: 0,
+  accountsOwed: 0,
+  unverifiedAdjustments: 0,
+};

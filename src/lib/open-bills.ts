@@ -67,26 +67,6 @@ export function withSplits(
   });
 }
 
-/**
- * What has already been paid against each sitting.
- *
- * One number from one place — the ledger — however it was collected. Reading
- * the split's own claims instead would have shown a share of a divided bill
- * and missed a waiter's collection entirely, which is the half of the money
- * the floor most needs to know about: it is the half somebody could take
- * again.
- */
-export function withCollected(
-  bills: OpenBill[],
-  collected: Map<string, number>,
-  sessionOf: Map<string, string>,
-): OpenBill[] {
-  return bills.map(bill => {
-    const paid = collected.get(sessionOfBill(bill, sessionOf) ?? "") ?? 0;
-    return paid > 0 ? { ...bill, collected: round2(paid) } : bill;
-  });
-}
-
 export function openBills(orders: Order[]): OpenBill[] {
   const bills = new Map<string, OpenBill>();
 

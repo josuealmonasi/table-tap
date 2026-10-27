@@ -16,8 +16,6 @@ interface AddonsPanelProps {
   onDelete: (id: string) => Promise<boolean>;
   onToggleAvailable: (id: string, available: boolean) => void;
   onMove: (id: string, direction: "up" | "down") => Promise<void>;
-  /** Open add/edit forms in a focused modal instead of expanding inline. Defaults to on. */
-  modalForms?: boolean;
   /** Lower-cased filter from the editor's search box — narrows the list shown here. */
   searchQuery?: string;
   /** Bulk-select mode: rows show checkboxes. */
@@ -34,7 +32,6 @@ export default function AddonsPanel({
   onDelete,
   onToggleAvailable,
   onMove,
-  modalForms = true,
   searchQuery = "",
   selectedIds,
   onToggleSelect,
@@ -84,30 +81,20 @@ export default function AddonsPanel({
           />
         );
 
-        if (modalForms) {
-          return (
-            <>
-              <button className="tt-add-more" onClick={() => setAdding(true)}>
-                {t("menu.addExtra")}
-              </button>
-              <Modal
-                open={adding}
-                onClose={() => setAdding(false)}
-                maxWidth={520}
-                title={t("menu.newExtra")}
-              >
-                {addForm}
-              </Modal>
-            </>
-          );
-        }
-
-        return adding ? (
-          <div className="tt-prod-editing">{addForm}</div>
-        ) : (
-          <button className="tt-add-more" onClick={() => setAdding(true)}>
-            {t("menu.addExtra")}
-          </button>
+        return (
+          <>
+            <button className="tt-add-more" onClick={() => setAdding(true)}>
+              {t("menu.addExtra")}
+            </button>
+            <Modal
+              open={adding}
+              onClose={() => setAdding(false)}
+              maxWidth={520}
+              title={t("menu.newExtra")}
+            >
+              {addForm}
+            </Modal>
+          </>
         );
       })()}
 
@@ -125,14 +112,6 @@ export default function AddonsPanel({
           />
         );
 
-        if (!modalForms && isEditing) {
-          return (
-            <div key={addon.id} className="tt-addon tt-prod-editing">
-              {editForm}
-            </div>
-          );
-        }
-
         return (
           <div key={addon.id} className="tt-addon">
             <AddonRow
@@ -148,16 +127,14 @@ export default function AddonsPanel({
               onMove={direction => void onMove(addon.id, direction)}
               onDelete={() => void onDelete(addon.id)}
             />
-            {modalForms && (
-              <Modal
-                open={isEditing}
-                onClose={() => setEditingId(null)}
-                maxWidth={520}
-                title={t("common.editingNamed", { name: addon.name })}
-              >
-                {editForm}
-              </Modal>
-            )}
+            <Modal
+              open={isEditing}
+              onClose={() => setEditingId(null)}
+              maxWidth={520}
+              title={t("common.editingNamed", { name: addon.name })}
+            >
+              {editForm}
+            </Modal>
           </div>
         );
       })}
