@@ -4476,3 +4476,24 @@ Claude applies the idempotent replacement of
 no signature, grant or drop-list change is needed. Then run the shared-database
 gates and check that Bills retains the pending fee and deletion refuses it until
 recovery finishes. No shared database or provider was contacted for this fix.
+
+## Gate sessions and promise sweep readiness (roadmap #5)
+
+| Rule | The bug it prevents | What checks it |
+|---|---|---|
+| HTTP and browser gates encode the same project session | Separate cookie builders drift, or encode a missing session and audit the login screen | `session-cookie.spec.ts` |
+| Promise sweeps audit resolved browser data | A 1.8-second sleep reports a skeleton as an honest empty screen before slow data arrives | `promise-readiness.spec.ts`, `browser-ready.spec.ts` |
+
+Six permitted harness files now use `session-cookie.mjs` for the existing
+project cookie name and base64 session encoding. Browser cookies and HTTP
+headers share that encoding; missing sessions fail before a visit. The RLS
+harness is held by PR #542 and deliberately keeps its existing builders until
+its owner adopts the helper.
+
+The team and diner promise sweeps track requests before navigation and use
+`ready`, which polls through `observe` until content, data and layout settle.
+Both regression cases first reproduced a false pass at 1.8 seconds with data
+arriving at 2.5 seconds; now every visit waits and reports the missing message.
+All original case lists, visits and verdict assertions are preserved: 54
+planned sweep visits and 54 development state cases, plus dynamically found
+dashboard links. Production continues to omit the writing state cases.

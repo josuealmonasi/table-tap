@@ -22,6 +22,7 @@ import { plantNeighbour } from "./rls-fixture.mjs";
 import { refuseProduction, watchDevWorker } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
 import { everyLogin } from "./logins.mjs";
+import { sessionCookieHeader } from "./session-cookie.mjs";
 
 refuseProduction("rls", "it plants rows, and asks for writes on a real restaurant that must be refused");
 process.loadEnvFile(join(process.cwd(), ".env.development.local"));
@@ -222,7 +223,7 @@ for (const [method, path, body] of [
 // valid session sending another restaurant's id.
 if (!signIn.error && theirs) {
   console.log("\nSigned in, aiming at another restaurant");
-  const cookie = `sb-${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0]}-auth-token=base64-${Buffer.from(JSON.stringify(signIn.data.session)).toString("base64")}`;
+  const cookie = sessionCookieHeader(signIn.data.session, process.env.NEXT_PUBLIC_SUPABASE_URL);
   // A read that failed, or a neighbour with no table, used to skip every check
   // that aims at its table, the collection's included, and print nothing
   // (audit M, finding 3). Both are failures now.
@@ -375,7 +376,7 @@ if (!signIn.error && theirs) {
 // status is not enough — look at the row again and see it is as it was.
 if (!signIn.error && theirs) {
   console.log("\nIcon groups belonging to the restaurant next door");
-  const cookie = `sb-${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0]}-auth-token=base64-${Buffer.from(JSON.stringify(signIn.data.session)).toString("base64")}`;
+  const cookie = sessionCookieHeader(signIn.data.session, process.env.NEXT_PUBLIC_SUPABASE_URL);
 
   const { data: victim } = await admin
     .from("icon_groups")
@@ -413,7 +414,7 @@ if (!signIn.error && theirs) {
     email: "demo-kitchen@tabletap.dev", password: "demo123",
   });
   if (!kSignIn.error) {
-    const kCookie = `sb-${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0]}-auth-token=base64-${Buffer.from(JSON.stringify(kSignIn.data.session)).toString("base64")}`;
+    const kCookie = sessionCookieHeader(kSignIn.data.session, process.env.NEXT_PUBLIC_SUPABASE_URL);
     const res = await fetch(BASE + "/api/icon-groups", {
       method: "POST",
       headers: { "Content-Type": "application/json", cookie: kCookie },
@@ -524,7 +525,7 @@ if (!signIn.error && theirs) {
 
     if (!home.print_token) bad(`${home.name} has no printer token — the credential check did not run`);
     else {
-      const kCookie = `sb-${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0]}-auth-token=base64-${Buffer.from(JSON.stringify(kSignIn.data.session)).toString("base64")}`;
+      const kCookie = sessionCookieHeader(kSignIn.data.session, process.env.NEXT_PUBLIC_SUPABASE_URL);
       const res = await fetch(BASE + "/dashboard/orders", { headers: { cookie: kCookie } });
       const page = await res.text();
       if (!page.includes("tt-dash")) bad(`the kitchen's orders page did not render (${res.status}) — the credential check did not run`);

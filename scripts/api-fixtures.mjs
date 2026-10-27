@@ -9,6 +9,7 @@
 import { memberFixture } from "./table-member-fixture.mjs";
 import { createClient } from "@supabase/supabase-js";
 import { loginByEmail } from "./logins.mjs";
+import { sessionCookieHeader } from "./session-cookie.mjs";
 
 export const MARK = "apicheck";
 
@@ -31,13 +32,12 @@ export async function setup(env, base) {
   // When this run began: what it reserved in the fee ledger is removed after.
   const startedAt = new Date().toISOString();
   const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY);
-  const ref = new URL(env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0];
 
   const cookieFor = async (email, password = "demo123") => {
     const c = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
     const { data, error } = await c.auth.signInWithPassword({ email, password });
     if (error) throw new Error(`could not sign in as ${email}: ${error.message}`);
-    return `sb-${ref}-auth-token=base64-${Buffer.from(JSON.stringify(data.session)).toString("base64")}`;
+    return sessionCookieHeader(data.session, env.NEXT_PUBLIC_SUPABASE_URL);
   };
 
   const who = {

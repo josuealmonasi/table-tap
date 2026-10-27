@@ -12,6 +12,7 @@
 import { join } from "node:path";
 import { requireServer, retryFetch } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
+import { sessionCookieHeader } from "./session-cookie.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -41,11 +42,8 @@ if (signInError) {
 }
 
 // Supabase's SSR client reads the session from a cookie named for the project.
-const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0];
 const session = signedIn.session;
-const cookie = `sb-${ref}-auth-token=base64-${Buffer.from(
-  JSON.stringify(session),
-).toString("base64")}`;
+const cookie = sessionCookieHeader(session, process.env.NEXT_PUBLIC_SUPABASE_URL);
 
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
 const { data: restaurant } = await admin

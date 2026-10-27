@@ -32,6 +32,7 @@ import { attackRefunds } from "./attack-refunds.mjs";
 import { attackFeeCeiling } from "./attack-fees.mjs";
 import { refuseProduction, watchDevWorker } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
+import { sessionCookieHeader } from "./session-cookie.mjs";
 
 refuseProduction("attack", "every case plants an order to attack");
 process.loadEnvFile(".env.development.local");
@@ -50,15 +51,13 @@ const bad = m => { failed++; console.log(`    BAD      ${m}`); };
 
 /** A signed-in browser's cookie, the way the app's own harness makes one. */
 async function cookieFor(email) {
-  const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0];
   const c = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   );
   const { data, error } = await c.auth.signInWithPassword({ email, password: "demo123" });
   if (error) throw new Error(`could not sign in as ${email}: ${error.message}`);
-  const session = Buffer.from(JSON.stringify(data.session)).toString("base64");
-  return `sb-${ref}-auth-token=base64-${session}`;
+  return sessionCookieHeader(data.session, process.env.NEXT_PUBLIC_SUPABASE_URL);
 }
 
 async function get(path, cookie) {
