@@ -88,6 +88,7 @@ export const en = {
       "written_off": "wrote off a table's bill",
       requested: "asked to cancel a table's bill",
       rejected: "refused to cancel a table's bill",
+      refund_failed: "could not complete a duplicate-charge refund: the customer did not get the money back",
     },
     discount: {
       discounted: "applied a promotion to a bill",
@@ -99,6 +100,7 @@ export const en = {
       offline_recovered: "approved a saved sale",
       cancelled: "cancelled an order",
       refunded: "refunded an order",
+      refund_failed: "could not complete a refund: the customer did not get the money back",
     },
     settings: {
       updated: "changed a setting",

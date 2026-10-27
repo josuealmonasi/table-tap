@@ -6241,6 +6241,54 @@ $$;
 revoke all on function public.verify_refunded_platform_fee(uuid, text, int, int, text[]) from public, anon, authenticated;
 grant execute on function public.verify_refunded_platform_fee(uuid, text, int, int, text[]) to service_role;
 
+-- Stripe can fail a refund it first reported as succeeded (a closed card, a
+-- bank that returns it). The diner then has not got the money back, and every
+-- reader that trusted "succeeded" was wrong: the bills page, the corte and
+-- the deletion checks (audit O finding 1). This puts the row back in the state
+-- an immediate failure leaves it in, which every screen already offers to
+-- retry. A failure also lowers the charge's cumulative fee target, which is
+-- the one time the high-water marks above may come down, so every sibling on
+-- the charge is re-verified from Stripe (audit O finding 2). Returns what it
+-- reopened: 'operation', 'due', or null when nothing was completed.
+create or replace function public.reverse_failed_refund(p_restaurant uuid, p_intent text, p_refund text, p_status text)
+returns text language plpgsql security definer set search_path = public as $$
+declare o refund_operations; d refunds_due; v_reopened text;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if p_refund is null or p_intent is null or p_status not in ('failed', 'canceled') then raise exception 'invalid refund reversal'; end if;
+  select * into o from refund_operations where restaurant_id = p_restaurant and source = 'stripe'
+    and stripe_refund_id = p_refund and stripe_payment_intent = p_intent for update;
+  if o.id is not null then
+    update refund_attempts set provider_status = p_status, updated_at = now()
+      where operation_id = o.id and stripe_refund_id = p_refund;
+    if o.status in ('succeeded', 'processing') then
+      update refund_operations set status = 'failed', provider_status = p_status, completed_at = null,
+        fee_verification_pending = false, fee_target_cents = null, fee_reconciled_at = null where id = o.id;
+      v_reopened := 'operation';
+    end if;
+  end if;
+  select * into d from refunds_due where restaurant_id = p_restaurant
+    and stripe_refund_id = p_refund and stripe_payment_intent = p_intent for update;
+  if d.id is not null then
+    update refund_due_attempts set provider_status = p_status, updated_at = now()
+      where due_id = d.id and stripe_refund_id = p_refund;
+    if d.refunded_at is not null then
+      update refunds_due set refunded_at = null, refunded_by = null, stripe_refund_id = null,
+        fee_target_cents = null, fee_verification_pending = true, fee_reconciled_at = null where id = d.id;
+      v_reopened := 'due';
+    end if;
+  end if;
+  -- Including a refund made by hand in Stripe, which has no row here at all.
+  update refund_operations set fee_target_cents = null, fee_verification_pending = true, fee_reconciled_at = null
+    where restaurant_id = p_restaurant and stripe_payment_intent = p_intent and source = 'stripe' and status = 'succeeded';
+  update refunds_due set fee_target_cents = null, fee_verification_pending = true, fee_reconciled_at = null
+    where restaurant_id = p_restaurant and stripe_payment_intent = p_intent and refunded_at is not null;
+  return v_reopened;
+end;
+$$;
+revoke all on function public.reverse_failed_refund(uuid, text, text, text) from public, anon, authenticated;
+grant execute on function public.reverse_failed_refund(uuid, text, text, text) to service_role;
+
 -- A manager may attribute an ambiguous historical receipt, never change it.
 drop function if exists public.attribute_payment(uuid, uuid, text, jsonb);
 -- The submitted cents are evidence supplied by that manager, not a claim
