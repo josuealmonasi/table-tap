@@ -25,7 +25,8 @@ export function fakeDb(rows: Row[], stripeAccount: string | null = "acct_1") {
   let attempt: { id: string; attempt_no: number; idempotency_key: string; provider_status?: string; stripe_refund_id?: string } | null = null;
   const db = {
     rpc: async (name: string, args: Record<string, unknown>) => {
-      if (name === "verify_refunded_platform_fee") {
+      if (name === "refund_fee_epoch") return { data: 0, error: null };
+      if (name === "verify_refunded_platform_fee_v2") {
         const refunds = args.p_refunds;
         for (const row of rows) if (row.restaurant_id === args.p_restaurant && row.stripe_payment_intent === args.p_intent
           && row.refunded_at && (refunds === null || Array.isArray(refunds) && refunds.includes(row.stripe_refund_id))) {
@@ -33,7 +34,7 @@ export function fakeDb(rows: Row[], stripeAccount: string | null = "acct_1") {
           row.fee_verification_pending = Number(args.p_cents) < Number(args.p_target);
           row.fee_reconciled_at = row.fee_verification_pending ? null : "2026-10-27T12:00:00Z";
         }
-        return { data: null, error: null };
+        return { data: true, error: null };
       }
       const row = rows.find(r => r.id === args.p_due && r.restaurant_id === args.p_restaurant);
       if (!row) return { data: null, error: null };

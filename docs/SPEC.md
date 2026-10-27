@@ -459,6 +459,13 @@ dishes on a bill the restaurant has just cancelled.
   refund or refunds-due row back in the state an immediate failure leaves it
   in (failed, owed, retryable) and clears every fee target on that charge so
   Stripe re-verifies it. The owner sees `refund_failed` in the activity log.
+  Stripe sends events twice and out of order, so each failure is recorded once
+  in `refund_failures` (a replay changes nothing). A "succeeded" read of a refund
+  already known to have failed is refused by both finish functions. Only the
+  latest attempt's refund reopens a row. Each charge has a fee epoch
+  (`refund_fee_epochs`): a failure moves it on, and `syncReturnedFee` reads it
+  before asking Stripe, so a verification that read Stripe before the failure is
+  refused and retried. The owner's log line is written in the same transaction.
   Its exact fee request
   is saved before Stripe is called and provider
   metadata recovers lost responses after idempotency expires. The obligation

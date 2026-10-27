@@ -6043,6 +6043,8 @@ begin
   select * into o from refund_operations where id = p_operation and restaurant_id = p_restaurant for update;
   if o.id is null then return false; end if;
   if o.status = 'succeeded' then return true; end if;
+  -- Stripe already told us this refund failed: a late "succeeded" read is stale.
+  if p_refund is not null and exists (select 1 from refund_failures where restaurant_id = p_restaurant and stripe_refund_id = p_refund) then return false; end if;
   if o.source = 'stripe' and p_attempt is distinct from
     (select id from refund_attempts where operation_id = o.id order by attempt_no desc limit 1) then return false; end if;
   if o.source = 'stripe' and p_refund is null then raise exception 'provider refund required'; end if;
@@ -6242,49 +6244,126 @@ revoke all on function public.verify_refunded_platform_fee(uuid, text, int, int,
 grant execute on function public.verify_refunded_platform_fee(uuid, text, int, int, text[]) to service_role;
 
 -- Stripe can fail a refund it first reported as succeeded (a closed card, a
--- bank that returns it). The diner then has not got the money back, and every
--- reader that trusted "succeeded" was wrong: the bills page, the corte and
--- the deletion checks (audit O finding 1). This puts the row back in the state
--- an immediate failure leaves it in, which every screen already offers to
--- retry. A failure also lowers the charge's cumulative fee target, which is
--- the one time the high-water marks above may come down, so every sibling on
--- the charge is re-verified from Stripe (audit O finding 2). Returns what it
--- reopened: 'operation', 'due', or null when nothing was completed.
-create or replace function public.reverse_failed_refund(p_restaurant uuid, p_intent text, p_refund text, p_status text)
-returns text language plpgsql security definer set search_path = public as $$
-declare o refund_operations; d refunds_due; v_reopened text;
+-- bank that returns it). The diner then has not got the money back (audit O).
+--
+-- Stripe delivers events more than once and out of order (audit P), so:
+--  * every failure is recorded once, by refund id, and a replay changes nothing;
+--  * a success that arrives after its own failure is refused (finish_* below);
+--  * only the refund of a row's LATEST attempt reopens it, so an old attempt's
+--    failure cannot undo a retry that is already in flight;
+--  * the charge's fee epoch moves on, and a fee verification that read Stripe
+--    before the failure is refused rather than trusted (verify_..._v2 below).
+create table if not exists refund_failures (
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  stripe_refund_id text not null,
+  stripe_payment_intent text not null,
+  provider_status text not null check (provider_status in ('failed', 'canceled')),
+  created_at timestamptz not null default now(),
+  primary key (restaurant_id, stripe_refund_id)
+);
+alter table refund_failures enable row level security;
+revoke all on refund_failures from anon, authenticated;
+revoke all on refund_failures from public;
+grant select, insert on refund_failures to service_role;
+
+-- One counter per charge: what a fee verification must have read under.
+create table if not exists refund_fee_epochs (
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  stripe_payment_intent text not null,
+  epoch int not null default 0 check (epoch >= 0),
+  primary key (restaurant_id, stripe_payment_intent)
+);
+alter table refund_fee_epochs enable row level security;
+revoke all on refund_fee_epochs from anon, authenticated;
+revoke all on refund_fee_epochs from public;
+grant select, insert, update on refund_fee_epochs to service_role;
+
+create or replace function public.refund_fee_epoch(p_restaurant uuid, p_intent text)
+returns int language sql stable security definer set search_path = public as $$
+  select coalesce((select epoch from refund_fee_epochs where restaurant_id = p_restaurant and stripe_payment_intent = p_intent), 0);
+$$;
+revoke all on function public.refund_fee_epoch(uuid, text) from public, anon, authenticated;
+grant execute on function public.refund_fee_epoch(uuid, text) to service_role;
+
+-- Only a verification read under the current epoch may move the fee state.
+create or replace function public.verify_refunded_platform_fee_v2(p_restaurant uuid, p_intent text, p_cents int, p_target int, p_refunds text[], p_epoch int)
+returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if p_epoch is null or p_epoch <> public.refund_fee_epoch(p_restaurant, p_intent) then return false; end if;
+  perform public.verify_refunded_platform_fee(p_restaurant, p_intent, p_cents, p_target, p_refunds);
+  return true;
+end;
+$$;
+revoke all on function public.verify_refunded_platform_fee_v2(uuid, text, int, int, text[], int) from public, anon, authenticated;
+grant execute on function public.verify_refunded_platform_fee_v2(uuid, text, int, int, text[], int) to service_role;
+
+-- Returns what it reopened: 'operation', 'due', or null (a replay, an old
+-- attempt, or a refund made by hand in Stripe with no row here). The owner's
+-- activity line is written in the same transaction, so it cannot be lost.
+create or replace function public.reverse_failed_refund_v2(
+  p_restaurant uuid, p_intent text, p_refund text, p_status text, p_cents int, p_currency text
+) returns text language plpgsql security definer set search_path = public as $$
+declare o refund_operations; d refunds_due; v_attempt uuid; v_latest uuid; v_reopened text; v_first boolean;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   if p_refund is null or p_intent is null or p_status not in ('failed', 'canceled') then raise exception 'invalid refund reversal'; end if;
-  select * into o from refund_operations where restaurant_id = p_restaurant and source = 'stripe'
-    and stripe_refund_id = p_refund and stripe_payment_intent = p_intent for update;
-  if o.id is not null then
-    update refund_attempts set provider_status = p_status, updated_at = now()
-      where operation_id = o.id and stripe_refund_id = p_refund;
-    if o.status in ('succeeded', 'processing') then
+  insert into refund_failures (restaurant_id, stripe_refund_id, stripe_payment_intent, provider_status)
+    values (p_restaurant, p_refund, p_intent, p_status) on conflict do nothing;
+  get diagnostics v_first = row_count;
+  if not v_first then return null; end if;
+
+  -- The charge's fee is re-verified from scratch, under a new epoch.
+  insert into refund_fee_epochs (restaurant_id, stripe_payment_intent, epoch) values (p_restaurant, p_intent, 1)
+    on conflict (restaurant_id, stripe_payment_intent) do update set epoch = refund_fee_epochs.epoch + 1;
+  update refund_operations set fee_target_cents = null, fee_verification_pending = true, fee_reconciled_at = null
+    where restaurant_id = p_restaurant and stripe_payment_intent = p_intent and source = 'stripe' and status = 'succeeded';
+  update refunds_due set fee_target_cents = null, fee_verification_pending = true, fee_reconciled_at = null
+    where restaurant_id = p_restaurant and stripe_payment_intent = p_intent and refunded_at is not null;
+
+  select a.id, a.operation_id into v_attempt, o.id from refund_attempts a
+    where a.restaurant_id = p_restaurant and a.stripe_refund_id = p_refund and a.stripe_payment_intent = p_intent;
+  if v_attempt is not null then
+    update refund_attempts set provider_status = p_status, updated_at = now() where id = v_attempt;
+    select * into o from refund_operations where id = o.id and restaurant_id = p_restaurant for update;
+    select id into v_latest from refund_attempts where operation_id = o.id order by attempt_no desc limit 1;
+    if v_latest = v_attempt and o.status in ('succeeded', 'processing') then
       update refund_operations set status = 'failed', provider_status = p_status, completed_at = null,
         fee_verification_pending = false, fee_target_cents = null, fee_reconciled_at = null where id = o.id;
       v_reopened := 'operation';
     end if;
   end if;
-  select * into d from refunds_due where restaurant_id = p_restaurant
-    and stripe_refund_id = p_refund and stripe_payment_intent = p_intent for update;
-  if d.id is not null then
-    update refund_due_attempts set provider_status = p_status, updated_at = now()
-      where due_id = d.id and stripe_refund_id = p_refund;
-    if d.refunded_at is not null then
+
+  v_attempt := null;
+  select a.id, a.due_id into v_attempt, d.id from refund_due_attempts a
+    where a.restaurant_id = p_restaurant and a.stripe_refund_id = p_refund and a.stripe_payment_intent = p_intent;
+  if v_attempt is not null then
+    update refund_due_attempts set provider_status = p_status, updated_at = now() where id = v_attempt;
+    select * into d from refunds_due where id = d.id and restaurant_id = p_restaurant for update;
+    select id into v_latest from refund_due_attempts where due_id = d.id order by attempt_no desc limit 1;
+    if v_latest = v_attempt and d.refunded_at is not null then
       update refunds_due set refunded_at = null, refunded_by = null, stripe_refund_id = null,
         fee_target_cents = null, fee_verification_pending = true, fee_reconciled_at = null where id = d.id;
       v_reopened := 'due';
     end if;
   end if;
-  -- Including a refund made by hand in Stripe, which has no row here at all.
-  update refund_operations set fee_target_cents = null, fee_verification_pending = true, fee_reconciled_at = null
-    where restaurant_id = p_restaurant and stripe_payment_intent = p_intent and source = 'stripe' and status = 'succeeded';
-  update refunds_due set fee_target_cents = null, fee_verification_pending = true, fee_reconciled_at = null
-    where restaurant_id = p_restaurant and stripe_payment_intent = p_intent and refunded_at is not null;
+
+  if v_reopened is not null then
+    insert into user_logs (restaurant_id, actor_email, entity, action, detail)
+      values (p_restaurant, 'Stripe', case when v_reopened = 'due' then 'bill' else 'order' end, 'refund_failed',
+        concat_ws(' ', case when p_cents is not null then 'amount=' || to_char(p_cents / 100.0, 'FM999999990.00') end,
+          case when p_currency ~ '^[A-Z]{3}$' then 'currency=' || p_currency end));
+  end if;
   return v_reopened;
 end;
+$$;
+revoke all on function public.reverse_failed_refund_v2(uuid, text, text, text, int, text) from public, anon, authenticated;
+grant execute on function public.reverse_failed_refund_v2(uuid, text, text, text, int, text) to service_role;
+
+-- #548's signature, kept for the deploy overlap.
+create or replace function public.reverse_failed_refund(p_restaurant uuid, p_intent text, p_refund text, p_status text)
+returns text language sql security definer set search_path = public as $$
+  select public.reverse_failed_refund_v2(p_restaurant, p_intent, p_refund, p_status, null, null);
 $$;
 revoke all on function public.reverse_failed_refund(uuid, text, text, text) from public, anon, authenticated;
 grant execute on function public.reverse_failed_refund(uuid, text, text, text) to service_role;
@@ -7795,6 +7874,8 @@ begin
   if p_attempt is distinct from (select id from refund_due_attempts where due_id = d.id order by attempt_no desc limit 1) then return false; end if;
   if p_status not in ('succeeded', 'pending', 'requires_action', 'failed', 'canceled') then raise exception 'invalid provider outcome'; end if;
   if p_refund is null then raise exception 'provider evidence required'; end if;
+  -- Stripe already told us this refund failed: a late "succeeded" read is stale.
+  if exists (select 1 from refund_failures where restaurant_id = p_restaurant and stripe_refund_id = p_refund) then return false; end if;
   update refund_due_attempts set stripe_refund_id = p_refund, provider_status = p_status, updated_at = now()
     where id = p_attempt and restaurant_id = p_restaurant;
   if p_status <> 'succeeded' then return false; end if;
