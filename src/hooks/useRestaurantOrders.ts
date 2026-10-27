@@ -37,6 +37,16 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
   const t = useT();
   const toast = useToast();
   const [orders, setOrders] = useState<BoardOrder[]>(initialOrders);
+  // A refresh brings a new server snapshot, and today's takings are its base
+  // plus what this list holds. Kept from the first render, the list still
+  // carried a completed MX$100 order the base had already counted: MX$200 shown
+  // for MX$100 paid (audit M, finding 2). Each new snapshot replaces the list,
+  // so both cover the same rows; realtime carries on from there.
+  const [seeded, setSeeded] = useState(initialOrders);
+  if (seeded !== initialOrders) {
+    setSeeded(initialOrders);
+    setOrders(initialOrders);
+  }
   const { online, markOffline } = useOnline();
   const [pending, setPending] = useState<QueuedMove[]>([]);
   // A refused stale tap can retire a card even when its realtime event was missed.

@@ -4437,3 +4437,15 @@ loads only with the camera open, on a browser without the native
 `BarcodeDetector` (Safari, the restaurant's iPads). If that load fails, the
 camera stops and the dialog says it cannot read, instead of showing a lens
 that never will. `qr.spec.ts` fails on a static import.
+
+### Audit M (Claude): today's takings doubled on refresh; an rls check that could skip
+
+- **Finding 2.** The orders board shows today's takings as the server's base
+  plus the paid orders in its live list. The live list was seeded once, so
+  after `router.refresh()` a completed MX$100 order the base now counted was
+  still in the list: MX$200 shown for MX$100 paid. Each new server snapshot
+  now replaces the list. Tested in `orders-snapshot.spec.ts`.
+- **Finding 3.** The cross-tenant collection checks in `rls-check` sat inside
+  `if (theirTable)`, so a failed lookup skipped them silently. They build
+  their own tables, so they now always run. A failed read, or a neighbour
+  with no table, fails the check.
