@@ -4617,3 +4617,46 @@ gates and integration; this worker uses only local mocked/unit checks.
 - **Finding 2.** Clearing every fee target on each failure let a replay erase a newer target, and let a verification from before the failure re-raise an obsolete one for good. Each failure is now recorded once, so a replay is a no-op. It also moves the charge's fee epoch on, and `verify_refunded_platform_fee_v2` refuses a snapshot read under an older epoch.
 - **Finding 6.** The owner's activity line was a separate insert after the reversal had committed. If it failed, a replay found nothing to reopen and never logged it. It is now written in the same transaction.
 - `provider-failure.spec.ts` and `fee-verification.spec.ts` pin each rule. Replayed on dev Postgres (rolled back), in MX$ and US$: a late success is refused in both books; an old attempt reopens nothing; a stale verification is refused while a current one is accepted; a replay keeps the epoch and the sibling; the log line appears once.
+
+
+## Audit P findings 3, 4, 5 and 7 — board responses and their local evidence must agree
+
+| Rule | The bug it came from | What checks it |
+|---|---|---|
+| Takings identify the restaurant and currency that earned them | A membership change let B's US$250 appear as A's MX$250 | `orders-takings-identity.spec.tsx`, `orders-takings-response.spec.ts` |
+| Remembered order timestamps only increase | A delayed HTTP reply lowered a newer realtime timestamp and let a stale snapshot erase ready | `orders-snapshot-watermark.spec.ts` |
+| Successful moves repair the local ticket even without their final realtime event | Received → preparing → ready replay emptied the queue but left preparing visible | `orders-move-ack.spec.tsx` |
+| Every API case resolves to an API path without arranging live fixtures | A cloudprnt case requested `undefined?token=undefined&code=OK` in inventory while other cases hid the coverage hole | `invariants/gates.spec.ts`, `print-delivery-path.spec.ts` |
+
+### Finding 3: the response and the mounted board name the same money
+
+The membership-scoped route returns `restaurantId`, `currency` and the ledger
+figure. The board rejects a mismatched identity, currency or invalid amount,
+keeping its last successful figure. Restaurant and currency are part of its
+SWR key, and only a manager mounts it. Claude left the root layout alone: its
+proposed change wrapped every page, the diner's menu included, in the
+dashboard cache, and the validation above already refuses another
+restaurant's figure.
+
+### Finding 4: a delayed reply cannot lower newer evidence
+
+`remember` keeps the maximum timestamp. A delayed reply can finish its active
+move without erasing a newer realtime commit time, so a snapshot begun between
+them cannot replace the newer ticket. The snapshot's `Date.now()` and database
+commit time are both server clocks; comparing them is acceptable. The tablet's
+clock does not replace either server timestamp.
+
+### Finding 5: a sent move and the ticket's visible stage agree
+
+Both queued and live successful moves reapply their destination when the ticket
+still shows the source stage. This repairs an intermediate event that overwrote
+the optimistic stage, while retaining a later stage already received live or
+requested locally. Refusal handling and retry queues retain their existing rules.
+
+### Finding 7: route coverage cannot hide a malformed inventory entry
+
+Inventory validates every resolved path's type and `/api/` prefix before
+matching routes, without calling arrange or any request callback. The cloudprnt
+race case now names its route directly from the printer fixture instead of an
+arrange-only variable. Its old delivery token still comes from arrange and its
+reprint checks stay intact. The runnable inventory remains 307 cases.

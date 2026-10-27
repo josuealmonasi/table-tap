@@ -61,7 +61,8 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
 
     function handleChange(row: BoardOrder | undefined, eventType: string, committedAt?: string) {
       if (!row || row.status === "pending_payment") return;
-      // Database commit time and the server read share UTC. The tablet's
+      // Database commit time and the snapshot's Date.now() are both server
+      // clocks, so comparing them is acceptable. The tablet's
       // own clock can be wrong and must not decide which live row is newer.
       const at = committedAt ? Date.parse(committedAt) : NaN;
       remember(row.id, Number.isFinite(at) ? at : undefined);
@@ -145,6 +146,10 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
           refused++;
           const data = await res.json().catch(() => ({}));
           if (data.inactive === true) setInactiveOrderIds(ids => new Set(ids).add(move.id));
+        } else {
+          // A missed final event must not leave a sent ticket halfway along.
+          // A later stage already received live must not be pulled back either.
+          setOrders(prev => prev.map(o => o.id === move.id && o.status === move.from ? { ...o, status: move.to } : o));
         }
       } catch {
         stuck.push(move); // still no connection: keep it for next time
@@ -201,6 +206,9 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
       const data = (await res.json().catch(() => ({}))) as { error?: string; inactive?: boolean };
       if (data.inactive === true) hideInactive(id);
       toast(data.error ?? t("orders.moveRefused"), "error");
+    } else {
+      // Realtime may have overwritten the optimistic move with its prior stage.
+      setOrders(prev => prev.map(o => o.id === id && o.status === was ? { ...o, status } : o));
     }
 
     finish(orderReplyTime(res));

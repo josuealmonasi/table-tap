@@ -7,7 +7,8 @@ export function orderBoardCases(fx) {
   return [
     { name: "GET  /api/orders/takings (manager's own restaurant)", as: "manager", method: "GET",
       path: "/api/orders/takings", expect: [200],
-      check: d => typeof d.collectedToday === "number" && Number.isFinite(d.collectedToday) || "missing today's takings" },
+      check: (d, f) => d.restaurantId === f.restaurant.id && d.currency === f.restaurant.currency
+        && typeof d.collectedToday === "number" && Number.isFinite(d.collectedToday) || "missing or mismatched today's takings" },
     { name: "GET  /api/orders/takings (kitchen refused)", as: "kitchen", method: "GET",
       path: "/api/orders/takings", expect: [403], expectError: /sin permiso|forbidden/i },
     { name: "GET  /api/orders/takings (waiter refused)", as: "waiter", method: "GET",

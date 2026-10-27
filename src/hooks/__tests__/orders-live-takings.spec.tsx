@@ -27,7 +27,7 @@ async function render(orders: BoardOrder[], enabled = true) {
 }
 beforeEach(() => {
   vi.useFakeTimers(); vi.stubGlobal("React", React); vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => ({ ok: true, json: async () => ({ collectedToday: 50 }) })));
+  vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => ({ ok: true, json: async () => ({ restaurantId: "r1", currency: "MXN", collectedToday: 50 }) })));
   refresh.mockClear(); cache.clear(); container = document.createElement("div"); root = createRoot(container);
 });
 afterEach(async () => { await act(async () => root.unmount()); vi.useRealTimers(); vi.unstubAllGlobals(); });
