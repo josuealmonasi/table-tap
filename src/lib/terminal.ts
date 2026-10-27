@@ -1,5 +1,6 @@
 import { terminalReturns, returnDeposit, carriedReturn, waitingDay } from "./terminal-returns";
 import { round2 } from "@/lib/money";
+import { localDayKey } from "@/lib/day-window";
 
 /**
  * What the restaurant's own card terminal should deposit, day by day.
@@ -73,7 +74,7 @@ export const DEPOSIT_TOLERANCE = 0.5;
 
 /** The calendar day an instant falls on in the restaurant's zone, YYYY-MM-DD. */
 export function localDay(iso: string | Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+  return localDayKey(new Date(iso), timeZone);
 }
 
 /** `n` business days after a calendar day: Saturdays and Sundays do not count. */

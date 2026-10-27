@@ -7,8 +7,8 @@
 // six in Mexico City.
 // ============================================================================
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
+import { localDayKey } from "@/lib/day-window";
 
 export function localToday(timezone: string | null, now: Date = new Date()): string {
-  // en-CA formats a date as YYYY-MM-DD, the shape `visit_day` is stored in.
-  return new Intl.DateTimeFormat("en-CA", { timeZone: timezone || DEFAULT_TIME_ZONE }).format(now);
+  return localDayKey(now, timezone || DEFAULT_TIME_ZONE);
 }

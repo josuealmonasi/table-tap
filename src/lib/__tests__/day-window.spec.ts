@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { localToday } from "@/lib/loyalty/day";
+import { localDay } from "@/lib/terminal";
 import {
   localDayKey,
   localHour,
@@ -34,13 +36,21 @@ describe("the restaurant's own day", () => {
     expect(next.toISOString()).toBe("2026-08-19T06:00:00.000Z");
   });
 
-  it("keeps days whole across a daylight-saving change", () => {
-    // Tijuana springs forward on 5 April 2026: that day is 23 hours long, and
-    // a fixed 24-hour step would land an hour into the wrong day.
-    const before = startOfLocalDay(new Date("2026-04-04T12:00:00Z"), TIJUANA);
+  it("keeps the spring clock-change day whole at 23 hours", () => {
+    const before = startOfLocalDay(new Date("2026-03-08T12:00:00Z"), TIJUANA);
     const after = startOfNextLocalDay(before, TIJUANA);
-    expect(localDayKey(before, TIJUANA)).toBe("2026-04-04");
-    expect(localDayKey(after, TIJUANA)).toBe("2026-04-05");
+    expect(before.toISOString()).toBe("2026-03-08T08:00:00.000Z");
+    expect(after.toISOString()).toBe("2026-03-09T07:00:00.000Z");
+    expect(after.getTime() - before.getTime()).toBe(23 * 60 * 60 * 1000);
+    expect(localHour(after, TIJUANA)).toBe(0);
+  });
+
+  it("keeps the autumn clock-change day whole at 25 hours", () => {
+    const before = startOfLocalDay(new Date("2026-11-01T12:00:00Z"), TIJUANA);
+    const after = startOfNextLocalDay(before, TIJUANA);
+    expect(before.toISOString()).toBe("2026-11-01T07:00:00.000Z");
+    expect(after.toISOString()).toBe("2026-11-02T08:00:00.000Z");
+    expect(after.getTime() - before.getTime()).toBe(25 * 60 * 60 * 1000);
     expect(localHour(after, TIJUANA)).toBe(0);
   });
 
@@ -51,8 +61,9 @@ describe("the restaurant's own day", () => {
   });
 
   it("counts back whole days across a daylight-saving change too", () => {
-    const start = subtractLocalDays(new Date("2026-04-08T12:00:00Z"), 6, TIJUANA);
-    expect(localDayKey(start, TIJUANA)).toBe("2026-04-02");
+    const start = subtractLocalDays(new Date("2026-03-11T12:00:00Z"), 6, TIJUANA);
+    expect(localDayKey(start, TIJUANA)).toBe("2026-03-05");
+    expect(start.toISOString()).toBe("2026-03-05T08:00:00.000Z");
     expect(localHour(start, TIJUANA)).toBe(0);
   });
 
@@ -61,5 +72,69 @@ describe("the restaurant's own day", () => {
     // Still 18 August locally, so the month started on the 1st.
     expect(localDayKey(start, MX)).toBe("2026-08-01");
     expect(start.toISOString()).toBe("2026-08-01T06:00:00.000Z");
+  });
+});
+
+describe("the day used by reports, loyalty and terminal receipts", () => {
+  it.each([
+    ["2026-10-27T05:59:59.999Z", MX, "2026-10-26"],
+    ["2026-10-27T06:00:00Z", MX, "2026-10-27"],
+    ["2024-03-01T05:59:59Z", MX, "2024-02-29"],
+    ["2027-01-01T05:59:59Z", MX, "2026-12-31"],
+    ["2026-12-31T15:00:00Z", "Asia/Tokyo", "2027-01-01"],
+    ["2026-10-27T10:00:00Z", "Pacific/Kiritimati", "2026-10-28"],
+    ["2026-03-08T07:59:59Z", TIJUANA, "2026-03-07"],
+    ["2026-03-08T08:00:00Z", TIJUANA, "2026-03-08"],
+    ["2026-03-08T09:59:59Z", TIJUANA, "2026-03-08"],
+    ["2026-03-08T10:00:00Z", TIJUANA, "2026-03-08"],
+    ["2026-11-01T08:59:59Z", TIJUANA, "2026-11-01"],
+    ["2026-11-01T09:00:00Z", TIJUANA, "2026-11-01"],
+    ["2026-11-02T08:00:00Z", TIJUANA, "2026-11-02"],
+  ])("dates %s in %s as %s", (iso, zone, expected) => {
+    const date = new Date(iso);
+    const instant = date.getTime();
+    expect(localDayKey(date, zone)).toBe(expected);
+    expect(localToday(zone, date)).toBe(expected);
+    expect(localDay(iso, zone)).toBe(expected);
+    expect(localDay(date, zone)).toBe(expected);
+    expect(date.getTime()).toBe(instant);
+  });
+
+  it("keeps the configured fallback for a missing or empty loyalty zone", () => {
+    const at = new Date("2026-10-27T05:30:00Z");
+    expect(localToday(null, at)).toBe("2026-10-26");
+    expect(localToday("", at)).toBe("2026-10-26");
+    expect(localToday("UTC", at)).toBe("2026-10-27");
+  });
+
+  it("uses the current instant when loyalty receives no explicit date", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-10-27T05:59:59.999Z"));
+      expect(localToday(null)).toBe("2026-10-26");
+      vi.advanceTimersByTime(1);
+      expect(localToday(null)).toBe("2026-10-27");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a receipt's explicit offset when converting its string date", () => {
+    expect(localDay("2026-10-27T15:00:00+09:00", MX)).toBe("2026-10-27");
+  });
+
+  it("refuses invalid dates instead of assigning them a day", () => {
+    const invalid = new Date("not-a-date");
+    expect(() => localDayKey(invalid, MX)).toThrow(RangeError);
+    expect(() => localToday(MX, invalid)).toThrow(RangeError);
+    expect(() => localDay(invalid, MX)).toThrow(RangeError);
+    expect(() => localDay("not-a-date", MX)).toThrow(RangeError);
+  });
+
+  it("refuses invalid zones instead of silently choosing a default", () => {
+    const at = new Date("2026-10-27T05:30:00Z");
+    expect(() => localDayKey(at, "Invalid/Zone")).toThrow(RangeError);
+    expect(() => localToday("Invalid/Zone", at)).toThrow(RangeError);
+    expect(() => localDay(at, "Invalid/Zone")).toThrow(RangeError);
   });
 });

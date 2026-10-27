@@ -1087,6 +1087,13 @@ by driving the scanner in a browser, where the halfway card refused its first
 stamp; the api case for "first visit today" would have passed or failed by the
 hour. The seed dates visits in the demo's time zone now, and never today.
 
+Loyalty and terminal receipt dates now delegate to the same `localDayKey`
+formatter used by reports. Their existing default-zone, clock and Date/string
+input behavior stays at the callers. `day-window.spec.ts` checks all three
+paths at local midnight, leap/month/year boundaries and the actual Tijuana
+clock changes, including its 23-hour and 25-hour days. Invalid dates and zones
+still fail instead of being assigned to another day.
+
 ## A month too wide for a phone
 
 Analytics' four tiles sat in `repeat(2, 1fr)` on a phone, and a plain `1fr`
