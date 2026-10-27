@@ -90,6 +90,7 @@ export const es: Messages = {
       "written_off": "canceló la deuda de una mesa",
       requested: "pidió cancelar la cuenta de una mesa",
       rejected: "rechazó cancelar la cuenta de una mesa",
+      refund_failed: "no pudo completar la devolución de un cobro doble: el cliente no recibió su dinero",
     },
     discount: {
       discounted: "aplicó una promoción a una cuenta",
@@ -101,6 +102,7 @@ export const es: Messages = {
       offline_recovered: "aprobó una venta guardada",
       cancelled: "canceló un pedido",
       refunded: "reembolsó un pedido",
+      refund_failed: "no pudo completar un reembolso: el cliente no recibió su dinero",
     },
     settings: {
       updated: "cambió un ajuste",

@@ -51,6 +51,8 @@ export type LogAction =
   | "rejected"
   | "cancelled"
   | "refunded"
+  /** Stripe failed a refund it first reported as succeeded. */
+  | "refund_failed"
   /** A manager approved a receipt already collected while offline. */
   | "offline_recovered"
   | "paused"

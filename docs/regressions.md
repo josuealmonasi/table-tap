@@ -4542,3 +4542,22 @@ removing a part's index import each failed that invariant, then passed restored.
   With takings off the list, the list is seeded once again and realtime keeps
   it current. `orders-takings.react-component.spec.tsx` fails with the
   replacement put back, and also pins audit M's MX$200-for-MX$100.
+
+### Audit O (Codex): a refund Stripe failed later stayed shown as returned
+
+- **Finding 1.** A card refund can fail days after Stripe first says
+  succeeded (a closed card, a bank that returns it). Nothing listened, so the
+  diner's money stayed shown as returned on Bills, in the corte and to the
+  deletion checks. The Connect webhook now handles `refund.failed`,
+  `refund.updated` and `charge.refund.updated`. `reverse_failed_refund`
+  returns the row to the failed state the app already offers to retry, and
+  logs `refund_failed` for the owner. **The Stripe endpoint must be
+  subscribed to those events** (external setup), or nothing arrives.
+- **Finding 2.** #546 made the fee target a high-water mark, which a failed
+  refund legitimately lowers. The reversal clears every fee target on the
+  charge, so the surviving refund re-verifies against the lower target
+  instead of staying pending and blocking deletion.
+- `provider-failure.spec.ts`. Replayed on dev Postgres, rolled back, in MX$
+  and US$: failed and retryable (attempt 2), a repeat reopens nothing, the
+  sibling re-verifies 300 → 30 and is done, the refunds-due row is owed and
+  retryable again.

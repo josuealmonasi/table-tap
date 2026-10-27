@@ -445,7 +445,15 @@ dishes on a bill the restaurant has just cancelled.
   keeps the row visible with a fee-only retry, and is recovered after a Bills
   response. Final verification saves the cumulative target and compares it with
   the returned fee under the money lock; a manual refund between provider reads
-  keeps any new remainder pending for the next recovery. Its exact fee request
+  keeps any new remainder pending for the next recovery. The target and the
+  returned fee only rise, so an older snapshot can't finish a row a newer one
+  left owed. They fall only when Stripe fails a refund it had reported as
+  succeeded. The Connect webhook (`refund.failed`, `refund.updated`,
+  `charge.refund.updated`) calls `reverse_failed_refund`, which puts the order
+  refund or refunds-due row back in the state an immediate failure leaves it
+  in (failed, owed, retryable) and clears every fee target on that charge so
+  Stripe re-verifies it. The owner sees `refund_failed` in the activity log.
+  Its exact fee request
   is saved before Stripe is called and provider
   metadata recovers lost responses after idempotency expires. The obligation
   keeps the verified charge's currency and account from its frozen checkout;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readStripeEvent } from "@/lib/stripe-webhook";
 import { abandonCheckout, settleCheckout } from "@/lib/checkout-settle";
 import { syncConnectAccount } from "@/lib/stripe-connect";
+import { REFUND_FAILURE_EVENTS, reopenFailedRefund } from "@/lib/refunds/provider-failure";
 import type Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -41,6 +42,13 @@ export async function POST(req: NextRequest) {
   // again from Stripe. Subscribe this endpoint to `account.updated` too.
   if (event!.type === "account.updated" && event!.account) {
     await syncConnectAccount(event!.account);
+  }
+
+  // A refund Stripe reported as succeeded and then failed. Subscribe this
+  // endpoint to `refund.failed` and `refund.updated` too; without them the
+  // diner's money stays shown as returned.
+  if (REFUND_FAILURE_EVENTS.has(event!.type)) {
+    await reopenFailedRefund(event!.data.object as Stripe.Refund, event!.account);
   }
 
   return NextResponse.json({ received: true });
