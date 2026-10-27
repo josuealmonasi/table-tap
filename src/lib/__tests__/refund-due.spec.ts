@@ -6,17 +6,21 @@ const logged: { action: string; detail?: string | null }[] = [];
 vi.mock("@/lib/activity-log", () => ({
   logEvent: async (e: { action: string; detail?: string | null }) => void logged.push(e),
 }));
-vi.mock("@/lib/refunds/fee", () => ({ syncReturnedFee: vi.fn(async () => {}) }));
+vi.mock("@/lib/refunds/fee", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/lib/refunds/fee")>();
+  return { syncReturnedFee: vi.fn(actual.syncReturnedFee) };
+});
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: feeVerification }) }));
 vi.mock("@/lib/stripe", () => ({ stripe: {} }));
 
 import { corteFrom } from "@/lib/corte";
 import { refundDue, refundDueLogDetail } from "@/lib/refund-due";
 
-import { due, fakeDb, fakeStripe, stripeError } from "./refund-due-fixtures";
+import { due, fakeDb, fakeStripe, feeVerification, stripeError } from "./refund-due-fixtures";
 
 beforeEach(() => {
   logged.length = 0;
-  vi.mocked(syncReturnedFee).mockReset().mockResolvedValue(undefined);
+  vi.clearAllMocks();
 });
 
 describe("refunding a payment taken twice", () => {

@@ -3,15 +3,22 @@ import type Stripe from "stripe";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { reconcileDueFee } from "../due-recovery";
 
-vi.mock("@/lib/refunds/fee", () => ({ syncReturnedFee: vi.fn(async () => {}) }));
+const { verify } = vi.hoisted(() => ({ verify: vi.fn() }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: verify }) }));
 const attempt = { id: "customer-attempt", attempt_no: 1, idempotency_key: "customer-key", amount: 100,
   stripe_account_id: "acct_original", stripe_payment_intent: "pi_original", stripe_refund_id: "re_customer" };
 interface Request { fee_id: string; amount: number; attempt_no?: number }
 
 function recovery(currency = "MXN") {
   const row = { fee_request: null as Request | null, fee_request_history: [] as Request[],
-    fee_verification_pending: false, fee_target_cents: null as number | null, fee_reconciled_at: null };
+    fee_verification_pending: false, fee_target_cents: null as number | null, fee_reconciled_at: null as string | null };
   const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
+    if (name === "verify_refunded_platform_fee") {
+      row.fee_target_cents = Number(args.p_target);
+      row.fee_verification_pending = Number(args.p_cents) < Number(args.p_target);
+      row.fee_reconciled_at = row.fee_verification_pending ? null : "2026-10-27T12:00:00Z";
+      return { data: null, error: null };
+    }
     if (name === "start_refund_due_fee") row.fee_request ??= { fee_id: String(args.p_fee), amount: Number(args.p_amount) };
     if (name === "advance_refund_due_fee") {
       if (JSON.stringify(args.p_previous) !== JSON.stringify(row.fee_request)) return { data: null, error: null };
@@ -21,9 +28,11 @@ function recovery(currency = "MXN") {
     }
     return { data: row.fee_request, error: null };
   });
+  verify.mockImplementation(rpc);
   const db = { rpc, from: () => {
     const q = { update: (patch: object) => { Object.assign(row, patch); return q; },
-      eq: () => q, not: () => q, then: (resolve: (result: object) => void) => resolve({ error: null }) };
+      select: () => q, eq: () => q, not: () => q, maybeSingle: async () => ({ data: row, error: null }),
+      then: (resolve: (result: object) => void) => resolve({ error: null }) };
     return q;
   } } as unknown as ReturnType<typeof createAdminClient>;
   let returned = 0;
@@ -39,7 +48,7 @@ function recovery(currency = "MXN") {
   const intent = vi.fn(async () => ({ currency: currency.toLowerCase(),
     latest_charge: { amount: 10000, application_fee: "fee_original" as string | null } }));
   const client = { paymentIntents: { retrieve: intent }, refunds: {
-    list: () => (async function* () { yield { amount: customerReturned, status: "succeeded" }; })(),
+    list: () => (async function* () { yield { id: "re_customer", amount: customerReturned, status: "succeeded" }; })(),
   }, applicationFees: { retrieve: fee, listRefunds: feeList, createRefund: feeRefund } } as unknown as Stripe;
   return { row, rpc, db, client, intent, feeRefund, feeList, fee,
     separatelyReturn: (cents: number) => { returned += cents; },
