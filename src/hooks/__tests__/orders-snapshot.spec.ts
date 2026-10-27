@@ -19,7 +19,7 @@ vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string) => key }));
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => vi.fn() }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: vi.fn() }));
 const { useRestaurantOrders } = await import("@/hooks/useRestaurantOrders");
-const render = (initial: BoardOrder[]) => { cursor = 0; return useRestaurantOrders("r1", initial); };
+const useBoard = (initial: BoardOrder[]) => { cursor = 0; return useRestaurantOrders("r1", initial); };
 beforeEach(() => { slots.length = 0; vi.stubGlobal("localStorage", { getItem: () => null, setItem: vi.fn(), removeItem: vi.fn() }); });
 
 it("audit M, 2: a refreshed snapshot replaces the list, so a completed order is not counted twice", () => {
@@ -27,9 +27,9 @@ it("audit M, 2: a refreshed snapshot replaces the list, so a completed order is 
   // the board; the list must drop it too, or today's takings read MX$200.
   const completed = { id: "o1", status: "completed", paid: true, total: 100 } as unknown as BoardOrder;
   const first = [completed];
-  render(first);
-  expect(render(first).orders).toEqual([completed]);
+  useBoard(first);
+  expect(useBoard(first).orders).toEqual([completed]);
   const refreshed: BoardOrder[] = [];
-  render(refreshed);
-  expect(render(refreshed).orders).toEqual([]);
+  useBoard(refreshed);
+  expect(useBoard(refreshed).orders).toEqual([]);
 });
