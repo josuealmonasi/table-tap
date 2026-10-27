@@ -7,6 +7,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { moveRestaurantPlan } from "@/lib/admin-plan";
 import { billingFailure, withRestaurantBilling } from "@/lib/billing-operation";
 import { endRestaurantBilling } from "@/lib/billing-delete";
+import { getLocale } from "@/lib/i18n/server";
+import { dateLocale } from "@/lib/format";
 
 export const runtime = "nodejs";
 
@@ -32,6 +34,15 @@ async function deleteRestaurant(req: NextRequest) {
         p_restaurant: id, p_check_only: checkOnly,
       });
       if (error || !data) return await apiError("apiErr.restaurantDelete", 500);
+      if (data.outcome === "refundWindow") {
+        const unlock = typeof data.unlock_at === "string" ? new Date(data.unlock_at) : null;
+        if (!unlock || !Number.isFinite(unlock.getTime())) return await apiError("apiErr.restaurantDelete", 500);
+        const date = new Intl.DateTimeFormat(dateLocale(await getLocale()), {
+          year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit",
+          timeZone: "UTC", timeZoneName: "short",
+        }).format(unlock);
+        return await apiError("apiErr.restaurantDeleteRefundWindow", 409, { date }, { unlock_at: data.unlock_at });
+      }
       const errors: Record<string, string> = {
         refund: "apiErr.restaurantDeleteRefund", refundDue: "apiErr.restaurantDeleteRefundDue",
         provider: "apiErr.restaurantDeleteProvider",
