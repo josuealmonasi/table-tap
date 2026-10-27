@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import CashChange from "@/components/dashboard/CashChange";
 import { Modal } from "@/components/ui/Modal";
 import TipPicker from "@/components/customer/TipPicker";
 import { useT } from "@/lib/i18n/context";
@@ -225,6 +226,7 @@ export default function TableCalculator({
             onCustomTip={setTipCustom}
           />
           {tipTooLarge && <p className="tt-field-error" role="alert">{t("tip.tooLarge", { max: formatMoney(amount, currency) })}</p>}
+          <CashChange amount={taken.amount} currency={currency} />
 
           <div className="tt-bill-actions">
             <button

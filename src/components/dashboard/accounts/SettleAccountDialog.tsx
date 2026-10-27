@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import CashChange from "@/components/dashboard/CashChange";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
@@ -86,6 +87,7 @@ export default function SettleAccountDialog({
       </div>
       <p className="tt-account-settle-total">{t("accounts.settleTotal", { amount: money(owed + safeTip) })}</p>
       {tip > owed && <p className="tt-field-error" role="alert">{t("tip.tooLarge", { max: money(owed) })}</p>}
+      <CashChange amount={owed + safeTip} currency={currency} />
       {error && <p className="tt-field-error" role="alert">{error}</p>}
       <div className="tt-bill-actions">
         <button type="button" className="tt-btn tt-btn-primary tt-btn-lg" style={{ width: "100%" }} disabled={busy || tip > owed} onClick={() => void collect("cash")}>

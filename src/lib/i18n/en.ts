@@ -1653,6 +1653,12 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     anchorage: "Anchorage",
     honolulu: "Honolulu",
   },
+  change: {
+    received: "Received",
+    exact: "Exact",
+    give: "Change: {amount}",
+    short: "{amount} short",
+  },
   common: {
     charactersLeft: "{count} characters left",
     discardTitle: "Discard your changes?",
