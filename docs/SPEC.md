@@ -472,6 +472,20 @@ dishes on a bill the restaurant has just cancelled.
   `apply_verified_platform_fee` only via the epoch-checked entry points
   (`verify_refunded_platform_fee_v2`, `save_refund_due_fee_target`). The kept
   #548 verifier refuses once a charge has an epoch.
+- **Our fee given back is one ledger per charge (`fee_returns`).** Duplicate-
+  charge recovery and order-refund recovery both run the one charge reconciler
+  (`src/lib/refunds/charge-reconciler.ts`). It reads the charge revision, reads
+  Stripe (charge, fee, every refund), verifies, then prepares, claims, sends
+  and records a fee return. Each step refuses a stale revision. A sent request
+  is only ever resent with the same key, within Stripe's idempotency window;
+  past it the request is `unresolved` until positive metadata evidence settles
+  it, and absence never authorises a replacement. Successful refund events
+  (`refund.created`, `refund.updated`, `charge.refunded`) enqueue the charge
+  in `fee_reconcile_queue` before the webhook answers. An ack removes only the
+  generation it reconciled. This is how a refund the restaurant made by hand in
+  Stripe gets our fee share back automatically, as the terms promise.
+  Duplicate-charge refunds record every contributing refund in
+  `refund_due_coverage`, and complete only when the active ones pay it all.
   Its exact fee request
   is saved before Stripe is called and provider
   metadata recovers lost responses after idempotency expires. The obligation
