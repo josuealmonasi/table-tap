@@ -180,9 +180,15 @@ ledger received since the restaurant's midnight, net of completed returns:
 the same number the corte signs for (`collectedToday`, built from `corteFrom`).
 It is never summed from the board's order list, so partial collections, split
 shares and old account debt settled today all count, and a refresh can't count
-an order twice. The browser can't read `payments`, so the board asks the server
-again when realtime shows an order becoming paid. The live list is seeded once
-and kept current by realtime; a refresh never replaces it.
+an order twice. The browser can't read `payments`, so a manager-only GET at
+`/api/orders/takings` reads the member's own restaurant, never a supplied id.
+SWR starts with the page's figure, revalidates every 30 seconds while visible,
+and invalidates on live paid, cancelled or total changes and after the board's
+own collection or cancellation. Kitchen, waiter and cashier never request it;
+the route also refuses them. Refreshed order/ticket snapshots repair missed
+inserts, stages, station changes and completions. The page stamps the start of
+its read; rows received afterwards and pending optimistic or queued moves win
+over that snapshot, so a slow refresh cannot erase newer work.
 
 An order paid for while it is `ready` ("Listos") moves to `completed` by
 itself, whichever way the money came (card, cash, the till, a split's last

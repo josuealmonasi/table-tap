@@ -20,10 +20,12 @@ import { useBoardStation } from "@/hooks/useBoardStation";
 import { useRefreshWhenPaid } from "@/hooks/useRefreshWhenPaid";
 import { boardOrderCode, hasOrderMoney, isPreparationOrder, type BoardOrder, type BoardRequest } from "@/lib/kitchen-ticket";
 import StationFilter from "./StationFilter";
+import OrdersTakings, { ordersTakingsChanged } from "./OrdersTakings";
 
 interface OrdersBoardProps {
   restaurant: Pick<Restaurant, "id" | "currency">;
   initialOrders: BoardOrder[];
+  snapshotReadAt?: number;
   kitchen?: boolean;
   initialRequests: BoardRequest[];
   /** Cancelling triggers refunds, so only the owner gets the button. */
@@ -64,6 +66,7 @@ interface OrdersBoardProps {
 export default function OrdersBoard({
   restaurant,
   initialOrders,
+  snapshotReadAt = 0,
   initialRequests,
   canCancel,
   canMove,
@@ -81,10 +84,14 @@ export default function OrdersBoard({
     restaurant.id,
     initialOrders,
     kitchen,
+    snapshotReadAt,
   );
   const confirm = useConfirm();
   const toast = useToast();
-  useRefreshWhenPaid(orders, showRevenue);
+  useRefreshWhenPaid(orders, showRevenue && !kitchen, restaurant.id);
+  function refreshTakings(): void {
+    if (showRevenue && !kitchen) ordersTakingsChanged(restaurant.id);
+  }
 
   const [station, setStation] = useBoardStation(restaurant.id, hasStations);
   // This screen's station sees only orders it makes something in, each in
@@ -135,6 +142,7 @@ export default function OrdersBoard({
       });
       if (!ok) return;
       const result = await cancelOrder(order.id);
+      if (!result) refreshTakings();
       toast(result?.error ?? words.done, result ? "error" : undefined);
       if (!result?.stale) return;
       // Collection can win while the dialog is open. Ask again with its new
@@ -160,10 +168,10 @@ export default function OrdersBoard({
               <strong className="tt-accent">{activeCount}</strong>
               <span>{t("orders.active")}</span>
             </div>
-            {showRevenue && (
+            {showRevenue && !kitchen && (
               <div className="tt-stat">
                 <strong style={{ color: "var(--tt-success)" }}>
-                  {formatMoney(collectedToday, restaurant.currency)}
+                  <OrdersTakings restaurantId={restaurant.id} currency={restaurant.currency} initialCollected={collectedToday} />
                 </strong>
                 <span>{t("orders.today")}</span>
               </div>
@@ -183,7 +191,7 @@ export default function OrdersBoard({
           canApprove={canApprove}
           initialRequests={initialRequests}
           currency={restaurant.currency}
-          onSettled={() => router.refresh()}
+          onSettled={() => { refreshTakings(); router.refresh(); }}
           // Only for whoever carries the plate. The pass put it there, so a
           // chip telling the kitchen their own food is ready is one they learn
           // to ignore — and then they read past the table asking for a waiter

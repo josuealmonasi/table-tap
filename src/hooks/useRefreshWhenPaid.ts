@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { ordersTakingsChanged } from "@/components/dashboard/OrdersTakings";
 import { hasOrderMoney, type BoardOrder } from "@/lib/kitchen-ticket";
 
 /** Long enough that a table paying four shares asks the server once. */
@@ -9,19 +9,23 @@ export const PAID_REFRESH_MS = 1500;
 
 /**
  * Today's takings come from the payments ledger, which a browser cannot read,
- * so the board cannot add a payment up itself. When realtime shows an order
- * becoming paid (a diner's card, another till, an account settled), it asks
- * the server for the day's figure again. Its own collections already refresh.
+ * so the board cannot add a payment up itself. Realtime money changes ask for
+ * the figure again; polling also catches partial collections, split shares and
+ * returns that leave orders.paid untouched. Its own collections invalidate it.
  */
-export function useRefreshWhenPaid(orders: BoardOrder[], enabled: boolean): void {
-  const router = useRouter();
-  const paid = orders.filter(o => hasOrderMoney(o) && o.paid).map(o => o.id).sort().join(",");
-  const seen = useRef(paid);
+export function useRefreshWhenPaid(orders: BoardOrder[], enabled: boolean, restaurantId = ""): void {
+  // Only what moves money: a stage change in the kitchen is not a reason to
+  // ask the server, and on a busy night it would be every few seconds.
+  const money = orders.filter(hasOrderMoney)
+    .map(o => `${o.id}:${o.paid}:${o.status === "cancelled"}:${o.total}`).sort().join(",");
+  const seen = useRef(money);
 
   useEffect(() => {
-    if (!enabled || paid === seen.current) return;
-    seen.current = paid;
-    const timer = setTimeout(() => router.refresh(), PAID_REFRESH_MS);
+    if (!enabled || money === seen.current) return;
+    const timer = setTimeout(() => {
+      seen.current = money;
+      ordersTakingsChanged(restaurantId);
+    }, PAID_REFRESH_MS);
     return () => clearTimeout(timer);
-  }, [enabled, paid, router]);
+  }, [enabled, money, restaurantId]);
 }
