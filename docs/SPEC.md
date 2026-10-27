@@ -434,7 +434,10 @@ dishes on a bill the restaurant has just cancelled.
   and our fee on it returned. Customer completion stays independent of fee
   completion: a failed fee return or lookup leaves `fee_reconciled_at` empty,
   keeps the row visible with a fee-only retry, and is recovered after a Bills
-  response. Its exact fee request is saved before Stripe is called and provider
+  response. Final verification saves the cumulative target and compares it with
+  the returned fee under the money lock; a manual refund between provider reads
+  keeps any new remainder pending for the next recovery. Its exact fee request
+  is saved before Stripe is called and provider
   metadata recovers lost responses after idempotency expires. The obligation
   keeps the verified charge's currency and account from its frozen checkout;
   older rows are verified from checkout or Stripe evidence where possible and

@@ -4449,3 +4449,30 @@ that never will. `qr.spec.ts` fails on a static import.
   `if (theirTable)`, so a failed lookup skipped them silently. They build
   their own tables, so they now always run. A failed read, or a neighbour
   with no table, fails the check.
+
+## Audit M finding 1 — fee recovery and its final provider check must agree
+
+| Rule | The bug it came from | What checks it |
+|---|---|---|
+| A duplicate-charge fee completes only when the final verified target is returned | A manual MX$90 / US$90 refund between provider reads raised the fee target from 30 to 300 cents, but recovery hid the remaining 270 cents and deletion let it through | `fee-recovery-target.spec.ts` in MXN and USD; `fee-recovery.spec.ts` |
+
+Recovery used to verify the provider again, then overwrite that result with an
+unconditional completion timestamp. `verify_refunded_platform_fee` now saves
+the due row's final cumulative target, pending flag and completion time under
+the same money lock as deletion. Only completed customer refunds seen in the
+provider snapshot are covered; a verified charge without a fee records zero.
+A short return clears completion and stays visible to Bills recovery. The caller
+reads this saved outcome instead of deciding completion from its earlier target.
+
+The failing-first MXN and USD cases reproduce a 100 charge, 3 fee and 10 customer
+refund, followed by another 90 customer refund during fee recovery. They now keep
+300 cents targeted and 30 returned pending, then return the remaining 270 exactly
+once with the existing numbered request and Stripe key. Existing lost-response,
+concurrent-retry and unknown-request tests remain covered; failed final writes
+and unreadable outcomes cannot report success.
+
+Claude applies the idempotent replacement of
+`verify_refunded_platform_fee(uuid, text, int, int, text[])` from `schema.sql`;
+no signature, grant or drop-list change is needed. Then run the shared-database
+gates and check that Bills retains the pending fee and deletion refuses it until
+recovery finishes. No shared database or provider was contacted for this fix.

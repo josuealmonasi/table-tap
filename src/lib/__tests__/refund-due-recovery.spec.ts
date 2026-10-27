@@ -1,11 +1,11 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type Stripe from "stripe";
-import { due, fakeDb, fakeStripe } from "./refund-due-fixtures";
+import { due, fakeDb, fakeStripe, feeVerification } from "./refund-due-fixtures";
 import { refundDue } from "@/lib/refund-due";
 import { verifyDueCurrency } from "@/lib/refunds/due-recovery";
 
 vi.mock("@/lib/activity-log", () => ({ logEvent: vi.fn() }));
-vi.mock("@/lib/refunds/fee", () => ({ syncReturnedFee: vi.fn(async () => {}) }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: feeVerification }) }));
 vi.mock("@/lib/stripe", () => ({ stripe: {} }));
 beforeEach(() => vi.clearAllMocks());
 

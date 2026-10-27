@@ -6221,6 +6221,14 @@ begin
     where restaurant_id = p_restaurant and stripe_payment_intent = p_intent
       and status = 'succeeded' and source = 'stripe'
       and (p_refunds is null or stripe_refund_id = any(p_refunds));
+  -- Duplicate-charge recovery must use this final snapshot too. A manual
+  -- refund between provider reads can leave more of our fee still owed.
+  update refunds_due set fee_target_cents = p_target,
+    fee_verification_pending = (p_cents < p_target),
+    fee_reconciled_at = case when p_cents >= p_target then now() end
+    where restaurant_id = p_restaurant and stripe_payment_intent = p_intent
+      and refunded_at is not null
+      and (p_refunds is null or stripe_refund_id = any(p_refunds));
 end;
 $$;
 revoke all on function public.verify_refunded_platform_fee(uuid, text, int, int, text[]) from public, anon, authenticated;

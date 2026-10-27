@@ -13,18 +13,32 @@ export interface Row {
   currency?: string | null;
   stripe_account_id?: string | null;
   fee_reconciled_at?: string | null;
+  fee_verification_pending?: boolean;
+  fee_target_cents?: number;
   fee_request?: { fee_id: string; amount: number } | null;
 }
+
+export const feeVerification = vi.fn();
 
 /** Just enough of the admin client for the two tables this touches. */
 export function fakeDb(rows: Row[], stripeAccount: string | null = "acct_1") {
   let attempt: { id: string; attempt_no: number; idempotency_key: string; provider_status?: string; stripe_refund_id?: string } | null = null;
-  return {
-    rpc: async (name: string, args: Record<string, string>) => {
+  const db = {
+    rpc: async (name: string, args: Record<string, unknown>) => {
+      if (name === "verify_refunded_platform_fee") {
+        const refunds = args.p_refunds;
+        for (const row of rows) if (row.restaurant_id === args.p_restaurant && row.stripe_payment_intent === args.p_intent
+          && row.refunded_at && (refunds === null || Array.isArray(refunds) && refunds.includes(row.stripe_refund_id))) {
+          row.fee_target_cents = Number(args.p_target);
+          row.fee_verification_pending = Number(args.p_cents) < Number(args.p_target);
+          row.fee_reconciled_at = row.fee_verification_pending ? null : "2026-10-27T12:00:00Z";
+        }
+        return { data: null, error: null };
+      }
       const row = rows.find(r => r.id === args.p_due && r.restaurant_id === args.p_restaurant);
       if (!row) return { data: null, error: null };
       if (name === "start_refund_due_fee") {
-        row.fee_request ??= { fee_id: args.p_fee, amount: Number(args.p_amount) };
+        row.fee_request ??= { fee_id: String(args.p_fee), amount: Number(args.p_amount) };
         return { data: row.fee_request, error: null };
       }
       if (name === "start_refund_due_attempt") {
@@ -37,7 +51,7 @@ export function fakeDb(rows: Row[], stripeAccount: string | null = "acct_1") {
         return { data: { ...attempt, amount: row.amount, stripe_account_id: row.stripe_account_id,
           stripe_payment_intent: row.stripe_payment_intent }, error: null };
       }
-      if (attempt?.id !== args.p_attempt) return { data: false, error: null };
+      if (!attempt || attempt.id !== args.p_attempt) return { data: false, error: null };
       Object.assign(attempt, { provider_status: args.p_status, stripe_refund_id: args.p_refund });
       const marked = args.p_status === "succeeded" && !row.refunded_at;
       if (marked) Object.assign(row, { refunded_at: "2026-10-20T14:00:00Z", refunded_by: args.p_actor, stripe_refund_id: args.p_refund });
@@ -81,7 +95,9 @@ export function fakeDb(rows: Row[], stripeAccount: string | null = "acct_1") {
       };
       return q;
     },
-  } as never;
+  };
+  feeVerification.mockImplementation(db.rpc);
+  return db as never;
 }
 
 export const due = (over: Partial<Row> = {}): Row => ({

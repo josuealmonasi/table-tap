@@ -46,10 +46,12 @@ export async function reconcileDueFee(db: Db, restaurant: string, id: string, at
       });
     if (!returned) return false;
     await syncReturnedFee(client, restaurant, attempt.stripe_payment_intent, attempt.stripe_account_id);
-    const { error } = await db.from("refunds_due").update({ fee_reconciled_at: new Date().toISOString(), fee_verification_pending: false })
-      .eq("restaurant_id", restaurant).eq("id", id).not("refunded_at", "is", null);
-    if (error) throw new Error(`Could not record the returned fee: ${error.message}`);
-    return true;
+    // A manual refund can raise the target after returnOurFee's snapshot.
+    // Only the final verification under the money lock can finish this row.
+    const { data, error } = await db.from("refunds_due").select("fee_reconciled_at, fee_verification_pending")
+      .eq("restaurant_id", restaurant).eq("id", id).maybeSingle();
+    if (error) throw new Error(`Could not read the verified fee outcome: ${error.message}`);
+    return Boolean(data?.fee_reconciled_at && data.fee_verification_pending === false);
   } catch (error) {
     console.error("refund due: could not reconcile the returned fee", error);
     return false;
