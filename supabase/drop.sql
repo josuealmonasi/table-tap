@@ -8,6 +8,8 @@ drop function if exists public.reverse_failed_refund(uuid, text, text, text);
 drop function if exists public.reverse_failed_refund_v2(uuid, text, text, text, int, text);
 drop function if exists public.verify_refunded_platform_fee_v2(uuid, text, int, int, text[], int);
 drop function if exists public.refund_fee_epoch(uuid, text);
+drop function if exists public.apply_verified_platform_fee(uuid, text, int, int, text[]);
+drop function if exists public.save_refund_due_fee_target(uuid, uuid, int, int);
 drop function if exists public.refund_fee_proven_clear(uuid, text);
 drop table if exists table_session_members cascade;
 drop function if exists public.recount_stock(uuid, uuid, int, int, int) cascade;

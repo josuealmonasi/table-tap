@@ -38,6 +38,18 @@ describe("refunding a payment taken twice", () => {
     expect(logged).toHaveLength(1);
   });
 
+  it("audit Q 2: a stale success the database refused, because Stripe since failed it, is never reported as refunded", async () => {
+    const rows = [due()];
+    const db = fakeDb(rows) as unknown as { rpc: (name: string, args: Record<string, unknown>) => Promise<unknown> };
+    const rpc = db.rpc.bind(db);
+    // finish_refund_due_attempt records the known failure and returns false.
+    db.rpc = async (name, args) => name === "finish_refund_due_attempt" ? { data: false, error: null } : rpc(name, args);
+    const { client } = fakeStripe();
+    expect(await refundDue(db as never, "r1", "d1", "manager", client)).toMatchObject({ ok: false, error: "apiErr.refundPending", status: 409 });
+    expect(rows[0].refunded_at).toBeNull();
+    expect(logged).toHaveLength(0);
+  });
+
   it("keeps a pending provider refund owed instead of claiming it completed", async () => {
     const rows = [due()];
     const { client } = fakeStripe({ create: async () => ({ id: "re_pending", status: "pending" }) });

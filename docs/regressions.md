@@ -4660,3 +4660,26 @@ matching routes, without calling arrange or any request callback. The cloudprnt
 race case now names its route directly from the printer fixture instead of an
 arrange-only variable. Its old delivery token still comes from arrange and its
 reprint checks stay intact. The runnable inventory remains 307 cases.
+
+### Audit Q (Codex): four ways a failed refund could still read as returned
+
+- **Finding 1.** Refunds completed before attempts existed have no attempt row,
+  so #551's reversal never found them. A failure left `refunded_at` set, and
+  deletion could pass with MX$100 owed. Rows without attempts are now matched
+  by their own refund id.
+- **Finding 2.** A failure that arrived before the attempt knew its refund id
+  made both finish functions refuse everything, so retries reused that attempt
+  for ever. A stale success also left `refundDue` reporting "refunded". The
+  finish functions now record the known failure on the attempt and don't
+  complete it: a retry opens a new attempt. `finish_refund_operation` returns
+  false for it, and `refundDue` answers `refundPending` unless the row really
+  completed.
+- **Finding 3.** #548's unversioned verifier stayed callable without an epoch.
+  It now refuses once a charge has seen a failure. The fee write itself lives
+  in `apply_verified_platform_fee`, which is granted to no one.
+- **Finding 4.** A recovery saved its provisional fee target with a direct
+  update. It now goes through `save_refund_due_fee_target`, which is
+  epoch-checked and only ever raises the target.
+- `provider-failure.spec.ts` and `refund-due.spec.ts`. The `refundDue` test
+  fails without its fix. Replayed on dev Postgres (rolled back), in MX$ and
+  US$, all four paths hold.
