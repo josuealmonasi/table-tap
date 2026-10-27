@@ -69,3 +69,59 @@ export function apiCaseFiles(): string[] {
 export const listed = (file: string): string => file === "api-cases.mjs"
   ? apiCaseFiles().map(read).join("\n")
   : read(path.join("scripts", file));
+
+/** Check registration as well as paths: two groups can exercise the same route. */
+export function apiCaseRegistrationErrors(readSource = read): string[] {
+  const files = ["scripts/api-cases.mjs", ...walkAll("scripts/api-cases").filter(f => f.endsWith(".mjs"))];
+  const options = { allowJs: true, noResolve: true, noLib: true };
+  const host = ts.createCompilerHost(options);
+  const original = host.getSourceFile;
+  host.getSourceFile = (name, ...args) => files.includes(name)
+    ? ts.createSourceFile(name, readSource(name), ts.ScriptTarget.Latest, true, ts.ScriptKind.JS)
+    : original(name, ...args);
+  const program = ts.createProgram(files, options, host);
+  const checker = program.getTypeChecker();
+  const imported = new Map<string, Set<string>>();
+  const errors: string[] = [];
+  const index = ts.createSourceFile(files[0], readSource(files[0]), ts.ScriptTarget.Latest, true);
+  const assembly = index.statements.find(s => ts.isFunctionDeclaration(s) && s.name?.text === "cases");
+  const returned = assembly && ts.isFunctionDeclaration(assembly)
+    ? assembly.body?.statements.find(ts.isReturnStatement)?.expression : undefined;
+  const spread = new Set(returned && ts.isArrayLiteralExpression(returned)
+    ? returned.elements.filter(ts.isSpreadElement).map(element => element.expression)
+      .filter(ts.isCallExpression).map(call => call.expression.getText(index)) : []);
+
+  for (const file of files) {
+    const source = ts.createSourceFile(file, readSource(file), ts.ScriptTarget.Latest, true);
+    for (const statement of source.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+      const target = path.normalize(path.join(path.dirname(file), statement.moduleSpecifier.text));
+      if (!target.startsWith("scripts/api-cases/")) continue;
+      const bindings = statement.importClause?.namedBindings;
+      if (!bindings || !ts.isNamedImports(bindings)) {
+        errors.push(`${file}: use named imports for ${target}`);
+        continue;
+      }
+      const names = imported.get(target) ?? new Set<string>();
+      imported.set(target, names);
+      for (const binding of bindings.elements) {
+        names.add((binding.propertyName ?? binding.name).text);
+        if (file === files[0] && !spread.has(binding.name.text)) {
+          errors.push(`${binding.name.text}: imported factory is not spread into cases`);
+        }
+      }
+    }
+  }
+  for (const file of files.slice(1)) {
+    // The checker includes variables, aliases and re-exports, not just functions.
+    // Use the supplied source too, so sabotage tests need no writes to held parts.
+    const source = program.getSourceFile(file)!;
+    const symbol = checker.getSymbolAtLocation(source);
+    const exports = symbol ? checker.getExportsOfModule(symbol) : [];
+    if (!imported.has(file)) errors.push(`${file}: part is not imported`);
+    for (const entry of exports) {
+      if (!imported.get(file)?.has(entry.name)) errors.push(`${file}: export ${entry.name} is not imported`);
+    }
+  }
+  return errors;
+}

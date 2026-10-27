@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import ts from "typescript";
-import { walkAll, read, listed, apiCaseFiles } from "./helpers";
+import { walkAll, read, listed, apiCaseFiles, apiCaseRegistrationErrors } from "./helpers";
 
 /**
  * The harness only ever checks what is on its lists.
@@ -14,25 +14,35 @@ import { walkAll, read, listed, apiCaseFiles } from "./helpers";
  * while `pnpm layout` reported that everything reads.
  */
 describe("the checks know about every route and screen", () => {
-  it("has an api case for every API route", () => {
+  it("runs every imported case factory and imports every part export", () => {
+    expect(apiCaseRegistrationErrors()).toEqual([]);
+  });
+
+  it("has an api case for every API route", async () => {
     expect(apiCaseFiles().filter(file => file !== "scripts/api-cases.mjs").sort(),
       "API case parts the index does not import").toEqual(
       walkAll("scripts/api-cases").filter(file => file.endsWith(".mjs")).sort(),
     );
-    const cases = listed("api-cases.mjs") + listed("api-admin-cases.mjs");
+    const { cases } = await import("../../../../scripts/api-cases.mjs");
+    const fixture = {
+      restaurant: { id: "restaurant" }, table: { id: "table" },
+      dish: { id: "dish", price: 10 }, printToken: async () => "printer",
+    };
+    const inventory = cases(fixture);
+    const requested = await Promise.all(inventory.map(entry =>
+      typeof entry.path === "function" ? entry.path(fixture) : entry.path,
+    ));
     const routes = walkAll("src/app/api")
       .filter(f => f.endsWith("route.ts"))
       .map(f => f.replace(/^src\/app/, "").replace(/\/route\.ts$/, ""));
 
-    // Every path a case actually requests. Read as text rather than imported,
-    // because the file builds most of them from fixtures that do not exist
-    // until the server is up.
-    const requested = [...cases.matchAll(/path:\s*[`"']([^`"']+)/g)].map(m => m[1]);
+    // Every path a returned case actually requests. A stub supplies IDs without
+    // running arrange, body, check or effect callbacks against a live server.
 
     // A dynamic route is one pattern, not one path: `[token]` is filled in at
-    // request time, and so is a `${...}` in the case that exercises it. Both
-    // sides collapse to "one segment, contents unknown" before they are
-    // compared — otherwise the app's first dynamic route is matched by nothing
+    // request time; the stub fixture fills in the case's path. Route parameters
+    // collapse to "one segment, contents unknown" before they are compared —
+    // otherwise the app's first dynamic route is matched by nothing
     // and waved through, which is the exact hole this test exists to close.
     const segment = "[^/?#]+";
     const covered = (route: string): boolean => {
@@ -46,7 +56,7 @@ describe("the checks know about every route and screen", () => {
             .join("/") +
           "([/?].*)?$",
       );
-      return requested.some(path => pattern.test(path.replace(/\$\{[^}]*\}/g, "x")));
+      return requested.some(path => pattern.test(path));
     };
 
     const missing = routes.filter(r => !covered(r));
