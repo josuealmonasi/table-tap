@@ -4561,3 +4561,18 @@ removing a part's index import each failed that invariant, then passed restored.
   and US$: failed and retryable (attempt 2), a repeat reopens nothing, the
   sibling re-verifies 300 → 30 and is done, the refunds-due row is owed and
   retryable again.
+
+## Audit O finding 5 — imported API groups must reach the runnable list
+
+| Rule | The bug it came from | What checks it |
+|---|---|---|
+| API coverage follows returned cases, and every part export must be registered | Removing the cash spread silently dropped 16 cases while imported route strings still counted as coverage | `invariants/gates.spec.ts`, `api-case-registration.spec.ts` |
+
+Route coverage now builds the real case list once with an in-memory fixture and
+resolves its string and function paths. It never runs fixture setup or case
+callbacks. Import registration also checks every factory against the spreads in
+the returned array and every part export against named imports, including the
+shared helpers. Cash routes overlap other groups, so route coverage alone cannot
+prove those 16 cases still run. Removing a spread, removing an import (even with
+its spread), or adding an unused part export now fails; restoring them passes.
+The runnable inventory remains 303 cases with identical names and order.
