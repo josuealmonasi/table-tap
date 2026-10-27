@@ -76,7 +76,10 @@ export function fakeDb(rows: Row[], stripeAccount: string | null = "acct_1") {
         order: () => q,
         range: (a: number, b: number) => ((from = a), (to = b), q),
         or: (filter: string) => {
-          either = filter.startsWith("currency")
+          const below = /^fee_target_cents\.is\.null,fee_target_cents\.lt\.(\d+)$/.exec(filter);
+          either = below
+            ? r => { const t = (r as { fee_target_cents?: number | null }).fee_target_cents; return t == null || t < Number(below[1]); }
+            : filter.startsWith("currency")
             ? r => !r.currency || Boolean(r.refunded_at && !r.fee_reconciled_at)
             : r => !r.refunded_at || !r.fee_reconciled_at;
           return q;

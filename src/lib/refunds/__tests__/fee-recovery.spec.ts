@@ -31,7 +31,7 @@ function recovery(currency = "MXN") {
   verify.mockImplementation(rpc);
   const db = { rpc, from: () => {
     const q = { update: (patch: object) => { Object.assign(row, patch); return q; },
-      select: () => q, eq: () => q, not: () => q, maybeSingle: async () => ({ data: row, error: null }),
+      select: () => q, eq: () => q, not: () => q, or: () => q, maybeSingle: async () => ({ data: row, error: null }),
       then: (resolve: (result: object) => void) => resolve({ error: null }) };
     return q;
   } } as unknown as ReturnType<typeof createAdminClient>;

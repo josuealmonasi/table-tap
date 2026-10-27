@@ -6209,23 +6209,30 @@ grant execute on function public.sync_refunded_platform_fee(uuid, text, int) to 
 
 create or replace function public.verify_refunded_platform_fee(p_restaurant uuid, p_intent text, p_cents int, p_target int, p_refunds text[] default null)
 returns void language plpgsql security definer set search_path = public as $$
+declare v_returned int;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   if p_cents is null or p_target is null or p_cents < 0 or p_target < 0 then raise exception 'invalid verified fee'; end if;
   if p_refunds is null and p_target <> 0 then raise exception 'missing fee refund evidence'; end if;
   perform public.sync_refunded_platform_fee(p_restaurant, p_intent, p_cents);
+  -- Two verifications can read the provider in one order and take the lock in
+  -- the other. Refunds only add up, so the target and what came back are
+  -- high-water marks: a stale snapshot can never lower the target and finish
+  -- a row whose newer, larger target is still owed (audit N finding 1).
+  select greatest(p_cents, coalesce(max(refunded_cents), 0)) into v_returned from platform_fees
+    where restaurant_id = p_restaurant and stripe_payment_intent = p_intent and status = 'taken';
   -- A refund completed after the provider snapshot must wait for its own check.
-  update refund_operations set fee_target_cents = p_target,
-    fee_verification_pending = (p_cents < p_target),
-    fee_reconciled_at = case when p_cents >= p_target then now() end
+  update refund_operations set fee_target_cents = greatest(coalesce(fee_target_cents, 0), p_target),
+    fee_verification_pending = (v_returned < greatest(coalesce(fee_target_cents, 0), p_target)),
+    fee_reconciled_at = case when v_returned >= greatest(coalesce(fee_target_cents, 0), p_target) then coalesce(fee_reconciled_at, now()) end
     where restaurant_id = p_restaurant and stripe_payment_intent = p_intent
       and status = 'succeeded' and source = 'stripe'
       and (p_refunds is null or stripe_refund_id = any(p_refunds));
   -- Duplicate-charge recovery must use this final snapshot too. A manual
   -- refund between provider reads can leave more of our fee still owed.
-  update refunds_due set fee_target_cents = p_target,
-    fee_verification_pending = (p_cents < p_target),
-    fee_reconciled_at = case when p_cents >= p_target then now() end
+  update refunds_due set fee_target_cents = greatest(coalesce(fee_target_cents, 0), p_target),
+    fee_verification_pending = (v_returned < greatest(coalesce(fee_target_cents, 0), p_target)),
+    fee_reconciled_at = case when v_returned >= greatest(coalesce(fee_target_cents, 0), p_target) then coalesce(fee_reconciled_at, now()) end
     where restaurant_id = p_restaurant and stripe_payment_intent = p_intent
       and refunded_at is not null
       and (p_refunds is null or stripe_refund_id = any(p_refunds));
