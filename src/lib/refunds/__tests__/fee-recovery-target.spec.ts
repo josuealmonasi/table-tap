@@ -23,8 +23,8 @@ function recovery(currency: string) {
       row.fee_target_cents = Math.max(Number(row.fee_target_cents ?? 0), Number(args.p_target));
       return { data: true, error: null };
     }
-    if (name === "start_refund_due_fee") row.fee_request ??= { fee_id: String(args.p_fee), amount: Number(args.p_amount) };
-    if (name === "advance_refund_due_fee") {
+    if (name === "start_refund_due_fee_v2") row.fee_request ??= { fee_id: String(args.p_fee), amount: Number(args.p_amount) };
+    if (name === "advance_refund_due_fee_v2") {
       if (JSON.stringify(row.fee_request) !== JSON.stringify(args.p_previous)) return { data: null, error: null };
       row.fee_request_history.push(row.fee_request!);
       row.fee_request = { fee_id: "fee_original", amount: Number(args.p_target) - Number(args.p_returned),

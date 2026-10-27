@@ -18,7 +18,7 @@ it("finding 2: deletion refuses unknown fee targets for both refund ledgers befo
 });
 
 it("finding 4: advancing an attempt compares the saved request under the money lock and keeps history", () => {
-  const body = fn("advance_refund_due_fee");
+  const body = fn("advance_refund_due_fee_apply");
   expect(body).toContain("lock_restaurant_money(p_restaurant)");
   expect(body).toContain("d.fee_request is distinct from p_previous");
   expect(body).toContain("fee_request_history");

@@ -134,3 +134,24 @@ it("drops everything it adds", () => {
     "drop function if exists public.save_refund_due_fee_target(uuid, uuid, int, int);",
     "drop table if exists refund_failures cascade;", "drop table if exists refund_fee_epochs cascade;"]) expect(drop).toContain(line);
 });
+
+it("audit R 1: the first attempt of a refund completed before attempts existed carries that refund", () => {
+  const start = body("start_refund_attempt");
+  expect(start).toContain("case when a.id is null and o.status = 'succeeded' then o.stripe_refund_id end");
+  expect(start).toContain("case when a.id is null and o.status = 'succeeded' then 'succeeded' end");
+});
+it("audit R 2: a fee request's amount is accepted only under the epoch it was read in; the writes are granted to no one", () => {
+  for (const [fn, args] of [["start_refund_due_fee", "uuid, uuid, text, int"], ["advance_refund_due_fee", "uuid, uuid, jsonb, int, int, int, text"]]) {
+    const v2 = body(`${fn}_v2`);
+    expect(v2.indexOf("lock_restaurant_money(p_restaurant)"), fn).toBeLessThan(v2.indexOf("refund_fee_epoch("));
+    expect(v2, fn).toContain("if p_epoch is null or p_epoch <> public.refund_fee_epoch(");
+    expect(body(fn), fn).toMatch(/if public\.refund_fee_epoch\([^;]*\) > 0 then return null; end if;/);
+    expect(sql, fn).toContain(`revoke all on function public.${fn}_apply(${args}) from public, anon, authenticated;`);
+    expect(sql, fn).not.toMatch(new RegExp(`grant execute on function public\\.${fn}_apply`));
+    expect(sql, fn).toContain(`grant execute on function public.${fn}_v2(${args}, int) to service_role;`);
+  }
+  const recovery = readFileSync("src/lib/refunds/due-recovery.ts", "utf8");
+  expect(recovery).toContain('rpc("advance_refund_due_fee_v2"');
+  expect(recovery).toContain('rpc("start_refund_due_fee_v2"');
+  expect(recovery).not.toMatch(/rpc\("(start|advance)_refund_due_fee"/);
+});

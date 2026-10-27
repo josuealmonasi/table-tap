@@ -43,7 +43,7 @@ export function fakeDb(rows: Row[], stripeAccount: string | null = "acct_1") {
       }
       const row = rows.find(r => r.id === args.p_due && r.restaurant_id === args.p_restaurant);
       if (!row) return { data: null, error: null };
-      if (name === "start_refund_due_fee") {
+      if (name === "start_refund_due_fee_v2") {
         row.fee_request ??= { fee_id: String(args.p_fee), amount: Number(args.p_amount) };
         return { data: row.fee_request, error: null };
       }

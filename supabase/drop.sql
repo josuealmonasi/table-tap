@@ -10,6 +10,10 @@ drop function if exists public.verify_refunded_platform_fee_v2(uuid, text, int, 
 drop function if exists public.refund_fee_epoch(uuid, text);
 drop function if exists public.apply_verified_platform_fee(uuid, text, int, int, text[]);
 drop function if exists public.save_refund_due_fee_target(uuid, uuid, int, int);
+drop function if exists public.start_refund_due_fee_apply(uuid, uuid, text, int);
+drop function if exists public.start_refund_due_fee_v2(uuid, uuid, text, int, int);
+drop function if exists public.advance_refund_due_fee_apply(uuid, uuid, jsonb, int, int, int, text);
+drop function if exists public.advance_refund_due_fee_v2(uuid, uuid, jsonb, int, int, int, text, int);
 drop function if exists public.refund_fee_proven_clear(uuid, text);
 drop table if exists table_session_members cascade;
 drop function if exists public.recount_stock(uuid, uuid, int, int, int) cascade;
