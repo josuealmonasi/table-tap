@@ -4428,3 +4428,12 @@ exercise the actual React hook: products/extras, returned stock, immediate copy,
 click ordering, cross-item saves, overlapping reads, failures, retry readiness and
 editor lifetime. Against the original availability action 11 cases failed; all
 22 cases pass with the row patch and queue.
+
+### The scanner's fallback decoder loads when a camera needs it
+
+jsQR was imported at the top of `useQrCamera`, so every diner's menu carried
+it through `MenuScanButton`, whether or not anybody scanned anything. It now
+loads only with the camera open, on a browser without the native
+`BarcodeDetector` (Safari, the restaurant's iPads). If that load fails, the
+camera stops and the dialog says it cannot read, instead of showing a lens
+that never will. `qr.spec.ts` fails on a static import.

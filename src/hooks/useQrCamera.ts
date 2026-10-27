@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import jsQR from "jsqr";
 
 /** Chromium exposes a native decoder; Safari does not, hence jsQR below. */
 interface Detector {
@@ -69,6 +68,22 @@ export function useQrCamera(
       await video.play().catch(() => undefined);
 
       const native = window.BarcodeDetector ? new window.BarcodeDetector({ formats: ["qr_code"] }) : null;
+      // The fallback decoder is fetched only here: with the camera open, on a
+      // browser without the native one. Imported at the top, every diner's menu
+      // carried it whether or not anybody scanned anything.
+      let jsQR: typeof import("jsqr").default | null = null;
+      if (!native) {
+        try {
+          jsQR = (await import("jsqr")).default;
+        } catch {
+          // The chunk did not load (offline, a deploy in between): say the
+          // camera cannot read, rather than show a lens that never will.
+          stream?.getTracks().forEach(track => track.stop());
+          if (!stopped) setProblem(noCamera);
+          return;
+        }
+        if (stopped) return;
+      }
 
       const read = async (): Promise<void> => {
         if (stopped || !video.videoWidth) {
@@ -83,7 +98,7 @@ export function useQrCamera(
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
           const ctx = canvas.getContext("2d", { willReadFrequently: true });
-          if (ctx) {
+          if (ctx && jsQR) {
             ctx.drawImage(video, 0, 0);
             const px = ctx.getImageData(0, 0, canvas.width, canvas.height);
             text = jsQR(px.data, px.width, px.height)?.data ?? null;
