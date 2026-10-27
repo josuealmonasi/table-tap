@@ -4744,3 +4744,35 @@ replaced by one retirement verdict. Its mocked execution and grant assertions
 failed before the fix and pass after it. Claude applies the revoke and runs
 the real attack with the other shared-database gates; this worker made no
 database or provider calls.
+
+## Audit S findings 1, 3 and 5 — charge fee returns and duplicate-refund coverage
+
+| Rule | The bug it prevents | What checks it |
+|---|---|---|
+| Every fee dispatcher uses one charge revision and immutable request key | Two snapshots return the same share twice, or an absent provider object authorises another unknown POST | `charge-contract.spec.ts`, `fee-recovery.spec.ts`, MXN and USD |
+| Duplicate-payment completion retains every contributing refund and amount | A partial return or a later failure is shown as fully refunded | `coverage-contract.spec.ts`, MXN and USD |
+| Successful Connect refunds enqueue before acknowledgment; recovery acknowledges only its starting generation | A later manual Stripe refund is never repaid, or a newer enqueue is erased | `discovery-contract.spec.ts`, `charge-contract.spec.ts`, MXN and USD |
+
+The duplicate-charge and order-refund paths now share `charge-reconciler.ts`.
+It reads the revision before Stripe, verifies cumulative provider amounts,
+prepares and claims the immutable fee request, then posts with the saved key
+and `fee_return` metadata. It records positive evidence and verifies a fresh
+snapshot before acknowledging the queue generation read at the start. Both
+customer refunds and application-fee refunds use Stripe's paginated iterators.
+Unknown requests are never replaced from absence: reclaim uses the same key
+inside the SQL window, and unresolved rows need positive matching evidence
+from the complete provider listing. A zero remainder can supersede a never-sent
+request without dispatching a zero refund.
+
+`refundDue` passes refund IDs with their amounts to the coverage-aware finish
+RPC. Partial and failed outcomes answer `refundPending` without logging or
+reporting a completed refund. Coverage remains available across retries, so a
+failure of an earlier contributor cannot disappear behind the latest attempt.
+The Connect webhook durably discovers successful manual refunds even after
+all local operations reconciled. Queue recovery uses the charge's saved account;
+without original account evidence it retains the queue entry for review.
+
+The contract regressions fail against the baseline TypeScript and pass with
+mocked RPCs following the agreed contract. Claude owns SQL integration, the
+Postgres concurrency/coverage replays, Connect event subscriptions and serial
+release gates. These local tests do not apply or validate the deployed schema.

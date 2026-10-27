@@ -3,7 +3,7 @@ import { stripe } from "@/lib/stripe";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
-import { refundMadeFor, fullyReturnedCharge } from "@/lib/refunds/due-provider";
+import { refundMadeFor, fullyReturnedCharge, type RefundCoverage } from "@/lib/refunds/due-provider";
 import { reconcileDueFee, verifyDueCurrency } from "@/lib/refunds/due-recovery";
 
 type Db = ReturnType<typeof createAdminClient>;
@@ -89,7 +89,7 @@ export async function refundDue(
   const intent = attempt.stripe_payment_intent as string;
   const amount = Number(attempt.amount);
   const cents = Math.round(amount * 100);
-  let refundId: string | null = null;
+  let coverage: RefundCoverage[] | null = null;
   let alreadyInStripe = false;
   try {
     const refund = (attempt.stripe_refund_id
@@ -99,12 +99,14 @@ export async function refundDue(
       { idempotencyKey: attempt.idempotency_key, stripeAccount },
     );
     if (refund.status !== "succeeded") {
-      const { error } = await db.rpc("finish_refund_due_attempt", { p_restaurant: restaurantId, p_due: id,
-        p_attempt: attempt.id, p_actor: actor, p_refund: refund.id, p_status: refund.status ?? "pending" });
+      // Keep the provider id so a pending attempt is retrieved on retry.
+      // The v2 finish stores coverage only for a succeeded status.
+      const { error } = await db.rpc("finish_refund_due_attempt_v2", { p_restaurant: restaurantId, p_due: id,
+        p_attempt: attempt.id, p_actor: actor, p_refunds: [{ id: refund.id, amount_cents: refund.amount }], p_status: refund.status ?? "pending" });
       if (error) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
     }
     if (refund.status !== "succeeded") return { ok: false, error: "apiErr.refundPending", status: 409 };
-    refundId = refund.id;
+    coverage = [{ id: refund.id, amount_cents: refund.amount }];
   } catch (err) {
     const code = err && typeof err === "object" && "code" in err ? err.code : undefined;
     // The other click, still being answered: its refund is the one.
@@ -117,31 +119,28 @@ export async function refundDue(
     }
     // Somebody refunded it in Stripe by hand, as the bell used to ask. The
     // diner has their money; what is left to give back is our fee.
-    refundId = await fullyReturnedCharge(client, intent, stripeAccount).catch(() => null);
-    if (!refundId) return { ok: false, error: "apiErr.refundPending", status: 409 };
+    coverage = await fullyReturnedCharge(client, intent, stripeAccount).catch(() => null);
+    if (!coverage) return { ok: false, error: "apiErr.refundPending", status: 409 };
     alreadyInStripe = true;
   }
 
   // Only the request that writes the row says so in the log, so a retry that
   // found the refund already made does not log it twice.
-  const { data: marked, error: writeError } = await db.rpc("finish_refund_due_attempt", {
+  const { data: marked, error: writeError } = await db.rpc("finish_refund_due_attempt_v2", {
     p_restaurant: restaurantId, p_due: id, p_attempt: attempt.id, p_actor: actor,
-    p_refund: refundId, p_status: "succeeded",
+    p_refunds: coverage, p_status: "succeeded",
   });
   if (writeError) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
-  // Refused because Stripe has since told us this refund failed (audit Q 2):
-  // the diner is still owed, whatever the stale read said.
-  if (!marked) {
-    const { data: row, error: readError } = await db.from("refunds_due").select("refunded_at")
-      .eq("restaurant_id", restaurantId).eq("id", id).maybeSingle();
-    if (readError) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
-    if (!row?.refunded_at) return { ok: false, error: "apiErr.refundPending", status: 409 };
+  // Refused because Stripe has since told us a contributing refund failed:
+  // partial coverage still leaves the diner owed, whatever a stale read said.
+  if (marked?.outcome !== "completed") {
+    return { ok: false, error: "apiErr.refundPending", status: 409 };
   }
 
   // The share of our fee that went back with it. A charge refunded by hand
   // in Stripe stays counted until verified: the safe way round for the month's ceiling.
   const returned = await reconcileDueFee(db, restaurantId, id, attempt, client);
-  if (marked) {
+  if (marked.marked === true) {
     await logEvent({
       restaurantId,
       actor,

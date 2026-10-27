@@ -3,6 +3,7 @@ import { readStripeEvent } from "@/lib/stripe-webhook";
 import { abandonCheckout, settleCheckout } from "@/lib/checkout-settle";
 import { syncConnectAccount } from "@/lib/stripe-connect";
 import { REFUND_FAILURE_EVENTS, reopenFailedRefund } from "@/lib/refunds/provider-failure";
+import { enqueueRefundFee } from "@/lib/refunds/fee-queue";
 import type Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -49,6 +50,14 @@ export async function POST(req: NextRequest) {
   // diner's money stays shown as returned.
   if (REFUND_FAILURE_EVENTS.has(event!.type)) {
     await reopenFailedRefund(event!.data.object as Stripe.Refund, event!.account);
+  }
+
+  // Manual Stripe refunds can arrive after all our own returns reconciled.
+  // Commit discovery before acknowledging; a failed enqueue must be retried.
+  if (event!.type === "charge.refunded"
+    || (["refund.created", "refund.updated"].includes(event!.type)
+      && (event!.data.object as Stripe.Refund).status === "succeeded")) {
+    await enqueueRefundFee(event!.data.object as Stripe.Refund | Stripe.Charge, event!.account);
   }
 
   return NextResponse.json({ received: true });
