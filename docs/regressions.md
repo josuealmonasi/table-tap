@@ -4609,3 +4609,11 @@ are added. A failed snapshot query cannot erase the current list.
 Both findings failed first in `orders-live-takings.spec.tsx` and
 `orders-snapshot-recovery.spec.tsx` (12 failures). Claude owns shared database
 gates and integration; this worker uses only local mocked/unit checks.
+
+### Audit P (Codex): a refund failure could be overwritten, replayed or verified against stale evidence
+
+#548 trusted Stripe's events to arrive once and in order. They don't.
+- **Finding 1.** A "succeeded" read already in flight could land after the failure webhook and complete the refund again: MX$100 owed, shown as returned. Both finish functions now refuse a success for a refund in `refund_failures`. An old attempt's first-seen failure no longer reopens a row whose retry is already in flight: only the latest attempt's refund does.
+- **Finding 2.** Clearing every fee target on each failure let a replay erase a newer target, and let a verification from before the failure re-raise an obsolete one for good. Each failure is now recorded once, so a replay is a no-op. It also moves the charge's fee epoch on, and `verify_refunded_platform_fee_v2` refuses a snapshot read under an older epoch.
+- **Finding 6.** The owner's activity line was a separate insert after the reversal had committed. If it failed, a replay found nothing to reopen and never logged it. It is now written in the same transaction.
+- `provider-failure.spec.ts` and `fee-verification.spec.ts` pin each rule. Replayed on dev Postgres (rolled back), in MX$ and US$: a late success is refused in both books; an old attempt reopens nothing; a stale verification is refused while a current one is accepted; a replay keeps the epoch and the sibling; the log line appears once.

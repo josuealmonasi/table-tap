@@ -35,11 +35,12 @@ function recovery(currency: string) {
     return query;
   } } as unknown as ReturnType<typeof createAdminClient>;
   // Model the final locked write. The schema assertion below checks its SQL.
-  verify.mockImplementation(async (_name: string, args: { p_cents: number; p_target: number }) => {
+  verify.mockImplementation(async (name: string, args: { p_cents: number; p_target: number }) => {
+    if (name === "refund_fee_epoch") return { data: 0, error: null };
     row.fee_target_cents = args.p_target;
     row.fee_verification_pending = args.p_cents < args.p_target;
     row.fee_reconciled_at = row.fee_verification_pending ? null : "2026-10-27T12:00:00Z";
-    return { error: null };
+    return { data: true, error: null };
   });
   const feeRefund = vi.fn(async (_fee: string, params: { amount: number; metadata: Record<string, string> }) => {
     returned += params.amount;
@@ -72,8 +73,8 @@ it.each(["MXN", "USD"])("M1: %s keeps a late 270-cent fee remainder pending, the
     return result;
   });
   expect(await reconcileDueFee(r.db, "restaurant", "due", attempt, r.client)).toBe(false);
-  expect(verify).toHaveBeenLastCalledWith("verify_refunded_platform_fee", {
-    p_restaurant: "restaurant", p_intent: "pi_original", p_cents: 30, p_target: 300, p_refunds: ["re_customer", "re_manual"],
+  expect(verify).toHaveBeenLastCalledWith("verify_refunded_platform_fee_v2", {
+    p_restaurant: "restaurant", p_intent: "pi_original", p_cents: 30, p_target: 300, p_refunds: ["re_customer", "re_manual"], p_epoch: 0,
   });
   expect(r.row).toMatchObject({ fee_target_cents: 300, fee_verification_pending: true, fee_reconciled_at: null });
   expect(r.returned()).toBe(30);

@@ -43,6 +43,8 @@ const NOT_DEMO_DATA = new Set([
   "account_checkouts", // an online payment in progress; only the pay route opens one
   "restaurant_billing_operations", // an in-flight billing claim; seeding one would block checkout
   "refunds_due", // money taken twice; only the webhook finds one, and a demo with one teaches that it happens
+  "refund_failures", // Stripe failing a refund it reported succeeded; only its webhook writes one
+  "refund_fee_epochs", // a counter the failure moves on; nothing to show without a failure
 ]);
 
 describe("the demo shows the whole app", () => {
