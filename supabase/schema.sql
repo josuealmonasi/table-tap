@@ -6020,10 +6020,14 @@ begin
   if a.id is null or (o.status = 'failed' and a.provider_status in ('failed', 'canceled')) then
     v_no := coalesce(a.attempt_no, 0) + 1;
     select order_id into v_order from order_adjustments where id = o.adjustment_id;
-    insert into refund_attempts(restaurant_id, operation_id, attempt_no, idempotency_key, amount, stripe_account_id, stripe_payment_intent)
+    -- A refund completed before attempts existed keeps its own evidence, so a
+    -- later failure of that refund still finds the row (audit R finding 1).
+    insert into refund_attempts(restaurant_id, operation_id, attempt_no, idempotency_key, amount, stripe_account_id, stripe_payment_intent, stripe_refund_id, provider_status)
       values(p_restaurant, o.id, v_no,
         case when v_no = 1 then 'cancel-' || v_order || '-' || o.stripe_payment_intent else 'return-' || o.id || '-' || v_no end,
-        o.amount, o.stripe_account_id, o.stripe_payment_intent) returning * into a;
+        o.amount, o.stripe_account_id, o.stripe_payment_intent,
+        case when a.id is null and o.status = 'succeeded' then o.stripe_refund_id end,
+        case when a.id is null and o.status = 'succeeded' then 'succeeded' end) returning * into a;
   end if;
   if o.status <> 'succeeded' then update refund_operations set status = 'processing' where id = o.id; end if;
   return to_jsonb(a) || jsonb_build_object('operation_status', o.status);
@@ -7873,7 +7877,7 @@ grant execute on function public.start_refund_due_attempt(uuid, uuid) to service
 
 -- Persist the exact fee request before calling Stripe. Concurrent retries and
 -- a lost response must reuse its amount even if another refund changes the fee.
-create or replace function public.start_refund_due_fee(p_restaurant uuid, p_due uuid, p_fee text, p_amount int)
+create or replace function public.start_refund_due_fee_apply(p_restaurant uuid, p_due uuid, p_fee text, p_amount int)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare d refunds_due;
 begin
@@ -7887,14 +7891,39 @@ begin
   return d.fee_request;
 end;
 $$;
+revoke all on function public.start_refund_due_fee_apply(uuid, uuid, text, int) from public, anon, authenticated;
+
+-- A fee request's amount comes from a provider read. After a refund on the
+-- charge fails, that amount may be stale and would return fee nobody owes
+-- (audit R finding 2): only a read under the current epoch may request it.
+create or replace function public.start_refund_due_fee_v2(p_restaurant uuid, p_due uuid, p_fee text, p_amount int, p_epoch int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if p_epoch is null or p_epoch <> public.refund_fee_epoch(p_restaurant, (select stripe_payment_intent from refunds_due where id = p_due and restaurant_id = p_restaurant)) then return null; end if;
+  return public.start_refund_due_fee_apply(p_restaurant, p_due, p_fee, p_amount);
+end;
+$$;
+revoke all on function public.start_refund_due_fee_v2(uuid, uuid, text, int, int) from public, anon, authenticated;
+grant execute on function public.start_refund_due_fee_v2(uuid, uuid, text, int, int) to service_role;
+
+-- Kept for servers deployed before the epoch; refused once the charge has one.
+create or replace function public.start_refund_due_fee(p_restaurant uuid, p_due uuid, p_fee text, p_amount int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if public.refund_fee_epoch(p_restaurant, (select stripe_payment_intent from refunds_due where id = p_due and restaurant_id = p_restaurant)) > 0 then return null; end if;
+  return public.start_refund_due_fee_apply(p_restaurant, p_due, p_fee, p_amount);
+end;
+$$;
 revoke all on function public.start_refund_due_fee(uuid, uuid, text, int) from public, anon, authenticated;
 grant execute on function public.start_refund_due_fee(uuid, uuid, text, int) to service_role;
 
 -- Retire only the request whose outcome was checked. An old 300-cent request
 -- cannot still land once only 200 cents of the WHOLE fee remain at Stripe.
 -- A partial target alone does not prove that; an unknown request stays put.
-create or replace function public.advance_refund_due_fee(
-  p_restaurant uuid, p_due uuid, p_previous jsonb, p_target int, p_returned int, p_fee_total int, p_refund text default null
+create or replace function public.advance_refund_due_fee_apply(
+  p_restaurant uuid, p_due uuid, p_previous jsonb, p_target int, p_returned int, p_fee_total int, p_refund text
 ) returns jsonb language plpgsql security definer set search_path = public as $$
 declare d refunds_due; v_no int;
 begin
@@ -7914,6 +7943,29 @@ begin
     fee_request = jsonb_build_object('fee_id', d.fee_request->>'fee_id', 'amount', p_target - p_returned, 'attempt_no', v_no)
     where id = d.id returning fee_request into d.fee_request;
   return d.fee_request;
+end;
+$$;
+revoke all on function public.advance_refund_due_fee_apply(uuid, uuid, jsonb, int, int, int, text) from public, anon, authenticated;
+
+create or replace function public.advance_refund_due_fee_v2(
+  p_restaurant uuid, p_due uuid, p_previous jsonb, p_target int, p_returned int, p_fee_total int, p_refund text, p_epoch int
+) returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if p_epoch is null or p_epoch <> public.refund_fee_epoch(p_restaurant, (select stripe_payment_intent from refunds_due where id = p_due and restaurant_id = p_restaurant)) then return null; end if;
+  return public.advance_refund_due_fee_apply(p_restaurant, p_due, p_previous, p_target, p_returned, p_fee_total, p_refund);
+end;
+$$;
+revoke all on function public.advance_refund_due_fee_v2(uuid, uuid, jsonb, int, int, int, text, int) from public, anon, authenticated;
+grant execute on function public.advance_refund_due_fee_v2(uuid, uuid, jsonb, int, int, int, text, int) to service_role;
+
+create or replace function public.advance_refund_due_fee(
+  p_restaurant uuid, p_due uuid, p_previous jsonb, p_target int, p_returned int, p_fee_total int, p_refund text default null
+) returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if public.refund_fee_epoch(p_restaurant, (select stripe_payment_intent from refunds_due where id = p_due and restaurant_id = p_restaurant)) > 0 then return null; end if;
+  return public.advance_refund_due_fee_apply(p_restaurant, p_due, p_previous, p_target, p_returned, p_fee_total, p_refund);
 end;
 $$;
 revoke all on function public.advance_refund_due_fee(uuid, uuid, jsonb, int, int, int, text) from public, anon, authenticated;

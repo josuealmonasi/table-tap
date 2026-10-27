@@ -4683,3 +4683,20 @@ reprint checks stay intact. The runnable inventory remains 307 cases.
 - `provider-failure.spec.ts` and `refund-due.spec.ts`. The `refundDue` test
   fails without its fix. Replayed on dev Postgres (rolled back), in MX$ and
   US$, all four paths hold.
+
+### Audit R (Codex): a fee request read before a failure could still be sent
+
+- **Finding 1.** Fee recovery opened a first attempt for a refund completed
+  before attempts existed, but without that refund's id. A later failure then
+  matched neither the attempt nor the legacy fallback, and the diner stayed
+  owed. `start_refund_attempt` now gives that first attempt the operation's
+  own refund and outcome.
+- **Finding 2.** `start_refund_due_fee` and `advance_refund_due_fee` accepted an
+  amount read before a refund on the charge failed, and could ask Stripe for
+  MX$2.70 of fee nobody owed. Their bodies are now internal `*_apply`
+  functions granted to no one. The recovery calls epoch-checked `*_v2` entry
+  points; the kept ones refuse once the charge has an epoch.
+- `provider-failure.spec.ts`. Replayed on dev Postgres (rolled back), in MX$
+  and US$: the legacy refund reopens after recovery; a stale start, the old
+  entry point and a stale advance are all refused; only the current-epoch
+  amount is requested.

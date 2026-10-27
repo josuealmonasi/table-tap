@@ -24,8 +24,8 @@ function recovery(currency = "MXN") {
       row.fee_reconciled_at = row.fee_verification_pending ? null : "2026-10-27T12:00:00Z";
       return { data: true, error: null };
     }
-    if (name === "start_refund_due_fee") row.fee_request ??= { fee_id: String(args.p_fee), amount: Number(args.p_amount) };
-    if (name === "advance_refund_due_fee") {
+    if (name === "start_refund_due_fee_v2") row.fee_request ??= { fee_id: String(args.p_fee), amount: Number(args.p_amount) };
+    if (name === "advance_refund_due_fee_v2") {
       if (JSON.stringify(args.p_previous) !== JSON.stringify(row.fee_request)) return { data: null, error: null };
       row.fee_request_history.push(row.fee_request!);
       row.fee_request = { fee_id: "fee_original", amount: Number(args.p_target) - Number(args.p_returned),
@@ -96,7 +96,7 @@ it.each(["MXN", "USD"])("finding 4: %s 100 with 3 owed and 1 separately returned
   expect(r.returned()).toBe(300);
   expect(r.feeRefund).toHaveBeenLastCalledWith("fee_original", { amount: 200,
     metadata: { refund_due: "due", refund_due_fee_attempt: "2" } }, { idempotencyKey: "refund-due-fee-due-2" });
-  const advance = r.rpc.mock.invocationCallOrder[r.rpc.mock.calls.findIndex(call => call[0] === "advance_refund_due_fee")];
+  const advance = r.rpc.mock.invocationCallOrder[r.rpc.mock.calls.findIndex(call => call[0] === "advance_refund_due_fee_v2")];
   expect(r.feeList.mock.invocationCallOrder[1]).toBeLessThan(advance);
 });
 
@@ -133,7 +133,7 @@ it("reconciles a completed original attempt before saving another attempt toward
     yield { id: "fr_original", amount: 100, metadata: { refund_due: "due" } };
   })());
   expect(await reconcileDueFee(r.db, "restaurant", "due", attempt, r.client)).toBe(true);
-  expect(r.rpc).toHaveBeenCalledWith("advance_refund_due_fee", expect.objectContaining({ p_refund: "fr_original" }));
+  expect(r.rpc).toHaveBeenCalledWith("advance_refund_due_fee_v2", expect.objectContaining({ p_refund: "fr_original" }));
   expect(r.feeRefund.mock.calls.map(call => call[1].amount)).toEqual([200]);
   expect(r.returned()).toBe(300);
 });

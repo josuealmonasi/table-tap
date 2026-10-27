@@ -36,10 +36,12 @@ export async function reconcileDueFee(db: Db, restaurant: string, id: string, at
     if (epochError || typeof epoch !== "number") throw new Error(`Could not read the fee verification epoch: ${epochError?.message ?? "no epoch"}`);
     const returned = await returnOurFee(client, attempt.stripe_payment_intent, attempt.stripe_account_id,
       Math.round(Number(attempt.amount) * 100), id, async (feeId, amount, previous, outcome) => {
-        const { data, error } = previous && outcome ? await db.rpc("advance_refund_due_fee", {
+        // Both under the epoch read before Stripe: a refund failing since makes
+        // the amount stale, and it must not be requested (audit R finding 2).
+        const { data, error } = previous && outcome ? await db.rpc("advance_refund_due_fee_v2", {
           p_restaurant: restaurant, p_due: id, p_previous: previous, p_target: outcome.target,
-          p_returned: outcome.returned, p_fee_total: outcome.total, p_refund: outcome.refund,
-        }) : await db.rpc("start_refund_due_fee", { p_restaurant: restaurant, p_due: id, p_fee: feeId, p_amount: amount });
+          p_returned: outcome.returned, p_fee_total: outcome.total, p_refund: outcome.refund ?? null, p_epoch: epoch,
+        }) : await db.rpc("start_refund_due_fee_v2", { p_restaurant: restaurant, p_due: id, p_fee: feeId, p_amount: amount, p_epoch: epoch });
         if (error || !data) throw new Error("Could not save the fee return request");
         return data;
       }, async target => {
