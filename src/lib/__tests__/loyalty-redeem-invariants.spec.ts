@@ -34,8 +34,11 @@ it("S15 keeps the new entry point private and includes it in teardown and the gr
   expect(read("scripts/rls-check.mjs")).toContain('["loyalty_redeem_once",');
 });
 it("S15 both staff screens use saved request identity and receive the displayed round", () => {
-  expect(read("src/components/dashboard/loyalty/StampCard.tsx")).toContain("redeemRequest(code, round, step)");
-  expect(read("src/components/dashboard/loyalty/CardLookupResult.tsx")).toContain("redeemRequest(card.code, card.round, card.standing.next.visits)");
+  // One lifecycle for both screens (useLoyaltyCommand), each passing the round
+  // and step it shows.
+  expect(read("src/hooks/useLoyaltyCommand.ts")).toContain("request = redeemRequest(code, round, step);");
+  expect(read("src/components/dashboard/loyalty/StampCard.tsx")).toContain("redeem: { code, round, step }");
+  expect(read("src/components/dashboard/loyalty/CardLookupResult.tsx")).toContain("{ code: card.code, round: card.round, step: card.standing.next.visits }");
   expect(read("src/lib/loyalty/server.ts")).toContain("round: card.round_no");
   expect(read("src/app/api/loyalty/lookup/route.ts")).toContain("round: card.round_no");
   for (const messages of [en, es]) {

@@ -243,7 +243,10 @@ function spanishOutput(path: string): string[] {
       const text = m[2].replace(/\$\{[^}]*\}/g, " ").replace(/\b(EN|ES)\b/g, " ");
       // A locale code, a path or a selector is an identifier, not prose: "es-MX"
       // and "terms-es.json" are not Spanish sentences, they only contain "es".
-      if (/^[a-z]{2}-[A-Z]{2}$/.test(m[2].trim()) || m[2].includes("/")) continue;
+      // An attribute selector matches the UI's own words on purpose
+      // (`button[aria-label^='Agregar ']`); it passed only while an unrelated
+      // English sentence happened to contain "button".
+      if (/^[a-z]{2}-[A-Z]{2}$/.test(m[2].trim()) || m[2].includes("/") || /\[[a-z-]+[\^$*~|]?=/.test(m[2])) continue;
       if (text.trim().length < 4) continue;
       if (readsSpanish(text, 1)) out.push(`${path}:${i + 1}  ${m[2].slice(0, 60)}`);
     }
