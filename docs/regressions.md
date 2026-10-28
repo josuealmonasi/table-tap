@@ -4840,6 +4840,7 @@ existing tests/documentation remain because `plan.ts` belongs to other work.
 | Coupon filters share the server's exact date boundaries | A code refused at its end time still appeared active, or a future code vanished from expired | `coupon-search-filters.spec.tsx`, existing coupon service tests |
 | Pending sales and approved history have separate reads and caches | History buried unapproved money, inflated the pending badge or reloaded every 30 seconds | `held-sales-history-route.spec.ts`, `held-sales-pending.spec.tsx`, existing offline recovery/upload tests |
 | Print/save uses the same receipt renderer as email and POS | A saved document changed the currency/discount/tip or falsely recorded an email as sent | `receipt-print-route.spec.ts`, `receipt-print-prompt.spec.tsx`, existing receipt/print/POS tests |
+| An emailed receipt never adds two currencies | MX$100 and US$10 from one restaurant were sent as MX$110 | `receipt-print-route.spec.ts` |
 
 ### Stock and count search
 
@@ -5045,3 +5046,12 @@ intent (`refusalSettles`). Unlike pay-later, the body is built afresh each time:
 a cart trimmed after a sold-out refusal must not be charged as it was, and a
 cart changed after a lost reply is told so (409). Claude finished this after
 Codex hit its usage limit.
+
+## A receipt that added pesos and dollars (paths audit #8)
+
+A receipt covers every order a table settled at once, and the builder takes the
+first order's currency for the whole sum. The print path (#562) already refused
+a mixed set; email did not, so MX$100 and US$10 from the same restaurant went
+out as MX$110. Both deliveries now refuse it, and a failed order read answers
+503 instead of "not found".
+
