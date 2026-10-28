@@ -12,10 +12,15 @@ export async function GET() {
   const actor = await actingOwner();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
-  const status = await syncConnectStatus(actor.restaurantId);
-  return NextResponse.json({
-    connected: Boolean(status.accountId),
-    chargesEnabled: status.chargesEnabled,
-    detailsSubmitted: status.detailsSubmitted,
-  });
+  try {
+    const status = await syncConnectStatus(actor.restaurantId);
+    return NextResponse.json({
+      connected: Boolean(status.accountId),
+      chargesEnabled: status.chargesEnabled,
+      detailsSubmitted: status.detailsSubmitted,
+    });
+  } catch (error) {
+    console.error("connect status error", error);
+    return await apiError("apiErr.generic", 502);
+  }
 }

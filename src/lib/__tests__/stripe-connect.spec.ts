@@ -24,16 +24,22 @@ let writeFails = false;
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => {
     const where: Record<string, unknown> = {};
+    let patch: Record<string, unknown> | undefined;
     const q = {
       select: () => q,
       eq: (k: string, v: unknown) => ((where[k] = v), q),
+      is: (k: string, v: unknown) => ((where[k] = v), q),
       single: async () => ({ data: { ...stored }, error: null }),
       // The restaurant whose account it is, looked up by the account id.
       maybeSingle: async () => ({ data: where.stripe_account_id === stored.stripe_account_id ? { id: "r1" } : null, error: null }),
-      update: (patch: Record<string, unknown>) => {
-        if (writeFails) return { eq: async () => ({ error: { message: "connection reset" } }) };
-        Object.assign(stored, patch);
-        return { eq: async () => ({ error: null }) };
+      update: (value: Record<string, unknown>) => {
+        patch = value;
+        return q;
+      },
+      then: (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => {
+        const changed = !writeFails && (!("stripe_account_id" in where) || stored.stripe_account_id === where.stripe_account_id);
+        if (changed) Object.assign(stored, patch);
+        return Promise.resolve({ data: changed ? [{ ...stored }] : [], error: writeFails ? { message: "connection reset" } : null }).then(resolve, reject);
       },
     };
     return { from: () => q };

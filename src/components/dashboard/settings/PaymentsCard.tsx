@@ -29,9 +29,13 @@ export default function PaymentsCard() {
       try {
         const res = await fetch("/api/connect/status");
         const data = await res.json();
-        if (!cancelled) setStatus(res.ok ? data : null);
+        if (!cancelled) {
+          if (res.ok) setStatus(data);
+          else setError(data.error ?? t("notice.network"));
+        }
       } catch {
-        // Leave status null — the card falls back to the connect prompt.
+        // An unread status cannot tell the owner their account is disconnected.
+        if (!cancelled) setError(t("notice.network"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -39,7 +43,7 @@ export default function PaymentsCard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   async function connect(): Promise<void> {
     setRedirecting(true);
@@ -84,9 +88,11 @@ export default function PaymentsCard() {
         </p>
       ) : (
         <>
-          <p className="tt-muted" style={{ fontSize: 14, marginTop: 0 }}>
-            {status?.connected ? t("dash.connectAlmost") : t("dash.connectPrompt")}
-          </p>
+          {status && (
+            <p className="tt-muted" style={{ fontSize: 14, marginTop: 0 }}>
+              {status.connected ? t("dash.connectAlmost") : t("dash.connectPrompt")}
+            </p>
+          )}
           <button
             className="tt-btn tt-btn-primary tt-btn-sm"
             onClick={connect}

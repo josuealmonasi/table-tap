@@ -38,11 +38,13 @@ function countryFor(currency: string): string {
 export async function readConnect(
   restaurantId: string,
 ): Promise<{ accountId: string | null; chargesEnabled: boolean }> {
-  const { data } = await createAdminClient()
+  const { data, error } = await createAdminClient()
     .from("restaurants")
     .select("stripe_account_id, stripe_charges_enabled")
     .eq("id", restaurantId)
     .single();
+  // An unread account is not an absent one: creating another strands its checkouts.
+  if (error) throw new Error(`connect account read failed: ${error.message}`);
   return {
     accountId: (data?.stripe_account_id as string | null) ?? null,
     chargesEnabled: Boolean(data?.stripe_charges_enabled),
@@ -79,11 +81,19 @@ export async function ensureConnectAccount(
     V2,
   )) as unknown as V2Account;
 
-  await createAdminClient()
+  const { data, error } = await createAdminClient()
     .from("restaurants")
     .update({ stripe_account_id: account.id })
-    .eq("id", restaurantId);
-  return account.id;
+    .eq("id", restaurantId)
+    .is("stripe_account_id", null)
+    .select("stripe_account_id");
+  if (error) throw new Error(`connect account write failed: ${error.message}`);
+  if (data?.length) return account.id;
+
+  // Another onboarding call won. Its saved account owns the diner's checkouts.
+  const saved = await readConnect(restaurantId);
+  if (!saved.accountId) throw new Error("connect account was not saved");
+  return saved.accountId;
 }
 
 /** A Stripe-hosted onboarding URL for the connected account to finish setup. */
