@@ -10794,8 +10794,8 @@ create table if not exists bill_split_slots (
   fee_slice_cents      int not null default 0 check (fee_slice_cents >= 0),
   -- The card attempt holding it; cleared only when that attempt is known to
   -- have expired or been refused.
-  reserved_checkout_id uuid references diner_checkouts(id) on delete restrict,
-  payment_id           uuid references payments(id) on delete restrict,
+  reserved_checkout_id uuid references diner_checkouts(id),
+  payment_id           uuid references payments(id),
   paid_at              timestamptz,
   primary key (split_id, share_no),
   foreign key (restaurant_id, split_id) references bill_splits (restaurant_id, id) on delete cascade,
@@ -10811,7 +10811,7 @@ grant select on bill_split_slots to authenticated;
 -- What one card attempt is paying for, frozen when it is reserved.
 create table if not exists bill_split_checkout_slots (
   restaurant_id   uuid not null,
-  checkout_id     uuid not null references diner_checkouts(id) on delete restrict,
+  checkout_id     uuid not null references diner_checkouts(id),
   split_id        uuid not null,
   share_no        int not null,
   amount_cents    int not null check (amount_cents > 0),
@@ -10819,6 +10819,18 @@ create table if not exists bill_split_checkout_slots (
   primary key (checkout_id, split_id, share_no),
   foreign key (restaurant_id, split_id) references bill_splits (restaurant_id, id) on delete cascade
 );
+-- NO ACTION, not RESTRICT: a payment or attempt deleted on its own still
+-- cannot strand a paid slot, but deleting a whole restaurant cascades to both
+-- sides in one statement, and RESTRICT refused that mid-cascade (db:mock).
+alter table bill_split_slots drop constraint if exists bill_split_slots_payment_id_fkey;
+alter table bill_split_slots add constraint bill_split_slots_payment_id_fkey
+  foreign key (payment_id) references payments(id);
+alter table bill_split_slots drop constraint if exists bill_split_slots_reserved_checkout_id_fkey;
+alter table bill_split_slots add constraint bill_split_slots_reserved_checkout_id_fkey
+  foreign key (reserved_checkout_id) references diner_checkouts(id);
+alter table bill_split_checkout_slots drop constraint if exists bill_split_checkout_slots_checkout_id_fkey;
+alter table bill_split_checkout_slots add constraint bill_split_checkout_slots_checkout_id_fkey
+  foreign key (checkout_id) references diner_checkouts(id);
 alter table bill_split_checkout_slots enable row level security;
 revoke all on bill_split_checkout_slots from anon, authenticated;
 
