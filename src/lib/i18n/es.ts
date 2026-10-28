@@ -1551,6 +1551,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     restaurantDeleteRefundFee: "Todavía falta devolverle a este restaurante su parte de la comisión de pagos reembolsados. Termina de devolverla antes de eliminarlo.",
     restaurantDeleteRefundFeeVerification: "Falta revisar si hay comisiones de pagos reembolsados que debamos devolverle a este restaurante. Abre Cuentas y termina de revisar los reembolsos antes de eliminarlo.",
     retryConflict: "Esto ya se había enviado antes con otros datos, así que no se registró de nuevo. Revisa lo que quedó registrado antes de volver a empezar.",
+    checkoutOpening: "Tu pago ya se está preparando. Espera unos segundos e inténtalo de nuevo.",
     adminAuditUnavailable: "El historial de administración no está disponible. Intenta más tarde.",
     adminActionUncertain: "La acción pudo haberse completado, pero no se pudo confirmar su resultado. Revisa el restaurante o el usuario antes de intentar de nuevo.",
     restaurantNotFound: "Restaurante no encontrado",

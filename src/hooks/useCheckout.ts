@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRetryIntent } from "@/hooks/useRetryIntent";
+import { refusalSettles, useRetryIntent } from "@/hooks/useRetryIntent";
 import type { RestaurantTable } from "@/lib/types";
 import type { AppliedCoupon } from "@/lib/pricing";
 import type { CartItem, useCart } from "@/hooks/useCart";
@@ -49,10 +49,23 @@ export function useCheckout(input: CheckoutInput): {
 } {
   const t = useT();
   const attempt = useRetryIntent();
+  // A card payment's reference, kept only while a send has had no answer
+  // (paths audit #3). Tapping "pay" again after a lost reply then finds the
+  // first order and its open page instead of making a second one. The body is
+  // built afresh each time: a cart that changed meanwhile is told so (409),
+  // never charged for the old one.
+  const cardRef = useRef<string | null>(null);
+  const cardSends = useRef(0);
   const inFlight = useRef(false);
   const sentLines = useRef<CartItem[]>([]);
   const [loading, setLoading] = useState(false);
   const { restaurantId, table, orderableItems, cart } = input;
+
+  function cardBody(value: object): string {
+    cardRef.current ??= crypto.randomUUID();
+    cardSends.current++;
+    return JSON.stringify({ ...value, ref: cardRef.current });
+  }
 
   async function checkout(payLater = false): Promise<void> {
     if (inFlight.current) return;
@@ -68,7 +81,7 @@ export function useCheckout(input: CheckoutInput): {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: (payLater ? attempt.body : JSON.stringify)({
+        body: (payLater ? attempt.body : cardBody)({
           restaurantId,
           tableId: table?.id ?? null,
           tableLabel: table?.label ?? null,
@@ -101,6 +114,12 @@ export function useCheckout(input: CheckoutInput): {
           diner: dinerToken(restaurantId) || undefined,
         }),
       });
+      // The same rule as a pay-later intent: a page opened settles it, and a
+      // refusal does only on the reference's first send.
+      if (!payLater && (res.ok || refusalSettles(res.status, cardSends.current > 1))) {
+        cardRef.current = null;
+        cardSends.current = 0;
+      }
       const data = await res.json();
       const frozen = payLater ? attempt.frozen<PendingCheckout>() : null;
       if (payLater && ((res.ok && data.deferred && data.orderId) || (!res.ok && attempt.settles(res.status)))) attempt.clear();

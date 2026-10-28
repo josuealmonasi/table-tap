@@ -3,7 +3,7 @@ import type { OrderLineItem } from "@/lib/types";
 /** What the menu sends to `/api/checkout`. Nothing in it is trusted as-is. */
 export interface CheckoutBody {
   restaurantId: string;
-  /** A pay-later intent; card sessions keep their own attempt handling. */
+  /** A retry of this meal: deferred orders or a still-open card checkout. */
   ref?: string;
   tableId: string | null;
   tableLabel: string | null;

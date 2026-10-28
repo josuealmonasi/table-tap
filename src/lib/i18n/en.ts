@@ -1556,6 +1556,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     restaurantDeleteRefundFee: "This restaurant's share of the fee on refunded payments hasn't been returned yet. Finish returning it before deleting the restaurant.",
     restaurantDeleteRefundFeeVerification: "We still need to check whether this restaurant is owed any fees on refunded payments. Open Bills and finish checking the refunds before deleting the restaurant.",
     retryConflict: "This was already sent before with different details, so nothing new was recorded. Check what was recorded before starting again.",
+    checkoutOpening: "Your payment is already being set up. Wait a few seconds and try again.",
     adminAuditUnavailable: "The admin activity log is unavailable. Try again later.",
     adminActionUncertain: "This action may have completed, but its result could not be confirmed. Check the restaurant or login before trying again.",
     restaurantNotFound: "Restaurant not found",

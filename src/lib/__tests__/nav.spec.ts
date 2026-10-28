@@ -38,9 +38,9 @@ describe("navItemsFor", () => {
     expect(hrefs("waiter")).toEqual([
       "/dashboard/orders",
       "/dashboard/table-order",
-      "/dashboard/waste",
       "/dashboard/bills",
       "/dashboard/accounts",
+      "/dashboard/waste",
     ]);
   });
 
@@ -68,7 +68,7 @@ describe("an area the tier does not include", () => {
     // Customer accounts stay on every tier: one opened on a paid plan still
     // owes after a move down, and its page collects it (opening is locked).
     // Held money also needs an upload surface after the till is locked.
-    expect(withoutPos("cashier")).toEqual(["/dashboard/orders", "/dashboard/waste", "/dashboard/held-sales", "/dashboard/bills", "/dashboard/accounts"]);
+    expect(withoutPos("cashier")).toEqual(["/dashboard/orders", "/dashboard/bills", "/dashboard/accounts", "/dashboard/held-sales", "/dashboard/waste"]);
   });
 
   it("never offers the till to a waiter or the kitchen", () => {
@@ -101,4 +101,16 @@ describe("the features the nav gates on", () => {
   it("is not empty, or every tiered area would vanish", () => {
     expect(NAV_FEATURES.length).toBeGreaterThan(1);
   });
+});
+
+it("lists the areas in the order they are used: menus first, the books last", () => {
+  // Owner's call, 2026-10-28. The tab row, the drawer and the home tiles all
+  // read this one order.
+  expect(hrefs("owner")).toEqual([
+    "/dashboard", "/dashboard/orders", "/dashboard/pos", "/dashboard/table-order",
+    "/dashboard/bills", "/dashboard/accounts", "/dashboard/held-sales",
+    "/dashboard/promotions", "/dashboard/loyalty",
+    "/dashboard/costs", "/dashboard/analytics",
+    "/dashboard/tables", "/dashboard/staff", "/dashboard/plan", "/dashboard/settings",
+  ]);
 });
