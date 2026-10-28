@@ -20,7 +20,7 @@ it("forgives only what part-paid orders still owe, writes unpaid ones off whole,
   const f = body("write_off_remainder_v1");
   expect(f).toContain("if o.covered <= 0 then v_whole := v_whole + round(o.total * 100)::int;");
   expect(f).toContain("update orders set written_off = true, write_off_reason = p_reason");
-  expect(f).toContain("if v_owed <> p_expected_cents then");
+  expect(f).toContain("if v_owed + v_whole <> p_expected_cents then");
   for (const refusal of ["'unresolved'", "'paying'", "'split'"]) expect(f).toContain(refusal);
   // The order ends at what was paid, paid and completed: completed does not restock.
   expect(f).toContain("update orders set total = round(o.covered, 2), tip = v_tip, paid = true, status = 'completed'");
