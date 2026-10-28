@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { filterValue } from "@/lib/order-code";
 
 /** One entry from the restaurant's activity log. */
 export interface UserLog {
@@ -44,9 +45,10 @@ export function useUserLogs(
    */
   matchedEntities: string[] = [],
 ) {
-  const [logs, setLogs] = useState<UserLog[]>([]);
+  const [snapshot, setSnapshot] = useState<{ restaurantId: string; logs: UserLog[]; total: number }>();
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [error, setError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<LogSort>("created_at");
@@ -69,39 +71,47 @@ export function useUserLogs(
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const from = (page - 1) * LOGS_PER_PAGE;
-      let request = createClient()
-        .from("user_logs")
-        .select(COLUMNS, { count: "exact" })
-        .eq("restaurant_id", restaurantId);
+      try {
+        const from = (page - 1) * LOGS_PER_PAGE;
+        let request = createClient()
+          .from("user_logs")
+          .select(COLUMNS, { count: "exact" })
+          .eq("restaurant_id", restaurantId);
 
-      if (debounced) {
-        // Whatever the owner remembers: who did it, what kind of thing it was,
-        // what happened, or the specifics recorded alongside it.
-        const like = `%${debounced}%`;
-        const clauses = [
-          `actor_email.ilike.${like}`,
-          `entity.ilike.${like}`,
-          `action.ilike.${like}`,
-          `detail.ilike.${like}`,
-          `target_email.ilike.${like}`,
-        ];
-        // "ajustes" is what the row reads; "settings" is what is in the column.
-        // Without this, searching for what is on screen returned nothing.
-        if (matchedEntities.length) clauses.push(`entity.in.(${matchedEntities.join(",")})`);
-        request = request.or(clauses.join(","));
-      }
+        if (debounced) {
+          // Whatever the owner remembers: who did it, what kind of thing it was,
+          // what happened, or the specifics recorded alongside it.
+          // A comma or parenthesis in the search belongs to the value, not the filter.
+          const like = filterValue(`%${debounced}%`);
+          const clauses = [
+            `actor_email.ilike.${like}`,
+            `entity.ilike.${like}`,
+            `action.ilike.${like}`,
+            `detail.ilike.${like}`,
+            `target_email.ilike.${like}`,
+          ];
+          // "ajustes" is what the row reads; "settings" is what is in the column.
+          // Without this, searching for what is on screen returned nothing.
+          if (matchedEntities.length) clauses.push(`entity.in.(${matchedEntities.join(",")})`);
+          request = request.or(clauses.join(","));
+        }
 
-      const { data, count } = await request
-        .order(sort, { ascending })
-        // Within one action type the newest is still the interesting one.
-        .order("created_at", { ascending: false })
-        .range(from, from + LOGS_PER_PAGE - 1);
+        const { data, count, error: readError } = await request
+          .order(sort, { ascending })
+          // Within one action type the newest is still the interesting one.
+          .order("created_at", { ascending: false })
+          .range(from, from + LOGS_PER_PAGE - 1);
+        if (readError) throw readError;
 
-      if (!cancelled) {
-        setLogs((data as UserLog[] | null) ?? []);
-        setTotal(count ?? 0);
-        setLoading(false);
+        if (!cancelled) {
+          setSnapshot({ restaurantId, logs: (data as UserLog[] | null) ?? [], total: count ?? 0 });
+          setError(false);
+        }
+      } catch {
+        // A failed read says nothing about activity; keep the last successful page.
+        if (!cancelled) setError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
@@ -111,8 +121,12 @@ export function useUserLogs(
     // and as a dependency would fire a query per render. `entityKey` is that same
     // array as a string, which is stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restaurantId, page, debounced, sort, ascending, entityKey]);
+  }, [restaurantId, page, debounced, sort, ascending, entityKey, attempt]);
 
+  // Keeping an old page is useful only within the same restaurant.
+  const current = snapshot?.restaurantId === restaurantId ? snapshot : undefined;
+  const logs = current?.logs ?? [];
+  const total = current?.total ?? 0;
   const pages = useMemo(() => Math.max(1, Math.ceil(total / LOGS_PER_PAGE)), [total]);
 
   /** Clicking a column heading sorts by it, or flips it if it already is. */
@@ -127,7 +141,9 @@ export function useUserLogs(
 
   return {
     logs,
-    loading,
+    loading: loading && !current,
+    error,
+    retry: () => setAttempt(value => value + 1),
     page,
     pages,
     total,

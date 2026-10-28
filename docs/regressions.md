@@ -4791,6 +4791,7 @@ release gates. These local tests do not apply or validate the deployed schema.
 | Repricing service decides and writes under the money lock | A collection between the read and the write; the stale write lowered a total with money against it | `service-reprice.spec.ts` (rules in the SQL), dev probe of `reprice_open_service` |
 | The allocation guard checks every order writer, not only those that opt in | Three direct writers lowered or forgave covered orders past an opt-in guard | `allocation-review.spec.ts`, `allocations-check.mjs` (non-opted-in writes refused; a status move allowed) |
 | A refund made by hand in Stripe counts toward the due, and the rest is asked for capped | MX$40 returned by hand; every retry asked for MX$100 and answered 502 for ever | `refund-due-partial.spec.ts` (MX$ and US$), `refund-due-manual-schema.spec.ts`, dev replay |
+| Failed activity reads retain the last page and offer retry; search text stays inside its filter | A timeout erased activity behind "no activity"; a comma or parenthesis broke the raw search filter | `user-logs-read-errors.spec.tsx` |
 
 ### A scanned collection and a refreshed bill list have separate lifetimes
 
@@ -5000,3 +5001,19 @@ too large, is retired only on Stripe's own "more than is left" refusal, which
 proves nothing was created, and replaced once from a fresh read. Contract
 agreed with Codex in the dialogue (topic refund7). Codex wrote the failing
 tests; Claude wrote both halves.
+### Paths audit 9 — the activity read and its empty state must agree
+
+A failed activity query used to replace the last rows and count with an empty
+page, so an owner saw "no activity" or "no matches" after a timeout. The hook
+now keeps its last successful page within the same restaurant, reports returned
+and thrown read errors, and retries the current search, sort and page. Rows
+stay visible while a replacement loads, and a late response cannot replace a
+newer read. A successful empty result still shows the normal empty message.
+
+Activity search now uses order history's `filterValue` helper: commas,
+parentheses, quotes and backslashes belong to the searched value, not extra
+PostgREST conditions. Existing English and Spanish network-error and retry
+copy is reused. `user-logs-read-errors.spec.tsx` checks these cases with mocked
+reads; Claude checks the owner activity screen and shared gates at integration.
+The hook keeps its existing fetching approach in this fix. A later SWR
+migration would align its caching and revalidation with the other readers.
