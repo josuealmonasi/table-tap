@@ -6796,6 +6796,13 @@ begin
   perform set_config('tabletap.allocation_scope', '', true);
   -- One collection at a time per sitting. Everything below reads live.
   perform pg_advisory_xact_lock(hashtextextended(p_session::text, 0));
+  -- A divided bill with a slot paid or held is collected by its slots: the
+  -- cancel below would free a paid slot (split contract, decision 5).
+  if exists(select 1 from bill_splits b join bill_split_slots s on s.split_id = b.id
+    where b.restaurant_id = p_restaurant and b.session_id = p_session and b.model_version = 2
+      and b.status = 'locked' and (s.payment_id is not null or s.reserved_checkout_id is not null)) then
+    return jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'split');
+  end if;
 
   select coalesce(sum(total), 0) into v_owed
     from orders
