@@ -21,6 +21,8 @@ drop function if exists public.record_fee_return(uuid, uuid, text);
 drop function if exists public.enqueue_fee_reconcile(uuid, text);
 drop function if exists public.ack_fee_reconcile(uuid, text, int);
 drop function if exists public.finish_refund_due_attempt_v2(uuid, uuid, uuid, text, jsonb, text);
+drop function if exists public.record_refund_due_coverage_v1(uuid, uuid, text, jsonb);
+drop function if exists public.start_refund_due_attempt_v2(uuid, uuid, int);
 drop function if exists public.guard_fee_return() cascade;
 drop function if exists public.refund_fee_proven_clear(uuid, text);
 drop table if exists table_session_members cascade;

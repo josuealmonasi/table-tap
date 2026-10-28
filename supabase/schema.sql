@@ -8539,6 +8539,93 @@ $$;
 revoke all on function public.finish_refund_due_attempt_v2(uuid, uuid, uuid, text, jsonb, text) from public, anon, authenticated;
 grant execute on function public.finish_refund_due_attempt_v2(uuid, uuid, uuid, text, jsonb, text) to service_role;
 
+-- Paths audit #7: a refund made by hand in Stripe.
+--
+-- A MX$100 duplicate-charge due, of which the restaurant had already returned
+-- MX$40 in Stripe's dashboard: every retry asked Stripe for the attempt's full
+-- MX$100, Stripe refused anything above the MX$60 left, and the MX$40 was
+-- never recorded, so the due answered 502 forever. Contract agreed with Codex
+-- (loop/dialogue/refund7): manual refunds are recorded as coverage without
+-- touching the attempt in flight, and a replacement is capped at what Stripe
+-- says is still refundable.
+--
+-- Records refunds Stripe reports as succeeded on the due's charge that no
+-- attempt of ours made. Never changes an attempt: a manual refund proves
+-- nothing about our own request. Same tombstones as finish: a refund that
+-- failed later stays inactive however often it is reported.
+create or replace function public.record_refund_due_coverage_v1(
+  p_restaurant uuid, p_due uuid, p_actor text, p_refunds jsonb
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare d refunds_due; e jsonb; v_due int; v_covered int;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into d from refunds_due where id = p_due and restaurant_id = p_restaurant for update;
+  if d.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if p_refunds is null or jsonb_typeof(p_refunds) <> 'array' then raise exception 'provider evidence required'; end if;
+  for e in select * from jsonb_array_elements(p_refunds) loop
+    if coalesce(e->>'id', '') = '' or (e->>'amount_cents')::int is null or (e->>'amount_cents')::int <= 0 then
+      raise exception 'invalid refund evidence';
+    end if;
+    insert into refund_due_coverage (restaurant_id, due_id, attempt_id, stripe_refund_id, amount_cents, active)
+      values (p_restaurant, d.id, null, e->>'id', (e->>'amount_cents')::int,
+        not exists (select 1 from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = e->>'id'))
+      on conflict (due_id, stripe_refund_id) do update set active = refund_due_coverage.active and excluded.active;
+  end loop;
+  v_due := round(d.amount * 100);
+  select coalesce(sum(amount_cents), 0) into v_covered from refund_due_coverage where due_id = d.id and active;
+  if v_covered >= v_due then
+    if d.refunded_at is null then
+      update refunds_due set refunded_at = now(), refunded_by = p_actor,
+        stripe_refund_id = coalesce(d.stripe_refund_id, p_refunds->0->>'id'), fee_verification_pending = true
+        where id = d.id;
+      return jsonb_build_object('outcome', 'completed', 'marked', true, 'outstanding_cents', 0);
+    end if;
+    return jsonb_build_object('outcome', 'completed', 'marked', false, 'outstanding_cents', 0);
+  end if;
+  return jsonb_build_object('outcome', 'partial', 'outstanding_cents', v_due - v_covered);
+end;
+$$;
+revoke all on function public.record_refund_due_coverage_v1(uuid, uuid, text, jsonb) from public, anon, authenticated;
+grant execute on function public.record_refund_due_coverage_v1(uuid, uuid, text, jsonb) to service_role;
+
+-- start_refund_due_attempt, with the new attempt capped at what Stripe still
+-- has refundable on the charge (its amount minus every refund, pending ones
+-- included). The same rule decides whether a new attempt opens at all: never
+-- while the latest is in flight or unknown. A new attempt gets its own amount
+-- and key; an old one is never edited. Nothing refundable means nothing opens.
+create or replace function public.start_refund_due_attempt_v2(p_restaurant uuid, p_due uuid, p_refundable_cents int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare d refunds_due; a refund_due_attempts; v_account text; v_no int; v_covered int; v_due int; v_send int;
+begin
+  if p_refundable_cents is null or p_refundable_cents < 0 then raise exception 'invalid refundable amount'; end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into d from refunds_due where id = p_due and restaurant_id = p_restaurant for update;
+  if d.id is null then return null; end if;
+  select * into a from refund_due_attempts where due_id = d.id order by attempt_no desc limit 1;
+  select coalesce(sum(amount_cents), 0) into v_covered from refund_due_coverage where due_id = d.id and active;
+  v_due := round(d.amount * 100);
+  if a.id is null or (d.refunded_at is null and (a.provider_status in ('failed', 'canceled')
+      or (a.provider_status = 'succeeded' and v_covered < v_due))) then
+    v_send := least(v_due - v_covered, p_refundable_cents);
+    if v_send <= 0 then
+      return jsonb_build_object('outcome', 'none', 'outstanding_cents', greatest(v_due - v_covered, 0));
+    end if;
+    v_no := coalesce(a.attempt_no, 0) + 1;
+    v_account := coalesce(a.stripe_account_id, d.stripe_account_id);
+    if v_account is null then select stripe_account_id into v_account from restaurants where id = p_restaurant; end if;
+    if v_account is null then return null; end if;
+    insert into refund_due_attempts(restaurant_id, due_id, attempt_no, idempotency_key, amount, stripe_account_id, stripe_payment_intent, stripe_refund_id, provider_status)
+      values(p_restaurant, d.id, v_no, 'refund-due-' || d.id || case when v_no = 1 then '' else '-' || v_no end,
+        v_send / 100.0, v_account, coalesce(a.stripe_payment_intent, d.stripe_payment_intent),
+        d.stripe_refund_id, case when d.refunded_at is not null then 'succeeded' end) returning * into a;
+  end if;
+  update refunds_due set stripe_account_id = a.stripe_account_id where id = d.id and stripe_account_id is null;
+  return to_jsonb(a);
+end;
+$$;
+revoke all on function public.start_refund_due_attempt_v2(uuid, uuid, int) from public, anon, authenticated;
+grant execute on function public.start_refund_due_attempt_v2(uuid, uuid, int) to service_role;
+
 revoke truncate, references, trigger on all tables in schema public from public, anon, authenticated;
 
 
