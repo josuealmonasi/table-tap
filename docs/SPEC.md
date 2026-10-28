@@ -609,6 +609,46 @@ dishes on a bill the restaurant has just cancelled.
   `/api/cash-drawer`, for owner, manager and cashier. Card and online money
   has no opening.
 
+## Split by people, model 2: slots
+
+The divided bill above is model 1. It waits for every phone to join, one share
+per phone. A table of four with one phone could not divide its bill at all,
+and the floor could not collect a share in cash. Model 2 is agreed in
+`tabletap-release/loop/dialogue/split-slots-contract.md`. Its database half
+is built; the routes and screens follow, and until then nothing starts a
+model-2 split except the demo seed. Model-1 splits stay readable and
+settleable as they are.
+
+- **Slots exist at once.** `start_bill_split_v2` freezes the sitting's
+  unpaid, non-account debt (the amount the screen showed, or `stale`) and
+  creates every slot, 2 to 20 of them. The odd cents go on slot 0, as
+  `sharesFor` does. Unpaid gratuities already in the orders stay inside the
+  debt but outside the food.
+- **One fee budget per bill:** the plan's flat fee, capped at 5% of the frozen
+  food (#556), sliced per slot by the same rule. A card attempt carries the
+  slices of the slots it pays; cash and the restaurant's own terminal carry
+  none.
+- **Any free slot can be paid by anyone.** A phone reserves one or more slots
+  for a card attempt (`reserve_split_slots_v1`), all or none. The floor
+  collects free slots in cash or on its terminal (`collect_split_slots_v1`)
+  from Pedidos and Cuentas abiertas. A slot held by a card attempt cannot be
+  collected; a paid slot is never paid twice or freed again.
+- **N freezes at the first payment attempt.** Before it, the split can be
+  resized or called off, on the current revision only.
+- **Below Stripe's minimum** (MX$10, US$0.50) a slot can't be paid by card
+  alone. It is combined with another or collected by the floor, never
+  inflated.
+- **A late card payment is owed back.** An attempt's slots are released only
+  when Stripe says it expired or was refused. If they were then collected
+  another way, its payment, when it lands anyway, becomes a refund owed with
+  the bell, never another slot (`settle_split_slots_v1`).
+- **The bill closes on coverage** (`close_divided_bill_v3`): every slot paid
+  and every order covered by its allocations. `pay_method` is written only
+  when every slot used one method; the old close wrote "card" for cash too.
+- **The other collections step aside.** Collecting a table or a sitting used to
+  cancel any live split. With a model-2 slot paid or held they answer `split`
+  instead, so the floor collects the slots.
+
 ## Data model
 
 `supabase/schema.sql` is one idempotent script; git history is the changelog.
