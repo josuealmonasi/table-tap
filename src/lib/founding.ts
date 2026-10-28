@@ -43,13 +43,3 @@ export function currentPrice(
   if (foundingOpen(taken)) return limits.monthly_price;
   return limits.list_price ?? limits.monthly_price;
 }
-
-/**
- * What a founder saves in a year against the list price.
- *
- * The argument is not one month's saving: it is that the price never rises.
- */
-export function yearlySaving(locked: number, list: number | null | undefined): number {
-  if (!list || list <= locked) return 0;
-  return (list - locked) * 12;
-}

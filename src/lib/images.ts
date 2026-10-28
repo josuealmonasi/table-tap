@@ -85,9 +85,6 @@ export const LOGO: ImageSpec = {
   maxBytes: 2 * 1024 * 1024,
 };
 
-/** What the file picker offers. iOS hands its HEIC photos over as JPEG when HEIC isn't listed. */
-export const ACCEPTED = ["image/jpeg", "image/png", "image/webp"];
-
 /**
  * The largest ORIGINAL we will try to open.
  *

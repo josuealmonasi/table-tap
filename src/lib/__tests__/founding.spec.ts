@@ -4,7 +4,6 @@ import {
   FOUNDING_SLOTS,
   foundingOpen,
   slotsLeft,
-  yearlySaving,
 } from "@/lib/founding";
 
 describe("the founding price", () => {
@@ -23,12 +22,6 @@ describe("the founding price", () => {
   it("closes on the place that fills it, not the one after", () => {
     expect(foundingOpen(49)).toBe(true);
     expect(foundingOpen(50)).toBe(false);
-  });
-
-  it("works out what a year at this price never costs them", () => {
-    // 899 - 699 = 200 a month the founder never pays.
-    expect(yearlySaving(699, 899)).toBe(2400);
-    expect(yearlySaving(1499, 1899)).toBe(4800);
   });
 
   it("charges the founding price while places remain", () => {
@@ -57,10 +50,4 @@ describe("the founding price", () => {
     expect(currentPrice({ monthly_price: 3499, list_price: null }, 999)).toBe(3499);
   });
 
-  it("invents no saving when there is no list price", () => {
-    expect(yearlySaving(699, null)).toBe(0);
-    expect(yearlySaving(699, undefined)).toBe(0);
-    // Nor when the list price is lower: that would be a discount in reverse.
-    expect(yearlySaving(899, 699)).toBe(0);
-  });
 });

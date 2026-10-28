@@ -37,12 +37,9 @@ import { DownloadSimple } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
 import { ForkKnife } from "@phosphor-icons/react/dist/ssr/ForkKnife";
 import { Gear } from "@phosphor-icons/react/dist/ssr/Gear";
 import { Gift } from "@phosphor-icons/react/dist/ssr/Gift";
-import { Lightbulb } from "@phosphor-icons/react/dist/ssr/Lightbulb";
-import { NotePencil } from "@phosphor-icons/react/dist/ssr/NotePencil";
 import { PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr/PaperPlaneTilt";
 import { Minus } from "@phosphor-icons/react/dist/ssr/Minus";
 import { Plus } from "@phosphor-icons/react/dist/ssr/Plus";
-import { Printer } from "@phosphor-icons/react/dist/ssr/Printer";
 import { ShieldCheck } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
 import { Ticket } from "@phosphor-icons/react/dist/ssr/Ticket";
 import { Tray } from "@phosphor-icons/react/dist/ssr/Tray";
@@ -55,7 +52,6 @@ import { Copy } from "@phosphor-icons/react/dist/ssr/Copy";
 import { House } from "@phosphor-icons/react/dist/ssr/House";
 import { LockSimple } from "@phosphor-icons/react/dist/ssr/LockSimple";
 import { MagnifyingGlass } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
-import { PauseCircle } from "@phosphor-icons/react/dist/ssr/PauseCircle";
 import { PencilSimple } from "@phosphor-icons/react/dist/ssr/PencilSimple";
 import { Receipt } from "@phosphor-icons/react/dist/ssr/Receipt";
 import { SignOut } from "@phosphor-icons/react/dist/ssr/SignOut";
@@ -104,7 +100,6 @@ export const NotificationsIcon = Bell;
 export const BillIcon = Receipt;
 export const TableIcon = Chair;
 export const SecureIcon = LockSimple;
-export const PausedIcon = PauseCircle;
 export const RatingIcon = Star;
 export const OrdersIcon = ClipboardText;
 export const AnalyticsIcon = ChartBar;
@@ -132,31 +127,14 @@ export const RoleKitchenIcon = ChefHat;
 export const StatusReceivedIcon = ClipboardText;
 export const StatusPreparingIcon = CookingPot;
 export const StatusReadyIcon = ForkKnife;
-export const HintIcon = Lightbulb;
 export const CouponIcon = Ticket;
 export const CheckIcon = Check;
 export const SelectIcon = CheckSquare;
-export const NoteIcon = NotePencil;
 export const AddIcon = Plus;
 export const RemoveIcon = Minus;
 export const DownloadIcon = DownloadSimple;
-export const PrintIcon = Printer;
 export const InviteIcon = PaperPlaneTilt;
 export const EmptyIcon = Tray;
-
-/**
- * Icon weight paired to the text it sits beside. Archivo carries hierarchy
- * through weight, and Phosphor ships the same idea, so an icon next to a bold
- * label shouldn't be drawn at body weight.
- */
-export const ICON_WEIGHT = {
-  /** Alongside 400–500 text: labels, descriptions, muted meta. */
-  regular: "regular",
-  /** Alongside 600–700 text: buttons, dish names, active states. */
-  bold: "bold",
-  /** Solid — for a selected star or an active state that must read as "on". */
-  fill: "fill",
-} as const;
 
 /**
  * The dashboard nav resolves its glyph from a key held in plain data

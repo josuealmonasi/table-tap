@@ -33,8 +33,6 @@ interface SectionEditorProps {
   onDeleteProduct: (id: string) => Promise<boolean>;
   onDuplicateProduct?: (id: string) => Promise<string | undefined>;
   onToggleAvailable: (id: string, available: boolean) => void;
-  /** Open add/edit forms in a focused modal instead of expanding inline. Defaults to on. */
-  modalForms?: boolean;
   /** Provided only for the Uncategorized catch-all: lets each product be moved into a real section. */
   categories?: Category[];
   onMoveProduct?: (productId: string, categoryId: string) => Promise<void>;
@@ -67,7 +65,6 @@ export default function SectionEditor({
   onDeleteProduct,
   onDuplicateProduct,
   onToggleAvailable,
-  modalForms = true,
   categories,
   onMoveProduct,
   onCreateCategory,
@@ -225,30 +222,20 @@ export default function SectionEditor({
               />
             );
 
-            if (modalForms) {
-              return (
-                <>
-                  <button className="tt-add-more" onClick={() => setAdding(true)}>
-                    {t("menu.addProduct")}
-                  </button>
-                  <Modal
-                    open={adding}
-                    onClose={() => setAdding(false)}
-                    maxWidth={720}
-                    title={t("menu.newProduct")}
-                  >
-                    {addForm}
-                  </Modal>
-                </>
-              );
-            }
-
-            return adding ? (
-              <div className="tt-prod tt-prod-editing">{addForm}</div>
-            ) : (
-              <button className="tt-add-more" onClick={() => setAdding(true)}>
-                {t("menu.addProduct")}
-              </button>
+            return (
+              <>
+                <button className="tt-add-more" onClick={() => setAdding(true)}>
+                  {t("menu.addProduct")}
+                </button>
+                <Modal
+                  open={adding}
+                  onClose={() => setAdding(false)}
+                  maxWidth={720}
+                  title={t("menu.newProduct")}
+                >
+                  {addForm}
+                </Modal>
+              </>
             );
           })()}
 
@@ -270,7 +257,6 @@ export default function SectionEditor({
             onDelete={onDeleteProduct}
             onDuplicate={onDuplicateProduct}
             onToggleAvailable={onToggleAvailable}
-            modalForms={modalForms}
             categories={categories}
             onMove={onMoveProduct}
             onCreateCategory={onCreateCategory}

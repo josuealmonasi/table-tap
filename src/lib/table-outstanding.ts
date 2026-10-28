@@ -70,36 +70,6 @@ export interface Paid {
 }
 
 /**
- * Money against the sitting that is still credited to what is unpaid.
- *
- * A payment carrying an `order_id` was recorded when that order was marked
- * paid, so it left with it. The rest belongs to the sitting: a waiter's
- * collections, and shares of a divided bill.
- *
- * The subtlety is what happens after a bill closes. Those collections settled
- * the orders they closed, and the orders stay on the sitting — so counting the
- * whole lifetime of a sitting's money against whatever is unpaid NOW would
- * spend the same pesos twice. A table that paid MX$200 and then ordered
- * MX$60 more read as owing nothing.
- *
- * So the money that settled an order is deducted from it: what is left over is
- * what the next round can be paid with, and usually that is everything,
- * because usually nothing has closed yet.
- */
-export function creditFor(
-  sittingPaid: Paid[],
-  settled: { id: string; total: number }[],
-  ownPaid: Map<string, number>,
-): number {
-  const collected = sittingPaid.reduce((sum, p) => sum + p.amount, 0);
-  const spent = settled.reduce(
-    (sum, o) => sum + Math.max(0, o.total - (ownPaid.get(o.id) ?? 0)),
-    0,
-  );
-  return Math.max(0, round2(collected - spent));
-}
-
-/**
  * @param restaurantId the caller's own restaurant — never taken from the client
  * @param tableId      the table being collected on
  */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchesBill, openBills, withCollected, withSplits } from "@/lib/open-bills";
+import { matchesBill, openBills, withSplits } from "@/lib/open-bills";
 import type { Order } from "@/lib/types";
 
 /**
@@ -84,36 +84,6 @@ describe("a table is one bill and a to-go order is its own", () => {
   it("leaves out what is already paid or written off", () => {
     expect(openBills([order({ paid: true })])).toHaveLength(0);
     expect(openBills([order({ written_off: true })])).toHaveLength(0);
-  });
-});
-
-describe("what a sitting has already handed over", () => {
-  it("marks the bill with it, so nobody collects that half twice", () => {
-    const bills = openBills([order({ id: "a1111111-1111-4111-8111-111111111111", table_id: "t1", total: 200 })]);
-    const withIt = withCollected(
-      bills,
-      new Map([["s1", 100]]),
-      new Map([["a1111111-1111-4111-8111-111111111111", "s1"]]),
-    );
-    expect(withIt[0].collected).toBe(100);
-  });
-
-  it("leaves a bill alone when nothing has been collected on it", () => {
-    const bills = openBills([order({ id: "a1111111-1111-4111-8111-111111111111", table_id: "t1" })]);
-    expect(withCollected(bills, new Map(), new Map())[0].collected).toBeUndefined();
-    // And a recorded zero is still nothing — it must not read as "paid some".
-    const zero = withCollected(bills, new Map([["s1", 0]]), new Map([["a1111111-1111-4111-8111-111111111111", "s1"]]));
-    expect(zero[0].collected).toBeUndefined();
-  });
-
-  it("finds the sitting through whichever of the bill's orders is on one", () => {
-    const bills = openBills([
-      order({ id: "a1111111-1111-4111-8111-111111111111", table_id: "t1", total: 50 }),
-      order({ id: "a2222222-2222-4222-8222-222222222222", table_id: "t1", total: 50 }),
-    ]);
-    // Only the second order carries the sitting.
-    const withIt = withCollected(bills, new Map([["s1", 30]]), new Map([["a2222222-2222-4222-8222-222222222222", "s1"]]));
-    expect(withIt[0].collected).toBe(30);
   });
 });
 

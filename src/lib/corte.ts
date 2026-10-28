@@ -82,18 +82,6 @@ export interface Corte {
   unverifiedAdjustments: number;
 }
 
-export const EMPTY_CORTE: Corte = {
-  people: [],
-  totals: EMPTY_TILL,
-  online: 0,
-  writtenOff: 0,
-  discounted: 0,
-  refunded: 0,
-  onAccount: 0,
-  accountsOwed: 0,
-  unverifiedAdjustments: 0,
-};
-
 /** Returns and waived bills are activity even when nobody collected today. */
 export function hasCorteActivity(corte: Corte): boolean {
   return corte.people.length > 0 || Object.values(corte.totals).some(v => v !== 0)

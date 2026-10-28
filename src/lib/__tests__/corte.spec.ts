@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY_CORTE, corteFrom } from "@/lib/corte";
+import { corteFrom, type Corte } from "@/lib/corte";
+import { EMPTY_TILL } from "@/lib/till";
 
 /** A row of `payments`, taken by a member of staff. */
 const took = (actor_email: string, amount: number, method: string) => ({
@@ -156,3 +157,15 @@ describe("money handed back after it arrived", () => {
     expect(corte.refunded).toBe(0);
   });
 });
+
+const EMPTY_CORTE: Corte = {
+  people: [],
+  totals: EMPTY_TILL,
+  online: 0,
+  writtenOff: 0,
+  discounted: 0,
+  refunded: 0,
+  onAccount: 0,
+  accountsOwed: 0,
+  unverifiedAdjustments: 0,
+};

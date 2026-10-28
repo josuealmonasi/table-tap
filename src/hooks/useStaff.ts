@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import useSWR from "swr";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/lib/i18n/context";
@@ -20,22 +21,24 @@ export interface StaffMember {
 /** Staff rows plus each member's profile name (when they've filled it in). */
 async function fetchMembers(restaurantId: string): Promise<StaffMember[]> {
   const supabase = createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("staff")
     .select("id, email, role, created_at, user_id")
     .eq("restaurant_id", restaurantId)
     .order("created_at");
+  if (error) throw error;
   const rows = (data as (StaffMember & { user_id: string })[]) ?? [];
   if (rows.length === 0) return [];
 
   // Names live in profiles (the owner may read their staff's rows under RLS).
-  const { data: profiles } = await supabase
+  const { data: profiles, error: profileError } = await supabase
     .from("profiles")
     .select("user_id, full_name")
     .in(
       "user_id",
       rows.map(r => r.user_id),
     );
+  if (profileError) throw profileError;
   const names = new Map(
     ((profiles as { user_id: string; full_name: string }[]) ?? []).map(p => [
       p.user_id,
@@ -54,27 +57,17 @@ async function fetchMembers(restaurantId: string): Promise<StaffMember[]> {
  */
 export function useStaff(restaurantId: string) {
   const t = useT();
-  const [members, setMembers] = useState<StaffMember[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data, error, isLoading: loading, mutate } = useSWR(
+    ["staff", restaurantId],
+    ([, id]) => fetchMembers(id),
+  );
+  const members = data ?? [];
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const members = await fetchMembers(restaurantId);
-      if (!cancelled) {
-        setMembers(members);
-        setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [restaurantId]);
-
   async function refresh(): Promise<void> {
-    setMembers(await fetchMembers(restaurantId));
+    // The invite already succeeded; a failed list read must not invite twice.
+    await mutate().catch(() => undefined);
   }
 
   async function addMember(email: string, role: StaffRole): Promise<boolean> {
@@ -115,7 +108,7 @@ export function useStaff(restaurantId: string) {
         return;
       }
       toast(t("done.roleUpdated"));
-      setMembers(prev => prev.map(m => (m.id === id ? { ...m, role } : m)));
+      await mutate(prev => prev?.map(m => (m.id === id ? { ...m, role } : m)), { revalidate: false });
     } catch {
       toast(t("done.networkError"), "error");
     } finally {
@@ -137,7 +130,7 @@ export function useStaff(restaurantId: string) {
         return;
       }
       toast(t("done.loginRemoved"));
-      setMembers(prev => prev.filter(m => m.id !== id));
+      await mutate(prev => prev?.filter(m => m.id !== id), { revalidate: false });
     } catch {
       toast(t("done.networkError"), "error");
     } finally {
@@ -145,5 +138,5 @@ export function useStaff(restaurantId: string) {
     }
   }
 
-  return { members, loading, busy, addMember, updateRole, removeMember };
+  return { members, loading, error, refresh, busy, addMember, updateRole, removeMember };
 }

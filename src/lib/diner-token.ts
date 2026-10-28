@@ -25,11 +25,3 @@ export function dinerToken(restaurantId: string): string {
     return "";
   }
 }
-
-export function forgetDiner(restaurantId: string): void {
-  try {
-    localStorage.removeItem(KEY(restaurantId));
-  } catch {
-    // Nothing kept, nothing to forget.
-  }
-}

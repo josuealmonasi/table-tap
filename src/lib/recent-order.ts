@@ -124,18 +124,6 @@ export function recallActiveOrders(
   }
 }
 
-/** The stored in-progress order id for this restaurant, if any. */
-export function recallOrder(
-  restaurantId: string,
-  tableId?: string | null,
-): string | null {
-  try {
-    return localStorage.getItem(key(restaurantId, tableId));
-  } catch {
-    return null;
-  }
-}
-
 /** Every order this device has placed at this restaurant, newest first. */
 export function recallOrders(restaurantId: string): string[] {
   try {

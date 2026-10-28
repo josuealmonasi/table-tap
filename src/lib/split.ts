@@ -11,16 +11,6 @@ import { round2 } from "@/lib/money";
  * somebody ordered afterwards are all decided elsewhere; this only divides.
  */
 
-/** What one person owes: their share, plus anything they ordered since. */
-export interface Share {
-  /** Their slice of the frozen amount. */
-  share: number;
-  /** Their own orders, placed after the table agreed. */
-  own: number;
-  /** What they actually pay. */
-  total: number;
-}
-
 /**
  * Split an amount into `people` shares, in centavos, with the remainder on the
  * first — which is the person who proposed it.
@@ -38,41 +28,4 @@ export function sharesFor(amount: number, people: number): number[] {
   const extra = cents - base * people;
 
   return Array.from({ length: people }, (_, i) => ((i === 0 ? base + extra : base)) / 100);
-}
-
-/**
- * What each person owes once the table has agreed.
- *
- * The split freezes: `amount` is what was outstanding at that moment, divided
- * evenly and never revisited. Anything ordered afterwards belongs to whoever
- * ordered it — the table agreed to divide the meal they had eaten, not to buy
- * each other another round.
- */
-export function splitTotals(
-  amount: number,
-  people: number,
-  ownSince: number[] = [],
-): Share[] {
-  return sharesFor(amount, people).map((share, i) => {
-    const own = round2(ownSince[i] ?? 0);
-    return { share, own, total: round2(share + own) };
-  });
-}
-
-/**
- * What is left to divide.
- *
- * Someone paying for their own dishes before the table decides to split is
- * ordinary — the person who has to leave early does it every night. Their money
- * is already in, so it is not divided again: the table splits what is still
- * owed, and nothing else.
- */
-export function amountToSplit(owedNow: number, alreadyPaid: number): number {
-  return round2(Math.max(0, round2(owedNow) - round2(alreadyPaid)));
-}
-
-/** Whether the shares still add up to the thing they came from. */
-export function addsUp(amount: number, shares: number[]): boolean {
-  const sum = shares.reduce((a, b) => Math.round(b * 100) + a, 0);
-  return sum === Math.round(round2(amount) * 100);
 }

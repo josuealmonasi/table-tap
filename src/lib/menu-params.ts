@@ -21,14 +21,6 @@ export interface MenuParams {
   combo: string | null;
 }
 
-export const EMPTY_MENU_PARAMS: MenuParams = {
-  q: "",
-  cat: "all",
-  diet: [],
-  item: null,
-  combo: null,
-};
-
 export function readMenuParams(search: URLSearchParams): MenuParams {
   const diet = (search.get("diet") ?? "")
     .split(",")

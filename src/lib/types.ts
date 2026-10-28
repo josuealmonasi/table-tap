@@ -54,13 +54,6 @@ export type MenuItem = {
   sort_order: number;
 };
 
-// Links a product to an add-on item it offers (both rows live in menu_items).
-export type ItemAddon = {
-  product_id: string;
-  addon_id: string;
-  sort_order: number;
-};
-
 export type Category = {
   id: string;
   restaurant_id: string;
