@@ -8,7 +8,9 @@ function db(scope: string | null = orderRequestScope("pos-account", body)) {
   const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ error: null,
     data: { id: "ticket", total: 100, currency: "MXN", status: "received", paid: false,
       account_id: "tab", charged_at: "now", request_scope: scope } }) };
-  return { from: () => q } as unknown as ReturnType<typeof createAdminClient>;
+  return { from: () => q, rpc: async () => ({ error: null, data: {
+    outcome: "settled", settled: true, repeat: true, orderId: "ticket", total: 100, currency: "MXN", onAccount: { name: "Customer" },
+  } }) } as unknown as ReturnType<typeof createAdminClient>;
 }
 it.each([
   { ...body, accountId: "other" }, { ...body, items: [{ ...body.items[0], qty: 2 }] },

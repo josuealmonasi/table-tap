@@ -979,6 +979,8 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     title: "Order status",
     backToMenu: "Back to menu",
     yourItems: "Your items",
+    returned: "Returned",
+    returnPending: "Still to return",
     totalPaid: "Total paid",
     stepReceived: "Order Received",
     stepPreparing: "Preparing",

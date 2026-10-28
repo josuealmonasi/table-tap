@@ -1,4 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { readReturnAdjustments, returnComponents, verifyReturnedOrder } from "@/lib/return-components";
+import { readReceiptReturns } from "@/lib/receipt-return-source";
+import { receiptCents as cents } from "@/lib/receipt-amount";
 import type { Order } from "@/lib/types";
 
 /**
@@ -25,10 +28,12 @@ export type TrackedOrder = Pick<
   // it, whatever stage the kitchen last left it at — and the phone has to be
   // told, or it goes on offering to follow an order nobody is cooking.
   | "written_off"
->;
+> & { returnSummary?: TrackedReturnSummary };
+
+export interface TrackedReturnSummary { paid: number; returned: number; pending: number }
 
 const TRACKER_COLUMNS =
-  "id, restaurant_id, table_id, table_label, status, items, total, currency, paid, customer_name, written_off";
+  "id, restaurant_id, table_id, table_label, status, items, total, tip, service_fee, currency, paid, customer_name, written_off";
 
 // UUIDs only — avoids sending malformed ids to Postgres' uuid column.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -51,5 +56,21 @@ export async function fetchTrackedOrder(orderId: string): Promise<TrackedOrder |
   // null, and the tracker page answered a diner who had just ordered with
   // "not found". Thrown: the page offers a retry and says nothing was lost.
   if (error) throw new Error(`Could not read the order: ${error.message}`);
-  return (data as TrackedOrder | null) ?? null;
+  if (!data) return null;
+  const { tip, service_fee, ...order } = data as TrackedOrder & { tip: number; service_fee: number };
+  const adjustments = await readReturnAdjustments(admin, order.restaurant_id, [order.id]);
+  if (!adjustments.length) return order;
+  if (adjustments.some(a => a.currency !== order.currency)) throw new Error("The return currency differs from its sale");
+  verifyReturnedOrder({ ...order, tip, service_fee }, adjustments);
+  const components = returnComponents(adjustments);
+  // Use the receipt's verified partial coverage. The retained bill is not
+  // what the diner originally paid, nor proof the whole promise was returned.
+  const [receipt] = await readReceiptReturns(admin, order.restaurant_id, [{ ...order,
+    total: (cents(order.total) + cents(components.total)) / 100,
+    tip: (cents(tip) + cents(components.tip)) / 100,
+    service_fee: (cents(service_fee) + cents(components.service_fee)) / 100,
+  }], adjustments);
+  const returned = (receipt.returns ?? []).reduce((sum, r) => sum + (r.returned_cents ?? (r.status === "succeeded" ? cents(r.amount) : 0)), 0);
+  return { ...order, returnSummary: { paid: (cents(order.total) + cents(components.total)) / 100,
+    returned: returned / 100, pending: (cents(components.total) - returned) / 100 } };
 }

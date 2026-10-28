@@ -125,3 +125,27 @@ it("recovers an exact legacy cancellation tag without mistaking a partial for th
   expect(await executeOrderRefund("r1", "return-one", "manager", client)).toBe(true);
   expect(calls.create).not.toHaveBeenCalled();
 });
+
+it.each([false, true])("recovers a pre-deploy null-currency attempt (saved provider id: %s)", async savedId => {
+  fixture.tables.restaurants = [{ id: "r1", currency: "USD" }];
+  const saved = { ...attempt("return-one"), currency: null, idempotency_key: "cancel-original",
+    created_at: "2020-01-01T00:00:00Z", stripe_refund_id: savedId ? "re_legacy" : null };
+  fixture.tables.refund_attempts = [{ ...saved, restaurant_id: "r1", origin: "app" }];
+  rpc.mockImplementation(async name => ({ data: name === "start_refund_attempt" ? saved
+    : { outcome: "completed", outstanding_cents: 0 }, error: null }));
+  const made = [{ id: "re_legacy", amount: 10000, currency: "mxn", payment_intent: "pi_1", status: "succeeded",
+    metadata: { refund_operation: "return-one" } }] as unknown as Stripe.Refund[];
+  const { client, calls } = fakeStripe({ currency: "mxn", made, retrieve: async () => made[0] });
+  expect(await executeOrderRefund("r1", "return-one", "manager", client)).toBe(true);
+  expect(calls.create).not.toHaveBeenCalled();
+  expect(rpc).toHaveBeenCalledWith("finish_refund_operation_v2", expect.objectContaining({
+    p_refunds: [expect.objectContaining({ currency: "MXN", id: "re_legacy" })],
+  }));
+});
+
+it("does not replace a conflicting saved attempt currency with the operation currency", async () => {
+  rpc.mockResolvedValue({ data: { ...attempt("return-one"), currency: "USD" }, error: null });
+  const { client, calls } = fakeStripe({ currency: "mxn" });
+  expect(await executeOrderRefund("r1", "return-one", "manager", client)).toBe(false);
+  expect(calls.create).not.toHaveBeenCalled();
+});

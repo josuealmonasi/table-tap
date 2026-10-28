@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { completedEventQuery } from "./return-events-fixture";
 import { returnFixture } from "./returns-contract-fixtures";
 import { buildReceipt, type ReceiptOrder } from "@/lib/receipt";
 import { foodRevenue } from "@/lib/report-revenue";
 
-const db = vi.hoisted(() => ({ from: vi.fn() }));
+const db = vi.hoisted(() => ({ from: vi.fn(), rpc: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => db }));
 import { returnedAdjustments } from "@/lib/refunds/adjustments";
 import { corteFrom } from "@/lib/corte";
@@ -11,6 +12,7 @@ import { corteFrom } from "@/lib/corte";
 let fixture: ReturnType<typeof returnFixture>;
 beforeEach(() => {
   vi.clearAllMocks(); fixture = returnFixture(); db.from.mockImplementation(fixture.from);
+  db.rpc.mockImplementation((_name, args) => completedEventQuery(fixture, args));
 });
 
 describe("a return keeps the sale and has its own completion day", () => {

@@ -5488,3 +5488,72 @@ every approved phone. `pnpm api` found it. A new invariant reads every plain
 `select` and filter on a known table against `schema.sql` (3,160 references
 today) and failed on both lines with the fix reverted. The table now comes from
 the sitting, which the membership check already ties to the table.
+
+## Returns audit #575 — legacy attempt currency
+
+| Rule | Two places that had to agree | Regression coverage |
+|---|---|---|
+| A saved return survives the currency column deploy | Old attempts had no currency while their operations retained the charge currency | `returns-provider.spec.ts`: pre-deploy null-currency attempt |
+
+The attempt and its operation had to agree about the original charge. A null
+attempt currency now falls back only to its operation, never today's restaurant
+currency. Provider IDs and exact legacy tags still recover the saved outcome
+without another POST. No backfill is needed; a conflicting saved currency is
+still refused.
+
+## Returns audit #575 — forgiveness followed by returns
+
+| Rule | Two places that had to agree | Regression coverage |
+|---|---|---|
+| A forgiven bill can later return money | The forgiveness snapshot stayed fixed while the order and retained allocations came down | `forgiveness-money.spec.ts`: forgiveness followed by returns |
+
+The saved forgiveness and today's retained coverage had to agree after returns.
+The checker now subtracts that order's immutable return deltas from the
+forgiveness result, including tips. It still verifies the original loss and its
+single event unchanged. Partial and full returns no longer report a false
+coverage failure.
+
+## Returns audit #575 — replay the collected sale
+
+| Rule | Two places that had to agree | Regression coverage |
+|---|---|---|
+| A replay after a return leaves the device | The replay used the retained bill while the device remembered the original collection | `pos-return-replay.spec.ts` |
+
+The server's repeated ticket and the device's saved charge had to agree. After
+checking tenant, method, currency, paid state and account request scope, the
+TypeScript reader now uses `pos_ticket`, the same ticket reader as the atomic
+writers. It must return the original collection after partial or full returns.
+The device still refuses contradictory amounts; it never silently drops money.
+The SQL correction to `pos_ticket(uuid, uuid)` is owned by Claude and must ship
+with this reader. Mocked replay tests are not database proof.
+
+## Returns audit #575 — the tracker shows paid and returned money
+
+| Rule | Two places that had to agree | Regression coverage |
+|---|---|---|
+| Total paid stays the amount the diner paid | Return preparation lowered the order while the tracker kept its paid label | `tracker-return-source.spec.ts`, `tracker-returns.spec.tsx` |
+
+The tracker and receipt had to agree about money already returned and still to
+return. The tracker now reads the receipt's verified coverage, restores the
+original paid amount and shows separate returned and pending amounts. English
+and Spanish are covered through `TrackerBody`, including a manual partial
+return. A failed financial read asks for retry instead of inventing amounts.
+
+## Returns audit #575 — each successful refund has its own date
+
+| Rule | Two places that had to agree | Regression coverage |
+|---|---|---|
+| Reports date money when each refund succeeds | The receipt counted a successful manual partial while analytics and corte waited for final operation completion | `return-event-dates.spec.ts`, updated `returns-readers.spec.ts`, `returns-reporting.spec.ts`, `shift-return-trail.spec.ts` |
+
+The receipt's verified coverage and dated reports had to agree. Analytics,
+corte, collected-today adjustments and the shift trail now read individual
+successful amounts from `order_return_events_v1`, including manual partials.
+Completing the remainder tomorrow cannot move today's returned money into
+tomorrow. Dated reports use an exclusive end; the shift trail keeps its existing
+inclusive closing instant. Imported log deductions stay excluded from typed
+corte/trail deductions, and cancellation money stays outside completed-sale
+return analytics. A failed event read cannot become a zero-refund day.
+
+The new SQL read and durable per-refund success timestamps are prerequisites,
+not implemented or applied by this TypeScript worker. The exact contract and
+legacy evidence rules are in `docs/returns-audit-ts-handoff.md`.

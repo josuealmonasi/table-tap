@@ -66,8 +66,10 @@ export async function executeOrderRefund(
   });
   if (error) throw new Error(`Could not prepare the refund: ${error.message}`);
   if (!attempt) return false;
+  // Pre-deploy attempts have no currency. The operation keeps the charge's
+  // currency even when the restaurant has since switched its menu.
   if (attempt.stripe_account_id !== operation.stripe_account_id || attempt.stripe_payment_intent !== operation.stripe_payment_intent
-    || attempt.currency !== operation.currency) return false;
+    || (attempt.currency ?? operation.currency) !== operation.currency) return false;
   if (attempt.operation_status === "succeeded") {
     await reconcileFee();
     return true;

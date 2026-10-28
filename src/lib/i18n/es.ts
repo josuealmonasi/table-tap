@@ -976,6 +976,8 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     title: "Estado de tu pedido",
     backToMenu: "Volver al menú",
     yourItems: "Tus platillos",
+    returned: "Devuelto",
+    returnPending: "Pendiente por devolver",
     totalPaid: "Total pagado",
     stepReceived: "Pedido recibido",
     stepPreparing: "Preparando",

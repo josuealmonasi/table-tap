@@ -24,6 +24,11 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
     return q;
   },
   rpc: async (name: string, args: Record<string, unknown>) => {
+    if (name === "pos_ticket") return { error: null, data: state.ticket && {
+      outcome: "settled", settled: true, repeat: true, orderId: state.ticket.id, total: state.ticket.total,
+      currency: state.ticket.currency, method: state.ticket.pay_method, handedOver: state.ticket.status === "completed",
+      ...(state.ticket.account_id ? { onAccount: { name: "Guest" } } : {}),
+    } };
     state.calls.push({ name, args });
     if (state.reply) return { data: state.reply, error: null };
     state.ticket = { id: args.p_ref, total: 100, currency: "MXN", pay_method: args.p_method, paid: name !== "ring_pos_account_v2", status: "completed",

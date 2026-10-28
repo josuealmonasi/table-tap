@@ -22,7 +22,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => { const from =
       created_at: "2026-10-20T12:00:00Z", orders: null, stripe_payment_intent: null,
     })));
     if (table === "orders") data = currencies.map(c => ({ id: `order-${c}`, currency: c, items: [{ itemId: "dish", name: "Dish", price: c === "MXN" ? 100 : 200, qty: 1 }], total: c === "MXN" ? 100 : 200, service_fee: 0, tip: 0, tax_pct: 0 }));
-    if (table === "refund_operations") data = currencies.map(c => ({ source: "cash", amount: c === "MXN" ? 10 : 50, payout_actor: "cashier@example.com", completed_at: "2026-10-20T13:00:00Z", tip: 0 }));
+    if (table === "refund_operations") data = currencies.map(c => ({ id: c, amount_cents: c === "MXN" ? 1000 : 5000, succeeded_at: "2026-10-20T13:00:00Z", source: "cash", amount: c === "MXN" ? 10 : 50, payout_actor: "cashier@example.com", completed_at: "2026-10-20T13:00:00Z", tip: 0 }));
     // An imported return already counted by its old log must not leave the
     // drawer twice, even when its currency matches the current restaurant.
     if (table === "refund_operations" && !withoutHistoricalReturns && (!currency || currency === "MXN")) {
@@ -34,7 +34,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => { const from =
   q.single = async () => result();
   q.then = (resolve: (value: unknown) => unknown) => Promise.resolve(result()).then(resolve);
   return q;
-}; return { from, rpc: (_name: string, args: { p_currency: string }) => { const q = from("payments"); const eq = q.eq as (key: string, value: string) => unknown; eq("currency", args.p_currency); eq("method", "card"); return q; } }; } }));
+}; return { from, rpc: (_name: string, args: { p_currency: string }) => { if (_name === "order_return_events_v1") { const q = from("refund_operations"); (q.eq as (k: string, v: string) => unknown)("currency", args.p_currency); return q; } const q = from("payments"); const eq = q.eq as (key: string, value: string) => unknown; eq("currency", args.p_currency); eq("method", "card"); return q; } }; } }));
 
 const { readCosts } = await import("@/lib/costs/server");
 const { readTerminal } = await import("@/lib/terminal-server");

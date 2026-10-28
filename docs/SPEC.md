@@ -2465,16 +2465,23 @@ POST. Fee completion remains separate through charge-wide recovery.
 
 Sales analytics and product contribution restore every immutable return delta
 before computing the original sale on its original day. Forgiveness is not
-restored as earnings. A separate return total uses each operation's completion
-date with half-open local-day bounds. Pending promises show their outstanding
-amount separately. Corte, collected-today, cash-shift cutoffs and signed terminal
-deposit manifests continue reading completed typed operations without duplicate
-legacy log deductions. Partial provider coverage does not complete an operation.
+restored as earnings. A separate return total dates each successful refund piece,
+including manual partial coverage, with half-open local-day bounds. Pending
+promises show only their outstanding amount separately. Analytics, corte,
+collected-today and shift trails share `order_return_events_v1`; imported log
+deductions remain deduplicated. This read requires Claude's SQL integration and
+durable success timestamps (see `docs/returns-audit-ts-handoff.md`). Cash-shift
+cutoff sums and signed terminal deposit manifests continue reading completed
+typed operations; they are outside this dated-report reader change. Partial
+provider coverage does not complete an operation. POS retries acknowledge the
+original collection after returns so the device can remove its saved sale.
 
 Email, plain text, thermal print and staff reprints show original, returned,
 pending and retained amounts, methods and original currency. Slot receipts
 follow their own payment allocations. Verified partial coverage is shown as
-partial, never the whole promise. Issued return versions carry a signed
+partial, never the whole promise. The customer tracker shares that verified
+coverage and shows original paid, returned and pending money in both languages;
+it never calls the retained bill the amount paid. Issued return versions carry a signed
 financial copy, scoped to their restaurant and receipt, so a later return or
 provider failure cannot rewrite paper already issued. Legacy versions continue
 to reconstruct the original bill. Return copies have no expiry; they use the

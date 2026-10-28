@@ -65,9 +65,14 @@ export async function checkAllocations(db, all, orders, payments, { ok, bad }) {
     const reserved = returns.filter(r => mine.some(p => p.id === r.allocation_id));
     const retained = sum(mine, "amount") - sum(reserved, "amount");
     const tip = sum(mine, "tip") - sum(reserved, "tip");
+    // Forgiveness freezes the paid bill before later returns lower it again.
+    // Only this order's immutable return reductions change that snapshot.
+    const later = adjustments.filter(r => r.kind === "return" && r.order_id === a.order_id && r.restaurant_id === a.restaurant_id);
+    const totalAfterReturns = cents(a.resulting_total) - later.reduce((s, r) => s + cents(r.previous_total) - cents(r.resulting_total), 0);
+    const tipAfterReturns = cents(a.resulting_tip) - later.reduce((s, r) => s + cents(r.previous_tip) - cents(r.resulting_tip), 0);
     if (!o || o.restaurant_id !== a.restaurant_id || !o.paid || o.written_off || o.status === "cancelled"
-      || cents(o.total) !== cents(a.resulting_total) || cents(o.tip) !== cents(a.resulting_tip)
-      || retained !== cents(a.resulting_total) || tip !== cents(a.resulting_tip)) bad(`forgiven order ${a.order_id} lacks resulting coverage`);
+      || cents(o.total) !== totalAfterReturns || cents(o.tip) !== tipAfterReturns
+      || retained !== totalAfterReturns || tip !== tipAfterReturns) bad(`forgiven order ${a.order_id} lacks resulting coverage`);
     // Match the writer's per-order cents, including unscaled legacy totals.
     if (!Number.isFinite(Number(a.forgiven)) || cents(a.forgiven) <= 0
       || cents(a.previous_total) - cents(a.resulting_total) !== cents(a.forgiven)

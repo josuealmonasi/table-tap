@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { everyRow } from "@/lib/paged";
+import { readReturnEvents } from "./events";
 import { logDetail } from "@/lib/log-detail";
 import type { CorteAdjustment } from "@/lib/corte";
 
@@ -7,14 +7,8 @@ import type { CorteAdjustment } from "@/lib/corte";
  * the source of the new return's amount, method, date or payout drawer. */
 export async function returnedAdjustments(restaurantId: string, from: string, to?: string, currency?: string): Promise<CorteAdjustment[]> {
   const db = createAdminClient();
-  const rows = await everyRow<{ source: string; amount: number; payout_actor: string | null }>((a, b) => {
-    let q = db.from("refund_operations").select("source, amount, payout_actor")
-      .eq("restaurant_id", restaurantId).eq("status", "succeeded").is("historical_log_id", null).gte("completed_at", from);
-    if (currency) q = q.eq("currency", currency);
-    if (to) q = q.lt("completed_at", to);
-    return q.order("id").range(a, b);
-  }, "the completed order returns");
+  const rows = await readReturnEvents(db, restaurantId, from, to, { currency, excludeHistorical: true });
   return rows.map(r => ({ action: "refunded", detail: logDetail({
-    amount: Number(r.amount).toFixed(2), method: r.source === "cash" ? "cash" : "card", collector: r.payout_actor,
+    amount: (r.amount_cents / 100).toFixed(2), method: r.source === "cash" ? "cash" : "card", collector: r.payout_actor,
   }) }));
 }

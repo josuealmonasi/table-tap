@@ -1,14 +1,17 @@
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { everyRowIn } from "@/lib/paged";
-import type { ReceiptOrder } from "@/lib/receipt";
 import type { ReceiptReturn } from "@/lib/receipt-returns";
 import { returnComponents, type ReturnAdjustment } from "@/lib/return-components";
 import { receiptCents as cents } from "@/lib/receipt-amount";
 
+interface ReturnOrder {
+  id: string; currency: string; total: number | string;
+  tip?: number | string | null; service_fee?: number | string | null;
+}
 /** Restore only the chosen sale version, then apply its reserved returns.
  * Forgiveness remains a loss, never money that a return can give back. */
-export async function readReceiptReturns(db: ReturnType<typeof createAdminClient>, restaurant: string,
-  orders: ReceiptOrder[], adjustments: ReturnAdjustment[]): Promise<ReceiptOrder[]> {
+export async function readReceiptReturns<T extends ReturnOrder>(db: ReturnType<typeof createAdminClient>, restaurant: string,
+  orders: T[], adjustments: ReturnAdjustment[]): Promise<(T & { return_components?: ReturnType<typeof returnComponents>; returns?: ReceiptReturn[] })[]> {
   const found = await everyRowIn<ReceiptReturn & { adjustment_id: string; currency: string }>(adjustments.map(a => a.id),
     (ids, a, b) => db.from("refund_operations")
       .select("id, adjustment_id, source, amount, tip, currency, status, completed_at")

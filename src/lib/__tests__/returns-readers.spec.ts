@@ -1,11 +1,14 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import { completedEventQuery } from "./return-events-fixture";
 import { returnFixture } from "./returns-contract-fixtures";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { withReturnComponents } from "@/lib/return-components";
 import { computeAnalytics } from "@/lib/analytics";
 import { saleReturnSummary } from "@/lib/refunds/reporting";
 let fixture: ReturnType<typeof returnFixture>;
-const db = () => fixture as unknown as ReturnType<typeof createAdminClient>;
+const db = () => ({ ...fixture, rpc: (name: string, args: { p_restaurant: string; p_currency: string | null }) =>
+  name === "order_return_events_v1" ? completedEventQuery(fixture, args) : fixture.rpc(name, args),
+}) as unknown as ReturnType<typeof createAdminClient>;
 beforeEach(() => { fixture = returnFixture(); });
 it("restores original sales, ticket averages, food contribution and sold units without restoring forgiven money", async () => {
   fixture.tables.order_adjustments = [{ id: "return", restaurant_id: "r1", order_id: "sale", kind: "return", currency: "USD",
