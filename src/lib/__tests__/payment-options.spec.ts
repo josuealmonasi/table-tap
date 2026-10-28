@@ -167,10 +167,10 @@ describe("what a bill that already exists can be settled with", () => {
 
   it("keeps a waiter's bill the waiter's, card reader or not", () => {
     // Two people collecting one bill through different doors is how a table
-    // pays twice, and the routes refuse it from their side too. Dividing it
-    // included: the waiter has a calculator that does the same job.
+    // pays twice, and the whole-bill route still refuses it. Model-2 parts
+    // now share the waiter's slot locks, so dividing stays open.
     const o = billActions(billCtx({ staffBill: true }));
-    expect(o).toMatchObject({ payOnline: false, split: false, extras: false });
-    expect(billActions(billCtx({ staffBill: true, splitAllowed: true })).split).toBe(false);
+    expect(o).toMatchObject({ payOnline: false, split: true, extras: false });
+    expect(billActions(billCtx({ staffBill: true, splitAllowed: true })).split).toBe(true);
   });
 });

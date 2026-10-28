@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useRef, useState } from "react";
+import useSWR from "swr";
 import { useT } from "@/lib/i18n/context";
 import { SPLIT_POLL_MS } from "@/lib/poll";
 
 /** What the table is doing about its bill, from this phone's point of view. */
 export interface SplitState {
+  modelVersion?: number; revision?: number; currency?: string; frozen?: boolean; slots?: import("@/lib/split-slots").SplitSlot[];
+  resumptions?: import("@/lib/split-slots").SplitResumption[];
   id: string;
   shares: number;
   status: "proposed" | "locked" | "cancelled" | "done";
@@ -32,6 +35,7 @@ export function useSplit(
   active: boolean,
   /** This phone's own unpaid orders — what it would owe on top of its share. */
   ownOrderIds: string[] = [],
+  quote?: { expectedCents: number; currency: string },
 ): {
   split: SplitState | null;
   diner: string;
@@ -40,71 +44,76 @@ export function useSplit(
   propose: (shares: number) => Promise<void>;
   join: () => Promise<void>;
   cancel: () => Promise<void>;
+  ready: boolean;
   refresh: () => Promise<void>;
+  resize: (people: number) => Promise<void>;
 } {
   const t = useT();
-  const [split, setSplit] = useState<SplitState | null>(null);
   const [busy, setBusy] = useState(false);
-  const [diner, setDiner] = useState("");
   const [error, setError] = useState<string | null>(null);
-
-  const read = useCallback(async () => {
-    if (!tableId || !sessionId) return;
+  const start = useRef<{ key: string; ref: string } | null>(null);
+  const sending = useRef(false);
+  const key = active && tableId && sessionId
+    ? `/api/split?sessionId=${sessionId}&restaurantId=${restaurantId}&tableId=${tableId}&own=${encodeURIComponent(ownOrderIds.join(","))}` : null;
+  const { data, error: readError, mutate } = useSWR<{ split: SplitState | null; diner: string }>(key, async url => {
     try {
-      const res = await fetch(
-        `/api/split?sessionId=${sessionId}&diner=${encodeURIComponent(diner)}` +
-          `&restaurantId=${restaurantId}&tableId=${tableId}` +
-          `&own=${encodeURIComponent(ownOrderIds.join(","))}`,
-      );
-      if (!res.ok) return;
-      const data = (await res.json()) as { split: SplitState | null; diner: string };
-      setSplit(data.split);
-      setDiner(data.diner);
-    } catch {
+      const res = await fetch(url, { cache: "no-store" });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error ?? t("slots.readFailed"));
+      return result;
+    } catch { throw new Error(t("slots.readFailed")); }
+  }, { refreshInterval: SPLIT_POLL_MS });
+  const split = data?.split ?? null;
+  const diner = data?.diner ?? "";
+  async function read(): Promise<void> { await mutate(); }
+
+  async function send(path: string, method: string, body: Record<string, unknown>): Promise<void> {
+    if (!tableId || !sessionId || sending.current) return;
+    sending.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(path, {
+        method, headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionId, diner, restaurantId, tableId, ...body }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) setError(result.error ?? t("apiErr.generic"));
       // Offline for a moment: keep showing what we last knew.
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restaurantId, tableId, sessionId, diner, ownOrderIds.join(",")]);
-
-  useEffect(() => {
-    if (!active) return;
-    read();
-    const timer = setInterval(read, SPLIT_POLL_MS);
-    return () => clearInterval(timer);
-  }, [active, read]);
-
-  const send = useCallback(
-    async (path: string, method: string, body: Record<string, unknown>) => {
-      if (!tableId || !sessionId) return;
-      setBusy(true);
-      setError(null);
-      try {
-        const res = await fetch(path, {
-          method,
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ sessionId, diner, restaurantId, tableId, ...body }),
-        });
-        const data = (await res.json().catch(() => ({}))) as { split?: SplitState | null; error?: string };
-        if (!res.ok) { setError(data.error ?? t("apiErr.generic")); return; }
-        if ("split" in data) setSplit(data.split ?? null);
-        else await read();
-      } catch {
-        setError(t("done.networkError"));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [restaurantId, tableId, sessionId, diner, read, t],
-  );
+      // A refusal can mean another phone took a part, so read the current list too.
+      await read();
+    } catch { setError(t("done.networkError")); }
+    finally { sending.current = false; setBusy(false); }
+  }
+  function propose(shares: number): Promise<void> {
+    const request = JSON.stringify({ restaurantId, tableId, sessionId, shares, ...quote });
+    // The same start after a lost reply must find its split, not create another.
+    if (start.current?.key !== request) start.current = { key: request, ref: splitStartRef() };
+    return send("/api/split/start", "POST", { shares, ...quote, ref: start.current.ref });
+  }
 
   return {
     split,
     diner,
     busy,
-    error,
-    propose: (shares: number) => send("/api/split", "POST", { shares }),
+    error: error ?? (readError ? t("slots.readFailed") : null),
+    ready: Boolean(data) && !readError,
+    propose,
     join: () => send("/api/split/join", "POST", { splitId: split?.id }),
-    cancel: () => send("/api/split", "DELETE", { splitId: split?.id }),
+    cancel: () => split?.modelVersion === 2
+      ? send("/api/split/cancel", "POST", { splitId: split.id, revision: split.revision })
+      : send("/api/split", "DELETE", { splitId: split?.id }),
+    resize: (shares: number) => send("/api/split/resize", "POST", { splitId: split?.id, revision: split?.revision, shares }),
     refresh: read,
   };
+}
+
+/** Local Wi-Fi can be plain HTTP: getRandomValues still gives a UUID there. */
+function splitStartRef(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 15) | 64;
+  bytes[8] = (bytes[8] & 63) | 128;
+  const hex = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }

@@ -7,6 +7,7 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { closeSessionsFor } from "@/lib/table-session";
 import { NOTE_MAX, writableOff, writeOffTotal } from "@/lib/write-off";
+import { applyWriteOffRest, coverageByOrder, owedCents, REST_REFUSAL } from "@/lib/write-off-rest";
 
 export const runtime = "nodejs";
 
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const { data: rows, error: readError } = await db
     .from("orders")
-    .select("id, total, paid, written_off, status, table_label, session_id")
+    .select("id, total, paid, written_off, status, table_label, session_id, currency")
     .is("account_id", null)
     .eq("restaurant_id", actor.restaurantId)
     .in("id", request.order_ids as string[]);
@@ -95,6 +96,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // request is the honest outcome, and nothing is written off twice.
     await decide("rejected");
     return await apiError("apiErr.nothingToWriteOff", 409);
+  }
+
+  // A part-paid table was asked for its rest: approving writes off only what
+  // nobody paid, and marks the request decided in the same transaction.
+  const paidBy = await coverageByOrder(actor.restaurantId, orders.map(o => o.id));
+  if (paidBy === null) return await apiError("apiErr.verifyOrders", 503);
+  const paid = Math.round([...paidBy.values()].reduce((a, b) => a + b, 0) * 100) / 100;
+  if (paid > 0) {
+    const expectedCents = owedCents(orders, paidBy);
+    // Asked for the whole bill, and part of it was paid since: not the same decision.
+    if (expectedCents !== Math.round(reviewedAmount * 100) || orders.length !== request.order_ids.length) {
+      return await apiError("apiErr.writeOffPartPaidLater", 409);
+    }
+    const done = await applyWriteOffRest({
+      orders, restaurantId: actor.restaurantId, actorEmail: actor.email, reason: request.reason,
+      note: request.note ?? "", expectedCents, currency: orders[0].currency ?? "MXN", requestId: request.id,
+    });
+    if (done.outcome !== "forgiven") return await apiError(REST_REFUSAL[done.outcome] ?? "apiErr.generic", done.outcome === "failed" ? 500 : 409);
+    const lost = (done.forgivenCents + done.writtenOffCents) / 100;
+    // The loss is recorded by write_off_remainder_v1 itself, in the same
+    // transaction: a log written here could fail after the commit (write-off audit #2).
+    return NextResponse.json({ ok: true, approved: true, amount: lost, paid });
   }
 
   const amount = writeOffTotal(orders);
@@ -110,6 +133,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Paid in part since it was asked for: the request stays pending, and the
   // floor collects the rest (paths audit #5).
   if (outcome === "part_paid") return await apiError("apiErr.writeOffPartPaidLater", 409);
+  if (outcome === "split") return await apiError("apiErr.billSplitLive", 409);
   if (outcome !== "approved") return await apiError("apiErr.approvalChanged", 409);
   await closeSessionsFor(orders, "written_off");
 

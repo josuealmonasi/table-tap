@@ -15,7 +15,7 @@ vi.mock("@/lib/i18n/context", () => ({ useLocale: () => ({ locale: "en" }), useT
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => vi.fn() }));
 vi.mock("@/components/ui/Modal", () => ({ Modal: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 vi.mock("@/hooks/useBillPayment", () => ({ useBillPayment: () => ({}) }));
-vi.mock("@/hooks/useSplit", () => ({ useSplit: () => ({ split: null }) }));
+vi.mock("@/hooks/useSplit", () => ({ useSplit: () => ({ split: null, ready: true }) }));
 vi.mock("@/components/customer/TipPicker", () => ({ default: ({ currency }: { currency: string }) => <span>Tip currency: {currency}</span> }));
 import TableCalculator from "@/components/dashboard/TableCalculator";
 import BillSheet from "@/components/customer/BillSheet";
@@ -28,7 +28,7 @@ import SettleBillLines from "@/components/dashboard/SettleBillLines";
 
 beforeEach(() => { state.index = 0; state.values = []; });
 it("S21 calculator offers the same MX$20 ceiling as applyPayment for ten plus fifty", () => {
-  state.values = [{ ordered: 100, owed: 100, collected: 0, tips: 0, currency: "MXN" }, "amount", [], 0, "10", 0, 50];
+  state.values = [[], { ordered: 100, owed: 100, collected: 0, tips: 0, currency: "MXN" }, "amount", [], 0, "10", 0, 50];
   const html = renderToStaticMarkup(<TableCalculator open onClose={vi.fn()} tableId="t" tableLabel="1" currency="MXN" onCollected={vi.fn()} />);
   expect(html).toContain("MX$20.00");
   expect(html).not.toContain("MX$60.00");
@@ -73,7 +73,7 @@ it("S21 an older paid peso order does not prevent splitting a dollar debt", () =
   const orders = [{ id: "owed",currency: "USD",total: 100,paid: false },{ id: "paid",currency: "MXN",total: 50,paid: true }]
     .map(o => ({ ...o,tip: 0,status: "completed",items: [] }) as unknown as Order);
   const html = renderToStaticMarkup(<BillSheet open onClose={vi.fn()} bill={tableBill(orders,["owed"])} restaurant={{ id: "r",currency: "MXN",cards_enabled: true } as Restaurant}
-    tableId="t" tableLabel="1" party={2} photoOf={() => null} />);
+    tableId="t" tableLabel="1" sessionId="session" party={2} photoOf={() => null} />);
   expect(html).toContain('type="checkbox"');
   expect(html).toContain("MX$50.00");
 });

@@ -46,13 +46,14 @@ for (const [kind, route] of [["write-off", writeOff], ["discount", discount]] as
     it("refuses a request showing ten pesos whose order ids act on a thousand", async () => {
       expect((await route(request(10))).status).toBe(409);
       expect(mutate).not.toHaveBeenCalled();
-      expect(rpc).not.toHaveBeenCalled();
+      // Reading what was already paid is allowed; nothing that writes is.
+      expect(rpc.mock.calls.filter(([name]) => name !== "retained_order_coverage")).toEqual([]);
     });
     it("refuses an approval whose screen showed an older amount", async () => {
       state.amount = state.total = 1000;
       expect((await route(request(10))).status).toBe(409);
       expect(mutate).not.toHaveBeenCalled();
-      expect(rpc).not.toHaveBeenCalled();
+      expect(rpc.mock.calls.filter(([name]) => name !== "retained_order_coverage")).toEqual([]);
     });
     it("requires the amount the manager saw", async () => {
       state.amount = state.total = 1000;

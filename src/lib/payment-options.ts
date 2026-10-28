@@ -142,19 +142,19 @@ export interface BillActions {
  * again. They divided the bill twelve ways first — a division that could not
  * have been paid either, because a share is charged through the same route.
  *
- * So all three go together. What survives is calling the waiter, which needs
- * nothing but a floor.
+ * The whole-bill card controls still go together. Dividing into slots now
+ * works without a card reader because the waiter collects those same parts.
  */
 export function billActions(ctx: BillContext): BillActions {
   // A waiter standing at the table with a running balance collects the whole
   // bill: a card charged here at the same moment is a table paying twice. That
-  // covers dividing it too — two people collecting one bill through different
-  // doors is the same mistake either way.
+  // used to cover dividing it too. Slots now use one atomic writer for both
+  // doors, which refuses a part already paid or held.
   const byCard = ctx.cardsEnabled && !ctx.staffBill;
   return {
     payOnline: byCard,
-    // Dividing it needs the owner's switch, not a card reader.
-    split: ctx.splitAllowed !== false && !ctx.staffBill,
+    // Slots share the waiter's part list, so a staff-opened bill can divide too.
+    split: ctx.splitAllowed !== false,
     extras: byCard,
     callWaiter: true,
   };

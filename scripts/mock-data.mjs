@@ -813,6 +813,69 @@ export async function seedMock(pg) {
   }
 
 
+  // ── A bill divided between three people, model 2 ──────────────────────
+  // Through the real functions, as a table would get there: three slots at
+  // once, a phone that tried to pay one by card and walked off (its attempt
+  // expired and gave the slot back), and the waiter collecting another in
+  // cash. Every gate then sees a part-paid split it must not break.
+  // Big enough that each of three parts clears the card minimum (MX$10 /
+  // US$0.50): a smaller random bill had its card hold refused, kept no slot
+  // record, and failed db:mock now and then.
+  let dividing = null, debt = null;
+  for (const b of openBills) {
+    if (b.sessionId === openBills[0].sessionId || b.sessionId === openBills[openBills.length - 1].sessionId) continue;
+    const { rows: [d] } = await pg.query(
+      "select * from public.sitting_split_debt($1, $2, $3, clock_timestamp())",
+      [rid, b.sessionId, b.table.id],
+    );
+    if (d && d.debt_cents >= 3 * (d.currency === "USD" ? 50 : 1000)) { dividing = b; debt = d; break; }
+  }
+  if (dividing) {
+    const { rows: [started] } = await pg.query(
+      "select public.start_bill_split_v2($1, $2, $3, null, 3, $4, $5, gen_random_uuid(), 300) as r",
+      [rid, dividing.table.id, dividing.sessionId, debt.debt_cents, debt.currency],
+    );
+    const split = started.r;
+    if (split.outcome !== "started") throw new Error(`demo split did not start: ${JSON.stringify(split)}`);
+    // Shaped like the real card path's attempt: the split, part 0's exact
+    // amount and the split metadata. A placeholder one cent with no split was
+    // rightly reported by `pnpm money` as a frozen amount that disagrees.
+    const { rows: [first] } = await pg.query(
+      "select amount_cents from bill_split_slots where split_id = $1 and share_no = 0", [split.split]);
+    const { rows: [attempt] } = await pg.query(
+      `insert into diner_checkouts (restaurant_id, stripe_account_id, livemode, currency, amount_cents, metadata, order_ids, status, split_id)
+       values ($1, 'acct_demo_walked_off', false, $2, $4,
+         jsonb_build_object('demo', 'walked off', 'split_id', $6::text, 'split_model', '2', 'settle_tip', '0'), $3, 'open', $5::uuid) returning id`,
+      [rid, debt.currency, debt.order_ids, first.amount_cents, split.split, String(split.split)],
+    );
+    const { rows: [held] } = await pg.query("select public.reserve_split_slots_v1($1, $2, $3, null, '{0}', $4) as r", [rid, split.split, split.revision, attempt.id]);
+    if (held.r?.outcome !== "reserved") throw new Error(`demo split hold was refused: ${JSON.stringify(held.r)}`);
+    await pg.query("select public.release_split_slots_v1($1, $2)", [rid, attempt.id]);
+    await pg.query("update diner_checkouts set status = 'expired' where id = $1", [attempt.id]);
+    // The attempt's own record of what it paid for outlives its reservation.
+    const { rows: [kept] } = await pg.query(
+      "select count(*)::int as n from bill_split_checkout_slots where checkout_id = $1",
+      [attempt.id],
+    );
+    if (kept.n !== 1) throw new Error("the walked-off attempt lost its slot record");
+    const { rows: [slot] } = await pg.query(
+      "select amount_cents from bill_split_slots where split_id = $1 and share_no = 1",
+      [split.split],
+    );
+    const { rows: [cash] } = await pg.query(
+      "select public.collect_split_slots_v1($1, $2, $3, '{1}', $4, $5, 0, 'cash', $6, gen_random_uuid()::text) as r",
+      [rid, split.split, split.revision, slot.amount_cents, debt.currency, DEMO_TEAM[1].email],
+    );
+    if (cash.r.outcome !== "collected") throw new Error(`demo split slot was not collected: ${JSON.stringify(cash.r)}`);
+    // The route logs what the cashier signs for, as a part payment does; the
+    // corte and pnpm money read the drawer from it.
+    await pg.query(
+      `insert into user_logs (restaurant_id, actor_email, entity, action, detail)
+       values ($1, $2, 'bill', 'collected', $3)`,
+      [rid, DEMO_TEAM[1].email, `amount=${(slot.amount_cents / 100).toFixed(2)} tip=0.00 currency=${debt.currency} method=cash`],
+    );
+  }
+
   const waiting = openBills[0];
   await pg.query(
     `insert into discount_requests (restaurant_id, table_id, table_label, order_ids, code, amount, requested_by)

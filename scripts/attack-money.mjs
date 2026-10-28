@@ -1,3 +1,4 @@
+import { attackSplitSlots } from "./attack-split-slots.mjs";
 import { memberFixture } from "./table-member-fixture.mjs";
 import { attackTableJoin } from "./attack-table-join.mjs";
 import { attackCashShift } from "./attack-cash-shift.mjs";
@@ -866,6 +867,7 @@ try {
   // The month's fee ceiling: diners at once never take more than it allows.
   console.log("\n  The month's fee ceiling\n");
   await attackFeeCeiling({ admin, home, ok, bad });
+  await attackSplitSlots({ admin, post, who, home, neighbour, ok, bad });
 } finally {
   try { await phoneMembers.cleanup(); }
   finally {

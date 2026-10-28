@@ -17,12 +17,22 @@ vi.mock("@/lib/coupon-service", () => ({
 }));
 vi.mock("@/lib/apply-bill-discount", () => ({ applyToOrders: async (orders: Row[]) => { applied.push(orders); return true; } }));
 const coverage: Record<string, number> = {};
+const remainders: Row[] = [];
 // write_off_orders as the SQL does it: refuse a part-paid bill, then write off
 // what is still open and off any account.
 const rpc = async (name: string, args: Row) => {
   const ids = (args.p_orders ?? [args.p_order]) as string[];
   const paid = ids.reduce((n, id) => n + (coverage[id] ?? 0), 0);
   if (name === "retained_order_coverage") return { data: paid, error: null };
+  if (name === "write_off_remainder_v1") {
+    // As the SQL does it: each order down to what was paid, the rest forgiven.
+    remainders.push(args);
+    const open = (tables.orders ?? []).filter(o => ids.includes(o.id as string));
+    const forgiven = open.reduce((n, o) => n + Math.round((Number(o.total) - (coverage[o.id as string] ?? 0)) * 100), 0);
+    if (forgiven !== args.p_expected_cents) return { data: { outcome: "changed" }, error: null };
+    open.forEach(o => { o.total = coverage[o.id as string] ?? 0; o.paid = true; o.status = "completed"; });
+    return { data: { outcome: "forgiven", forgiven_cents: forgiven, written_off_cents: 0, orderIds: ids, sessions: [] }, error: null };
+  }
   if (name === "apply_bill_discount") {
     const open = (tables.orders ?? []).filter(o => ids.includes(o.id as string) && !o.account_id && !o.paid && !o.written_off);
     if (open.length !== ids.length) return { data: "changed", error: null };
@@ -70,6 +80,7 @@ beforeEach(() => {
   actor.role = "waiter";
   applied.length = 0;
   for (const id of Object.keys(coverage)) delete coverage[id];
+  remainders.length = 0;
   tables.orders = [
     { id: "today", restaurant_id: "r1", total: 50, table_id: "t1", paid: false, written_off: false, status: "received", account_id: null },
     { id: "yesterday", restaurant_id: "r1", total: 100, table_id: "t1", paid: false, written_off: false, status: "received", account_id: "a1" },
@@ -130,19 +141,22 @@ describe("a part-paid bill is not discounted (paths audit #2)", () => {
   });
 });
 
-describe("a part-paid bill is not written off (paths audit #5)", () => {
-  it("refuses a manager's write-off and writes nothing", async () => {
+describe("a part-paid bill: only the rest is written off (paths audit #5 follow-up)", () => {
+  it("a manager writes off only what nobody paid", async () => {
     actor.role = "manager";
     coverage.today = 30;
     const res = await writeOff.POST(request({ tableId: "t1", reason: "walkout" }));
-    expect(res.status).toBe(409);
-    expect((await res.json()).error).toBe("apiErr.writeOffPartPaid");
-    expect(tables.orders[0].written_off).toBe(false);
+    expect(await res.json()).toEqual({ ok: true, amount: 20, paid: 30 });
+    expect(remainders[0]).toMatchObject({ p_orders: ["today"], p_expected_cents: 2000, p_reason: "walkout" });
+    // Paid at what was collected, never marked written off as a whole.
+    expect(tables.orders[0]).toMatchObject({ total: 30, paid: true, written_off: false });
   });
-  it("refuses a waiter's ask instead of storing one nobody can approve", async () => {
+  it("a waiter's ask is stored for the rest, not refused", async () => {
     coverage.today = 30;
-    expect((await writeOff.POST(request({ tableId: "t1", reason: "walkout" }))).status).toBe(409);
-    expect(tables.write_off_requests).toEqual([]);
+    const res = await writeOff.POST(request({ tableId: "t1", reason: "walkout" }));
+    expect(await res.json()).toEqual({ pending: true, amount: 20, paid: 30 });
+    expect(tables.write_off_requests[0]).toMatchObject({ order_ids: ["today"], amount: 20 });
+    expect(remainders).toEqual([]);
   });
   it("writes off an unpaid bill and reports what the database wrote off", async () => {
     actor.role = "manager";

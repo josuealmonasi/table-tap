@@ -4,6 +4,16 @@ export function splitsCases(fx) {
   const { restaurant, table } = fx;
   const r = restaurant.id;
   return [
+    // A receipt follows a paid part even after the bill closes. Its reader
+    // requires the same approved phone as the bill, never the sitting id alone.
+    { name: "GET  /api/receipt/payments (approved phone)", as: "diner", method: "GET",
+      path: f => `/api/receipt/payments?restaurantId=${r}&tableId=${f.splitTableId ?? table.id}&sessionId=${f.splitSessionId ?? ""}`,
+      expect: [200], check: d => typeof d.split === "boolean" && Array.isArray(d.payments)
+        && d.payments.every(p => typeof p.paymentId === "string" && Array.isArray(p.slots)
+          && !Object.keys(p).some(key => /checkout|intent|secret/i.test(key))) || "invalid payment receipt identities" },
+    { name: "GET  /api/receipt/payments (no phone cookie)", as: "diner", method: "GET",
+      path: f => `/api/receipt/payments?restaurantId=${r}&tableId=${f.splitTableId ?? table.id}&sessionId=${f.splitSessionId ?? ""}`,
+      headers: { cookie: "" }, expect: [403] },
     // ── dividing a bill ───────────────────────────────────────────────────
     // The read is real. The writes are checked by the refusals they must give:
     // proposing one for real would leave a live split on the demo table, and

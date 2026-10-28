@@ -127,6 +127,14 @@ const uprootCombo = (admin, c) =>
   admin.from("promotions").delete().eq("restaurant_id", c.restaurantId).eq("name", AUDIT_COMBO);
 
 export const STATES = [
+  {
+    name: "a divided bill with a paid slot offers parts, not the whole bill",
+    as: "owner", path: "/dashboard/bills", splitSlots: true,
+    says: /1 de 3 partes pagadas|1 of 3 parts paid/i,
+    keeps: /pagó en efectivo|paid cash/i,
+    requiresSelector: "[data-split-model='2'] [data-split-slot]",
+    forbidsSelector: "[data-whole-bill-collect]",
+  },
   // The visit card's scanner, shown only where a stamp would be taken. The
   // first case is the control: with the program on the button is there, so
   // the two after it cannot pass merely because it never renders at all.
@@ -559,9 +567,9 @@ export const STATES = [
         .eq("id", c.restaurantId),
     open: /ver mi cuenta|view my bill/i,
     says: /no cobra con tarjeta|can't take cards/i,
-    // The card button, and dividing it — a share is charged through the same
-    // route, so twelve agreed shares would have been twelve refusals.
-    offers: /pago en l|pay online|dividir|split/i,
+    // The card button stays hidden. Slots can be collected by the waiter,
+    // so dividing a cash bill is now a real payment path.
+    offers: /pago en l|pay online/i,
     // And the one that needs nothing but a floor has to still be there.
     keeps: /pagar en la mesa|pay at the table/i,
   },
@@ -581,8 +589,7 @@ export const STATES = [
         .eq("id", c.restaurantId),
     open: /ver mi cuenta|view my bill/i,
     says: /total/i,
-    // No way in to dividing it, because there is nobody to divide it with.
-    offers: /dividir|split/i,
+    // One phone can now pay several people: device count never caps the offer.
     // And the bill itself is still perfectly payable.
     keeps: /pago en l|pay online|pagar en la mesa|pay at the table/i,
   },

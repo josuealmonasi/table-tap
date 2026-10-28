@@ -2,7 +2,7 @@
 
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
-import type { OpenBill } from "@/lib/open-bills";
+import { remainingBill, type OpenBill } from "@/lib/open-bills";
 import { BillIcon, TableIcon } from "@/components/ui/icons";
 
 interface OpenBillRowProps {
@@ -90,7 +90,7 @@ export default function OpenBillRow({
           <span className="tt-badge tt-bill-flag">{t("dash.staffOnlyBadge")}</span>
         )}
         <strong className="tt-bill-total-cell">
-          {formatMoney(bill.total, currency)}
+          {formatMoney(remainingBill(bill), currency)}
         </strong>
       </button>
       {/* For the counter order too: that is exactly where somebody is

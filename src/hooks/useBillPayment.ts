@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
+import { rememberSlotSettling } from "@/lib/slot-receipt-offer";
 import { rememberSettling } from "@/hooks/useReceiptOffer";
 
 /**
@@ -71,6 +72,22 @@ export function useBillPayment(
     }
   }
 
+  /** These parts belong to this revision; the route checks them again before opening a card page. */
+  async function paySlots(pay: { splitId: string; revision: number; slots: number[]; expectedCents: number; tipCents?: number }): Promise<void> {
+    if (!sessionId || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/split/pay", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...pay, restaurantId, tableId, sessionId, tipCents: pay.tipCents ?? 0 }),
+      });
+      await redirectOrSay(res, () => {
+        rememberSettling([]);
+        rememberSlotSettling({ restaurantId, tableId, sessionId, splitId: pay.splitId, slots: pay.slots });
+      });
+    } catch { toast(t("done.networkError"), "error"); setBusy(false); }
+  }
+
   async function payOnline(pay: {
     orderIds: string[];
     couponCode?: string;
@@ -133,5 +150,5 @@ export function useBillPayment(
     }
   }
 
-  return { busy, called, payShare, payOnline, payAtTable };
+  return { busy, called, payShare, paySlots, payOnline, payAtTable };
 }

@@ -1,3 +1,4 @@
+import { checkSplitSlots } from "./money-split-slots.mjs";
 // ============================================================================
 // The ledger and the boolean have to tell the same story.
 //
@@ -401,6 +402,7 @@ const REFUND_ERA = "2026-09-22T00:00:00Z";
   }
 }
 
+await checkSplitSlots(db, { ok, bad });
 await checkStockReturns(db, { ok, bad });
 await checkDrawer(db, all, { ok, bad });
 

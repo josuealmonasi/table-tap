@@ -1,3 +1,4 @@
+import { receiptCents } from "@/lib/receipt-amount";
 import { formatMoney } from "@/lib/format";
 import { lineUnitPrice, orderCode, type OrderLineItem } from "@/lib/types";
 
@@ -13,6 +14,31 @@ export interface ReceiptOrder {
   table_label?: string | null;
   created_at: string;
   pay_method?: string | null;
+  forgiveness?: ReceiptForgiveness;
+}
+
+export interface ReceiptForgiveness {
+  id: string;
+  previous_total: number | string;
+  resulting_total: number | string;
+  forgiven: number | string;
+  previous_tip: number | string;
+  resulting_tip: number | string;
+  previous_service_fee: number | string;
+  resulting_service_fee: number | string;
+}
+
+/** Keep the adjustments this copy included, so a later loss cannot rewrite it. */
+export interface ReceiptVersion { adjustmentIds: string[] }
+
+export interface SlotReceiptPayment {
+  id: string;
+  amount: number | string;
+  tip: number | string;
+  currency: string;
+  created_at: string;
+  slots: number[];
+  table_label?: string | null;
 }
 
 export interface Receipt {
@@ -46,22 +72,30 @@ export function buildReceipt(
     locale: string;
   },
   t: (key: string, vars?: Record<string, string | number>) => string,
+  payment?: SlotReceiptPayment,
 ): Receipt {
   // Settling a table pays for several orders at once, so a receipt covers
   // whatever was paid for — one ticket or the whole table. The code names the
   // first of them, which is the one the tip and the discount were recorded on.
-  const order = orders[0];
+  // A slot payment has its own code and amounts; it never borrows that bill.
+  const order = payment ?? orders[0];
   const cur = order.currency;
   const num = (v: number | string | null | undefined) => Number(v ?? 0);
-  const code = orderCode(order.id);
+  const code = payment ? `PAY-${payment.id.slice(0, 8).toUpperCase()}` : orderCode(order.id);
   const sum = (pick: (o: ReceiptOrder) => number) => orders.reduce((n, o) => n + pick(o), 0);
   const discount = sum(o => num(o.discount));
-  const service = sum(o => num(o.service_fee));
-  const tip = sum(o => num(o.tip));
+  const service = payment ? 0 : sum(o => num(o.forgiveness?.previous_service_fee ?? o.service_fee));
+  const tip = payment ? num(payment.tip) : sum(o => num(o.forgiveness?.previous_tip ?? o.tip));
   const gross = sum(o => num(o.subtotal)) + discount;
-  const paid = sum(o => num(o.total));
+  const paid = payment ? num(payment.amount) : sum(o => num(o.total));
+  const forgiven = sum(o => num(o.forgiveness?.forgiven));
+  const original = sum(o => receiptCents(o.forgiveness?.previous_total ?? o.total)) / 100;
+  const totalLabel = t(forgiven > 0 || payment ? "receipt.paid" : "totals.total");
 
-  const lines = orders.flatMap(o =>
+  // Parts already include old gratuities. Show their principal once and the
+  // receipt's full tip once; adding that tip to the frozen parts counts it twice.
+  const lines = payment ? [{ label: t("receipt.parts", { parts: payment.slots.map(n => n + 1).join(", ") }),
+    amount: paid - tip }] : orders.flatMap(o =>
     (o.items ?? []).map(item => ({
       label: `${item.qty}× ${item.name}`,
       amount: lineUnitPrice(item) * item.qty,
@@ -79,6 +113,10 @@ export function buildReceipt(
   }
   if (service > 0) rows.push([t("receipt.service"), formatMoney(service, cur)]);
   if (tip > 0) rows.push([t("totals.tip"), formatMoney(tip, cur)]);
+  if (forgiven > 0) {
+    rows.push([t("receipt.originalBill"), formatMoney(original, cur)]);
+    rows.push([t("receipt.forgiven"), `−${formatMoney(forgiven, cur)}`]);
+  }
 
   // Stamped in the restaurant's own time, not the server's. Left to the
   // server, a receipt for an eight o'clock dinner in Mexico City comes out of
@@ -102,7 +140,7 @@ export function buildReceipt(
     ...lines.map(l => `${l.label}  ${formatMoney(l.amount, cur)}`),
     "",
     ...rows.map(([label, amount]) => `${label}  ${amount}`),
-    `${t("totals.total")}  ${formatMoney(paid, cur)}`,
+    `${totalLabel}  ${formatMoney(paid, cur)}`,
     "",
     t("receipt.footer"),
     t("receipt.notFiscal"),
@@ -131,7 +169,7 @@ export function buildReceipt(
       )
       .join("")}
     <tr>
-      <td style="padding:10px 0 0;font-weight:700;border-top:2px solid #16211C">${esc(t("totals.total"))}</td>
+      <td style="padding:10px 0 0;font-weight:700;border-top:2px solid #16211C">${esc(totalLabel)}</td>
       <td style="padding:10px 0 0;text-align:right;font-weight:700;border-top:2px solid #16211C">${esc(formatMoney(paid, cur))}</td>
     </tr>
   </table>

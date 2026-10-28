@@ -34,6 +34,15 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| This phone can continue its own held parts (split audit 2) | A lost reservation answer left every part disabled before any Stripe page existed |
+| A receipt and its activity share one identity (split audit 4) | A failed balance read skipped the log and duplicate collection retries never repaired it |
+| A refused or expired slot attempt retires whole (split audit 3) | Separate slot and fee releases stranded an open attempt after one cleanup failed |
+| Slot activity keeps the old unpaid tip inside a part (split model 2) | Logging only the new tip understated the gratuity already collected in the frozen part |
+| Slot collections and the cashier activity show the same money (split model 2) | A cash slot reached the receipt ledger without reaching the cashier drawer log |
+| A slot split reads slots rather than legacy phone claims (split model 2) | One phone saw no payable part even though every slot already existed |
+| A slot checkout reserves its exact parts before Stripe and keeps them after a lost reply (split model 2) | A payable page could exist without owning the parts it would settle |
+| Slot webhooks use the verified attempt, including expiry and refunds owed (split model 2) | A slot charge reached the legacy claim writer or an expiry kept its parts held |
+| Whole-table collectors preserve the divided-bill refusal (split model 2) | Staff were told a generic failure or another card payment instead of which parts to collect |
 | Deletion preserves collected offline receipts and unfinished fee returns (Audit L3, S25b) | Deleting a restaurant erased unapproved cash and the fee still owed after a refund |
 | A saved reference names the same subject and request (Audit L4, S25b) | A milk purchase reference returned another ingredient's purchase, and a replay logged paid twice |
 | A retry key is cleared only on success or an explicit no-write result (Audit L5, S25b) | A frozen retry forgot the lost MX$100 purchase and added it again after unfreezing |
@@ -4897,6 +4906,7 @@ gates and makes no schema changes.
 | Rule | The bug it prevents | What checks it |
 |---|---|---|
 | An unread Connect account stays an error, and only an empty account field may be filled | A read failure or two onboarding calls replaced the merchant and stranded open diner checkouts; Settings called a failed status read disconnected | `stripe-connect-read.spec.ts`, `stripe-connect-payments.spec.tsx`, `stripe-connect.spec.ts` |
+| A part-paid walkout writes off only what nobody paid | #564 refused it outright, so a table that paid MX$80 of MX$100 and left could not be closed | `table-adjustments.spec.tsx`, `write-off-remainder-schema.spec.ts`, api case, dev replay |
 
 `readConnect` throws on a failed read before asking Stripe for another account.
 The first account is saved only while `stripe_account_id` is null, with returned
@@ -5019,6 +5029,215 @@ copy is reused. `user-logs-read-errors.spec.tsx` checks these cases with mocked
 reads; Claude checks the owner activity screen and shared gates at integration.
 The hook keeps its existing fetching approach in this fix. A later SWR
 migration would align its caching and revalidation with the other readers.
+
+## A slot split and its reader agree on parts (split model 2)
+
+`currentSplit` read every division through `bill_split_claims`. Model 2 has
+slots immediately and allows one phone to pay several: those two places no
+longer described the same bill. It now returns the revision, saved currency,
+freeze flag and paid/held parts from slots, without exposing another phone's
+checkout. Expiry-on-read remains legacy-only. `split-slots-state.spec.ts`
+failed before the change and passes alongside the legacy reader case.
+
+## A payable page owns exactly its reserved parts (split model 2)
+
+The durable diner attempt and the slot owner must agree before Stripe sees a
+request. The attempt is saved first, its exact parts reserved second, and its
+saved Stripe request sent last. A timeout keeps both the fee and the parts;
+a retry repeats the saved request, including its tip. Only a positive provider
+expiry or refusal releases its slots. A definite selection refusal retires an
+attempt only when it has no immutable slot links. Frozen revision, cents and
+fee slices are checked before charging. `split-slots-attempt.spec.ts` failed
+before the reservation hook and passes now; `split-slots-pay.spec.ts` checks
+staff-opened tables, grouped fees, tips and both currencies.
+
+## A slot charge and its receipt agree on the attempt (split model 2)
+
+The connected webhook sent every split charge to the legacy single-claim
+writer. It now sends verified model-2 payments to `settle_split_slots_v1` with
+the persisted attempt id and actual charged cents. Only settled, duplicate or
+refund-due results acknowledge paid money; failures retry. Positive provider
+expiry/refusal releases that attempt's slots. The legacy branch stays intact.
+`split-slots-lifecycle.spec.ts` reproduced the missing settlement and release
+calls before the fix. `split-slots-money.spec.ts` checks missing receipts,
+wrong amounts, fees, allocation scope and a full late-charge refund obligation.
+
+## A whole-table refusal tells staff to collect the parts (split model 2)
+
+SQL refuses ordinary whole-table collection after a divided bill has a paid
+or held part. Its TypeScript readers discarded `split`, so Pedidos and Cuentas
+abiertas reported a generic failure or the unrelated card-payment message.
+Both callers now return the same bilingual instruction with `code: split`.
+The older batch reader preserves it too. `split-slots-collection.spec.ts`
+failed before the fix. `split-slots-collect-route.spec.ts` checks exact cents,
+method, trusted collector, retries and each refusal from the slot writer.
+
+## A slot receipt and its cashier activity agree (split model 2)
+
+The slot writer records the receipt, while the cashier activity feeds the
+existing drawer readers. The new route must do both just like partial table
+collection: log the actual amount, tip, saved currency, method and remaining
+balance, with `collected` or `paid` as appropriate. It logs only new receipts,
+so a retry does not count cash twice. The two activity assertions in
+`split-slots-collect-route.spec.ts` failed before the log was added; the
+repeated-collection assertion keeps the second activity out. Fixture cleanup
+removes only activity bearing that fixture's unique table label.
+
+## A slot activity and its receipt agree on old unpaid tips (split model 2)
+
+The activity reads its amount and tip from the receipt, including the unpaid
+old gratuities inside the frozen parts. Logging only the new `tip_cents`
+would understate collected tips. That extra case also failed before the
+receipt-based log and passes in `split-slots-collect-route.spec.ts`.
+
+
+## Split model-2 screens — 2026-10-28
+
+| Check | Two places that had to agree | Regression coverage |
+|---|---|---|
+| New splits count people, not phones | The server created immediate parts, but the card capped people by devices and started legacy claims | `split-slots-screen.spec.tsx`, `split-slots-client.spec.tsx`, `split-slots-payment-options.spec.ts` |
+| A coupon promise survives the choice to divide | A coupon chosen for whole-bill checkout had not changed the stored bill that a new split freezes | `split-slots-coupon.spec.tsx` |
+| A displayed part is the part being paid | The route accepted grouped free parts, but the card described legacy joining and had no honest minimum or held/paid choices | `split-slots-screen.spec.tsx`, `bill-slot-payment.spec.ts` |
+| Both staff doors collect parts | The slot writer refused whole-bill collection, but the staff reader and sheets knew only orders | `split-slots-staff-read.spec.ts`, `split-slots-collection-screen.spec.tsx` |
+| Bills show what remains, in the right currency and sitting | The ledger covered half the bill while the row/totals showed the full amount and read only legacy claims or the first sitting | `split-slots-bills.spec.ts`, `split-slots-bill-row.spec.tsx`; browser gate fixtures |
+| A retry keeps its reference on every supported phone | A lost start reply generated a new reference, and HTTP phones lacked randomUUID | `split-slots-client.spec.tsx`; the collection-screen spec also preserves cash retry bodies |
+| A live split stays payable when its surrounding screen changes | A switch or a second currency hid existing parts; an unread split could expose a second whole-bill card offer | `split-slots-bill-sheet.spec.tsx` |
+| A refusal speaks to the person collecting or paying | A grouped paid-slot refusal said the cashier's own share was paid | `split-slots-outcome-copy.spec.ts`, `bill-slot-payment.spec.ts` |
+
+### New splits count people, not phones
+
+The start card and the slot protocol had to agree. The old dropdown disappeared
+with fewer than two ordering phones and the no-card path only did arithmetic.
+New starts offer 2–20 people and create the real parts, with no device ceiling.
+A waiter-opened bill can use those same parts while whole-bill card payment
+stays with staff. The old phone-claim card keeps its existing flow and comments.
+The screen tests failed against the old card before the new path was added.
+
+### A displayed part is the part being paid
+
+The selector and checkout had to agree on free parts and exact cents. Every
+part now says free, someone is paying, or paid; only free parts can be chosen.
+The phone can pay several together, and an amount below the card minimum asks
+for more parts or the waiter instead of inventing money. New tips are separate
+and cannot satisfy the food minimum. Tests cover MXN grouping, disabled paid
+and held parts, route refusals and the unchanged model-1 payment body.
+
+### Both staff doors collect parts
+
+The staff read and the collection writer had to agree. Neither collection
+sheet read slots, so both offered money the route refused. The trusted
+outstanding orders now scope the staff slot read; a failed read is loud and
+checkout ids stay private. Both sheets share one selector, cash-change helper,
+terminal/cash writer and revision-checked cancellation. If a split starts
+after the sheet opens, a whole-bill `split` refusal immediately reads and
+offers the parts; both entry-point tests failed before that correction. Frozen copy replaces
+cancellation after an attempt. The staff screen and mocked database tests
+failed before these readers and controls existed, then passed with the fix.
+
+### Bills show what remains, in the right currency and sitting
+
+Payment coverage and the Bills display had to agree. The row and sum still
+used the order total after half had been paid, and progress read legacy claims
+or the first sitting only. Rows and sums now subtract coverage; model 2 counts
+paid slots, with currency and every represented sitting matched explicitly.
+The half-paid row and later-sitting/currency tests reproduced both mistakes.
+
+### A retry keeps its reference on every supported phone
+
+A retry and its first request had to agree. The new start initially generated
+a different reference after an unanswered request, while a phone on local
+HTTP could not call randomUUID at all. The hook now retains the reference for
+the same quote and creates a UUID from random bytes when needed. Both tests
+failed before the corrections. Cash/terminal retries retain their exact body
+and reference too, so a lost reply cannot become another ledger collection.
+
+### A live split stays payable when its surrounding screen changes
+
+The existing division and the bill's visibility rules had to agree. Turning
+off new splitting or adding another currency must not hide money already
+being collected in parts. Existing parts now stay visible in their saved
+currency, and the waiter call survives a pending or failed split read while
+the whole-bill card offer waits. The mixed-currency screen test failed before
+that correction; switch and loading cases pin the other two paths.
+
+### A refusal speaks to the person collecting or paying
+
+The grouped route and its sentence had to agree. A cashier collecting another
+person's parts was told their own share was already paid. Model-2 paid-part
+copy now asks them to check the parts in both languages, while model 1 keeps
+its original sentence. The bilingual tests failed before that mapping changed.
+Taken, reserved, below_minimum, stale, frozen and split retain their translated
+route messages, and the clients show those messages without guessing.
+
+The new `SPLIT_SCREENS` inventory reaches the diner and every collector through
+both staff doors. Its private fixture cleanup has local mock coverage. Claude
+must still run layout at 360/390/820/1280, dialogs, promises and the full shared
+gate, and inspect the screens. No worker unit result stands in for that run.
+
+
+### A coupon promise survives the choice to divide
+
+The coupon shown in checkout and the amount frozen into parts had to agree.
+Choosing a coupon changes a whole-bill card payment, not the stored orders.
+Starting a split at that point would silently lose the promised discount. The
+screen now keeps online coupon payment available and asks the waiter to put
+the coupon on the bill before dividing. If another phone divides meanwhile,
+it says the coupon is not included instead of pretending it was applied.
+`split-slots-coupon.spec.tsx` failed before that screen guard was added.
+
+### A refused split attempt gives everything back together
+
+The held parts and the attempt's fee and coupon had to agree. Separate cleanup
+calls freed parts before a failed fee release, leaving an open attempt whose
+immutable links prevented every retry. Model-2 refusal and expiry now use
+`retire_split_attempt_v1` once, including the connected webhook. An uncertain
+reservation still keeps its parts. `split-slots-attempt.spec.ts` and
+`split-slots-lifecycle.spec.ts` failed before the change and cover retrying a
+failed retirement, refusal, expiry and uncertain provider answers.
+
+### This phone can continue its held parts
+
+The durable attempt and the phone's offered controls had to agree. A reservation
+could commit while its answer was lost, before Stripe was called, yet every
+held part was disabled even on the phone that owned it. The approved member's
+poll now includes only its own open attempts' parts and frozen tip. Continue
+payment sends that exact selection through the existing durable scope, without
+another fee or a changed tip. Other phones and staff still see held parts.
+`split-slots-resume.spec.tsx` transpiles the real payment, attempt, polling and
+React modules against an in-memory database. It failed before the fix and now
+checks both missing and open provider pages in English and Spanish.
+
+### A receipt can repair its missing activity
+
+The committed receipt and the cashier activity had to agree. A post-commit
+balance read could fail before logging; a duplicate then skipped the log forever.
+Both outcomes now log from the receipt before reading balances, including the
+original cashier, currency, amount, tip and collection time. The payment id is
+in the detail and is also the activity row id; insert-on-conflict-do-nothing
+makes concurrent retries count once without replacing history. The receipt's
+saved reference finds it when SQL returns a duplicate without a payment id.
+`split-slots-collect-route.spec.ts` failed before the fix and covers failed
+balance reads, missing activity, concurrent retries and activity write failures.
+Activity remains best-effort so a log failure never asks staff to collect twice;
+a later retry can repair it. Every receipt is described as collected, without
+using a later bill balance to rewrite what happened to that receipt.
+## The rest of a part-paid bill (paths audit #5, follow-up)
+
+#564 stopped writing off a part-paid bill as a whole, which logged the money
+that came in as lost. That left a table that paid MX$80 of MX$100 and walked
+out with no way to close. `write_off_remainder_v1` writes off only the rest,
+in one transaction under the money lock:
+- each part-paid order comes down to what was paid and is paid and completed,
+  with an immutable `order_adjustments` row (`forgive`) recording the before,
+  the after and what was forgiven;
+- unpaid orders on the same table are written off whole.
+
+It refuses while a card page is open, a split is live or a payment is
+unattributed. A waiter's ask is stored for the rest and the approval runs the
+same transaction. The loss is logged as `written_off` with `kind=rest` and the
+amount actually lost, so the corte and analytics count it once. Design and
+requirements from Codex's review in the dialogue (topic writeoff). Receipts
+showing original / forgiven / paid are still to come, with the receipts pass.
 ## Paths #3 — a pay-now retry keeps its first payment page
 
 The phone's reference and the pending order had to agree, but only deferred
@@ -5055,3 +5274,150 @@ a mixed set; email did not, so MX$100 and US$10 from the same restaurant went
 out as MX$110. Both deliveries now refuse it, and a failed order read answers
 503 instead of "not found".
 
+
+## Forgiven bills and payment receipts — 2026-10-28
+
+| Rule | Two places that had to agree | Regression coverage |
+|---|---|---|
+| A forgiven receipt explains the original bill and what was paid | The order total came down while email and paper kept the original dishes without the loss | `receipt-forgiveness-route.spec.ts`, `receipt-forgiveness.spec.ts` |
+| Reprinting keeps the financial version that was issued | A later forgiveness silently changed the receipt read from live orders | `receipt-forgiveness-route.spec.ts`, `receipt-version-prompt.spec.tsx` |
+| A slot receipt confirms its payment | One person's parts and tip could be replaced by the whole table's bill | `receipt-forgiveness-route.spec.ts`, `receipt-version-prompt.spec.tsx` |
+| The money check reconciles forgiveness and its single loss event | Coverage at a reduced total passed without checking the adjustment or the operation's whole-order losses | `forgiveness-money.spec.ts`, existing `allocation-money.spec.ts` |
+
+### A forgiven receipt explains the original bill
+
+The saved adjustment and the shared email/paper renderer had to agree. The
+receipt API now reads the typed forgiveness, including the original and
+resulting total, tip and service charge. Original dishes and discounts keep
+their original service and tip; original bill less the restaurant's forgiveness
+equals paid. English and Spanish use the same rows and arithmetic. A failed or
+inconsistent adjustment read issues no unexplained receipt. The print and email
+route cases failed before the fix; bilingual renderer cases check both forms.
+
+### A copy keeps the financial version that was issued
+
+The original copy and the reissue request had to agree. Order receipts now
+return `version.adjustmentIds`: the included immutable forgiveness IDs, or an
+empty list for the original bill. A reissue sends that version and reconstructs
+the original total, tip and service charge from the adjustment when needed.
+Unknown or duplicate version IDs are refused. The receipt prompt shares the
+issued version between email and print, and a different bill starts fresh.
+A version selects saved facts; the caller never supplies money. This preserves
+the financial copy without expiring it or blocking a sale. Legacy callers with
+no saved version ask for today's statement; an explicit empty version asks for
+the original. Full historical HTML, restaurant-name and locale snapshots are
+not added by this change.
+
+### A slot receipt confirms its payment
+
+Paid parts and receipt amounts had to agree. The receipt API accepts the
+immutable payment ID and checks its slot, sitting, restaurant and currency
+links. It lists the numbered parts together at their principal, the ledger's
+full tip and the actual charge, dated when that payment arrived. Old gratuities
+inside the frozen parts are included in that tip, once. Other unpaid parts,
+later dishes, menu currency changes and later forgiveness cannot replace that
+payment with the table's bill. Payment receipts do not mark an entire order as
+emailed. The payment cases failed before the fix and pass while orders remain
+unpaid. `ReceiptPrompt` and `ReceiptPrint` accept a payment identity; the
+follow-up below wires the diner offer and separate staff reprint route.
+
+### The money check follows the forgiveness operation
+
+The reduced paid total, its adjustment and its loss log had to agree. The
+allocation checker now distinguishes `cancel` from `forgive`, checks the rounded
+original-minus-resulting loss, paid state and exact retained total/tip coverage,
+and requires one `bill/written_off` event with `kind=rest` at the operation ID.
+Its amount is the sum of that operation's forgiven amounts and wholly written-off
+orders. Whole orders currently carry no operation ID: the writer's identical
+transaction timestamp, actor, restaurant and currency connect them to the log.
+The checker preserves sub-millisecond timestamp precision and fails ambiguous
+matches rather than counting a whole loss twice. A durable whole-order link
+would require a later SQL change. Whole-only operations are checked too.
+The malformed adjustment, unpaid/uncovered order, missing/duplicate/foreign/wrong
+loss-event and wrong whole-loss cases failed before this check. No live database
+or money gate was run by this worker; Claude owns those checks.
+
+The new forgiveness readers count decimal half-cents as PostgreSQL does: `1.005`
+becomes 101 cents, and `2.675` becomes 268. The two half-cent route/checker cases
+failed before this correction. Table originals round per order before adding,
+so original minus forgiveness equals paid even with several unscaled totals.
+Existing collection and write-off writers are outside this receipt/checker fix.
+
+## Slot receipt offers and staff reprints — 2026-10-28
+
+| Rule | Two places that had to agree | Regression coverage |
+|---|---|---|
+| A paid part offers its own receipt once | Checkout and staff collection created payment receipts, but the phone watched only whole-order settlement | `slot-receipt-offer.spec.tsx`, `slot-receipt-payments-route.spec.ts` |
+| Staff paper includes the restaurant's forgiveness | The diner reader explained the loss, but staff reprints read the reduced order alone | `staff-receipt-reprint.spec.ts`, existing `kitchen-print.spec.ts` |
+| Staff can reprint a paid group of parts | The receipt renderer accepted payments, but the staff route required an order | `staff-receipt-reprint.spec.ts` |
+| A query names a column its table has | The slot-receipt readers filtered `bill_splits` by `table_id`, which it never had; mocked tests passed and every approved phone's receipt list answered 503 | `invariants/database.spec.ts` ("a query names only columns its table has"), `pnpm api` |
+| One bad saved payment cannot blank a diner's split | A held card attempt whose saved scope did not match made the whole split read throw: 500, no parts, nothing to press | `split-slots-resume` (skip and log), `pnpm layout` "diner paid, held and chosen parts" |
+| A promise is judged on the loaded screen | The bill shows "pay at the table" while it still checks for a split; the audit judged it then and reported three bills as explaining nothing | `promise-audit.mjs` waits for the expected words, bounded at 30s |
+
+### A paid part offers its own receipt once
+
+The selected parts and the receipt offer had to agree. Card checkout remembers
+its sitting, split and selected parts only after receiving a redirect. On the
+return, the phone waits for their immutable payment, including a late webhook.
+A small sitting reader checks approved membership, including a closed sitting,
+and exposes only grouped payment IDs and part numbers, never checkout secrets.
+Another table, restaurant or party cannot supply the observed payments.
+
+The phone polls even while its bill sheet is closed. A first successful read
+sets the baseline; later staff collections offer a payment receipt even while
+the table owes more. Repeated polls and refreshes do not repeat an offer.
+Concurrent collections queue without replacing an open receipt, and unshown
+receipts survive refresh. Failed reads never invent a payment or erase the
+baseline. The final parts do not also offer the whole table's order receipt.
+The bill sheet and tracker wait behind the receipt question, so their focus
+traps cannot compete. Receipt memory failures never prevent a card redirect.
+The original whole-order card and cash offers remain covered too.
+
+The hook cases failed before wiring; English and Spanish use the existing
+receipt prompt. The route cases check membership before reads, tenant/sitting
+filters, closed-sitting access, polling limits and read failures. These are
+mocked local checks; Claude owns the browser and database gates.
+
+### Staff paper includes the restaurant's forgiveness
+
+The saved forgiveness and staff reprint had to agree. The staff route now uses
+the same adjustment-aware source as diner email and print. It shows original,
+forgiven and paid amounts in both languages, returning the receipt version.
+Passing an issued original version keeps that copy's original amounts after a
+later forgiveness. An unread adjustment issues no plausible but incomplete
+paper. These route cases failed before the change. Existing kitchen grants,
+tenant scoping and deliberate requeue behavior remain covered.
+
+### Staff can reprint a paid group of parts
+
+The immutable payment and staff paper had to agree. A staff receipt accepts
+exactly one order or payment identity, reads a payment only in that staff
+restaurant, and prints its numbered parts, full tip and actual charge before
+the remaining parts are paid. It never substitutes the table's dishes or
+current currency. Both language cases failed when the route required an order.
+Kitchen and unauthenticated callers are refused before financial reads, and a
+payment cannot be sent to the kitchen printer.
+
+### A query names a column its table has
+
+The code and the schema had to agree on a column. The slot-receipt list and
+the slot-receipt reader both asked `bill_splits` for `table_id`; a split
+belongs to its sitting and has no table of its own. Every unit test mocked the
+database, so all of them passed, and the first real request answered 503 for
+every approved phone. `pnpm api` found it. A new invariant reads every plain
+`select` and filter on a known table against `schema.sql` (3,160 references
+today) and failed on both lines with the fix reverted. The table now comes from
+the sitting, which the membership check already ties to the table.
+
+### One bad saved payment cannot blank a diner's split
+
+The split read and each saved card attempt had to agree on the attempt's
+scope. When one did not, the resume check threw, `/api/split` answered 500,
+and the phone showed "No pudimos leer las partes" with no part to choose and
+no button to press. Only the gates' fixture made such an attempt (a made-up
+scope key), so it failed every layout and dialog run of the diner's divided
+bill; a real phone would have hit it on any attempt saved under an older
+format. A mismatched attempt is now simply not offered for resuming and is
+logged; its parts stay held, so nothing can be paid twice. The fixture now
+writes the card path's own key, and the seed picks a bill large enough for
+three card parts, so its card hold is never refused at random.

@@ -202,3 +202,13 @@ export const DINER = [
     steps: [{ addToCart: true }, { click: ".tt-fab" }, { text: { es: "Otro", en: "Other" } }],
   },
 ];
+
+/** Private split fixtures are development-only; production sweeps never create memberships or money. */
+export const SPLIT_SCREENS = [
+  { name: "split between 20 people", role: "diner", state: "start" },
+  { name: "diner paid, held and chosen parts", role: "diner", state: "parts" },
+  ...["owner", "manager", "waiter", "cashier"].flatMap(role => [
+    { name: "divided bill from Pedidos", role, door: "orders", state: "parts" },
+    { name: "divided bill from Cuentas abiertas", role, door: "bills", state: "parts" },
+  ]),
+];

@@ -1,3 +1,4 @@
+import { paySplitSlots } from "@/lib/split-slots-pay";
 import { tableMember } from "@/lib/table-membership";
 import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
 import { dinerCurrency } from "@/lib/diner-currency";
@@ -42,7 +43,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const body = await jsonBody<{
     splitId?: string; sessionId?: string; diner?: string; restaurantId?: string;
-    tableId?: string; ownOrderIds?: string[]; tipPct?: number; tipAmount?: number;
+    tableId?: string; revision?: number; slots?: number[]; expectedCents?: number; tipCents?: number;
+    couponCode?: string; ownOrderIds?: string[]; tipPct?: number; tipAmount?: number;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { splitId, sessionId, restaurantId, tableId, ownOrderIds, tipPct, tipAmount } = body;
@@ -56,12 +58,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const member = await tableMember(req, restaurantId, tableId, sessionId, true).catch(() => null);
   if (!member) return await apiError("apiErr.tableJoin", 403);
   const diner = member.id;
-  // The same refusal the bill screen makes, made where it counts: a share
-  // charged here is money the waiter's running balance never sees.
-  // A guard that cannot read refuses: a failed read is not leave to charge.
-  const waiterSettles = await staffOpenedBill(restaurantId, tableId, sessionId).catch(() => null);
-  if (waiterSettles === null) return await apiError("apiErr.verifyOrders", 503);
-  if (waiterSettles) return await apiError("apiErr.waiterSettles", 409);
 
   const db = createAdminClient();
 
@@ -77,11 +73,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const { data: split } = await db
     .from("bill_splits")
-    .select("id, status, locked_at, session_id, shares, amount, food_principal, restaurant_id, order_ids")
+    .select("id, status, locked_at, session_id, shares, amount, food_principal, restaurant_id, order_ids, model_version")
     .eq("id", splitId)
     .eq("session_id", sessionId)
     .maybeSingle();
-  if (!split || split.status !== "locked") return await apiError("apiErr.splitNotReady", 409);
+  if (!split) return await apiError("apiErr.splitNotReady", 409);
+  if (split.model_version === 2) return await paySplitSlots(req, { ...body, splitId, sessionId, restaurantId, tableId }, member);
+  if (split.status !== "locked") return await apiError("apiErr.splitNotReady", 409);
+  // The same refusal the bill screen makes, made where it counts: a share
+  // charged here is money the waiter's running balance never sees.
+  // A guard that cannot read refuses: a failed read is not leave to charge.
+  const waiterSettles = await staffOpenedBill(restaurantId, tableId, sessionId).catch(() => null);
+  if (waiterSettles === null) return await apiError("apiErr.verifyOrders", 503);
+  if (waiterSettles) return await apiError("apiErr.waiterSettles", 409);
+
   // The split, its sitting and the table all belong to the restaurant whose
   // Stripe account takes the money. Nothing tied them before: a diner holding
   // a real share of one restaurant's split could name another restaurant

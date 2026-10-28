@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import TableSplitCollection from "./TableSplitCollection";
+import type { StaffSlotSplit } from "@/lib/split-slots-staff";
+import { SPLIT_POLL_MS } from "@/lib/poll";
 import CashChange from "@/components/dashboard/CashChange";
 import { Modal } from "@/components/ui/Modal";
 import { badgesChanged } from "@/hooks/useBadges";
@@ -68,6 +71,7 @@ export default function SettleTableDialog({
 }: SettleTableDialogProps) {
   const t = useT();
   const toast = useToast();
+  const [splits, setSplits] = useState<StaffSlotSplit[]>([]);
   const [orders, setOrders] = useState<Order[] | null>(null);
   // The bill could not be read. Never the same answer as a table that owes
   // nothing: a failed read used to become an empty bill, and the waiter was
@@ -83,20 +87,22 @@ export default function SettleTableDialog({
   const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null);
   const [ref] = useState(newRef);
 
+  useEffect(() => { setOrders(null); setSplits([]); setUnread(false); }, [open, restaurantId, tableId, orderId]);
+
   useEffect(() => {
     if (!open) return;
     let live = true;
-    setOrders(null);
-    setUnread(false);
     // The staff view: everything the table owes, not just this service.
     fetch(tableId ? `/api/table-bill?tableId=${tableId}` : `/api/table-bill?orderId=${orderId}`)
       .then(async r => {
         if (!r.ok) throw new Error(String(r.status));
         const d = await r.json();
-        if (live) setOrders(d.orders ?? []);
+        if (live) { setUnread(false); setOrders(d.orders ?? []); setSplits(d.splits ?? []); }
       })
       .catch(() => live && setUnread(true));
+    const timer = setInterval(() => setAttempt(n => n + 1), SPLIT_POLL_MS);
     return () => {
+      clearInterval(timer);
       live = false;
     };
   }, [open, restaurantId, tableId, orderId, attempt]);
@@ -106,6 +112,8 @@ export default function SettleTableDialog({
   const currency = selectedCurrency && currencies.includes(selectedCurrency) ? selectedCurrency : currencies[0] ?? menuCurrency;
   const selectedOrders = orders?.filter(o => o.currency === currency) ?? null;
   const bill = selectedOrders ? tableBill(selectedOrders, []) : null;
+
+  const slotSplits = splits.filter(s => s.currency === currency);
 
   async function writeOff(reason: WriteOffReason, note: string): Promise<void> {
     setBusy(true);
@@ -149,6 +157,8 @@ export default function SettleTableDialog({
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast(data.error ?? t("settle.failed"), "error");
+        // Another phone divided it after this sheet opened: offer its parts now.
+        if (data.code === "split") setAttempt(n => n + 1);
         return;
       }
       const data = await res.json();
@@ -208,6 +218,8 @@ export default function SettleTableDialog({
       ) : (
         <>
           <SettleBillLines bill={{ ...bill, paid: tableBill(orders ?? [], []).paid }} currency={currency} />
+          {slotSplits.length > 0 ? <TableSplitCollection splits={slotSplits}
+            remaining={bill.total} refresh={async () => { setAttempt(n => n + 1); }} onCollected={onSettled} /> : <>
           <CashChange amount={bill.total} currency={currency} />
 
           <div className="tt-bill-actions">
@@ -215,6 +227,7 @@ export default function SettleTableDialog({
               className="tt-btn tt-btn-primary tt-btn-lg"
               style={{ width: "100%" }}
               disabled={busy}
+              data-whole-bill-collect
               onClick={() => settle("cash")}
             >
               {t("settle.cash")}
@@ -223,6 +236,7 @@ export default function SettleTableDialog({
               className="tt-btn tt-btn-ghost tt-btn-lg"
               style={{ width: "100%", marginTop: 8 }}
               disabled={busy}
+              data-whole-bill-collect
               onClick={() => settle("card")}
             >
               {t("settle.card")}
@@ -270,6 +284,7 @@ export default function SettleTableDialog({
               {canApprove ? t("settle.writeOff") : t("writeOff.request")}
             </button>}
           </div>
+          </>}
         </>
       )}
       </Modal>

@@ -6,7 +6,10 @@ describe("the allocation money check", () => {
     const bad = vi.fn();
     const snapshots: Record<string, unknown[]> = { payment_allocations: [{ id: "a", restaurant_id: "r", order_id: "o",
       payment_id: "p", amount: 100, tip: 20 }], refund_allocations: [], refund_operations: [], order_adjustments: [] };
-    const db = { from: (table: string) => ({ select: () => snapshots[table] }) };
+    const db = { from: (table: string) => {
+      const q = { select: () => q, eq: () => q, then: (resolve: (value: unknown) => unknown) => Promise.resolve(snapshots[table] ?? []).then(resolve) };
+      return q;
+    } };
     const all = async (build: () => unknown) => ({ data: build(), error: null });
     await checkAllocations(db, all, [{ id: "o", restaurant_id: "r", paid: true, written_off: false,
       status: "completed", total: 100, tip: 0 }], [{ id: "p", restaurant_id: "r", amount: 100, tip: 20,

@@ -12,7 +12,7 @@
 import { join } from "node:path";
 import { chromium } from "playwright";
 import { createClient } from "@supabase/supabase-js";
-import { CREW, DINER, PUBLIC } from "./layout-paths.mjs";
+import { CREW, DINER, PUBLIC, SPLIT_SCREENS } from "./layout-paths.mjs";
 import { requireServer } from "./preflight.mjs";
 import { holdWrites } from "./hold-writes.mjs";
 import { DEV_URL } from "./dev-url.mjs";
@@ -24,6 +24,7 @@ import { assertAuditControl, look } from "./browser-audit.mjs";
 import { navigate, trackData } from "./browser-ready.mjs";
 import { dinerVisit, teamVisit } from "./layout-visits.mjs";
 
+import { splitScreenFixture, openSplitScreen } from "./split-slot-screens.mjs";
 import { deadline, runWatchdog } from "./browser-deadline.mjs";
 import { monitorBrowserServer } from "./browser-server.mjs";
 
@@ -98,6 +99,28 @@ for (const size of SIZES) {
       if (auth.error) throw auth.error;
       await job.ctx.addCookies([auth.cookie]);
       return teamVisit(job, { who, path, base: BASE, width: size.width });
+    },
+  });
+}
+// Separate fixtures let these dialogs be checked without changing another visit's bill.
+for (const size of SIZES) for (const screen of SPLIT_SCREENS) {
+  const path = screen.role === "diner" ? "/r/_/t/_" : `/dashboard/${screen.door === "bills" ? "bills" : "orders"}`;
+  if (!pageInScope(path)) continue;
+  for (const lang of screen.role === "diner" ? ["es", "en"] : ["es"]) jobs.push({
+    id: `${size.width}px · ${screen.role} ${lang} · ${screen.name}`, options: { viewport: { width: size.width, height: size.height } },
+    skip: prod ? "private split fixtures run only in development" : cookies.get(screen.role)?.skip,
+    run: async job => {
+      if (!prod) {
+        const auth = cookies.get(screen.role);
+        if (auth?.error) throw auth.error;
+        if (auth?.cookie) await job.ctx.addCookies([auth.cookie]);
+        const fixture = await splitScreenFixture(admin, fixtures.r.id, screen.state !== "start");
+        try {
+          await openSplitScreen(job, { fixture, screen, base: BASE, lang });
+          return { failures: await look(job.tab, screen.name, job.phase, job.log), audits: 1 };
+        } finally { try { await job.tab.close(); } finally { await fixture.cleanup(); } }
+      }
+      throw new Error("Private split fixtures cannot run against production");
     },
   });
 }

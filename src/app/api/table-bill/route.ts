@@ -1,3 +1,4 @@
+import { staffSlotSplits } from "@/lib/split-slots-staff";
 import { PaymentAttributionRequired } from "@/lib/payment-coverage";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -50,6 +51,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       // screen wants; only the arithmetic goes back a second time.
       return NextResponse.json({
         orders,
+        splits: await staffSlotSplits(actor.restaurantId, tableId, outstanding.orders),
         outstanding: summary(outstanding),
       });
     }

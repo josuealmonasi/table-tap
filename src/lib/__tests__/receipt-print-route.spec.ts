@@ -11,7 +11,8 @@ vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: numb
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
   const q = { select: () => q, in: () => q, eq: () => q, update: (data: unknown) => { state.writes(data); return q; },
     order: async () => (state.readError ? { data: null, error: state.readError } : { data: state.rows, error: null }), single: async () => ({ data: { name: "Bistro", timezone: "America/Mexico_City" } }) };
-  void table; return q;
+  Object.assign(q, { then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: table === "order_adjustments" ? [] : state.rows, error: null }).then(resolve) });
+  return q;
 } }) }));
 import { POST } from "@/app/api/receipt/route";
 const order = (id: string, extra: object = {}) => ({ id, restaurant_id: "r", table_id: "table", items: [{ itemId: "dish", name: "<Dish>", price: 100, qty: 1, mods: {} }], subtotal: 80, discount: 20, service_fee: 5, tip: 10, total: 95, currency: "USD", paid: true, created_at: "2026-10-27T12:00:00Z", ...extra });
@@ -21,7 +22,7 @@ it("prints the exact shared receipt HTML, including a table's discounts, tips an
   const res = await request({ orderIds: ["1111-order", "2222-order"], delivery: "print" }); expect(res.status).toBe(200);
   const t = (key: string, vars?: Record<string, string | number>) => translate(messagesFor("en"), key, vars);
   const receipt = buildReceipt(state.rows as unknown as ReceiptOrder[], { name: "Bistro", timeZone: "America/Mexico_City", locale: "en-US" }, t);
-  expect(await res.json()).toEqual({ html: printableReceipt(receipt.html, receipt.subject) });
+  expect(await res.json()).toEqual({ html: printableReceipt(receipt.html, receipt.subject), version: { adjustmentIds: [] } });
   expect(state.mail).not.toHaveBeenCalled(); expect(state.writes).not.toHaveBeenCalled();
 });
 it("keeps emailed receipts on the existing renderer and timestamps successful mail only", async () => {

@@ -1,3 +1,6 @@
+import { splitResumptions } from "@/lib/split-slots-resume";
+import { splitSlots } from "@/lib/split-slots-state";
+import type { SplitSlot } from "@/lib/split-slots";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchTableBill } from "@/lib/bill-data";
 import { tableBill } from "@/lib/table-bill";
@@ -14,10 +17,12 @@ import { round2 } from "@/lib/money";
  */
 
 export interface SplitState {
+  modelVersion?: number; revision?: number; currency?: string; frozen?: boolean; slots?: SplitSlot[];
+  resumptions?: import("@/lib/split-slots").SplitResumption[];
   id: string;
   shares: number;
   status: "proposed" | "locked" | "cancelled" | "done";
-  /** Frozen when the last person joined; zero while it is still a proposal. */
+  /** Frozen at start for slots, or when the last legacy diner joined; zero during a legacy proposal. */
   amount: number;
   proposedBy: string;
   joined: number;
@@ -117,16 +122,27 @@ export async function currentSplit(
   const db = createAdminClient();
   const { data: split } = await db
     .from("bill_splits")
-    .select("id, shares, status, amount, proposed_by, locked_at, expires_at")
+    .select("id, shares, status, amount, proposed_by, locked_at, expires_at, model_version, revision, currency, first_payment_attempt_at")
     .eq("session_id", sessionId)
     .in("status", ["proposed", "locked"])
     .maybeSingle();
   if (!split) return null;
 
-  // A proposal nobody finished is not a proposal any more.
-  if (split.status === "proposed" && new Date(split.expires_at) < new Date()) {
+  // A legacy proposal nobody finished is not a proposal any more.
+  // Slots never expire on a read: staff may be counting cash against them.
+  if (split.model_version !== 2 && split.status === "proposed" && new Date(split.expires_at) < new Date()) {
     await db.from("bill_splits").update({ status: "cancelled" }).eq("id", split.id);
     return null;
+  }
+
+  if (split.model_version === 2) {
+    const slots = await splitSlots(restaurantId, split.id);
+    const orders = await fetchTableBill(restaurantId, tableId, "diner", sessionId, member);
+    return { id: split.id, shares: split.shares, status: split.status, amount: Number(split.amount),
+      proposedBy: split.proposed_by, joined: slots.filter(s => s.paid).length, mine: null,
+      outstanding: tableBill(orders, []).total, ownSince: 0, modelVersion: 2, revision: split.revision,
+      currency: split.currency, frozen: Boolean(split.first_payment_attempt_at), slots,
+      resumptions: await splitResumptions(restaurantId, split.id, split.revision, member.id) };
   }
 
   const { data: claims } = await db

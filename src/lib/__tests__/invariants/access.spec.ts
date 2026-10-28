@@ -89,8 +89,8 @@ describe("every public endpoint has a ceiling", () => {
       return room === -1 || room > post.indexOf("jsonBody") || !/isTableLimited\(req, "[a-z-]+", (tableId|typeof tableId)/.test(post);
     });
     expect(offenders, `a public write that does not count its table:\n${offenders.join("\n")}`).toEqual([]);
-    // The receipt learns its table from the order it reads.
-    expect(code("src/app/api/receipt/route.ts")).toMatch(/isTableLimited\(req, "receipt", order\.table_id/);
+    // The receipt learns its table from the order or slot payment it reads.
+    expect(code("src/app/api/receipt/route.ts")).toMatch(/isTableLimited\(req, "receipt", source\.tableId/);
   });
 });
 

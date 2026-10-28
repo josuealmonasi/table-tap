@@ -131,7 +131,7 @@ export default async function BillsPage() {
   const liveSplits = unwrap(
     await db
       .from("bill_splits")
-      .select("id, session_id, shares, bill_split_claims(paid_at, amount)")
+      .select("id, session_id, shares, model_version, currency, order_ids, bill_split_claims(paid_at, amount), bill_split_slots(payment_id)")
       .eq("restaurant_id", r.id)
       .eq("status", "locked"),
     "the bills being divided",
@@ -140,12 +140,16 @@ export default async function BillsPage() {
   type LiveSplit = {
     session_id: string;
     shares: number;
+    model_version: number; currency: string | null; order_ids: string[];
+    bill_split_slots: { payment_id: string | null }[] | null;
     bill_split_claims: { paid_at: string | null; amount: number }[] | null;
   };
   const splits = ((liveSplits ?? []) as unknown as LiveSplit[]).map(s => ({
     session_id: s.session_id,
     shares: s.shares,
-    paidShares: (s.bill_split_claims ?? []).filter(c => c.paid_at).length,
+    currency: s.currency ?? rows.find(o => s.order_ids?.includes(o.id))?.currency,
+    paidShares: s.model_version === 2 ? (s.bill_split_slots ?? []).filter(slot => slot.payment_id).length
+      : (s.bill_split_claims ?? []).filter(c => c.paid_at).length,
   }));
 
   // What each of those sittings has already handed over, from the ledger: a

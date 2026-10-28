@@ -1,3 +1,4 @@
+import { splitScreenFixture } from "./split-slot-screens.mjs";
 import { memberFixture, forgetBrowserMember } from "./table-member-fixture.mjs";
 // ============================================================================
 // TableTap — does the screen promise something the system cannot deliver?
@@ -485,11 +486,16 @@ for (const state of STATES) {
         // that takes 1.3s on a slow compile made this case report the screen
         // as having hidden its own working button — a red gate over nothing,
         // which is how a gate teaches people to ignore it.
+        // And for what it says: the bill shows "pay at the table" while it is
+        // still checking whether the table is dividing it, and judging then
+        // read a screen mid-load as one that explains nothing (#574's gates).
+        // A screen that never says it still fails, thirty seconds later.
         const deadline = Date.now() + 30000;
         while (Date.now() < deadline) {
-          const ready = state.keeps
+          const opened = state.keeps
             ? (await visible(tab, state.keeps)) > 0
             : (await tab.evaluate(`document.querySelectorAll("dialog[open],[role=dialog]").length`)) > 0;
+          const ready = opened && (!state.says || state.says.test(await tab.evaluate("document.body.innerText")));
           if (ready) break;
           await tab.waitForTimeout(250);
         }
@@ -515,7 +521,10 @@ for (const state of STATES) {
       // What must survive. Without it, a screen that hid everything — the
       // refused control and the working one together — would pass for honest.
       const kept = state.keeps ? await visible(tab, state.keeps) > 0 : true;
-      if (offered) bad(`${state.name} — offers a control the system refuses`);
+      const required = !state.requiresSelector || await tab.locator(state.requiresSelector).count() > 0;
+      const forbidden = state.forbidsSelector && await tab.locator(state.forbidsSelector).count() > 0;
+      if (!required || forbidden) bad(`${state.name} — does not offer only the free parts`);
+      else if (offered) bad(`${state.name} — offers a control the system refuses`);
       else if (!kept) bad(`${state.name} — took away the one thing that still works`);
       else if (state.says.test(text)) ok(`${state.name} — the screen says so`);
       else bad(`${state.name} — the screen shows nothing and explains nothing`);
@@ -526,7 +535,11 @@ for (const state of STATES) {
   };
 
   try {
-    if (state.as === "tracker") await withCounterOrder(id => visit(`/order/${id}`));
+    if (state.splitSlots) {
+      const fixture = await splitScreenFixture(admin, restaurant.id);
+      try { await visit(`/dashboard/bills?order=${fixture.orderId}`); }
+      finally { await fixture.cleanup(); }
+    } else if (state.as === "tracker") await withCounterOrder(id => visit(`/order/${id}`));
     else if (state.as === "bill") {
       await withTableBill(free => visit(`/r/${restaurant.id}/t/${free.id}`), state.frozen, context);
     } else {

@@ -1,3 +1,4 @@
+import { abandonSplitSlots } from "@/lib/split-slots-lifecycle";
 import { finishDinerCheckout } from "@/lib/diner-attempt";
 import type Stripe from "stripe";
 import { legacyStockDemand } from "@/lib/legacy-stock";
@@ -11,6 +12,8 @@ import { releaseSessionFee } from "@/lib/platform-fee";
 export async function abandonCheckout(session: Stripe.Checkout.Session, context: ConnectContext): Promise<void> {
   await verifyDinerCheckout(session, context);
   if (session.payment_status === "paid") throw new Error("A paid checkout cannot expire");
+  // The split returns its parts, coupon and fee together, including on retry.
+  if (session.metadata?.split_model === "2") return await abandonSplitSlots(session);
   // Nobody paid: the fee it reserved stops counting toward the month.
   await releaseSessionFee(session);
   await finishDinerCheckout(session, false);

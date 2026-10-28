@@ -1,13 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import type { ReceiptVersion } from "@/lib/receipt";
 import { useT } from "@/lib/i18n/context";
 import { printWhenReady } from "@/lib/print-window";
 
-interface ReceiptPrintProps { orderIds: string[]; disabled: boolean }
+interface ReceiptPrintProps {
+  orderIds?: string[]; paymentId?: string; disabled: boolean;
+  issued?: RefObject<{ version?: ReceiptVersion }>;
+}
 
-export default function ReceiptPrint({ orderIds, disabled }: ReceiptPrintProps) {
+export default function ReceiptPrint({ orderIds = [], paymentId, disabled, issued }: ReceiptPrintProps) {
   const t = useT();
+  const target = paymentId ?? orderIds.join(",");
+  const ownVersion = useRef<{ target: string; version?: ReceiptVersion }>({ target });
+  if (ownVersion.current.target !== target) ownVersion.current = { target };
+  const copy = issued ?? ownVersion;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const request = useRef<{ controller: AbortController; popup: Window } | null>(null);
@@ -23,14 +31,17 @@ export default function ReceiptPrint({ orderIds, disabled }: ReceiptPrintProps) 
     const controller = new AbortController();
     request.current = { controller, popup };
     setBusy(true);
+    const issuedCopy = copy.current;
     try {
       const response = await fetch("/api/receipt", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderIds, delivery: "print" }), signal: controller.signal,
+        body: JSON.stringify({ orderIds, paymentId, delivery: "print", version: issuedCopy.version }), signal: controller.signal,
       });
       const data = await response.json();
       if (controller.signal.aborted || popup.closed) return;
       if (!response.ok || typeof data.html !== "string") throw new Error("Could not read receipt");
+      // Reprint the copy that opened, rather than silently adding a later loss.
+      if (data.version) issuedCopy.version = data.version;
       popup.document.write(data.html);
       popup.document.close();
       popup.focus();

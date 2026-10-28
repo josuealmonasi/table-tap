@@ -27,14 +27,16 @@ export async function POST(req: NextRequest) {
   );
   if (refusal) return refusal;
 
-  if (event!.type === "checkout.session.completed") {
+  if (event!.type === "checkout.session.completed"
+    || (event!.type === "checkout.session.async_payment_succeeded" && (event!.data.object as Stripe.Checkout.Session).metadata?.split_model === "2")) {
     await settleCheckout(event!.data.object as Stripe.Checkout.Session, event!);
   }
 
   // Opened Stripe Checkout and never paid. Give the coupon use back so a
   // limited code is not burned by an abandoned cart, and clear the order that
   // will never be paid for.
-  if (event!.type === "checkout.session.expired") {
+  if (event!.type === "checkout.session.expired"
+    || (event!.type === "checkout.session.async_payment_failed" && (event!.data.object as Stripe.Checkout.Session).metadata?.split_model === "2")) {
     await abandonCheckout(event!.data.object as Stripe.Checkout.Session, event!);
   }
 

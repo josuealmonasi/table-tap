@@ -6,6 +6,7 @@ import type { Order } from "@/lib/types";
 export type WriteOffOutcome =
   | { outcome: "written_off"; amount: number; orderIds: string[] }
   | { outcome: "part_paid"; paid: number }
+  | { outcome: "split" }
   | { outcome: "nothing" }
   | { outcome: "failed" };
 
@@ -47,6 +48,7 @@ export async function applyWriteOff({
   if (error || !data) return { outcome: "failed" };
   const result = data as { outcome: string; amount?: number; paid?: number; orderIds?: string[]; sessions?: string[] };
   if (result.outcome === "part_paid") return { outcome: "part_paid", paid: Number(result.paid) };
+  if (result.outcome === "split") return { outcome: "split" };
   if (result.outcome !== "written_off") return { outcome: "nothing" };
 
   // A table whose debt was cancelled is clear: nobody owes anything on it any

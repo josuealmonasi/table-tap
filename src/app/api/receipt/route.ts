@@ -6,7 +6,8 @@ import { messagesFor, translate } from "@/lib/i18n";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { getLocale } from "@/lib/i18n/server";
 import { mailConfigured, sendMail } from "@/lib/mail";
-import { buildReceipt } from "@/lib/receipt";
+import { buildReceipt, type ReceiptVersion } from "@/lib/receipt";
+import { readOrderReceipt, readSlotReceipt, ReceiptReadError, type ReceiptSource } from "@/lib/receipt-source";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidEmail, normalizeEmail } from "@/lib/email";
 import { dateLocale } from "@/lib/format";
@@ -48,10 +49,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     orderIds?: string[];
     email?: string;
     delivery?: "print";
+    paymentId?: string;
+    version?: ReceiptVersion;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { orderId, orderIds, email } = body;
   const printing = body.delivery === "print";
+  const paymentId = typeof body.paymentId === "string" ? body.paymentId : "";
+  if ((body.paymentId !== undefined && (!paymentId || paymentId.length > 100))
+    || (body.version !== undefined && (!body.version || !Array.isArray(body.version.adjustmentIds)))) {
+    return await apiError("apiErr.invalidRequest", 400);
+  }
   // One ticket, or every ticket a table settled together. Capped: a table
   // settles a handful of orders, and an uncapped list is a way to make one
   // request read the whole table and build an enormous email.
@@ -61,59 +69,39 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .filter((v): v is string => typeof v === "string" && v.length > 0)
     .slice(0, 40);
   const address = normalizeEmail(String(email ?? ""));
-  if (ids.length === 0 || (!printing && !isValidEmail(address))) {
+  if ((!paymentId && ids.length === 0) || (!printing && !isValidEmail(address))) {
     return await apiError("receipt.badEmail", 400);
   }
 
-  // Per ORDER as well as per caller. The IP limit alone bounds how fast one
+  // Per ORDER (or slot PAYMENT) as well as per caller. The IP limit alone bounds how fast one
   // machine can send, not how much: anybody holding a single order id could
   // point our sender at any address they liked, five a minute, for as long as
   // they cared to — from our domain, which is the part that gets a sending
   // reputation blocked. A real diner asks for a receipt once, and mistypes the
   // address at most a couple of times.
-  for (const id of ids) {
+  for (const id of paymentId ? [paymentId] : ids) {
     if (await isRateLimited(`${printing ? "receipt-print" : "receipt-order"}:${id}`, printing ? 20 : RESENDS_PER_ORDER, 86_400)) {
       return await apiError("apiErr.tooManyRequests", 429);
     }
   }
 
   const db = createAdminClient();
-  const { data: found, error: readError } = await db
-    .from("orders")
-    .select(
-      "id, restaurant_id, table_id, items, subtotal, discount, service_fee, tip, total, currency, table_label, created_at, pay_method, paid",
-    )
-    .in("id", ids)
-    .order("created_at", { ascending: true });
-  // A failed read is not "no such order".
-  if (readError) return await apiError("apiErr.generic", 503);
-
-  // Knowing the order's unguessable id is what proves this is your order —
-  // the same trust boundary the tracker already uses.
-  // One receipt is one restaurant's bill. Ids from two restaurants would
-  // otherwise be added together and sent out under whichever name came first.
-  const first = found?.[0];
-  const orders = (found ?? []).filter(o => o.restaurant_id === first?.restaurant_id);
-  if (orders.length === 0) return await apiError("apiErr.notFound", 404);
-  const order = orders[0];
-  // One receipt, one currency, by email as on paper (paths audit #8): MX$100
-  // and US$10 from the same restaurant were added up and sent as MX$110.
-  if (orders.some(o => o.currency !== order.currency)) return await apiError("apiErr.notFound", 404);
-  // Paper confirms a complete paid bill. A partial read or mixed currency
-  // cannot become a plausible-looking total on a saved receipt.
-  if (printing && (orders.length !== new Set(ids).size || (Array.isArray(orderIds) && orderIds.length > 40)
-    || orders.some(o => !o.paid || o.currency !== order.currency || o.table_id !== order.table_id))) {
-    return await apiError("apiErr.notFound", 404);
+  let source: ReceiptSource;
+  try {
+    source = paymentId ? await readSlotReceipt(db, paymentId) : await readOrderReceipt(db, ids, printing, orderIds, body.version);
+  } catch (error) {
+    return await apiError(error instanceof ReceiptReadError && error.status === 404 ? "apiErr.notFound" : "apiErr.generic",
+      error instanceof ReceiptReadError ? error.status : 503);
   }
   // The table is known only now; the room was counted before anything was read.
-  if (await isTableLimited(req, "receipt", order.table_id, 5)) {
+  if (await isTableLimited(req, "receipt", source.tableId, 5)) {
     return await apiError("apiErr.tooManyRequests", 429);
   }
 
   const { data: restaurant } = await db
     .from("restaurants")
     .select("name, timezone")
-    .eq("id", order.restaurant_id)
+    .eq("id", source.restaurantId)
     .single();
 
   const locale = await getLocale();
@@ -122,17 +110,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     translate(messages, key, vars);
 
   const receipt = buildReceipt(
-    orders,
+    source.orders,
     {
       name: restaurant?.name ?? "TableTap",
       timeZone: restaurant?.timezone ?? DEFAULT_TIME_ZONE,
       locale: dateLocale(locale),
     },
     t,
+    source.payment,
   );
+  // Slot receipts already have their immutable payment id. Order copies keep
+  // the included adjustment ids: an empty list still names the original bill.
   // The print/save path uses the same renderer as POS and email, without
   // sending mail or recording an email timestamp.
-  if (printing) return NextResponse.json({ html: printableReceipt(receipt.html, receipt.subject) });
+  if (printing) return NextResponse.json({ html: printableReceipt(receipt.html, receipt.subject), ...(source.version ? { version: source.version } : {}) });
   const result = await sendMail({
     to: address,
     subject: receipt.subject,
@@ -143,12 +134,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // Only a timestamp, and only when it actually went. If mail is not
   // configured yet the diner is told plainly rather than thanked for nothing.
-  if (result.sent) {
+  if (result.sent && source.orders.length) {
     await db
       .from("orders")
       .update({ receipt_sent_at: new Date().toISOString() })
-      .in("id", orders.map(o => o.id))
-      .eq("restaurant_id", order.restaurant_id);
+      .in("id", source.orders.map(o => o.id))
+      .eq("restaurant_id", source.restaurantId);
   }
 
   if (!result.sent) {
@@ -157,5 +148,5 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       503,
     );
   }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, ...(source.version ? { version: source.version } : {}) });
 }

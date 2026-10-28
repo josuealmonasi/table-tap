@@ -609,6 +609,57 @@ dishes on a bill the restaurant has just cancelled.
   `/api/cash-drawer`, for owner, manager and cashier. Card and online money
   has no opening.
 
+## Writing off the rest of a part-paid bill
+
+A whole order is written off only when nothing was paid against it. When part
+of a table's bill was paid and the table walks out, only the rest is written
+off (`write_off_remainder_v1`): each part-paid order comes down to what was
+paid, is marked paid, and keeps an immutable `order_adjustments` row of kind
+`forgive` with its original and resulting totals and the amount forgiven.
+`written_off` keeps meaning "the whole order was forgiven". It is refused
+while a card checkout is open, a split is live, or a payment on the table is
+unattributed. The loss is logged once, as a write-off of the amount nobody
+paid, which is what the corte and analytics total.
+
+## Split by people, model 2: slots
+
+The divided bill above is model 1. It waits for every phone to join, one share
+per phone. A table of four with one phone could not divide its bill at all,
+and the floor could not collect a share in cash. Model 2 is agreed in
+`tabletap-release/loop/dialogue/split-slots-contract.md`. The database, routes and diner/staff screens now create and collect model-2
+splits. Payment-based receipt screens follow after #567. Model-1 splits stay
+readable and settleable as they are.
+
+- **Slots exist at once.** `start_bill_split_v2` freezes the sitting's
+  unpaid, non-account debt (the amount the screen showed, or `stale`) and
+  creates every slot, 2 to 20 of them. The odd cents go on slot 0, as
+  `sharesFor` does. Unpaid gratuities already in the orders stay inside the
+  debt but outside the food.
+- **One fee budget per bill:** the plan's flat fee, capped at 5% of the frozen
+  food (#556), sliced per slot by the same rule. A card attempt carries the
+  slices of the slots it pays; cash and the restaurant's own terminal carry
+  none.
+- **Any free slot can be paid by anyone.** A phone reserves one or more slots
+  for a card attempt (`reserve_split_slots_v1`), all or none. The floor
+  collects free slots in cash or on its terminal (`collect_split_slots_v1`)
+  from Pedidos and Cuentas abiertas. A slot held by a card attempt cannot be
+  collected; a paid slot is never paid twice or freed again.
+- **N freezes at the first payment attempt.** Before it, the split can be
+  resized or called off, on the current revision only.
+- **Below Stripe's minimum** (MX$10, US$0.50) a slot can't be paid by card
+  alone. It is combined with another or collected by the floor, never
+  inflated.
+- **A late card payment is owed back.** An attempt's slots are released only
+  when Stripe says it expired or was refused. If they were then collected
+  another way, its payment, when it lands anyway, becomes a refund owed with
+  the bell, never another slot (`settle_split_slots_v1`).
+- **The bill closes on coverage** (`close_divided_bill_v3`): every slot paid
+  and every order covered by its allocations. `pay_method` is written only
+  when every slot used one method; the old close wrote "card" for cash too.
+- **The other collections step aside.** Collecting a table or a sitting used to
+  cancel any live split. With a model-2 slot paid or held they answer `split`
+  instead, so the floor collects the slots.
+
 ## Data model
 
 `supabase/schema.sql` is one idempotent script; git history is the changelog.
@@ -2229,3 +2280,148 @@ in sales. The SQL promotion CHECK requires strictly positive tier prices.
 - Coupons search codes and filter active, expired or paused; expired follows the server's start/end boundaries, including codes that have not started.
 - Saved sales open awaiting approval with a pending-only count and 30-second refresh; approved history reads stable pages of 20 while preserving manager approval and cashier upload.
 - Diner receipts offer email or print/save through the existing receipt renderer and print stylesheet; browser printing can save PDF without sending email or writing a receipt timestamp.
+
+
+### Split by people, model 2 — server pass (2026-10-28)
+
+The server provides `/api/split/start`, `/resize` and `/cancel` for an approved
+sitting member or front of house. Start takes `restaurantId`, `tableId`,
+`sessionId`, `shares` (2–20), `expectedCents`, saved `currency` and a UUID `ref`.
+It uses the server-read plan's flat fee; SQL caps the frozen fee budget at 5%
+of food principal. Parts exist immediately, regardless of phone count. Only
+the proposer or authorised staff resizes/cancels, with `splitId` and `revision`.
+There is no automatic model-2 split expiry. The first accepted attempt or
+collection freezes the size permanently; food cancellation uses refunds.
+
+`/api/split/pay` retains the legacy claim path and dispatches model 2 to grouped
+slots. Its body adds `revision`, unique zero-based `slots`, `expectedCents` and
+optional `tipCents` (default zero, at most the selected parts). It creates a
+durable attempt, reserves every selected part, then creates Stripe Checkout.
+The amount is the parts plus the new tip. The application fee is the sum of
+their frozen fee slices, reserved through the existing monthly cap. Below the
+card minimum, parts must be combined or collected by staff; tips never inflate
+that minimum or the fee base. Coupons must be applied before the split.
+Staff-opened tables support model 2. The original attempt's tip, fee and expiry
+survive retries. Its approved phone sees Continue payment for its exact saved
+parts and tip, even if the reservation answer was lost before Stripe opened.
+Other phones see those parts held. A browser return or lost answer never frees parts.
+
+`/api/split/collect` is shared by the Pedidos and Cuentas abiertas part
+selectors. It accepts the sitting scope, split/revision, selected slots,
+`expectedCents`, `currency`, optional `tipCents`, `method` (`cash` or own-terminal
+`card`) and a stable `ref` (at most 100 characters). The trusted staff identity
+supplies the collector; kitchen and foreign restaurants are refused. It writes
+through `collect_split_slots_v1`, with the existing coverage-based sitting close.
+Both new collections and duplicate replies insert receipt-keyed activity before
+reading the remaining balance. The original receipt supplies the cashier,
+collection time, amount, tip, currency and method; concurrent retries count once.
+The full and partial table collectors explain the SQL `split` refusal in both
+languages. SQL settlement preserves actual methods for corte, shifts and
+deposits, including a mixed-method close with no invented order pay method.
+
+Connected webhooks authenticate the stored session and dispatch model-2 paid
+attempts to the slot settlement writer; a late incompatible charge becomes a
+refund owed. Positive expiry or provider refusal retires the attempt and returns
+its unpaid parts, coupon and fee in one transaction. Uncertain requests keep
+their reservations.
+`pnpm money` now checks slots, immutable checkout links, attempts, receipts,
+fee slices and allocations. API and attack cases cover the new routes and
+concurrency/role boundaries. Those shared gates are run by the release owner.
+
+Legacy creation/join/read/payment remains available for existing model-1
+splits. The screens below start only model 2. Payment-based receipt screens
+remain pass 3 and wait for #567.
+
+
+### Split by people, model 2 — screens (2026-10-28)
+
+The diner's BillSheet starts a division between 2 and 20 people without
+counting devices, including on a waiter-opened or cash-only bill. Coupons
+are applied to the stored bill by staff before dividing. A coupon chosen for
+online whole-bill checkout stays usable there; it never silently disappears
+into a split that cannot accept it. Every numbered person appears at once, with the
+saved amount and a free, someone-is-paying or paid label. One phone chooses
+several free parts and pays their exact summed cents plus an optional tip.
+Below the card minimum, the screen asks for more parts or the waiter; a tip
+never makes an undersized part eligible. The waiter call stays available.
+Existing model-1 splits keep their joining and own-share payment flow.
+
+A live division remains visible if the owner switches new splitting off or a
+later order uses another currency. Its saved currency and the real remaining
+balance are shown. While the split read is pending or has failed, the screen
+keeps the waiter call and withholds a second whole-bill card offer. Polls use
+SWR with the shared split interval and stop when the bill closes. Starting
+again after a lost reply keeps the same reference; local HTTP phones use
+random bytes when randomUUID is unavailable.
+
+Pedidos and Cuentas abiertas use the same selector and collection component
+for owner, manager, waiter and cashier; kitchen has neither the controls nor
+access to the staff reader. `/api/table-bill` includes model-2 splits only for
+sittings in the trusted outstanding orders of that restaurant/table. Parts
+expose no private checkout ids. A failed split read fails the bill read rather
+than offering whole-bill collection over an unread division.
+
+Staff choose free parts, add an optional tip, and record cash or payment on
+the restaurant's terminal through `/api/split/collect`. Cash includes the
+existing change helper. The reviewed cents, currency and revision travel with
+the selection; a lost-reply retry keeps its collection reference. Every
+refusal is shown in the caller's language and answered with a fresh list.
+Before the first attempt, both staff doors offer a visible revision-checked
+stop-dividing button. Afterwards they explain why the people count cannot
+change. Cancellation returns the real unpaid bill to ordinary collection.
+
+Bills rows and totals subtract retained payment coverage. Progress counts
+paid slots for model 2 and paid claims for model 1, matches the saved currency,
+and includes every sitting represented by a row. New private browser fixtures
+exercise the diner start, paid/held/free parts and both staff collection doors
+for every collector in layout and dialogs. Promises includes a bill with a
+paid part and requires slot controls while forbidding whole-bill collection.
+These fixture visits run only in development and delete their own requests,
+memberships, attempts, money, orders, sitting and table. The release owner runs
+those browser/database gates; unit tests alone do not claim they passed.
+
+### Receipt versions, forgiven bills and paid split parts (2026-10-28)
+
+The diner receipt API reads `order_adjustments.kind=forgive` and shows the
+original dishes, discount, service charge and tip, then original bill, forgiven
+by the restaurant and paid. The original and resulting service/tip components
+come from the adjustment. Email and browser print/save use the same renderer.
+Order responses carry `version: { adjustmentIds: [...] }`; a reissue supplies
+that version. Empty means the original bill, so later forgiveness cannot change
+its financial values. Omitted means the current statement. Unknown version IDs
+and inconsistent or failed financial reads do not issue a receipt. The prompt
+shares its issued version across email and print. No new table, expiry or
+payment/sign-out restriction is introduced; the version selects saved financial
+facts rather than storing full historical HTML or customer email.
+
+`POST /api/receipt` also accepts `paymentId` for a model-2 slot collection. It
+reads the immutable payment and its paid slots, verifies their restaurant,
+sitting and currency, and shows those numbered parts' principal plus the full
+ledger tip and actual charge. Gratuities already inside frozen parts are not
+added twice. This works before the other parts are paid and uses the payment's
+currency and time, without reading today's order totals. Both receipt components
+accept that payment identity. The menu remembers the selected parts only when
+checkout returns a card URL, then resolves their payment after Stripe returns,
+including late confirmation. Approved phones poll `/api/receipt/payments` for
+their sitting, including after it closes. A new staff collection offers its
+payment receipt while other parts remain unpaid. The first successful read
+sets a baseline; old payments are not offered on a first visit. Each payment
+is offered once per tab. Simultaneous payments wait their turn, and unshown
+receipts survive a refresh. Failed reads preserve the previous observation.
+The bill sheet and tracker wait while a receipt is open. Receipt memory never
+blocks paying, selling or signing out.
+
+`POST /api/orders/print` accepts exactly one of `orderId` or `paymentId` for a
+staff receipt. Both are scoped to the staff restaurant before reading its
+financial facts. Order reprints use the same forgiveness reader and return the
+issued version; callers can pass that version on reissue. Payment reprints use
+the immutable payment and paid parts without borrowing whole-order totals.
+Kitchen paper still requires an order and cannot return either money receipt.
+Existing bilingual receipt copy is reused; no new customer wording is added.
+
+`pnpm money` reconciles each forgiveness's rounded original/resulting amounts,
+paid state and retained principal/tip coverage, and its single `kind=rest`
+write-off event identified by `operation_ref`. The event must equal forgiveness
+plus whole-order losses from the same transaction, actor, restaurant and
+currency; ambiguous whole-order membership fails. Cancel adjustments retain
+their cancellation meaning. Whole orders do not yet carry an operation ID.

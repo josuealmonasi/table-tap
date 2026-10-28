@@ -4,7 +4,8 @@ import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { actingStaff, actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildReceipt } from "@/lib/receipt";
+import { buildReceipt, type ReceiptVersion } from "@/lib/receipt";
+import { readOrderReceipt, readSlotReceipt, ReceiptReadError, type ReceiptSource } from "@/lib/receipt-source";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { DEFAULT_LOCALE, messagesFor, translate } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n/server";
@@ -34,11 +35,15 @@ export async function POST(req: NextRequest) {
 
   const body = await jsonBody<{
     orderId?: string;
+    paymentId?: string;
+    version?: ReceiptVersion;
     to?: "kitchen" | "receipt";
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
-  const { orderId, to } = body;
-  if (!orderId || (to !== "kitchen" && to !== "receipt")) {
+  const { orderId, paymentId, version, to } = body;
+  if ((to !== "kitchen" && to !== "receipt") || Boolean(orderId) === Boolean(paymentId)
+    || (orderId !== undefined && typeof orderId !== "string") || (paymentId !== undefined && typeof paymentId !== "string")
+    || (to === "kitchen" && !orderId)) {
     return await apiError("apiErr.invalidRequest", 400);
   }
 
@@ -49,15 +54,16 @@ export async function POST(req: NextRequest) {
   const db = createAdminClient();
   // Scoped to the caller's own restaurant, so an id from anywhere else is
   // simply not found.
-  const { data: order } = await db
+  const { data: order, error: orderError } = orderId ? await db
     .from("orders")
     .select(
       "id, restaurant_id, items, subtotal, discount, service_fee, tip, total, currency, table_label, created_at, pay_method",
     )
     .eq(actor.role === "kitchen" ? "kitchen_ticket_id" : "id", orderId)
     .eq("restaurant_id", actor.restaurantId)
-    .maybeSingle();
-  if (!order) return await apiError("apiErr.orderNotFound", 404);
+    .maybeSingle() : { data: null, error: null };
+  if (orderError) return await apiError("apiErr.generic", 503);
+  if (orderId && !order) return await apiError("apiErr.orderNotFound", 404);
 
   if (to === "kitchen") {
     const { data: place } = await db
@@ -80,7 +86,7 @@ export async function POST(req: NextRequest) {
       .upsert(
         {
           restaurant_id: actor.restaurantId,
-          order_id: order.id as string,
+          order_id: order!.id as string,
           kind: "kitchen",
           delivery_token: randomUUID(),
           claimed_at: null,
@@ -93,6 +99,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ queued: true });
   }
 
+  let source: ReceiptSource;
+  try {
+    source = paymentId ? await readSlotReceipt(db, paymentId, actor.restaurantId)
+      : await readOrderReceipt(db, [order!.id], false, undefined, version);
+  } catch (error) {
+    return await apiError("apiErr.generic", error instanceof ReceiptReadError ? error.status : 503);
+  }
+
   const { data: place } = await db
     .from("restaurants")
     .select("name, timezone")
@@ -102,13 +116,14 @@ export async function POST(req: NextRequest) {
   const locale = await getLocale();
   const messages = messagesFor(locale ?? DEFAULT_LOCALE);
   const receipt = buildReceipt(
-    [order as never],
+    source.orders,
     {
       name: place?.name ?? "TableTap",
       timeZone: (place?.timezone as string | null) ?? DEFAULT_TIME_ZONE,
       locale: locale === "en" ? "en-US" : "es-MX",
     },
     (key, vars) => translate(messages, key, vars),
+    source.payment,
   );
-  return NextResponse.json({ html: receipt.html });
+  return NextResponse.json({ html: receipt.html, ...(source.version ? { version: source.version } : {}) });
 }

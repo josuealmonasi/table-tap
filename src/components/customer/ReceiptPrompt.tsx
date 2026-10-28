@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import type { ReceiptVersion } from "@/lib/receipt";
 import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
 import { EMAIL_MAX, isValidEmail } from "@/lib/email";
@@ -21,15 +22,20 @@ import ReceiptPrint from "./ReceiptPrint";
  */
 interface ReceiptPromptProps {
   /** One order, or every order a table settled at once. */
-  orderIds: string[];
+  orderIds?: string[];
+  /** A slot receipt confirms this payment, even if other parts are unpaid. */
+  paymentId?: string;
   /** False when no mail provider is configured: only print/save is offered. */
   email?: boolean;
   open: boolean;
   onClose: () => void;
 }
 
-export default function ReceiptPrompt({ orderIds, email: canEmail = true, open, onClose }: ReceiptPromptProps) {
+export default function ReceiptPrompt({ orderIds = [], paymentId, email: canEmail = true, open, onClose }: ReceiptPromptProps) {
   const t = useT();
+  const target = paymentId ?? orderIds.join(",");
+  const issued = useRef<{ target: string; version?: ReceiptVersion }>({ target });
+  if (issued.current.target !== target) issued.current = { target };
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -44,18 +50,21 @@ export default function ReceiptPrompt({ orderIds, email: canEmail = true, open, 
     e.preventDefault();
     setBusy(true);
     setError("");
+    const issuedCopy = issued.current;
     try {
       const res = await fetch("/api/receipt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderIds, email }),
+        body: JSON.stringify({ orderIds, paymentId, email, version: issuedCopy.version }),
       });
       const data = await res.json().catch(() => ({}));
+      if (issued.current !== issuedCopy) return;
       if (!res.ok) {
         setError(data.error ?? t("notice.generic"));
         setBusy(false);
         return;
       }
+      if (data.version) issuedCopy.version = data.version;
       setSent(true);
     } catch {
       setError(t("notice.network"));
@@ -73,7 +82,7 @@ export default function ReceiptPrompt({ orderIds, email: canEmail = true, open, 
           <p className="tt-muted" style={{ fontSize: 14, marginTop: 0 }}>
             {t("receipt.askBodyPrint")}
           </p>
-          <ReceiptPrint orderIds={orderIds} disabled={false} />
+          <ReceiptPrint orderIds={orderIds} paymentId={paymentId} issued={issued} disabled={false} />
           <button
             type="button"
             className="tt-btn tt-btn-ghost"
@@ -91,7 +100,7 @@ export default function ReceiptPrompt({ orderIds, email: canEmail = true, open, 
           <p className="tt-muted" style={{ fontSize: 14 }}>
             {t("receipt.sentBody", { email })}
           </p>
-          <ReceiptPrint orderIds={orderIds} disabled={false} />
+          <ReceiptPrint orderIds={orderIds} paymentId={paymentId} issued={issued} disabled={false} />
           <button
             className="tt-btn tt-btn-primary"
             style={{ width: "100%", marginTop: 16 }}
@@ -146,7 +155,7 @@ export default function ReceiptPrompt({ orderIds, email: canEmail = true, open, 
           >
             {busy ? t("receipt.sending") : t("receipt.send")}
           </button>
-          <ReceiptPrint orderIds={orderIds} disabled={busy} />
+          <ReceiptPrint orderIds={orderIds} paymentId={paymentId} issued={issued} disabled={busy} />
           <button
             type="button"
             className="tt-btn tt-btn-ghost"

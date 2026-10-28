@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
-const schema = readFileSync("supabase/schema.sql", "utf8").split("-- S20:")[1];
+// The S20 block only: later sections (split slots, model 2) bring their own rules.
+const schema = readFileSync("supabase/schema.sql", "utf8").split("-- S20:")[1].split("-- ── Split by people, model 2")[0];
 const drop = readFileSync("supabase/drop.sql", "utf8");
 const fn = (name: string) => schema.match(new RegExp(`create or replace function public\\.${name}\\([\\s\\S]*?\\$\\$;`))?.[0] ?? "";
 it("K4 the transaction checks the saved order before stock or a coupon, and rolls back competing claims", () => {
