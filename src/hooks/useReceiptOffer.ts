@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TableBill } from "@/lib/table-bill";
+import { useSlotReceiptOffer } from "@/hooks/useSlotReceiptOffer";
+import type { SplitScope } from "@/lib/split-slots";
 import { receiptTargets } from "@/lib/receipt-offer";
 
 const SETTLING = "tt.settling"; // what a card settlement is paying for
@@ -21,6 +23,7 @@ function read(key: string): string[] {
 export function rememberSettling(orderIds: string[]): void {
   try {
     sessionStorage.setItem(SETTLING, JSON.stringify(orderIds));
+    sessionStorage.removeItem("tt.settling.slots");
   } catch {
     // A phone with storage switched off simply doesn't get asked.
   }
@@ -35,6 +38,7 @@ export function rememberSettling(orderIds: string[]): void {
  * - paying for one order by card, which comes back to `/order/<id>?paid=1`;
  * - settling the table by card, which comes back to the menu with `?settled=1`
  *   and the ids the bill sheet stashed on the way out;
+ * - paying numbered parts, whose immutable payment is watched separately;
  * - paying the waiter in cash, which nothing redirects — the bill is polled
  *   while the sheet is open, so the offer is triggered by watching it go from
  *   owing something to owing nothing.
@@ -50,7 +54,10 @@ export function rememberSettling(orderIds: string[]): void {
 export function useReceiptOffer(
   paidOrderId: string | null,
   bill: TableBill | null,
-): { offering: string[] | null; dismiss: () => void; paidNow: boolean } {
+  scope?: SplitScope & { dividing?: boolean },
+): { offering: string[] | null; paymentId: string | null; dismiss: () => void; paidNow: boolean } {
+  const slots = useSlotReceiptOffer(scope);
+  const divided = useRef(false);
   const [offering, setOffering] = useState<string[] | null>(null);
   // That money was just settled — the visit card is offered at the same moment.
   const [paidNow, setPaidNow] = useState(false);
@@ -95,6 +102,8 @@ export function useReceiptOffer(
   useEffect(() => {
     if (!bill) return;
     const was = settled.current;
+    const wasDivided = divided.current;
+    divided.current = Boolean(scope?.dividing || slots.split);
     settled.current = bill.settled;
     if (!bill.settled) {
       // Their own orders when they have any; otherwise they are paying for
@@ -103,8 +112,11 @@ export function useReceiptOffer(
       owed.current = mine.length > 0 ? mine : bill.others.orders.map(o => o.id);
       return;
     }
-    if (was === false && owed.current.length > 0) offer(owed.current);
-  }, [bill, offer]);
+    // Parts have payment receipts. Closing their bill must not offer the whole table again.
+    if (!wasDivided && !divided.current && was === false && owed.current.length > 0) offer(owed.current);
+  }, [bill, offer, scope?.dividing, slots.split]);
 
-  return { offering, dismiss: () => setOffering(null), paidNow };
+  return { offering, paymentId: slots.paymentId, dismiss: () => {
+    if (offering) setOffering(null); else slots.dismiss();
+  }, paidNow: paidNow || slots.paidNow };
 }

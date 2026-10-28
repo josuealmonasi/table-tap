@@ -5318,9 +5318,8 @@ inside the frozen parts are included in that tip, once. Other unpaid parts,
 later dishes, menu currency changes and later forgiveness cannot replace that
 payment with the table's bill. Payment receipts do not mark an entire order as
 emailed. The payment cases failed before the fix and pass while orders remain
-unpaid. `ReceiptPrompt` and `ReceiptPrint` accept a payment identity; wiring the
-diner's slot-return offer and the separate staff reprint route is held for
-Claude's adjacent-file ownership decision.
+unpaid. `ReceiptPrompt` and `ReceiptPrint` accept a payment identity; the
+follow-up below wires the diner offer and separate staff reprint route.
 
 ### The money check follows the forgiveness operation
 
@@ -5343,3 +5342,55 @@ becomes 101 cents, and `2.675` becomes 268. The two half-cent route/checker case
 failed before this correction. Table originals round per order before adding,
 so original minus forgiveness equals paid even with several unscaled totals.
 Existing collection and write-off writers are outside this receipt/checker fix.
+
+## Slot receipt offers and staff reprints — 2026-10-28
+
+| Rule | Two places that had to agree | Regression coverage |
+|---|---|---|
+| A paid part offers its own receipt once | Checkout and staff collection created payment receipts, but the phone watched only whole-order settlement | `slot-receipt-offer.spec.tsx`, `slot-receipt-payments-route.spec.ts` |
+| Staff paper includes the restaurant's forgiveness | The diner reader explained the loss, but staff reprints read the reduced order alone | `staff-receipt-reprint.spec.ts`, existing `kitchen-print.spec.ts` |
+| Staff can reprint a paid group of parts | The receipt renderer accepted payments, but the staff route required an order | `staff-receipt-reprint.spec.ts` |
+
+### A paid part offers its own receipt once
+
+The selected parts and the receipt offer had to agree. Card checkout remembers
+its sitting, split and selected parts only after receiving a redirect. On the
+return, the phone waits for their immutable payment, including a late webhook.
+A small sitting reader checks approved membership, including a closed sitting,
+and exposes only grouped payment IDs and part numbers, never checkout secrets.
+Another table, restaurant or party cannot supply the observed payments.
+
+The phone polls even while its bill sheet is closed. A first successful read
+sets the baseline; later staff collections offer a payment receipt even while
+the table owes more. Repeated polls and refreshes do not repeat an offer.
+Concurrent collections queue without replacing an open receipt, and unshown
+receipts survive refresh. Failed reads never invent a payment or erase the
+baseline. The final parts do not also offer the whole table's order receipt.
+The bill sheet and tracker wait behind the receipt question, so their focus
+traps cannot compete. Receipt memory failures never prevent a card redirect.
+The original whole-order card and cash offers remain covered too.
+
+The hook cases failed before wiring; English and Spanish use the existing
+receipt prompt. The route cases check membership before reads, tenant/sitting
+filters, closed-sitting access, polling limits and read failures. These are
+mocked local checks; Claude owns the browser and database gates.
+
+### Staff paper includes the restaurant's forgiveness
+
+The saved forgiveness and staff reprint had to agree. The staff route now uses
+the same adjustment-aware source as diner email and print. It shows original,
+forgiven and paid amounts in both languages, returning the receipt version.
+Passing an issued original version keeps that copy's original amounts after a
+later forgiveness. An unread adjustment issues no plausible but incomplete
+paper. These route cases failed before the change. Existing kitchen grants,
+tenant scoping and deliberate requeue behavior remain covered.
+
+### Staff can reprint a paid group of parts
+
+The immutable payment and staff paper had to agree. A staff receipt accepts
+exactly one order or payment identity, reads a payment only in that staff
+restaurant, and prints its numbered parts, full tip and actual charge before
+the remaining parts are paid. It never substitutes the table's dishes or
+current currency. Both language cases failed when the route required an order.
+Kitchen and unauthenticated callers are refused before financial reads, and a
+payment cannot be sent to the kitchen printer.

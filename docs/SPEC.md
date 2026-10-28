@@ -2400,9 +2400,24 @@ sitting and currency, and shows those numbered parts' principal plus the full
 ledger tip and actual charge. Gratuities already inside frozen parts are not
 added twice. This works before the other parts are paid and uses the payment's
 currency and time, without reading today's order totals. Both receipt components
-accept that payment identity. The existing diner return/offer hook and separate
-staff reprint route still need adjacent integration by their assigned owner;
-they must pass the payment identity or saved order version respectively.
+accept that payment identity. The menu remembers the selected parts only when
+checkout returns a card URL, then resolves their payment after Stripe returns,
+including late confirmation. Approved phones poll `/api/receipt/payments` for
+their sitting, including after it closes. A new staff collection offers its
+payment receipt while other parts remain unpaid. The first successful read
+sets a baseline; old payments are not offered on a first visit. Each payment
+is offered once per tab. Simultaneous payments wait their turn, and unshown
+receipts survive a refresh. Failed reads preserve the previous observation.
+The bill sheet and tracker wait while a receipt is open. Receipt memory never
+blocks paying, selling or signing out.
+
+`POST /api/orders/print` accepts exactly one of `orderId` or `paymentId` for a
+staff receipt. Both are scoped to the staff restaurant before reading its
+financial facts. Order reprints use the same forgiveness reader and return the
+issued version; callers can pass that version on reissue. Payment reprints use
+the immutable payment and paid parts without borrowing whole-order totals.
+Kitchen paper still requires an order and cannot return either money receipt.
+Existing bilingual receipt copy is reused; no new customer wording is added.
 
 `pnpm money` reconciles each forgiveness's rounded original/resulting amounts,
 paid state and retained principal/tip coverage, and its single `kind=rest`

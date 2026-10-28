@@ -141,7 +141,14 @@ export default function OrderingApp({
 
   // The orders this phone can still watch, its sitting, and the tracker.
   const orders = useTrackedOrders(restaurant.id, table?.id ?? null, trackOrder);
-  const { trackIds, sittingSessionId, tracking, setTracking, closeTracker } = orders;
+  const { trackIds, sittingSessionId, setSittingSessionId, tracking, setTracking, closeTracker } = orders;
+  useEffect(() => {
+    // A phone can join without ordering. Keep its sitting when the last part
+    // closes membership, or its receipt poll would stop just before the answer.
+    if (membership.state?.status === "approved" && membership.state.sessionId) {
+      setSittingSessionId(membership.state.sessionId);
+    }
+  }, [membership.state?.status, membership.state?.sessionId, setSittingSessionId]);
 
   // Already owing at another table? Ordering here would open a second bill
   // beside one nobody has settled.
@@ -149,11 +156,16 @@ export default function OrderingApp({
 
   // "Want that by email?" — asked once, when the money is settled, whether
   // that happened by card or in cash at the table.
+  const receiptSessionId = (membership.state?.status === "approved" ? membership.state.sessionId : null) ?? sittingSessionId;
   const {
     offering,
+    paymentId: receiptPaymentId,
     dismiss: dismissReceipt,
     paidNow,
-  } = useReceiptOffer(trackOrder?.id ?? null, bill);
+  } = useReceiptOffer(trackOrder?.id ?? null, bill, table && receiptSessionId ? {
+    restaurantId: restaurant.id, tableId: table.id, sessionId: receiptSessionId, dividing,
+  } : undefined);
+  const receiptOpen = Boolean(offering || receiptPaymentId);
 
   // "Anything else?" — asked on the way to ordering, and asked once.
   const offered = useUpsell(screen === "cart", restaurant.id, cart.items, items, ratings);
@@ -235,7 +247,7 @@ export default function OrderingApp({
           notice={<>
             {frozen && <PendingAttempt message={t("pending.order")} />}
             {table && <TableJoinNotice restaurantId={restaurant.id} {...membership} />}
-            {tableLoyalty && paidNow && !offering && !tracking ? <LoyaltyOffer offer={tableLoyalty} /> : null}
+            {tableLoyalty && paidNow && !receiptOpen && !tracking ? <LoyaltyOffer offer={tableLoyalty} /> : null}
           </>}
           onOpenBill={() => {
             reloadBill();
@@ -269,7 +281,7 @@ export default function OrderingApp({
         {/* One at a time. Paying is answered first — it is what just happened,
           and two dialogs stacked would trap focus against each other and take
           two Escapes to leave. The tracker is underneath it either way. */}
-        {tracking && !offering && (
+        {tracking && !receiptOpen && (
           <TrackerOverlay
             orderId={tracking}
             initialOrder={trackOrder?.id === tracking ? trackOrder : null}
@@ -279,7 +291,7 @@ export default function OrderingApp({
         )}
         {table && bill && !bill.settled && (
           <BillSheet
-            open={billOpen}
+            open={billOpen && !receiptOpen}
             onClose={() => setBillOpen(false)}
             bill={bill}
             photoOf={photoOf}
@@ -293,7 +305,7 @@ export default function OrderingApp({
           />
         )}
         <OwingElsewhereModal owing={owingElsewhere} currency={restaurant.currency} />
-        {offering && <ReceiptPrompt orderIds={offering} email={receipts} open onClose={dismissReceipt} />}
+        {receiptOpen && <ReceiptPrompt key={offering?.join(",") ?? receiptPaymentId} orderIds={offering ?? undefined} paymentId={offering ? undefined : receiptPaymentId ?? undefined} email={receipts} open onClose={dismissReceipt} />}
         <DishOverlays
           screens={screens}
           currency={restaurant.currency}

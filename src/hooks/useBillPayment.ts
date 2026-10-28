@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
+import { rememberSlotSettling } from "@/lib/slot-receipt-offer";
 import { rememberSettling } from "@/hooks/useReceiptOffer";
 
 /**
@@ -80,7 +81,10 @@ export function useBillPayment(
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...pay, restaurantId, tableId, sessionId, tipCents: pay.tipCents ?? 0 }),
       });
-      await redirectOrSay(res);
+      await redirectOrSay(res, () => {
+        rememberSettling([]);
+        rememberSlotSettling({ restaurantId, tableId, sessionId, splitId: pay.splitId, slots: pay.slots });
+      });
     } catch { toast(t("done.networkError"), "error"); setBusy(false); }
   }
 

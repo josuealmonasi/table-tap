@@ -79,9 +79,11 @@ export async function readOrderReceipt(db: Database, ids: string[], printing: bo
 }
 
 /** A slot receipt names money received, even while the other parts are unpaid. */
-export async function readSlotReceipt(db: Database, id: string): Promise<ReceiptSource> {
-  const { data: payment, error } = await db.from("payments")
-    .select("id, restaurant_id, session_id, amount, tip, currency, created_at").eq("id", id).maybeSingle();
+export async function readSlotReceipt(db: Database, id: string, restaurantId?: string): Promise<ReceiptSource> {
+  let query = db.from("payments")
+    .select("id, restaurant_id, session_id, amount, tip, currency, created_at").eq("id", id);
+  if (restaurantId) query = query.eq("restaurant_id", restaurantId);
+  const { data: payment, error } = await query.maybeSingle();
   if (error) throw new ReceiptReadError(503);
   if (!payment) throw new ReceiptReadError(404);
   const { data: slots, error: slotError } = await db.from("bill_split_slots")
