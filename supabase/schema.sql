@@ -7972,6 +7972,58 @@ end; $$;
 revoke all on function public.apply_bill_discount(uuid, uuid[], uuid, numeric) from public, anon, authenticated;
 grant execute on function public.apply_bill_discount(uuid, uuid[], uuid, numeric) to service_role;
 
+-- Switching the service charge off takes it off the bills still open, under
+-- the money lock (paths audit #4).
+--
+-- It used to read which bills were promised to somebody, then write each one
+-- guarded only on its old service charge. A waiter collecting MX$100 plus a
+-- MX$10 tip in between left the total MX$120 and MX$110 allocated, and the
+-- stale write put the total back to MX$100 with the money still against it.
+-- Now the reading and the writing are one transaction that every money writer
+-- waits for. The rules are the ones `service-reprice.ts` describes: only ever
+-- lower, and leave alone anything whose total is already promised. Returns how
+-- many orders changed.
+create or replace function public.reprice_open_service(p_restaurant uuid, p_pct numeric)
+returns int language plpgsql security definer set search_path = public as $$
+declare v_changed int;
+begin
+  if p_pct is null or p_pct < 0 then return 0; end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  perform public.backfill_payment_allocations(p_restaurant);
+  perform set_config('tabletap.allocation_scope', '', true);
+  perform 1 from orders where restaurant_id = p_restaurant and paid = false and service_fee > 0
+   order by id for update;
+  with open as (
+    select o.id, round(o.subtotal * p_pct / 100, 2) wanted
+      from orders o
+     where o.restaurant_id = p_restaurant and o.paid = false and o.account_id is null
+       and o.written_off = false and o.status not in ('cancelled', 'pending_payment')
+       and o.stripe_session_id is null and o.service_fee > 0
+       -- A card checkout opened in the last 35 minutes was priced from this
+       -- total (CHECKOUT_HOLD_MINUTES: 30 for the session, five for the webhook).
+       and (o.card_checkout_at is null or o.card_checkout_at <= now() - interval '35 minutes')
+       -- Money against the order or its sitting.
+       and public.retained_order_coverage(p_restaurant, o.id) = 0
+       and not exists (select 1 from payments p where p.order_id = o.id)
+       and (o.session_id is null or not exists (select 1 from payments p where p.session_id = o.session_id))
+       -- Being divided into shares.
+       and (o.session_id is null or not exists (select 1 from bill_splits s
+         where s.session_id = o.session_id and s.status in ('proposed', 'locked')))
+       -- Named in a discount or write-off waiting for a manager.
+       and not exists (select 1 from discount_requests d
+         where d.restaurant_id = p_restaurant and d.status = 'pending' and o.id = any(d.order_ids))
+       and not exists (select 1 from write_off_requests w
+         where w.restaurant_id = p_restaurant and w.status = 'pending' and o.id = any(w.order_ids))
+  )
+  update orders o set service_fee = open.wanted, total = round(o.total - o.service_fee + open.wanted, 2)
+    from open where o.id = open.id and open.wanted < o.service_fee;
+  get diagnostics v_changed = row_count;
+  return v_changed;
+end; $$;
+revoke all on function public.reprice_open_service(uuid, numeric) from public, anon, authenticated;
+grant execute on function public.reprice_open_service(uuid, numeric) to service_role;
+
 -- Duplicate charges need the same durable retry rule as order cancellations.
 -- Unknown/pending outcomes reuse their immutable request; only a confirmed
 -- terminal failure can advance to a new Stripe idempotency key.

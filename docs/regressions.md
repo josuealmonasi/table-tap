@@ -4788,6 +4788,7 @@ release gates. These local tests do not apply or validate the deployed schema.
 | A locked plan freezes every table the menu editor writes directly | Sections, extras, icon palettes and dietary tags stayed editable on a locked plan | `invariants/database.spec.ts` (every "manages" policy has a freeze trigger), dev probe |
 | A shift opened during a close starts after it | An open waiting on a close kept its transaction-start time, so one sale fell in both shifts | `cash-shift-open.spec.ts`, dev probe of `open_cash_shift` |
 | A staff discount lands whole or not at all, and never under collected money | Totals written with no lock, failed writes ignored, redemption logged anyway; a part-paid bill cut below what it had paid | `table-adjustments.spec.tsx`, dev probe of `apply_bill_discount` |
+| Repricing service decides and writes under the money lock | A collection between the read and the write; the stale write lowered a total with money against it | `service-reprice.spec.ts` (rules in the SQL), dev probe of `reprice_open_service` |
 
 ### A scanned collection and a refreshed bill list have separate lifetimes
 
@@ -4958,4 +4959,15 @@ coupon use, the totals and the redemption, or none. It refuses a part-paid bill
 the way a write-off is refused. An approval for a bill paid in part since the
 ask now answers `part_paid` instead of raising. Both bill routes also stopped
 reading a failed order read as an empty bill.
+
+## A service charge taken off a bill that had just been paid into (paths audit #4)
+
+Switching the service charge off lowers it on bills nobody has started paying.
+The rules were right, but they ran in two steps: read which bills were promised
+to somebody, then write each one guarded only on its old service charge. A
+waiter collecting MX$100 plus a MX$10 tip in between left the order at MX$120
+with MX$110 allocated, and the stale write set the total back to MX$100 with
+the money still against it. `reprice_open_service` now reads and writes in one
+transaction under the money lock, with the same rules, plus retained coverage
+checked directly.
 
