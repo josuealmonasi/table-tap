@@ -270,3 +270,26 @@ describe("a database call names the arguments its function takes", () => {
     expect(misfits).toEqual([]);
   });
 });
+
+describe("a locked plan freezes every table the dashboard writes directly", () => {
+  it("puts the dashboard-write trigger on every table the team manages with its own key", () => {
+    // Only menus, items and tables were frozen; sections, extras, icon
+    // palettes and dietary tags were written by the same editor and stayed
+    // writable on a locked plan (paths audit #10). A table the team manages
+    // through RLS needs the freeze too, unless it is listed here with why.
+    const unfrozen: Record<string, string> = {
+      restaurants: "the owner pays and unlocks through it; settings are refused by the API",
+      staff: "the owner removes people on a locked plan",
+      notifications: "marking one read is not editing the restaurant",
+      service_requests: "the floor answers a call even while the plan is locked",
+      discount_requests: "written through API routes that check the plan",
+      write_off_requests: "written through API routes that check the plan",
+    };
+    const managed = [...schema.matchAll(/create policy "(?:team|owner) manages [^"]*"\s+on ([a-z_]+) for all/g)].map(m => m[1]);
+    expect(managed.length).toBeGreaterThan(5);
+    const missing = [...new Set(managed)].filter(
+      t => !(t in unfrozen) && !new RegExp(`create trigger \\w+_dashboard_write before insert or update or delete on ${t}\\b`).test(schema),
+    );
+    expect(missing, `managed with no locked-plan freeze: ${missing.join(", ")}`).toEqual([]);
+  });
+});

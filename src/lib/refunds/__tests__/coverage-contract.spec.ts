@@ -15,6 +15,9 @@ describe.each(["mxn", "usd"])("duplicate coverage in %s", currency => {
     const original = db.rpc.bind(db);
     const seen: unknown[] = [];
     const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      // Untagged refunds are the restaurant's own, recorded first (paths audit
+      // #7); the same late failure leaves that recording partial too.
+      if (name === "record_refund_due_coverage_v1") return { data: { outcome: "partial", outstanding_cents: 6000 }, error: null };
       if (name !== "finish_refund_due_attempt_v2") return original(name, args);
       seen.push(args.p_refunds);
       // A late failure of re60 makes only re40 active at completion.
@@ -52,7 +55,7 @@ it.each(["MXN", "USD"])("%s retains coverage over partial completion, a contribu
   let attemptNo = 0;
   let outstanding = 4000;
   const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
-    if (name === "start_refund_due_attempt") return { data: { id: `a${++attemptNo}`, attempt_no: attemptNo,
+    if (name === "start_refund_due_attempt" || name === "start_refund_due_attempt_v2") return { data: { id: `a${++attemptNo}`, attempt_no: attemptNo,
       amount: outstanding / 100, idempotency_key: `key${attemptNo}`, stripe_account_id: "acct", stripe_payment_intent: "pi" }, error: null };
     if (name === "finish_refund_due_attempt_v2") {
       for (const r of args.p_refunds as { id: string; amount_cents: number }[]) coverage.set(r.id, r.amount_cents);
@@ -80,7 +83,7 @@ it("retains a pending provider id without counting it as successful coverage", a
   const base = fakeDb([due({ currency: "USD" })]) as ReturnType<typeof createAdminClient>;
   let providerId: string | null = null;
   const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
-    if (name === "start_refund_due_attempt") return { data: { id: "a1", attempt_no: 1, amount: 125.5,
+    if (name === "start_refund_due_attempt" || name === "start_refund_due_attempt_v2") return { data: { id: "a1", attempt_no: 1, amount: 125.5,
       idempotency_key: "key1", stripe_account_id: "acct", stripe_payment_intent: "pi", stripe_refund_id: providerId }, error: null };
     const evidence = args.p_refunds as { id: string; amount_cents: number }[];
     providerId = evidence[0].id;

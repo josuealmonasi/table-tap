@@ -72,8 +72,10 @@ describe("money that stops being owed closes the sitting", () => {
     // which is an order that was owed and now is not. A counter sale inserts a
     // row already paid, with no table and no sitting — there was never
     // anything holding a table to close. Matching the whole file rather than
-    // the call is what made that look like the same act.
-    const settlesExisting = /\.update\(\s*\{[\s\S]*?(paid:\s*true|written_off:\s*true)/;
+    // the call is what made that look like the same act. A write-off is now
+    // written by `write_off_orders` under the money lock (paths audit #5), so
+    // calling it counts as settling too.
+    const settlesExisting = /\.update\(\s*\{[\s\S]*?(paid:\s*true|written_off:\s*true)|rpc\(\s*"write_off_orders"/;
     const clearing = sources.filter(f => settlesExisting.test(read(f)));
     expect(clearing.length).toBeGreaterThan(0);
 

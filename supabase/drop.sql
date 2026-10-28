@@ -21,6 +21,8 @@ drop function if exists public.record_fee_return(uuid, uuid, text);
 drop function if exists public.enqueue_fee_reconcile(uuid, text);
 drop function if exists public.ack_fee_reconcile(uuid, text, int);
 drop function if exists public.finish_refund_due_attempt_v2(uuid, uuid, uuid, text, jsonb, text);
+drop function if exists public.record_refund_due_coverage_v1(uuid, uuid, text, jsonb);
+drop function if exists public.start_refund_due_attempt_v2(uuid, uuid, int);
 drop function if exists public.guard_fee_return() cascade;
 drop function if exists public.refund_fee_proven_clear(uuid, text);
 drop table if exists table_session_members cascade;
@@ -213,6 +215,7 @@ drop function if exists public.keep_order_terminal();
 drop table if exists restaurant_subscription_prices cascade;
 drop function if exists public.effective_restaurant_plan(uuid);
 drop function if exists public.enforce_dashboard_write();
+drop function if exists public.enforce_dashboard_write_child();
 
 drop function if exists public.lock_restaurant_money(uuid) cascade;
 drop function if exists public.snapshot_payment_scope() cascade;
@@ -261,7 +264,10 @@ drop function if exists public.cancel_order_v2(uuid, uuid, text, jsonb, boolean,
 drop function if exists public.ring_pos_sale_v2(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int);
 drop function if exists public.ring_pos_account_v2(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int);
 drop function if exists public.approve_write_off_request_v2(uuid, uuid, text, numeric, text);
+drop function if exists public.write_off_orders(uuid, uuid[], text, text, text);
 drop function if exists public.approve_discount_request_v2(uuid, uuid, text, numeric);
+drop function if exists public.apply_bill_discount(uuid, uuid[], uuid, numeric);
+drop function if exists public.reprice_open_service(uuid, numeric);
 drop function if exists public.attribute_payment(uuid, uuid, text, jsonb, text, text, boolean);
 
 drop function if exists public.start_refund_due_attempt(uuid, uuid);
@@ -304,6 +310,7 @@ drop function if exists public.record_purchase_once(uuid, uuid, numeric, numeric
 drop function if exists public.record_waste_once(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid);
 drop function if exists public.record_ingredient_counts_once(uuid, jsonb, text, uuid);
 drop function if exists public.close_cash_shift_once(uuid, uuid, numeric, text, uuid);
+drop function if exists public.open_cash_shift(uuid, text, numeric);
 
 drop function if exists public.account_checkout_currency_v1(uuid, uuid, numeric, numeric, numeric, text) cascade;
 drop function if exists public.account_settle_currency_v1(uuid, uuid, numeric, numeric, text, text, text, text) cascade;

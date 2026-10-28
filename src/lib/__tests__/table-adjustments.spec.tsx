@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 interface Row { [key: string]: unknown }
@@ -15,7 +16,26 @@ vi.mock("@/lib/coupon-service", () => ({
   toAppliedCoupon: () => ({ kind: "fixed", value: 30 }),
 }));
 vi.mock("@/lib/apply-bill-discount", () => ({ applyToOrders: async (orders: Row[]) => { applied.push(orders); return true; } }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
+const coverage: Record<string, number> = {};
+// write_off_orders as the SQL does it: refuse a part-paid bill, then write off
+// what is still open and off any account.
+const rpc = async (name: string, args: Row) => {
+  const ids = (args.p_orders ?? [args.p_order]) as string[];
+  const paid = ids.reduce((n, id) => n + (coverage[id] ?? 0), 0);
+  if (name === "retained_order_coverage") return { data: paid, error: null };
+  if (name === "apply_bill_discount") {
+    const open = (tables.orders ?? []).filter(o => ids.includes(o.id as string) && !o.account_id && !o.paid && !o.written_off);
+    if (open.length !== ids.length) return { data: "changed", error: null };
+    if (paid > 0) return { data: "part_paid", error: null };
+    applied.push(open);
+    return { data: "applied", error: null };
+  }
+  if (paid > 0) return { data: { outcome: "part_paid", paid }, error: null };
+  const done = (tables.orders ?? []).filter(o => ids.includes(o.id as string) && !o.account_id && !o.paid && !o.written_off);
+  done.forEach(o => { o.written_off = true; o.status = "completed"; });
+  return { data: done.length ? { outcome: "written_off", orderIds: done.map(o => o.id), amount: done.reduce((n, o) => n + Number(o.total), 0), sessions: [] } : { outcome: "nothing" }, error: null };
+};
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc, from: (table: string) => {
   const filters: ((r: Row) => boolean)[] = [];
   let columns = "*";
   let patch: Row | null = null;
@@ -49,6 +69,7 @@ const request = (body: object) => new NextRequest("https://test/api/bill", { met
 beforeEach(() => {
   actor.role = "waiter";
   applied.length = 0;
+  for (const id of Object.keys(coverage)) delete coverage[id];
   tables.orders = [
     { id: "today", restaurant_id: "r1", total: 50, table_id: "t1", paid: false, written_off: false, status: "received", account_id: null },
     { id: "yesterday", restaurant_id: "r1", total: 100, table_id: "t1", paid: false, written_off: false, status: "received", account_id: "a1" },
@@ -80,11 +101,53 @@ describe("table adjustment routes leave account orders alone", () => {
   });
   it("cannot discount an order moved to an account after the read", async () => {
     const { applyToOrders } = await vi.importActual<typeof import("@/lib/apply-bill-discount")>("@/lib/apply-bill-discount");
-    await applyToOrders([{ id: "yesterday", total: 100 }] as never, "c1", "SAVE", 30, "r1");
+    expect(await applyToOrders([{ id: "yesterday", total: 100 }] as never, "c1", 30, "r1")).toBe("changed");
     expect(tables.orders[1].total).toBe(100);
+    const fn = readFileSync("supabase/schema.sql", "utf8").split("create or replace function public.apply_bill_discount(")[1]!.split("end; $$;")[0]!;
+    expect(fn).toContain("and coupon_code is null and account_id is null");
+    expect(fn).toContain("perform public.lock_restaurant_money(p_restaurant);");
+    expect(fn).toContain("retained_order_coverage(p_restaurant, o.id) > 0) then return 'part_paid'");
   });
   it("cannot write off an order moved to an account after the read", async () => {
-    await applyWriteOff({ orders: [{ id: "yesterday" }] as never, restaurantId: "r1", actorEmail: "ana", reason: "walkout", note: "" });
+    expect(await applyWriteOff({ orders: [{ id: "yesterday" }] as never, restaurantId: "r1", actorEmail: "ana", reason: "walkout", note: "" }))
+      .toEqual({ outcome: "nothing" });
     expect(tables.orders[1].written_off).toBe(false);
+    // The rule lives in the function now, under the money lock.
+    const fn = readFileSync("supabase/schema.sql", "utf8").split("create or replace function public.write_off_orders(")[1]!.split("end; $$;")[0]!;
+    expect(fn).toContain("and account_id is null");
+    expect(fn).toContain("perform public.lock_restaurant_money(p_restaurant);");
+    expect(fn).toContain("retained_order_coverage(p_restaurant, id)");
+  });
+});
+
+describe("a part-paid bill is not discounted (paths audit #2)", () => {
+  it("refuses a manager's discount and applies nothing", async () => {
+    actor.role = "manager";
+    coverage.today = 30;
+    const { applyToOrders } = await vi.importActual<typeof import("@/lib/apply-bill-discount")>("@/lib/apply-bill-discount");
+    expect(await applyToOrders([{ id: "today", total: 50 }] as never, "c1", 30, "r1")).toBe("part_paid");
+    expect(applied).toEqual([]);
+  });
+});
+
+describe("a part-paid bill is not written off (paths audit #5)", () => {
+  it("refuses a manager's write-off and writes nothing", async () => {
+    actor.role = "manager";
+    coverage.today = 30;
+    const res = await writeOff.POST(request({ tableId: "t1", reason: "walkout" }));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe("apiErr.writeOffPartPaid");
+    expect(tables.orders[0].written_off).toBe(false);
+  });
+  it("refuses a waiter's ask instead of storing one nobody can approve", async () => {
+    coverage.today = 30;
+    expect((await writeOff.POST(request({ tableId: "t1", reason: "walkout" }))).status).toBe(409);
+    expect(tables.write_off_requests).toEqual([]);
+  });
+  it("writes off an unpaid bill and reports what the database wrote off", async () => {
+    actor.role = "manager";
+    const res = await writeOff.POST(request({ tableId: "t1", reason: "walkout" }));
+    expect(await res.json()).toEqual({ ok: true, amount: 50 });
+    expect(tables.orders[0].written_off).toBe(true);
   });
 });

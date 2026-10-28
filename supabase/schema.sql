@@ -1563,6 +1563,54 @@ drop trigger if exists tables_dashboard_write on restaurant_tables;
 create trigger tables_dashboard_write before insert or update or delete on restaurant_tables
   for each row execute function public.enforce_dashboard_write();
 
+-- The rest of the menu editor writes straight to Postgres as well: sections,
+-- extras on a dish, icon palettes and dietary tags. Only menus, items and tables
+-- were frozen, so on a locked plan a manager could still rename a section the
+-- dashboard said was read-only (paths audit #10).
+drop trigger if exists categories_dashboard_write on categories;
+create trigger categories_dashboard_write before insert or update or delete on categories
+  for each row execute function public.enforce_dashboard_write();
+drop trigger if exists icon_groups_dashboard_write on icon_groups;
+create trigger icon_groups_dashboard_write before insert or update or delete on icon_groups
+  for each row execute function public.enforce_dashboard_write();
+drop trigger if exists dietary_tags_dashboard_write on dietary_tags;
+create trigger dietary_tags_dashboard_write before insert or update or delete on dietary_tags
+  for each row execute function public.enforce_dashboard_write();
+
+-- Two editor tables carry no restaurant of their own: an extra belongs to the
+-- dish it is on, an icon to its palette. The same freeze, found through the
+-- parent row.
+create or replace function public.enforce_dashboard_write_child()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_restaurant uuid;
+begin
+  if auth.uid() is null then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+  if tg_table_name = 'item_addons' then
+    select restaurant_id into v_restaurant from menu_items
+     where id = case when tg_op = 'DELETE' then old.product_id else new.product_id end;
+  else
+    select restaurant_id into v_restaurant from icon_groups
+     where id = case when tg_op = 'DELETE' then old.group_id else new.group_id end;
+  end if;
+  if exists (select 1 from restaurants where id = v_restaurant and plan_status = 'locked') then
+    raise exception 'tt_plan_frozen' using errcode = 'check_violation';
+  end if;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end $$;
+revoke all on function public.enforce_dashboard_write_child() from public, anon, authenticated;
+grant execute on function public.enforce_dashboard_write_child() to service_role;
+
+drop trigger if exists item_addons_dashboard_write on item_addons;
+create trigger item_addons_dashboard_write before insert or update or delete on item_addons
+  for each row execute function public.enforce_dashboard_write_child();
+drop trigger if exists icon_group_items_dashboard_write on icon_group_items;
+create trigger icon_group_items_dashboard_write before insert or update or delete on icon_group_items
+  for each row execute function public.enforce_dashboard_write_child();
+
 -- A paid feature has to be paid for in the database too.
 --
 -- Five of the eight tiered features are refused by an API route. Three are not,
@@ -6095,12 +6143,26 @@ $$;
 revoke all on function public.retained_order_coverage(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.retained_order_coverage(uuid, uuid) to service_role;
 
+-- Every writer, not only the ones that say so (paths audit #2, #4, #5).
+--
+-- This used to return at once unless the writer had set
+-- tabletap.allocation_writer = 'v1', so a direct update was never checked: a
+-- staff discount, a service reprice and a write-off each lowered or forgave an
+-- order with money already against it, and the legacy cancel_order can still
+-- cancel one with no refund obligation. Those three now run as locked
+-- functions, and the guard checks everyone. Legacy payments with no
+-- allocations read as no coverage, so old data cannot be refused by it.
 create or replace function public.guard_allocated_order()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare v_covered numeric;
 begin
-  if current_setting('tabletap.allocation_writer', true) is distinct from 'v1' then return new; end if;
   if pg_trigger_depth() > 1 then return new; end if;
+  -- Nothing it protects changed, which is a kitchen moving a ticket along:
+  -- no coverage read on every board update.
+  if new.total is not distinct from old.total and new.tip is not distinct from old.tip
+    and new.written_off is not distinct from old.written_off
+    and new.account_id is not distinct from old.account_id
+    and (new.status is not distinct from old.status or new.status <> 'cancelled') then return new; end if;
   v_covered := public.retained_order_coverage(old.restaurant_id, old.id);
   if v_covered > 0 and (new.written_off or new.account_id is distinct from old.account_id
     or ((new.total <> old.total or new.tip <> old.tip)
@@ -7742,6 +7804,11 @@ begin
      -- An order moved onto a customer account is the account's debt now.
      and account_id is null;
   if v_count <> cardinality(v_request.order_ids) or round(v_total, 2) <> p_amount then return 'changed'; end if;
+  -- Part of the bill was paid after it was asked for: writing it off would
+  -- report the whole total as lost (paths audit #5). The guard below would
+  -- raise; this says why.
+  if exists (select 1 from unnest(v_request.order_ids) o(id)
+    where public.retained_order_coverage(p_restaurant, o.id) > 0) then return 'part_paid'; end if;
 
   update orders set written_off = true, write_off_reason = v_request.reason,
     write_off_note = v_request.note, written_off_by = p_actor, written_off_at = now(), status = 'completed'
@@ -7754,6 +7821,55 @@ begin
 end; $$;
 revoke all on function public.approve_write_off_request_v2(uuid, uuid, text, numeric, text) from public, anon, authenticated;
 grant execute on function public.approve_write_off_request_v2(uuid, uuid, text, numeric, text) to service_role;
+
+-- A manager's direct write-off, under the money lock (paths audit #5).
+--
+-- It used to be a plain update that checked `paid = false` and nothing else, so
+-- a bill with MX$80 of MX$100 already collected was written off and logged as
+-- MX$100 lost, while the MX$80 stayed allocated to an order nobody owed any
+-- more. It also skipped guard_allocated_order, which only runs for writers that
+-- say so. A part-paid bill is refused with what was paid; forgiving just the
+-- rest is a different operation, not this one.
+create or replace function public.write_off_orders(
+  p_restaurant uuid, p_orders uuid[], p_actor text, p_reason text, p_note text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_paid numeric;
+  v_amount numeric;
+  v_ids uuid[];
+  v_sessions uuid[];
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  perform public.backfill_payment_allocations(p_restaurant);
+  perform set_config('tabletap.allocation_scope', '', true);
+  perform 1 from orders where id = any(p_orders) and restaurant_id = p_restaurant order by id for update;
+  select coalesce(sum(public.retained_order_coverage(p_restaurant, id)), 0) into v_paid
+    from orders where id = any(p_orders) and restaurant_id = p_restaurant;
+  if v_paid > 0 then return jsonb_build_object('outcome', 'part_paid', 'paid', round(v_paid, 2)); end if;
+
+  -- And off every screen that shows live work. A table whose debt was
+  -- cancelled kept its orders at "received", so the kitchen still had tickets
+  -- for a table that had gone and the diner's phone still offered "follow your
+  -- order ORD-09BB" three times over, on a table the floor had cleared for the
+  -- next party.
+  with done as (
+    update orders set written_off = true, write_off_reason = p_reason, write_off_note = p_note,
+      written_off_by = p_actor, written_off_at = now(), status = 'completed'
+     where id = any(p_orders) and restaurant_id = p_restaurant
+       and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
+       -- An order moved onto a customer account is the account's debt now.
+       and account_id is null
+    returning id, total, session_id
+  )
+  select array_agg(id), coalesce(sum(total), 0), array_agg(distinct session_id) filter (where session_id is not null)
+    into v_ids, v_amount, v_sessions from done;
+  if v_ids is null then return jsonb_build_object('outcome', 'nothing'); end if;
+  return jsonb_build_object('outcome', 'written_off', 'orderIds', to_jsonb(v_ids),
+    'amount', round(v_amount, 2), 'sessions', coalesce(to_jsonb(v_sessions), '[]'::jsonb));
+end; $$;
+revoke all on function public.write_off_orders(uuid, uuid[], text, text, text) from public, anon, authenticated;
+grant execute on function public.write_off_orders(uuid, uuid[], text, text, text) to service_role;
 
 create or replace function public.approve_discount_request_v2(
   p_request uuid, p_restaurant uuid, p_actor text, p_amount numeric
@@ -7780,6 +7896,10 @@ begin
      and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
      and coupon_code is null and account_id is null;
   if v_count <> cardinality(v_request.order_ids) or v_total <= 0 then return 'changed'; end if;
+  -- Paid in part since it was asked for: a lower total would sit under money
+  -- already collected (paths audit #2). The guard would raise; this says why.
+  if exists (select 1 from unnest(v_request.order_ids) o(id)
+    where public.retained_order_coverage(p_restaurant, o.id) > 0) then return 'part_paid'; end if;
   select * into v_coupon from coupons
    where restaurant_id = p_restaurant and upper(code) = upper(v_request.code) for update;
   if not found or not v_coupon.active
@@ -7812,6 +7932,111 @@ begin
 end; $$;
 revoke all on function public.approve_discount_request_v2(uuid, uuid, text, numeric) from public, anon, authenticated;
 grant execute on function public.approve_discount_request_v2(uuid, uuid, text, numeric) to service_role;
+
+-- A manager's staff discount on a bill, under the money lock (paths audit #2).
+--
+-- It used to be written order by order from the route: totals lowered with no
+-- lock, update errors ignored, and the redemption logged and reported as done
+-- whatever happened to the orders. A bill with MX$80 of MX$100 collected could
+-- be cut to MX$50 under the money already in it, past guard_allocated_order,
+-- which only checks writers that opt in. Now it is one transaction: eligibility,
+-- the coupon use, the totals and the redemption, or none of them. A part-paid
+-- bill is refused like a write-off (the guard would refuse the lower total
+-- anyway). The amount is the route's coupon arithmetic; this checks it fits.
+create or replace function public.apply_bill_discount(
+  p_restaurant uuid, p_orders uuid[], p_coupon uuid, p_amount numeric
+) returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_coupon coupons%rowtype;
+  v_count int;
+  v_total numeric;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  perform public.backfill_payment_allocations(p_restaurant);
+  perform set_config('tabletap.allocation_scope', '', true);
+  perform 1 from orders where id = any(p_orders) and restaurant_id = p_restaurant order by id for update;
+  select count(*), coalesce(sum(total), 0) into v_count, v_total from orders
+   where id = any(p_orders) and restaurant_id = p_restaurant
+     and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
+     and coupon_code is null and account_id is null;
+  if v_count = 0 or v_count <> cardinality(p_orders) or v_total <= 0 then return 'changed'; end if;
+  if p_amount is null or p_amount <= 0 or p_amount > v_total then return 'changed'; end if;
+  if exists (select 1 from unnest(p_orders) o(id)
+    where public.retained_order_coverage(p_restaurant, o.id) > 0) then return 'part_paid'; end if;
+  select * into v_coupon from coupons where id = p_coupon and restaurant_id = p_restaurant for update;
+  if not found or redeem_coupon(v_coupon.id) is null then return 'changed'; end if;
+
+  -- Keep the rounding remainder on the largest order, as spreadDiscount does.
+  with shares as (
+    select id, total, round(p_amount * total / v_total, 2) amount,
+      row_number() over (order by total desc, id) position
+    from orders where id = any(p_orders) and restaurant_id = p_restaurant
+  ), amounts as (
+    select id, greatest(0, least(total, amount + case when position = 1
+      then p_amount - sum(amount) over () else 0 end)) amount from shares
+  )
+  update orders o set coupon_code = v_coupon.code,
+    discount = round(coalesce(o.discount, 0) + a.amount, 2), total = round(o.total - a.amount, 2)
+    from amounts a where o.id = a.id and o.restaurant_id = p_restaurant;
+  insert into coupon_redemptions (restaurant_id, coupon_id, order_id, code, amount, confirmed_at)
+  values (p_restaurant, v_coupon.id, p_orders[1], v_coupon.code, p_amount, now());
+  return 'applied';
+end; $$;
+revoke all on function public.apply_bill_discount(uuid, uuid[], uuid, numeric) from public, anon, authenticated;
+grant execute on function public.apply_bill_discount(uuid, uuid[], uuid, numeric) to service_role;
+
+-- Switching the service charge off takes it off the bills still open, under
+-- the money lock (paths audit #4).
+--
+-- It used to read which bills were promised to somebody, then write each one
+-- guarded only on its old service charge. A waiter collecting MX$100 plus a
+-- MX$10 tip in between left the total MX$120 and MX$110 allocated, and the
+-- stale write put the total back to MX$100 with the money still against it.
+-- Now the reading and the writing are one transaction that every money writer
+-- waits for. The rules are the ones `service-reprice.ts` describes: only ever
+-- lower, and leave alone anything whose total is already promised. Returns how
+-- many orders changed.
+create or replace function public.reprice_open_service(p_restaurant uuid, p_pct numeric)
+returns int language plpgsql security definer set search_path = public as $$
+declare v_changed int;
+begin
+  if p_pct is null or p_pct < 0 then return 0; end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  perform public.backfill_payment_allocations(p_restaurant);
+  perform set_config('tabletap.allocation_scope', '', true);
+  perform 1 from orders where restaurant_id = p_restaurant and paid = false and service_fee > 0
+   order by id for update;
+  with open as (
+    select o.id, round(o.subtotal * p_pct / 100, 2) wanted
+      from orders o
+     where o.restaurant_id = p_restaurant and o.paid = false and o.account_id is null
+       and o.written_off = false and o.status not in ('cancelled', 'pending_payment')
+       and o.stripe_session_id is null and o.service_fee > 0
+       -- A card checkout opened in the last 35 minutes was priced from this
+       -- total (CHECKOUT_HOLD_MINUTES: 30 for the session, five for the webhook).
+       and (o.card_checkout_at is null or o.card_checkout_at <= now() - interval '35 minutes')
+       -- Money against the order or its sitting.
+       and public.retained_order_coverage(p_restaurant, o.id) = 0
+       and not exists (select 1 from payments p where p.order_id = o.id)
+       and (o.session_id is null or not exists (select 1 from payments p where p.session_id = o.session_id))
+       -- Being divided into shares.
+       and (o.session_id is null or not exists (select 1 from bill_splits s
+         where s.session_id = o.session_id and s.status in ('proposed', 'locked')))
+       -- Named in a discount or write-off waiting for a manager.
+       and not exists (select 1 from discount_requests d
+         where d.restaurant_id = p_restaurant and d.status = 'pending' and o.id = any(d.order_ids))
+       and not exists (select 1 from write_off_requests w
+         where w.restaurant_id = p_restaurant and w.status = 'pending' and o.id = any(w.order_ids))
+  )
+  update orders o set service_fee = open.wanted, total = round(o.total - o.service_fee + open.wanted, 2)
+    from open where o.id = open.id and open.wanted < o.service_fee;
+  get diagnostics v_changed = row_count;
+  return v_changed;
+end; $$;
+revoke all on function public.reprice_open_service(uuid, numeric) from public, anon, authenticated;
+grant execute on function public.reprice_open_service(uuid, numeric) to service_role;
 
 -- Duplicate charges need the same durable retry rule as order cancellations.
 -- Unknown/pending outcomes reuse their immutable request; only a confirmed
@@ -8313,6 +8538,93 @@ end;
 $$;
 revoke all on function public.finish_refund_due_attempt_v2(uuid, uuid, uuid, text, jsonb, text) from public, anon, authenticated;
 grant execute on function public.finish_refund_due_attempt_v2(uuid, uuid, uuid, text, jsonb, text) to service_role;
+
+-- Paths audit #7: a refund made by hand in Stripe.
+--
+-- A MX$100 duplicate-charge due, of which the restaurant had already returned
+-- MX$40 in Stripe's dashboard: every retry asked Stripe for the attempt's full
+-- MX$100, Stripe refused anything above the MX$60 left, and the MX$40 was
+-- never recorded, so the due answered 502 forever. Contract agreed with Codex
+-- (loop/dialogue/refund7): manual refunds are recorded as coverage without
+-- touching the attempt in flight, and a replacement is capped at what Stripe
+-- says is still refundable.
+--
+-- Records refunds Stripe reports as succeeded on the due's charge that no
+-- attempt of ours made. Never changes an attempt: a manual refund proves
+-- nothing about our own request. Same tombstones as finish: a refund that
+-- failed later stays inactive however often it is reported.
+create or replace function public.record_refund_due_coverage_v1(
+  p_restaurant uuid, p_due uuid, p_actor text, p_refunds jsonb
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare d refunds_due; e jsonb; v_due int; v_covered int;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into d from refunds_due where id = p_due and restaurant_id = p_restaurant for update;
+  if d.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if p_refunds is null or jsonb_typeof(p_refunds) <> 'array' then raise exception 'provider evidence required'; end if;
+  for e in select * from jsonb_array_elements(p_refunds) loop
+    if coalesce(e->>'id', '') = '' or (e->>'amount_cents')::int is null or (e->>'amount_cents')::int <= 0 then
+      raise exception 'invalid refund evidence';
+    end if;
+    insert into refund_due_coverage (restaurant_id, due_id, attempt_id, stripe_refund_id, amount_cents, active)
+      values (p_restaurant, d.id, null, e->>'id', (e->>'amount_cents')::int,
+        not exists (select 1 from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = e->>'id'))
+      on conflict (due_id, stripe_refund_id) do update set active = refund_due_coverage.active and excluded.active;
+  end loop;
+  v_due := round(d.amount * 100);
+  select coalesce(sum(amount_cents), 0) into v_covered from refund_due_coverage where due_id = d.id and active;
+  if v_covered >= v_due then
+    if d.refunded_at is null then
+      update refunds_due set refunded_at = now(), refunded_by = p_actor,
+        stripe_refund_id = coalesce(d.stripe_refund_id, p_refunds->0->>'id'), fee_verification_pending = true
+        where id = d.id;
+      return jsonb_build_object('outcome', 'completed', 'marked', true, 'outstanding_cents', 0);
+    end if;
+    return jsonb_build_object('outcome', 'completed', 'marked', false, 'outstanding_cents', 0);
+  end if;
+  return jsonb_build_object('outcome', 'partial', 'outstanding_cents', v_due - v_covered);
+end;
+$$;
+revoke all on function public.record_refund_due_coverage_v1(uuid, uuid, text, jsonb) from public, anon, authenticated;
+grant execute on function public.record_refund_due_coverage_v1(uuid, uuid, text, jsonb) to service_role;
+
+-- start_refund_due_attempt, with the new attempt capped at what Stripe still
+-- has refundable on the charge (its amount minus every refund, pending ones
+-- included). The same rule decides whether a new attempt opens at all: never
+-- while the latest is in flight or unknown. A new attempt gets its own amount
+-- and key; an old one is never edited. Nothing refundable means nothing opens.
+create or replace function public.start_refund_due_attempt_v2(p_restaurant uuid, p_due uuid, p_refundable_cents int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare d refunds_due; a refund_due_attempts; v_account text; v_no int; v_covered int; v_due int; v_send int;
+begin
+  if p_refundable_cents is null or p_refundable_cents < 0 then raise exception 'invalid refundable amount'; end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into d from refunds_due where id = p_due and restaurant_id = p_restaurant for update;
+  if d.id is null then return null; end if;
+  select * into a from refund_due_attempts where due_id = d.id order by attempt_no desc limit 1;
+  select coalesce(sum(amount_cents), 0) into v_covered from refund_due_coverage where due_id = d.id and active;
+  v_due := round(d.amount * 100);
+  if a.id is null or (d.refunded_at is null and (a.provider_status in ('failed', 'canceled')
+      or (a.provider_status = 'succeeded' and v_covered < v_due))) then
+    v_send := least(v_due - v_covered, p_refundable_cents);
+    if v_send <= 0 then
+      return jsonb_build_object('outcome', 'none', 'outstanding_cents', greatest(v_due - v_covered, 0));
+    end if;
+    v_no := coalesce(a.attempt_no, 0) + 1;
+    v_account := coalesce(a.stripe_account_id, d.stripe_account_id);
+    if v_account is null then select stripe_account_id into v_account from restaurants where id = p_restaurant; end if;
+    if v_account is null then return null; end if;
+    insert into refund_due_attempts(restaurant_id, due_id, attempt_no, idempotency_key, amount, stripe_account_id, stripe_payment_intent, stripe_refund_id, provider_status)
+      values(p_restaurant, d.id, v_no, 'refund-due-' || d.id || case when v_no = 1 then '' else '-' || v_no end,
+        v_send / 100.0, v_account, coalesce(a.stripe_payment_intent, d.stripe_payment_intent),
+        d.stripe_refund_id, case when d.refunded_at is not null then 'succeeded' end) returning * into a;
+  end if;
+  update refunds_due set stripe_account_id = a.stripe_account_id where id = d.id and stripe_account_id is null;
+  return to_jsonb(a);
+end;
+$$;
+revoke all on function public.start_refund_due_attempt_v2(uuid, uuid, int) from public, anon, authenticated;
+grant execute on function public.start_refund_due_attempt_v2(uuid, uuid, int) to service_role;
 
 revoke truncate, references, trigger on all tables in schema public from public, anon, authenticated;
 
@@ -10128,6 +10440,31 @@ end;
 $$;
 revoke all on function public.close_cash_shift_once(uuid, uuid, numeric, text, uuid) from public, anon, authenticated;
 grant execute on function public.close_cash_shift_once(uuid, uuid, numeric, text, uuid) to service_role;
+-- Opening a shift, under the same lock as closing one (paths audit #6).
+--
+-- The plain insert stamped opened_at with now(), the start of its own
+-- transaction. An open that started at 12:00:00 and then waited on the
+-- one-open index for a close committing at 12:00:01 kept its 12:00:00, so a
+-- sale at 12:00:00.5 fell inside both shifts and the corte counted it twice.
+-- Taking the money lock first and stamping clock_timestamp() after it puts the
+-- opening after every close that came before. Null means a shift is already
+-- open.
+create or replace function public.open_cash_shift(p_restaurant uuid, p_actor text, p_amount numeric)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if exists (select 1 from cash_shifts where restaurant_id = p_restaurant and closed_at is null) then
+    return null;
+  end if;
+  insert into cash_shifts (restaurant_id, opened_by, opening_amount, opened_at)
+  values (p_restaurant, p_actor, p_amount, clock_timestamp())
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+revoke all on function public.open_cash_shift(uuid, text, numeric) from public, anon, authenticated;
+grant execute on function public.open_cash_shift(uuid, text, numeric) to service_role;
 -- S21: refuse a changed handful before writing any of it. The old batch stays
 -- available for deployed callers and recovery of its historical partial writes.
 create or replace function public.collect_table_reviewed_v1(

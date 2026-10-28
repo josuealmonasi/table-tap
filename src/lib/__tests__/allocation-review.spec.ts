@@ -36,10 +36,12 @@ describe("PR1 schema review regressions", () => {
       expect(definition(schema, name), name).toContain("public.lock_restaurant_money(p_restaurant)");
     }
   });
-  it("gates strict order enforcement on versioned writers, never existing coverage", () => {
-    for (const name of ["guard_allocated_order", "check_paid_coverage"]) {
-      expect(definition(schema, name), name).toContain("current_setting('tabletap.allocation_writer', true) is distinct from 'v1' then");
-    }
+  it("guards every order writer, and gates only the paid-coverage check on versioned writers", () => {
+    // Opt-in let three direct writers past it (paths audit #2, #4, #5).
+    const guard = definition(schema, "guard_allocated_order");
+    expect(guard).not.toContain("current_setting('tabletap.allocation_writer', true) is distinct from 'v1' then return new");
+    expect(guard).toContain("new.total is not distinct from old.total and new.tip is not distinct from old.tip");
+    expect(definition(schema, "check_paid_coverage")).toContain("current_setting('tabletap.allocation_writer', true) is distinct from 'v1' then");
     expect(definition(schema, "snapshot_payment_scope")).toContain("new.allocation_version := 0");
     expect(definition(schema, "collect_on_sitting_v2")).toContain("backfill_payment_allocations");
   });

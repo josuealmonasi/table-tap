@@ -4784,6 +4784,13 @@ release gates. These local tests do not apply or validate the deployed schema.
 | A scanned URL opens collection once, independently of later bill snapshots | A bill refresh reopened the collection the cashier had dismissed | `bills-scan.spec.tsx` |
 | Failed history reads retain the last rows and offer retry | A failed page read replaced successful sales with an empty list | `sections-read-errors.spec.tsx` |
 | Staff and profile read failures remain errors, with the previous team retained | A failed staff read looked like an empty team; a failed profile read erased names | `sections-read-errors.spec.tsx` |
+| A part-paid bill is never written off, directly or by approval | MX$80 of a MX$100 bill collected; a manager wrote it off and the log said MX$100 lost | `table-adjustments.spec.tsx` (route + SQL text), dev probe of `write_off_orders` |
+| A locked plan freezes every table the menu editor writes directly | Sections, extras, icon palettes and dietary tags stayed editable on a locked plan | `invariants/database.spec.ts` (every "manages" policy has a freeze trigger), dev probe |
+| A shift opened during a close starts after it | An open waiting on a close kept its transaction-start time, so one sale fell in both shifts | `cash-shift-open.spec.ts`, dev probe of `open_cash_shift` |
+| A staff discount lands whole or not at all, and never under collected money | Totals written with no lock, failed writes ignored, redemption logged anyway; a part-paid bill cut below what it had paid | `table-adjustments.spec.tsx`, dev probe of `apply_bill_discount` |
+| Repricing service decides and writes under the money lock | A collection between the read and the write; the stale write lowered a total with money against it | `service-reprice.spec.ts` (rules in the SQL), dev probe of `reprice_open_service` |
+| The allocation guard checks every order writer, not only those that opt in | Three direct writers lowered or forgave covered orders past an opt-in guard | `allocation-review.spec.ts`, `allocations-check.mjs` (non-opted-in writes refused; a status move allowed) |
+| A refund made by hand in Stripe counts toward the due, and the rest is asked for capped | MX$40 returned by hand; every retry asked for MX$100 and answered 502 for ever | `refund-due-partial.spec.ts` (MX$ and US$), `refund-due-manual-schema.spec.ts`, dev replay |
 
 ### A scanned collection and a refreshed bill list have separate lifetimes
 
@@ -4902,3 +4909,94 @@ The failing-first tests mock the database and Stripe; they do not replay a
 Postgres race. Claude runs the serial integration gates and checks failed status
 requests and onboarding in Settings in both languages before release. No schema
 or function signature changes are needed.
+## A bill written off with the money already in it (paths audit #5)
+
+`applyWriteOff` was a plain update that checked `paid = false` and nothing
+else. A bill with MX$80 of MX$100 already collected was written off and logged
+as MX$100 lost, while the MX$80 stayed allocated to an order nobody owed any
+more. It also got past `guard_allocated_order`, which only checks writers that
+set `tabletap.allocation_writer`. The approval path did set it, so the same ask
+raised a database error there instead: two routes, two answers, neither one
+explained.
+
+The direct write-off now runs in `write_off_orders`, under the money lock. It
+refuses a part-paid bill with the amount paid, and the route logs what the
+database actually wrote off. A waiter's ask is refused for the same bill before
+it is stored, and an approval for a bill paid in part since the ask returns
+`part_paid` instead of raising. Forgiving only the rest of a part-paid bill is
+a separate operation, not built.
+
+## A read-only dashboard that still renamed sections (paths audit #10)
+
+On a locked plan the dashboard says it is read-only, and the database refuses
+management writes to menus, items and tables. The same editor also writes
+sections (`categories`), extras (`item_addons`), icon palettes and dietary tags
+straight to Postgres, and none of those were frozen, so a manager could still
+rename a section. All five now carry the freeze trigger. `item_addons` and
+`icon_group_items` have no restaurant of their own and find it through the
+parent row. An invariant now fails on any table with a "team/owner manages"
+policy and no freeze trigger, unless it is listed with the reason it stays
+writable.
+
+## One sale in two shifts (paths audit #6)
+
+Closing a shift takes the money lock and stamps `clock_timestamp()`. Opening
+one was a plain insert whose `opened_at` defaulted to `now()`, the start of its
+own transaction. An open that started at 12:00:00 and waited on the one-open
+index for a close committing at 12:00:01 kept 12:00:00, so a sale at
+12:00:00.5 fell inside both windows and the corte counted it twice. Opening is
+now `open_cash_shift`: the same lock, then the time. Found by reading, not
+seen in production; the interleaving was not run.
+
+## A discount that said yes whatever happened (paths audit #2)
+
+A manager's staff discount was written from `apply-bill-discount.ts` order by
+order: the coupon use first, then each order's total with no lock and no check
+of the result, then the redemption, logged and reported as done whatever the
+updates did. A bill with MX$80 of MX$100 collected could be cut to MX$50 under
+the money already in it, and a refused update still logged MX$50 redeemed. It
+also got past `guard_allocated_order`, which only checks writers that opt in.
+`apply_bill_discount` does it in one transaction under the money lock: the
+coupon use, the totals and the redemption, or none. It refuses a part-paid bill
+the way a write-off is refused. An approval for a bill paid in part since the
+ask now answers `part_paid` instead of raising. Both bill routes also stopped
+reading a failed order read as an empty bill.
+
+## A service charge taken off a bill that had just been paid into (paths audit #4)
+
+Switching the service charge off lowers it on bills nobody has started paying.
+The rules were right, but they ran in two steps: read which bills were promised
+to somebody, then write each one guarded only on its old service charge. A
+waiter collecting MX$100 plus a MX$10 tip in between left the order at MX$120
+with MX$110 allocated, and the stale write set the total back to MX$100 with
+the money still against it. `reprice_open_service` now reads and writes in one
+transaction under the money lock, with the same rules, plus retained coverage
+checked directly.
+
+## A guard that only guarded writers who asked (paths audit #2, #4, #5)
+
+`guard_allocated_order` refuses changing an order that has money against it
+without the matching adjustment. It returned at once unless the writer had set
+`tabletap.allocation_writer = 'v1'`, so the three direct writers above were
+never checked, and the legacy `cancel_order` can still cancel a covered order
+with no refund obligation. With those three moved into locked functions, the
+guard now checks every writer (Codex found the `cancel_order` case; agreed in
+the dialogue). An update that changes nothing it protects, such as the kitchen
+moving a ticket along, returns before the coverage read. `check_paid_coverage`
+stays gated as it was. The api gate's allocation checks now try the refused
+writes without the flag.
+
+## A duplicate-charge refund stuck behind a manual one (paths audit #7)
+
+A MX$100 duplicate-charge due, of which the restaurant had already returned
+MX$40 from Stripe's dashboard. Every retry asked Stripe for the attempt's full
+MX$100, Stripe refused anything above the MX$60 left, the MX$40 was never
+recorded, and the due answered 502 for ever. Before asking for anything,
+`refundDue` now reads the charge. The restaurant's untagged succeeded refunds
+are recorded as coverage (`record_refund_due_coverage_v1`), which never touches
+our own attempt. A new attempt is capped at what the charge still has
+refundable (`start_refund_due_attempt_v2`). An attempt left from before, now
+too large, is retired only on Stripe's own "more than is left" refusal, which
+proves nothing was created, and replaced once from a fresh read. Contract
+agreed with Codex in the dialogue (topic refund7). Codex wrote the failing
+tests; Claude wrote both halves.

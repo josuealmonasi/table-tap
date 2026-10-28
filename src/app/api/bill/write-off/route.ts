@@ -5,8 +5,9 @@ import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
-import { applyWriteOff } from "@/lib/apply-write-off";
+import { applyWriteOff, paidSoFar } from "@/lib/apply-write-off";
 import { MANAGES } from "@/lib/membership";
+import { formatMoney } from "@/lib/format";
 import {
   isWriteOffReason,
   noteProblem,
@@ -56,13 +57,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // nothing rather than someone else's bill.
   const scoped = db
     .from("orders")
-    .select("id, total, paid, written_off, status, table_id, table_label")
+    .select("id, total, paid, written_off, status, table_id, table_label, currency")
     .is("account_id", null)
     .eq("restaurant_id", actor.restaurantId);
-  const { data: rows } = await (tableId ? scoped.eq("table_id", tableId) : scoped.in("id", ids));
+  const { data: rows, error: readError } = await (tableId ? scoped.eq("table_id", tableId) : scoped.in("id", ids));
+  // A failed read is not a bill with nothing on it.
+  if (readError) return await apiError("apiErr.generic", 503);
 
   const orders = writableOff((rows ?? []) as Order[]);
   if (orders.length === 0) return await apiError("apiErr.nothingToWriteOff", 409);
+
+  // Part of it is paid: forgiving the whole total would report money that came
+  // in as lost (paths audit #5). Refused before a waiter's ask is stored, so
+  // nobody is told to wait for an approval that cannot be given.
+  const paid = await paidSoFar(actor.restaurantId, orders.map(o => o.id));
+  if (paid === null) return await apiError("apiErr.generic", 503);
+  if (paid > 0) {
+    return await apiError("apiErr.writeOffPartPaid", 409, { amount: formatMoney(paid, orders[0].currency ?? "MXN") });
+  }
 
   const amount = writeOffTotal(orders);
   const label = orders[0].table_label ?? "";
@@ -103,15 +115,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     reason,
     note: text,
   });
-  if (!done) return await apiError("apiErr.generic", 500);
+  if (done.outcome === "part_paid") {
+    return await apiError("apiErr.writeOffPartPaid", 409, { amount: formatMoney(done.paid, orders[0].currency ?? "MXN") });
+  }
+  if (done.outcome === "nothing") return await apiError("apiErr.nothingToWriteOff", 409);
+  if (done.outcome === "failed") return await apiError("apiErr.generic", 500);
 
   await logEvent({
     restaurantId: actor.restaurantId,
     actor: actor.email,
     entity: "bill",
     action: "written_off",
-    orderIds: orders.map(o => o.id),
-    detail,
+    orderIds: done.orderIds,
+    detail: logDetail({ table: label, amount: done.amount.toFixed(2), reason, note: text || null }),
   });
-  return NextResponse.json({ ok: true, amount });
+  return NextResponse.json({ ok: true, amount: done.amount });
 }
