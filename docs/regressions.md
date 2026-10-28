@@ -5360,6 +5360,11 @@ Existing collection and write-off writers are outside this receipt/checker fix.
 | Staff paper includes the restaurant's forgiveness | The diner reader explained the loss, but staff reprints read the reduced order alone | `staff-receipt-reprint.spec.ts`, existing `kitchen-print.spec.ts` |
 | Staff can reprint a paid group of parts | The receipt renderer accepted payments, but the staff route required an order | `staff-receipt-reprint.spec.ts` |
 | A query names a column its table has | The slot-receipt readers filtered `bill_splits` by `table_id`, which it never had; mocked tests passed and every approved phone's receipt list answered 503 | `invariants/database.spec.ts` ("a query names only columns its table has"), `pnpm api` |
+| One provider refund pays one obligation | A manual refund attributed to a return was also counted by the duplicate-charge coverage writer; both closed with half the money back | `returns-schema.spec.ts` (audit 1), `loop/returns-probe.cjs` |
+| No manual attribution while an app refund is in flight | A manual MX$40 attributed mid-POST let the app's saved MX$100 still leave: MX$140 for a MX$100 promise | `returns-schema.spec.ts` (audit 2), `loop/returns-probe.cjs` |
+| A return's header names the refund that finished it | A failed first refund stayed on the header and manual completion left it empty, so fee reconciliation and completion evidence missed real refunds | `returns-schema.spec.ts` (audit 4), `loop/returns-probe.cjs` |
+| An offline replay acknowledges what was collected | A return made before the tablet reconnected lowered the total its replay reported, so the device never released the sale | `returns-schema.spec.ts` (audit 6) |
+| An unknown tip breakdown goes to review | A historical receipt without its tip let returns plan principal it did not hold, leaving money nobody could return | `returns-schema.spec.ts` (audit 8) |
 
 ### A paid part offers its own receipt once
 
@@ -5557,3 +5562,16 @@ return analytics. A failed event read cannot become a zero-refund day.
 The new SQL read and durable per-refund success timestamps are prerequisites,
 not implemented or applied by this TypeScript worker. The exact contract and
 legacy evidence rules are in `docs/returns-audit-ts-handoff.md`.
+### Returns: one refund, one obligation (returns audit 1, 2, 4, 6, 8)
+
+Codex audited #575 read-only and every one of these was two places that had to
+agree. The duplicate-charge writer and the return writer each counted manual
+refunds on the same charge, so one refund could close two debts; it now skips a
+refund a return owns, as the return writer already skipped a due's. A manual
+refund attributed while an app refund was in flight let both leave; attribution
+now waits for the app's outcome. The return header kept a failed first refund
+and was left empty by manual completion, so fee reconciliation never matched;
+completion stamps the latest refund that still counts and the reconciler matches
+any of an operation's succeeded refunds. An offline replay after a return now
+acknowledges the collected amount. A receipt that never recorded its tip goes to
+a person before any plan is made.
