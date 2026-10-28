@@ -4882,3 +4882,23 @@ after email success. Print-preview/save PDF on mobile Safari and desktop with a
 single order and whole paid table, MXN/USD, discounts, service and tips. Compare
 the same receipt's POS print and email. This worker runs no servers or live
 gates and makes no schema changes.
+## Paths audit 1 — onboarding and open checkouts keep the same merchant
+
+| Rule | The bug it prevents | What checks it |
+|---|---|---|
+| An unread Connect account stays an error, and only an empty account field may be filled | A read failure or two onboarding calls replaced the merchant and stranded open diner checkouts; Settings called a failed status read disconnected | `stripe-connect-read.spec.ts`, `stripe-connect-payments.spec.tsx`, `stripe-connect.spec.ts` |
+
+`readConnect` throws on a failed read before asking Stripe for another account.
+The first account is saved only while `stripe_account_id` is null, with returned
+rows proving the save. A losing call reads and uses the winner's saved id; a
+failed save or re-read stays an error. Its unused Stripe account is left for
+separate cleanup, so a cleanup failure cannot prevent onboarding the saved one.
+The onboarding route keeps its existing error response. Status now returns the
+existing generic error, and Payments shows that failure without the disconnected
+prompt. The owner can still resume onboarding. Existing English and Spanish
+copy is reused.
+
+The failing-first tests mock the database and Stripe; they do not replay a
+Postgres race. Claude runs the serial integration gates and checks failed status
+requests and onboarding in Settings in both languages before release. No schema
+or function signature changes are needed.
