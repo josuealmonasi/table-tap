@@ -6112,7 +6112,10 @@ begin
   select * into a from refund_attempts where operation_id = o.id and origin = 'app' order by attempt_no desc limit 1;
   -- A refund completed before attempts existed keeps its own evidence, so a
   -- later failure of that refund still finds the row (audit R finding 1).
-  if a.id is null and o.status = 'succeeded' then
+  -- Only when the operation has no evidence at all: next to manual pieces a
+  -- full-amount row would count the money twice (verification 4).
+  if a.id is null and o.status = 'succeeded' and o.stripe_refund_id is not null
+    and not exists (select 1 from refund_attempts x where x.operation_id = o.id) then
     insert into refund_attempts(restaurant_id, operation_id, attempt_no, idempotency_key, amount, currency,
         stripe_account_id, stripe_payment_intent, stripe_refund_id, provider_status)
       values(p_restaurant, o.id, 1, 'return-' || o.id || '-' || 1, o.amount, o.currency,
@@ -6152,6 +6155,8 @@ begin
   if o.source = 'stripe' and p_attempt is distinct from
     (select id from refund_attempts where operation_id = o.id and origin = 'app' order by attempt_no desc limit 1) then return false; end if;
   if o.source = 'stripe' and p_refund is null then raise exception 'provider refund required'; end if;
+  -- One provider refund pays one obligation (returns audit 1).
+  if o.source = 'stripe' and public.refund_id_taken_v1(p_restaurant, p_refund, o.id) then return false; end if;
   if o.source <> 'stripe' and (o.source = 'review' or p_refund is not null) then raise exception 'review required'; end if;
   if p_status not in ('succeeded', 'pending', 'requires_action', 'failed', 'canceled') then raise exception 'invalid refund status'; end if;
   -- Stripe already told us this refund failed: a late "succeeded" read is
@@ -6381,10 +6386,10 @@ begin
     fee_reconciled_at = case when v_returned >= greatest(coalesce(fee_target_cents, 0), p_target) then coalesce(fee_reconciled_at, now()) end
     where restaurant_id = p_restaurant and stripe_payment_intent = p_intent
       and status = 'succeeded' and source = 'stripe'
-      and (p_refunds is null or stripe_refund_id = any(p_refunds)
-        -- A return can finish in several refunds (returns audit 4).
-        or exists (select 1 from refund_attempts a where a.operation_id = refund_operations.id
-          and a.provider_status = 'succeeded' and a.stripe_refund_id = any(p_refunds)));
+      -- The header is the latest refund that completed the operation, so a
+      -- snapshot holding it was read after completion. Matching any earlier
+      -- piece let a stale partial snapshot reconcile it (verification 5).
+      and (p_refunds is null or stripe_refund_id = any(p_refunds));
   -- Duplicate-charge recovery must use this final snapshot too. A manual
   -- refund between provider reads can leave more of our fee still owed.
   update refunds_due set fee_target_cents = greatest(coalesce(fee_target_cents, 0), p_target),
@@ -8346,6 +8351,8 @@ begin
   if p_attempt is distinct from (select id from refund_due_attempts where due_id = d.id order by attempt_no desc limit 1) then return false; end if;
   if p_status not in ('succeeded', 'pending', 'requires_action', 'failed', 'canceled') then raise exception 'invalid provider outcome'; end if;
   if p_refund is null then raise exception 'provider evidence required'; end if;
+  -- One provider refund pays one obligation (returns audit 1).
+  if public.refund_owned_by_return_v1(p_restaurant, p_refund) then return false; end if;
   -- Stripe already told us this refund failed: record that on this attempt
   -- (so a retry opens a new one) and never complete it (audit Q 2).
   select f.provider_status into v_failed from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = p_refund;
@@ -8611,6 +8618,8 @@ begin
       if exists (select 1 from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = e->>'id') then
         v_any_failed := true;
       end if;
+      -- A refund a return operation counts is that return's (returns audit 1).
+      continue when public.refund_owned_by_return_v1(p_restaurant, e->>'id');
       -- Once a refund failed it stays inactive, however often it is reported.
       insert into refund_due_coverage (restaurant_id, due_id, attempt_id, stripe_refund_id, amount_cents, active)
         values (p_restaurant, d.id, p_attempt, e->>'id', (e->>'amount_cents')::int,
@@ -8662,6 +8671,14 @@ begin
   select * into d from refunds_due where id = p_due and restaurant_id = p_restaurant for update;
   if d.id is null then return jsonb_build_object('outcome', 'missing'); end if;
   if p_refunds is null or jsonb_typeof(p_refunds) <> 'array' then raise exception 'provider evidence required'; end if;
+  -- An attempt already sent may still succeed for the whole due. Counting a
+  -- manual refund now would let both leave; the attempt is resumed first
+  -- with its saved key, and its own refund decides (returns audit, due side).
+  if exists (select 1 from refund_due_attempts a where a.due_id = d.id and a.restaurant_id = p_restaurant
+      and a.attempt_no = (select max(b.attempt_no) from refund_due_attempts b where b.due_id = d.id)
+      and (a.provider_status is null or a.provider_status not in ('succeeded', 'failed', 'canceled'))) then
+    p_refunds := '[]'::jsonb;
+  end if;
   for e in select * from jsonb_array_elements(p_refunds) loop
     if coalesce(e->>'id', '') = '' or (e->>'amount_cents')::int is null or (e->>'amount_cents')::int <= 0 then
       raise exception 'invalid refund evidence';
@@ -8669,8 +8686,7 @@ begin
     -- One provider refund pays one obligation. A refund a return operation
     -- already counts is that return's, not this duplicate charge's (returns
     -- audit 1): counting it twice would close both with half the money back.
-    continue when exists (select 1 from refund_attempts a where a.restaurant_id = p_restaurant and a.stripe_refund_id = e->>'id')
-      or exists (select 1 from refund_operations o where o.restaurant_id = p_restaurant and o.stripe_refund_id = e->>'id');
+    continue when public.refund_owned_by_return_v1(p_restaurant, e->>'id');
     insert into refund_due_coverage (restaurant_id, due_id, attempt_id, stripe_refund_id, amount_cents, active)
       values (p_restaurant, d.id, null, e->>'id', (e->>'amount_cents')::int,
         not exists (select 1 from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = e->>'id'))
@@ -11898,6 +11914,9 @@ returns jsonb language sql stable security definer set search_path = public as $
   select jsonb_build_object(
     -- Cash and terminal have no provider evidence: their own confirmation is it.
     'outstanding_cents', case when o.source <> 'stripe' then case when o.status = 'succeeded' then 0 else round(o.amount * 100)::int end
+      -- Completed before attempts existed: its own header is its evidence.
+      when o.status = 'succeeded' and o.stripe_refund_id is not null
+        and not exists (select 1 from refund_attempts x where x.operation_id = o.id) then 0
       else round(o.amount * 100)::int - coalesce((select sum(c) from (
         select distinct on (a.stripe_refund_id) round(a.amount * 100)::int c from refund_attempts a
         where a.operation_id = o.id and a.provider_status = 'succeeded' and a.stripe_refund_id is not null
@@ -11914,6 +11933,7 @@ grant execute on function public.refund_operation_progress_v1(uuid) to service_r
 -- never both, and never two operations.
 create or replace function public.refund_id_taken_v1(p_restaurant uuid, p_refund text, p_operation uuid)
 returns boolean language sql stable security definer set search_path = public as $$
+  -- Used by every return writer; refund_owned_by_return_v1 is the due side's.
   select exists (select 1 from refund_attempts where restaurant_id = p_restaurant and stripe_refund_id = p_refund and operation_id <> p_operation)
     or exists (select 1 from refund_operations where restaurant_id = p_restaurant and stripe_refund_id = p_refund and id <> p_operation)
     or exists (select 1 from refunds_due where restaurant_id = p_restaurant and stripe_refund_id = p_refund)
@@ -11966,12 +11986,6 @@ begin
   if o.id is null or o.source <> 'stripe' then return jsonb_build_object('outcome', 'missing'); end if;
   if o.status = 'succeeded' then return public.complete_refund_operation_v1(o.id, p_actor); end if;
   if p_attribution_ref is null or nullif(btrim(p_actor), '') is null then return jsonb_build_object('outcome', 'review'); end if;
-  -- An app refund already sent for the outstanding amount may still succeed.
-  -- Counting a manual one now would let both leave (returns audit 2): MX$140
-  -- for a MX$100 promise. Its outcome is known first.
-  if (public.refund_operation_progress_v1(o.id)->>'unresolved')::boolean then
-    return jsonb_build_object('outcome', 'pending');
-  end if;
   for r in select * from jsonb_array_elements(p_refunds) order by value->>'id' loop
     if r->>'id' is null or jsonb_typeof(r->'amount_cents') <> 'number' or r->>'status' is null then
       raise exception 'invalid refund evidence';
@@ -11992,13 +12006,20 @@ begin
       if round(x.amount * 100) <> v_cents or x.attribution_ref <> p_attribution_ref then return jsonb_build_object('outcome', 'conflict'); end if;
       continue;
     end if;
+    -- New evidence only. An app refund already sent for the outstanding amount
+    -- may still succeed; counting a manual one now would let both leave
+    -- (returns audit 2: MX$140 for a MX$100 promise). Replaying evidence
+    -- already saved stays allowed, so its retry can finish (verification 3).
+    if (public.refund_operation_progress_v1(o.id)->>'unresolved')::boolean then
+      return jsonb_build_object('outcome', 'pending');
+    end if;
     v_outstanding := (public.refund_operation_progress_v1(o.id)->>'outstanding_cents')::int;
     if v_cents > v_outstanding then return jsonb_build_object('outcome', 'review'); end if;
     select coalesce(max(attempt_no), 0) + 1 into v_no from refund_attempts where operation_id = o.id and origin = 'manual';
     insert into refund_attempts(restaurant_id, operation_id, origin, attempt_no, idempotency_key, amount, currency,
         stripe_account_id, stripe_payment_intent, stripe_refund_id, provider_status, attribution_ref, succeeded_at)
       values(p_restaurant, o.id, 'manual', v_no, 'manual-' || o.id || '-' || (r->>'id'), v_cents / 100.0, o.currency,
-        o.stripe_account_id, o.stripe_payment_intent, r->>'id', 'succeeded', p_attribution_ref, now());
+        o.stripe_account_id, o.stripe_payment_intent, r->>'id', 'succeeded', p_attribution_ref, public.refund_success_time_v1(r));
   end loop;
   return public.complete_refund_operation_v1(o.id, p_actor);
 end $$;
@@ -12052,7 +12073,7 @@ begin
   select f.provider_status into v_failed from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = r->>'id';
   v_status := coalesce(v_failed, p_status);
   update refund_attempts set stripe_refund_id = r->>'id', provider_status = v_status, updated_at = now(),
-    succeeded_at = case when v_status = 'succeeded' then coalesce(succeeded_at, now()) else succeeded_at end where id = a.id;
+    succeeded_at = case when v_status = 'succeeded' then coalesce(succeeded_at, public.refund_success_time_v1(r)) else succeeded_at end where id = a.id;
   update refund_operations set stripe_refund_id = r->>'id', provider_status = v_status,
     status = case when v_status in ('failed', 'canceled') then 'failed' else 'processing' end where id = o.id;
   if v_status in ('failed', 'canceled') then
@@ -12118,8 +12139,19 @@ begin
           and b.provider_status = 'succeeded' and b.stripe_refund_id is not null) = 1)) then
     raise exception 'a succeeded refund has no success time';
   end if;
+  -- A completed operation's events must be exactly its amount: money a report
+  -- cannot place is a failed read, never a quiet day (verification 7).
+  if exists (select 1 from refund_operations o where o.restaurant_id = p_restaurant
+      and (p_currency is null or o.currency = p_currency) and o.status = 'succeeded' and o.source <> 'review'
+      and ((o.source in ('cash', 'terminal') and o.completed_at is null)
+        or (o.source = 'stripe' and not exists (select 1 from refund_attempts a where a.operation_id = o.id)
+          and (o.stripe_refund_id is null or o.completed_at is null))
+        or (o.source = 'stripe' and exists (select 1 from refund_attempts a where a.operation_id = o.id)
+          and (public.refund_operation_progress_v1(o.id)->>'outstanding_cents')::int <> 0))) then
+    raise exception 'a completed return does not reconcile with its refunds';
+  end if;
   return query
-  select distinct on (a.stripe_refund_id) 'refund:' || a.stripe_refund_id, o.id, d.order_id, d.kind, o.source, o.currency,
+  select distinct on (o.id, a.stripe_refund_id) 'refund:' || a.stripe_refund_id, o.id, d.order_id, d.kind, o.source, o.currency,
       round(a.amount * 100)::int, coalesce(a.succeeded_at, o.completed_at), o.payout_actor, o.confirmed_by, o.historical_log_id
     from refund_operations o
     join order_adjustments d on d.id = o.adjustment_id and d.restaurant_id = o.restaurant_id
@@ -12127,10 +12159,11 @@ begin
     where o.restaurant_id = p_restaurant and o.source = 'stripe' and (p_currency is null or o.currency = p_currency)
       and a.provider_status = 'succeeded' and a.stripe_refund_id is not null
       and not exists (select 1 from refund_failures f where f.restaurant_id = a.restaurant_id and f.stripe_refund_id = a.stripe_refund_id)
-    order by a.stripe_refund_id, a.attempt_no;
+    order by o.id, a.stripe_refund_id, a.attempt_no, a.id;
   -- A Stripe operation completed before attempts existed has only its own record.
   return query
-  select 'operation:' || o.id, o.id, d.order_id, d.kind, o.source, o.currency, round(o.amount * 100)::int,
+  select case when o.source = 'stripe' then 'refund:' || o.stripe_refund_id else 'operation:' || o.id end,
+      o.id, d.order_id, d.kind, o.source, o.currency, round(o.amount * 100)::int,
       o.completed_at, o.payout_actor, o.confirmed_by, o.historical_log_id
     from refund_operations o join order_adjustments d on d.id = o.adjustment_id and d.restaurant_id = o.restaurant_id
     where o.restaurant_id = p_restaurant and (p_currency is null or o.currency = p_currency)
@@ -12142,3 +12175,24 @@ begin
 end $$;
 revoke all on function public.order_return_events_v1(uuid, text) from public, anon, authenticated;
 grant execute on function public.order_return_events_v1(uuid, text) to service_role;
+
+-- The due side of the same rule: a provider refund a return operation counts
+-- (app or manual evidence, or its header) never pays a duplicate charge.
+create or replace function public.refund_owned_by_return_v1(p_restaurant uuid, p_refund text)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from refund_attempts where restaurant_id = p_restaurant and stripe_refund_id = p_refund)
+    or exists (select 1 from refund_operations where restaurant_id = p_restaurant and stripe_refund_id = p_refund);
+$$;
+revoke all on function public.refund_owned_by_return_v1(uuid, text) from public, anon, authenticated;
+grant execute on function public.refund_owned_by_return_v1(uuid, text) to service_role;
+
+-- When a refund succeeded: the provider's own time when the evidence carries
+-- one (`succeeded_at`, epoch seconds, read from Stripe server-side), never later
+-- than now; otherwise the first time we verified it (verification 6).
+create or replace function public.refund_success_time_v1(p_evidence jsonb)
+returns timestamptz language sql stable set search_path = public as $$
+  select least(now(), coalesce(case when jsonb_typeof(p_evidence->'succeeded_at') = 'number'
+    then to_timestamp((p_evidence->>'succeeded_at')::double precision) end, now()));
+$$;
+revoke all on function public.refund_success_time_v1(jsonb) from public, anon, authenticated;
+grant execute on function public.refund_success_time_v1(jsonb) to service_role;

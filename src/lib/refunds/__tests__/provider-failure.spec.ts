@@ -141,7 +141,7 @@ it("drops everything it adds", () => {
 
 it("audit R 1: the first attempt of a refund completed before attempts existed carries that refund", () => {
   const start = body("start_refund_attempt");
-  expect(start).toContain("if a.id is null and o.status = 'succeeded' then");
+  expect(start).toContain("if a.id is null and o.status = 'succeeded' and o.stripe_refund_id is not null");
   expect(start).toContain("o.stripe_account_id, o.stripe_payment_intent, o.stripe_refund_id, 'succeeded') returning * into a;");
 });
 it("audit R 2: a fee request's amount is accepted only under the epoch it was read in; the writes are granted to no one", () => {

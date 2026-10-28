@@ -54,18 +54,26 @@ describe("the SQL side of the returns contract", () => {
 describe("returns audit (Codex, 2026-10-28)", () => {
   it("1: a refund a return counts never also pays a duplicate-charge due", () => {
     const due = definition("record_refund_due_coverage_v1");
-    expect(due).toContain("continue when exists (select 1 from refund_attempts a where a.restaurant_id = p_restaurant and a.stripe_refund_id = e->>'id')");
+    // Every writer of either ledger (verification 1).
+    for (const fn of ["record_refund_due_coverage_v1", "finish_refund_due_attempt_v2", "finish_refund_due_attempt"]) {
+      expect(definition(fn), fn).toContain("public.refund_owned_by_return_v1(p_restaurant,");
+    }
+    expect(definition("finish_refund_operation")).toContain("public.refund_id_taken_v1(p_restaurant, p_refund, o.id)");
+    expect(due).toContain("p_refunds := '[]'::jsonb;"); // no new due coverage while an attempt is in flight
     expect(definition("refund_id_taken_v1")).toContain("from refund_due_coverage");
   });
   it("2: no manual attribution while an app refund is unresolved", () => {
     const record = definition("record_order_return_coverage_v1");
     expect(record.indexOf("->>'unresolved')::boolean")).toBeLessThan(record.indexOf("insert into refund_attempts"));
     expect(record).toContain("return jsonb_build_object('outcome', 'pending');");
+    // Saved evidence replays before the guard, so a retry can finish (verification 3).
+    expect(record.indexOf("if x.id is not null then")).toBeLessThan(record.indexOf("->>'unresolved')::boolean"));
   });
   it("4: completion names a refund that still counts, and the fee reconciler finds every one", () => {
     expect(definition("complete_refund_operation_v1")).toContain("stripe_refund_id = coalesce((select a.stripe_refund_id from refund_attempts a");
     expect(definition("finish_refund_operation_v2")).not.toContain("coalesce(stripe_refund_id, r->>'id')");
-    expect(definition("apply_verified_platform_fee")).toContain("a.provider_status = 'succeeded' and a.stripe_refund_id = any(p_refunds)");
+    // A stale partial snapshot must not match an earlier piece (verification 5).
+    expect(definition("apply_verified_platform_fee")).not.toContain("a.stripe_refund_id = any(p_refunds)");
   });
   it("6: an offline replay acknowledges what was collected", () => {
     expect(definition("pos_ticket")).toContain("v_order.total + coalesce((select sum(a.previous_total - a.resulting_total) from order_adjustments a");
@@ -73,5 +81,13 @@ describe("returns audit (Codex, 2026-10-28)", () => {
   it("8: an unknown tip breakdown goes to review before any plan", () => {
     const prepare = definition("return_on_order_v1");
     expect(prepare.indexOf("->>'breakdown_unknown')::boolean then")).toBeLessThan(prepare.indexOf("insert into order_adjustments"));
+  });
+  it("verification 4, 6, 7: no synthetic evidence beside pieces; provider time; one coverage rule", () => {
+    expect(definition("start_refund_attempt")).toContain("not exists (select 1 from refund_attempts x where x.operation_id = o.id)");
+    expect(definition("refund_success_time_v1")).toContain("least(now(),");
+    expect(definition("refund_operation_progress_v1")).toContain("not exists (select 1 from refund_attempts x where x.operation_id = o.id) then 0");
+    const events = definition("order_return_events_v1");
+    expect(events).toContain("raise exception 'a completed return does not reconcile with its refunds'");
+    expect(events).toContain("distinct on (o.id, a.stripe_refund_id)");
   });
 });
