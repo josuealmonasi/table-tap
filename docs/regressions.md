@@ -5352,6 +5352,7 @@ Existing collection and write-off writers are outside this receipt/checker fix.
 | Staff can reprint a paid group of parts | The receipt renderer accepted payments, but the staff route required an order | `staff-receipt-reprint.spec.ts` |
 | A query names a column its table has | The slot-receipt readers filtered `bill_splits` by `table_id`, which it never had; mocked tests passed and every approved phone's receipt list answered 503 | `invariants/database.spec.ts` ("a query names only columns its table has"), `pnpm api` |
 | One bad saved payment cannot blank a diner's split | A held card attempt whose saved scope did not match made the whole split read throw: 500, no parts, nothing to press | `split-slots-resume` (skip and log), `pnpm layout` "diner paid, held and chosen parts" |
+| A promise is judged on the loaded screen | The bill shows "pay at the table" while it still checks for a split; the audit judged it then and reported three bills as explaining nothing | `promise-audit.mjs` waits for the expected words, bounded at 30s |
 
 ### A paid part offers its own receipt once
 

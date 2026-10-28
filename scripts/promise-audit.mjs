@@ -486,11 +486,16 @@ for (const state of STATES) {
         // that takes 1.3s on a slow compile made this case report the screen
         // as having hidden its own working button — a red gate over nothing,
         // which is how a gate teaches people to ignore it.
+        // And for what it says: the bill shows "pay at the table" while it is
+        // still checking whether the table is dividing it, and judging then
+        // read a screen mid-load as one that explains nothing (#574's gates).
+        // A screen that never says it still fails, thirty seconds later.
         const deadline = Date.now() + 30000;
         while (Date.now() < deadline) {
-          const ready = state.keeps
+          const opened = state.keeps
             ? (await visible(tab, state.keeps)) > 0
             : (await tab.evaluate(`document.querySelectorAll("dialog[open],[role=dialog]").length`)) > 0;
+          const ready = opened && (!state.says || state.says.test(await tab.evaluate("document.body.innerText")));
           if (ready) break;
           await tab.waitForTimeout(250);
         }
