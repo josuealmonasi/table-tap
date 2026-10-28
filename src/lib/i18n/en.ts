@@ -1658,7 +1658,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     exact: "Exact",
     give: "Change: {amount}",
     short: "{amount} short",
-
+  },
   ticketTimes: {
     title: "Kitchen times",
     hint: "On Orders, each ticket shows how long it has been waiting. Past the first time it turns amber; past the second, red.",

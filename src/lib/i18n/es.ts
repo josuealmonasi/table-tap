@@ -1655,7 +1655,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     exact: "Exacto",
     give: "Cambio: {amount}",
     short: "Faltan {amount}",
-
+  },
   ticketTimes: {
     title: "Tiempos de cocina",
     hint: "En Pedidos, cada comanda muestra cuánto lleva esperando. Pasado el primer tiempo se pone ámbar; pasado el segundo, roja.",
