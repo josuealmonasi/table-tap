@@ -95,5 +95,9 @@ describe("returns audit (Codex, 2026-10-28)", () => {
     expect(definition("complete_refund_operation_v1")).toContain("perform public.enqueue_fee_reconcile(o.restaurant_id, o.stripe_payment_intent)");
     expect(definition("order_return_events_v1")).toContain("raise exception 'a provider refund is counted by two returns'");
     expect(definition("refund_operation_progress_v1")).toContain("order by a.stripe_refund_id, a.attempt_no, a.id");
+    // Verification 3: header owners count; the manual due writer and a pending due keep their own ids.
+    expect(definition("order_return_events_v1")).toContain("union select o.stripe_refund_id, o.id from refund_operations o");
+    expect(definition("record_refund_due_coverage_v1")).toContain("stripe_refund_id = coalesce(d.stripe_refund_id, v_first)");
+    expect(definition("finish_refund_due_attempt_v2")).toContain("v_first := case when p_status <> 'succeeded'");
   });
 });

@@ -8607,7 +8607,10 @@ begin
   end if;
   if p_status not in ('succeeded', 'pending', 'requires_action', 'failed', 'canceled') then raise exception 'invalid provider outcome'; end if;
   if p_refunds is null or jsonb_typeof(p_refunds) <> 'array' then raise exception 'provider evidence required'; end if;
-  v_first := null;
+  -- Pending, requires_action or failed: the id is this attempt's own refund
+  -- and is kept for its retry (verification 3). Success picks below.
+  v_first := case when p_status <> 'succeeded' and not public.refund_owned_by_return_v1(p_restaurant, p_refunds->0->>'id')
+    then p_refunds->0->>'id' end;
   v_due := round(d.amount * 100);
   if p_status = 'succeeded' then
     if jsonb_array_length(p_refunds) = 0 then raise exception 'provider evidence required'; end if;
@@ -8667,7 +8670,7 @@ grant execute on function public.finish_refund_due_attempt_v2(uuid, uuid, uuid, 
 create or replace function public.record_refund_due_coverage_v1(
   p_restaurant uuid, p_due uuid, p_actor text, p_refunds jsonb
 ) returns jsonb language plpgsql security definer set search_path = public as $$
-declare d refunds_due; e jsonb; v_due int; v_covered int;
+declare d refunds_due; e jsonb; v_due int; v_covered int; v_first text;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   select * into d from refunds_due where id = p_due and restaurant_id = p_restaurant for update;
@@ -8689,6 +8692,7 @@ begin
     -- already counts is that return's, not this duplicate charge's (returns
     -- audit 1): counting it twice would close both with half the money back.
     continue when public.refund_owned_by_return_v1(p_restaurant, e->>'id');
+    v_first := coalesce(v_first, e->>'id');
     insert into refund_due_coverage (restaurant_id, due_id, attempt_id, stripe_refund_id, amount_cents, active)
       values (p_restaurant, d.id, null, e->>'id', (e->>'amount_cents')::int,
         not exists (select 1 from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = e->>'id'))
@@ -8699,7 +8703,7 @@ begin
   if v_covered >= v_due then
     if d.refunded_at is null then
       update refunds_due set refunded_at = now(), refunded_by = p_actor,
-        stripe_refund_id = coalesce(d.stripe_refund_id, p_refunds->0->>'id'), fee_verification_pending = true
+        stripe_refund_id = coalesce(d.stripe_refund_id, v_first), fee_verification_pending = true
         where id = d.id;
       return jsonb_build_object('outcome', 'completed', 'marked', true, 'outstanding_cents', 0);
     end if;
@@ -12147,8 +12151,10 @@ begin
   end if;
   -- Every writer now keeps one refund to one obligation; one that predates it
   -- would be counted twice, so it fails the read (verification 2, V7).
-  if exists (select 1 from refund_attempts a where a.restaurant_id = p_restaurant and a.stripe_refund_id is not null
-      group by a.stripe_refund_id having count(distinct a.operation_id) > 1) then
+  if exists (select 1 from (
+        select a.stripe_refund_id r, a.operation_id op from refund_attempts a where a.restaurant_id = p_restaurant and a.stripe_refund_id is not null
+        union select o.stripe_refund_id, o.id from refund_operations o where o.restaurant_id = p_restaurant and o.stripe_refund_id is not null) owners
+      group by r having count(distinct op) > 1) then
     raise exception 'a provider refund is counted by two returns';
   end if;
   -- A completed operation's events must be exactly its amount: money a report
