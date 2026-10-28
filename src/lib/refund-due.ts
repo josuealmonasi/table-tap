@@ -104,8 +104,9 @@ export async function refundDue(
   try {
     charge = await chargeRefundState(client, intent, stripeAccount);
   } catch (err) {
+    // Stripe failing is 502 here, as for the refund itself; 503 is our own database.
     console.error("refund due: could not read the charge", err);
-    return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
+    return { ok: false, error: "apiErr.refundDueFailed", status: 502 };
   }
   if (charge.manual.length > 0) {
     const { data: recorded, error } = await db.rpc("record_refund_due_coverage_v1", {
@@ -169,7 +170,7 @@ export async function refundDue(
         p_attempt: attempt.id, p_actor: actor, p_refunds: [], p_status: "failed" });
       if (retireError) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
       const fresh = await chargeRefundState(client, intent, stripeAccount).catch(() => null);
-      if (!fresh) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
+      if (!fresh) return { ok: false, error: "apiErr.refundDueFailed", status: 502 };
       const { data: next, error: nextError } = await db.rpc("start_refund_due_attempt_v2", {
         p_restaurant: restaurantId, p_due: id, p_refundable_cents: fresh.refundableCents,
       });

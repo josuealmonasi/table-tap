@@ -119,8 +119,14 @@ export function billCollectionCases(fx) {
       path: "/api/table-payment/part",
       body: { tableId: table.id, amount: PART_AMOUNT, method: "cash", ref: `${partRef}-k` },
       expect: [403] },
-    { name: "POST /api/bill/write-off (waiter asks)", as: "waiter", method: "POST",
+    // Part of this table is paid now, so its rest cannot be written off: that
+    // would log the money that came in as lost (paths audit #5). Which
+    // refusal matters: this one names what was paid.
+    { name: "POST /api/bill/write-off (waiter asks, part paid)", as: "waiter", method: "POST",
       path: "/api/bill/write-off", body: { tableId: table.id, reason: "walkout", note: MARK },
+      expect: [409], expectError: /ya se pagaron|already paid/i },
+    { name: "POST /api/bill/write-off (waiter asks)", as: "waiter", method: "POST",
+      path: "/api/bill/write-off", body: { orderIds: [walkoutOrder], reason: "walkout", note: MARK },
       expect: [200], check: d => d.pending === true || "a waiter's request should stay pending" },
     // The route reads `requestId`. This sent `id`, so it was refused on the
     // missing field every single run — the one path that decides whether a
