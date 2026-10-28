@@ -10832,6 +10832,10 @@ drop trigger if exists guard_split_checkout_slot on bill_split_checkout_slots;
 create trigger guard_split_checkout_slot before update on bill_split_checkout_slots
   for each row execute function public.guard_split_checkout_slot();
 
+-- RLS does not guard TRUNCATE: the two tables above need the same revoke as
+-- every table before them (invariants/money.spec.ts).
+revoke truncate, references, trigger on all tables in schema public from authenticated;
+
 alter table diner_checkouts add column if not exists payer_member_id uuid;
 alter table diner_checkouts add column if not exists split_id uuid;
 alter table diner_checkouts add column if not exists split_revision int;

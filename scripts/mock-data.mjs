@@ -813,6 +813,49 @@ export async function seedMock(pg) {
   }
 
 
+  // ── A bill divided between three people, model 2 ──────────────────────
+  // Through the real functions, as a table would get there: three slots at
+  // once, a phone that tried to pay one by card and walked off (its attempt
+  // expired and gave the slot back), and the waiter collecting another in
+  // cash. Every gate then sees a part-paid split it must not break.
+  const dividing = openBills.find(b => b.sessionId !== openBills[0].sessionId
+    && b.sessionId !== openBills[openBills.length - 1].sessionId);
+  if (dividing) {
+    const { rows: [debt] } = await pg.query(
+      "select * from public.sitting_split_debt($1, $2, $3, clock_timestamp())",
+      [rid, dividing.sessionId, dividing.table.id],
+    );
+    const { rows: [started] } = await pg.query(
+      "select public.start_bill_split_v2($1, $2, $3, null, 3, $4, $5, gen_random_uuid(), 300) as r",
+      [rid, dividing.table.id, dividing.sessionId, debt.debt_cents, debt.currency],
+    );
+    const split = started.r;
+    if (split.outcome !== "started") throw new Error(`demo split did not start: ${JSON.stringify(split)}`);
+    const { rows: [attempt] } = await pg.query(
+      `insert into diner_checkouts (restaurant_id, stripe_account_id, livemode, currency, amount_cents, metadata, order_ids, status)
+       values ($1, 'acct_demo_walked_off', false, $2, 1, '{"demo": "walked off"}', $3, 'open') returning id`,
+      [rid, debt.currency, debt.order_ids],
+    );
+    await pg.query("select public.reserve_split_slots_v1($1, $2, $3, null, '{0}', $4)", [rid, split.split, split.revision, attempt.id]);
+    await pg.query("select public.release_split_slots_v1($1, $2)", [rid, attempt.id]);
+    await pg.query("update diner_checkouts set status = 'expired' where id = $1", [attempt.id]);
+    // The attempt's own record of what it paid for outlives its reservation.
+    const { rows: [kept] } = await pg.query(
+      "select count(*)::int as n from bill_split_checkout_slots where checkout_id = $1",
+      [attempt.id],
+    );
+    if (kept.n !== 1) throw new Error("the walked-off attempt lost its slot record");
+    const { rows: [slot] } = await pg.query(
+      "select amount_cents from bill_split_slots where split_id = $1 and share_no = 1",
+      [split.split],
+    );
+    const { rows: [cash] } = await pg.query(
+      "select public.collect_split_slots_v1($1, $2, $3, '{1}', $4, $5, 0, 'cash', $6, gen_random_uuid()::text) as r",
+      [rid, split.split, split.revision, slot.amount_cents, debt.currency, DEMO_TEAM[1].email],
+    );
+    if (cash.r.outcome !== "collected") throw new Error(`demo split slot was not collected: ${JSON.stringify(cash.r)}`);
+  }
+
   const waiting = openBills[0];
   await pg.query(
     `insert into discount_requests (restaurant_id, table_id, table_label, order_ids, code, amount, requested_by)

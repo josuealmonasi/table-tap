@@ -1,14 +1,3 @@
-drop function if exists public.settle_split_slots_v1(uuid, uuid, text, int);
-drop function if exists public.collect_split_slots_v1(uuid, uuid, int, int[], int, text, int, text, text, text);
-drop function if exists public.close_divided_bill_v3(uuid);
-drop function if exists public.reserve_split_slots_v1(uuid, uuid, int, uuid, int[], uuid);
-drop function if exists public.release_split_slots_v1(uuid, uuid);
-drop function if exists public.start_bill_split_v2(uuid, uuid, uuid, uuid, int, int, text, uuid, int);
-drop function if exists public.resize_bill_split_v2(uuid, uuid, int, text, int);
-drop function if exists public.cancel_bill_split_v2(uuid, uuid, int, text);
-drop function if exists public.sitting_split_debt(uuid, uuid, uuid, timestamptz);
-drop function if exists public.split_cents(int, int, int);
-drop function if exists public.guard_split_checkout_slot();
 drop table if exists restaurant_accounting_records cascade;
 drop table if exists platform_admin_audit cascade;
 drop function if exists public.keep_platform_admin_audit();
@@ -291,6 +280,17 @@ drop function if exists public.guard_offline_audit() cascade;
 
 drop function if exists public.queue_offline_sale(uuid,uuid,jsonb,text,text,text,text) cascade;
 drop table if exists offline_sale_queue cascade;
+drop function if exists public.settle_split_slots_v1(uuid, uuid, text, int);
+drop function if exists public.collect_split_slots_v1(uuid, uuid, int, int[], int, text, int, text, text, text);
+drop function if exists public.close_divided_bill_v3(uuid);
+drop function if exists public.reserve_split_slots_v1(uuid, uuid, int, uuid, int[], uuid);
+drop function if exists public.release_split_slots_v1(uuid, uuid);
+drop function if exists public.start_bill_split_v2(uuid, uuid, uuid, uuid, int, int, text, uuid, int);
+drop function if exists public.resize_bill_split_v2(uuid, uuid, int, text, int);
+drop function if exists public.cancel_bill_split_v2(uuid, uuid, int, text);
+drop function if exists public.sitting_split_debt(uuid, uuid, uuid, timestamptz);
+drop function if exists public.split_cents(int, int, int);
+drop function if exists public.guard_split_checkout_slot();
 
 drop function if exists public.sync_kitchen_ticket();
 drop function if exists public.kitchen_items(jsonb);
