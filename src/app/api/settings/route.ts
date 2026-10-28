@@ -126,8 +126,20 @@ export async function POST(req: NextRequest) {
   // Same range the column's constraint allows, so a fat-fingered number comes
   // back as a clamped setting rather than a 500 from Postgres.
   // Saved as a pair, so "late" always stays after "warn".
+  // A value left out keeps what is saved: posting only "warn" must never
+  // reset a saved "late" to the default (Codex's review of #560).
   if ("ticket_warn_minutes" in update || "ticket_late_minutes" in update) {
-    const times = clampTicketTimes(update.ticket_warn_minutes ?? DEFAULT_TICKET_WARN_MINUTES, update.ticket_late_minutes ?? DEFAULT_TICKET_LATE_MINUTES);
+    let saved: { ticket_warn_minutes?: number; ticket_late_minutes?: number } = {};
+    if (!("ticket_warn_minutes" in update) || !("ticket_late_minutes" in update)) {
+      const { data, error } = await createAdminClient().from("restaurants")
+        .select("ticket_warn_minutes, ticket_late_minutes").eq("id", actor.restaurantId).maybeSingle();
+      if (error) return await apiError("apiErr.generic", 503);
+      saved = data ?? {};
+    }
+    const times = clampTicketTimes(
+      update.ticket_warn_minutes ?? saved.ticket_warn_minutes ?? DEFAULT_TICKET_WARN_MINUTES,
+      update.ticket_late_minutes ?? saved.ticket_late_minutes ?? DEFAULT_TICKET_LATE_MINUTES,
+    );
     update.ticket_warn_minutes = times.warn;
     update.ticket_late_minutes = times.late;
   }
