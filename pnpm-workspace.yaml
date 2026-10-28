@@ -22,7 +22,9 @@ overrides:
   # without touching the SDK. qs serialises our requests going OUT to Stripe
   # rather than parsing anything a caller sends us, which is why this is
   # tidiness rather than an emergency — but it is a production dependency.
-  qs: "^6.16.0"
+  # 6.16.1 since 2026-10-28: 6.16.0 throws on an array element whose toString
+  # is not callable (GHSA-6pq8-jhm2-2vcw, a denial of service).
+  qs: "^6.16.1"
   # Next pins postcss to exactly 8.4.31, which carries an arbitrary file read
   # and a path traversal in source-map handling. Both are BUILD-time: postcss
   # processes our own stylesheets, so exploiting them means already being able

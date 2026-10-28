@@ -5359,6 +5359,7 @@ Existing collection and write-off writers are outside this receipt/checker fix.
 | A paid part offers its own receipt once | Checkout and staff collection created payment receipts, but the phone watched only whole-order settlement | `slot-receipt-offer.spec.tsx`, `slot-receipt-payments-route.spec.ts` |
 | Staff paper includes the restaurant's forgiveness | The diner reader explained the loss, but staff reprints read the reduced order alone | `staff-receipt-reprint.spec.ts`, existing `kitchen-print.spec.ts` |
 | Staff can reprint a paid group of parts | The receipt renderer accepted payments, but the staff route required an order | `staff-receipt-reprint.spec.ts` |
+| A query names a column its table has | The slot-receipt readers filtered `bill_splits` by `table_id`, which it never had; mocked tests passed and every approved phone's receipt list answered 503 | `invariants/database.spec.ts` ("a query names only columns its table has"), `pnpm api` |
 
 ### A paid part offers its own receipt once
 
@@ -5477,3 +5478,13 @@ waiters and kitchen cannot prepare, attribute or finish through the API.
 invariant cover the screen and server boundary. The API cases prepare/replay a
 private completed cash/terminal sale and confirm its payout twice. The layout
 list names both return dialogs; Claude runs it and inspects 390/1280 screenshots.
+### A query names a column its table has
+
+The code and the schema had to agree on a column. The slot-receipt list and
+the slot-receipt reader both asked `bill_splits` for `table_id`; a split
+belongs to its sitting and has no table of its own. Every unit test mocked the
+database, so all of them passed, and the first real request answered 503 for
+every approved phone. `pnpm api` found it. A new invariant reads every plain
+`select` and filter on a known table against `schema.sql` (3,160 references
+today) and failed on both lines with the fix reverted. The table now comes from
+the sitting, which the membership check already ties to the table.

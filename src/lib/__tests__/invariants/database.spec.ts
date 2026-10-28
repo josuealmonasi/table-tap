@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { walkAll, schema, sources, read } from "./helpers";
+import { walk, walkAll, schema, sources, read } from "./helpers";
 
 describe("a new table decides whether the world can read it", () => {
   it("locks down or explicitly grants every table created after the blanket revoke", () => {
@@ -291,5 +291,49 @@ describe("a locked plan freezes every table the dashboard writes directly", () =
       t => !(t in unfrozen) && !new RegExp(`create trigger \\w+_dashboard_write before insert or update or delete on ${t}\\b`).test(schema),
     );
     expect(missing, `managed with no locked-plan freeze: ${missing.join(", ")}`).toEqual([]);
+  });
+});
+
+describe("a query names only columns its table has", () => {
+  // Unit tests mock the database, so a query on a column that does not exist
+  // passes every one of them and fails only against Postgres. The slot-receipt
+  // reader filtered bill_splits by table_id, which bill_splits never had, and
+  // every approved phone's receipt list answered 503 until `pnpm api` ran.
+  const columns = new Map<string, Set<string>>();
+  const add = (table: string, column: string): void => {
+    if (!columns.has(table)) columns.set(table, new Set());
+    columns.get(table)!.add(column);
+  };
+  for (const m of schema.matchAll(/create table if not exists (?:public\.)?(\w+)\s*\(([\s\S]*?)\n\);/g)) {
+    for (const line of m[2].split("\n")) {
+      const c = line.match(/^\s+(\w+)\s+\w/);
+      if (c && !/^(primary|foreign|unique|check|constraint)$/i.test(c[1])) add(m[1], c[1]);
+    }
+  }
+  for (const m of schema.matchAll(/alter table\s+(?:public\.)?(\w+)\s+add column if not exists\s+(\w+)/g)) add(m[1], m[2]);
+  for (const m of schema.matchAll(/alter table\s+(?:public\.)?(\w+)\s+rename column \w+ to (\w+)/g)) add(m[1], m[2]);
+  const files = [...walk("src"), ...walkAll("scripts").filter(f => /\.mjs$/.test(f))];
+
+  it("checks every plain select and filter against schema.sql", () => {
+    let checked = 0;
+    const missing: string[] = [];
+    for (const file of files) {
+      for (const m of read(file).matchAll(/\.from\("(\w+)"\)((?:\s*\.\w+\((?:[^()]|\([^()]*\))*\))+)/g)) {
+        const known = columns.get(m[1]);
+        if (!known) continue; // a view, or a table this parser cannot read
+        const chain = m[2];
+        const select = chain.match(/\.select\("([^"]*)"/)?.[1] ?? "";
+        // Embedded relations (`orders(id)`) may be filtered by name.
+        const embedded = new Set([...select.matchAll(/(\w+)\(/g)].map(e => e[1]));
+        const names = /[(*:!]/.test(select) ? [] : select.split(",").map(s => s.trim()).filter(Boolean);
+        for (const f of chain.matchAll(/\.(?:eq|neq|in|is|gt|gte|lt|lte|order|not)\("(\w+)"/g)) names.push(f[1]);
+        for (const name of names) {
+          checked++;
+          if (!known.has(name) && !embedded.has(name)) missing.push(`${file}: ${m[1]}.${name}`);
+        }
+      }
+    }
+    expect(checked, "the parser stopped finding queries").toBeGreaterThan(2000);
+    expect([...new Set(missing)]).toEqual([]);
   });
 });
