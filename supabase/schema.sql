@@ -11732,7 +11732,8 @@ begin
   -- Money nobody can attribute exactly goes to a person, not to a guess.
   if (public.order_coverage(p_restaurant, array[o.id])->0->>'unresolved')::boolean
     or exists (select 1 from jsonb_array_elements(public.order_refund_coverage(p_restaurant, o.id)) c
-      where c->>'allocation_quality' <> 'exact' or c->>'currency' is distinct from o.currency) then
+      where c->>'allocation_quality' <> 'exact' or c->>'currency' is distinct from o.currency
+        or (c->>'stripe_payment_intent' is not null and c->>'stripe_account_id' is null)) then
     return jsonb_build_object('outcome', 'review');
   end if;
   for x in select (c->>'amount')::numeric amount, (c->>'tip')::numeric tip
