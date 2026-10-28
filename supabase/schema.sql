@@ -1192,6 +1192,11 @@ create policy "team manages dietary tags" on dietary_tags for all
 
 -- The blanket `anon` lockdown runs long before this table exists, so the
 -- grant is given again here.
+-- A diner reads the tags; nobody without a login writes them. Supabase grants
+-- every new table to every role by default, so a database built from this
+-- file gave anon insert, update and delete here (RLS refused them; prod never
+-- had them; prod:check found the difference).
+revoke insert, update, delete on dietary_tags from anon;
 grant select on dietary_tags to anon;
 
 -- The usual eight, so nobody starts with an empty list. `key` is the same one
