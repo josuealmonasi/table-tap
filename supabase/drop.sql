@@ -1,3 +1,9 @@
+drop function if exists public.start_bill_split_v2(uuid, uuid, uuid, uuid, int, int, text, uuid, int);
+drop function if exists public.resize_bill_split_v2(uuid, uuid, int, text, int);
+drop function if exists public.cancel_bill_split_v2(uuid, uuid, int, text);
+drop function if exists public.sitting_split_debt(uuid, uuid, uuid, timestamptz);
+drop function if exists public.split_cents(int, int, int);
+drop function if exists public.guard_split_checkout_slot();
 drop table if exists restaurant_accounting_records cascade;
 drop table if exists platform_admin_audit cascade;
 drop function if exists public.keep_platform_admin_audit();
@@ -91,6 +97,8 @@ drop table if exists loyalty_visits      cascade;
 drop table if exists loyalty_cards       cascade;
 drop table if exists loyalty_programs    cascade;
 drop table if exists print_jobs          cascade;
+drop table if exists bill_split_checkout_slots cascade;
+drop table if exists bill_split_slots    cascade;
 drop table if exists bill_split_claims   cascade;
 drop table if exists bill_splits         cascade;
 drop table if exists payments             cascade;

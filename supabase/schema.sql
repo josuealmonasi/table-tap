@@ -10748,3 +10748,231 @@ end;
 $$;
 revoke all on function public.save_product_addons_v1(uuid, uuid, uuid[], jsonb, uuid, uuid) from public, anon, authenticated;
 grant execute on function public.save_product_addons_v1(uuid, uuid, uuid[], jsonb, uuid, uuid) to service_role;
+
+-- ── Split by people, model 2: slots (contract: loop/dialogue/split-slots-contract.md) ──
+--
+-- The old split froze the amount only when the last phone joined, one share
+-- per phone, so a table of four with one phone could never divide its bill,
+-- and the waiter could not collect a share in cash. Model 2 freezes the debt
+-- the moment the split starts and creates every slot at once. A phone may pay
+-- several slots, the floor may collect any free one, and a slot is never paid
+-- twice or silently freed after it was paid. Legacy splits (model_version 1)
+-- stay readable and settleable as they were.
+alter table bill_splits add column if not exists model_version int not null default 1;
+alter table bill_splits add column if not exists revision int not null default 0;
+alter table bill_splits add column if not exists currency text;
+alter table bill_splits add column if not exists fee_budget_cents int not null default 0;
+alter table bill_splits add column if not exists first_payment_attempt_at timestamptz;
+alter table bill_splits add column if not exists request_ref uuid;
+alter table bill_splits drop constraint if exists bill_splits_model_check;
+alter table bill_splits add constraint bill_splits_model_check
+  check (model_version in (1, 2) and revision >= 0 and fee_budget_cents >= 0);
+create unique index if not exists bill_splits_request_once on bill_splits (restaurant_id, request_ref)
+  where request_ref is not null;
+create unique index if not exists bill_splits_restaurant_id_id on bill_splits (restaurant_id, id);
+
+create table if not exists bill_split_slots (
+  restaurant_id        uuid not null,
+  split_id             uuid not null,
+  share_no             int not null check (share_no >= 0 and share_no < 20),
+  amount_cents         int not null check (amount_cents > 0),
+  fee_slice_cents      int not null default 0 check (fee_slice_cents >= 0),
+  -- The card attempt holding it; cleared only when that attempt is known to
+  -- have expired or been refused.
+  reserved_checkout_id uuid references diner_checkouts(id) on delete restrict,
+  payment_id           uuid references payments(id) on delete restrict,
+  paid_at              timestamptz,
+  primary key (split_id, share_no),
+  foreign key (restaurant_id, split_id) references bill_splits (restaurant_id, id) on delete cascade,
+  check ((payment_id is null) = (paid_at is null))
+);
+alter table bill_split_slots enable row level security;
+drop policy if exists "team reads split slots" on bill_split_slots;
+create policy "team reads split slots" on bill_split_slots for select
+  using (has_role(restaurant_id, array['manager', 'waiter', 'cashier']));
+revoke all on bill_split_slots from anon;
+grant select on bill_split_slots to authenticated;
+
+-- What one card attempt is paying for, frozen when it is reserved.
+create table if not exists bill_split_checkout_slots (
+  restaurant_id   uuid not null,
+  checkout_id     uuid not null references diner_checkouts(id) on delete restrict,
+  split_id        uuid not null,
+  share_no        int not null,
+  amount_cents    int not null check (amount_cents > 0),
+  fee_slice_cents int not null check (fee_slice_cents >= 0),
+  primary key (checkout_id, split_id, share_no),
+  foreign key (restaurant_id, split_id) references bill_splits (restaurant_id, id) on delete cascade
+);
+alter table bill_split_checkout_slots enable row level security;
+revoke all on bill_split_checkout_slots from anon, authenticated;
+
+create or replace function public.guard_split_checkout_slot()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  raise exception 'a checkout''s slots are immutable';
+end $$;
+revoke all on function public.guard_split_checkout_slot() from public, anon, authenticated;
+drop trigger if exists guard_split_checkout_slot on bill_split_checkout_slots;
+create trigger guard_split_checkout_slot before update on bill_split_checkout_slots
+  for each row execute function public.guard_split_checkout_slot();
+
+alter table diner_checkouts add column if not exists payer_member_id uuid;
+alter table diner_checkouts add column if not exists split_id uuid;
+alter table diner_checkouts add column if not exists split_revision int;
+
+-- Shares of a total in cents: equal, the odd cents on slot 0 (sharesFor).
+create or replace function public.split_cents(p_total int, p_n int, p_share int)
+returns int language sql immutable set search_path = public as $$
+  select (p_total / p_n) + case when p_share = 0 then p_total % p_n else 0 end;
+$$;
+revoke all on function public.split_cents(int, int, int) from public, anon, authenticated;
+grant execute on function public.split_cents(int, int, int) to service_role;
+
+-- What the sitting owes now, and the food in it, under locks the caller holds.
+-- Unpaid gratuities stay inside the debt but outside the food (decision 8).
+create or replace function public.sitting_split_debt(p_restaurant uuid, p_session uuid, p_table uuid, p_before timestamptz)
+returns table (debt_cents int, food_cents int, currencies int, currency text, order_ids uuid[])
+language sql stable security definer set search_path = public as $$
+  select
+    round(coalesce(sum(greatest(o.total - public.retained_order_coverage(p_restaurant, o.id), 0)), 0) * 100)::int,
+    round(coalesce(sum(greatest(o.total - public.retained_order_coverage(p_restaurant, o.id)
+      - greatest(o.tip - coalesce((select sum(a.tip) from payment_allocations a where a.order_id = o.id), 0), 0), 0)), 0) * 100)::int,
+    count(distinct o.currency)::int, min(o.currency),
+    coalesce(array_agg(o.id order by o.created_at, o.id), '{}')
+  from orders o
+  where o.session_id = p_session and o.restaurant_id = p_restaurant and o.table_id = p_table
+    and not o.paid and not o.written_off and o.account_id is null
+    and o.status not in ('cancelled', 'pending_payment') and o.created_at < p_before;
+$$;
+revoke all on function public.sitting_split_debt(uuid, uuid, uuid, timestamptz) from public, anon, authenticated;
+grant execute on function public.sitting_split_debt(uuid, uuid, uuid, timestamptz) to service_role;
+
+-- Starting a split freezes the table's debt and makes every slot (decision 1).
+-- `p_expected_cents` is what the screen showed; anything else is `stale`. The
+-- fee budget is the plan's flat fee, capped at 5% of the food (#556).
+create or replace function public.start_bill_split_v2(
+  p_restaurant uuid, p_table uuid, p_session uuid, p_member uuid, p_shares int,
+  p_expected_cents int, p_currency text, p_ref uuid, p_flat_fee_cents int
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_sitting table_sessions%rowtype;
+  v_split bill_splits%rowtype;
+  v_debt record;
+  v_freeze timestamptz;
+  v_fee int;
+begin
+  if p_shares is null or p_shares < 2 or p_shares > 20 or p_flat_fee_cents is null or p_flat_fee_cents < 0
+    or p_expected_cents is null or p_ref is null then
+    return jsonb_build_object('outcome', 'invalid');
+  end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  perform public.backfill_payment_allocations(p_restaurant);
+  perform set_config('tabletap.allocation_scope', '', true);
+  perform pg_advisory_xact_lock(hashtextextended(p_session::text, 0));
+
+  select * into v_split from bill_splits where restaurant_id = p_restaurant and request_ref = p_ref;
+  if found then
+    if v_split.session_id = p_session and v_split.shares = p_shares then
+      return jsonb_build_object('outcome', 'repeat', 'split', v_split.id, 'revision', v_split.revision);
+    end if;
+    return jsonb_build_object('outcome', 'conflict');
+  end if;
+
+  select * into v_sitting from table_sessions where id = p_session for update;
+  if not found or v_sitting.restaurant_id is distinct from p_restaurant or v_sitting.table_id is distinct from p_table
+    or v_sitting.closed_at is not null then
+    return jsonb_build_object('outcome', 'gone');
+  end if;
+  if p_member is not null and not exists (select 1 from table_session_members m
+    where m.id = p_member and m.session_id = p_session and m.status = 'approved') then
+    return jsonb_build_object('outcome', 'forbidden');
+  end if;
+  select * into v_split from bill_splits where session_id = p_session and status in ('proposed', 'locked')
+    order by created_at desc limit 1;
+  if found then return jsonb_build_object('outcome', 'busy', 'split', v_split.id); end if;
+
+  perform 1 from orders where session_id = p_session and restaurant_id = p_restaurant and table_id = p_table
+    order by id for update;
+  v_freeze := clock_timestamp();
+  select * into v_debt from public.sitting_split_debt(p_restaurant, p_session, p_table, v_freeze);
+  if v_debt.debt_cents <= 0 then return jsonb_build_object('outcome', 'nothing'); end if;
+  if v_debt.currencies <> 1 or v_debt.currency is distinct from p_currency then
+    return jsonb_build_object('outcome', 'currency');
+  end if;
+  if v_debt.debt_cents <> p_expected_cents then
+    return jsonb_build_object('outcome', 'stale', 'debt_cents', v_debt.debt_cents);
+  end if;
+  -- A share must be payable: at least a cent each.
+  if v_debt.debt_cents < p_shares then return jsonb_build_object('outcome', 'invalid'); end if;
+  v_fee := least(p_flat_fee_cents, floor(v_debt.food_cents * 0.05)::int);
+
+  insert into bill_splits (restaurant_id, session_id, shares, amount, status, proposed_by, locked_at,
+    expires_at, order_ids, food_principal, model_version, revision, currency, fee_budget_cents, request_ref)
+  values (p_restaurant, p_session, p_shares, v_debt.debt_cents / 100.0, 'locked', coalesce(p_member::text, 'staff'),
+    v_freeze, 'infinity', v_debt.order_ids, v_debt.food_cents / 100.0, 2, 1, p_currency, v_fee, p_ref)
+  returning * into v_split;
+  insert into bill_split_slots (restaurant_id, split_id, share_no, amount_cents, fee_slice_cents)
+  select p_restaurant, v_split.id, s, public.split_cents(v_debt.debt_cents, p_shares, s), public.split_cents(v_fee, p_shares, s)
+    from generate_series(0, p_shares - 1) s;
+  return jsonb_build_object('outcome', 'started', 'split', v_split.id, 'revision', v_split.revision,
+    'debt_cents', v_debt.debt_cents, 'fee_budget_cents', v_fee);
+end; $$;
+revoke all on function public.start_bill_split_v2(uuid, uuid, uuid, uuid, int, int, text, uuid, int) from public, anon, authenticated;
+grant execute on function public.start_bill_split_v2(uuid, uuid, uuid, uuid, int, int, text, uuid, int) to service_role;
+
+-- Before the first payment attempt the split can be resized or called off;
+-- after it, N is frozen (decision 3). A stale revision changes nothing.
+create or replace function public.resize_bill_split_v2(
+  p_restaurant uuid, p_split uuid, p_revision int, p_actor text, p_shares int
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_split bill_splits%rowtype; v_debt int;
+begin
+  if p_shares is null or p_shares < 2 or p_shares > 20 then return jsonb_build_object('outcome', 'invalid'); end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into v_split from bill_splits where id = p_split and restaurant_id = p_restaurant and model_version = 2;
+  if not found then return jsonb_build_object('outcome', 'gone'); end if;
+  perform pg_advisory_xact_lock(hashtextextended(v_split.session_id::text, 0));
+  select * into v_split from bill_splits where id = p_split for update;
+  if v_split.status <> 'locked' then return jsonb_build_object('outcome', 'gone'); end if;
+  if v_split.revision <> p_revision then return jsonb_build_object('outcome', 'stale', 'revision', v_split.revision); end if;
+  perform 1 from bill_split_slots where split_id = p_split order by share_no for update;
+  if v_split.first_payment_attempt_at is not null or exists (select 1 from bill_split_slots
+    where split_id = p_split and (reserved_checkout_id is not null or payment_id is not null)) then
+    return jsonb_build_object('outcome', 'frozen');
+  end if;
+  v_debt := round(v_split.amount * 100);
+  if v_debt < p_shares then return jsonb_build_object('outcome', 'invalid'); end if;
+  delete from bill_split_slots where split_id = p_split;
+  insert into bill_split_slots (restaurant_id, split_id, share_no, amount_cents, fee_slice_cents)
+  select p_restaurant, p_split, s, public.split_cents(v_debt, p_shares, s), public.split_cents(v_split.fee_budget_cents, p_shares, s)
+    from generate_series(0, p_shares - 1) s;
+  update bill_splits set shares = p_shares, revision = revision + 1 where id = p_split returning * into v_split;
+  return jsonb_build_object('outcome', 'resized', 'revision', v_split.revision);
+end; $$;
+revoke all on function public.resize_bill_split_v2(uuid, uuid, int, text, int) from public, anon, authenticated;
+grant execute on function public.resize_bill_split_v2(uuid, uuid, int, text, int) to service_role;
+
+create or replace function public.cancel_bill_split_v2(
+  p_restaurant uuid, p_split uuid, p_revision int, p_actor text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_split bill_splits%rowtype;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into v_split from bill_splits where id = p_split and restaurant_id = p_restaurant and model_version = 2;
+  if not found then return jsonb_build_object('outcome', 'gone'); end if;
+  perform pg_advisory_xact_lock(hashtextextended(v_split.session_id::text, 0));
+  select * into v_split from bill_splits where id = p_split for update;
+  if v_split.status <> 'locked' then return jsonb_build_object('outcome', 'gone'); end if;
+  if v_split.revision <> p_revision then return jsonb_build_object('outcome', 'stale', 'revision', v_split.revision); end if;
+  perform 1 from bill_split_slots where split_id = p_split order by share_no for update;
+  if v_split.first_payment_attempt_at is not null or exists (select 1 from bill_split_slots
+    where split_id = p_split and (reserved_checkout_id is not null or payment_id is not null)) then
+    return jsonb_build_object('outcome', 'frozen');
+  end if;
+  update bill_splits set status = 'cancelled', revision = revision + 1 where id = p_split returning * into v_split;
+  return jsonb_build_object('outcome', 'cancelled', 'revision', v_split.revision);
+end; $$;
+revoke all on function public.cancel_bill_split_v2(uuid, uuid, int, text) from public, anon, authenticated;
+grant execute on function public.cancel_bill_split_v2(uuid, uuid, int, text) to service_role;
