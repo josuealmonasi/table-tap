@@ -10505,6 +10505,14 @@ begin
     into v_owed,v_ids from orders where restaurant_id = p_restaurant and table_id = p_table
     and currency = p_currency and not paid and not written_off and account_id is null
     and status not in ('cancelled','pending_payment');
+  -- A divided bill with a slot paid or held is collected by its slots: the
+  -- cancel below would free a paid slot (split contract, decision 5).
+  if exists(select 1 from bill_splits b join bill_split_slots s on s.split_id = b.id
+    where b.restaurant_id = p_restaurant and b.model_version = 2 and b.status = 'locked'
+      and b.session_id in (select session_id from orders where id = any(v_ids))
+      and (s.payment_id is not null or s.reserved_checkout_id is not null)) then
+    return jsonb_build_object('outcome','split');
+  end if;
   if v_owed <> p_expected then
     return jsonb_build_object('outcome','changed','owed',v_owed,'currency',p_currency);
   end if;
@@ -11070,3 +11078,125 @@ begin
 end; $$;
 revoke all on function public.release_split_slots_v1(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.release_split_slots_v1(uuid, uuid) to service_role;
+
+-- The floor collects free slots: cash, or a card on its own terminal
+-- (decision 2). One receipt for the chosen slots, plus the tip, allocated
+-- across the split's frozen orders like every other collection. A held or
+-- paid slot is refused; a retry with the same reference returns the receipt.
+create or replace function public.collect_split_slots_v1(
+  p_restaurant uuid, p_split uuid, p_revision int, p_slots int[], p_expected_cents int, p_currency text,
+  p_tip_cents int, p_method text, p_actor text, p_ref text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_split bill_splits%rowtype;
+  v_amount int; v_count int;
+  v_seen numeric; v_seen_tip numeric;
+  v_left numeric; v_old_tip numeric;
+  v_payment uuid;
+  v_scope text := coalesce(current_setting('tabletap.allocation_scope', true), '');
+begin
+  if p_slots is null or cardinality(p_slots) = 0 or cardinality(p_slots) <> (select count(distinct s) from unnest(p_slots) s)
+    or p_expected_cents is null or p_expected_cents <= 0 or p_tip_cents is null or p_tip_cents < 0
+    or p_tip_cents > p_expected_cents or p_method is null or p_method not in ('cash', 'card')
+    or p_currency is null or p_currency not in ('MXN', 'USD') or nullif(btrim(p_ref), '') is null then
+    return jsonb_build_object('outcome', 'invalid');
+  end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  perform public.backfill_payment_allocations(p_restaurant);
+
+  -- A lost response: the same reference gets its receipt back, once.
+  select sum(amount), sum(tip) into v_seen, v_seen_tip from payments where restaurant_id = p_restaurant and client_ref = p_ref;
+  if v_seen is not null then
+    if round(v_seen * 100) <> p_expected_cents + p_tip_cents or (select array_agg(share_no order by share_no)
+        from bill_split_slots where split_id = p_split and payment_id in (select id from payments
+          where restaurant_id = p_restaurant and client_ref = p_ref)) is distinct from (select array_agg(s order by s) from unnest(p_slots) s) then
+      return jsonb_build_object('outcome', 'conflict');
+    end if;
+    return jsonb_build_object('outcome', 'duplicate', 'amount_cents', round(v_seen * 100), 'tip_cents', round(v_seen_tip * 100));
+  end if;
+
+  select * into v_split from bill_splits where id = p_split and restaurant_id = p_restaurant and model_version = 2;
+  if not found then return jsonb_build_object('outcome', 'gone'); end if;
+  perform pg_advisory_xact_lock(hashtextextended(v_split.session_id::text, 0));
+  select * into v_split from bill_splits where id = p_split for update;
+  if v_split.status <> 'locked' then return jsonb_build_object('outcome', 'gone'); end if;
+  if v_split.revision <> p_revision then return jsonb_build_object('outcome', 'stale', 'revision', v_split.revision); end if;
+  if v_split.currency is distinct from p_currency then return jsonb_build_object('outcome', 'currency'); end if;
+  perform 1 from bill_split_slots where split_id = p_split order by share_no for update;
+  select count(*), coalesce(sum(amount_cents), 0) into v_count, v_amount
+    from bill_split_slots where split_id = p_split and share_no = any(p_slots);
+  if v_count <> cardinality(p_slots) then return jsonb_build_object('outcome', 'invalid'); end if;
+  if exists (select 1 from bill_split_slots where split_id = p_split and share_no = any(p_slots) and payment_id is not null) then
+    return jsonb_build_object('outcome', 'paid');
+  end if;
+  if exists (select 1 from bill_split_slots where split_id = p_split and share_no = any(p_slots) and reserved_checkout_id is not null) then
+    return jsonb_build_object('outcome', 'reserved');
+  end if;
+  if v_amount <> p_expected_cents then return jsonb_build_object('outcome', 'stale', 'amount_cents', v_amount); end if;
+
+  perform 1 from orders where id = any(v_split.order_ids) and restaurant_id = p_restaurant order by id for update;
+  -- What the frozen orders still owe, and the unpaid gratuity inside it.
+  select coalesce(sum(greatest(o.total - public.retained_order_coverage(p_restaurant, o.id), 0)), 0),
+    coalesce(sum(greatest(o.tip - coalesce((select sum(a.tip) from payment_allocations a where a.order_id = o.id), 0), 0)), 0)
+    into v_left, v_old_tip
+    from orders o where o.id = any(v_split.order_ids) and not o.paid and not o.written_off
+      and o.account_id is null and o.status not in ('cancelled', 'pending_payment');
+  -- A cancellation since the split started changed what is owed (decision 5).
+  if round(v_left * 100) < p_expected_cents then return jsonb_build_object('outcome', 'changed'); end if;
+  v_old_tip := least(v_old_tip, v_left);
+  v_old_tip := round((p_expected_cents / 100.0) * v_old_tip / v_left, 2);
+
+  perform set_config('tabletap.allocation_scope', to_json(v_split.order_ids)::text, true);
+  -- `total` and `tip` rise together, as every other collection adds a tip.
+  if p_tip_cents > 0 then
+    update orders set tip = round(tip + p_tip_cents / 100.0, 2), total = round(total + p_tip_cents / 100.0, 2)
+     where id = (select id from orders where id = any(v_split.order_ids) and not paid and not written_off
+       and account_id is null and status not in ('cancelled', 'pending_payment') order by created_at, id limit 1);
+  end if;
+  insert into payments (restaurant_id, session_id, amount, tip, method, actor_email, client_ref)
+  values (p_restaurant, v_split.session_id, (p_expected_cents + p_tip_cents) / 100.0,
+    round(p_tip_cents / 100.0 + v_old_tip, 2), p_method, p_actor, p_ref)
+  returning id into v_payment;
+  perform set_config('tabletap.allocation_scope', v_scope, true);
+  -- Allocated now, not at commit: the close below reads coverage, and the
+  -- next slot's gratuity share must see this one's.
+  perform public.allocate_receipt(v_payment);
+  update bill_split_slots set payment_id = v_payment, paid_at = now() where split_id = p_split and share_no = any(p_slots);
+  perform public.close_divided_bill_v3(p_split);
+  return jsonb_build_object('outcome', 'collected', 'payment', v_payment,
+    'amount_cents', p_expected_cents + p_tip_cents, 'tip_cents', p_tip_cents);
+end; $$;
+revoke all on function public.collect_split_slots_v1(uuid, uuid, int, int[], int, text, int, text, text, text) from public, anon, authenticated;
+grant execute on function public.collect_split_slots_v1(uuid, uuid, int, int[], int, text, int, text, text, text) to service_role;
+
+-- Closes a model-2 split once every slot is paid and the money really covers
+-- its orders. The orders' pay_method is the one method every slot used, or
+-- none when they mixed: it is never made up (the old close wrote 'card').
+create or replace function public.close_divided_bill_v3(p_split uuid)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare v_split bill_splits%rowtype; v_methods text[];
+begin
+  select * into v_split from bill_splits where id = p_split and model_version = 2;
+  if not found then return false; end if;
+  perform public.lock_restaurant_money(v_split.restaurant_id);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  perform pg_advisory_xact_lock(hashtextextended(v_split.session_id::text, 0));
+  select * into v_split from bill_splits where id = p_split for update;
+  if v_split.status = 'done' then return true; end if;
+  if v_split.status <> 'locked' then return false; end if;
+  if exists (select 1 from bill_split_slots where split_id = p_split and payment_id is null) then return false; end if;
+  perform 1 from orders where id = any(v_split.order_ids) and restaurant_id = v_split.restaurant_id order by id for update;
+  if exists (select 1 from orders o where o.id = any(v_split.order_ids) and o.restaurant_id = v_split.restaurant_id
+    and not o.paid and not o.written_off and o.status not in ('cancelled', 'pending_payment') and o.account_id is null
+    and public.retained_order_coverage(v_split.restaurant_id, o.id) < o.total) then return false; end if;
+  select array_agg(distinct p.method) into v_methods from bill_split_slots s join payments p on p.id = s.payment_id
+   where s.split_id = p_split;
+  update orders set paid = true, pay_method = case when cardinality(v_methods) = 1 then v_methods[1] end
+   where id = any(v_split.order_ids) and restaurant_id = v_split.restaurant_id
+     and not paid and not written_off and account_id is null and status not in ('cancelled', 'pending_payment');
+  update bill_splits set status = 'done' where id = p_split;
+  return true;
+end; $$;
+revoke all on function public.close_divided_bill_v3(uuid) from public, anon, authenticated;
+grant execute on function public.close_divided_bill_v3(uuid) to service_role;
