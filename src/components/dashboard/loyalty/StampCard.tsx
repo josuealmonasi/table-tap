@@ -5,7 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
 import { useQrCamera } from "@/hooks/useQrCamera";
 import { codeFromScan, normalizeCode } from "@/lib/loyalty/code";
-import { redeemRequest, forgetRedeemRequest } from "@/lib/loyalty/redeem-request";
+import { useLoyaltyCommand } from "@/hooks/useLoyaltyCommand";
 import StampOutcome, { type Outcome } from "./StampOutcome";
 
 interface StampCardProps {
@@ -24,52 +24,16 @@ export default function StampCard({ buttonClass = "tt-btn tt-btn-ghost tt-btn-sm
   const t = useT();
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
-  const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const sending = useRef(false);
   const found = useRef<string | null>(null);
+  const { busy, run } = useLoyaltyCommand();
 
   async function send(path: string, code: string, kind: Outcome["kind"], step?: number, round?: number | null): Promise<void> {
-    if (sending.current) return;
-    sending.current = true;
-    setBusy(true);
     setError(null);
-    let request: ReturnType<typeof redeemRequest> | undefined;
-    try {
-      if (kind === "redeem") {
-        if (typeof round !== "number" || step === undefined) {
-          setError(t("apiErr.loyaltyRoundChanged"));
-          return;
-        }
-        try {
-          request = redeemRequest(code, round, step);
-        } catch {
-          setError(t("loyalty.saveRetry"));
-          return;
-        }
-      }
-      const res = await fetch(path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(request ?? { code }),
-      });
-      const data = await res.json();
-      if (!res.ok) setError(data.error ?? t("apiErr.generic"));
-      else {
-        setOutcome({ kind, code, ...data });
-        // The answer is already on screen. A cleanup failure must not turn a
-        // successful handover into an error inviting another try.
-        if (request) { try { forgetRedeemRequest(request); } catch {} }
-      }
-    } catch {
-      // Stamps are never queued: replay on reconnect is a second visit.
-      // A redemption keeps its saved key until the same handover is answered.
-      setError(t("done.networkError"));
-    } finally {
-      sending.current = false;
-      setBusy(false);
-    }
+    const answer = await run({ path, body: { code }, ...(kind === "redeem" && { redeem: { code, round, step } }) });
+    if (answer.status === "done") setOutcome({ kind, code, ...answer.data } as Outcome);
+    else if (answer.status !== "busy") setError(answer.error);
   }
 
   const scanning = open && !outcome && !busy && !error;
