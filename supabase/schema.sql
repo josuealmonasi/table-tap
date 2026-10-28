@@ -11870,11 +11870,13 @@ create constraint trigger check_order_return_operations after insert or update o
 create or replace function public.refund_operation_progress_v1(p_operation uuid)
 returns jsonb language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
-    'outstanding_cents', round(o.amount * 100)::int - coalesce((select sum(c) from (
+    -- Cash and terminal have no provider evidence: their own confirmation is it.
+    'outstanding_cents', case when o.source <> 'stripe' then case when o.status = 'succeeded' then 0 else round(o.amount * 100)::int end
+      else round(o.amount * 100)::int - coalesce((select sum(c) from (
         select distinct on (a.stripe_refund_id) round(a.amount * 100)::int c from refund_attempts a
         where a.operation_id = o.id and a.provider_status = 'succeeded' and a.stripe_refund_id is not null
           and not exists (select 1 from refund_failures f where f.restaurant_id = a.restaurant_id and f.stripe_refund_id = a.stripe_refund_id)
-        order by a.stripe_refund_id, a.attempt_no) z), 0),
+        order by a.stripe_refund_id, a.attempt_no) z), 0) end,
     'unresolved', exists (select 1 from refund_attempts a where a.operation_id = o.id and a.origin = 'app'
       and (a.provider_status is null or a.provider_status not in ('succeeded', 'failed', 'canceled'))))
   from refund_operations o where o.id = p_operation;
