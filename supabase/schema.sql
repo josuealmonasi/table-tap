@@ -8607,7 +8607,7 @@ begin
   end if;
   if p_status not in ('succeeded', 'pending', 'requires_action', 'failed', 'canceled') then raise exception 'invalid provider outcome'; end if;
   if p_refunds is null or jsonb_typeof(p_refunds) <> 'array' then raise exception 'provider evidence required'; end if;
-  v_first := p_refunds->0->>'id';
+  v_first := null;
   v_due := round(d.amount * 100);
   if p_status = 'succeeded' then
     if jsonb_array_length(p_refunds) = 0 then raise exception 'provider evidence required'; end if;
@@ -8620,6 +8620,8 @@ begin
       end if;
       -- A refund a return operation counts is that return's (returns audit 1).
       continue when public.refund_owned_by_return_v1(p_restaurant, e->>'id');
+      -- The due names a refund it counted, never one a return owns (verification 2, V1).
+      v_first := coalesce(v_first, e->>'id');
       -- Once a refund failed it stays inactive, however often it is reported.
       insert into refund_due_coverage (restaurant_id, due_id, attempt_id, stripe_refund_id, amount_cents, active)
         values (p_restaurant, d.id, p_attempt, e->>'id', (e->>'amount_cents')::int,
@@ -11921,7 +11923,7 @@ returns jsonb language sql stable security definer set search_path = public as $
         select distinct on (a.stripe_refund_id) round(a.amount * 100)::int c from refund_attempts a
         where a.operation_id = o.id and a.provider_status = 'succeeded' and a.stripe_refund_id is not null
           and not exists (select 1 from refund_failures f where f.restaurant_id = a.restaurant_id and f.stripe_refund_id = a.stripe_refund_id)
-        order by a.stripe_refund_id, a.attempt_no) z), 0) end,
+        order by a.stripe_refund_id, a.attempt_no, a.id) z), 0) end,
     'unresolved', exists (select 1 from refund_attempts a where a.operation_id = o.id and a.origin = 'app'
       and (a.provider_status is null or a.provider_status not in ('succeeded', 'failed', 'canceled'))))
   from refund_operations o where o.id = p_operation;
@@ -11952,6 +11954,10 @@ begin
   v := public.refund_operation_progress_v1(o.id);
   if (v->>'outstanding_cents')::int = 0 and not (v->>'unresolved')::boolean then
     if o.status <> 'succeeded' then
+      -- A fee snapshot read before this completion cannot reconcile it: the
+      -- charge's revision moves on, as a failure moves it (verification 2, V5).
+      -- Queued too, so an interrupted request is still reconciled later.
+      if o.source = 'stripe' then perform public.enqueue_fee_reconcile(o.restaurant_id, o.stripe_payment_intent); end if;
       -- The header names the latest refund that still counts, app or manual,
       -- so completion evidence and fee readers find it (returns audit 4).
       update refund_operations set status = 'succeeded', completed_at = now(), fee_verification_pending = true,
@@ -12138,6 +12144,12 @@ begin
         and (select count(distinct b.stripe_refund_id) from refund_attempts b where b.operation_id = o.id
           and b.provider_status = 'succeeded' and b.stripe_refund_id is not null) = 1)) then
     raise exception 'a succeeded refund has no success time';
+  end if;
+  -- Every writer now keeps one refund to one obligation; one that predates it
+  -- would be counted twice, so it fails the read (verification 2, V7).
+  if exists (select 1 from refund_attempts a where a.restaurant_id = p_restaurant and a.stripe_refund_id is not null
+      group by a.stripe_refund_id having count(distinct a.operation_id) > 1) then
+    raise exception 'a provider refund is counted by two returns';
   end if;
   -- A completed operation's events must be exactly its amount: money a report
   -- cannot place is a failed read, never a quiet day (verification 7).

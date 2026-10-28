@@ -90,4 +90,10 @@ describe("returns audit (Codex, 2026-10-28)", () => {
     expect(events).toContain("raise exception 'a completed return does not reconcile with its refunds'");
     expect(events).toContain("distinct on (o.id, a.stripe_refund_id)");
   });
+  it("verification 2: V1 due id, V5 fee revision on completion, V7 one owner per refund", () => {
+    expect(definition("finish_refund_due_attempt_v2")).toContain("v_first := coalesce(v_first, e->>'id');");
+    expect(definition("complete_refund_operation_v1")).toContain("perform public.enqueue_fee_reconcile(o.restaurant_id, o.stripe_payment_intent)");
+    expect(definition("order_return_events_v1")).toContain("raise exception 'a provider refund is counted by two returns'");
+    expect(definition("refund_operation_progress_v1")).toContain("order by a.stripe_refund_id, a.attempt_no, a.id");
+  });
 });
