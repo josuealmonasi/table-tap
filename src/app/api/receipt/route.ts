@@ -78,13 +78,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const db = createAdminClient();
-  const { data: found } = await db
+  const { data: found, error: readError } = await db
     .from("orders")
     .select(
       "id, restaurant_id, table_id, items, subtotal, discount, service_fee, tip, total, currency, table_label, created_at, pay_method, paid",
     )
     .in("id", ids)
     .order("created_at", { ascending: true });
+  // A failed read is not "no such order".
+  if (readError) return await apiError("apiErr.generic", 503);
 
   // Knowing the order's unguessable id is what proves this is your order —
   // the same trust boundary the tracker already uses.
@@ -94,6 +96,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const orders = (found ?? []).filter(o => o.restaurant_id === first?.restaurant_id);
   if (orders.length === 0) return await apiError("apiErr.notFound", 404);
   const order = orders[0];
+  // One receipt, one currency, by email as on paper (paths audit #8): MX$100
+  // and US$10 from the same restaurant were added up and sent as MX$110.
+  if (orders.some(o => o.currency !== order.currency)) return await apiError("apiErr.notFound", 404);
   // Paper confirms a complete paid bill. A partial read or mixed currency
   // cannot become a plausible-looking total on a saved receipt.
   if (printing && (orders.length !== new Set(ids).size || (Array.isArray(orderIds) && orderIds.length > 40)
