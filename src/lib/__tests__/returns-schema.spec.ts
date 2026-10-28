@@ -64,9 +64,11 @@ describe("returns audit (Codex, 2026-10-28)", () => {
   });
   it("2: no manual attribution while an app refund is unresolved", () => {
     const record = definition("record_order_return_coverage_v1");
+    expect(record.indexOf("->>'unresolved')::boolean")).toBeGreaterThan(0);
     expect(record.indexOf("->>'unresolved')::boolean")).toBeLessThan(record.indexOf("insert into refund_attempts"));
     expect(record).toContain("return jsonb_build_object('outcome', 'pending');");
     // Saved evidence replays before the guard, so a retry can finish (verification 3).
+    expect(record.indexOf("if x.id is not null then")).toBeGreaterThan(0);
     expect(record.indexOf("if x.id is not null then")).toBeLessThan(record.indexOf("->>'unresolved')::boolean"));
   });
   it("4: completion names a refund that still counts, and the fee reconciler finds every one", () => {
@@ -81,8 +83,10 @@ describe("returns audit (Codex, 2026-10-28)", () => {
   it("8: an unknown tip breakdown sends only the tip share to review", () => {
     const prepare = definition("return_on_order_v1");
     // Food returns on such a receipt plan exactly; only a tip share goes to a person.
-    expect(prepare.indexOf("if v_unknown and v_tr > 0 then return jsonb_build_object('outcome', 'review'); end if;"))
-      .toBeLessThan(prepare.indexOf("insert into order_adjustments"));
+    const guard = prepare.indexOf("if v_unknown and v_tr > 0 then return jsonb_build_object('outcome', 'review'); end if;");
+    // Present first: a missing guard is -1, which is "before" anything (Codex, evidence review 2).
+    expect(guard).toBeGreaterThan(0);
+    expect(guard).toBeLessThan(prepare.indexOf("insert into order_adjustments"));
   });
   it("verification 4, 6, 7: no synthetic evidence beside pieces; provider time; one coverage rule", () => {
     expect(definition("start_refund_attempt")).toContain("not exists (select 1 from refund_attempts x where x.operation_id = o.id)");
