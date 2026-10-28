@@ -900,6 +900,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
   receipt: {
     askTitle: "Want your receipt?",
     askBody: "We can email it to you. Nothing else — no account, no list.",
+    askBodyPrint: "Print it or save it as a PDF.",
     placeholder: "you@email.com",
     promise: "Used once, for this receipt, and never stored. We will not write to you again.",
     send: "Send my receipt",
@@ -2540,6 +2541,36 @@ votes: "Votes",
   footer: {
     privacy: "Privacy",
     rights: "All rights reserved.",
+  },
+  stockSearch: {
+    search: "Search ingredients",
+    empty: "No ingredients match your search.",
+  },
+  couponSearch: {
+    search: "Search by code",
+    status: "Coupon status",
+    all: "All coupons",
+    active: "Active",
+    expired: "Expired",
+    paused: "Paused",
+    expiredHint: "Outside their dates: includes codes that have not started yet.",
+    empty: "No coupons match your search and filter.",
+  },
+  heldSalesView: {
+    views: "Saved sales views",
+    pending: "Awaiting approval ({count})",
+    history: "History",
+    emptyHistory: "No approved sales on this page.",
+    previous: "Previous",
+    next: "Next",
+    page: "Page {page}",
+  },
+  receiptPrint: {
+    action: "Print or save receipt",
+    hint: "Choose a printer or Save as PDF in the print dialog.",
+    loading: "Preparing receipt…",
+    blocked: "Allow pop-ups to print or save your receipt.",
+    failed: "We couldn't open your receipt. Try again.",
   },
 };
 

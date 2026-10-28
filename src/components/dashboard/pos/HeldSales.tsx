@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useT, useLocale } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { dateLocale, formatMoney } from "@/lib/format";
@@ -8,6 +8,7 @@ import { reviewSale, type QueuedOfflineSale } from "@/lib/offline-review";
 import { orderCode } from "@/lib/types";
 import type { RecoveryDetails } from "./RecoveryForm";
 import RecoveryReview from "./RecoveryReview";
+import { useHeldSales } from "@/hooks/useHeldSales";
 
 interface Props { restaurantId: string; currency: string }
 
@@ -16,30 +17,15 @@ export default function HeldSales({ restaurantId, currency }: Props) {
   const { locale } = useLocale();
   const toast = useToast();
   const offline = useOfflineSales(restaurantId);
-  const [rows, setRows] = useState<QueuedOfflineSale[]>([]);
+  const [history, setHistory] = useState(false);
+  const [page, setPage] = useState(0);
+  const { rows, pendingCount, loading, error, hasMore, reload, refreshPending } = useHeldSales(restaurantId, history, page);
   const [selected, setSelected] = useState<QueuedOfflineSale | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const load = useCallback(async (signal?: AbortSignal) => {
-    try {
-      const res = await fetch("/api/pos/recover", { signal, cache: "no-store" });
-      if (!res.ok) throw new Error("Could not read held sales");
-      const data = await res.json();
-      if (!signal?.aborted) { setRows(data.sales); setError(false); }
-    } catch { if (!signal?.aborted) setError(true); }
-    finally { if (!signal?.aborted) setLoading(false); }
-  }, []);
-  useEffect(() => {
-    const controller = new AbortController();
-    void load(controller.signal);
-    const timer = setInterval(() => void load(controller.signal), 30_000);
-    return () => { controller.abort(); clearInterval(timer); };
-  }, [load]);
 
   async function sendLocal() {
     setBusy(true);
-    try { await offline.flush(); await load(); }
+    try { await offline.flush(); await refreshPending(); }
     finally { setBusy(false); }
   }
 
@@ -56,20 +42,26 @@ export default function HeldSales({ restaurantId, currency }: Props) {
         || data.currency !== details.currency || data.method !== sale.method || data.onAccount) {
         toast(t("pos.saleMismatch", { collected: sale.charge.total, settled: data.total ?? "—" }), "error"); return;
       }
-      setSelected(null); await load(); toast(t("recovery.done"));
+      setSelected(null); await refreshPending(); toast(t("recovery.done"));
     } catch { toast(t("done.networkError"), "error"); }
     finally { setBusy(false); }
   }
 
   return <>
     <section className="tt-section"><p>{t("recovery.intro")}</p><p className="tt-muted">{t("recovery.deviceOnly")}</p>
+      <div role="group" aria-label={t("heldSalesView.views")} style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <button className="tt-btn tt-btn-secondary" aria-pressed={!history} onClick={() => setHistory(false)}>
+          {t("heldSalesView.pending", { count: pendingCount ?? "—" })}
+        </button>
+        <button className="tt-btn tt-btn-secondary" aria-pressed={history} onClick={() => { setPage(0); setHistory(true); }}>{t("heldSalesView.history")}</button>
+      </div>
       {offline.held.length > 0 && <div role="status"><p>{t("recovery.local", { count: offline.held.length })}</p>
         {offline.held.map(s => <p key={s.posRef}>{orderCode(s.posRef)} · {s.error}</p>)}
         <button className="tt-btn tt-btn-secondary" disabled={busy} onClick={sendLocal}>{t("recovery.send")}</button>
       </div>}
       {loading && <p role="status">{t("common.loading")}</p>}
-      {error && <p role="alert">{t("done.networkError")} <button className="tt-btn tt-btn-secondary" onClick={() => void load()}>{t("recovery.reload")}</button></p>}
-      {!loading && !error && !rows.length && <p>{t("recovery.empty")}</p>}
+      {error && <p role="alert">{t("done.networkError")} <button className="tt-btn tt-btn-secondary" onClick={() => void reload()}>{t("recovery.reload")}</button></p>}
+      {!loading && !error && !rows.length && <p>{t(history ? "heldSalesView.emptyHistory" : "recovery.empty")}</p>}
       {rows.map(row => {
         const sale = reviewSale(row, restaurantId);
         return <div key={row.pos_ref} className="tt-bill-row tt-bill-approval">
@@ -79,6 +71,11 @@ export default function HeldSales({ restaurantId, currency }: Props) {
           {!row.approved_at && <button className="tt-btn tt-btn-primary tt-btn-sm" disabled={busy} onClick={() => setSelected(row)}>{t("recovery.review")}</button>}
         </div>;
       })}
+      {history && <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+        <button className="tt-btn tt-btn-secondary" disabled={loading || page === 0} onClick={() => setPage(p => p - 1)}>{t("heldSalesView.previous")}</button>
+        <span>{t("heldSalesView.page", { page: page + 1 })}</span>
+        <button className="tt-btn tt-btn-secondary" disabled={loading || error || !hasMore} onClick={() => setPage(p => p + 1)}>{t("heldSalesView.next")}</button>
+      </div>}
     </section>
     {selected && <RecoveryReview key={selected.pos_ref} sale={reviewSale(selected, restaurantId)} currentCurrency={currency} busy={busy}
       onClose={() => { if (!busy) setSelected(null); }} onSubmit={details => void recover(details)} />}

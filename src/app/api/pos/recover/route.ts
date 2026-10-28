@@ -26,10 +26,25 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (!data) return await apiError("apiErr.notFound", 404);
     return NextResponse.json({ comparison: await compareOfflineSale(db, actor.restaurantId, data as QueuedOfflineSale) });
   }
-  const rows = await everyRow<QueuedOfflineSale>((a, b) => createAdminClient().from("offline_sale_queue")
+  const history = req.nextUrl.searchParams.get("view") === "history";
+  const page = req.nextUrl.searchParams.get("page") ?? "0";
+  if (history && (!/^\d+$/.test(page) || Number(page) > 1_000_000)) return await apiError("apiErr.invalidRequest", 400);
+  const query = () => createAdminClient().from("offline_sale_queue")
     .select("pos_ref, body, collector, currency, submitted_by, reason, approved_by, approved_at")
-    .eq("restaurant_id", actor.restaurantId).order("received_at", { ascending: false }).order("pos_ref").range(a, b), "held sales");
-  return NextResponse.json({ sales: rows });
+    .eq("restaurant_id", actor.restaurantId);
+  if (history) {
+    const size = 20;
+    const from = Number(page) * size;
+    const { data, error } = await query().not("approved_at", "is", null)
+      .order("approved_at", { ascending: false }).order("pos_ref").range(from, from + size);
+    if (error) return await apiError("apiErr.generic", 503);
+    return NextResponse.json({ restaurantId: actor.restaurantId, sales: (data ?? []).slice(0, size), hasMore: (data?.length ?? 0) > size });
+  }
+  try {
+    const rows = await everyRow<QueuedOfflineSale>((a, b) => query().is("approved_at", null)
+      .order("received_at", { ascending: false }).order("pos_ref").range(a, b), "held sales");
+    return NextResponse.json({ restaurantId: actor.restaurantId, sales: rows });
+  } catch { return await apiError("apiErr.generic", 503); }
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {

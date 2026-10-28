@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
 import { EMAIL_MAX, isValidEmail } from "@/lib/email";
+import ReceiptPrint from "./ReceiptPrint";
 
 /**
- * Offers a receipt by email, once, after paying.
+ * Offers a receipt by email or print/save, once, after paying.
  *
  * Easy to leave: the backdrop closes it, Escape closes it, and there is a
  * plain "no thanks" — somebody who has just paid is on their way out, and a
@@ -18,16 +19,16 @@ import { EMAIL_MAX, isValidEmail } from "@/lib/email";
  * is written where the typing happens because that is where it is decided,
  * not in a policy nobody opens.
  */
-export default function ReceiptPrompt({
-  orderIds,
-  open,
-  onClose,
-}: {
+interface ReceiptPromptProps {
   /** One order, or every order a table settled at once. */
   orderIds: string[];
+  /** False when no mail provider is configured: only print/save is offered. */
+  email?: boolean;
   open: boolean;
   onClose: () => void;
-}) {
+}
+
+export default function ReceiptPrompt({ orderIds, email: canEmail = true, open, onClose }: ReceiptPromptProps) {
   const t = useT();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -64,7 +65,25 @@ export default function ReceiptPrompt({
 
   return (
     <Modal open={open} onClose={onClose} maxWidth={400} label={t("receipt.askTitle")}>
-      {sent ? (
+      {!canEmail ? (
+        <>
+          <h3 className="tt-serif" style={{ marginTop: 0 }}>
+            {t("receipt.askTitle")}
+          </h3>
+          <p className="tt-muted" style={{ fontSize: 14, marginTop: 0 }}>
+            {t("receipt.askBodyPrint")}
+          </p>
+          <ReceiptPrint orderIds={orderIds} disabled={false} />
+          <button
+            type="button"
+            className="tt-btn tt-btn-ghost"
+            style={{ width: "100%", marginTop: 6 }}
+            onClick={onClose}
+          >
+            {t("receipt.noThanks")}
+          </button>
+        </>
+      ) : sent ? (
         <>
           <h3 className="tt-serif" style={{ marginTop: 0 }}>
             {t("receipt.sentTitle")}
@@ -72,6 +91,7 @@ export default function ReceiptPrompt({
           <p className="tt-muted" style={{ fontSize: 14 }}>
             {t("receipt.sentBody", { email })}
           </p>
+          <ReceiptPrint orderIds={orderIds} disabled={false} />
           <button
             className="tt-btn tt-btn-primary"
             style={{ width: "100%", marginTop: 16 }}
@@ -126,6 +146,7 @@ export default function ReceiptPrompt({
           >
             {busy ? t("receipt.sending") : t("receipt.send")}
           </button>
+          <ReceiptPrint orderIds={orderIds} disabled={busy} />
           <button
             type="button"
             className="tt-btn tt-btn-ghost"

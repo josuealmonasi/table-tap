@@ -897,6 +897,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
   receipt: {
     askTitle: "¿Quieres tu recibo?",
     askBody: "Te lo mandamos por correo. Nada más — sin cuenta, sin listas.",
+    askBodyPrint: "Imprímelo o guárdalo como PDF.",
     placeholder: "tu@correo.com",
     promise: "Se usa una vez, para este recibo, y no lo guardamos. No te volvemos a escribir.",
     send: "Enviar mi recibo",
@@ -2520,5 +2521,35 @@ votes: "Votos",
   footer: {
     privacy: "Privacidad",
     rights: "Todos los derechos reservados.",
+  },
+  stockSearch: {
+    search: "Buscar ingredientes",
+    empty: "Ningún ingrediente coincide con tu búsqueda.",
+  },
+  couponSearch: {
+    search: "Buscar por código",
+    status: "Estado del cupón",
+    all: "Todos los cupones",
+    active: "Activos",
+    expired: "Vencidos",
+    paused: "Pausados",
+    expiredHint: "Fuera de sus fechas: incluye códigos que todavía no empiezan.",
+    empty: "Ningún cupón coincide con tu búsqueda y filtro.",
+  },
+  heldSalesView: {
+    views: "Vistas de ventas guardadas",
+    pending: "Por aprobar ({count})",
+    history: "Historial",
+    emptyHistory: "No hay ventas aprobadas en esta página.",
+    previous: "Anterior",
+    next: "Siguiente",
+    page: "Página {page}",
+  },
+  receiptPrint: {
+    action: "Imprimir o guardar recibo",
+    hint: "Elige una impresora o Guardar como PDF al imprimir.",
+    loading: "Preparando recibo…",
+    blocked: "Permite las ventanas emergentes para imprimir o guardar tu recibo.",
+    failed: "No pudimos abrir tu recibo. Intenta de nuevo.",
   },
 };

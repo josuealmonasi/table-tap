@@ -153,7 +153,7 @@ export default function OrderingApp({
     offering,
     dismiss: dismissReceipt,
     paidNow,
-  } = useReceiptOffer(receipts, trackOrder?.id ?? null, bill);
+  } = useReceiptOffer(trackOrder?.id ?? null, bill);
 
   // "Anything else?" — asked on the way to ordering, and asked once.
   const offered = useUpsell(screen === "cart", restaurant.id, cart.items, items, ratings);
@@ -293,7 +293,7 @@ export default function OrderingApp({
           />
         )}
         <OwingElsewhereModal owing={owingElsewhere} currency={restaurant.currency} />
-        {offering && <ReceiptPrompt orderIds={offering} open onClose={dismissReceipt} />}
+        {offering && <ReceiptPrompt orderIds={offering} email={receipts} open onClose={dismissReceipt} />}
         <DishOverlays
           screens={screens}
           currency={restaurant.currency}
