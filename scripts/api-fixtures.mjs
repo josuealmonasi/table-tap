@@ -283,11 +283,18 @@ export async function setup(env, base) {
 
   const phoneMembers = memberFixture(admin, restaurant.id);
 
-  // An open table session, which is what /api/session asks for by id.
-  const { data: session } = await admin
+  // An open table session, which is what /api/session asks for by id. Not a
+  // divided one: the seed leaves a bill split between three people with a part
+  // paid, and every collection on it is rightly refused ("split"), so a fixture
+  // that sat there by chance failed the waiter's part-payment cases.
+  const { data: dividing } = await admin
+    .from("bill_splits").select("session_id")
+    .eq("restaurant_id", restaurant.id).eq("model_version", 2).in("status", ["proposed", "locked"]);
+  const divided = new Set((dividing ?? []).map(d => d.session_id));
+  const { data: openSessions } = await admin
     .from("table_sessions").select("id, table_id")
-    .eq("restaurant_id", restaurant.id).is("closed_at", null)
-    .limit(1).maybeSingle();
+    .eq("restaurant_id", restaurant.id).is("closed_at", null);
+  const session = (openSessions ?? []).find(s => !divided.has(s.id)) ?? null;
 
   // Admission needs the sitting and its actual table to agree. The old
   // fixture paired the first table with whichever sitting happened to arrive.

@@ -91,9 +91,13 @@ export async function readSlotReceipt(db: Database, id: string, restaurantId?: s
   if (slotError) throw new ReceiptReadError(503);
   if (!slots?.length) throw new ReceiptReadError(404);
   const { data: split, error: splitError } = await db.from("bill_splits")
-    .select("id, restaurant_id, table_id, session_id, model_version, currency")
+    .select("id, restaurant_id, session_id, model_version, currency")
     .eq("id", slots[0].split_id).eq("restaurant_id", payment.restaurant_id).maybeSingle();
   if (splitError) throw new ReceiptReadError(503);
+  // The table is the sitting's: bill_splits has no table column of its own.
+  const { data: sitting, error: sittingError } = split ? await db.from("table_sessions").select("table_id")
+    .eq("id", split.session_id).eq("restaurant_id", payment.restaurant_id).maybeSingle() : { data: null, error: null };
+  if (sittingError) throw new ReceiptReadError(503);
   if (!split || split.model_version !== 2 || split.session_id !== payment.session_id || split.currency !== payment.currency
     || slots.some(s => s.restaurant_id !== payment.restaurant_id || s.split_id !== split.id)) throw new ReceiptReadError(404);
   const frozen = slots.reduce((sum, s) => sum + s.amount_cents, 0);
@@ -104,6 +108,6 @@ export async function readSlotReceipt(db: Database, id: string, restaurantId?: s
     || charged - tip > frozen || slots.some(s => !Number.isInteger(s.share_no) || s.share_no < 0 || s.share_no > 19
       || !Number.isSafeInteger(s.amount_cents) || s.amount_cents <= 0)
     || new Set(slots.map(s => s.share_no)).size !== slots.length) throw new ReceiptReadError(503);
-  return { orders: [], restaurantId: payment.restaurant_id, tableId: split.table_id,
+  return { orders: [], restaurantId: payment.restaurant_id, tableId: sitting?.table_id ?? null,
     payment: { ...payment, slots: slots.map(s => s.share_no).sort((a, b) => a - b) } };
 }
