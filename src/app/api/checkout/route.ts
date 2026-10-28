@@ -20,6 +20,7 @@ import { orderableNow } from "@/lib/checkout/orderable-now";
 import { claimCheckoutCoupon, logCheckoutCoupon } from "@/lib/checkout/claim-coupon";
 import { checkoutLineItems } from "@/lib/checkout/line-items";
 import { openCardSession } from "@/lib/checkout/card-session";
+import { resumePayNowCheckout } from "@/lib/checkout/paynow-retry";
 import { checkoutTip, type CheckoutBody } from "@/lib/checkout/checkout-body";
 import { verifiedLines } from "@/lib/checkout/verified-lines";
 import { checkoutOrderRow } from "@/lib/checkout/order-row";
@@ -67,6 +68,9 @@ export async function POST(req: NextRequest) {
     const hash = memberHash(req);
     const surface = `checkout:${tableId ?? ""}:${hash ?? ""}`;
     const intent = payLater && ref ? { restaurantId, ref, scope: orderRequestScope(surface, body), legacyScope: surface } : null;
+    // Keep deferred scopes unchanged: saved intents must still match. Only a
+    // pay-now scope adds the mode, so it cannot resume a deferred order.
+    const cardScope = !payLater && ref ? orderRequestScope(`${surface}:payLater:false`, body) : null;
     if (intent) {
       const previous = await readOrderIntent(intent);
       if (previous?.conflict) return await apiError("apiErr.retryConflict", 409);
@@ -85,6 +89,14 @@ export async function POST(req: NextRequest) {
 
     if (rErr || !restaurant) {
       return await apiError("apiErr.restaurantNotFound", 404);
+    }
+
+    const cardRetry = cardScope && ref ? {
+      restaurantId, ref, scope: cardScope, stripeAccount: restaurant.stripe_account_id,
+    } : null;
+    if (cardRetry) {
+      const previous = await resumePayNowCheckout(cardRetry);
+      if (previous) return previous;
     }
 
     // Kill switch: the owner paused orders (maybe after this page loaded).
@@ -277,6 +289,7 @@ export async function POST(req: NextRequest) {
       .insert({
         stock_managed: true,
         stock_reservation_id: stockReservationId,
+        ...(cardRetry ? { request_ref: ref, request_scope: cardScope } : {}),
         ...checkoutOrderRow({
           restaurantId,
           table,
@@ -297,6 +310,11 @@ export async function POST(req: NextRequest) {
 
     if (oErr || !order) {
       await held.giveBack();
+      // Both requests can see no order. The unique reference picks one; give
+      // back only this loser's claims before returning the winner's page.
+      if (cardRetry && oErr?.code === "23505" && oErr.message.includes("orders_request_once")) {
+        return (await resumePayNowCheckout(cardRetry)) ?? await apiError("apiErr.retryConflict", 409);
+      }
       return await apiError("apiErr.orderCreate", 500);
     }
     // A pay-later order is the kitchen's now. A card order is still ours until

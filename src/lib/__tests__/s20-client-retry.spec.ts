@@ -64,9 +64,12 @@ it("a first send settles on any refusal; a retry never does on its own", () => {
     expect(refusalSettles(status, true), `retry ${status}`).toBe(false);
   }
 });
-it("K4 card checkout retains its existing request shape", async () => {
+it("K4 card checkout carries a reference now the server keeps it (paths #3), and a first refusal lets it go", async () => {
   state.fetch.mockResolvedValue(Response.json({ error: "no card" }, { status: 409 }));
-  await useMenu().checkout(false); expect(bodies()[0]).not.toHaveProperty("ref");
+  const cart = useMenu();
+  await cart.checkout(false); await cart.checkout(false);
+  expect(bodies()[0].ref).toEqual(expect.any(String));
+  expect(bodies()[1].ref).not.toBe(bodies()[0].ref);
 });
 it.each(["purchases", "waste"])("K6 %s keeps its frozen request through a network or server failure", async path => {
   const send = useCostsSend(true);
@@ -95,4 +98,28 @@ it("a refused first order still says why", async () => {
   state.fetch.mockResolvedValueOnce(Response.json({ error: "La cocina está cerrada" }, { status: 409 }));
   await cart.checkout(true);
   expect(cart.input.notify).toHaveBeenCalledWith("La cocina está cerrada");
+});
+it("paths #3: a card payment resends its reference after a lost reply, with the cart as it is now", async () => {
+  // The first page may exist; the server finds it by the reference. A cart
+  // changed meanwhile goes as it is, so the server can say it changed.
+  const cart = useMenu();
+  state.fetch.mockRejectedValueOnce(new Error("lost"))
+    .mockResolvedValueOnce(Response.json({ url: "https://pay/one", orderId: "one" }))
+    .mockResolvedValueOnce(Response.json({ url: "https://pay/two", orderId: "two" }));
+  vi.stubGlobal("window", { location: { href: "" } });
+  await cart.checkout(false);
+  cart.input.orderNote = "Changed";
+  await cart.checkout(false); await cart.checkout(false);
+  const [lost, retry, next] = bodies();
+  expect(lost.ref).toEqual(expect.any(String));
+  expect(retry.ref).toBe(lost.ref); expect(retry.note).toBe("Changed");
+  expect(next.ref).not.toBe(lost.ref);
+});
+it("paths #3: a refusal of a card retry keeps its reference", async () => {
+  const cart = useMenu();
+  state.fetch.mockResolvedValueOnce(Response.json({ error: "unknown" }, { status: 503 }))
+    .mockResolvedValueOnce(Response.json({ error: "apiErr.tooManyAttempts" }, { status: 429 }))
+    .mockResolvedValueOnce(Response.json({ error: "x" }, { status: 503 }));
+  await cart.checkout(false); await cart.checkout(false); await cart.checkout(false);
+  expect(new Set(bodies().map(b => b.ref)).size).toBe(1);
 });
