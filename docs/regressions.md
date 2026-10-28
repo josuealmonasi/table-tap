@@ -34,6 +34,7 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| A manual return keeps its provider date when attributed later (Returns V6) | Discovering Monday's successful manual refund on Tuesday moved its money into Tuesday's reports |
 | Completed returns preserve the eaten sale and its exact component plan (Returns 7b) | Cancelling served food would release stock, while the return route had no preparation boundary |
 | A return reference keeps its exact reviewed request (Returns 7b) | A lost full-return reply could not replay after the retained total reached zero |
 | Card discovery precedes attempts and only outstanding money is sent (Returns 7b) | A manual 40 was ignored before asking Stripe for another 100, or accepted as the whole promise |
@@ -5575,3 +5576,12 @@ completion stamps the latest refund that still counts and the reconciler matches
 any of an operation's succeeded refunds. An offline replay after a return now
 acknowledges the collected amount. A receipt that never recorded its tip goes to
 a person before any plan is made.
+
+### Returns V6 — a manual refund keeps its provider date
+
+Stripe's successful manual refund and the report's day had to agree. Manual
+attribution now sends `refund.created` as epoch seconds in `succeeded_at` only
+when Stripe reports success. Pending manual evidence carries no date. App
+attempts still send no date, including recovery after a pending response, so
+SQL uses the verification time. `return-success-time.spec.ts` checks the RPC
+payloads; SQL keeps the first saved date and caps future evidence at now.

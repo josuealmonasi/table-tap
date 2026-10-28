@@ -14,7 +14,7 @@ beforeEach(() => {
   state.rpc.mockImplementation(fixture.rpc); state.from.mockImplementation(fixture.from);
   fixture.tables.refund_operations = [{ id: ORDER, restaurant_id: "r1", source: "stripe", status: "pending", currency: "USD",
     stripe_account_id: "acct_original", stripe_payment_intent: "pi_original", original_collector: "cashier" }];
-  state.retrieve.mockResolvedValue({ id: "re_manual", amount: 4000, currency: "usd", payment_intent: "pi_original", status: "succeeded", metadata: {} });
+  state.retrieve.mockResolvedValue({ id: "re_manual", amount: 4000, currency: "usd", payment_intent: "pi_original", created: 1793059200, status: "succeeded", metadata: {} });
 });
 describe("the manager return boundary", () => {
   it.each([["missing", 404], ["conflict", 409], ["changed", 409], ["capacity", 409], ["review", 409], ["split", 409], ["ineligible", 409], ["invalid", 400], ["future-outcome", 503]])(
@@ -49,12 +49,12 @@ describe("the manager return boundary", () => {
   });
   it("records only provider-verified manual evidence, on the original account and currency", async () => {
     state.rpc.mockResolvedValue({ data: { outcome: "partial", outstanding_cents: 6000 }, error: null });
-    const response = await post({ action: "attribute", id: ORDER, refundId: "re_manual", ref: REF, amount: 999999, currency: "MXN" });
+    const response = await post({ action: "attribute", id: ORDER, refundId: "re_manual", ref: REF, amount: 999999, currency: "MXN", succeeded_at: 9999999999 });
     expect(response.status).toBe(200); expect(await response.json()).toMatchObject({ completed: false, outstandingCents: 6000 });
     expect(state.retrieve).toHaveBeenCalledWith("re_manual", { stripeAccount: "acct_original" });
     expect(state.rpc).toHaveBeenCalledExactlyOnceWith("record_order_return_coverage_v1", { p_restaurant: "r1", p_operation: ORDER,
       p_actor: "manager", p_attribution_ref: REF, p_refunds: [{ id: "re_manual", amount_cents: 4000,
-        currency: "USD", account: "acct_original", payment_intent: "pi_original", status: "succeeded" }] });
+        currency: "USD", account: "acct_original", payment_intent: "pi_original", status: "succeeded", succeeded_at: 1793059200 }] });
   });
   it.each([{ currency: "mxn" }, { payment_intent: "pi_other" }, { status: "pending" }, { metadata: { refund_due: "due" } }])(
     "refuses unverified manual evidence %j", async over => {

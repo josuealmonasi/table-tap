@@ -20,9 +20,12 @@ export function verifiedRefund(refund: Stripe.Refund, operation: ReturnCharge): 
     && refund.currency?.toUpperCase() === operation.currency && Number.isSafeInteger(refund.amount) && refund.amount > 0
     && ["succeeded", "pending", "requires_action", "failed", "canceled"].includes(refund.status ?? ""));
 }
-export function refundEvidence(refund: Stripe.Refund, operation: ReturnCharge) {
+export function refundEvidence(refund: Stripe.Refund, operation: ReturnCharge, origin: "app" | "manual" = "app") {
+  // A manual refund found tomorrow keeps Stripe's date. App attempts use
+  // the verification time because they may have been pending when created.
   return { id: refund.id, amount_cents: refund.amount, currency: refund.currency.toUpperCase(),
-    payment_intent: operation.stripe_payment_intent, account: operation.stripe_account_id, status: refund.status };
+    payment_intent: operation.stripe_payment_intent, account: operation.stripe_account_id, status: refund.status,
+    ...(origin === "manual" && refund.status === "succeeded" && { succeeded_at: refund.created }) };
 }
 /** Old cancellations tagged only their operation. Exact full evidence may
  * recover their first saved request; a partial tag never covers that request. */
@@ -68,7 +71,7 @@ export async function discoverReturn(client: Stripe, restaurant: string, operati
     if (saved?.origin === "manual" && saved.operation_id === operation.id && uuid(saved.attribution_ref)) {
       const { data, error } = await db.rpc("record_order_return_coverage_v1", {
         p_restaurant: restaurant, p_operation: operation.id, p_actor: actor,
-        p_refunds: [refundEvidence(refund, operation)], p_attribution_ref: saved.attribution_ref,
+        p_refunds: [refundEvidence(refund, operation, "manual")], p_attribution_ref: saved.attribution_ref,
       });
       if (error) throw new Error(`Could not record manual refund coverage: ${error.message}`);
       if (!["completed", "partial"].includes(data?.outcome)) blocked = true;

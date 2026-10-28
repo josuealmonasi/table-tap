@@ -21,7 +21,7 @@ export async function attributeReturn(body: { id?: unknown; refundId?: unknown; 
   }
   const { data, error } = await createAdminClient().rpc("record_order_return_coverage_v1", {
     p_restaurant: actor.restaurantId, p_operation: operation.id, p_actor: actor.email,
-    p_attribution_ref: body.ref, p_refunds: [refundEvidence(refund, operation)],
+    p_attribution_ref: body.ref, p_refunds: [refundEvidence(refund, operation, "manual")],
   });
   if (error || !data) return await apiError("apiErr.verifyOrders", 503);
   if (!["completed", "partial"].includes(data.outcome)) return await apiError("apiErr.refundReviewRequired", 409);
