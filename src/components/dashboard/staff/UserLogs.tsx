@@ -36,6 +36,8 @@ export default function UserLogs({ restaurantId, currency }: UserLogsProps) {
   const {
     logs,
     loading,
+    error,
+    retry,
     page,
     pages,
     total,
@@ -104,8 +106,16 @@ export default function UserLogs({ restaurantId, currency }: UserLogsProps) {
         </button>
       </div>
 
+      {error && (
+        <div role="alert">
+          <p>{t("done.networkError")}</p>
+          <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={retry}>
+            {t("settle.retry")}
+          </button>
+        </div>
+      )}
       {loading && <LogRowsSkeleton rows={6} />}
-      {!loading && logs.length === 0 && (
+      {!loading && !error && logs.length === 0 && (
         <p className="tt-muted" style={{ fontSize: 13, margin: "12px 0 0" }}>
           {query ? t("dash.logsNoMatch", { query }) : t("dash.logsEmpty")}
         </p>
