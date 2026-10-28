@@ -5846,6 +5846,10 @@ create constraint trigger check_receipt_allocations after insert or update on pa
 
 -- Old receipt tip metadata can be missing. That exception is named, not
 -- silently treated as proof that all historical money paid for food.
+-- The snapshot columns are added with write-offs further down; a SQL
+-- function's body is checked when it is created, so they exist from here.
+alter table order_adjustments add column if not exists resulting_total numeric;
+alter table order_adjustments add column if not exists resulting_tip numeric;
 create or replace function public.order_component_capacity(p_restaurant uuid, p_order uuid)
 returns jsonb language sql security definer set search_path = public as $$
   -- Receipt attribution capacity: the order as it was before any return
@@ -5879,7 +5883,7 @@ begin
   if o.id is null or o.status <> 'cancelled' then return; end if;
   insert into order_adjustments(restaurant_id, order_id, kind, previous_total, previous_tip, actor, created_at)
     values(p_restaurant, o.id, 'cancel', o.total, o.tip, 'historical review', coalesce(o.cancelled_at, o.created_at))
-    on conflict(order_id, kind) do nothing;
+    on conflict (order_id) where kind = 'cancel' do nothing;
   select id into d from order_adjustments where order_id = o.id and kind = 'cancel';
   for g in select p.method, p.actor_email, p.currency, p.stripe_payment_intent, p.stripe_account_id,
       sum(a.amount) amount, sum(a.tip) tip, jsonb_agg(to_jsonb(a)) entries, f.id existing_operation
@@ -11434,7 +11438,8 @@ grant execute on function public.retire_split_attempt_v1(uuid, uuid) to service_
 -- original and resulting totals, what was forgiven, and who and why.
 -- `written_off` keeps meaning "the whole order was forgiven".
 alter table order_adjustments drop constraint if exists order_adjustments_kind_check;
-alter table order_adjustments add constraint order_adjustments_kind_check check (kind in ('cancel', 'forgive'));
+-- 'return' too: rerunning this file must accept the return rows added below.
+alter table order_adjustments add constraint order_adjustments_kind_check check (kind in ('cancel', 'forgive', 'return'));
 alter table order_adjustments add column if not exists resulting_total numeric;
 alter table order_adjustments add column if not exists resulting_tip numeric;
 alter table order_adjustments add column if not exists forgiven numeric;
@@ -11765,7 +11770,7 @@ begin
   insert into order_adjustments (restaurant_id, order_id, kind, previous_total, previous_tip, previous_service_fee,
     resulting_total, resulting_tip, resulting_service_fee, amount_cents, actor, reason, note, operation_ref, request, currency)
   values (p_restaurant, o.id, 'return', o.total, o.tip, coalesce(o.service_fee, 0),
-    (v_total - p_amount_cents) / 100.0, (v_tip - v_tr) / 100.0, (v_service - v_sr) / 100.0,
+    round((v_total - p_amount_cents) / 100.0, 2), round((v_tip - v_tr) / 100.0, 2), round((v_service - v_sr) / 100.0, 2),
     p_amount_cents, p_actor, p_reason, nullif(btrim(p_note), ''), p_ref, v_request, o.currency)
   returning id into v_adjustment;
 
@@ -11815,15 +11820,15 @@ begin
 
   -- The order comes down to match, by exactly the change its adjustment names.
   perform set_config('tabletap.return_adjustment', v_adjustment::text, true);
-  update orders set total = (v_total - p_amount_cents) / 100.0, tip = (v_tip - v_tr) / 100.0,
-    service_fee = (v_service - v_sr) / 100.0
+  update orders set total = round((v_total - p_amount_cents) / 100.0, 2), tip = round((v_tip - v_tr) / 100.0, 2),
+    service_fee = round((v_service - v_sr) / 100.0, 2)
    where id = o.id and restaurant_id = p_restaurant;
   perform set_config('tabletap.return_adjustment', '', true);
 
   return jsonb_build_object('outcome', 'prepared', 'replay', false, 'adjustment', v_adjustment, 'amount_cents', p_amount_cents,
     'previous', jsonb_build_object('total', o.total, 'tip', o.tip, 'service_fee', coalesce(o.service_fee, 0)),
-    'resulting', jsonb_build_object('total', (v_total - p_amount_cents) / 100.0, 'tip', (v_tip - v_tr) / 100.0,
-      'service_fee', (v_service - v_sr) / 100.0),
+    'resulting', jsonb_build_object('total', round((v_total - p_amount_cents) / 100.0, 2), 'tip', round((v_tip - v_tr) / 100.0, 2),
+      'service_fee', round((v_service - v_sr) / 100.0, 2)),
     'operations', v_ops);
 end; $$;
 revoke all on function public.return_on_order_v1(uuid, uuid, int, text, text, text, uuid, int, int, int) from public, anon, authenticated;
