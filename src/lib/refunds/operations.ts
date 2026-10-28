@@ -51,6 +51,7 @@ export async function executeOrderRefund(
   const db = createAdminClient();
   const operation = await returnCharge(restaurantId, operationId);
   if (!operation || operation.source !== "stripe" || operation.status === "review") return false;
+  const { stripe_payment_intent: intent, stripe_account_id: account } = operation;
   // Completed money needs only fee recovery. Opening Bills must never POST it again.
   if (operation.status === "succeeded") {
     await syncReturnedFee(client, restaurantId, operation.stripe_payment_intent, operation.stripe_account_id)
@@ -66,17 +67,19 @@ export async function executeOrderRefund(
   });
   if (error) throw new Error(`Could not prepare the refund: ${error.message}`);
   if (!attempt) return false;
+  // A manager can finish with manual refunds before start takes its lock.
+  // That completion has no app attempt; its charge still needs fee recovery.
+  if (attempt.operation_status === "succeeded" || attempt.outstanding_cents === 0) {
+    await reconcileFee();
+    return true;
+  }
   // Pre-deploy attempts have no currency. The operation keeps the charge's
   // currency even when the restaurant has since switched its menu.
   if (attempt.stripe_account_id !== operation.stripe_account_id || attempt.stripe_payment_intent !== operation.stripe_payment_intent
     || (attempt.currency ?? operation.currency) !== operation.currency) return false;
-  if (attempt.operation_status === "succeeded") {
-    await reconcileFee();
-    return true;
-  }
   async function reconcileFee() {
     try {
-      await syncReturnedFee(client, restaurantId, attempt.stripe_payment_intent, attempt.stripe_account_id);
+      await syncReturnedFee(client, restaurantId, intent, account);
     } catch (error) {
       // A fee lookup cannot undo money already returned to the diner. The
       // ledger keeps consuming the fee until a later verified reconciliation.

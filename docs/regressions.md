@@ -34,6 +34,7 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| A manual-only completion needs no app attempt (Returns verification 3) | A manager finished the return between discovery and start, but the executor required app account fields and answered incomplete |
 | A manual return keeps its provider date when attributed later (Returns V6) | Discovering Monday's successful manual refund on Tuesday moved its money into Tuesday's reports |
 | Completed returns preserve the eaten sale and its exact component plan (Returns 7b) | Cancelling served food would release stock, while the return route had no preparation boundary |
 | A return reference keeps its exact reviewed request (Returns 7b) | A lost full-return reply could not replay after the retained total reached zero |
@@ -5585,3 +5586,16 @@ when Stripe reports success. Pending manual evidence carries no date. App
 attempts still send no date, including recovery after a pending response, so
 SQL uses the verification time. `return-success-time.spec.ts` checks the RPC
 payloads; SQL keeps the first saved date and caps future evidence at now.
+
+### Returns verification 3 — manual-only completion needs no app attempt
+
+The saved operation and the executor's reply had to agree. A manager could
+finish the whole return with manual refunds after discovery, before start took
+its lock. Start correctly made no app attempt, but the executor checked that
+missing attempt's account before recognizing completion. It answered incomplete
+and missed immediate fee recovery. Completion now comes first, using the
+operation's saved charge and account for fee recovery. A failed fee lookup
+still leaves the customer's return complete. `return-manual-completion.spec.ts`
+first failed four cases, then passed all nine: concurrent success, zero owed,
+null app fields, already completed money, failed fee recovery and unproven
+replies. No provider refund is sent for completed money.
