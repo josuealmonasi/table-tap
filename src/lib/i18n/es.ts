@@ -4,6 +4,8 @@ import type { Messages } from "./en";
 // compile error.
 export const es: Messages = {
   slots: {
+    resume: "Continuar el pago",
+    resumeParts: "Partes {parts} · {amount}",
     couponFirst: "Para dividir con este cupón, pídele al mesero que lo aplique primero a la cuenta. También puedes pagar la cuenta en línea con él.",
     couponNotIncluded: "El cupón que elegiste no está incluido en estas partes. Pídele ayuda al mesero.",
     chooseBill: "Elige la cuenta dividida",

@@ -29,6 +29,12 @@ export default function SplitSlotsCard({ split, outstanding, diner, busy, cardsE
   return <div className="tt-split" data-split-model="2">
     <strong>{t("slots.progress", { paid: slots.filter(s => s.paid).length, of: split.shares })}</strong>
     <p>{t("slots.remaining", { amount: formatMoney(outstanding, currency) })}</p>
+    {split.resumptions?.map(resume => <div key={resume.slots.join(",")}>
+      <p>{t("slots.resumeParts", { parts: resume.slots.map(n => n + 1).join(", "), amount: formatMoney(resume.amountCents / 100, currency) })}
+        {" · "}{t("pending.tip", { amount: formatMoney(resume.tipCents / 100, currency) })}</p>
+      <button type="button" className="tt-btn tt-btn-primary" disabled={busy}
+        onClick={() => onPay(resume.slots, resume.tipCents)}>{t("slots.resume")}</button>
+    </div>)}
     <SplitSlotSelector slots={slots} selected={selected} currency={currency} busy={busy} onChange={setSelected} />
     {cardsEnabled ? <>
       <TipPicker currency={currency} tipPct={tipPct} tipCustom={tipCustom} maxTip={cents / 100}

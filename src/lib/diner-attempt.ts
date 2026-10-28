@@ -1,5 +1,5 @@
 import { prepareSplitSlots } from "@/lib/split-slots-attempt";
-import { releaseSplitSlots } from "@/lib/split-slots-lifecycle";
+import { retireSplitAttempt } from "@/lib/split-slots-lifecycle";
 import { randomUUID } from "node:crypto";
 import type Stripe from "stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -32,9 +32,7 @@ async function deliver(stripe: Stripe, attempt: AttemptRecord): Promise<Stripe.C
       : await stripe.checkout.sessions.create(attempt.stripe_params, { ...options, idempotencyKey: attempt.idempotency_key });
   } catch (error) {
     if (attempt.stripe_params?.metadata?.split_model === "2" && !attempt.stripe_session_id && stripeRefusedOutright(error)) {
-      await releaseSplitSlots(attempt.restaurant_id, attempt.id);
-      await releaseFee(String(attempt.stripe_params.metadata?.fee_id ?? ""));
-      await finishAttempt(attempt.id, false);
+      await retireSplitAttempt(attempt.restaurant_id, attempt.id);
     }
     throw error;
   }
@@ -44,10 +42,8 @@ async function deliver(stripe: Stripe, attempt: AttemptRecord): Promise<Stripe.C
   }, () => stripe.checkout.sessions.expire(session.id, {}, options));
   if (session.status === "expired") {
     if (attempt.stripe_params?.metadata?.split_model === "2") {
-      await releaseSplitSlots(attempt.restaurant_id, attempt.id);
-      await releaseFee(String(attempt.stripe_params.metadata?.fee_id ?? ""));
-    }
-    await finishAttempt(attempt.id, false);
+      await retireSplitAttempt(attempt.restaurant_id, attempt.id);
+    } else await finishAttempt(attempt.id, false);
     throw new DinerAttemptExpired("Checkout expired; the bill can be quoted again");
   }
   if (session.status !== "open" || !session.url) throw new Error("Checkout payment is being recorded");

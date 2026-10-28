@@ -2290,7 +2290,9 @@ their frozen fee slices, reserved through the existing monthly cap. Below the
 card minimum, parts must be combined or collected by staff; tips never inflate
 that minimum or the fee base. Coupons must be applied before the split.
 Staff-opened tables support model 2. The original attempt's tip, fee and expiry
-survive retries. A browser return or lost answer never frees parts.
+survive retries. Its approved phone sees Continue payment for its exact saved
+parts and tip, even if the reservation answer was lost before Stripe opened.
+Other phones see those parts held. A browser return or lost answer never frees parts.
 
 `/api/split/collect` is shared by the Pedidos and Cuentas abiertas part
 selectors. It accepts the sitting scope, split/revision, selected slots,
@@ -2298,13 +2300,18 @@ selectors. It accepts the sitting scope, split/revision, selected slots,
 `card`) and a stable `ref` (at most 100 characters). The trusted staff identity
 supplies the collector; kitchen and foreign restaurants are refused. It writes
 through `collect_split_slots_v1`, with the existing coverage-based sitting close.
+Both new collections and duplicate replies insert receipt-keyed activity before
+reading the remaining balance. The original receipt supplies the cashier,
+collection time, amount, tip, currency and method; concurrent retries count once.
 The full and partial table collectors explain the SQL `split` refusal in both
 languages. SQL settlement preserves actual methods for corte, shifts and
 deposits, including a mixed-method close with no invented order pay method.
 
 Connected webhooks authenticate the stored session and dispatch model-2 paid
 attempts to the slot settlement writer; a late incompatible charge becomes a
-refund owed. Positive expiry or provider refusal releases only its reservation.
+refund owed. Positive expiry or provider refusal retires the attempt and returns
+its unpaid parts, coupon and fee in one transaction. Uncertain requests keep
+their reservations.
 `pnpm money` now checks slots, immutable checkout links, attempts, receipts,
 fee slices and allocations. API and attack cases cover the new routes and
 concurrency/role boundaries. Those shared gates are run by the release owner.

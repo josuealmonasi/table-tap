@@ -4,12 +4,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireVerifiedCheckout } from "@/lib/diner-checkout";
 
 /** Only verified provider expiry or outright refusal can free these slots. */
-export async function releaseSplitSlots(restaurantId: string, checkoutId: string): Promise<void> {
-  const { data, error } = await createAdminClient().rpc("release_split_slots_v1", {
+export async function retireSplitAttempt(restaurantId: string, checkoutId: string): Promise<void> {
+  const { data, error } = await createAdminClient().rpc("retire_split_attempt_v1", {
     p_restaurant: restaurantId, p_checkout: checkoutId,
   });
-  if (error || !["released", "gone"].includes(data?.outcome)) {
-    throw new Error(`Could not release split slots: ${error?.message ?? data?.outcome}`);
+  if (error || !["retired", "paid", "gone"].includes(data?.outcome)) {
+    throw new Error(`Could not retire split attempt: ${error?.message ?? data?.outcome}`);
   }
 }
 
@@ -40,5 +40,5 @@ export async function settleSplitSlots(session: Stripe.Checkout.Session): Promis
 }
 
 export async function abandonSplitSlots(session: Stripe.Checkout.Session): Promise<void> {
-  await releaseSplitSlots(session.metadata!.restaurant_id, await checkoutId(session));
+  await retireSplitAttempt(session.metadata!.restaurant_id, await checkoutId(session));
 }

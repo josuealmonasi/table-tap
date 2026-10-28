@@ -12,9 +12,10 @@ import { releaseSessionFee } from "@/lib/platform-fee";
 export async function abandonCheckout(session: Stripe.Checkout.Session, context: ConnectContext): Promise<void> {
   await verifyDinerCheckout(session, context);
   if (session.payment_status === "paid") throw new Error("A paid checkout cannot expire");
+  // The split returns its parts, coupon and fee together, including on retry.
+  if (session.metadata?.split_model === "2") return await abandonSplitSlots(session);
   // Nobody paid: the fee it reserved stops counting toward the month.
   await releaseSessionFee(session);
-  if (session.metadata?.split_model === "2") await abandonSplitSlots(session);
   await finishDinerCheckout(session, false);
   if (session.metadata?.account_checkout) return await abandonAccountCheckout(session);
   const billOrder = unpackOrderIds(session.metadata)[0];

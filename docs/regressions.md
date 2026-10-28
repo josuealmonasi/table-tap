@@ -34,6 +34,9 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| This phone can continue its own held parts (split audit 2) | A lost reservation answer left every part disabled before any Stripe page existed |
+| A receipt and its activity share one identity (split audit 4) | A failed balance read skipped the log and duplicate collection retries never repaired it |
+| A refused or expired slot attempt retires whole (split audit 3) | Separate slot and fee releases stranded an open attempt after one cleanup failed |
 | Slot activity keeps the old unpaid tip inside a part (split model 2) | Logging only the new tip understated the gratuity already collected in the frozen part |
 | Slot collections and the cashier activity show the same money (split model 2) | A cash slot reached the receipt ledger without reaching the cashier drawer log |
 | A slot split reads slots rather than legacy phone claims (split model 2) | One phone saw no payable part even though every slot already existed |
@@ -5178,3 +5181,40 @@ screen now keeps online coupon payment available and asks the waiter to put
 the coupon on the bill before dividing. If another phone divides meanwhile,
 it says the coupon is not included instead of pretending it was applied.
 `split-slots-coupon.spec.tsx` failed before that screen guard was added.
+
+### A refused split attempt gives everything back together
+
+The held parts and the attempt's fee and coupon had to agree. Separate cleanup
+calls freed parts before a failed fee release, leaving an open attempt whose
+immutable links prevented every retry. Model-2 refusal and expiry now use
+`retire_split_attempt_v1` once, including the connected webhook. An uncertain
+reservation still keeps its parts. `split-slots-attempt.spec.ts` and
+`split-slots-lifecycle.spec.ts` failed before the change and cover retrying a
+failed retirement, refusal, expiry and uncertain provider answers.
+
+### This phone can continue its held parts
+
+The durable attempt and the phone's offered controls had to agree. A reservation
+could commit while its answer was lost, before Stripe was called, yet every
+held part was disabled even on the phone that owned it. The approved member's
+poll now includes only its own open attempts' parts and frozen tip. Continue
+payment sends that exact selection through the existing durable scope, without
+another fee or a changed tip. Other phones and staff still see held parts.
+`split-slots-resume.spec.tsx` transpiles the real payment, attempt, polling and
+React modules against an in-memory database. It failed before the fix and now
+checks both missing and open provider pages in English and Spanish.
+
+### A receipt can repair its missing activity
+
+The committed receipt and the cashier activity had to agree. A post-commit
+balance read could fail before logging; a duplicate then skipped the log forever.
+Both outcomes now log from the receipt before reading balances, including the
+original cashier, currency, amount, tip and collection time. The payment id is
+in the detail and is also the activity row id; insert-on-conflict-do-nothing
+makes concurrent retries count once without replacing history. The receipt's
+saved reference finds it when SQL returns a duplicate without a payment id.
+`split-slots-collect-route.spec.ts` failed before the fix and covers failed
+balance reads, missing activity, concurrent retries and activity write failures.
+Activity remains best-effort so a log failure never asks staff to collect twice;
+a later retry can repair it. Every receipt is described as collected, without
+using a later bill balance to rewrite what happened to that receipt.

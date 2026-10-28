@@ -1,4 +1,5 @@
 export interface SplitScope { restaurantId: string; tableId: string; sessionId: string }
+export interface SplitResumption { slots: number[]; tipCents: number; amountCents: number }
 export interface SplitSlot {
   shareNo: number; amountCents: number; feeCents: number; paid: boolean; paying: boolean;
 }

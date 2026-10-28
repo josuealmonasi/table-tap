@@ -2,6 +2,8 @@
 // truth for the message keys; es.ts must mirror its shape (enforced by types).
 export const en = {
   slots: {
+    resume: "Continue payment",
+    resumeParts: "Parts {parts} · {amount}",
     couponFirst: "To divide with this coupon, ask the waiter to apply it to the bill first. You can still pay the bill online with it.",
     couponNotIncluded: "The coupon you chose is not included in these parts. Ask the waiter for help.",
     chooseBill: "Choose the divided bill",

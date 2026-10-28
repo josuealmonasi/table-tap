@@ -8,6 +8,7 @@ import { SPLIT_POLL_MS } from "@/lib/poll";
 /** What the table is doing about its bill, from this phone's point of view. */
 export interface SplitState {
   modelVersion?: number; revision?: number; currency?: string; frozen?: boolean; slots?: import("@/lib/split-slots").SplitSlot[];
+  resumptions?: import("@/lib/split-slots").SplitResumption[];
   id: string;
   shares: number;
   status: "proposed" | "locked" | "cancelled" | "done";

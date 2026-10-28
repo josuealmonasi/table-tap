@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { releaseFee } from "@/lib/platform-fee";
+import { retireSplitAttempt } from "@/lib/split-slots-lifecycle";
 import { splitRpc } from "@/lib/split-slots-rpc";
 import type { SplitOutcome } from "@/lib/split-slots";
 
@@ -27,9 +27,7 @@ export async function prepareSplitSlots(attempt: SlotAttempt): Promise<void> {
       .eq("checkout_id", attempt.id).limit(1);
     if (error) throw new Error("Could not verify the refused slot reservation");
     if (!data?.length) {
-      await releaseFee(String(meta.fee_id ?? ""));
-      const { error: finishError } = await db.rpc("finish_diner_checkout", { p_attempt: attempt.id, p_paid: false });
-      if (finishError) throw new Error("Could not finish the refused split attempt");
+      await retireSplitAttempt(attempt.restaurant_id, attempt.id);
     }
     throw new SplitReservationRejected(result);
   }
