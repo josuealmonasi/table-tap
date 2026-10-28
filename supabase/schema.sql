@@ -11731,7 +11731,7 @@ declare
   v_request jsonb;
   v_total int; v_tip int; v_service int; v_p int; v_f int;
   v_pr int; v_tr int; v_sr int; v_fr int; v_rem int;
-  v_have_p int := 0; v_have_t int := 0;
+  v_have_p int := 0; v_have_t int := 0; v_unknown boolean;
   v_left_p int; v_left_t int; v_take_p int; v_take_t int;
   v_adjustment uuid; v_operation uuid;
   x record; g record;
@@ -11778,12 +11778,15 @@ begin
   if (public.order_coverage(p_restaurant, array[o.id])->0->>'unresolved')::boolean
     or exists (select 1 from jsonb_array_elements(public.order_refund_coverage(p_restaurant, o.id)) c
       where c->>'allocation_quality' <> 'exact' or c->>'currency' is distinct from o.currency
-        or (c->>'stripe_payment_intent' is not null and c->>'stripe_account_id' is null))
-    -- A receipt that never recorded its tip cannot be split into principal and
-    -- tip; planning would leave money nobody can return (returns audit 8).
-    or (public.retained_order_component_capacity_v1(p_restaurant, o.id)->>'breakdown_unknown')::boolean then
+        or (c->>'stripe_payment_intent' is not null and c->>'stripe_account_id' is null)) then
     return jsonb_build_object('outcome', 'review');
   end if;
+  -- A receipt that never recorded its tip holds the order's money with the tip
+  -- inside it. A return of the food comes out of it exactly; the tip's share
+  -- cannot be placed, so only that part goes to a person (returns audit 8;
+  -- 41% of production's receipts are like this, so refusing all of it would
+  -- leave most old sales with no return at all).
+  v_unknown := (public.retained_order_component_capacity_v1(p_restaurant, o.id)->>'breakdown_unknown')::boolean;
   for x in select (c->>'amount')::numeric amount, (c->>'tip')::numeric tip
     from jsonb_array_elements(public.order_refund_coverage(p_restaurant, o.id)) c loop
     v_have_p := v_have_p + round((x.amount - x.tip) * 100)::int;
@@ -11793,6 +11796,7 @@ begin
   v_p := v_total - v_tip;
   v_pr := least(p_amount_cents, v_p);
   v_tr := p_amount_cents - v_pr;
+  if v_unknown and v_tr > 0 then return jsonb_build_object('outcome', 'review'); end if;
   if p_amount_cents <= 0 or p_amount_cents > v_total or v_tr > v_tip or v_pr > v_have_p or v_tr > v_have_t then
     return jsonb_build_object('outcome', 'capacity');
   end if;

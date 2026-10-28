@@ -78,9 +78,11 @@ describe("returns audit (Codex, 2026-10-28)", () => {
   it("6: an offline replay acknowledges what was collected", () => {
     expect(definition("pos_ticket")).toContain("v_order.total + coalesce((select sum(a.previous_total - a.resulting_total) from order_adjustments a");
   });
-  it("8: an unknown tip breakdown goes to review before any plan", () => {
+  it("8: an unknown tip breakdown sends only the tip share to review", () => {
     const prepare = definition("return_on_order_v1");
-    expect(prepare.indexOf("->>'breakdown_unknown')::boolean then")).toBeLessThan(prepare.indexOf("insert into order_adjustments"));
+    // Food returns on such a receipt plan exactly; only a tip share goes to a person.
+    expect(prepare.indexOf("if v_unknown and v_tr > 0 then return jsonb_build_object('outcome', 'review'); end if;"))
+      .toBeLessThan(prepare.indexOf("insert into order_adjustments"));
   });
   it("verification 4, 6, 7: no synthetic evidence beside pieces; provider time; one coverage rule", () => {
     expect(definition("start_refund_attempt")).toContain("not exists (select 1 from refund_attempts x where x.operation_id = o.id)");
