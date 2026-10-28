@@ -110,7 +110,8 @@ it("audit Q 4: a provisional duplicate-charge fee target is saved only under the
   expect(save).toContain("fee_target_cents = greatest(coalesce(fee_target_cents, 0), p_target)");
   expect(sql).toContain("grant execute on function public.save_refund_due_fee_target(uuid, uuid, int, int) to service_role;");
   const recovery = readFileSync("src/lib/refunds/due-recovery.ts", "utf8");
-  expect(recovery.indexOf('rpc("refund_fee_epoch"')).toBeLessThan(recovery.indexOf("returnOurFee("));
+  const reconciler = readFileSync("src/lib/refunds/charge-reconciler.ts", "utf8");
+  expect(reconciler.indexOf('rpc("refund_fee_epoch"')).toBeLessThan(reconciler.indexOf("client.paymentIntents.retrieve("));
   expect(recovery).not.toContain('.update({ fee_target_cents');
 });
 it("audit P 2: a failure moves the charge's fee epoch on, and a verification read under an older one is refused", () => {
@@ -151,7 +152,7 @@ it("audit R 2: a fee request's amount is accepted only under the epoch it was re
     expect(sql, fn).toContain(`grant execute on function public.${fn}_v2(${args}, int) to service_role;`);
   }
   const recovery = readFileSync("src/lib/refunds/due-recovery.ts", "utf8");
-  expect(recovery).toContain('rpc("advance_refund_due_fee_v2"');
-  expect(recovery).toContain('rpc("start_refund_due_fee_v2"');
+  expect(recovery).toContain("await syncReturnedFee(");
+  expect(recovery).not.toMatch(/rpc\("(?:start|advance)_refund_due_fee_v2/);
   expect(recovery).not.toMatch(/rpc\("(start|advance)_refund_due_fee"/);
 });
