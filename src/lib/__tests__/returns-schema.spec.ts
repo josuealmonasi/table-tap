@@ -99,5 +99,6 @@ describe("returns audit (Codex, 2026-10-28)", () => {
     expect(definition("order_return_events_v1")).toContain("union select o.stripe_refund_id, o.id from refund_operations o");
     expect(definition("record_refund_due_coverage_v1")).toContain("stripe_refund_id = coalesce(d.stripe_refund_id, v_first)");
     expect(definition("finish_refund_due_attempt_v2")).toContain("v_first := case when p_status <> 'succeeded'");
+    expect(definition("order_return_events_v1")).toContain("raise exception 'two records of one refund disagree'");
   });
 });

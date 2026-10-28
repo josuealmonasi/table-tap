@@ -12157,6 +12157,14 @@ begin
       group by r having count(distinct op) > 1) then
     raise exception 'a provider refund is counted by two returns';
   end if;
+  -- Two records of one refund must agree; which one a report picks must
+  -- never decide its amount or its day (verification 4).
+  if exists (select 1 from refund_attempts a where a.restaurant_id = p_restaurant and a.provider_status = 'succeeded'
+      and a.stripe_refund_id is not null
+      group by a.operation_id, a.stripe_refund_id
+      having count(distinct round(a.amount * 100)) > 1 or count(distinct a.succeeded_at) > 1) then
+    raise exception 'two records of one refund disagree';
+  end if;
   -- A completed operation's events must be exactly its amount: money a report
   -- cannot place is a failed read, never a quiet day (verification 7).
   if exists (select 1 from refund_operations o where o.restaurant_id = p_restaurant
