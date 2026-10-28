@@ -1,11 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { formatCode } from "@/lib/loyalty/code";
-import { redeemRequest, forgetRedeemRequest } from "@/lib/loyalty/redeem-request";
+import { useLoyaltyCommand } from "@/hooks/useLoyaltyCommand";
 import type { Standing } from "@/lib/loyalty/standing";
 import LadderSteps from "@/components/loyalty/LadderSteps";
 
@@ -37,41 +36,20 @@ export default function CardLookupResult({ card, active, onChanged }: CardLookup
   const t = useT();
   const confirm = useConfirm();
   const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  const sending = useRef(false);
+  const { busy, run } = useLoyaltyCommand();
 
-  async function act(path: string, method: string, body: object, done: (data: Record<string, unknown>) => string): Promise<void> {
-    if (sending.current) return;
-    sending.current = true;
-    setBusy(true);
-    let request: ReturnType<typeof redeemRequest> | undefined;
-    let succeeded = false;
-    try {
-      if (path === "/api/loyalty/redeem" && card.standing.next) {
-        try { request = redeemRequest(card.code, card.round, card.standing.next.visits); }
-        catch { toast(t("loyalty.saveRetry"), "error"); return; }
-      }
-      const res = await fetch(path, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(request ?? body),
-      });
-      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      if (!res.ok) toast((data.error as string | undefined) ?? t("apiErr.generic"), "error");
-      else {
-        succeeded = true;
-        toast(done(data));
-        if (request) { try { forgetRedeemRequest(request); } catch {} }
-      }
-    } catch {
-      // Never queued: a stamp replayed on reconnect is a second visit.
-      // A redemption keeps the old round and its key for the same retry.
-      toast(t("done.networkError"), "error");
-    } finally {
-      sending.current = false;
-      setBusy(false);
-    }
-    if (succeeded || path !== "/api/loyalty/redeem") await onChanged(card.code);
+  async function act(path: string, method: "POST" | "DELETE", body: object, done: (data: Record<string, unknown>) => string): Promise<void> {
+    // A redemption carries the round and step this card shows (S15).
+    const redeem = path === "/api/loyalty/redeem" && card.standing.next
+      ? { code: card.code, round: card.round, step: card.standing.next.visits }
+      : undefined;
+    const answer = await run({ path, method, body, redeem });
+    if (answer.status === "busy") return;
+    if (answer.status === "done") toast(done(answer.data));
+    else toast(answer.error, "error");
+    // A redemption that did not land is retried as it is, so the card is not
+    // read again under it; anything else may have changed the card.
+    if (answer.status === "done" || path !== "/api/loyalty/redeem") await onChanged(card.code);
   }
 
   async function undo(visitId: string): Promise<void> {
