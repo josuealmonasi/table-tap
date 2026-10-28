@@ -119,12 +119,13 @@ export function billCollectionCases(fx) {
       path: "/api/table-payment/part",
       body: { tableId: table.id, amount: PART_AMOUNT, method: "cash", ref: `${partRef}-k` },
       expect: [403] },
-    // Part of this table is paid now, so its rest cannot be written off: that
-    // would log the money that came in as lost (paths audit #5). Which
-    // refusal matters: this one names what was paid.
-    { name: "POST /api/bill/write-off (waiter asks, part paid)", as: "waiter", method: "POST",
+    // Part of this table is paid now, so only its rest can be written off,
+    // never the money that came in (paths audit #5 and its follow-up): the ask
+    // is stored for what is still owed, and says what was paid.
+    { name: "POST /api/bill/write-off (waiter asks for the rest of a part-paid table)", as: "waiter", method: "POST",
       path: "/api/bill/write-off", body: { tableId: table.id, reason: "walkout", note: MARK },
-      expect: [409], expectError: /ya se pagaron|already paid/i },
+      expect: [200],
+      check: d => (d.pending === true && d.paid > 0 && d.amount > 0) || `asked ${JSON.stringify(d)}` },
     { name: "POST /api/bill/write-off (waiter asks)", as: "waiter", method: "POST",
       path: "/api/bill/write-off", body: { orderIds: [walkoutOrder], reason: "walkout", note: MARK },
       expect: [200], check: d => d.pending === true || "a waiter's request should stay pending" },
