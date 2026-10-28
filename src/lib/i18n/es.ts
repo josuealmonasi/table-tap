@@ -1411,6 +1411,8 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     waiterSettles: "Tu mesero está cobrando esta mesa. Pídele la cuenta.",
     nothingToDiscount: "Esa cuenta ya no tiene nada que descontar.",
     nothingToWriteOff: "Esa cuenta ya no tiene nada que cancelar — la cobraron o la cancelaron antes.",
+    writeOffPartPaid: "Ya se pagaron {amount} de esta cuenta, así que no se puede cancelar. Cobra lo que falta.",
+    writeOffPartPaidLater: "Ya pagaron una parte de esta cuenta desde que se pidió cancelarla. Cobra lo que falta.",
     approvalChanged: "La cuenta cambió desde que se mostró esta solicitud. Recházala y pide una nueva solicitud.",
     requestGone: "Esa solicitud ya fue resuelta.",
     couponNotFound: "No encontramos ese cupón.",

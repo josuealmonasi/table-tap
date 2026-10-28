@@ -1417,6 +1417,8 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     waiterSettles: "Your waiter is settling this table. Ask them for the bill.",
     nothingToDiscount: "That bill has nothing left to discount.",
     nothingToWriteOff: "That bill has nothing left to write off — it was collected or cancelled first.",
+    writeOffPartPaid: "{amount} of this bill is already paid, so it can't be written off. Collect the rest.",
+    writeOffPartPaidLater: "Part of this bill was paid after the write-off was asked for. Collect the rest.",
     approvalChanged: "The bill changed since this request was shown. Reject it and ask for a new request.",
     requestGone: "That request has already been decided.",
     couponNotFound: "We couldn't find that coupon.",

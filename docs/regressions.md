@@ -4784,6 +4784,7 @@ release gates. These local tests do not apply or validate the deployed schema.
 | A scanned URL opens collection once, independently of later bill snapshots | A bill refresh reopened the collection the cashier had dismissed | `bills-scan.spec.tsx` |
 | Failed history reads retain the last rows and offer retry | A failed page read replaced successful sales with an empty list | `sections-read-errors.spec.tsx` |
 | Staff and profile read failures remain errors, with the previous team retained | A failed staff read looked like an empty team; a failed profile read erased names | `sections-read-errors.spec.tsx` |
+| A part-paid bill is never written off, directly or by approval | MX$80 of a MX$100 bill collected; a manager wrote it off and the log said MX$100 lost | `table-adjustments.spec.tsx` (route + SQL text), dev probe of `write_off_orders` |
 
 ### A scanned collection and a refreshed bill list have separate lifetimes
 
@@ -4902,3 +4903,20 @@ The failing-first tests mock the database and Stripe; they do not replay a
 Postgres race. Claude runs the serial integration gates and checks failed status
 requests and onboarding in Settings in both languages before release. No schema
 or function signature changes are needed.
+## A bill written off with the money already in it (paths audit #5)
+
+`applyWriteOff` was a plain update that checked `paid = false` and nothing
+else. A bill with MX$80 of MX$100 already collected was written off and logged
+as MX$100 lost, while the MX$80 stayed allocated to an order nobody owed any
+more. It also got past `guard_allocated_order`, which only checks writers that
+set `tabletap.allocation_writer`. The approval path did set it, so the same ask
+raised a database error there instead: two routes, two answers, neither one
+explained.
+
+The direct write-off now runs in `write_off_orders`, under the money lock. It
+refuses a part-paid bill with the amount paid, and the route logs what the
+database actually wrote off. A waiter's ask is refused for the same bill before
+it is stored, and an approval for a bill paid in part since the ask returns
+`part_paid` instead of raising. Forgiving only the rest of a part-paid bill is
+a separate operation, not built.
+

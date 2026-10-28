@@ -261,6 +261,7 @@ drop function if exists public.cancel_order_v2(uuid, uuid, text, jsonb, boolean,
 drop function if exists public.ring_pos_sale_v2(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int);
 drop function if exists public.ring_pos_account_v2(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int);
 drop function if exists public.approve_write_off_request_v2(uuid, uuid, text, numeric, text);
+drop function if exists public.write_off_orders(uuid, uuid[], text, text, text);
 drop function if exists public.approve_discount_request_v2(uuid, uuid, text, numeric);
 drop function if exists public.attribute_payment(uuid, uuid, text, jsonb, text, text, boolean);
 

@@ -7742,6 +7742,11 @@ begin
      -- An order moved onto a customer account is the account's debt now.
      and account_id is null;
   if v_count <> cardinality(v_request.order_ids) or round(v_total, 2) <> p_amount then return 'changed'; end if;
+  -- Part of the bill was paid after it was asked for: writing it off would
+  -- report the whole total as lost (paths audit #5). The guard below would
+  -- raise; this says why.
+  if exists (select 1 from unnest(v_request.order_ids) o(id)
+    where public.retained_order_coverage(p_restaurant, o.id) > 0) then return 'part_paid'; end if;
 
   update orders set written_off = true, write_off_reason = v_request.reason,
     write_off_note = v_request.note, written_off_by = p_actor, written_off_at = now(), status = 'completed'
@@ -7754,6 +7759,55 @@ begin
 end; $$;
 revoke all on function public.approve_write_off_request_v2(uuid, uuid, text, numeric, text) from public, anon, authenticated;
 grant execute on function public.approve_write_off_request_v2(uuid, uuid, text, numeric, text) to service_role;
+
+-- A manager's direct write-off, under the money lock (paths audit #5).
+--
+-- It used to be a plain update that checked `paid = false` and nothing else, so
+-- a bill with MX$80 of MX$100 already collected was written off and logged as
+-- MX$100 lost, while the MX$80 stayed allocated to an order nobody owed any
+-- more. It also skipped guard_allocated_order, which only runs for writers that
+-- say so. A part-paid bill is refused with what was paid; forgiving just the
+-- rest is a different operation, not this one.
+create or replace function public.write_off_orders(
+  p_restaurant uuid, p_orders uuid[], p_actor text, p_reason text, p_note text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_paid numeric;
+  v_amount numeric;
+  v_ids uuid[];
+  v_sessions uuid[];
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  perform public.backfill_payment_allocations(p_restaurant);
+  perform set_config('tabletap.allocation_scope', '', true);
+  perform 1 from orders where id = any(p_orders) and restaurant_id = p_restaurant order by id for update;
+  select coalesce(sum(public.retained_order_coverage(p_restaurant, id)), 0) into v_paid
+    from orders where id = any(p_orders) and restaurant_id = p_restaurant;
+  if v_paid > 0 then return jsonb_build_object('outcome', 'part_paid', 'paid', round(v_paid, 2)); end if;
+
+  -- And off every screen that shows live work. A table whose debt was
+  -- cancelled kept its orders at "received", so the kitchen still had tickets
+  -- for a table that had gone and the diner's phone still offered "follow your
+  -- order ORD-09BB" three times over, on a table the floor had cleared for the
+  -- next party.
+  with done as (
+    update orders set written_off = true, write_off_reason = p_reason, write_off_note = p_note,
+      written_off_by = p_actor, written_off_at = now(), status = 'completed'
+     where id = any(p_orders) and restaurant_id = p_restaurant
+       and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
+       -- An order moved onto a customer account is the account's debt now.
+       and account_id is null
+    returning id, total, session_id
+  )
+  select array_agg(id), coalesce(sum(total), 0), array_agg(distinct session_id) filter (where session_id is not null)
+    into v_ids, v_amount, v_sessions from done;
+  if v_ids is null then return jsonb_build_object('outcome', 'nothing'); end if;
+  return jsonb_build_object('outcome', 'written_off', 'orderIds', to_jsonb(v_ids),
+    'amount', round(v_amount, 2), 'sessions', coalesce(to_jsonb(v_sessions), '[]'::jsonb));
+end; $$;
+revoke all on function public.write_off_orders(uuid, uuid[], text, text, text) from public, anon, authenticated;
+grant execute on function public.write_off_orders(uuid, uuid[], text, text, text) to service_role;
 
 create or replace function public.approve_discount_request_v2(
   p_request uuid, p_restaurant uuid, p_actor text, p_amount numeric

@@ -107,6 +107,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     p_actor: actor.email, p_amount: reviewedAmount, p_note: decidedNote || null,
   });
   if (error) return await apiError("apiErr.generic", 500);
+  // Paid in part since it was asked for: the request stays pending, and the
+  // floor collects the rest (paths audit #5).
+  if (outcome === "part_paid") return await apiError("apiErr.writeOffPartPaidLater", 409);
   if (outcome !== "approved") return await apiError("apiErr.approvalChanged", 409);
   await closeSessionsFor(orders, "written_off");
 
