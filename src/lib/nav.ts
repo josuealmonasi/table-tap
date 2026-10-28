@@ -42,6 +42,10 @@ export type NavItem = {
  * are listed dynamically on the dashboard, so they're not part of this list.
  */
 export const NAV_ITEMS: NavItem[] = [
+  // In the order they are used (owner's call, 2026-10-28): the menus, then
+  // the floor's live screens, then what collects the money, then what brings
+  // people back, and the books last. The configuration at the end lives in
+  // the account menu, not the tab row.
   {
     // The dashboard home *is* the menus screen — the card at the top of it is
     // the list, and each menu opens from there. Naming it for what it holds
@@ -82,10 +86,44 @@ export const NAV_ITEMS: NavItem[] = [
     feature: "waiterService",
   },
   {
-    href: "/dashboard/analytics",
-    icon: "Analytics",
-    titleKey: "nav.analytics",
-    descKey: "nav.analyticsDesc",
+    href: "/dashboard/bills",
+    icon: "Bills",
+    titleKey: "nav.bills",
+    shortKey: "nav.billsShort",
+    descKey: "nav.billsDesc",
+  },
+  {
+    // Not gated on the plan: an account opened on a paid tier still owes
+    // after a move down, and its page — with the lock on opening new ones —
+    // is where it is collected.
+    href: "/dashboard/accounts",
+    icon: "Accounts",
+    titleKey: "nav.accounts",
+    shortKey: "nav.accountsShort",
+    descKey: "nav.accountsDesc",
+  },
+  {
+    href: "/dashboard/held-sales",
+    icon: "Bills",
+    titleKey: "recovery.title",
+    shortKey: "recovery.short",
+    descKey: "recovery.deviceOnly",
+  },
+  {
+    href: "/dashboard/promotions",
+    icon: "Promotions",
+    titleKey: "nav.promos",
+    shortKey: "nav.promosShort",
+    descKey: "nav.promosDesc",
+  },
+  {
+    // The visit card: the program, and every card and who stamped it. Only
+    // on the tiers that include it, like the till.
+    href: "/dashboard/loyalty",
+    icon: "Loyalty",
+    titleKey: "nav.loyalty",
+    descKey: "nav.loyaltyDesc",
+    feature: "loyalty",
   },
   {
     // What each product leaves: ingredients, recipes, the fee for taking the
@@ -107,44 +145,10 @@ export const NAV_ITEMS: NavItem[] = [
     feature: "costs",
   },
   {
-    href: "/dashboard/promotions",
-    icon: "Promotions",
-    titleKey: "nav.promos",
-    shortKey: "nav.promosShort",
-    descKey: "nav.promosDesc",
-  },
-  {
-    // The visit card: the program, and every card and who stamped it. Only
-    // on the tiers that include it, like the till.
-    href: "/dashboard/loyalty",
-    icon: "Loyalty",
-    titleKey: "nav.loyalty",
-    descKey: "nav.loyaltyDesc",
-    feature: "loyalty",
-  },
-  {
-    href: "/dashboard/held-sales",
-    icon: "Bills",
-    titleKey: "recovery.title",
-    shortKey: "recovery.short",
-    descKey: "recovery.deviceOnly",
-  },
-  {
-    href: "/dashboard/bills",
-    icon: "Bills",
-    titleKey: "nav.bills",
-    shortKey: "nav.billsShort",
-    descKey: "nav.billsDesc",
-  },
-  {
-    // Not gated on the plan: an account opened on a paid tier still owes
-    // after a move down, and its page — with the lock on opening new ones —
-    // is where it is collected.
-    href: "/dashboard/accounts",
-    icon: "Accounts",
-    titleKey: "nav.accounts",
-    shortKey: "nav.accountsShort",
-    descKey: "nav.accountsDesc",
+    href: "/dashboard/analytics",
+    icon: "Analytics",
+    titleKey: "nav.analytics",
+    descKey: "nav.analyticsDesc",
   },
   {
     href: "/dashboard/tables",
