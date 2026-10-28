@@ -11751,11 +11751,12 @@ begin
   -- Food and service, by largest remainders, food first on a tie.
   v_f := v_p - v_service;
   if v_p > 0 then
-    v_sr := (v_pr * v_service) / v_p;
-    v_fr := (v_pr * v_f) / v_p;
+    -- bigint: a MX$500 return already multiplies 50000 × 50000 cents.
+    v_sr := ((v_pr::bigint * v_service) / v_p)::int;
+    v_fr := ((v_pr::bigint * v_f) / v_p)::int;
     v_rem := v_pr - v_sr - v_fr;
     if v_rem > 0 then
-      if ((v_pr * v_f) % v_p) >= ((v_pr * v_service) % v_p) then v_fr := v_fr + v_rem; else v_sr := v_sr + v_rem; end if;
+      if ((v_pr::bigint * v_f) % v_p) >= ((v_pr::bigint * v_service) % v_p) then v_fr := v_fr + v_rem; else v_sr := v_sr + v_rem; end if;
     end if;
   else
     v_sr := 0; v_fr := 0;
@@ -11835,7 +11836,12 @@ create or replace function public.check_order_return_adjustment_v1()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare d order_adjustments; v_amount numeric; v_tip numeric;
 begin
-  select * into d from order_adjustments where id = coalesce(new.adjustment_id, new.id);
+  -- Fires on both tables; only refund_operations has adjustment_id.
+  if tg_table_name = 'order_adjustments' then
+    select * into d from order_adjustments where id = new.id;
+  else
+    select * into d from order_adjustments where id = new.adjustment_id;
+  end if;
   if d.id is null or d.kind <> 'return' then return null; end if;
   select coalesce(sum(o.amount), 0), coalesce(sum(o.tip), 0) into v_amount, v_tip
     from refund_operations o where o.adjustment_id = d.id;
