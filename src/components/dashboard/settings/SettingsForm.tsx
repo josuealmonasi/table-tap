@@ -7,6 +7,8 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 import PaymentsCard from "./PaymentsCard";
 import CoverCard from "./CoverCard";
 import InventoryCard from "./InventoryCard";
+import TicketTimesCard from "./TicketTimesCard";
+import { DEFAULT_TICKET_LATE_MINUTES, DEFAULT_TICKET_WARN_MINUTES } from "@/lib/ticket-wait";
 import PrintingCard from "./PrintingCard";
 import LogoCard from "./LogoCard";
 import RestaurantCard from "./RestaurantCard";
@@ -71,6 +73,14 @@ export default function SettingsForm({
           {isOwner && <PaymentsCard />}
 
           <TaxCard restaurant={restaurant} saving={saving} save={save} />
+
+          {/* The floor's: how long the kitchen should take before a ticket
+              warns, on the board everyone in the kitchen is watching. */}
+          <TicketTimesCard
+            warn={restaurant.ticket_warn_minutes ?? DEFAULT_TICKET_WARN_MINUTES}
+            late={restaurant.ticket_late_minutes ?? DEFAULT_TICKET_LATE_MINUTES}
+            save={save}
+          />
 
           {/* The manager's too. Running out of a dish is the floor's problem
               before it is the owner's, and they are who reorders. */}

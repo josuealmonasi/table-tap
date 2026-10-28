@@ -23,7 +23,7 @@ import StationFilter from "./StationFilter";
 import OrdersTakings, { ordersTakingsChanged } from "./OrdersTakings";
 
 interface OrdersBoardProps {
-  restaurant: Pick<Restaurant, "id" | "currency">;
+  restaurant: Pick<Restaurant, "id" | "currency" | "ticket_warn_minutes" | "ticket_late_minutes">;
   initialOrders: BoardOrder[];
   snapshotReadAt?: number;
   kitchen?: boolean;
@@ -232,6 +232,8 @@ export default function OrdersBoard({
                           key={order.id}
                           order={order}
                           currency={restaurant.currency}
+                          warnMinutes={restaurant.ticket_warn_minutes}
+                          lateMinutes={restaurant.ticket_late_minutes}
                           onAdvance={updateStatus}
                           onCancel={canCancel ? handleCancel : undefined}
                           canMove={canMove}

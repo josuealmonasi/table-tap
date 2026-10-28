@@ -28,6 +28,8 @@ export type SettingsInput = Pick<
   | "split_enabled"
   | "low_stock_alerts_enabled"
   | "low_stock_threshold"
+  | "ticket_warn_minutes"
+  | "ticket_late_minutes"
   | "auto_print_kitchen"
 >;
 

@@ -169,6 +169,13 @@ status, restaurant and write-off flag. Cancelled, written-off, completed and
 pending-payment tickets cannot move through it. Offline work keeps each step;
 older collapsed queues expand into the same permitted forward steps.
 
+Each ticket shows how long it has been waiting ("hace 12 min"), amber past
+the restaurant's first threshold and red past the second
+(`restaurants.ticket_warn_minutes` / `ticket_late_minutes`, 10 and 20 by
+default, set by the owner or a manager in Settings, "Kitchen times"). The
+kitchen login and the floor see the same thing. The clock time it was placed
+stays in the tooltip.
+
 Written-off orders also stay out of the initial/live preparation feed and its
 badges, even when a historical source row still has a live status. The private
 kitchen projection marks them inactive (`cancelled`) without disclosing money
