@@ -10819,18 +10819,19 @@ create table if not exists bill_split_checkout_slots (
   primary key (checkout_id, split_id, share_no),
   foreign key (restaurant_id, split_id) references bill_splits (restaurant_id, id) on delete cascade
 );
--- NO ACTION, not RESTRICT: a payment or attempt deleted on its own still
--- cannot strand a paid slot, but deleting a whole restaurant cascades to both
--- sides in one statement, and RESTRICT refused that mid-cascade (db:mock).
+-- Checked at commit: a payment or attempt deleted on its own still cannot
+-- strand a paid slot, but deleting a whole restaurant cascades to both sides
+-- by two paths, and an immediate check (RESTRICT, and even NO ACTION) refused
+-- it before the slots' own cascade had run (db:mock).
 alter table bill_split_slots drop constraint if exists bill_split_slots_payment_id_fkey;
 alter table bill_split_slots add constraint bill_split_slots_payment_id_fkey
-  foreign key (payment_id) references payments(id);
+  foreign key (payment_id) references payments(id) deferrable initially deferred;
 alter table bill_split_slots drop constraint if exists bill_split_slots_reserved_checkout_id_fkey;
 alter table bill_split_slots add constraint bill_split_slots_reserved_checkout_id_fkey
-  foreign key (reserved_checkout_id) references diner_checkouts(id);
+  foreign key (reserved_checkout_id) references diner_checkouts(id) deferrable initially deferred;
 alter table bill_split_checkout_slots drop constraint if exists bill_split_checkout_slots_checkout_id_fkey;
 alter table bill_split_checkout_slots add constraint bill_split_checkout_slots_checkout_id_fkey
-  foreign key (checkout_id) references diner_checkouts(id);
+  foreign key (checkout_id) references diner_checkouts(id) deferrable initially deferred;
 alter table bill_split_checkout_slots enable row level security;
 revoke all on bill_split_checkout_slots from anon, authenticated;
 
