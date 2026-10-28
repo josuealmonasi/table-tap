@@ -854,6 +854,13 @@ export async function seedMock(pg) {
       [rid, split.split, split.revision, slot.amount_cents, debt.currency, DEMO_TEAM[1].email],
     );
     if (cash.r.outcome !== "collected") throw new Error(`demo split slot was not collected: ${JSON.stringify(cash.r)}`);
+    // The route logs what the cashier signs for, as a part payment does; the
+    // corte and pnpm money read the drawer from it.
+    await pg.query(
+      `insert into user_logs (restaurant_id, actor_email, entity, action, detail)
+       values ($1, $2, 'bill', 'collected', $3)`,
+      [rid, DEMO_TEAM[1].email, `amount=${(slot.amount_cents / 100).toFixed(2)} tip=0.00 currency=${debt.currency} method=cash`],
+    );
   }
 
   const waiting = openBills[0];
