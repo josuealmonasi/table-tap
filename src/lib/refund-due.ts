@@ -3,7 +3,7 @@ import { stripe } from "@/lib/stripe";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
-import { refundMadeFor, fullyReturnedCharge, type RefundCoverage } from "@/lib/refunds/due-provider";
+import { refundMadeFor, fullyReturnedCharge, chargeRefundState, refusedAsTooLarge, type RefundCoverage } from "@/lib/refunds/due-provider";
 import { reconcileDueFee, verifyDueCurrency } from "@/lib/refunds/due-recovery";
 
 type Db = ReturnType<typeof createAdminClient>;
@@ -66,31 +66,84 @@ export async function refundDue(
 ): Promise<RefundAnswer> {
   const { data: due } = await db
     .from("refunds_due")
-    .select("id, stripe_payment_intent, amount, currency, table_label, refunded_at, fee_reconciled_at")
+    .select("id, stripe_payment_intent, stripe_account_id, amount, currency, table_label, refunded_at, fee_reconciled_at")
     .eq("id", id)
     .eq("restaurant_id", restaurantId)
     .maybeSingle();
   if (!due) return { ok: false, error: "apiErr.refundNotFound", status: 404 };
   if (due.refunded_at && due.fee_reconciled_at) return { ok: false, error: "apiErr.alreadyRefunded", status: 409 };
 
-  const { data: attempt, error: prepareError } = await db.rpc("start_refund_due_attempt", {
-    p_restaurant: restaurantId, p_due: id,
-  });
-  if (prepareError) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
-  if (!attempt) return { ok: false, error: "apiErr.refundNeedsStripe", status: 409 };
-  const stripeAccount = attempt.stripe_account_id as string;
   let currency = due.currency as string | null;
-  if (!currency) currency = await verifyDueCurrency(db, restaurantId, id, attempt, client).catch(() => null);
   if (due.refunded_at) {
-    const returned = await reconcileDueFee(db, restaurantId, id, attempt, client);
-    return { ok: true, amount: Number(attempt.amount), alreadyInStripe: true, ...(!returned && { feePending: true }) };
+    // The diner has their money; only our fee is left to recover.
+    const { data: settled, error } = await db.rpc("start_refund_due_attempt", { p_restaurant: restaurantId, p_due: id });
+    if (error) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
+    if (!settled) return { ok: false, error: "apiErr.refundNeedsStripe", status: 409 };
+    const returned = await reconcileDueFee(db, restaurantId, id, settled, client);
+    return { ok: true, amount: Number(settled.amount), alreadyInStripe: true, ...(!returned && { feePending: true }) };
   }
 
-  const intent = attempt.stripe_payment_intent as string;
-  const amount = Number(attempt.amount);
-  const cents = Math.round(amount * 100);
+  // The charge lives on the restaurant's account: the one this due was first
+  // tried on, or the restaurant's own.
+  let stripeAccount = (due.stripe_account_id as string | null) ?? null;
+  if (!stripeAccount) {
+    const { data: r, error } = await db.from("restaurants").select("stripe_account_id").eq("id", restaurantId).single();
+    if (error) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
+    stripeAccount = (r?.stripe_account_id as string | null) ?? null;
+  }
+  if (!stripeAccount) return { ok: false, error: "apiErr.refundNeedsStripe", status: 409 };
+  const intent = due.stripe_payment_intent as string;
+  const found = { stripe_account_id: stripeAccount, stripe_payment_intent: intent };
+  if (!currency) currency = await verifyDueCurrency(db, restaurantId, id, found, client).catch(() => null);
+
+  // Refunds the restaurant made by hand in Stripe count before we ask for
+  // anything (paths audit #7). A due of MX$100 with MX$40 already returned
+  // there kept asking for MX$100, Stripe refused anything above the MX$60
+  // left, and the due answered 502 for ever with the MX$40 never recorded.
+  let charge: Awaited<ReturnType<typeof chargeRefundState>>;
+  try {
+    charge = await chargeRefundState(client, intent, stripeAccount);
+  } catch (err) {
+    console.error("refund due: could not read the charge", err);
+    return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
+  }
+  if (charge.manual.length > 0) {
+    const { data: recorded, error } = await db.rpc("record_refund_due_coverage_v1", {
+      p_restaurant: restaurantId, p_due: id, p_actor: actor, p_refunds: charge.manual,
+    });
+    if (error) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
+    if (recorded?.outcome === "completed") {
+      const returned = await reconcileDueFee(db, restaurantId, id, found, client);
+      if (recorded.marked === true) {
+        await logEvent({
+          restaurantId, actor, entity: "bill", action: "refunded",
+          detail: refundDueLogDetail(Number(due.amount), (due.table_label as string | null) ?? null, currency),
+        });
+      }
+      return { ok: true, amount: Number(due.amount), alreadyInStripe: true, ...(!returned && { feePending: true }) };
+    }
+  }
+
+  // An attempt in flight is resumed as it is; a new one is capped at what the
+  // charge still has refundable, and never edited afterwards.
+  const prepared = await db.rpc("start_refund_due_attempt_v2", {
+    p_restaurant: restaurantId, p_due: id, p_refundable_cents: charge.refundableCents,
+  });
+  if (prepared.error) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
+  if (!prepared.data) return { ok: false, error: "apiErr.refundNeedsStripe", status: 409 };
+  if (prepared.data.outcome === "none") return { ok: false, error: "apiErr.refundPending", status: 409 };
+  let attempt = prepared.data;
+  // An attempt is sent on the account it was frozen with.
+  stripeAccount = attempt.stripe_account_id as string;
+
   let coverage: RefundCoverage[] | null = null;
   let alreadyInStripe = false;
+  let amount = 0;
+  // At most one replacement: only Stripe's own "more than is left" refusal
+  // retires an attempt, and the new one is capped at what Stripe says is left.
+  for (let pass = 0; ; pass++) {
+  amount = Number(attempt.amount);
+  const cents = Math.round(amount * 100);
   try {
     const refund = (attempt.stripe_refund_id
       ? await client.refunds.retrieve(attempt.stripe_refund_id, { stripeAccount })
@@ -107,8 +160,24 @@ export async function refundDue(
     }
     if (refund.status !== "succeeded") return { ok: false, error: "apiErr.refundPending", status: 409 };
     coverage = [{ id: refund.id, amount_cents: refund.amount }];
+    break;
   } catch (err) {
     const code = err && typeof err === "object" && "code" in err ? err.code : undefined;
+    if (pass === 0 && refusedAsTooLarge(err)) {
+      // Nothing was created: retire this attempt and open one for what is left.
+      const { error: retireError } = await db.rpc("finish_refund_due_attempt_v2", { p_restaurant: restaurantId, p_due: id,
+        p_attempt: attempt.id, p_actor: actor, p_refunds: [], p_status: "failed" });
+      if (retireError) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
+      const fresh = await chargeRefundState(client, intent, stripeAccount).catch(() => null);
+      if (!fresh) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
+      const { data: next, error: nextError } = await db.rpc("start_refund_due_attempt_v2", {
+        p_restaurant: restaurantId, p_due: id, p_refundable_cents: fresh.refundableCents,
+      });
+      if (nextError) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
+      if (!next || next.outcome === "none") return { ok: false, error: "apiErr.refundPending", status: 409 };
+      attempt = next;
+      continue;
+    }
     // The other click, still being answered: its refund is the one.
     if (code === "idempotency_key_in_use") {
       return { ok: false, error: "apiErr.alreadyRefunded", status: 409 };
@@ -122,6 +191,8 @@ export async function refundDue(
     coverage = await fullyReturnedCharge(client, intent, stripeAccount).catch(() => null);
     if (!coverage) return { ok: false, error: "apiErr.refundPending", status: 409 };
     alreadyInStripe = true;
+    break;
+  }
   }
 
   // Only the request that writes the row says so in the log, so a retry that

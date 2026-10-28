@@ -14,7 +14,10 @@ export interface DueAttempt {
 }
 
 /** Original provider evidence can fill a missing currency, never relabel one. */
-export async function verifyDueCurrency(db: Db, restaurant: string, id: string, attempt: DueAttempt, client: Stripe): Promise<string | null> {
+/** All the fee and currency checks need: where the charge lives. */
+export type DueCharge = Pick<DueAttempt, "stripe_account_id" | "stripe_payment_intent">;
+
+export async function verifyDueCurrency(db: Db, restaurant: string, id: string, attempt: DueCharge, client: Stripe): Promise<string | null> {
   const intent = await client.paymentIntents.retrieve(attempt.stripe_payment_intent, {}, { stripeAccount: attempt.stripe_account_id });
   const currency = intent.currency?.toUpperCase();
   if (!currency || !/^[A-Z]{3}$/.test(currency)) return null;
@@ -25,7 +28,7 @@ export async function verifyDueCurrency(db: Db, restaurant: string, id: string, 
 }
 
 /** Customer completion is durable even if returning or checking our fee fails. */
-export async function reconcileDueFee(db: Db, restaurant: string, id: string, attempt: DueAttempt, client: Stripe): Promise<boolean> {
+export async function reconcileDueFee(db: Db, restaurant: string, id: string, attempt: DueCharge, client: Stripe): Promise<boolean> {
   try {
     const { error: pendingError } = await db.from("refunds_due").update({ fee_verification_pending: true })
       .eq("restaurant_id", restaurant).eq("id", id).not("refunded_at", "is", null);

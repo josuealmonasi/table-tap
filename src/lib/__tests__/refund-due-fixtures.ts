@@ -149,6 +149,38 @@ export function fakeDb(rows: Row[], stripeAccount: string | null = "acct_1") {
         }
         return result({ ...attempt, stripe_account_id: row.stripe_account_id, stripe_payment_intent: row.stripe_payment_intent });
       }
+      if (name === "start_refund_due_attempt_v2") {
+        // As v1, but a new attempt is capped at what Stripe still has refundable (paths audit #7).
+        const cap = args.p_refundable_cents as number;
+        if (!Number.isSafeInteger(cap) || cap < 0) throw new Error("invalid refundable amount");
+        if (!attempt || !row.refunded_at && (["failed", "canceled"].includes(attempt.provider_status ?? "")
+          || attempt.provider_status === "succeeded" && outstanding() > 0)) {
+          const send = Math.min(outstanding(), cap);
+          if (send <= 0) return result({ outcome: "none", outstanding_cents: outstanding() });
+          if (!stripeAccount && !row.stripe_account_id) return result(null);
+          const no = (attempt?.attempt_no ?? 0) + 1;
+          row.stripe_account_id ??= stripeAccount;
+          attempt = { id: `due-${row.id}-attempt-${no}`, attempt_no: no,
+            idempotency_key: `refund-due-${row.id}${no === 1 ? "" : `-${no}`}`, amount: send / 100,
+            stripe_refund_id: row.stripe_refund_id, provider_status: row.refunded_at ? "succeeded" : undefined };
+          state.attempts.set(row.id, attempt);
+        }
+        return result({ ...attempt, stripe_account_id: row.stripe_account_id, stripe_payment_intent: row.stripe_payment_intent });
+      }
+      if (name === "record_refund_due_coverage_v1") {
+        // Manual refunds in Stripe: coverage only, never a change to our attempt.
+        for (const refund of args.p_refunds as { id: string; amount_cents: number }[]) {
+          if (!refund.id || !Number.isSafeInteger(refund.amount_cents) || refund.amount_cents <= 0) throw new Error("invalid refund evidence");
+          const active = !state.failures.has(JSON.stringify([row.restaurant_id, refund.id]));
+          const old = coverage.get(refund.id);
+          coverage.set(refund.id, { amount_cents: old?.amount_cents ?? refund.amount_cents, active: (old?.active ?? true) && active });
+        }
+        if (outstanding() > 0) return result({ outcome: "partial", outstanding_cents: outstanding() });
+        const marked = !row.refunded_at;
+        if (marked) Object.assign(row, { refunded_at: new Date().toISOString(), refunded_by: args.p_actor,
+          stripe_refund_id: row.stripe_refund_id ?? (args.p_refunds as { id: string }[])[0]?.id, fee_verification_pending: true });
+        return result({ outcome: "completed", marked, outstanding_cents: 0 });
+      }
       if (name !== "finish_refund_due_attempt_v2") throw new Error(`Unexpected RPC ${name}`);
       if (!attempt || attempt.id !== args.p_attempt) return result({ outcome: "stale" });
       const refunds = args.p_refunds as { id: string; amount_cents: number }[];

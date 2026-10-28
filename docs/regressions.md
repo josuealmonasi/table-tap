@@ -4790,6 +4790,7 @@ release gates. These local tests do not apply or validate the deployed schema.
 | A staff discount lands whole or not at all, and never under collected money | Totals written with no lock, failed writes ignored, redemption logged anyway; a part-paid bill cut below what it had paid | `table-adjustments.spec.tsx`, dev probe of `apply_bill_discount` |
 | Repricing service decides and writes under the money lock | A collection between the read and the write; the stale write lowered a total with money against it | `service-reprice.spec.ts` (rules in the SQL), dev probe of `reprice_open_service` |
 | The allocation guard checks every order writer, not only those that opt in | Three direct writers lowered or forgave covered orders past an opt-in guard | `allocation-review.spec.ts`, `allocations-check.mjs` (non-opted-in writes refused; a status move allowed) |
+| A refund made by hand in Stripe counts toward the due, and the rest is asked for capped | MX$40 returned by hand; every retry asked for MX$100 and answered 502 for ever | `refund-due-partial.spec.ts` (MX$ and US$), `refund-due-manual-schema.spec.ts`, dev replay |
 
 ### A scanned collection and a refreshed bill list have separate lifetimes
 
@@ -4985,3 +4986,17 @@ moving a ticket along, returns before the coverage read. `check_paid_coverage`
 stays gated as it was. The api gate's allocation checks now try the refused
 writes without the flag.
 
+## A duplicate-charge refund stuck behind a manual one (paths audit #7)
+
+A MX$100 duplicate-charge due, of which the restaurant had already returned
+MX$40 from Stripe's dashboard. Every retry asked Stripe for the attempt's full
+MX$100, Stripe refused anything above the MX$60 left, the MX$40 was never
+recorded, and the due answered 502 for ever. Before asking for anything,
+`refundDue` now reads the charge. The restaurant's untagged succeeded refunds
+are recorded as coverage (`record_refund_due_coverage_v1`), which never touches
+our own attempt. A new attempt is capped at what the charge still has
+refundable (`start_refund_due_attempt_v2`). An attempt left from before, now
+too large, is retired only on Stripe's own "more than is left" refusal, which
+proves nothing was created, and replaced once from a fresh read. Contract
+agreed with Codex in the dialogue (topic refund7). Codex wrote the failing
+tests; Claude wrote both halves.
