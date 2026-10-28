@@ -31,17 +31,20 @@ export async function POST(req: NextRequest) {
   if (body?.action === "open") {
     const amount = cashAmount(body.amount, false);
     if (amount === null) return await apiError("apiErr.cashAmount", 400);
-    const { data, error } = await db.from("cash_shifts")
-      .insert({ restaurant_id: actor.restaurantId, opened_by: actor.email, opening_amount: amount })
-      .select("id").single();
-    // The one-open-shift index: somebody opened it first.
+    // Under the money lock, stamped after it: a shift opened while another was
+    // closing cannot start before that one ended (paths audit #6).
+    const { data: id, error } = await db.rpc("open_cash_shift", {
+      p_restaurant: actor.restaurantId, p_actor: actor.email, p_amount: amount,
+    });
+    // Somebody opened it first (the one-open-shift index says the same).
+    if (!error && !id) return await apiError("apiErr.shiftAlreadyOpen", 409);
     if (error?.code === "23505") return await apiError("apiErr.shiftAlreadyOpen", 409);
-    if (error || !data) return await apiError("apiErr.generic", 500);
+    if (error) return await apiError("apiErr.generic", 500);
     await logEvent({
       restaurantId: actor.restaurantId, actor: actor.email, entity: "cash", action: "opened",
       detail: logDetail({ opening: amount.toFixed(2) }),
     });
-    return NextResponse.json({ ok: true, id: data.id });
+    return NextResponse.json({ ok: true, id });
   }
 
   if (body?.action === "close") {

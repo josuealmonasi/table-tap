@@ -4786,6 +4786,7 @@ release gates. These local tests do not apply or validate the deployed schema.
 | Staff and profile read failures remain errors, with the previous team retained | A failed staff read looked like an empty team; a failed profile read erased names | `sections-read-errors.spec.tsx` |
 | A part-paid bill is never written off, directly or by approval | MX$80 of a MX$100 bill collected; a manager wrote it off and the log said MX$100 lost | `table-adjustments.spec.tsx` (route + SQL text), dev probe of `write_off_orders` |
 | A locked plan freezes every table the menu editor writes directly | Sections, extras, icon palettes and dietary tags stayed editable on a locked plan | `invariants/database.spec.ts` (every "manages" policy has a freeze trigger), dev probe |
+| A shift opened during a close starts after it | An open waiting on a close kept its transaction-start time, so one sale fell in both shifts | `cash-shift-open.spec.ts`, dev probe of `open_cash_shift` |
 
 ### A scanned collection and a refreshed bill list have separate lifetimes
 
@@ -4932,4 +4933,14 @@ rename a section. All five now carry the freeze trigger. `item_addons` and
 parent row. An invariant now fails on any table with a "team/owner manages"
 policy and no freeze trigger, unless it is listed with the reason it stays
 writable.
+
+## One sale in two shifts (paths audit #6)
+
+Closing a shift takes the money lock and stamps `clock_timestamp()`. Opening
+one was a plain insert whose `opened_at` defaulted to `now()`, the start of its
+own transaction. An open that started at 12:00:00 and waited on the one-open
+index for a close committing at 12:00:01 kept 12:00:00, so a sale at
+12:00:00.5 fell inside both windows and the corte counted it twice. Opening is
+now `open_cash_shift`: the same lock, then the time. Found by reading, not
+seen in production; the interleaving was not run.
 

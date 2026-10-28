@@ -10230,6 +10230,31 @@ end;
 $$;
 revoke all on function public.close_cash_shift_once(uuid, uuid, numeric, text, uuid) from public, anon, authenticated;
 grant execute on function public.close_cash_shift_once(uuid, uuid, numeric, text, uuid) to service_role;
+-- Opening a shift, under the same lock as closing one (paths audit #6).
+--
+-- The plain insert stamped opened_at with now(), the start of its own
+-- transaction. An open that started at 12:00:00 and then waited on the
+-- one-open index for a close committing at 12:00:01 kept its 12:00:00, so a
+-- sale at 12:00:00.5 fell inside both shifts and the corte counted it twice.
+-- Taking the money lock first and stamping clock_timestamp() after it puts the
+-- opening after every close that came before. Null means a shift is already
+-- open.
+create or replace function public.open_cash_shift(p_restaurant uuid, p_actor text, p_amount numeric)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if exists (select 1 from cash_shifts where restaurant_id = p_restaurant and closed_at is null) then
+    return null;
+  end if;
+  insert into cash_shifts (restaurant_id, opened_by, opening_amount, opened_at)
+  values (p_restaurant, p_actor, p_amount, clock_timestamp())
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+revoke all on function public.open_cash_shift(uuid, text, numeric) from public, anon, authenticated;
+grant execute on function public.open_cash_shift(uuid, text, numeric) to service_role;
 -- S21: refuse a changed handful before writing any of it. The old batch stays
 -- available for deployed callers and recovery of its historical partial writes.
 create or replace function public.collect_table_reviewed_v1(
