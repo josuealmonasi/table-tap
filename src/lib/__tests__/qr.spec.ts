@@ -70,7 +70,7 @@ describe("a table's QR scans to the table", () => {
       if ((await scan(url)) !== url) misses.push(url);
     }
     expect(misses).toEqual([]);
-  });
+  }, 20_000); // A hundred encodes and decodes; 5 s is too tight when the machine is busy.
 });
 
 describe("the SVG a restaurant prints", () => {

@@ -15,7 +15,7 @@ const limits: PlanLimits = {
 };
 beforeEach(() => {
   vi.resetAllMocks();
-  retrieve.mockResolvedValue({ id: "price_mxn", currency: "mxn", active: true,
+  retrieve.mockResolvedValue({ id: "price_mxn", currency: "mxn", active: true, unit_amount: 149900,
     recurring: { interval: "month", interval_count: 1 } });
 });
 it("uses a verified monthly MXN price from the catalog", async () => {
@@ -34,4 +34,11 @@ it("registers generated founding Prices before offering checkout", async () => {
   create.mockResolvedValue({ id: "price_founder" });
   expect(await checkoutPrice({ ...limits, stripe_price_id: null }, 0)).toEqual({ price: "price_founder", quantity: 1 });
   expect(register).toHaveBeenCalledWith("price_founder", "casa");
+});
+it("rejects a configured price for another amount than the plan screen shows", async () => {
+  // Codex's pricing review: a Price set up in Stripe for MX$1,899 would bill
+  // a founder who was shown MX$1,499.
+  retrieve.mockResolvedValue({ id: "price_mxn", currency: "mxn", active: true, unit_amount: 189900,
+    recurring: { interval: "month", interval_count: 1 } });
+  await expect(checkoutPrice(limits, 0)).rejects.toThrow("does not match the price shown");
 });

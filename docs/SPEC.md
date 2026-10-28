@@ -483,7 +483,9 @@ dishes on a bill the restaurant has just cancelled.
   was never in them. The bell's notice opens Cuentas abiertas.
 - **The month's fee ceiling lives in its own ledger.** Each plan caps our
   per-order fee in a month (`plan_limits.fee_cap`; "never more than X" on the
-  plan card). Every checkout that carries a fee — a diner's order, a table's
+  plan card). Each order's fee is also capped at 5% of its food
+  (`FEE_CAP_FRACTION`, a tenth until 2026-10-27), so Carta charges its full
+  MX$3 only from MX$60. Every checkout that carries a fee — a diner's order, a table's
   bill, a divided bill (once per bill, `ref`), a customer account —
   *reserves* it in `platform_fees` before Stripe is asked, through
   `reserve_platform_fee`, which locks the restaurant and charges
