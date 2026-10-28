@@ -9,7 +9,7 @@ export function splitSlotCases(fx) {
     gone: /ya no está disponible|no longer available/i, taken: /ya está pagando|already paying/i,
     reserved: /ya está pagando|already paying/i, paid: /ya está pagada|already paid/i,
     below_minimum: /más partes|more parts/i, currency: /monedas|currenc/i,
-    busy: /ya.*divid|already.*split/i, conflict: /otras partes|different parts/i,
+    busy: /ya hay una divisi|already dividing/i, conflict: /otras partes|different parts/i,
   };
   return [
     { name: "POST /api/split/start (four parts with one phone on a staff-opened table)", as: "diner", method: "POST", path: "/api/split/start",

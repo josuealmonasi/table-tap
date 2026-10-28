@@ -16,6 +16,11 @@ export async function splitSlotFixture(admin, restaurantId, { currency = "MXN", 
     // fixture's split first; its immutable checkout links cascade with it.
     await checked(admin.from("bill_splits").delete().eq("session_id", sessionId));
     if (attempts.length) await checked(admin.from("diner_checkouts").delete().in("id", attempts));
+    // A part collection logs under its receipt's own id, with a detail that
+    // starts "payment=…", so the table-label match below never found it and
+    // every pnpm attack left its drawer short of the corte (cash and card).
+    const receipts = await checked(admin.from("payments").select("id").eq("session_id", sessionId));
+    if (receipts?.length) await checked(admin.from("user_logs").delete().in("id", receipts.map(p => p.id)));
     await checked(admin.from("payments").delete().eq("session_id", sessionId));
     await checked(admin.from("user_logs").delete().eq("restaurant_id", restaurantId).eq("entity", "bill")
       .in("action", ["collected", "paid"]).like("detail", `table=split-${ref.slice(0, 8)} %`));
