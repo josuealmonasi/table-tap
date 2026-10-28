@@ -1563,6 +1563,54 @@ drop trigger if exists tables_dashboard_write on restaurant_tables;
 create trigger tables_dashboard_write before insert or update or delete on restaurant_tables
   for each row execute function public.enforce_dashboard_write();
 
+-- The rest of the menu editor writes straight to Postgres as well: sections,
+-- extras on a dish, icon palettes and dietary tags. Only menus, items and tables
+-- were frozen, so on a locked plan a manager could still rename a section the
+-- dashboard said was read-only (paths audit #10).
+drop trigger if exists categories_dashboard_write on categories;
+create trigger categories_dashboard_write before insert or update or delete on categories
+  for each row execute function public.enforce_dashboard_write();
+drop trigger if exists icon_groups_dashboard_write on icon_groups;
+create trigger icon_groups_dashboard_write before insert or update or delete on icon_groups
+  for each row execute function public.enforce_dashboard_write();
+drop trigger if exists dietary_tags_dashboard_write on dietary_tags;
+create trigger dietary_tags_dashboard_write before insert or update or delete on dietary_tags
+  for each row execute function public.enforce_dashboard_write();
+
+-- Two editor tables carry no restaurant of their own: an extra belongs to the
+-- dish it is on, an icon to its palette. The same freeze, found through the
+-- parent row.
+create or replace function public.enforce_dashboard_write_child()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_restaurant uuid;
+begin
+  if auth.uid() is null then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+  if tg_table_name = 'item_addons' then
+    select restaurant_id into v_restaurant from menu_items
+     where id = case when tg_op = 'DELETE' then old.product_id else new.product_id end;
+  else
+    select restaurant_id into v_restaurant from icon_groups
+     where id = case when tg_op = 'DELETE' then old.group_id else new.group_id end;
+  end if;
+  if exists (select 1 from restaurants where id = v_restaurant and plan_status = 'locked') then
+    raise exception 'tt_plan_frozen' using errcode = 'check_violation';
+  end if;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end $$;
+revoke all on function public.enforce_dashboard_write_child() from public, anon, authenticated;
+grant execute on function public.enforce_dashboard_write_child() to service_role;
+
+drop trigger if exists item_addons_dashboard_write on item_addons;
+create trigger item_addons_dashboard_write before insert or update or delete on item_addons
+  for each row execute function public.enforce_dashboard_write_child();
+drop trigger if exists icon_group_items_dashboard_write on icon_group_items;
+create trigger icon_group_items_dashboard_write before insert or update or delete on icon_group_items
+  for each row execute function public.enforce_dashboard_write_child();
+
 -- A paid feature has to be paid for in the database too.
 --
 -- Five of the eight tiered features are refused by an API route. Three are not,

@@ -4785,6 +4785,7 @@ release gates. These local tests do not apply or validate the deployed schema.
 | Failed history reads retain the last rows and offer retry | A failed page read replaced successful sales with an empty list | `sections-read-errors.spec.tsx` |
 | Staff and profile read failures remain errors, with the previous team retained | A failed staff read looked like an empty team; a failed profile read erased names | `sections-read-errors.spec.tsx` |
 | A part-paid bill is never written off, directly or by approval | MX$80 of a MX$100 bill collected; a manager wrote it off and the log said MX$100 lost | `table-adjustments.spec.tsx` (route + SQL text), dev probe of `write_off_orders` |
+| A locked plan freezes every table the menu editor writes directly | Sections, extras, icon palettes and dietary tags stayed editable on a locked plan | `invariants/database.spec.ts` (every "manages" policy has a freeze trigger), dev probe |
 
 ### A scanned collection and a refreshed bill list have separate lifetimes
 
@@ -4919,4 +4920,16 @@ database actually wrote off. A waiter's ask is refused for the same bill before
 it is stored, and an approval for a bill paid in part since the ask returns
 `part_paid` instead of raising. Forgiving only the rest of a part-paid bill is
 a separate operation, not built.
+
+## A read-only dashboard that still renamed sections (paths audit #10)
+
+On a locked plan the dashboard says it is read-only, and the database refuses
+management writes to menus, items and tables. The same editor also writes
+sections (`categories`), extras (`item_addons`), icon palettes and dietary tags
+straight to Postgres, and none of those were frozen, so a manager could still
+rename a section. All five now carry the freeze trigger. `item_addons` and
+`icon_group_items` have no restaurant of their own and find it through the
+parent row. An invariant now fails on any table with a "team/owner manages"
+policy and no freeze trigger, unless it is listed with the reason it stays
+writable.
 

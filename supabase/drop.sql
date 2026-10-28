@@ -213,6 +213,7 @@ drop function if exists public.keep_order_terminal();
 drop table if exists restaurant_subscription_prices cascade;
 drop function if exists public.effective_restaurant_plan(uuid);
 drop function if exists public.enforce_dashboard_write();
+drop function if exists public.enforce_dashboard_write_child();
 
 drop function if exists public.lock_restaurant_money(uuid) cascade;
 drop function if exists public.snapshot_payment_scope() cascade;
