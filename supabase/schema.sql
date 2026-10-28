@@ -5264,7 +5264,12 @@ begin
      where id = v_order.account_id and restaurant_id = p_restaurant;
   end if;
   return jsonb_build_object('outcome', 'settled', 'settled', true, 'repeat', true,
-    'orderId', v_order.id, 'total', v_order.total, 'currency', v_order.currency, 'method', v_order.pay_method, 'handedOver', v_order.status = 'completed')
+    'orderId', v_order.id,
+    -- What was collected: a return made since then lowers the order, but the
+    -- device must still be told the amount it took, or the sale never leaves
+    -- it (returns audit 6).
+    'total', v_order.total + coalesce((select sum(a.previous_total - a.resulting_total) from order_adjustments a
+      where a.order_id = v_order.id and a.restaurant_id = p_restaurant and a.kind = 'return'), 0), 'currency', v_order.currency, 'method', v_order.pay_method, 'handedOver', v_order.status = 'completed')
     || case when v_order.account_id is null then '{}'::jsonb
        else jsonb_build_object('onAccount', jsonb_build_object('name', v_name)) end;
 end;
@@ -6371,7 +6376,10 @@ begin
     fee_reconciled_at = case when v_returned >= greatest(coalesce(fee_target_cents, 0), p_target) then coalesce(fee_reconciled_at, now()) end
     where restaurant_id = p_restaurant and stripe_payment_intent = p_intent
       and status = 'succeeded' and source = 'stripe'
-      and (p_refunds is null or stripe_refund_id = any(p_refunds));
+      and (p_refunds is null or stripe_refund_id = any(p_refunds)
+        -- A return can finish in several refunds (returns audit 4).
+        or exists (select 1 from refund_attempts a where a.operation_id = refund_operations.id
+          and a.provider_status = 'succeeded' and a.stripe_refund_id = any(p_refunds)));
   -- Duplicate-charge recovery must use this final snapshot too. A manual
   -- refund between provider reads can leave more of our fee still owed.
   update refunds_due set fee_target_cents = greatest(coalesce(fee_target_cents, 0), p_target),
@@ -8653,6 +8661,11 @@ begin
     if coalesce(e->>'id', '') = '' or (e->>'amount_cents')::int is null or (e->>'amount_cents')::int <= 0 then
       raise exception 'invalid refund evidence';
     end if;
+    -- One provider refund pays one obligation. A refund a return operation
+    -- already counts is that return's, not this duplicate charge's (returns
+    -- audit 1): counting it twice would close both with half the money back.
+    continue when exists (select 1 from refund_attempts a where a.restaurant_id = p_restaurant and a.stripe_refund_id = e->>'id')
+      or exists (select 1 from refund_operations o where o.restaurant_id = p_restaurant and o.stripe_refund_id = e->>'id');
     insert into refund_due_coverage (restaurant_id, due_id, attempt_id, stripe_refund_id, amount_cents, active)
       values (p_restaurant, d.id, null, e->>'id', (e->>'amount_cents')::int,
         not exists (select 1 from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = e->>'id'))
@@ -11738,7 +11751,10 @@ begin
   if (public.order_coverage(p_restaurant, array[o.id])->0->>'unresolved')::boolean
     or exists (select 1 from jsonb_array_elements(public.order_refund_coverage(p_restaurant, o.id)) c
       where c->>'allocation_quality' <> 'exact' or c->>'currency' is distinct from o.currency
-        or (c->>'stripe_payment_intent' is not null and c->>'stripe_account_id' is null)) then
+        or (c->>'stripe_payment_intent' is not null and c->>'stripe_account_id' is null))
+    -- A receipt that never recorded its tip cannot be split into principal and
+    -- tip; planning would leave money nobody can return (returns audit 8).
+    or (public.retained_order_component_capacity_v1(p_restaurant, o.id)->>'breakdown_unknown')::boolean then
     return jsonb_build_object('outcome', 'review');
   end if;
   for x in select (c->>'amount')::numeric amount, (c->>'tip')::numeric tip
@@ -11911,8 +11927,15 @@ begin
   v := public.refund_operation_progress_v1(o.id);
   if (v->>'outstanding_cents')::int = 0 and not (v->>'unresolved')::boolean then
     if o.status <> 'succeeded' then
+      -- The header names the latest refund that still counts, app or manual,
+      -- so completion evidence and fee readers find it (returns audit 4).
       update refund_operations set status = 'succeeded', completed_at = now(), fee_verification_pending = true,
-        confirmed_by = p_actor where id = o.id returning * into o;
+        confirmed_by = p_actor,
+        stripe_refund_id = coalesce((select a.stripe_refund_id from refund_attempts a where a.operation_id = o.id
+          and a.provider_status = 'succeeded' and a.stripe_refund_id is not null
+          and not exists (select 1 from refund_failures f where f.restaurant_id = a.restaurant_id and f.stripe_refund_id = a.stripe_refund_id)
+          order by a.updated_at desc, a.attempt_no desc limit 1), stripe_refund_id)
+        where id = o.id returning * into o;
     end if;
     return jsonb_build_object('outcome', 'completed', 'outstanding_cents', 0, 'completed_at', o.completed_at);
   end if;
@@ -11938,6 +11961,12 @@ begin
   if o.id is null or o.source <> 'stripe' then return jsonb_build_object('outcome', 'missing'); end if;
   if o.status = 'succeeded' then return public.complete_refund_operation_v1(o.id, p_actor); end if;
   if p_attribution_ref is null or nullif(btrim(p_actor), '') is null then return jsonb_build_object('outcome', 'review'); end if;
+  -- An app refund already sent for the outstanding amount may still succeed.
+  -- Counting a manual one now would let both leave (returns audit 2): MX$140
+  -- for a MX$100 promise. Its outcome is known first.
+  if (public.refund_operation_progress_v1(o.id)->>'unresolved')::boolean then
+    return jsonb_build_object('outcome', 'pending');
+  end if;
   for r in select * from jsonb_array_elements(p_refunds) order by value->>'id' loop
     if r->>'id' is null or jsonb_typeof(r->'amount_cents') <> 'number' or r->>'status' is null then
       raise exception 'invalid refund evidence';
@@ -12018,7 +12047,7 @@ begin
   select f.provider_status into v_failed from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = r->>'id';
   v_status := coalesce(v_failed, p_status);
   update refund_attempts set stripe_refund_id = r->>'id', provider_status = v_status, updated_at = now() where id = a.id;
-  update refund_operations set stripe_refund_id = coalesce(stripe_refund_id, r->>'id'), provider_status = v_status,
+  update refund_operations set stripe_refund_id = r->>'id', provider_status = v_status,
     status = case when v_status in ('failed', 'canceled') then 'failed' else 'processing' end where id = o.id;
   if v_status in ('failed', 'canceled') then
     return jsonb_build_object('outcome', 'failed',
