@@ -10,16 +10,18 @@ import { clampTicketTimes } from "@/lib/ticket-wait";
  * then red. The owner's and the manager's: whoever runs the floor knows what
  * a busy night looks like. Both numbers are saved together, when a field is
  * left, so "late" can never end up before "warn".
+ *
+ * The fields stay enabled while a save is in flight. Disabling them threw the
+ * cursor out of "late" the moment you tabbed in from "warn", because leaving
+ * "warn" is what starts the save (`pnpm dialogs` caught it).
  */
 export default function TicketTimesCard({
   warn,
   late,
-  saving,
   save,
 }: {
   warn: number;
   late: number;
-  saving: boolean;
   save: (input: Partial<SettingsInput>) => Promise<boolean>;
 }) {
   const t = useT();
@@ -47,7 +49,6 @@ export default function TicketTimesCard({
         max={240}
         inputMode="numeric"
         value={value}
-        disabled={saving}
         onChange={e => set(e.target.value)}
         onBlur={() => void commit()}
       />

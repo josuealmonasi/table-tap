@@ -79,7 +79,6 @@ export default function SettingsForm({
           <TicketTimesCard
             warn={restaurant.ticket_warn_minutes ?? DEFAULT_TICKET_WARN_MINUTES}
             late={restaurant.ticket_late_minutes ?? DEFAULT_TICKET_LATE_MINUTES}
-            saving={saving}
             save={save}
           />
 
