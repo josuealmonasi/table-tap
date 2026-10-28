@@ -10805,7 +10805,9 @@ alter table bill_split_slots enable row level security;
 drop policy if exists "team reads split slots" on bill_split_slots;
 create policy "team reads split slots" on bill_split_slots for select
   using (has_role(restaurant_id, array['manager', 'waiter', 'cashier']));
-revoke all on bill_split_slots from anon;
+-- Supabase grants every new table to every role by default; RLS would refuse
+-- the writes, but the floor only ever reads slots, so it is only granted that.
+revoke all on bill_split_slots from anon, authenticated;
 grant select on bill_split_slots to authenticated;
 
 -- What one card attempt is paying for, frozen when it is reserved.
