@@ -43,27 +43,28 @@ export interface OpenBill {
 }
 
 /**
- * Which sitting a bill belongs to, if its orders are on one.
+ * Which sittings a bill belongs to, if its orders are on any.
  *
  * Kept separate from `openBills` so the grouping stays a pure function of the
  * orders, and these are the only places that know about sittings.
  */
-function sessionOfBill(bill: OpenBill, sessionOf: Map<string, string>): string | undefined {
-  return bill.orderIds.map(id => sessionOf.get(id)).find(Boolean);
+function sessionsOfBill(bill: OpenBill, sessionOf: Map<string, string>): Set<string | undefined> {
+  return new Set(bill.orderIds.map(id => sessionOf.get(id)).filter(Boolean));
 }
 
 /** How far a table has got through dividing its bill. */
 export function withSplits(
   bills: OpenBill[],
-  splits: { session_id: string; shares: number; paidShares: number }[],
+  splits: { session_id: string; shares: number; paidShares: number; currency?: string | null }[],
   sessionOf: Map<string, string>,
 ): OpenBill[] {
-  const bySession = new Map(splits.map(s => [s.session_id, s]));
   return bills.map(bill => {
-    const found = bySession.get(sessionOfBill(bill, sessionOf) ?? "");
-    return found
-      ? { ...bill, split: { shares: found.shares, paidShares: found.paidShares } }
-      : bill;
+    const sessions = sessionsOfBill(bill, sessionOf);
+    const found = splits.filter(s => sessions.has(s.session_id) && (!s.currency || !bill.currency || s.currency === bill.currency));
+    return found.length ? { ...bill, split: {
+      shares: found.reduce((sum, s) => sum + s.shares, 0),
+      paidShares: found.reduce((sum, s) => sum + s.paidShares, 0),
+    } } : bill;
   });
 }
 
@@ -115,4 +116,9 @@ export function matchesBill(bill: OpenBill, query: string): boolean {
     (bill.customerName ?? "").toLowerCase().includes(q) ||
     bill.items.some(i => i.name.toLowerCase().includes(q))
   );
+}
+
+/** Orders stay unpaid until the last part: the ledger has already covered some of their total. */
+export function remainingBill(bill: Pick<OpenBill, "total" | "collected">): number {
+  return Math.max(0, round2(bill.total - (bill.collected ?? 0)));
 }

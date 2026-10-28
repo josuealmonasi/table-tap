@@ -138,10 +138,10 @@ describe("a polled route is sized for the room that polls it", () => {
     const offenders: string[] = [];
     for (const file of walkAll("src").filter(f => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__") && !f.includes("/app/api/"))) {
       const src = code(file);
-      if (!Object.keys(POLLED).some(route => src.includes(route)) || !src.includes("setInterval(")) continue;
+      if (!Object.keys(POLLED).some(route => src.includes(route)) || (!src.includes("setInterval(") && !src.includes("refreshInterval:"))) continue;
       pollers.push(file);
       const fromPoll = /from "@\/lib\/poll"/.test(src);
-      const literal = /setInterval\([^;]*?,\s*[\d_]+\s*\)/.test(src);
+      const literal = /setInterval\([^;]*?,\s*[\d_]+\s*\)|refreshInterval:\s*[\d_]+/.test(src);
       if (!fromPoll || literal) offenders.push(file);
     }
     expect(pollers.length, "no poller of these routes was found — the scan broke").toBeGreaterThan(3);

@@ -11,7 +11,7 @@ export async function splitRpc(name: string, args: Record<string, unknown>): Pro
 
 const refusals: Record<string, string> = {
   stale: "splitChanged", changed: "splitChanged", frozen: "splitFrozen", taken: "splitSlotPaying",
-  reserved: "splitSlotPaying", paid: "splitAlreadyPaid", below_minimum: "splitCombineSlots",
+  reserved: "splitSlotPaying", paid: "splitSlotPaid", below_minimum: "splitCombineSlots",
   conflict: "splitRequestChanged", busy: "splitAlready", nothing: "nothingToSplit", currency: "mixedCurrencies",
   gone: "splitGone", forbidden: "forbidden", invalid: "invalidRequest",
 };

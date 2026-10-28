@@ -3,6 +3,30 @@ import type { Messages } from "./en";
 // Spanish (Mexico) UI strings. Typed as Messages so a missing or extra key is a
 // compile error.
 export const es: Messages = {
+  slots: {
+    couponFirst: "Para dividir con este cupón, pídele al mesero que lo aplique primero a la cuenta. También puedes pagar la cuenta en línea con él.",
+    couponNotIncluded: "El cupón que elegiste no está incluido en estas partes. Pídele ayuda al mesero.",
+    chooseBill: "Elige la cuenta dividida",
+    division: "Cuenta dividida {n}",
+    checking: "Estamos revisando la cuenta. Puedes pedirle al mesero que cobre.",
+    startHint: "Elige entre cuántas personas van a dividir. Un teléfono puede pagar varias partes. ¿Tienes cupón? Pídele al mesero que lo aplique a la cuenta antes de dividir.",
+    start: "Dividir entre {n} personas",
+    choose: "Elige las partes que van a pagar",
+    part: "Persona {n}",
+    paid: "Pagada",
+    held: "Alguien está pagando",
+    free: "Libre",
+    progress: "{paid} de {of} partes pagadas",
+    remaining: "Faltan {amount} en esta cuenta",
+    minimum: "No alcanza el mínimo para tarjeta. Elige más partes o pídele al mesero que cobre.",
+    pay: "Pagar {amount}",
+    askWaiter: "Pídele al mesero que cobre las partes que elegiste, en efectivo o con la terminal.",
+    frozen: "Alguien ya intentó pagar. Ya no se puede cambiar entre cuántos se divide. Pídele ayuda al mesero si la necesitas.",
+    cancel: "Dejar de dividir esta cuenta",
+    collect: "Cobrar las partes elegidas",
+    cancelled: "La cuenta ya no está dividida. Puedes cobrar lo que falta.",
+    readFailed: "No pudimos leer las partes. Intenta de nuevo antes de cobrar.",
+  },
   pending: {
     discard: "Ya no enviar esto",
     discardWarning: "Puede que ya haya quedado registrado. Revisa primero tus pedidos o registros: dejar de enviarlo no lo cancela ni devuelve dinero, y mandarlo como algo nuevo podría registrarlo dos veces.",
@@ -1347,6 +1371,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     requestsFailed: "No pudimos revisar si hay otros teléfonos esperando entrar. Lo intentaremos de nuevo en unos segundos.",
   },
   apiErr: {
+    splitSlotPaid: "Una de estas partes ya está pagada. Revisa las partes.",
     splitCollectSlots: "Esta cuenta está dividida. Elige las partes que vas a cobrar.",
     splitChanged: "La cuenta cambió. Revisa las partes.",
     splitFrozen: "Alguien ya empezó a pagar. Ya no se puede cambiar ni cancelar esta división.",

@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import TableSplitCollection from "./TableSplitCollection";
+import type { StaffSlotSplit } from "@/lib/split-slots-staff";
+import { SPLIT_POLL_MS } from "@/lib/poll";
 import CashChange from "@/components/dashboard/CashChange";
 import { Modal } from "@/components/ui/Modal";
 import TipPicker from "@/components/customer/TipPicker";
@@ -16,9 +19,9 @@ import type { Outstanding } from "@/lib/table-outstanding";
 /**
  * The arithmetic half of an outstanding bill.
  *
- * The rows stay on the server, and so do the sitting ids: which sittings a
- * table owes on is how the money is attributed, not something a screen has any
- * use for.
+ * The rows stay on the server. A divided bill also carries its sitting id
+ * to the slot writer, which checks the table and restaurant again: a choice
+ * on one table must never collect another table's food.
  */
 type Balance = Omit<Outstanding, "orders" | "sittings">;
 
@@ -57,6 +60,7 @@ export default function TableCalculator({
 }: TableCalculatorProps) {
   const t = useT();
   const toast = useToast();
+  const [splits, setSplits] = useState<StaffSlotSplit[]>([]);
   const [bill, setBill] = useState<Balance | null>(null);
   const [mode, setMode] = useState<Mode>("full");
   const [plan, setPlan] = useState<number[]>([]);
@@ -77,6 +81,7 @@ export default function TableCalculator({
       const res = await fetch(`/api/table-bill?tableId=${tableId}`);
       const data = res.ok ? await res.json() : null;
       setBill(data?.outstanding ?? null);
+      setSplits(data?.splits ?? []);
       setLost(!data?.outstanding);
     } catch {
       // Offline. Said plainly rather than left spinning: a waiter waiting on a
@@ -94,6 +99,8 @@ export default function TableCalculator({
     setDone(0);
     setTyped("");
     void load();
+    const timer = setInterval(() => void load(), SPLIT_POLL_MS);
+    return () => clearInterval(timer);
   }, [open, load]);
 
   const balance = bill?.balances?.find(b => b.currency === chosenCurrency && b.owed > 0) ?? bill?.balances?.find(b => b.owed > 0) ?? bill;
@@ -127,7 +134,7 @@ export default function TableCalculator({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         toast(data.error ?? t("settle.failed"), "error");
-        if (data.code === "balance_changed") { setPlan([]); setDone(0); setMode("full"); await load(); }
+        if (data.code === "balance_changed" || data.code === "split") { setPlan([]); setDone(0); setMode("full"); await load(); }
         return;
       }
 
@@ -175,7 +182,7 @@ export default function TableCalculator({
       </h3>
 
       {lost ? (
-        <p className="tt-muted">{t("settle.failed")}</p>
+        <><p className="tt-muted">{t("settle.failed")}</p><button type="button" className="tt-btn tt-btn-ghost" onClick={load}>{t("settle.retry")}</button></>
       ) : !bill ? (
         <p className="tt-muted">{t("common.loading")}</p>
       ) : owed <= 0 ? (
@@ -204,6 +211,7 @@ export default function TableCalculator({
             </div>
           </div>
 
+          {splits.some(s => s.currency === currency) ? <TableSplitCollection splits={splits.filter(s => s.currency === currency)} remaining={owed} refresh={load} onCollected={onCollected} /> : <>
           <CollectionAmount
             mode={mode}
             plan={plan}
@@ -233,6 +241,7 @@ export default function TableCalculator({
               className="tt-btn tt-btn-primary tt-btn-lg"
               style={{ width: "100%" }}
               disabled={busy || amount <= 0 || tipTooLarge}
+              data-whole-bill-collect
               onClick={() => collect("cash")}
             >
               {t("settle.cash")} · {formatMoney(taken.amount, currency)}
@@ -241,6 +250,7 @@ export default function TableCalculator({
               className="tt-btn tt-btn-ghost tt-btn-lg"
               style={{ width: "100%", marginTop: 8 }}
               disabled={busy || amount <= 0 || tipTooLarge}
+              data-whole-bill-collect
               onClick={() => collect("card")}
             >
               {t("settle.card")} · {formatMoney(taken.amount, currency)}
@@ -258,6 +268,7 @@ export default function TableCalculator({
               </button>
             )}
           </div>
+          </>}
         </>
       )}
     </Modal>

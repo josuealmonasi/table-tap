@@ -12,16 +12,17 @@
 import { chromium } from "playwright";
 import { createClient } from "@supabase/supabase-js";
 import { join } from "node:path";
-import { CREW } from "./layout-paths.mjs";
+import { CREW, SPLIT_SCREENS } from "./layout-paths.mjs";
 import { changedParts, fingerprint, holdWrites } from "./hold-writes.mjs";
 import { watchDevWorker } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
 import { pageInScope, reportScope } from "./gate-scope.mjs";
 import { browserConcurrency, phaseTimings, runBrowserJobs } from "./browser-jobs.mjs";
 import { crewCookies } from "./browser-fixtures.mjs";
-import { probeDialogs } from "./dialog-probe.mjs";
-import { assertAuditControl } from "./browser-audit.mjs";
+import { probeDialogs, typingFaults } from "./dialog-probe.mjs";
+import { assertAuditControl, look } from "./browser-audit.mjs";
 
+import { splitScreenFixture, openSplitScreen } from "./split-slot-screens.mjs";
 import { deadline, runWatchdog } from "./browser-deadline.mjs";
 import { monitorBrowserServer } from "./browser-server.mjs";
 
@@ -61,6 +62,34 @@ const jobs = WIDTHS.flatMap(width => CREW.flatMap(who => who.pages.filter(pageIn
     return probeDialogs(job, { url: BASE + path, role: who.role, path });
   },
 }))));
+// The nested cash and tip fields are exercised in each collection door, as every collector.
+const { data: splitRestaurant, error: splitRestaurantError } = await admin.from("restaurants").select("id").eq("name", DEMO).single();
+if (splitRestaurantError) throw new Error(splitRestaurantError.message);
+for (const width of WIDTHS) for (const screen of SPLIT_SCREENS) {
+  const path = screen.role === "diner" ? "/r/_/t/_" : `/dashboard/${screen.door === "bills" ? "bills" : "orders"}`;
+  if (!pageInScope(path)) continue;
+  jobs.push({ id: `${width}px · ${screen.role} · ${screen.name}`, options: { viewport: { width, height: 900 } },
+    skip: prod ? "private split fixtures run only in development" : cookies.get(screen.role)?.skip,
+    run: async job => {
+      if (!prod) {
+        const auth = cookies.get(screen.role);
+        if (auth?.error) throw auth.error;
+        if (auth?.cookie) await job.ctx.addCookies([auth.cookie]);
+        const fixture = await splitScreenFixture(admin, splitRestaurant.id, screen.state !== "start");
+        try {
+          await openSplitScreen(job, { fixture, screen, base: BASE });
+          const failures = await look(job.tab, screen.name, job.phase, job.log);
+          const faults = await typingFaults(job.tab);
+          for (const fault of faults) job.log(`    BAD      ${screen.name}: ${fault}`);
+          await job.tab.keyboard.press("Escape");
+          await job.tab.locator("[role=dialog]").waitFor({ state: "hidden" });
+          return { failures: failures + faults.length, opened: 1, fieldChecks: 1 };
+        } finally { try { await job.tab.close(); } finally { await fixture.cleanup(); } }
+      }
+      throw new Error("Private split fixtures cannot run against production");
+    },
+  });
+}
 const browser = await deadline(30000, () => chromium.launch(), undefined, 5000, "browser launch");
 console.log(`\nDialogs — ${prod ? "production" : "development"}; ${concurrency} worker(s)\n`);
 let result;

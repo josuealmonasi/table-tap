@@ -5083,3 +5083,98 @@ The activity reads its amount and tip from the receipt, including the unpaid
 old gratuities inside the frozen parts. Logging only the new `tip_cents`
 would understate collected tips. That extra case also failed before the
 receipt-based log and passes in `split-slots-collect-route.spec.ts`.
+
+
+## Split model-2 screens — 2026-10-28
+
+| Check | Two places that had to agree | Regression coverage |
+|---|---|---|
+| New splits count people, not phones | The server created immediate parts, but the card capped people by devices and started legacy claims | `split-slots-screen.spec.tsx`, `split-slots-client.spec.tsx`, `split-slots-payment-options.spec.ts` |
+| A coupon promise survives the choice to divide | A coupon chosen for whole-bill checkout had not changed the stored bill that a new split freezes | `split-slots-coupon.spec.tsx` |
+| A displayed part is the part being paid | The route accepted grouped free parts, but the card described legacy joining and had no honest minimum or held/paid choices | `split-slots-screen.spec.tsx`, `bill-slot-payment.spec.ts` |
+| Both staff doors collect parts | The slot writer refused whole-bill collection, but the staff reader and sheets knew only orders | `split-slots-staff-read.spec.ts`, `split-slots-collection-screen.spec.tsx` |
+| Bills show what remains, in the right currency and sitting | The ledger covered half the bill while the row/totals showed the full amount and read only legacy claims or the first sitting | `split-slots-bills.spec.ts`, `split-slots-bill-row.spec.tsx`; browser gate fixtures |
+| A retry keeps its reference on every supported phone | A lost start reply generated a new reference, and HTTP phones lacked randomUUID | `split-slots-client.spec.tsx`; the collection-screen spec also preserves cash retry bodies |
+| A live split stays payable when its surrounding screen changes | A switch or a second currency hid existing parts; an unread split could expose a second whole-bill card offer | `split-slots-bill-sheet.spec.tsx` |
+| A refusal speaks to the person collecting or paying | A grouped paid-slot refusal said the cashier's own share was paid | `split-slots-outcome-copy.spec.ts`, `bill-slot-payment.spec.ts` |
+
+### New splits count people, not phones
+
+The start card and the slot protocol had to agree. The old dropdown disappeared
+with fewer than two ordering phones and the no-card path only did arithmetic.
+New starts offer 2–20 people and create the real parts, with no device ceiling.
+A waiter-opened bill can use those same parts while whole-bill card payment
+stays with staff. The old phone-claim card keeps its existing flow and comments.
+The screen tests failed against the old card before the new path was added.
+
+### A displayed part is the part being paid
+
+The selector and checkout had to agree on free parts and exact cents. Every
+part now says free, someone is paying, or paid; only free parts can be chosen.
+The phone can pay several together, and an amount below the card minimum asks
+for more parts or the waiter instead of inventing money. New tips are separate
+and cannot satisfy the food minimum. Tests cover MXN grouping, disabled paid
+and held parts, route refusals and the unchanged model-1 payment body.
+
+### Both staff doors collect parts
+
+The staff read and the collection writer had to agree. Neither collection
+sheet read slots, so both offered money the route refused. The trusted
+outstanding orders now scope the staff slot read; a failed read is loud and
+checkout ids stay private. Both sheets share one selector, cash-change helper,
+terminal/cash writer and revision-checked cancellation. If a split starts
+after the sheet opens, a whole-bill `split` refusal immediately reads and
+offers the parts; both entry-point tests failed before that correction. Frozen copy replaces
+cancellation after an attempt. The staff screen and mocked database tests
+failed before these readers and controls existed, then passed with the fix.
+
+### Bills show what remains, in the right currency and sitting
+
+Payment coverage and the Bills display had to agree. The row and sum still
+used the order total after half had been paid, and progress read legacy claims
+or the first sitting only. Rows and sums now subtract coverage; model 2 counts
+paid slots, with currency and every represented sitting matched explicitly.
+The half-paid row and later-sitting/currency tests reproduced both mistakes.
+
+### A retry keeps its reference on every supported phone
+
+A retry and its first request had to agree. The new start initially generated
+a different reference after an unanswered request, while a phone on local
+HTTP could not call randomUUID at all. The hook now retains the reference for
+the same quote and creates a UUID from random bytes when needed. Both tests
+failed before the corrections. Cash/terminal retries retain their exact body
+and reference too, so a lost reply cannot become another ledger collection.
+
+### A live split stays payable when its surrounding screen changes
+
+The existing division and the bill's visibility rules had to agree. Turning
+off new splitting or adding another currency must not hide money already
+being collected in parts. Existing parts now stay visible in their saved
+currency, and the waiter call survives a pending or failed split read while
+the whole-bill card offer waits. The mixed-currency screen test failed before
+that correction; switch and loading cases pin the other two paths.
+
+### A refusal speaks to the person collecting or paying
+
+The grouped route and its sentence had to agree. A cashier collecting another
+person's parts was told their own share was already paid. Model-2 paid-part
+copy now asks them to check the parts in both languages, while model 1 keeps
+its original sentence. The bilingual tests failed before that mapping changed.
+Taken, reserved, below_minimum, stale, frozen and split retain their translated
+route messages, and the clients show those messages without guessing.
+
+The new `SPLIT_SCREENS` inventory reaches the diner and every collector through
+both staff doors. Its private fixture cleanup has local mock coverage. Claude
+must still run layout at 360/390/820/1280, dialogs, promises and the full shared
+gate, and inspect the screens. No worker unit result stands in for that run.
+
+
+### A coupon promise survives the choice to divide
+
+The coupon shown in checkout and the amount frozen into parts had to agree.
+Choosing a coupon changes a whole-bill card payment, not the stored orders.
+Starting a split at that point would silently lose the promised discount. The
+screen now keeps online coupon payment available and asks the waiter to put
+the coupon on the bill before dividing. If another phone divides meanwhile,
+it says the coupon is not included instead of pretending it was applied.
+`split-slots-coupon.spec.tsx` failed before that screen guard was added.

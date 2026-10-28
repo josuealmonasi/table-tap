@@ -35,17 +35,16 @@ interface BillSheetProps {
    * A waiter opened this bill and is settling it in person.
    *
    * The diners can watch what has been ordered and add to it; the money goes
-   * to the person standing in front of them. So no card field and no dividing
-   * it here — the waiter has a calculator that does the same job, and the
-   * routes refuse a charge anyway. Offering a button the system turns down is
-   * worse than not offering it.
+   * to the person standing in front of them. Whole-bill card checkout stays
+   * hidden; model-2 payments use the same parts as the waiter, so both see what
+   * has already been paid and neither can collect a part twice.
    */
   staffBill?: boolean;
   /**
    * How many devices have ordered on this table.
    *
-   * The ceiling on dividing the bill. Nothing else on this screen uses it —
-   * what somebody pays is always summed from the orders.
+   * Only the legacy model-1 flow uses this ceiling. New splits count people,
+   * and one phone may pay several parts.
    */
   party?: number;
   /**
@@ -95,7 +94,7 @@ export default function BillSheet({
   const bill = tableBill(allOrders.filter(o => o.currency === currency), allBill.mine.orders.map(o => o.id));
   const mixed = currencies.length > 1;
   const [scope, setScope] = useState<"all" | "mine">("all");
-  const { busy, called, payShare, payOnline, payAtTable } = useBillPayment(
+  const { busy, called, payShare, paySlots, payOnline, payAtTable } = useBillPayment(
     restaurant.id,
     tableId,
     sessionId,
@@ -116,21 +115,26 @@ export default function BillSheet({
 
   // Only while the sheet is open, and only while dividing it leads anywhere:
   // a bill nobody is looking at does not need asking about every five
-  // seconds, and one that cannot be paid by card cannot be paid by share.
+  // seconds. Existing parts stay visible even if the owner turns splitting
+  // off; hiding them would offer the whole bill over money already paid.
   const {
     split,
+    ready: splitReady,
     diner,
     busy: splitBusy,
     error: splitError,
     propose,
     join,
+    resize,
+    refresh: refreshSplit,
     cancel: cancelSplit,
   } = useSplit(
     restaurant.id,
     tableId,
     sessionId,
-    open && can.split,
+    open && Boolean(sessionId),
     bill.mine.orders.filter(o => !o.paid).map(o => o.id),
+    { expectedCents: Math.round(bill.total * 100), currency },
   );
 
   // Once it has frozen, the split card is how this table pays. Everything that
@@ -138,7 +142,8 @@ export default function BillSheet({
   // share. A phone that ordered and never joined still had the button: three
   // ordered, two of them halved it, and the third could pay for the lot while
   // the two halves were being collected. One dinner, charged twice.
-  const splitLocked = can.split && (dividing || split?.status === "locked");
+  const splitLocked = dividing || split?.status === "locked" || split?.modelVersion === 2;
+  const checkingSplit = Boolean(sessionId) && !splitReady;
   /**
    * Is calling somebody over the only thing left on this screen?
    *
@@ -149,7 +154,7 @@ export default function BillSheet({
    * no share looking at a bill and no way to do anything about it, not even
    * ask for help, which is worse than the button it was hiding.
    */
-  const alone = Boolean(noCard) || splitLocked;
+  const alone = Boolean(noCard) || splitLocked || checkingSplit;
 
   const [tipPct, setTipPct] = useState(0);
   const [tipCustom, setTipCustom] = useState<number | null>(null);
@@ -211,29 +216,32 @@ export default function BillSheet({
               side={paid} currency={c} photoOf={photoOf} settled collapsible />;
           })}
 
+          {coupon && <p className="tt-muted">{t(split ? "slots.couponNotIncluded" : "slots.couponFirst")}</p>}
+
           {/* Dividing it evenly is a decision about the whole bill, so it is
               asked before the smaller question of whose dishes to pay for.
-              Not on a bill the waiter is settling: they are standing there
-              with a calculator that divides it, and two of us collecting the
-              same bill is how a table pays twice. And not without a card
-              reader behind it: a share is charged through the same route as
-              the whole bill, so dividing one twelve ways with no Stripe
-              account produces twelve people who cannot pay. */}
-          {can.split && !mixed && (
+              Every part exists at once, even without a card account. The
+              waiter and the phones choose from the same list, so cash and
+              cards cannot both pay the same food. */}
+          {(split?.modelVersion === 2 || (split && !staffBill) || (!split && !coupon && can.split && sessionId && splitReady && !mixed)) && (
             <SplitBillCard
               split={split}
               diner={diner}
               tipPct={tipPct}
               busy={splitBusy || busy}
               currency={dinerCurrency(ordersToPay(bill, "all")) ?? currency}
-              outstanding={bill.total}
+              outstanding={tableBill(allOrders.filter(o => o.currency === (split?.currency ?? currency)), []).total}
               party={party}
               cardsEnabled={Boolean(restaurant.cards_enabled)}
               propose={propose}
               join={join}
+              resize={resize}
               cancel={cancelSplit}
-              onPay={() =>
-                split?.mine
+              onPay={(slots, tipCents) =>
+                split?.modelVersion === 2 && slots && split.revision
+                  ? paySlots({ splitId: split.id, revision: split.revision, slots, tipCents,
+                    expectedCents: (split.slots ?? []).filter(s => slots.includes(s.shareNo)).reduce((sum, s) => sum + s.amountCents, 0) }).then(() => refreshSplit())
+                  : split?.mine
                   ? payShare({ splitId: split.id, diner, ownOrderIds: myUnpaid, tipPct })
                   : Promise.resolve()
               }
@@ -249,7 +257,7 @@ export default function BillSheet({
           {/* Everything below settles the WHOLE bill, which is not what this
               phone owes any more once the table has divided it. Two ways to
               pay, disagreeing about the amount, is how somebody pays twice. */}
-          {!splitLocked && can.extras && (
+          {!splitLocked && !checkingSplit && can.extras && (
             <BillExtras
               restaurantId={restaurant.id}
               currency={currency}
@@ -272,7 +280,7 @@ export default function BillSheet({
               always offered. What is gated is the rest: a frozen split settles
               through the shares, and a total with a card button under it is a
               second way to pay the same food. */}
-          {!splitLocked && (
+          {!splitLocked && !checkingSplit && (
             <BillTotals amounts={amounts} restaurant={{ ...restaurant, currency }} tipPct={tipPct} tipCustom={tipCustom} />
           )}
 
@@ -280,7 +288,7 @@ export default function BillSheet({
             called={called}
             busy={busy}
             alone={alone}
-            reasonKey={splitLocked ? "bill.dividing" : noCard}
+            reasonKey={checkingSplit ? "slots.checking" : splitLocked ? "bill.dividing" : noCard}
             onPayOnline={() =>
               payOnline({
                 orderIds: orders.map(o => o.id),

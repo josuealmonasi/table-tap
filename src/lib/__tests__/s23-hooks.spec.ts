@@ -5,6 +5,7 @@ vi.mock("react", async original => ({ ...await original<typeof import("react")>(
   ...await import("./s23-test-helpers").then(h => ({ useState: h.useState, useRef: h.useRef })),
   useCallback: (fn: unknown) => fn, useEffect: () => {},
 }));
+vi.mock("swr", () => ({ default: () => ({ data: { split: { id: "s", status: "proposed" }, diner: "d" }, mutate: async () => {} }) }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({ from: mocks.from, rpc: mocks.rpc }) }));
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => mocks.toast }));
 vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string) => key }));
@@ -52,7 +53,7 @@ it("K16: failed coupon reads retain the last list and expose a retry", async () 
   expect(again.coupons).toEqual(coupons); expect(again).toHaveProperty("loadFailed", true); expect(again).toHaveProperty("reload");
 });
 it.each(["refusal", "network"])("K18: split %s leaves a visible error and the last split", async kind => {
-  state.values = [{ id: "s", status: "proposed" }, false, "d"];
+  state.values = [false, null];
   if (kind === "refusal") vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ error: "Try later" }), { status: 429 }));
   else vi.mocked(fetch).mockRejectedValue(new Error("offline"));
   await expect(useSplit("r", "t", "s", false).join()).resolves.toBeUndefined(); resetHooks();

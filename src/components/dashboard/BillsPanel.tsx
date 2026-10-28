@@ -6,7 +6,7 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { balancesLabel, currencyBalances } from "@/lib/currency-balances";
-import { matchesBill, type OpenBill } from "@/lib/open-bills";
+import { remainingBill, matchesBill, type OpenBill } from "@/lib/open-bills";
 import BillDiscountDialog from "./BillDiscountDialog";
 import SettleTableDialog from "./SettleTableDialog";
 import { SearchIcon } from "@/components/ui/icons";
@@ -127,7 +127,7 @@ export default function BillsPanel({
   }, []);
 
   const shown = useMemo(() => bills.filter(b => matchesBill(b, query)), [bills, query]);
-  const owed = currencyBalances(shown.map(b => ({ currency: b.currency ?? currency, amount: b.total })));
+  const owed = currencyBalances(shown.map(b => ({ currency: b.currency ?? currency, amount: remainingBill(b) })));
 
   // Having a balance and asking for the bill are not the same: the first is
   // nearly the whole room, the second is somebody with a hand up. The ones

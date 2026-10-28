@@ -1,6 +1,30 @@
 // English UI strings for the customer-facing screens. This is the source of
 // truth for the message keys; es.ts must mirror its shape (enforced by types).
 export const en = {
+  slots: {
+    couponFirst: "To divide with this coupon, ask the waiter to apply it to the bill first. You can still pay the bill online with it.",
+    couponNotIncluded: "The coupon you chose is not included in these parts. Ask the waiter for help.",
+    chooseBill: "Choose the divided bill",
+    division: "Divided bill {n}",
+    checking: "Checking the bill. You can still ask the waiter to collect.",
+    startHint: "Choose how many people are sharing. One phone can pay several parts. Have a coupon? Ask the waiter to apply it to the bill before dividing.",
+    start: "Divide between {n} people",
+    choose: "Choose the parts to pay",
+    part: "Person {n}",
+    paid: "Paid",
+    held: "Someone is paying",
+    free: "Free",
+    progress: "{paid} of {of} parts paid",
+    remaining: "{amount} left on this bill",
+    minimum: "Below the card minimum. Choose more parts or ask the waiter.",
+    pay: "Pay {amount}",
+    askWaiter: "Ask the waiter to collect the parts you chose, in cash or on the terminal.",
+    frozen: "Someone has already tried to pay. The number of people can no longer change. Ask the waiter if you need help.",
+    cancel: "Stop dividing this bill",
+    collect: "Collect the chosen parts",
+    cancelled: "The bill is no longer divided. You can collect what is left.",
+    readFailed: "Couldn’t read the parts. Try again before collecting.",
+  },
   pending: {
     discard: "Stop sending this",
     discardWarning: "It may already be recorded. Check your orders or records first: not sending it doesn't cancel it or return any money, and sending it as something new could record it twice.",
@@ -1353,6 +1377,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     requestsFailed: "Could not check for other phones waiting to join. We’ll check again in a few seconds.",
   },
   apiErr: {
+    splitSlotPaid: "One of these parts is already paid. Check the parts again.",
     splitCollectSlots: "This bill is divided. Choose the parts you are collecting.",
     splitChanged: "The bill changed. Check the parts again.",
     splitFrozen: "Someone has already started paying. This split can no longer be changed or cancelled.",

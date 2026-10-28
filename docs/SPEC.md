@@ -614,10 +614,9 @@ dishes on a bill the restaurant has just cancelled.
 The divided bill above is model 1. It waits for every phone to join, one share
 per phone. A table of four with one phone could not divide its bill at all,
 and the floor could not collect a share in cash. Model 2 is agreed in
-`tabletap-release/loop/dialogue/split-slots-contract.md`. Its database half
-is built; the routes and screens follow, and until then nothing starts a
-model-2 split except the demo seed. Model-1 splits stay readable and
-settleable as they are.
+`tabletap-release/loop/dialogue/split-slots-contract.md`. The database, routes and diner/staff screens now create and collect model-2
+splits. Payment-based receipt screens follow after #567. Model-1 splits stay
+readable and settleable as they are.
 
 - **Slots exist at once.** `start_bill_split_v2` freezes the sitting's
   unpaid, non-account debt (the amount the screen showed, or `stale`) and
@@ -2293,7 +2292,7 @@ that minimum or the fee base. Coupons must be applied before the split.
 Staff-opened tables support model 2. The original attempt's tip, fee and expiry
 survive retries. A browser return or lost answer never frees parts.
 
-`/api/split/collect` is shared by the future Pedidos and Cuentas abiertas part
+`/api/split/collect` is shared by the Pedidos and Cuentas abiertas part
 selectors. It accepts the sitting scope, split/revision, selected slots,
 `expectedCents`, `currency`, optional `tipCents`, `method` (`cash` or own-terminal
 `card`) and a stable `ref` (at most 100 characters). The trusted staff identity
@@ -2310,8 +2309,54 @@ refund owed. Positive expiry or provider refusal releases only its reservation.
 fee slices and allocations. API and attack cases cover the new routes and
 concurrency/role boundaries. Those shared gates are run by the release owner.
 
-Legacy split creation/join/read/payment remains available for existing screens.
-The diner split card, shared staff part selector, progress in Bills and Cuentas
-abiertas, visible revision-checked cancellation in both staff entry points,
-and payment-based receipts are pass 2; receipts wait for #567. Server pass 1
-does not claim those controls are present on screen.
+Legacy creation/join/read/payment remains available for existing model-1
+splits. The screens below start only model 2. Payment-based receipt screens
+remain pass 3 and wait for #567.
+
+
+### Split by people, model 2 — screens (2026-10-28)
+
+The diner's BillSheet starts a division between 2 and 20 people without
+counting devices, including on a waiter-opened or cash-only bill. Coupons
+are applied to the stored bill by staff before dividing. A coupon chosen for
+online whole-bill checkout stays usable there; it never silently disappears
+into a split that cannot accept it. Every numbered person appears at once, with the
+saved amount and a free, someone-is-paying or paid label. One phone chooses
+several free parts and pays their exact summed cents plus an optional tip.
+Below the card minimum, the screen asks for more parts or the waiter; a tip
+never makes an undersized part eligible. The waiter call stays available.
+Existing model-1 splits keep their joining and own-share payment flow.
+
+A live division remains visible if the owner switches new splitting off or a
+later order uses another currency. Its saved currency and the real remaining
+balance are shown. While the split read is pending or has failed, the screen
+keeps the waiter call and withholds a second whole-bill card offer. Polls use
+SWR with the shared split interval and stop when the bill closes. Starting
+again after a lost reply keeps the same reference; local HTTP phones use
+random bytes when randomUUID is unavailable.
+
+Pedidos and Cuentas abiertas use the same selector and collection component
+for owner, manager, waiter and cashier; kitchen has neither the controls nor
+access to the staff reader. `/api/table-bill` includes model-2 splits only for
+sittings in the trusted outstanding orders of that restaurant/table. Parts
+expose no private checkout ids. A failed split read fails the bill read rather
+than offering whole-bill collection over an unread division.
+
+Staff choose free parts, add an optional tip, and record cash or payment on
+the restaurant's terminal through `/api/split/collect`. Cash includes the
+existing change helper. The reviewed cents, currency and revision travel with
+the selection; a lost-reply retry keeps its collection reference. Every
+refusal is shown in the caller's language and answered with a fresh list.
+Before the first attempt, both staff doors offer a visible revision-checked
+stop-dividing button. Afterwards they explain why the people count cannot
+change. Cancellation returns the real unpaid bill to ordinary collection.
+
+Bills rows and totals subtract retained payment coverage. Progress counts
+paid slots for model 2 and paid claims for model 1, matches the saved currency,
+and includes every sitting represented by a row. New private browser fixtures
+exercise the diner start, paid/held/free parts and both staff collection doors
+for every collector in layout and dialogs. Promises includes a bill with a
+paid part and requires slot controls while forbidding whole-bill collection.
+These fixture visits run only in development and delete their own requests,
+memberships, attempts, money, orders, sitting and table. The release owner runs
+those browser/database gates; unit tests alone do not claim they passed.
