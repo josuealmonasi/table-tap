@@ -1,8 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { claimCoupon, logRedemption } from "@/lib/coupon-service";
-import { spreadDiscount } from "@/lib/staff-discount";
 import type { Order } from "@/lib/types";
-import { round2 } from "@/lib/money";
+
+/** What a staff discount came to. */
+export type DiscountOutcome = "applied" | "part_paid" | "changed" | "failed";
 
 /**
  * Reserves the use and writes it across the bill.
@@ -11,48 +11,26 @@ import { round2 } from "@/lib/money";
  * tables at once. Recorded as confirmed straight away, unlike a checkout —
  * there is no payment page to abandon, the discount is real the moment the
  * manager grants it.
+ *
+ * All of it happens in `apply_bill_discount`, under the money lock: the coupon
+ * use, the new totals and the redemption land together or not at all, and a
+ * bill with money already collected is refused (paths audit #2). It used to be
+ * written order by order from here, with failed writes ignored and the
+ * redemption logged regardless. A charge can still move an order off the
+ * table after the discount was read; the function re-reads it under the lock.
  */
 export async function applyToOrders(
   orders: Order[],
   couponId: string,
-  code: string,
   amount: number,
   restaurantId: string,
-): Promise<boolean> {
-  if (!(await claimCoupon(couponId))) return false;
-
-  const db = createAdminClient();
-  for (const share of spreadDiscount(orders, amount)) {
-    const order = orders.find(o => o.id === share.orderId)!;
-    await db
-      .from("orders")
-      .update({
-        coupon_code: code,
-        discount: round2(Number(order.discount ?? 0) + share.amount),
-        total: share.total,
-      })
-      .eq("id", share.orderId)
-      // A charge can move it off the table after the discount was read.
-      .is("account_id", null)
-      .eq("restaurant_id", restaurantId)
-      .eq("paid", false)
-      .eq("written_off", false)
-      .neq("status", "cancelled");
-  }
-
-  await logRedemption({
-    restaurantId,
-    couponId,
-    orderId: orders[0].id,
-    code,
-    amount,
+): Promise<DiscountOutcome> {
+  const { data, error } = await createAdminClient().rpc("apply_bill_discount", {
+    p_restaurant: restaurantId,
+    p_orders: orders.map(o => o.id),
+    p_coupon: couponId,
+    p_amount: amount,
   });
-  await db
-    .from("coupon_redemptions")
-    .update({ confirmed_at: new Date().toISOString() })
-    .eq("order_id", orders[0].id)
-    .is("confirmed_at", null);
-
-  return true;
+  if (error) return "failed";
+  return data === "applied" || data === "part_paid" ? data : "changed";
 }
-

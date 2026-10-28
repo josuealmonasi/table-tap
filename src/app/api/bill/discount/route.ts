@@ -65,7 +65,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   query = orderId ? query.eq("id", orderId) : query.eq("table_id", tableId!);
 
   if (body.currency) query = query.eq("currency", body.currency);
-  const { data: rows } = await query;
+  const { data: rows, error: readError } = await query;
+  // A failed read is not an empty bill.
+  if (readError) return await apiError("apiErr.generic", 503);
   const orders = discountableOrders((rows ?? []) as Order[]);
   if (orders.length === 0) return await apiError("apiErr.nothingToDiscount", 409);
 
@@ -102,8 +104,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ pending: true, amount, code: coupon.code });
   }
 
-  const applied = await applyToOrders(orders, coupon.id, coupon.code, amount, actor.restaurantId);
-  if (!applied) return await apiError("apiErr.couponNotValid", 409);
+  const applied = await applyToOrders(orders, coupon.id, amount, actor.restaurantId);
+  if (applied === "part_paid") return await apiError("apiErr.discountPartPaid", 409);
+  if (applied === "failed") return await apiError("apiErr.generic", 503);
+  if (applied !== "applied") return await apiError("apiErr.couponNotValid", 409);
 
   await logEvent({
     restaurantId: actor.restaurantId,

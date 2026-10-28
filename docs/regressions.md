@@ -4787,6 +4787,7 @@ release gates. These local tests do not apply or validate the deployed schema.
 | A part-paid bill is never written off, directly or by approval | MX$80 of a MX$100 bill collected; a manager wrote it off and the log said MX$100 lost | `table-adjustments.spec.tsx` (route + SQL text), dev probe of `write_off_orders` |
 | A locked plan freezes every table the menu editor writes directly | Sections, extras, icon palettes and dietary tags stayed editable on a locked plan | `invariants/database.spec.ts` (every "manages" policy has a freeze trigger), dev probe |
 | A shift opened during a close starts after it | An open waiting on a close kept its transaction-start time, so one sale fell in both shifts | `cash-shift-open.spec.ts`, dev probe of `open_cash_shift` |
+| A staff discount lands whole or not at all, and never under collected money | Totals written with no lock, failed writes ignored, redemption logged anyway; a part-paid bill cut below what it had paid | `table-adjustments.spec.tsx`, dev probe of `apply_bill_discount` |
 
 ### A scanned collection and a refreshed bill list have separate lifetimes
 
@@ -4943,4 +4944,18 @@ index for a close committing at 12:00:01 kept 12:00:00, so a sale at
 12:00:00.5 fell inside both windows and the corte counted it twice. Opening is
 now `open_cash_shift`: the same lock, then the time. Found by reading, not
 seen in production; the interleaving was not run.
+
+## A discount that said yes whatever happened (paths audit #2)
+
+A manager's staff discount was written from `apply-bill-discount.ts` order by
+order: the coupon use first, then each order's total with no lock and no check
+of the result, then the redemption, logged and reported as done whatever the
+updates did. A bill with MX$80 of MX$100 collected could be cut to MX$50 under
+the money already in it, and a refused update still logged MX$50 redeemed. It
+also got past `guard_allocated_order`, which only checks writers that opt in.
+`apply_bill_discount` does it in one transaction under the money lock: the
+coupon use, the totals and the redemption, or none. It refuses a part-paid bill
+the way a write-off is refused. An approval for a bill paid in part since the
+ask now answers `part_paid` instead of raising. Both bill routes also stopped
+reading a failed order read as an empty bill.
 

@@ -23,6 +23,13 @@ const rpc = async (name: string, args: Row) => {
   const ids = (args.p_orders ?? [args.p_order]) as string[];
   const paid = ids.reduce((n, id) => n + (coverage[id] ?? 0), 0);
   if (name === "retained_order_coverage") return { data: paid, error: null };
+  if (name === "apply_bill_discount") {
+    const open = (tables.orders ?? []).filter(o => ids.includes(o.id as string) && !o.account_id && !o.paid && !o.written_off);
+    if (open.length !== ids.length) return { data: "changed", error: null };
+    if (paid > 0) return { data: "part_paid", error: null };
+    applied.push(open);
+    return { data: "applied", error: null };
+  }
   if (paid > 0) return { data: { outcome: "part_paid", paid }, error: null };
   const done = (tables.orders ?? []).filter(o => ids.includes(o.id as string) && !o.account_id && !o.paid && !o.written_off);
   done.forEach(o => { o.written_off = true; o.status = "completed"; });
@@ -94,8 +101,12 @@ describe("table adjustment routes leave account orders alone", () => {
   });
   it("cannot discount an order moved to an account after the read", async () => {
     const { applyToOrders } = await vi.importActual<typeof import("@/lib/apply-bill-discount")>("@/lib/apply-bill-discount");
-    await applyToOrders([{ id: "yesterday", total: 100 }] as never, "c1", "SAVE", 30, "r1");
+    expect(await applyToOrders([{ id: "yesterday", total: 100 }] as never, "c1", 30, "r1")).toBe("changed");
     expect(tables.orders[1].total).toBe(100);
+    const fn = readFileSync("supabase/schema.sql", "utf8").split("create or replace function public.apply_bill_discount(")[1]!.split("end; $$;")[0]!;
+    expect(fn).toContain("and coupon_code is null and account_id is null");
+    expect(fn).toContain("perform public.lock_restaurant_money(p_restaurant);");
+    expect(fn).toContain("retained_order_coverage(p_restaurant, o.id) > 0) then return 'part_paid'");
   });
   it("cannot write off an order moved to an account after the read", async () => {
     expect(await applyWriteOff({ orders: [{ id: "yesterday" }] as never, restaurantId: "r1", actorEmail: "ana", reason: "walkout", note: "" }))
@@ -106,6 +117,16 @@ describe("table adjustment routes leave account orders alone", () => {
     expect(fn).toContain("and account_id is null");
     expect(fn).toContain("perform public.lock_restaurant_money(p_restaurant);");
     expect(fn).toContain("retained_order_coverage(p_restaurant, id)");
+  });
+});
+
+describe("a part-paid bill is not discounted (paths audit #2)", () => {
+  it("refuses a manager's discount and applies nothing", async () => {
+    actor.role = "manager";
+    coverage.today = 30;
+    const { applyToOrders } = await vi.importActual<typeof import("@/lib/apply-bill-discount")>("@/lib/apply-bill-discount");
+    expect(await applyToOrders([{ id: "today", total: 50 }] as never, "c1", 30, "r1")).toBe("part_paid");
+    expect(applied).toEqual([]);
   });
 });
 

@@ -60,7 +60,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .select("id, total, paid, written_off, status, table_id, table_label, currency")
     .is("account_id", null)
     .eq("restaurant_id", actor.restaurantId);
-  const { data: rows } = await (tableId ? scoped.eq("table_id", tableId) : scoped.in("id", ids));
+  const { data: rows, error: readError } = await (tableId ? scoped.eq("table_id", tableId) : scoped.in("id", ids));
+  // A failed read is not a bill with nothing on it.
+  if (readError) return await apiError("apiErr.generic", 503);
 
   const orders = writableOff((rows ?? []) as Order[]);
   if (orders.length === 0) return await apiError("apiErr.nothingToWriteOff", 409);

@@ -7882,6 +7882,10 @@ begin
      and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
      and coupon_code is null and account_id is null;
   if v_count <> cardinality(v_request.order_ids) or v_total <= 0 then return 'changed'; end if;
+  -- Paid in part since it was asked for: a lower total would sit under money
+  -- already collected (paths audit #2). The guard would raise; this says why.
+  if exists (select 1 from unnest(v_request.order_ids) o(id)
+    where public.retained_order_coverage(p_restaurant, o.id) > 0) then return 'part_paid'; end if;
   select * into v_coupon from coupons
    where restaurant_id = p_restaurant and upper(code) = upper(v_request.code) for update;
   if not found or not v_coupon.active
@@ -7914,6 +7918,59 @@ begin
 end; $$;
 revoke all on function public.approve_discount_request_v2(uuid, uuid, text, numeric) from public, anon, authenticated;
 grant execute on function public.approve_discount_request_v2(uuid, uuid, text, numeric) to service_role;
+
+-- A manager's staff discount on a bill, under the money lock (paths audit #2).
+--
+-- It used to be written order by order from the route: totals lowered with no
+-- lock, update errors ignored, and the redemption logged and reported as done
+-- whatever happened to the orders. A bill with MX$80 of MX$100 collected could
+-- be cut to MX$50 under the money already in it, past guard_allocated_order,
+-- which only checks writers that opt in. Now it is one transaction: eligibility,
+-- the coupon use, the totals and the redemption, or none of them. A part-paid
+-- bill is refused like a write-off (the guard would refuse the lower total
+-- anyway). The amount is the route's coupon arithmetic; this checks it fits.
+create or replace function public.apply_bill_discount(
+  p_restaurant uuid, p_orders uuid[], p_coupon uuid, p_amount numeric
+) returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_coupon coupons%rowtype;
+  v_count int;
+  v_total numeric;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  perform public.backfill_payment_allocations(p_restaurant);
+  perform set_config('tabletap.allocation_scope', '', true);
+  perform 1 from orders where id = any(p_orders) and restaurant_id = p_restaurant order by id for update;
+  select count(*), coalesce(sum(total), 0) into v_count, v_total from orders
+   where id = any(p_orders) and restaurant_id = p_restaurant
+     and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
+     and coupon_code is null and account_id is null;
+  if v_count = 0 or v_count <> cardinality(p_orders) or v_total <= 0 then return 'changed'; end if;
+  if p_amount is null or p_amount <= 0 or p_amount > v_total then return 'changed'; end if;
+  if exists (select 1 from unnest(p_orders) o(id)
+    where public.retained_order_coverage(p_restaurant, o.id) > 0) then return 'part_paid'; end if;
+  select * into v_coupon from coupons where id = p_coupon and restaurant_id = p_restaurant for update;
+  if not found or redeem_coupon(v_coupon.id) is null then return 'changed'; end if;
+
+  -- Keep the rounding remainder on the largest order, as spreadDiscount does.
+  with shares as (
+    select id, total, round(p_amount * total / v_total, 2) amount,
+      row_number() over (order by total desc, id) position
+    from orders where id = any(p_orders) and restaurant_id = p_restaurant
+  ), amounts as (
+    select id, greatest(0, least(total, amount + case when position = 1
+      then p_amount - sum(amount) over () else 0 end)) amount from shares
+  )
+  update orders o set coupon_code = v_coupon.code,
+    discount = round(coalesce(o.discount, 0) + a.amount, 2), total = round(o.total - a.amount, 2)
+    from amounts a where o.id = a.id and o.restaurant_id = p_restaurant;
+  insert into coupon_redemptions (restaurant_id, coupon_id, order_id, code, amount, confirmed_at)
+  values (p_restaurant, v_coupon.id, p_orders[1], v_coupon.code, p_amount, now());
+  return 'applied';
+end; $$;
+revoke all on function public.apply_bill_discount(uuid, uuid[], uuid, numeric) from public, anon, authenticated;
+grant execute on function public.apply_bill_discount(uuid, uuid[], uuid, numeric) to service_role;
 
 -- Duplicate charges need the same durable retry rule as order cancellations.
 -- Unknown/pending outcomes reuse their immutable request; only a confirmed

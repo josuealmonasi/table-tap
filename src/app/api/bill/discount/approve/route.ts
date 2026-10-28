@@ -108,6 +108,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     p_actor: actor.email, p_amount: reviewedAmount,
   });
   if (error) return await apiError("apiErr.generic", 500);
+  // Paid in part since it was asked for (paths audit #2).
+  if (outcome === "part_paid") return await apiError("apiErr.discountPartPaidLater", 409);
   if (outcome !== "approved") return await apiError("apiErr.approvalChanged", 409);
 
   await logEvent({

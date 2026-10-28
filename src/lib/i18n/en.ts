@@ -1419,6 +1419,8 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     nothingToWriteOff: "That bill has nothing left to write off — it was collected or cancelled first.",
     writeOffPartPaid: "{amount} of this bill is already paid, so it can't be written off. Collect the rest.",
     writeOffPartPaidLater: "Part of this bill was paid after the write-off was asked for. Collect the rest.",
+    discountPartPaid: "Part of this bill is already paid, so it can't be discounted.",
+    discountPartPaidLater: "Part of this bill was paid after the discount was asked for, so it can't be applied.",
     approvalChanged: "The bill changed since this request was shown. Reject it and ask for a new request.",
     requestGone: "That request has already been decided.",
     couponNotFound: "We couldn't find that coupon.",
