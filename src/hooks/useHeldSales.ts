@@ -4,12 +4,18 @@ import useSWR from "swr";
 import type { QueuedOfflineSale } from "@/lib/offline-review";
 import { readDashboardJson } from "@/lib/dashboard-read";
 
-interface HeldPage { sales: QueuedOfflineSale[]; hasMore?: boolean }
+interface HeldPage { restaurantId?: string; sales: QueuedOfflineSale[]; hasMore?: boolean }
 
 /** A failed read keeps SWR's last good list, like every other dashboard read. */
 async function readSales([, restaurantId, view, page]: [string, string, string, number]): Promise<HeldPage> {
   const url = view === "history" ? `/api/pos/recover?view=history&page=${page}` : "/api/pos/recover";
-  return readDashboardJson<HeldPage>([url, restaurantId]);
+  const page_ = await readDashboardJson<HeldPage>([url, restaurantId]);
+  // The page's content sits outside the session-scoped cache, so a tab left
+  // open across a sign-in to another restaurant could cache that restaurant's
+  // sales under this one's key (Codex's review of #562). A reply for any other
+  // restaurant is refused: the last good list stays, with the error shown.
+  if (page_.restaurantId !== restaurantId) throw new Error("Held sales answered for another restaurant");
+  return page_;
 }
 
 /** Pending refreshes keep the badge live; approved history reads one page on demand. */

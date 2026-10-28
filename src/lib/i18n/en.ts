@@ -900,6 +900,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
   receipt: {
     askTitle: "Want your receipt?",
     askBody: "We can email it to you. Nothing else — no account, no list.",
+    askBodyPrint: "Print it or save it as a PDF.",
     placeholder: "you@email.com",
     promise: "Used once, for this receipt, and never stored. We will not write to you again.",
     send: "Send my receipt",

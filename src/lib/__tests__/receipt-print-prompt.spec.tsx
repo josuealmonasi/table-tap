@@ -32,3 +32,8 @@ it("closes a blank popup and leaves email available after a failed receipt read"
   vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window); vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
   await mount(); await print(); expect(popup.close).toHaveBeenCalledOnce(); expect(state.ready).not.toHaveBeenCalled(); expect(host.querySelector('[role="alert"]')).not.toBeNull(); expect(host.querySelector('input[type="email"]')).not.toBeNull();
 });
+it("offers print/save alone when no mail provider is configured", async () => {
+  await act(async () => root.render(<ReceiptPrompt open email={false} orderIds={["order"]} onClose={vi.fn()} />));
+  expect(host.querySelector('input[type="email"]')).toBeNull(); expect(host.textContent).toContain("receipt.askBodyPrint");
+  expect([...host.querySelectorAll("button")].some(b => b.textContent === "receiptPrint.action")).toBe(true);
+});

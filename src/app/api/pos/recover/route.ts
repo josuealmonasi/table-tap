@@ -38,12 +38,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const { data, error } = await query().not("approved_at", "is", null)
       .order("approved_at", { ascending: false }).order("pos_ref").range(from, from + size);
     if (error) return await apiError("apiErr.generic", 503);
-    return NextResponse.json({ sales: (data ?? []).slice(0, size), hasMore: (data?.length ?? 0) > size });
+    return NextResponse.json({ restaurantId: actor.restaurantId, sales: (data ?? []).slice(0, size), hasMore: (data?.length ?? 0) > size });
   }
   try {
     const rows = await everyRow<QueuedOfflineSale>((a, b) => query().is("approved_at", null)
       .order("received_at", { ascending: false }).order("pos_ref").range(a, b), "held sales");
-    return NextResponse.json({ sales: rows });
+    return NextResponse.json({ restaurantId: actor.restaurantId, sales: rows });
   } catch { return await apiError("apiErr.generic", 503); }
 }
 

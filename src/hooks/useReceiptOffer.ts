@@ -39,21 +39,20 @@ export function rememberSettling(orderIds: string[]): void {
  *   while the sheet is open, so the offer is triggered by watching it go from
  *   owing something to owing nothing.
  *
+ * It is offered even when no mail provider is configured: print/save needs
+ * nothing but the browser, so the prompt then shows only that.
+ *
  * Asked orders are remembered for the tab, so refreshing the page — or leaving
  * `?paid=1` sitting in the address bar — cannot turn one question into several.
  * That memory lives in sessionStorage rather than state because the redirect
  * back from Stripe is a fresh page, not a re-render.
  */
 export function useReceiptOffer(
-  /** False when no mail provider is configured: nothing is offered at all. */
-  enabled: boolean,
   paidOrderId: string | null,
   bill: TableBill | null,
 ): { offering: string[] | null; dismiss: () => void; paidNow: boolean } {
   const [offering, setOffering] = useState<string[] | null>(null);
-  // That money was just settled, whether or not a receipt can be sent — the
-  // visit card is offered at the same moment, and receipts being switched off
-  // is no reason to miss it.
+  // That money was just settled — the visit card is offered at the same moment.
   const [paidNow, setPaidNow] = useState(false);
   // The bill as it was while it was still owed: once it settles the orders are
   // gone from it, and those are exactly the ones the receipt is for.
@@ -62,7 +61,6 @@ export function useReceiptOffer(
 
   const offer = useCallback((ids: string[]) => {
     if (ids.some(Boolean)) setPaidNow(true);
-    if (!enabled) return;
     const fresh = ids.filter(id => id && !read(ASKED).includes(id));
     if (fresh.length === 0) return;
     try {
@@ -71,7 +69,7 @@ export function useReceiptOffer(
       // Not remembering is better than not asking.
     }
     setOffering(fresh);
-  }, [enabled]);
+  }, []);
 
   // Back from Stripe. Runs once: the params are read at load, and clearing the
   // stash keeps a later settlement from reusing them.

@@ -16,7 +16,7 @@ const pending = row("1111-pending"), approved = row("2222-approved", true);
 beforeEach(() => {
   vi.stubGlobal("React", React); vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); vi.stubGlobal("fetch", state.fetch); vi.useFakeTimers(); state.fetch.mockReset();
   state.fetch.mockImplementation(async (url: string, init?: RequestInit) => init?.method === "POST" ? Response.json({ settled: true, orderId: pending.pos_ref, total: 80, currency: "USD", method: "cash" })
-    : Response.json(url.includes("view=history") ? { sales: [approved], hasMore: url.includes("page=0") } : { sales: [pending] }));
+    : Response.json(url.includes("view=history") ? { restaurantId: "r", sales: [approved], hasMore: url.includes("page=0") } : { restaurantId: "r", sales: [pending] }));
   cache = new Map() as Cache; host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); });
@@ -42,6 +42,16 @@ it("does not replace a history page with a late response from the previous page"
   await mount(); let answer!: (response: Response) => void;
   state.fetch.mockImplementationOnce(() => new Promise<Response>(resolve => { answer = resolve; }));
   await click("heldSalesView.history"); await click("heldSalesView.pending");
-  await act(async () => { answer(Response.json({ sales: [approved], hasMore: true })); });
+  await act(async () => { answer(Response.json({ restaurantId: "r", sales: [approved], hasMore: true })); });
   expect(host.textContent).toContain("ORD-1111"); expect(host.textContent).not.toContain("ORD-2222");
+});
+
+it("refuses a reply for another restaurant and keeps the last good list (Codex's review)", async () => {
+  await mount();
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+  expect(host.textContent).toContain("1111");
+  state.fetch.mockImplementation(async () => Response.json({ restaurantId: "other", sales: [row("9999-other")] }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(31_000); });
+  expect(host.textContent).not.toContain("9999");
+  expect(host.textContent).toContain("1111");
 });

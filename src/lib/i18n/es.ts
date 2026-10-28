@@ -897,6 +897,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
   receipt: {
     askTitle: "¿Quieres tu recibo?",
     askBody: "Te lo mandamos por correo. Nada más — sin cuenta, sin listas.",
+    askBodyPrint: "Imprímelo o guárdalo como PDF.",
     placeholder: "tu@correo.com",
     promise: "Se usa una vez, para este recibo, y no lo guardamos. No te volvemos a escribir.",
     send: "Enviar mi recibo",
